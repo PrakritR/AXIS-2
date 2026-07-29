@@ -46,7 +46,7 @@ export function PortalSegmentedControl<T extends string>({
 }) {
   const pad = size === "sm" ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-sm";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1" role="tablist" aria-label="View">
+    <div className="flex w-full max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1" role="tablist" aria-label="View">
       {options.map((opt) => {
         const disabled = optionDisabled?.(opt.id) ?? false;
         return (
@@ -59,7 +59,7 @@ export function PortalSegmentedControl<T extends string>({
             onClick={() => {
               if (!disabled) onChange(opt.id);
             }}
-            className={`min-h-9 rounded-full font-semibold transition-all duration-150 ${pad} ${
+            className={`min-h-9 min-w-0 flex-1 basis-0 rounded-full font-semibold transition-all duration-150 ${pad} ${
               disabled
                 ? "cursor-not-allowed opacity-45"
                 : value === opt.id
@@ -567,6 +567,7 @@ export function ManagerPortalPageShell({
   title,
   subtitle,
   titleAside,
+  titleTrailing,
   filterRow,
   children,
   hideTitleOnNative = false,
@@ -580,6 +581,8 @@ export function ManagerPortalPageShell({
   title: string;
   subtitle?: string;
   titleAside?: ReactNode;
+  /** Inline on the title row (Appendix D4 — direction switch beside page title). */
+  titleTrailing?: ReactNode;
   filterRow?: ReactNode;
   children: ReactNode;
   /** Visually hide the page title in the native app (bottom nav shows the section). */
@@ -611,6 +614,7 @@ export function ManagerPortalPageShell({
       <PageHeader
         title={title}
         count={count}
+        titleTrailing={titleTrailing}
         primaryAction={titleAside && !titleAsideDesktopOnly ? titleAside : undefined}
         showTitleOnMobile={showTitleOnMobile}
         className={cn(

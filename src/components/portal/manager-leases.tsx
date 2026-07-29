@@ -41,9 +41,11 @@ const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] =
 export function ManagerLeases({
   tab: tabProp = "manager",
   basePath: basePathProp,
+  leaseId: leaseIdProp,
 }: {
   tab?: ManagerLeaseTab;
   basePath?: string;
+  leaseId?: string;
 }) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
@@ -242,6 +244,8 @@ export function ManagerLeases({
           refreshKey={tick}
           managerUserId={userId}
           residentAccountEmails={residentAccountEmails}
+          leaseId={leaseIdProp}
+          listBasePath={leasesBase}
           onEmailAccountSetup={(email) => {
             setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
           }}

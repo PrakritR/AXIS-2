@@ -37,9 +37,9 @@ export function DestinationNav({
   return (
     <nav
       className={cn(
-        "flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
+        "flex w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
         "[scrollbar-width:none] [-ms-overflow-style:none] snap-x snap-mandatory scroll-px-1 [&::-webkit-scrollbar]:hidden",
-        "md:inline-flex md:flex-wrap md:overflow-visible md:snap-none",
+        "md:flex md:overflow-visible md:snap-none",
         className,
       )}
       aria-label={ariaLabel}
@@ -55,7 +55,7 @@ export function DestinationNav({
             href={item.href}
             data-attr={item.dataAttr}
             className={cn(
-              "portal-pressable inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors",
+              "portal-pressable inline-flex min-h-11 flex-1 basis-0 justify-center items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold transition-colors sm:px-3.5",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active
                 ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -9,8 +9,17 @@ import {
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
-import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
+import {
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
+import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
@@ -64,6 +73,9 @@ export function ManagerPaymentsLedgerPanel({
   onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
+  paymentId: paymentIdProp,
+  listBasePath,
+  direction = "incoming",
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
@@ -73,9 +85,14 @@ export function ManagerPaymentsLedgerPanel({
   onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
+  paymentId?: string;
+  listBasePath?: string;
+  direction?: ManagerPaymentDirection;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [editDueDateDraft, setEditDueDateDraft] = useState("");
@@ -96,6 +113,50 @@ export function ManagerPaymentsLedgerPanel({
   const showSelection = rows.length > 0;
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
+  const selectedRow = useMemo(
+    () => rows.find((row) => row.id === expandedId) ?? null,
+    [rows, expandedId],
+  );
+
+  const navigateToList = useCallback(() => {
+    if (listBasePath) navigate(paymentListHref(listBasePath, direction, activeBucket));
+  }, [activeBucket, direction, listBasePath, navigate]);
+
+  const openPaymentDetail = useCallback(
+    (row: DemoManagerPaymentLedgerRow) => {
+      setExpandedId(row.id);
+      setMobileDetailOpen(true);
+      if (listBasePath) navigate(paymentDetailHref(listBasePath, direction, activeBucket, row.id));
+    },
+    [activeBucket, direction, listBasePath, navigate],
+  );
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setExpandedId(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setExpandedId((cur) => {
+      if (cur && rows.some((row) => row.id === cur)) return cur;
+      if (portalUsesDesktopSplit()) return rows[0]!.id;
+      return null;
+    });
+  }, [rowIdsKey, rows]);
+
+  useEffect(() => {
+    if (!paymentIdProp) return;
+    const decoded = decodeURIComponent(paymentIdProp);
+    if (rows.some((row) => row.id === decoded)) {
+      setExpandedId(decoded);
+      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
+    }
+  }, [paymentIdProp, rows]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit() && !paymentIdProp) setExpandedId(null);
+  }, [activeBucket, paymentIdProp]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -445,21 +506,26 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-  const tableRows = useMemo<PortalPaymentTableRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.id,
-        charge:
-          row.manualPaymentReportedAt && row.manualPaymentChannel
-            ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-            : row.chargeTitle,
-        property: row.propertyName,
-        payee: row.residentName,
-        dueDate: row.dueDate,
-        amount: row.lineAmount,
-      })),
-    [rows],
+
+  const renderPaymentDetailPanel = (row: DemoManagerPaymentLedgerRow) => (
+    <div className="space-y-3 text-sm">
+      <div>
+        <p className="text-xs font-medium text-muted">Property</p>
+        <p className="text-foreground">{row.propertyName}</p>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-muted">Charge</p>
+        <p className="text-foreground">{row.chargeTitle}</p>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-muted">Due date</p>
+        <div className="text-foreground">{renderDueDateCell(row)}</div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-muted">Amount</p>
+        <div className="text-foreground">{renderAmountOwedCell(row)}</div>
+      </div>
+    </div>
   );
 
   if (!hasAnySource) {
@@ -471,6 +537,7 @@ export function ManagerPaymentsLedgerPanel({
       if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
         showToast("Payment removed.");
         setExpandedId(null);
+        navigateToList();
         onRowsChanged?.();
         return;
       }
@@ -688,28 +755,82 @@ export function ManagerPaymentsLedgerPanel({
         </Button>
       </BulkActionBar>
     ) : null}
-    <PortalPaymentsTable
-      rows={tableRows}
-      expandedId={expandedId}
-      onExpand={setExpandedId}
-      selection={
-        showSelection
-          ? {
-              selectedIds,
-              allSelected,
-              onToggle: toggleSelected,
-              onToggleAll: toggleSelectAll,
-              selectLabel: (tr) => {
-                const row = rowById.get(tr.id);
-                return row ? `Select ${row.chargeTitle} for ${row.residentName}` : `Select ${tr.charge}`;
-              },
-            }
-          : undefined
+    <PortalListDetailPane
+      mobileCompact
+      className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+      detailOpen={mobileDetailOpen && Boolean(selectedRow)}
+      list={
+        <div className={INBOX_LIST_SCROLL}>
+          {showSelection ? (
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 rounded border-border"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                aria-label="Select all payments"
+              />
+              <span className="text-xs text-muted">Select all</span>
+            </div>
+          ) : null}
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-stretch gap-2">
+              {showSelection ? (
+                <div className="flex items-center pl-3 max-md:pl-2.5">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 rounded border-border"
+                    checked={selectedIds.has(row.id)}
+                    onChange={() => toggleSelected(row.id)}
+                    aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                  />
+                </div>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <PortalPersonRecordRow
+                  name={row.residentName}
+                  subtitle={
+                    row.manualPaymentReportedAt && row.manualPaymentChannel
+                      ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+                      : row.chargeTitle
+                  }
+                  preview={row.propertyName}
+                  meta={row.lineAmount}
+                  selected={expandedId === row.id}
+                  onOpen={() => openPaymentDetail(row)}
+                  dataAttr="payment-list-row"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       }
-      settledAppearance={activeBucket === "paid"}
-      renderDueDateCell={(tr) => renderDueDateCell(rowById.get(tr.id)!)}
-      renderAmountCell={(tr) => renderAmountOwedCell(rowById.get(tr.id)!)}
-      renderExpandedActions={(tr) => renderDetailActions(rowById.get(tr.id)!)}
+      detail={
+        selectedRow ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <PortalDetailHeader
+              title={selectedRow.residentName}
+              subtitle={selectedRow.chargeTitle}
+              avatarName={selectedRow.residentName}
+              onBack={() => {
+                setMobileDetailOpen(false);
+                navigateToList();
+              }}
+              backLabel="Back to payments"
+              dataAttrBack="payment-detail-back"
+              actions={renderDetailActions(selectedRow)}
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+              {renderPaymentDetailPanel(selectedRow)}
+            </div>
+          </div>
+        ) : (
+          <PortalListDetailPlaceholder
+            title="Select a payment"
+            hint="Choose a charge from the list to review, remind, or mark paid."
+          />
+        )
+      }
     />
     </>
   );

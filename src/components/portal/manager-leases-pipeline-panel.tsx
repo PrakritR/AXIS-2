@@ -1,24 +1,27 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH, RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
+import {
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { Badge } from "@/components/ui/badge";
+import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+} from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
@@ -53,6 +56,8 @@ export function ManagerLeasesPipelinePanel({
   managerUserId,
   residentAccountEmails,
   onEmailAccountSetup,
+  leaseId: leaseIdProp,
+  listBasePath,
 }: {
   rows: LeasePipelineRow[];
   tab: ManagerLeaseTab;
@@ -60,9 +65,13 @@ export function ManagerLeasesPipelinePanel({
   managerUserId?: string | null;
   residentAccountEmails: Set<string>;
   onEmailAccountSetup?: (email: string, name: string, axisId?: string) => void;
+  leaseId?: string;
+  listBasePath?: string;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadTargetRowIdRef = useRef<string | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
@@ -216,6 +225,51 @@ export function ManagerLeasesPipelinePanel({
   const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
+  const bucketRowIds = useMemo(() => bucketRows.map((r) => r.id), [bucketRows]);
+  const selectedRow = useMemo(
+    () => bucketRows.find((r) => r.id === expandedId) ?? null,
+    [bucketRows, expandedId],
+  );
+
+  useEffect(() => {
+    if (bucketRowIds.length === 0) {
+      setExpandedId(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setExpandedId((cur) => {
+      if (cur && bucketRowIds.includes(cur)) return cur;
+      if (portalUsesDesktopSplit()) return bucketRowIds[0] ?? null;
+      return null;
+    });
+  }, [bucketRowIds]);
+
+  useEffect(() => {
+    if (!leaseIdProp) return;
+    const decoded = decodeURIComponent(leaseIdProp);
+    if (bucketRowIds.includes(decoded)) {
+      setExpandedId(decoded);
+      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
+    }
+  }, [leaseIdProp, bucketRowIds]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit() && !leaseIdProp) setExpandedId(null);
+  }, [tab, leaseIdProp]);
+
+  const navigateToList = useCallback(() => {
+    if (listBasePath) navigate(leaseListHref(listBasePath, tab));
+  }, [listBasePath, navigate, tab]);
+
+  const openLeaseDetail = useCallback(
+    (row: LeasePipelineRow) => {
+      setExpandedId(row.id);
+      setMobileDetailOpen(true);
+      if (listBasePath) navigate(leaseDetailHref(listBasePath, tab, row.id));
+    },
+    [listBasePath, navigate, tab],
+  );
 
   const runGenerateLease = (row: LeasePipelineRow) => {
     if (generatingRowId) return;
@@ -316,6 +370,7 @@ export function ManagerLeasesPipelinePanel({
     appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.", managerUserId);
     showToast("Lease moved to Manager Review.");
     setExpandedId(null);
+    navigateToList();
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
@@ -348,6 +403,7 @@ export function ManagerLeasesPipelinePanel({
             : "Manager signature saved.",
       );
       setExpandedId(null);
+      navigateToList();
       setSigningRow(null);
       return true;
     } else {
@@ -561,72 +617,57 @@ export function ManagerLeasesPipelinePanel({
           if (id) void onPickUpload(id, e.target.files);
         }}
       />
-      <div className="space-y-2 lg:hidden">
-        {bucketRows.map((row) => (
-          <div key={row.id} id={`portal-lease-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 gap-2 text-left"
-                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                aria-expanded={expandedId === row.id}
-              >
-                <PortalTableInlineExpand expanded={expandedId === row.id} className="font-semibold text-foreground">
-                  <span className="truncate">{row.residentName}</span>
-                  {row.leaseKind === "joint_bundle" ? (
-                    <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground">Joint bundle</span>
-                  ) : null}
-                </PortalTableInlineExpand>
-              </button>
-              {renderLeaseHeaderActions(row)}
-            </div>
-            {expandedId === row.id ? (
-              <div className="mt-3 border-t border-border pt-3">{renderLeaseRowDetail(row)}</div>
-            ) : null}
+      <PortalListDetailPane
+        mobileCompact
+        className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+        detailOpen={mobileDetailOpen && Boolean(selectedRow)}
+        list={
+          <div className={INBOX_LIST_SCROLL}>
+            {bucketRows.map((row) => (
+              <PortalPersonRecordRow
+                key={row.id}
+                name={row.residentName}
+                subtitle={row.unit}
+                preview={row.status}
+                badge={
+                  row.leaseKind === "joint_bundle" ? (
+                    <Badge tone="neutral">Joint bundle</Badge>
+                  ) : undefined
+                }
+                selected={expandedId === row.id}
+                onOpen={() => openLeaseDetail(row)}
+                dataAttr="lease-list-row"
+              />
+            ))}
           </div>
-        ))}
-      </div>
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className={PORTAL_DATA_TABLE}>
-            <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bucketRows.map((row) => (
-                <Fragment key={row.id}>
-                  {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
-                  <tr
-                    id={`portal-lease-${row.id}`}
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    onClick={createPortalRowExpandClick(() =>
-                      setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                    )}
-                    aria-expanded={expandedId === row.id}
-                  >
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                      <PortalTableInlineExpand expanded={expandedId === row.id}>{row.residentName}</PortalTableInlineExpand>
-                    </td>
-                    <td className={`${PORTAL_TABLE_TD} text-right`}>{renderLeaseHeaderActions(row)}</td>
-                  </tr>
-                  {expandedId === row.id ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
-                        {renderLeaseRowDetail(row)}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        }
+        detail={
+          selectedRow ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <PortalDetailHeader
+                title={selectedRow.residentName}
+                subtitle={selectedRow.unit}
+                avatarName={selectedRow.residentName}
+                onBack={() => {
+                  setMobileDetailOpen(false);
+                  navigateToList();
+                }}
+                backLabel="Back to leases"
+                dataAttrBack="lease-detail-back"
+                actions={renderLeaseHeaderActions(selectedRow)}
+              />
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+                {renderLeaseRowDetail(selectedRow)}
+              </div>
+            </div>
+          ) : (
+            <PortalListDetailPlaceholder
+              title="Select a lease"
+              hint="Choose a resident from the list to review and sign their lease."
+            />
+          )
+        }
+      />
 
       {amendLeaseRow ? (
         <LeaseAmendMoveOutModal

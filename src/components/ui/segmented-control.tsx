@@ -61,7 +61,7 @@ export function SegmentedTwo<T extends string>({ value, onChange, left, right, c
   const isRight = value === right.id;
 
   return (
-    <div className={`relative flex gap-1 rounded-2xl border border-border bg-card/40 p-1 shadow-sm backdrop-blur-sm ${className}`}>
+    <div className={`relative flex w-full gap-1 rounded-2xl border border-border bg-card/40 p-1 shadow-sm backdrop-blur-sm ${className}`}>
       <span
         aria-hidden
         className="segmented-pill absolute bottom-1 left-1 top-1 w-[calc(50%-6px)] rounded-xl shadow-[0_4px_14px_-4px_rgba(47,107,255,0.45)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"

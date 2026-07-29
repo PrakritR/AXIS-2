@@ -558,7 +558,7 @@ export async function renderPortalSection(
         if (tabParts.length === 1) {
           redirect(`${def.basePath}/services/requests/pending`);
         }
-        if (tabParts.length > 2) notFound();
+        if (tabParts.length > 3) notFound();
         const bucketRaw = tabParts[1]!;
         const requestBucket = REQUEST_BUCKETS.includes(bucketRaw as typeof REQUEST_BUCKETS[number])
           ? (bucketRaw as typeof REQUEST_BUCKETS[number])
@@ -570,7 +570,7 @@ export async function renderPortalSection(
         if (tabParts.length === 1) {
           redirect(`${def.basePath}/services/work-orders/open`);
         }
-        if (tabParts.length > 2) notFound();
+        if (tabParts.length > 3) notFound();
         const bucketRaw = tabParts[1]!;
         const workOrderBucket = WO_BUCKETS.includes(bucketRaw as typeof WO_BUCKETS[number])
           ? (bucketRaw as typeof WO_BUCKETS[number])
@@ -588,6 +588,14 @@ export async function renderPortalSection(
         servicesTab === "work-orders"
           ? (tabParts[1] as typeof WO_BUCKETS[number])
           : undefined;
+      const serviceRequestId =
+        servicesTab === "requests" && tabParts.length >= 3
+          ? decodeURIComponent(tabParts[2]!)
+          : undefined;
+      const workOrderId =
+        servicesTab === "work-orders" && tabParts.length >= 3
+          ? decodeURIComponent(tabParts[2]!)
+          : undefined;
 
       const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
       return subscriptionGated(
@@ -596,6 +604,8 @@ export async function renderPortalSection(
           basePath={def.basePath}
           requestBucket={requestBucket}
           workOrderBucket={workOrderBucket}
+          serviceRequestId={serviceRequestId}
+          workOrderId={workOrderId}
         />,
         kind,
         "services",
@@ -630,7 +640,7 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/payments/${direction}/pending`);
       }
 
-      if (tabParts.length > 2) {
+      if (tabParts.length > 3) {
         redirect(`${def.basePath}/payments/${direction}/pending`);
       }
 
@@ -643,8 +653,16 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/payments/${direction}/${bucket}`);
       }
 
+      const paymentId =
+        tabParts.length >= 3 ? decodeURIComponent(tabParts[2]!) : undefined;
+
       return subscriptionGated(
-        <ManagerPayments direction={direction} bucket={bucket} basePath={def.basePath} />,
+        <ManagerPayments
+          direction={direction}
+          bucket={bucket}
+          basePath={def.basePath}
+          paymentId={paymentId}
+        />,
         kind,
         "payments",
         managerOwnerSubscriptionTier,
@@ -673,7 +691,7 @@ export async function renderPortalSection(
       if (!tabParts?.length) {
         redirect(`${def.basePath}/leases/manager`);
       }
-      if (tabParts.length > 1) notFound();
+      if (tabParts.length > 2) notFound();
       const tabRaw = tabParts[0]!;
       const leaseTab = LEASE_TABS.includes(tabRaw as typeof LEASE_TABS[number])
         ? (tabRaw as typeof LEASE_TABS[number])
@@ -681,8 +699,9 @@ export async function renderPortalSection(
       if (tabRaw !== leaseTab) {
         redirect(`${def.basePath}/leases/${leaseTab}`);
       }
+      const leaseId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
       return subscriptionGated(
-        <ManagerLeases tab={leaseTab} basePath={def.basePath} />,
+        <ManagerLeases tab={leaseTab} basePath={def.basePath} leaseId={leaseId} />,
         kind,
         "leases",
         managerOwnerSubscriptionTier,
@@ -694,7 +713,7 @@ export async function renderPortalSection(
       if (!tabParts?.length) {
         redirect(`${def.basePath}/applications/pending`);
       }
-      if (tabParts.length > 1) notFound();
+      if (tabParts.length > 2) notFound();
       const tabRaw = tabParts[0]!;
       const applicationTab = APPLICATION_TABS.includes(tabRaw as typeof APPLICATION_TABS[number])
         ? (tabRaw as typeof APPLICATION_TABS[number])
@@ -702,9 +721,14 @@ export async function renderPortalSection(
       if (tabRaw !== applicationTab) {
         redirect(`${def.basePath}/applications/${applicationTab}`);
       }
+      const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
       const ManagerApplications = await loadManagerApplications();
       return subscriptionGated(
-        <ManagerApplications bucket={applicationTab} basePath={def.basePath} />,
+        <ManagerApplications
+          bucket={applicationTab}
+          basePath={def.basePath}
+          applicationId={applicationId}
+        />,
         kind,
         "applications",
         managerOwnerSubscriptionTier,

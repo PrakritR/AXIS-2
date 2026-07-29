@@ -1337,6 +1337,27 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   }
 }
 
+/* Appendix D6 — mobile-web list/detail polish (responsive portal at phone widths). */
+@media (max-width: 1023px) {
+  .portal-list-detail {
+    min-height: min(70vh, calc(100dvh - var(--portal-native-bottom-nav-inset) - 9rem));
+  }
+
+  .portal-detail-header {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .portal-list-search {
+    min-height: 2.75rem;
+    font-size: 16px;
+  }
+
+  [data-slot="destination-nav"] a,
+  [data-slot="portal-tabs-mobile"] button {
+    min-height: 2.75rem;
+  }
+}
+
 /* App Store compliance (Guideline 2.1(b) / 3.1.1): the iOS app must not present
    in-app purchasing of digital subscriptions (billing is on the web via Stripe).
    `.native-hide` removes any upgrade / subscribe / pricing / checkout CTA or link

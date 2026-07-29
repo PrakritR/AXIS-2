@@ -8,10 +8,26 @@ import {
   parseResidentDetailTab,
   parseCalendarViewTab,
   parseTeamLinkTab,
+  parseApplicationBucket,
+  parseLeasePipelineTab,
+  parsePaymentDirection,
+  parsePaymentBucket,
+  parseServiceRequestBucket,
+  parseWorkOrderBucket,
   propertyDetailHref,
   residentDetailHref,
   calendarViewHref,
   teamLinkHref,
+  applicationDetailHref,
+  applicationListHref,
+  leaseDetailHref,
+  leaseListHref,
+  paymentDetailHref,
+  paymentListHref,
+  serviceRequestDetailHref,
+  serviceRequestListHref,
+  workOrderDetailHref,
+  workOrderListHref,
 } from "@/lib/portal-detail-routes";
 
 describe("portal-detail-routes", () => {
@@ -42,6 +58,39 @@ describe("portal-detail-routes", () => {
     expect(parseCalendarViewTab("")).toBe("all");
     expect(parseTeamLinkTab("linked")).toBe("linked");
     expect(parseTeamLinkTab(undefined)).toBe("pending");
+  });
+
+  it("parses and builds Appendix D5 manager detail routes", () => {
+    expect(parseApplicationBucket("approved")).toBe("approved");
+    expect(parseApplicationBucket("bogus")).toBe("pending");
+    expect(parseLeasePipelineTab("signed")).toBe("signed");
+    expect(parseLeasePipelineTab(undefined)).toBe("manager");
+    expect(parsePaymentDirection("outgoing")).toBe("outgoing");
+    expect(parsePaymentBucket("paid")).toBe("paid");
+    expect(parseServiceRequestBucket("denied")).toBe("denied");
+    expect(parseWorkOrderBucket("scheduled")).toBe("scheduled");
+
+    expect(applicationListHref("/portal", "pending")).toBe("/portal/applications/pending");
+    expect(applicationDetailHref("/portal", "pending", "AXIS-123")).toBe(
+      "/portal/applications/pending/AXIS-123",
+    );
+    expect(leaseListHref("/portal", "manager")).toBe("/portal/leases/manager");
+    expect(leaseDetailHref("/portal", "signed", "lease-1")).toBe("/portal/leases/signed/lease-1");
+    expect(paymentListHref("/portal", "incoming", "overdue")).toBe("/portal/payments/incoming/overdue");
+    expect(paymentDetailHref("/portal", "incoming", "pending", "chg-1")).toBe(
+      "/portal/payments/incoming/pending/chg-1",
+    );
+    expect(serviceRequestListHref("/portal", "approved")).toBe("/portal/services/requests/approved");
+    expect(serviceRequestDetailHref("/portal", "pending", "sr-1")).toBe(
+      "/portal/services/requests/pending/sr-1",
+    );
+    expect(workOrderListHref("/portal", "open")).toBe("/portal/services/work-orders/open");
+    expect(workOrderDetailHref("/portal", "completed", "wo-1")).toBe(
+      "/portal/services/work-orders/completed/wo-1",
+    );
+    expect(applicationDetailHref("/portal", "pending", "mgr foo")).toBe(
+      "/portal/applications/pending/mgr%20foo",
+    );
   });
 });
 

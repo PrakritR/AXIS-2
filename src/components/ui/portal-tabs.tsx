@@ -65,7 +65,7 @@ export function PortalTabs({
         role="tablist"
         aria-label={ariaLabel}
         className={cn(
-          "relative flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
+          "relative flex w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
           "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
           "snap-x snap-mandatory scroll-px-1",
           "md:hidden",
@@ -95,7 +95,7 @@ export function PortalTabs({
               }}
               onClick={() => onChange(item.id)}
               className={cn(
-                "relative z-10 shrink-0 snap-start rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors min-h-11",
+                "relative z-10 min-w-0 flex-1 basis-0 snap-start rounded-xl px-2 py-2 text-center text-sm font-semibold transition-colors min-h-11 sm:px-3.5",
                 active ? "text-foreground" : "text-muted hover:text-foreground",
               )}
             >
@@ -113,7 +113,7 @@ export function PortalTabs({
         role="tablist"
         aria-label={ariaLabel}
         className={cn(
-          "hidden min-w-0 gap-4 border-b border-border md:flex",
+          "hidden min-w-0 w-full gap-0 border-b border-border md:flex",
           className,
         )}
         data-slot="portal-tabs-desktop"
@@ -129,7 +129,7 @@ export function PortalTabs({
               data-attr={item.dataAttr}
               onClick={() => onChange(item.id)}
               className={cn(
-                "-mb-px min-h-11 border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors",
+                "-mb-px min-h-11 flex-1 basis-0 border-b-2 px-1 pb-2.5 text-center text-sm font-semibold transition-colors",
                 active
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted hover:text-foreground",

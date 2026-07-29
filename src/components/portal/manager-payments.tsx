@@ -4,7 +4,6 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
-import { QuickActionRow } from "@/components/ui/quick-action-row";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -171,10 +170,12 @@ export function ManagerPayments({
   direction = "incoming",
   bucket = "pending",
   basePath = "/portal",
+  paymentId,
 }: {
   direction?: ManagerPaymentDirection;
   bucket?: ManagerPaymentBucket;
   basePath?: string;
+  paymentId?: string;
 }) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
@@ -541,27 +542,28 @@ export function ManagerPayments({
   };
 
   const paymentsHeaderActions = (
-    <PortalSectionActionRow>
+    <PortalSectionActionRow className="max-sm:flex-row max-sm:[&_button]:w-auto max-sm:[&_button]:flex-1">
       {direction === "incoming" ? (
         <Button
           type="button"
           variant="outline"
-          className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
           onClick={() => setReminderSettingsOpen(true)}
           data-attr="payments-reminder-settings"
         >
           Reminders
         </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => setPaymentSetupOpen(true)}
-        data-attr="payments-setup"
-      >
-        Payment setup
-      </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={() => setPaymentSetupOpen(true)}
+          data-attr="payments-setup"
+        >
+          Payment setup
+        </Button>
+      )}
       <Button
         type="button"
         variant="primary"
@@ -572,6 +574,20 @@ export function ManagerPayments({
         Add
       </Button>
     </PortalSectionActionRow>
+  );
+
+  const directionNav = (
+    <DestinationNav
+      items={DIRECTION_LABELS.map((d) => ({
+        id: d.id,
+        label: d.label,
+        href: `${paymentsBase}/${d.id}/pending`,
+        dataAttr: `payments-direction-${d.id}`,
+      }))}
+      activeId={direction}
+      ariaLabel="Payment direction"
+      className="max-w-none"
+    />
   );
 
   const paymentsFilterSheet = (
@@ -621,19 +637,11 @@ export function ManagerPayments({
   );
 
   return (
-    <ManagerPortalPageShell title="Payments" compactFilterRow>
+    <ManagerPortalPageShell title="Payments" titleTrailing={directionNav} compactFilterRow>
       <PortalListControlStack
         className="mb-3"
         filterRow={paymentsFilterSheet}
         primaryAction={paymentsHeaderActions}
-        destinations={DIRECTION_LABELS.map((d) => ({
-          id: d.id,
-          label: d.label,
-          href: `${paymentsBase}/${d.id}/pending`,
-          dataAttr: `payments-direction-${d.id}`,
-        }))}
-        activeDestinationId={direction}
-        destinationAriaLabel="Payment direction"
       />
       <div className="mt-1 space-y-3">
         <DestinationNav
@@ -648,41 +656,6 @@ export function ManagerPayments({
           activeId={bucket}
           ariaLabel="Payment status"
         />
-        <QuickActionRow
-          actions={
-            direction === "incoming"
-              ? [
-                  {
-                    id: "reminders",
-                    label: "Reminders",
-                    onClick: () => setReminderSettingsOpen(true),
-                    dataAttr: "payments-quick-reminders",
-                  },
-                  {
-                    id: "add",
-                    label: "Add charge",
-                    onClick: () => setAddOpen(true),
-                    primary: true,
-                    dataAttr: "payments-quick-add",
-                  },
-                ]
-              : [
-                  {
-                    id: "setup",
-                    label: "Payment setup",
-                    onClick: () => setPaymentSetupOpen(true),
-                    dataAttr: "payments-quick-setup",
-                  },
-                  {
-                    id: "add-outgoing",
-                    label: "Add expense",
-                    onClick: () => setAddOutgoingOpen(true),
-                    primary: true,
-                    dataAttr: "payments-quick-add-outgoing",
-                  },
-                ]
-          }
-        />
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel
             rows={rowsForBucket}
@@ -693,12 +666,17 @@ export function ManagerPayments({
             onOpenReminderSettings={() => setReminderSettingsOpen(true)}
             onScheduleChanged={() => void reloadSchedule()}
             onRowsChanged={() => setHcTick((n) => n + 1)}
+            paymentId={paymentId}
+            listBasePath={paymentsBase}
+            direction={direction}
           />
         ) : (
           <ManagerOutgoingPaymentsPanel
             rows={outgoingRowsForBucket}
             activeBucket={bucket}
             vendorById={vendorById}
+            paymentId={paymentId}
+            listBasePath={paymentsBase}
             onRowsChanged={() => {
               setOutgoingTick((n) => n + 1);
               void syncManagerOutgoingExpensesFromServer(true);

@@ -25,7 +25,7 @@ export function RadixSegmentedTabs({
       <Tabs.List
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex w-fit max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1",
+          "flex w-full max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1",
           className,
         )}
       >
@@ -35,7 +35,7 @@ export function RadixSegmentedTabs({
             value={item.id}
             data-attr={item.dataAttr}
             className={cn(
-              "shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors min-h-11",
+              "min-w-0 flex-1 basis-0 rounded-full px-3 py-1.5 text-center text-sm font-semibold transition-colors min-h-11",
               "text-muted data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[var(--shadow-sm)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}

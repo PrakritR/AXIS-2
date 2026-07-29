@@ -96,3 +96,129 @@ export function parseTeamLinkTab(raw: string | undefined | null): TeamLinkTabId 
 export function teamLinkHref(basePath: string, tab: TeamLinkTabId): string {
   return `${basePath}/relationships/${tab}`;
 }
+
+/** Manager applications list buckets (Appendix D5). */
+export const APPLICATION_BUCKETS = ["incomplete", "pending", "approved", "rejected"] as const;
+export type ApplicationBucketId = (typeof APPLICATION_BUCKETS)[number];
+
+export function parseApplicationBucket(raw: string | undefined | null): ApplicationBucketId {
+  if (raw && (APPLICATION_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as ApplicationBucketId;
+  }
+  return "pending";
+}
+
+export function applicationListHref(basePath: string, bucket: ApplicationBucketId): string {
+  return `${basePath}/applications/${bucket}`;
+}
+
+export function applicationDetailHref(
+  basePath: string,
+  bucket: ApplicationBucketId,
+  applicationId: string,
+): string {
+  return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
+}
+
+/** Manager lease pipeline tabs (Appendix D5). */
+export const LEASE_PIPELINE_TABS = ["manager", "resident", "signed", "completed"] as const;
+export type LeasePipelineTabId = (typeof LEASE_PIPELINE_TABS)[number];
+
+export function parseLeasePipelineTab(raw: string | undefined | null): LeasePipelineTabId {
+  if (raw && (LEASE_PIPELINE_TABS as readonly string[]).includes(raw)) {
+    return raw as LeasePipelineTabId;
+  }
+  return "manager";
+}
+
+export function leaseListHref(basePath: string, tab: LeasePipelineTabId): string {
+  return `${basePath}/leases/${tab}`;
+}
+
+export function leaseDetailHref(basePath: string, tab: LeasePipelineTabId, leaseId: string): string {
+  return `${basePath}/leases/${tab}/${encodeURIComponent(leaseId)}`;
+}
+
+/** Manager payments direction + status bucket (Appendix D5). */
+export const PAYMENT_DIRECTIONS = ["incoming", "outgoing"] as const;
+export type PaymentDirectionId = (typeof PAYMENT_DIRECTIONS)[number];
+
+export const PAYMENT_BUCKETS = ["pending", "overdue", "paid"] as const;
+export type PaymentBucketId = (typeof PAYMENT_BUCKETS)[number];
+
+export function parsePaymentDirection(raw: string | undefined | null): PaymentDirectionId {
+  if (raw && (PAYMENT_DIRECTIONS as readonly string[]).includes(raw)) {
+    return raw as PaymentDirectionId;
+  }
+  return "incoming";
+}
+
+export function parsePaymentBucket(raw: string | undefined | null): PaymentBucketId {
+  if (raw && (PAYMENT_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as PaymentBucketId;
+  }
+  return "pending";
+}
+
+export function paymentListHref(
+  basePath: string,
+  direction: PaymentDirectionId,
+  bucket: PaymentBucketId,
+): string {
+  return `${basePath}/payments/${direction}/${bucket}`;
+}
+
+export function paymentDetailHref(
+  basePath: string,
+  direction: PaymentDirectionId,
+  bucket: PaymentBucketId,
+  paymentId: string,
+): string {
+  return `${basePath}/payments/${direction}/${bucket}/${encodeURIComponent(paymentId)}`;
+}
+
+/** Manager add-on service request buckets (Appendix D5). */
+export const SERVICE_REQUEST_BUCKETS = ["pending", "approved", "denied"] as const;
+export type ServiceRequestBucketId = (typeof SERVICE_REQUEST_BUCKETS)[number];
+
+export function parseServiceRequestBucket(raw: string | undefined | null): ServiceRequestBucketId {
+  if (raw && (SERVICE_REQUEST_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as ServiceRequestBucketId;
+  }
+  return "pending";
+}
+
+export function serviceRequestListHref(basePath: string, bucket: ServiceRequestBucketId): string {
+  return `${basePath}/services/requests/${bucket}`;
+}
+
+export function serviceRequestDetailHref(
+  basePath: string,
+  bucket: ServiceRequestBucketId,
+  requestId: string,
+): string {
+  return `${basePath}/services/requests/${bucket}/${encodeURIComponent(requestId)}`;
+}
+
+/** Manager work order buckets (Appendix D5). */
+export const WORK_ORDER_BUCKETS = ["open", "scheduled", "completed"] as const;
+export type WorkOrderBucketId = (typeof WORK_ORDER_BUCKETS)[number];
+
+export function parseWorkOrderBucket(raw: string | undefined | null): WorkOrderBucketId {
+  if (raw && (WORK_ORDER_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as WorkOrderBucketId;
+  }
+  return "open";
+}
+
+export function workOrderListHref(basePath: string, bucket: WorkOrderBucketId): string {
+  return `${basePath}/services/work-orders/${bucket}`;
+}
+
+export function workOrderDetailHref(
+  basePath: string,
+  bucket: WorkOrderBucketId,
+  workOrderId: string,
+): string {
+  return `${basePath}/services/work-orders/${bucket}/${encodeURIComponent(workOrderId)}`;
+}

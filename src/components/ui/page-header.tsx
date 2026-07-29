@@ -14,6 +14,7 @@ export function PageHeader({
   title,
   count,
   primaryAction,
+  titleTrailing,
   filterSlot,
   className,
   /** When true, title is visible on mobile (first scroll element). Default hides duplicate mobile nav title. */
@@ -22,6 +23,8 @@ export function PageHeader({
   title: string;
   count?: number;
   primaryAction?: ReactNode;
+  /** Renders inline on the title row (e.g. Incoming / Outgoing beside "Payments"). */
+  titleTrailing?: ReactNode;
   filterSlot?: ReactNode;
   className?: string;
   showTitleOnMobile?: boolean;
@@ -36,7 +39,7 @@ export function PageHeader({
       data-slot="page-header"
     >
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <h1 className={cn(PAGE_HEADER_TITLE_CLASS, "flex-1")}>
+        <h1 className={cn(PAGE_HEADER_TITLE_CLASS, titleTrailing ? "shrink-0" : "flex-1")}>
           {title}
           {count != null ? (
             <span className="ml-2 align-middle">
@@ -44,6 +47,7 @@ export function PageHeader({
             </span>
           ) : null}
         </h1>
+        {titleTrailing ? <div className="min-w-0 flex-1">{titleTrailing}</div> : null}
         {primaryAction ? (
           <div className="flex shrink-0 items-center gap-2">{primaryAction}</div>
         ) : null}

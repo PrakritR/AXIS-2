@@ -2302,6 +2302,29 @@ export function ManagerResidents({
       ) : null}
       <ManagerPortalPageShell
         title="Residents"
+        titleTrailing={
+          <DestinationNav
+            items={[
+              {
+                id: "current",
+                label: "Current",
+                href: `${portalBase}/residents/current`,
+                count: currentResidentsCount,
+                dataAttr: "residents-tab-current",
+              },
+              {
+                id: "previous",
+                label: "Previous",
+                href: `${portalBase}/residents/previous`,
+                count: previousResidentsCount,
+                dataAttr: "residents-tab-previous",
+              },
+            ]}
+            activeId={residentsTab}
+            ariaLabel="Resident directory"
+            className="max-w-none"
+          />
+        }
         compactFilterRow
         mobileHideFilterRow={mobileDetailOpen}
         mobileFlush={mobileDetailOpen}
@@ -2328,24 +2351,6 @@ export function ManagerResidents({
             </Button>
           </PortalSectionActionRow>
         }
-        destinations={[
-          {
-            id: "current",
-            label: "Current",
-            href: `${portalBase}/residents/current`,
-            count: currentResidentsCount,
-            dataAttr: "residents-tab-current",
-          },
-          {
-            id: "previous",
-            label: "Previous",
-            href: `${portalBase}/residents/previous`,
-            count: previousResidentsCount,
-            dataAttr: "residents-tab-previous",
-          },
-        ]}
-        activeDestinationId={residentsTab}
-        destinationAriaLabel="Resident directory"
         search={{
           value: searchQuery,
           onChange: setSearchQuery,

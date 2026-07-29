@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  serviceRequestDetailHref,
+  serviceRequestListHref,
+  workOrderDetailHref,
+  workOrderListHref,
+} from "@/lib/portal-detail-routes";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -69,14 +76,19 @@ export function ManagerAllServicesPanel({
   basePath,
   requestBucket: requestBucketProp = "pending",
   workOrderBucket: workOrderBucketProp = "open",
+  serviceRequestId: serviceRequestIdProp,
+  workOrderId: workOrderIdProp,
 }: {
   tabId: FilterType;
   basePath: string;
   requestBucket?: RequestBucket;
   workOrderBucket?: ManagerWorkOrderBucket;
+  serviceRequestId?: string;
+  workOrderId?: string;
 }) {
   const tabId = useShallowTabId<FilterType>(serverTabId, SERVICES_TAB_IDS);
   const router = useRouter();
+  const navigate = usePortalNavigate();
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
@@ -285,9 +297,19 @@ export function ManagerAllServicesPanel({
   }, [requestIds, typeFilter]);
 
   useEffect(() => {
+    if (typeFilter !== "requests" || !serviceRequestIdProp) return;
+    const decoded = decodeURIComponent(serviceRequestIdProp);
+    const id = `request-${decoded}`;
+    if (requestIds.includes(id)) {
+      setExpandedId(id);
+      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
+    }
+  }, [serviceRequestIdProp, requestIds, typeFilter]);
+
+  useEffect(() => {
     setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit()) setExpandedId(null);
-  }, [reqBucket, propertyFilter, searchQuery, typeFilter]);
+    if (!portalUsesDesktopSplit() && !serviceRequestIdProp) setExpandedId(null);
+  }, [reqBucket, propertyFilter, searchQuery, typeFilter, serviceRequestIdProp]);
 
   const selectedRequest = useMemo(() => {
     if (!expandedId?.startsWith("request-")) return null;
@@ -467,6 +489,8 @@ export function ManagerAllServicesPanel({
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
+              workOrderId={workOrderIdProp}
+              listBasePath={basePath}
               onAfterSchedule={() => router.push(`${basePath}/services/work-orders/scheduled`)}
             />
           </>
@@ -512,6 +536,7 @@ export function ManagerAllServicesPanel({
                           onOpen={() => {
                             setExpandedId(id);
                             setMobileDetailOpen(true);
+                            navigate(serviceRequestDetailHref(basePath, reqBucket, req.id));
                           }}
                           dataAttr="service-request-list-row"
                         />
@@ -526,7 +551,10 @@ export function ManagerAllServicesPanel({
                         title={selectedRequest.offerName}
                         subtitle={selectedRequest.residentName}
                         avatarName={selectedRequest.residentName}
-                        onBack={() => setMobileDetailOpen(false)}
+                        onBack={() => {
+                          setMobileDetailOpen(false);
+                          navigate(serviceRequestListHref(basePath, reqBucket));
+                        }}
                         backLabel="Back to services"
                         dataAttrBack="service-request-detail-back"
                       />

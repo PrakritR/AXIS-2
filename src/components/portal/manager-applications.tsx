@@ -105,6 +105,11 @@ import {
 } from "@/lib/resident-welcome-email";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  applicationDetailHref,
+  applicationListHref,
+} from "@/lib/portal-detail-routes";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -305,14 +310,17 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
 export function ManagerApplications({
   bucket: bucketProp = "pending",
   basePath: basePathProp,
+  applicationId: applicationIdProp,
 }: {
   bucket?: ManagerApplicationTabId;
   basePath?: string;
+  applicationId?: string;
 }) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const pathname = usePathname();
   const router = useRouter();
+  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const applicationsBase = basePathProp ?? `${portalBase}/applications`;
   const openHandled = useRef(false);
@@ -493,9 +501,18 @@ export function ManagerApplications({
   }, [rowsForBucket]);
 
   useEffect(() => {
+    if (!applicationIdProp) return;
+    const decoded = decodeURIComponent(applicationIdProp);
+    if (rowsForBucket.some((r) => r.id === decoded)) {
+      setExpandedId(decoded);
+      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
+    }
+  }, [applicationIdProp, rowsForBucket]);
+
+  useEffect(() => {
     setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit()) setExpandedId(null);
-  }, [bucket, propertyFilter, searchQuery]);
+    if (!portalUsesDesktopSplit() && !applicationIdProp) setExpandedId(null);
+  }, [bucket, propertyFilter, searchQuery, applicationIdProp]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -534,7 +551,7 @@ export function ManagerApplications({
     }
 
     setExpandedId(null);
-    router.push(`${applicationsBase}/${nextBucket}`);
+    router.push(applicationListHref(applicationsBase, nextBucket));
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
@@ -985,6 +1002,7 @@ export function ManagerApplications({
                       onOpen={() => {
                         setExpandedId(row.id);
                         setMobileDetailOpen(true);
+                        navigate(applicationDetailHref(applicationsBase, bucket, row.id));
                       }}
                       dataAttr="application-list-row"
                     />
@@ -1000,7 +1018,10 @@ export function ManagerApplications({
                   title={selectedRow.name}
                   subtitle={selectedRow.email}
                   avatarName={selectedRow.name}
-                  onBack={() => setMobileDetailOpen(false)}
+                  onBack={() => {
+                    setMobileDetailOpen(false);
+                    navigate(applicationListHref(applicationsBase, bucket));
+                  }}
                   backLabel="Back to applications"
                   dataAttrBack="application-detail-back"
                   actions={renderApplicationRowActions(selectedRow)}
