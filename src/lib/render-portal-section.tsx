@@ -761,6 +761,31 @@ export async function renderPortalSection(
       );
     }
 
+    if (section === "calendar") {
+      const CALENDAR_VIEWS = ["all", "tours", "services"] as const;
+      if (tabParts?.length) {
+        const viewRaw = tabParts[0]!;
+        if (!CALENDAR_VIEWS.includes(viewRaw as (typeof CALENDAR_VIEWS)[number])) notFound();
+        if (tabParts.length > 1) notFound();
+      } else if (kind === "pro") {
+        redirect(`${def.basePath}/calendar/all`);
+      }
+      const calendarView = tabParts?.length
+        ? (tabParts[0] as (typeof CALENDAR_VIEWS)[number])
+        : undefined;
+      const PortalCalendar = await loadPortalCalendar();
+      return subscriptionGated(
+        <PortalCalendar
+          portal="manager"
+          initialUserId={effectiveWorkspaceUserId}
+          calendarView={calendarView}
+        />,
+        kind,
+        "calendar",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
     if (tabParts?.length) notFound();
 
     if (section === "dashboard") {
@@ -770,30 +795,6 @@ export async function renderPortalSection(
         <ManagerDashboard displayName={displayName} />,
         kind,
         "dashboard",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "calendar") {
-      const CALENDAR_VIEWS = ["all", "tours", "services"] as const;
-      if (tabParts?.length) {
-        const viewRaw = tabParts[0]!;
-        if (!CALENDAR_VIEWS.includes(viewRaw as (typeof CALENDAR_VIEWS)[number])) notFound();
-        if (tabParts.length > 1) notFound();
-      } else if (kind === "manager") {
-        redirect(`${def.basePath}/calendar/all`);
-      }
-      const calendarView = tabParts?.length
-        ? (tabParts[0] as (typeof CALENDAR_VIEWS)[number])
-        : undefined;
-      const PortalCalendar = await loadPortalCalendar();
-      return subscriptionGated(
-        <PortalCalendar
-          portal={kind === "manager" ? "manager" : "admin"}
-          initialUserId={effectiveWorkspaceUserId}
-          calendarView={calendarView}
-        />,
-        kind,
-        "calendar",
         managerOwnerSubscriptionTier,
       );
     }
