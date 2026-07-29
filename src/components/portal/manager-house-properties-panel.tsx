@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -14,23 +14,15 @@ import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-tour-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import {
-  PORTAL_DATA_TABLE,
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableColGroup,
-  PortalDataTableEmpty,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PORTAL_MOBILE_CARD_CLASS,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
-  portalTableColumnPercents,
-} from "@/components/portal/portal-data-table";
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
@@ -657,6 +649,7 @@ export function ManagerHousePropertiesPanel({
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   const propCount = useMemo(() => {
     void tick;
@@ -720,6 +713,32 @@ export function ManagerHousePropertiesPanel({
     });
   }, [rows, searchQuery]);
 
+  const rowKeys = useMemo(() => visibleRows.map(({ row }) => row.adminRefId + (row.listingId ?? "")), [visibleRows]);
+
+  useEffect(() => {
+    if (rowKeys.length === 0) {
+      setExpandedRowKey(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setExpandedRowKey((cur) => {
+      if (cur && rowKeys.includes(cur)) return cur;
+      if (portalUsesDesktopSplit()) return rowKeys[0] ?? null;
+      return null;
+    });
+  }, [rowKeys]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit()) setExpandedRowKey(null);
+  }, [activeStage, searchQuery]);
+
+  const selectedEntry = useMemo(
+    () =>
+      visibleRows.find(({ row }) => row.adminRefId + (row.listingId ?? "") === expandedRowKey) ?? null,
+    [visibleRows, expandedRowKey],
+  );
+
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
   }
@@ -750,108 +769,60 @@ export function ManagerHousePropertiesPanel({
           icon="default"
         />
       ) : (
-        <>
-          <div className="space-y-2 lg:hidden">
-            {visibleRows.map(({ sourceBucket, row, linked }) => {
-              const rowKey = row.adminRefId + (row.listingId ?? "");
-              const expanded = expandedRowKey === rowKey;
-
-              return (
-                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button
-                    type="button"
-                    className="flex w-full gap-2 text-left"
-                    onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                    aria-expanded={expanded}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                        <span className="truncate">{managerPropertyRowTitle(row, sourceBucket)}</span>
-                      </PortalTableInlineExpand>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                        {row.address}
-                        {row.zip ? `, ${row.zip}` : ""}
-                      </p>
-                      <p className="mt-1.5 text-xs text-muted">
-                        <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
-                        ba · {row.neighborhood}
-                      </p>
-                      <p className="mt-1.5">
-                        <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
-                          {linked ? "Co-managed" : "Owned"}
-                        </span>
-                      </p>
-                    </div>
-                  </button>
-                  {expanded ? (
-                    <div className="mt-3 border-t border-border pt-3">
-                      {renderRowDetail(sourceBucket, row, rowKey)}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map(({ sourceBucket, row, linked }) => {
-                    const rowKey = row.adminRefId + (row.listingId ?? "");
-                    const expanded = expandedRowKey === rowKey;
-
-                    return (
-                      <Fragment key={rowKey}>
-                        <tr
-                          className={PORTAL_TABLE_TR_EXPANDABLE}
-                          onClick={createPortalRowExpandClick(() =>
-                            setExpandedRowKey(expanded ? null : rowKey),
-                          )}
-                          aria-expanded={expanded}
-                        >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                            <PortalTableInlineExpand expanded={expanded}>
-                              {managerPropertyRowTitle(row, sourceBucket)}
-                            </PortalTableInlineExpand>
-                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                              {row.address}
-                              {row.zip ? `, ${row.zip}` : ""}
-                            </p>
-                            <p className="mt-1.5">
-                              <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
-                                {linked ? "Co-managed" : "Owned"}
-                              </span>
-                            </p>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <p className="text-xs text-muted">
-                              <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
-                              ba · {row.neighborhood}
-                            </p>
-                          </td>
-                        </tr>
-                        {expanded ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
-                              {renderRowDetail(sourceBucket, row, rowKey)}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <PortalListDetailPane
+          mobileCompact
+          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+          detailOpen={mobileDetailOpen && Boolean(selectedEntry)}
+          list={
+            <div className={INBOX_LIST_SCROLL}>
+              {visibleRows.map(({ sourceBucket, row, linked }) => {
+                const rowKey = row.adminRefId + (row.listingId ?? "");
+                const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+                const summary = `${adminPropertyRentDisplayLabel(row)} · ${row.beds} bd / ${row.baths} ba · ${row.neighborhood}`;
+                return (
+                  <PortalPropertyRecordRow
+                    key={rowKey}
+                    title={managerPropertyRowTitle(row, sourceBucket)}
+                    address={address}
+                    summary={summary}
+                    badge={
+                      <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
+                        {linked ? "Co-managed" : "Owned"}
+                      </span>
+                    }
+                    selected={expandedRowKey === rowKey}
+                    onOpen={() => {
+                      setExpandedRowKey(rowKey);
+                      setMobileDetailOpen(true);
+                    }}
+                    dataAttr="property-list-row"
+                  />
+                );
+              })}
             </div>
-          </div>
-        </>
+          }
+          detail={
+            selectedEntry ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <PortalDetailHeader
+                  title={managerPropertyRowTitle(selectedEntry.row, selectedEntry.sourceBucket)}
+                  subtitle={`${selectedEntry.row.address}${selectedEntry.row.zip ? `, ${selectedEntry.row.zip}` : ""}`}
+                  onBack={() => setMobileDetailOpen(false)}
+                  backLabel="Back to properties"
+                  dataAttrBack="property-detail-back"
+                />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+                  {renderRowDetail(selectedEntry.sourceBucket, selectedEntry.row, expandedRowKey!)}
+                </div>
+              </div>
+            ) : (
+              <PortalListDetailPlaceholder
+                title="Select a property"
+                hint="Choose a listing from the list to manage units, leases, and promotion."
+              />
+            )
+          }
+        />
       )}
     </>
   );

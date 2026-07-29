@@ -48,6 +48,14 @@ import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import {
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
@@ -292,6 +300,7 @@ export function ManagerResidents({
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [chargeBucket, setChargeBucket] = useState<ManagerPaymentBucket>("pending");
   const [residentReminderSettingsOpen, setResidentReminderSettingsOpen] = useState(false);
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
@@ -764,7 +773,26 @@ export function ManagerResidents({
 
   if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
     setSelectedId(null);
+    setMobileDetailOpen(false);
   }
+
+  useEffect(() => {
+    if (filtered.length === 0) {
+      setSelectedId(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setSelectedId((cur) => {
+      if (cur && filtered.some((r) => r.id === cur)) return cur;
+      if (portalUsesDesktopSplit()) return filtered[0]!.id;
+      return null;
+    });
+  }, [filtered]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit()) setSelectedId(null);
+  }, [residentsTab, propertyFilter, searchQuery]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -2293,10 +2321,20 @@ export function ManagerResidents({
       <ManagerPortalPageShell
         title="Residents"
         compactFilterRow
+        mobileHideFilterRow={mobileDetailOpen}
+        mobileFlush={mobileDetailOpen}
         titleAside={
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-            + Add
-          </Button>
+          mobileDetailOpen ? (
+            <div className="max-md:hidden">
+              <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+                + Add
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add
+            </Button>
+          )
         }
         filterRow={
           <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
@@ -2316,130 +2354,123 @@ export function ManagerResidents({
           </ManagerPortalFilterRow>
         }
       >
-      <PortalListToolbar
-        statusPills={
-          <ManagerPortalStatusPills
-            compact
-            selectAriaLabel="Show current or previous residents"
-            tabs={[
-              {
-                id: "current",
-                label: "Current",
-                count: currentResidentsCount,
-                dataAttr: "residents-tab-current",
-              },
-              {
-                id: "previous",
-                label: "Previous",
-                count: previousResidentsCount,
-                dataAttr: "residents-tab-previous",
-              },
-            ]}
-            activeId={residentsTab}
-            onChange={(id) => {
-              const next = id as ResidentsTabId;
-              setResidentsTab(next);
-              navigate(`${portalBase}/residents/${next}`);
+      {filtered.length === 0 ? (
+        <>
+          <PortalListToolbar
+            statusPills={
+              <ManagerPortalStatusPills
+                compact
+                selectAriaLabel="Show current or previous residents"
+                tabs={[
+                  { id: "current", label: "Current", count: currentResidentsCount, dataAttr: "residents-tab-current" },
+                  { id: "previous", label: "Previous", count: previousResidentsCount, dataAttr: "residents-tab-previous" },
+                ]}
+                activeId={residentsTab}
+                onChange={(id) => {
+                  const next = id as ResidentsTabId;
+                  setResidentsTab(next);
+                  navigate(`${portalBase}/residents/${next}`);
+                }}
+              />
+            }
+            search={{
+              value: searchQuery,
+              onChange: setSearchQuery,
+              placeholder: "Search residents",
+              dataAttr: "residents-search",
             }}
           />
-        }
-        search={{
-          value: searchQuery,
-          onChange: setSearchQuery,
-          placeholder: "Search residents",
-          dataAttr: "residents-search",
-        }}
-      />
-      {filtered.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="residents"
-          message={
-            residents.length === 0
-              ? "No residents yet."
-              : searchQuery.trim()
-                ? "No residents match your search."
-              : residentsTab === "current"
-                ? "No current residents yet."
-                : "No previous residents yet."
+          <PortalDataTableEmpty
+            icon="residents"
+            message={
+              residents.length === 0
+                ? "No residents yet."
+                : searchQuery.trim()
+                  ? "No residents match your search."
+                  : residentsTab === "current"
+                    ? "No current residents yet."
+                    : "No previous residents yet."
+            }
+          />
+        </>
+      ) : (
+        <PortalListDetailPane
+          mobileCompact
+          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+          detailOpen={mobileDetailOpen && Boolean(selected)}
+          list={
+            <div className="flex min-h-0 flex-1 flex-col">
+              <PortalListToolbar
+                statusPills={
+                  <ManagerPortalStatusPills
+                    compact
+                    selectAriaLabel="Show current or previous residents"
+                    tabs={[
+                      { id: "current", label: "Current", count: currentResidentsCount, dataAttr: "residents-tab-current" },
+                      { id: "previous", label: "Previous", count: previousResidentsCount, dataAttr: "residents-tab-previous" },
+                    ]}
+                    activeId={residentsTab}
+                    onChange={(id) => {
+                      const next = id as ResidentsTabId;
+                      setResidentsTab(next);
+                      navigate(`${portalBase}/residents/${next}`);
+                    }}
+                  />
+                }
+                search={{
+                  value: searchQuery,
+                  onChange: setSearchQuery,
+                  placeholder: "Search residents",
+                  dataAttr: "residents-search",
+                }}
+              />
+              <div className={INBOX_LIST_SCROLL}>
+                {filtered.map((res) => {
+                  const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <PortalPersonRecordRow
+                      key={res.id}
+                      name={res.name || "—"}
+                      subtitle={housingLabel || undefined}
+                      preview={res.email || housingLabel || " "}
+                      meta={res.leaseStart ? shortDateLabel(res.leaseStart) : undefined}
+                      selected={selectedId === res.id}
+                      onOpen={() => {
+                        setSelectedId(res.id);
+                        setMobileDetailOpen(true);
+                      }}
+                      dataAttr="resident-list-row"
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          }
+          detail={
+            selected ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <PortalDetailHeader
+                  title={selected.name || "Resident"}
+                  subtitle={selected.email || undefined}
+                  avatarName={selected.name || selected.email}
+                  onBack={() => setMobileDetailOpen(false)}
+                  backLabel="Back to residents"
+                  dataAttrBack="resident-detail-back"
+                />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+                  {residentDetailPanel}
+                </div>
+              </div>
+            ) : (
+              <PortalListDetailPlaceholder
+                title="Select a resident"
+                hint="Choose someone from the list to view their profile, lease, and payments."
+              />
+            )
           }
         />
-      ) : (
-      <>
-      <div className="space-y-2 lg:hidden">
-        {filtered.map((res) => {
-          const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null].filter(Boolean).join(" · ");
-          return (
-          <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-2 text-left"
-              onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-              aria-expanded={selectedId === res.id}
-            >
-              <div className="min-w-0 flex-1">
-                <PortalTableInlineExpand expanded={selectedId === res.id} className="truncate font-semibold text-foreground">
-                  {res.name || "—"}
-                </PortalTableInlineExpand>
-                {housingLabel ? (
-                  <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
-                ) : null}
-              </div>
-            </button>
-            {selectedId === res.id && selected ? (
-              <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
-            ) : null}
-          </div>
-          );
-        })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full table-fixed border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((res) => (
-                  <Fragment key={res.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
-                      )}
-                      aria-expanded={selectedId === res.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={selectedId === res.id}>
-                          {res.name || "—"}
-                        </PortalTableInlineExpand>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>{res.email}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
-                    </tr>
-                    {selectedId === res.id && selected ? (
-                      <tr>
-                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
-                          {residentDetailPanel}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </>
       )}
 
       <ReminderSettingsModal
