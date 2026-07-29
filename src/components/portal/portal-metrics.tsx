@@ -725,7 +725,7 @@ export function PortalToolbarSelectWrap({
 
 /** Shared action button sizing for page header controls. */
 export const PORTAL_HEADER_ACTION_BTN =
-  "h-10 rounded-full px-5 text-sm font-semibold [html[data-native]_&]:h-9 [html[data-native]_&]:px-3.5 [html[data-native]_&]:text-xs";
+  "h-10 rounded-full px-5 text-sm font-semibold max-md:h-9 max-md:px-3.5 max-md:text-xs [html[data-native]_&]:h-9 [html[data-native]_&]:px-3.5 [html[data-native]_&]:text-xs";
 
 /** Compact toolbar buttons (resident profile sections on mobile). */
 export const RESIDENT_DETAIL_HEADER_ACTION_BTN =

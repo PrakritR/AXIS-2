@@ -212,7 +212,7 @@ export function ManagerProperties({
   };
 
   const propertiesHeaderActions = (
-    <PortalSectionActionRow>
+    <PortalSectionActionRow variant="header">
       <Button
         type="button"
         variant="outline"

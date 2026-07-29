@@ -38,8 +38,14 @@ export function PageHeader({
       )}
       data-slot="page-header"
     >
-      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <h1 className={cn(PAGE_HEADER_TITLE_CLASS, titleTrailing ? "shrink-0" : "flex-1")}>
+      <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
+        <h1
+          className={cn(
+            PAGE_HEADER_TITLE_CLASS,
+            titleTrailing ? "shrink-0" : "min-w-0 flex-1",
+            primaryAction && !titleTrailing && "truncate",
+          )}
+        >
           {title}
           {count != null ? (
             <span className="ml-2 align-middle">

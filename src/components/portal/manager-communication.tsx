@@ -224,7 +224,7 @@ export function ManagerCommunication({
   );
 
   const titleAside = (
-    <PortalSectionActionRow>
+    <PortalSectionActionRow variant="header">
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
       <Button
         type="button"

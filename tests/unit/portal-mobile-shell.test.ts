@@ -32,8 +32,9 @@ describe("portal mobile shell conventions", () => {
   });
 
   it("uses measured bottom nav inset on native main content", () => {
-    expect(GLOBALS_CSS).toContain("padding-bottom: var(--portal-native-bottom-nav-inset)");
-    expect(GLOBALS_CSS).toContain("scroll-padding-bottom: var(--portal-native-bottom-nav-inset)");
+    expect(GLOBALS_CSS).toContain("--portal-mobile-scroll-bottom-inset");
+    expect(GLOBALS_CSS).toContain("padding-bottom: var(--portal-mobile-scroll-bottom-inset)");
+    expect(GLOBALS_CSS).toContain("scroll-padding-bottom: var(--portal-mobile-scroll-bottom-inset)");
   });
 
   it("documents native dashboard preview list spacing", () => {
@@ -76,6 +77,8 @@ describe("portal mobile shell conventions", () => {
     );
     expect(AXIS_ASSISTANT_SOURCE).not.toContain("AxisAssistantNavButton");
     expect(AXIS_ASSISTANT_SOURCE).toContain("[html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]");
+    expect(GLOBALS_CSS).toContain(".axis-assistant-fab");
+    expect(GLOBALS_CSS).toContain("calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem)");
     expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
     expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
   });

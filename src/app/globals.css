@@ -1313,6 +1313,11 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
    higher specificity and wins in the native app, so this only ever governs web. */
 :root {
   --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
+  /* FAB (h-11) + gap above the fixed bottom bar — used for main-column scroll clearance. */
+  --portal-assistant-fab-clearance: 3.5rem;
+  --portal-mobile-scroll-bottom-inset: calc(
+    var(--portal-native-bottom-nav-inset) + var(--portal-assistant-fab-clearance)
+  );
   --portal-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --portal-duration-fast: 120ms;
   --portal-duration: 220ms;
@@ -2078,11 +2083,11 @@ html[data-native] .portal-main-inner {
 
 html[data-native] #portal-main-content {
   padding-top: max(0.25rem, var(--native-safe-top));
-  padding-bottom: var(--portal-native-bottom-nav-inset);
+  padding-bottom: var(--portal-mobile-scroll-bottom-inset);
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
   scroll-padding-top: max(0.25rem, var(--native-safe-top));
-  scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+  scroll-padding-bottom: var(--portal-mobile-scroll-bottom-inset);
 }
 
 /* Resident/manager/vendor: back + profile sit in the status-bar band beside the notch. */
@@ -2156,8 +2161,8 @@ html[data-native] .portal-mobile-nav-bar {
   }
 
   #portal-main-content {
-    padding-bottom: var(--portal-native-bottom-nav-inset);
-    scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+    padding-bottom: var(--portal-mobile-scroll-bottom-inset);
+    scroll-padding-bottom: var(--portal-mobile-scroll-bottom-inset);
   }
 
   .portal-mobile-nav-bar {
@@ -2224,13 +2229,11 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
     padding-right: 3.25rem;
   }
 
+  /* Float above the fixed bottom tab bar (not inside it) on phone-width web + native. */
   .axis-assistant-fab {
-    bottom: max(1.25rem, env(safe-area-inset-bottom)) !important;
-    right: max(1rem, env(safe-area-inset-right)) !important;
-  }
-
-  html[data-native] .axis-assistant-fab {
     bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    z-index: 45;
   }
 }
 
