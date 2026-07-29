@@ -87,9 +87,9 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
  */
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "properties",
-  "communication",
-  "dashboard",
   "residents",
+  "dashboard",
+  "communication",
 ] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;

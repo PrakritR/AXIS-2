@@ -712,7 +712,9 @@ export function InboxListSegmentTabs({
             type="button"
             role="tab"
             aria-selected={selected}
-            onClick={() => onChange(tab.id)}
+            onClick={() => {
+              if (tab.id !== value) onChange(tab.id);
+            }}
             className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors max-md:px-1.5 max-md:py-1 max-md:text-[11px] ${
               selected
                 ? "bg-card text-foreground shadow-sm"

@@ -108,6 +108,13 @@ function iosListTimestamp(iso: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
 }
 
+/** Desktop shows list + thread together; phones use list-then-thread navigation. */
+function inboxUsesDesktopSplit(): boolean {
+  if (typeof window === "undefined") return true;
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
 export function ManagerUnifiedInbox({
   tabId,
   commBase,
@@ -141,6 +148,7 @@ export function ManagerUnifiedInbox({
   const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [listSegment, setListSegment] = useState<InboxListSegment>("active");
 
   useEffect(() => {
@@ -344,20 +352,29 @@ export function ManagerUnifiedInbox({
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
   useEffect(() => {
-    onThreadOpenChange?.(Boolean(selection));
-  }, [onThreadOpenChange, selection]);
+    onThreadOpenChange?.(mobileThreadOpen && Boolean(selection));
+  }, [onThreadOpenChange, mobileThreadOpen, selection]);
 
-  // Toggling the segment is a different result set — clear search; keep selection when possible.
+  // Toggling the segment is a different result set — clear search; return to list on phones.
   useEffect(() => {
     setQuery("");
+    setMobileThreadOpen(false);
+    if (!inboxUsesDesktopSplit()) {
+      setSelectedKey(null);
+    }
   }, [listSegment]);
 
   useEffect(() => {
     if (mergedRows.length === 0) {
       setSelectedKey(null);
+      setMobileThreadOpen(false);
       return;
     }
-    setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0].key));
+    setSelectedKey((cur) => {
+      if (cur && mergedRows.some((r) => r.key === cur)) return cur;
+      if (inboxUsesDesktopSplit()) return mergedRows[0]!.key;
+      return null;
+    });
   }, [mergedRows]);
 
   const listPane = (
@@ -414,7 +431,10 @@ export function ManagerUnifiedInbox({
               unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
-              onOpen={() => setSelectedKey(row.key)}
+              onOpen={() => {
+                setSelectedKey(row.key);
+                setMobileThreadOpen(true);
+              }}
             />
           ))
         )}
@@ -436,7 +456,10 @@ export function ManagerUnifiedInbox({
         filterContacts={filterContacts}
         controlledExpandedId={selection.threadId}
         onControlledExpandedIdChange={(id) => {
-          if (!id) setSelectedKey(null);
+          if (!id) {
+            setSelectedKey(null);
+            setMobileThreadOpen(false);
+          }
         }}
       />
     ) : selection?.channel === "sms" ? (
@@ -448,7 +471,10 @@ export function ManagerUnifiedInbox({
         suppressListPane
         controlledActiveId={selection.threadId}
         onControlledActiveIdChange={(id) => {
-          if (!id) setSelectedKey(null);
+          if (!id) {
+            setSelectedKey(null);
+            setMobileThreadOpen(false);
+          }
         }}
         onUnreadCountChange={onSmsUnreadCountChange}
         onConversationOpened={handleSmsConversationOpened}
@@ -464,7 +490,7 @@ export function ManagerUnifiedInbox({
     <InboxTwoPane
       mobileCompact
       className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-      threadOpen={Boolean(selection)}
+      threadOpen={mobileThreadOpen && Boolean(selection)}
       list={listPane}
       thread={threadPane}
     />

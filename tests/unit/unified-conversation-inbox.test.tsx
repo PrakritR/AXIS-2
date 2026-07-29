@@ -158,4 +158,28 @@ describe("unified conversation inbox (no folder tabs)", () => {
     await waitFor(() => expect(screen.getByText("Jordan Lee")).toBeTruthy());
     expect(screen.getByText("Dana Ramirez")).toBeTruthy();
   });
+
+  it("does not open a thread on mobile when re-tapping the Active segment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })),
+    );
+    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" />);
+    await waitFor(() => expect(screen.getByText("Dana Ramirez")).toBeTruthy());
+    expect(screen.queryByTestId("embedded-email-thread")).toBeNull();
+
+    const activeTab = screen.getByRole("tab", { name: /^Active/ });
+    fireEvent.click(activeTab);
+    expect(screen.queryByTestId("embedded-email-thread")).toBeNull();
+  });
 });
