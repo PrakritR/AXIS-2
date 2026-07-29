@@ -805,7 +805,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-leases"
             />
             <PortalDashboardKpiTile
-              label="Applicants to review"
+              label="Review"
               value={pendingApps.length}
               tone={pendingApps.length > 0 ? "warning" : "brand"}
               emphasis={pendingApps.length > 0}
@@ -813,7 +813,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-applications"
             />
             <PortalDashboardKpiTile
-              label="Overdue balance"
+              label="Overdue"
               value={overdueBalanceLabel}
               tone={overdueChargeCount > 0 ? "danger" : "success"}
               emphasis={overdueChargeCount > 0}
@@ -821,12 +821,20 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-overdue"
             />
             <PortalDashboardKpiTile
-              label="Open services"
+              label="Services"
               value={serviceItems.length}
               tone={serviceItems.length > 0 ? "warning" : "neutral"}
               emphasis={serviceItems.length > 0}
               href={`${BASE}/services/requests`}
               dataAttr="dashboard-kpi-services"
+            />
+            <PortalDashboardKpiTile
+              label="Messages to read"
+              value={inboxThreads.length}
+              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
+              emphasis={inboxThreads.length > 0}
+              href={`${BASE}/communication/inbox/unopened`}
+              dataAttr="dashboard-kpi-messages"
             />
         </PortalDashboardKpiRow>
 

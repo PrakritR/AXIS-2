@@ -395,7 +395,7 @@ export const PORTAL_DASHBOARD_STACK = "space-y-5 max-lg:space-y-3 [html[data-nat
 /** KPI row: 2-column grid on phones (no sideways scroll); horizontal strip from `sm` up. */
 export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-2 max-md:[&>*]:min-w-0 sm:-mx-1 sm:flex sm:gap-2.5 sm:overflow-x-auto sm:px-1 sm:pb-1 sm:[&>*]:min-w-[8.75rem] [-ms-overflow-style:none] sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
+    <div className="grid grid-cols-2 gap-2 max-md:[&>*]:min-w-0 sm:-mx-1 sm:flex sm:gap-2 sm:overflow-x-auto sm:px-1 sm:pb-1 sm:[&>*]:min-w-[7.25rem] sm:[&>*]:max-w-[9.5rem] [-ms-overflow-style:none] sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
       {children}
     </div>
   );
@@ -440,7 +440,7 @@ const KPI_TONE_STYLES: Record<
   },
 };
 
-/** Restrained KPI tile: tinted accent, colored value + label (no subtext row). */
+/** Restrained KPI tile: header label on top, centered value (no subtext). */
 export function PortalDashboardKpiTile({
   label,
   value,
@@ -463,29 +463,31 @@ export function PortalDashboardKpiTile({
       href={href}
       data-attr={dataAttr}
       className={cn(
-        "flex min-w-0 flex-1 flex-col rounded-xl border border-border border-l-[3px] px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
+        "flex min-h-[5.25rem] min-w-0 flex-1 flex-col items-center justify-between rounded-xl border border-border border-l-[3px] px-2.5 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
         "hover:-translate-y-px hover:border-primary/35 hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]",
-        "max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3",
+        "sm:min-h-[5.5rem] sm:min-w-[7.5rem] sm:px-3 sm:py-3 [html[data-native]_&]:min-h-[4.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2",
         styles.accent,
         styles.shell,
       )}
     >
       <span
         className={cn(
-          "text-[1.75rem] leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem]",
+          "w-full shrink-0 px-0.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] sm:text-[10px] sm:tracking-[0.08em]",
+          "line-clamp-2 [html[data-native]_&]:text-[8px]",
+          styles.label,
+        )}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          "flex w-full flex-1 items-center justify-center whitespace-nowrap tabular-nums tracking-[-0.02em]",
+          "text-[1.5rem] sm:text-[1.65rem] [html[data-native]_&]:text-[1.35rem]",
           emphasis ? "font-bold" : "font-semibold",
           styles.value,
         )}
       >
         {value}
-      </span>
-      <span
-        className={cn(
-          "mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]",
-          styles.label,
-        )}
-      >
-        {label}
       </span>
     </Link>
   );
