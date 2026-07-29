@@ -2,6 +2,7 @@
 import { describe, expect, it, vi, beforeAll } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
@@ -15,6 +16,22 @@ beforeAll(() => {
     unobserve() {}
   }
   vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+});
+
+describe("DestinationNav", () => {
+  it("marks active item by id", () => {
+    render(
+      <DestinationNav
+        items={[
+          { id: "pending", label: "Pending", href: "/portal/payments/incoming/pending", count: 5 },
+          { id: "paid", label: "Paid", href: "/portal/payments/incoming/paid" },
+        ]}
+        activeId="pending"
+      />,
+    );
+    expect(screen.getByRole("link", { name: /Pending/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Paid/ }).getAttribute("aria-current")).toBeNull();
+  });
 });
 
 describe("PageHeader", () => {

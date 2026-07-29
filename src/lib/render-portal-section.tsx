@@ -551,10 +551,43 @@ export async function renderPortalSection(
           managerOwnerSubscriptionTier,
         );
       }
-      if (tabParts?.length) {
-        redirect(`${def.basePath}/${section}`);
+
+      const PAYMENT_DIRECTIONS = ["incoming", "outgoing"] as const;
+      const PAYMENT_BUCKETS = ["pending", "overdue", "paid"] as const;
+
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/payments/incoming/pending`);
       }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+
+      const directionRaw = tabParts[0];
+      if (!PAYMENT_DIRECTIONS.includes(directionRaw as typeof PAYMENT_DIRECTIONS[number])) {
+        redirect(`${def.basePath}/payments/incoming/pending`);
+      }
+      const direction = directionRaw as "incoming" | "outgoing";
+
+      if (tabParts.length === 1) {
+        redirect(`${def.basePath}/payments/${direction}/pending`);
+      }
+
+      if (tabParts.length > 2) {
+        redirect(`${def.basePath}/payments/${direction}/pending`);
+      }
+
+      const bucketRaw = tabParts[1];
+      const bucket = PAYMENT_BUCKETS.includes(bucketRaw as typeof PAYMENT_BUCKETS[number])
+        ? (bucketRaw as "pending" | "overdue" | "paid")
+        : "pending";
+
+      if (bucketRaw !== bucket) {
+        redirect(`${def.basePath}/payments/${direction}/${bucket}`);
+      }
+
+      return subscriptionGated(
+        <ManagerPayments direction={direction} bucket={bucket} basePath={def.basePath} />,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
     }
 
     const financesView = await renderManagerFinancesSection(

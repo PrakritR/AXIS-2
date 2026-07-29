@@ -3,18 +3,15 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusFilterRow,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_MOBILE_STATUS_SELECT_CLASS,
   PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
-import { PortalTabs } from "@/components/ui/portal-tabs";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -168,12 +165,19 @@ function normalizePropertyLabel(label: string | undefined): string {
     .trim();
 }
 
-export function ManagerPayments() {
+export function ManagerPayments({
+  direction = "incoming",
+  bucket = "pending",
+  basePath = "/portal",
+}: {
+  direction?: ManagerPaymentDirection;
+  bucket?: ManagerPaymentBucket;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
-  const [direction, setDirection] = useState<ManagerPaymentDirection>("incoming");
-  const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
+  const paymentsBase = `${basePath}/payments`;
   const [hcTick, setHcTick] = useState(0);
   const [outgoingTick, setOutgoingTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
@@ -193,6 +197,10 @@ export function ManagerPayments() {
     [reminderSettings],
   );
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
+
+  useEffect(() => {
+    setResidentFilter("");
+  }, [direction]);
 
   useEffect(() => {
     const onOutgoing = () => setOutgoingTick((n) => n + 1);
@@ -532,37 +540,16 @@ export function ManagerPayments() {
 
   const filterRow = (
     <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-      <label className="flex shrink-0 md:hidden">
-        <span className="sr-only">Payment direction</span>
-        <Select
-          className={PORTAL_MOBILE_STATUS_SELECT_CLASS}
-          value={direction}
-          onChange={(e) => {
-            setDirection(e.target.value as ManagerPaymentDirection);
-            setBucket("pending");
-            setResidentFilter("");
-          }}
-          data-attr="payments-direction-mobile-select"
-        >
-          {DIRECTION_LABELS.map(({ id, label }) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <div className="hidden w-fit shrink-0 md:block">
-        <PortalTabs
-          items={DIRECTION_LABELS.map((d) => ({ id: d.id, label: d.label }))}
-          activeId={direction}
-          ariaLabel="Payment direction"
-          onChange={(id) => {
-            setDirection(id as ManagerPaymentDirection);
-            setBucket("pending");
-            setResidentFilter("");
-          }}
-        />
-      </div>
+      <DestinationNav
+        items={DIRECTION_LABELS.map((d) => ({
+          id: d.id,
+          label: d.label,
+          href: `${paymentsBase}/${d.id}/pending`,
+          dataAttr: `payments-direction-${d.id}`,
+        }))}
+        activeId={direction}
+        ariaLabel="Payment direction"
+      />
       <PortalFilterSortSheet
         activeCount={filterTouchCount}
         onReset={resetPaymentFilters}
@@ -648,19 +635,19 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
-      <div className="mt-1">
-        <ManagerPortalStatusFilterRow>
-          <PortalTabs
-            items={tabs.map((t) => ({
-              id: t.id,
-              label: t.label,
-              count: t.count,
-            }))}
-            activeId={bucket}
-            ariaLabel="Payment status"
-            onChange={(id) => setBucket(id as ManagerPaymentBucket)}
-          />
-        </ManagerPortalStatusFilterRow>
+      <div className="mt-1 space-y-3">
+        <DestinationNav
+          items={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: `${paymentsBase}/${direction}/${t.id}`,
+            count: t.count,
+            alert: t.alert,
+            dataAttr: `payments-bucket-${t.id}`,
+          }))}
+          activeId={bucket}
+          ariaLabel="Payment status"
+        />
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel
             rows={rowsForBucket}

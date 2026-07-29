@@ -36,6 +36,13 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { MonthlyProfitChart } from "@/components/portal/monthly-profit-chart";
+import { ManagerDashboardKpiStrip } from "@/components/portal/manager-dashboard-kpi-strip";
+import { ManagerDashboardMoneySummary } from "@/components/portal/manager-dashboard-money-summary";
+import {
+  DASHBOARD_TASK_ICONS,
+  ManagerDashboardTaskLauncher,
+  type DashboardTaskItem,
+} from "@/components/portal/manager-dashboard-task-launcher";
 import {
   applicationVisibleToPortalUser,
   collectLinkedPropertyIdsForModule,
@@ -222,44 +229,37 @@ function IssueRow({
   );
 }
 
-/** Compact attention strip — only surfaces that genuinely need action. */
-function DashboardAttentionStrip({
+/** Attention rows — statement plus a direct action button (TurboTenant pattern). */
+function DashboardAttentionList({
   items,
 }: {
-  items: { id: string; label: string; href: string; tone: AttentionTone; dataAttr?: string }[];
+  items: { id: string; statement: string; href: string; actionLabel: string }[];
 }) {
   if (items.length === 0) {
     return (
-      <p className="text-sm text-muted" data-attr="dashboard-attention-strip-calm">
+      <p className="text-sm text-muted" data-attr="dashboard-attention-list-calm">
         You&apos;re all caught up — nothing needs your attention right now.
       </p>
     );
   }
 
   return (
-    <div
-      className="flex flex-wrap gap-2 [html[data-native]_&]:gap-1.5"
-      data-attr="dashboard-attention-strip"
-    >
-      {items.map((item) => {
-        const accent = ATTENTION_TONE[item.tone];
-        return (
+    <div className="space-y-2" data-slot="dashboard-attention-list">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5"
+        >
+          <p className="min-w-0 text-sm font-medium text-foreground">{item.statement}</p>
           <Link
-            key={item.id}
             href={item.href}
-            data-attr={item.dataAttr}
-            className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold transition hover:shadow-[var(--shadow-sm)]"
-            style={{
-              borderColor: `color-mix(in srgb, ${accent.fg} 35%, var(--border))`,
-              background: `color-mix(in srgb, ${accent.bg} 55%, var(--card))`,
-              color: accent.fg,
-            }}
+            data-attr={`dashboard-attention-view-${item.id}`}
+            className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-border bg-accent/40 px-3 text-xs font-bold uppercase tracking-[0.06em] text-foreground transition hover:bg-accent/70"
           >
-            <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: accent.fg }} />
-            <span className="truncate">{item.label}</span>
+            {item.actionLabel}
           </Link>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -829,6 +829,14 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const overdueBalanceLabel = formatUsd(
     overdueCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
   );
+  const totalUnpaidLabel = formatUsd(
+    pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
+  );
+  const asOfLabel = new Date().toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const residentAttentionItems: DashboardResidentAttentionItem[] = activeResidents.map((lease) => ({
     lease,
@@ -871,50 +879,53 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     visibility.services ||
     visibility.inbox;
 
-  const attentionStripItems = useMemo(() => {
-    const items: { id: string; label: string; href: string; tone: AttentionTone; dataAttr?: string }[] = [];
+  const attentionListItems = useMemo(() => {
+    const items: { id: string; statement: string; href: string; actionLabel: string }[] = [];
     if (overdueChargeCount > 0) {
       items.push({
         id: "overdue",
-        label: `${overdueChargeCount} overdue · ${overdueBalanceLabel}`,
-        href: `${BASE}/payments`,
-        tone: "danger",
-        dataAttr: "dashboard-attention-strip-overdue",
+        statement: `${overdueChargeCount} overdue charge${overdueChargeCount === 1 ? "" : "s"} · ${overdueBalanceLabel}`,
+        href: `${BASE}/payments/incoming/overdue`,
+        actionLabel: "View payments",
       });
     }
     if (pendingApps.length > 0) {
       items.push({
         id: "applications",
-        label: `${pendingApps.length} application${pendingApps.length === 1 ? "" : "s"} to review`,
+        statement: `${pendingApps.length} application${pendingApps.length === 1 ? "" : "s"} awaiting review`,
         href: `${BASE}/applications`,
-        tone: "pending",
-        dataAttr: "dashboard-attention-strip-applications",
+        actionLabel: "Review",
       });
     }
     if (managerSignatureLeaseCount > 0) {
       items.push({
         id: "leases-sign",
-        label: `${managerSignatureLeaseCount} lease${managerSignatureLeaseCount === 1 ? "" : "s"} need your signature`,
+        statement: `${managerSignatureLeaseCount} lease${managerSignatureLeaseCount === 1 ? "" : "s"} need your signature`,
         href: `${BASE}/leases`,
-        tone: "pending",
-        dataAttr: "dashboard-attention-strip-leases",
+        actionLabel: "Sign",
       });
     } else if (pendingLeaseRows.length > 0) {
       items.push({
         id: "leases",
-        label: `${pendingLeaseRows.length} unsigned lease${pendingLeaseRows.length === 1 ? "" : "s"}`,
+        statement: `${pendingLeaseRows.length} unsigned lease${pendingLeaseRows.length === 1 ? "" : "s"}`,
         href: `${BASE}/leases`,
-        tone: "info",
-        dataAttr: "dashboard-attention-strip-leases",
+        actionLabel: "View leases",
       });
     }
     if (serviceItems.length > 0) {
       items.push({
         id: "services",
-        label: `${serviceItems.length} open service request${serviceItems.length === 1 ? "" : "s"}`,
+        statement: `${serviceItems.length} open service request${serviceItems.length === 1 ? "" : "s"}`,
         href: `${BASE}/services/requests`,
-        tone: servicesSectionTone,
-        dataAttr: "dashboard-attention-strip-services",
+        actionLabel: "View services",
+      });
+    }
+    if (pendingTours.length > 0) {
+      items.push({
+        id: "tours",
+        statement: `${pendingTours.length} tour request${pendingTours.length === 1 ? "" : "s"} pending`,
+        href: `${BASE}/calendar`,
+        actionLabel: "View calendar",
       });
     }
     return items;
@@ -925,8 +936,209 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     managerSignatureLeaseCount,
     pendingLeaseRows.length,
     serviceItems.length,
-    servicesSectionTone,
+    pendingTours.length,
   ]);
+
+  const kpiChips = useMemo(() => {
+    const chips: {
+      id: string;
+      label: string;
+      value: string | number;
+      href: string;
+      badge?: string;
+      alert?: boolean;
+      dataAttr?: string;
+    }[] = [];
+    if (visibility.applications && pendingApps.length > 0) {
+      chips.push({
+        id: "applications",
+        label: "Applications",
+        value: pendingApps.length,
+        href: `${BASE}/applications`,
+        badge: pendingApps.length > 0 ? "New" : undefined,
+        alert: true,
+        dataAttr: "dashboard-kpi-applications",
+      });
+    }
+    if (visibility.leases && pendingLeaseRows.length > 0) {
+      chips.push({
+        id: "leases",
+        label: "Leases",
+        value: pendingLeaseRows.length,
+        href: `${BASE}/leases`,
+        dataAttr: "dashboard-kpi-leases",
+      });
+    }
+    if (visibility.payments && overdueChargeCount > 0) {
+      chips.push({
+        id: "overdue",
+        label: "Overdue",
+        value: overdueChargeCount,
+        href: `${BASE}/payments/incoming/overdue`,
+        alert: true,
+        dataAttr: "dashboard-kpi-overdue",
+      });
+    }
+    if (visibility.services && serviceItems.length > 0) {
+      chips.push({
+        id: "services",
+        label: "Services",
+        value: serviceItems.length,
+        href: `${BASE}/services/requests`,
+        dataAttr: "dashboard-kpi-services",
+      });
+    }
+    if (visibility.inbox && inboxThreads.length > 0) {
+      chips.push({
+        id: "messages",
+        label: "Messages",
+        value: inboxThreads.length,
+        href: `${BASE}/communication/inbox/unopened`,
+        dataAttr: "dashboard-kpi-messages",
+      });
+    }
+    if (roomsVacant > 0) {
+      chips.push({
+        id: "vacant",
+        label: "Vacant",
+        value: roomsVacant,
+        href: `${BASE}/properties`,
+        dataAttr: "dashboard-kpi-vacant",
+      });
+    }
+    return chips;
+  }, [
+    visibility,
+    pendingApps.length,
+    pendingLeaseRows.length,
+    overdueChargeCount,
+    serviceItems.length,
+    inboxThreads.length,
+    roomsVacant,
+  ]);
+
+  const rankedTaskItems = useMemo(() => {
+    const items: DashboardTaskItem[] = [];
+    if (pendingApps.length > 0) {
+      items.push({
+        id: "review-apps",
+        label: "Review applications",
+        description: "Screen and approve incoming applicants",
+        href: `${BASE}/applications`,
+        count: pendingApps.length,
+        icon: DASHBOARD_TASK_ICONS.applications,
+        dataAttr: "dashboard-task-applications",
+      });
+    }
+    if (managerSignatureLeaseCount > 0) {
+      items.push({
+        id: "sign-leases",
+        label: "Sign leases",
+        description: "Leases waiting for your signature",
+        href: `${BASE}/leases`,
+        count: managerSignatureLeaseCount,
+        urgent: true,
+        icon: DASHBOARD_TASK_ICONS.leases,
+        dataAttr: "dashboard-task-leases",
+      });
+    }
+    if (overdueChargeCount > 0) {
+      items.push({
+        id: "collect-overdue",
+        label: "Collect overdue rent",
+        description: `${overdueBalanceLabel} past due`,
+        href: `${BASE}/payments/incoming/overdue`,
+        count: overdueChargeCount,
+        urgent: true,
+        icon: DASHBOARD_TASK_ICONS.payments,
+        dataAttr: "dashboard-task-overdue",
+      });
+    }
+    if (serviceItems.length > 0) {
+      items.push({
+        id: "services",
+        label: "Review service requests",
+        description: "Open maintenance and add-on requests",
+        href: `${BASE}/services/requests`,
+        count: serviceItems.length,
+        icon: DASHBOARD_TASK_ICONS.services,
+        dataAttr: "dashboard-task-services",
+      });
+    }
+    if (inboxThreads.length > 0) {
+      items.push({
+        id: "messages",
+        label: "Reply to messages",
+        description: "Unread conversations",
+        href: `${BASE}/communication/inbox/unopened`,
+        count: inboxThreads.length,
+        icon: DASHBOARD_TASK_ICONS.messages,
+        dataAttr: "dashboard-task-messages",
+      });
+    }
+    return items;
+  }, [
+    pendingApps.length,
+    managerSignatureLeaseCount,
+    overdueChargeCount,
+    overdueBalanceLabel,
+    serviceItems.length,
+    inboxThreads.length,
+  ]);
+
+  const moreTaskItems: DashboardTaskItem[] = useMemo(
+    () => [
+      {
+        id: "create-charge",
+        label: "Create a charge",
+        description: "Bill rent, fees, or one-time amounts",
+        href: `${BASE}/payments/incoming/pending`,
+        icon: DASHBOARD_TASK_ICONS.charge,
+        dataAttr: "dashboard-task-create-charge",
+      },
+      {
+        id: "record-expense",
+        label: "Record an expense",
+        description: "Log outgoing payments to vendors",
+        href: `${BASE}/payments/outgoing/pending`,
+        icon: DASHBOARD_TASK_ICONS.expense,
+        dataAttr: "dashboard-task-record-expense",
+      },
+      {
+        id: "share-listing",
+        label: "Share a listing",
+        description: "Send properties to prospects",
+        href: `${BASE}/promotion`,
+        icon: DASHBOARD_TASK_ICONS.promotion,
+        dataAttr: "dashboard-task-promotion",
+      },
+      {
+        id: "add-property",
+        label: "Add a property",
+        description: "Publish a new rental listing",
+        href: `${BASE}/properties`,
+        icon: DASHBOARD_TASK_ICONS.properties,
+        dataAttr: "dashboard-task-properties",
+      },
+      {
+        id: "work-order",
+        label: "Create a work order",
+        description: "Dispatch maintenance to vendors",
+        href: `${BASE}/services/work-orders`,
+        icon: DASHBOARD_TASK_ICONS.services,
+        dataAttr: "dashboard-task-work-orders",
+      },
+      {
+        id: "calendar",
+        label: "Manage calendar",
+        description: "Tours and scheduled visits",
+        href: `${BASE}/calendar`,
+        icon: DASHBOARD_TASK_ICONS.calendar,
+        dataAttr: "dashboard-task-calendar",
+      },
+    ],
+    [],
+  );
 
   const showDocExpiryBanner =
     docExpirySummary && (docExpirySummary.expired > 0 || docExpirySummary.within30 > 0);
@@ -961,14 +1173,34 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
           </Link>
         ) : null}
 
+        <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,13.5rem)] lg:items-start lg:gap-5 lg:space-y-0">
+          <div className="space-y-3 min-w-0 lg:order-1">
+            <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Needs you</h2>
+            <DashboardAttentionList items={attentionListItems} />
+          </div>
+
+          <div className="min-w-0 lg:order-2">
+            <ManagerDashboardTaskLauncher ranked={rankedTaskItems} more={moreTaskItems} />
+          </div>
+
+          <div className="space-y-3 min-w-0 lg:order-3">
+            <ManagerDashboardKpiStrip items={kpiChips} />
+            {visibility.payments ? (
+              <ManagerDashboardMoneySummary
+                totalUnpaidLabel={totalUnpaidLabel}
+                totalPastDueLabel={overdueBalanceLabel}
+                asOfLabel={asOfLabel}
+                paymentsHref={`${BASE}/payments/incoming/pending`}
+              />
+            ) : null}
+          </div>
+        </div>
+
         {visibility.cashflow ? (
           <MonthlyProfitChart points={mergeMonthlyCashflow(paymentsByMonth, expensesByMonth)} />
         ) : null}
 
-        <DashboardAttentionStrip items={attentionStripItems} />
-
-        {/* Needs attention — a live, colour-coded queue: big all-caps heading over
-            status-railed group cards that stream in with a staggered entrance. */}
+        {/* Needs attention — detailed queue groups */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">
           <div className="flex items-center gap-2.5">
             <span aria-hidden className="text-primary text-xl leading-none [html[data-native]_&]:text-lg">
