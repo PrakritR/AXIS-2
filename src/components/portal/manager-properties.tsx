@@ -243,7 +243,7 @@ export function ManagerProperties({
 
   return (
     <>
-      <ManagerPortalPageShell title="Properties" compactFilterRow>
+      <ManagerPortalPageShell title="Properties" titleAside={propertiesHeaderActions} compactFilterRow>
         {atPropertyLimit && limitMax != null ? (
           <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
             You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
@@ -259,7 +259,6 @@ export function ManagerProperties({
         ) : null}
         <PortalListControlStack
           className="mb-3"
-          primaryAction={propertiesHeaderActions}
           destinations={MANAGER_STAGES.map((stage) => ({
             id: stage.key,
             label: stage.label,

@@ -30,13 +30,12 @@ export function PortalCommunicationShell({
 }) {
   const resolvedStack =
     controlStack ??
-    (titleAside || threadFilters ? (
-      <PortalListControlStack filterRow={threadFilters} primaryAction={titleAside} />
-    ) : null);
+    (threadFilters ? <PortalListControlStack filterRow={threadFilters} /> : null);
 
   return (
     <ManagerPortalPageShell
       title={title}
+      titleAside={titleAside}
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
       mobileFlush={mobileThreadReading}

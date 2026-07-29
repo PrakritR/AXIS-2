@@ -415,34 +415,36 @@ export function PortalCalendar({
     );
   }
 
+  const calendarHeaderActions =
+    portal === "manager" ? (
+      <PortalSectionActionRow>
+        <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          disabled={shareableProperties.length === 0 || calendarView === "services"}
+          title={
+            calendarView === "services"
+              ? "Switch to Tours or All to share a tour link"
+              : shareableProperties.length === 0
+                ? "List a property as active before sharing tour links"
+                : "Share tour links"
+          }
+          onClick={() => setShareTourModalOpen(true)}
+        >
+          Share tour
+        </Button>
+      </PortalSectionActionRow>
+    ) : null;
+
   return (
     <>
-      <ManagerPortalPageShell title={pageTitle}>
+      <ManagerPortalPageShell title={pageTitle} titleAside={calendarHeaderActions}>
         {portal === "manager" ? (
           <PortalListControlStack
             className="mb-3"
             filterRow={calendarPropertyFilter ?? undefined}
-            primaryAction={
-              <PortalSectionActionRow>
-                <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                  disabled={shareableProperties.length === 0 || calendarView === "services"}
-                  title={
-                    calendarView === "services"
-                      ? "Switch to Tours or All to share a tour link"
-                      : shareableProperties.length === 0
-                        ? "List a property as active before sharing tour links"
-                        : "Share tour links"
-                  }
-                  onClick={() => setShareTourModalOpen(true)}
-                >
-                  Share tour
-                </Button>
-              </PortalSectionActionRow>
-            }
             destinations={calendarTabs}
             activeDestinationId={calendarView}
             destinationAriaLabel="Calendar views"

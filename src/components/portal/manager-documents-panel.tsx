@@ -304,39 +304,40 @@ export function ManagerDocumentsPanel({
       (tabId === "expense-documents" && generated) ||
       Boolean(incomeReceiptExportHref && generated));
 
+  const documentsHeaderActions = (
+    <PortalSectionActionRow>
+      {hasExportActions ? exportActions : null}
+      {isLibraryTab ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => libraryRef.current?.openUpload()}
+          disabled={isDemoModeActive()}
+          data-attr="document-upload-open"
+        >
+          Upload
+        </Button>
+      ) : null}
+      {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => setGenerateModalOpen(true)}
+          disabled={loading}
+          data-attr="documents-generate-report"
+        >
+          {loading ? "Generating…" : "Generate report"}
+        </Button>
+      ) : null}
+    </PortalSectionActionRow>
+  );
+
   return (
-    <ManagerPortalPageShell title="Documents" compactFilterRow>
+    <ManagerPortalPageShell title="Documents" titleAside={documentsHeaderActions} compactFilterRow>
       <PortalListControlStack
         className="mb-3"
-        primaryAction={
-          <PortalSectionActionRow>
-            {hasExportActions ? exportActions : null}
-            {isLibraryTab ? (
-              <Button
-                type="button"
-                variant="primary"
-                className={PORTAL_HEADER_ACTION_BTN}
-                onClick={() => libraryRef.current?.openUpload()}
-                disabled={isDemoModeActive()}
-                data-attr="document-upload-open"
-              >
-                Upload
-              </Button>
-            ) : null}
-            {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
-              <Button
-                type="button"
-                variant="primary"
-                className={PORTAL_HEADER_ACTION_BTN}
-                onClick={() => setGenerateModalOpen(true)}
-                disabled={loading}
-                data-attr="documents-generate-report"
-              >
-                {loading ? "Generating…" : "Generate report"}
-              </Button>
-            ) : null}
-          </PortalSectionActionRow>
-        }
         destinations={documentTabItems}
         activeDestinationId={tabId}
         destinationAriaLabel="Document views"

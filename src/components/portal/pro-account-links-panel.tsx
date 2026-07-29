@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -1466,8 +1467,32 @@ export function ProAccountLinksPanel({
     </>
   );
 
+  const teamHeaderActions = (
+    <PortalSectionActionRow>
+      {linkCap != null ? (
+        <span
+          className={`text-sm tabular-nums ${atLinkCap ? "font-semibold text-[var(--status-overdue-fg)]" : "text-muted"}`}
+          title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+        >
+          {linksUsed}/{linkCap} links
+        </span>
+      ) : null}
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        disabled={atLinkCap}
+        onClick={openLinkModal}
+        title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+        data-attr="co-manager-link-account"
+      >
+        Link account
+      </Button>
+    </PortalSectionActionRow>
+  );
+
   return (
-    <ManagerPortalPageShell title="Team">
+    <ManagerPortalPageShell title="Team" titleAside={teamHeaderActions}>
       <PortalListControlStack
         className="mb-3"
         filterRow={
@@ -1483,32 +1508,22 @@ export function ProAccountLinksPanel({
             />
           </PortalFilterSortSheet>
         }
-        primaryAction={
-          <PortalSectionActionRow>
-            {linkCap != null ? (
-              <span
-                className={`text-sm tabular-nums ${atLinkCap ? "font-semibold text-[var(--status-overdue-fg)]" : "text-muted"}`}
-                title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
-              >
-                {linksUsed}/{linkCap} links
-              </span>
-            ) : null}
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              disabled={atLinkCap}
-              onClick={openLinkModal}
-              title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
-              data-attr="co-manager-link-account"
-            >
-              Link account
-            </Button>
-          </PortalSectionActionRow>
-        }
         destinations={teamLinkTabs}
         activeDestinationId={teamLinkFilter}
         destinationAriaLabel="Team link status"
+        activeFilterChips={
+          teamPropertyFilter ? (
+            <PortalActiveFilterChips
+              chips={[
+                {
+                  id: "property",
+                  label: `Property: ${teamPropertyFilter}`,
+                  onRemove: () => setTeamPropertyFilter(""),
+                },
+              ]}
+            />
+          ) : null
+        }
       />
       <div className="space-y-4" data-attr="co-manager-unified-view">
         {loadError ? (

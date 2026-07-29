@@ -3,21 +3,26 @@
 import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { DestinationNav, type DestinationNavItem } from "@/components/ui/destination-nav";
+import { cn } from "@/lib/utils";
 
 /**
- * Appendix C1 — Communication-style list chrome, standardized:
- * 1. Full-width filter & sort beside the page primary action
- * 2. Routed destination tab row (segmented)
- * 3. Search scoped to the active destination
+ * Appendix F — Communication-style list chrome (exactly three bands above data):
+ * 1. Title + axis switch + actions — {@link ManagerPortalPageShell} / {@link PageHeader}
+ * 2. Routed destination tabs with counts — `destinations` below
+ * 3. Filter & sort + search — `filterRow` + `search`; active filters as `activeFilterChips`
  */
 export function PortalListControlStack({
   filterRow,
-  primaryAction,
+  /**
+   * @deprecated Pass actions via `titleAside` on {@link ManagerPortalPageShell} (Appendix F band 1).
+   */
+  primaryAction: _primaryAction,
   destinations,
   activeDestinationId,
   destinationAriaLabel = "Section views",
   destinationRow,
   search,
+  activeFilterChips,
   className,
 }: {
   /** Typically {@link PortalFilterSortSheet} (mobile sheet + desktop inline pills). */
@@ -35,25 +40,17 @@ export function PortalListControlStack({
     dataAttr?: string;
     ariaLabel?: string;
   };
+  /** Removable chips when filters are active (Appendix F band 3). */
+  activeFilterChips?: ReactNode;
   className?: string;
 }) {
-  const showFilterPrimary = filterRow || primaryAction;
   const showDestinations = Boolean(destinationRow) || (destinations && destinations.length > 0);
+  const showFindRow = Boolean(filterRow || search);
 
-  if (!showFilterPrimary && !showDestinations && !search) return null;
+  if (!showDestinations && !showFindRow && !activeFilterChips) return null;
 
   return (
-    <div className={`space-y-2 ${className ?? ""}`.trim()} data-slot="portal-list-control-stack">
-      {showFilterPrimary ? (
-        <div className="flex w-full min-w-0 items-stretch gap-2 max-md:flex-col md:items-center">
-          {filterRow ? <div className="min-w-0 flex-1">{filterRow}</div> : null}
-          {primaryAction ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 max-md:w-full max-md:[&_button]:flex-1">
-              {primaryAction}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+    <div className={cn("space-y-2", className)} data-slot="portal-list-control-stack">
       {showDestinations ? (
         destinationRow ?? (
           <DestinationNav
@@ -63,17 +60,30 @@ export function PortalListControlStack({
           />
         )
       ) : null}
-      {search ? (
-        <Input
-          type="search"
-          value={search.value}
-          onChange={(e) => search.onChange(e.target.value)}
-          placeholder={search.placeholder}
-          aria-label={search.ariaLabel ?? search.placeholder}
-          className="portal-list-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-          data-attr={search.dataAttr ?? "portal-list-search"}
-        />
+      {showFindRow ? (
+        <div className="flex w-full min-w-0 items-stretch gap-2 max-md:flex-col md:items-center">
+          {filterRow ? <div className="min-w-0 flex-1">{filterRow}</div> : null}
+          {search ? (
+            <div
+              className={cn(
+                "min-w-0",
+                filterRow ? "w-full md:max-w-[14rem] md:shrink-0" : "flex-1",
+              )}
+            >
+              <Input
+                type="search"
+                value={search.value}
+                onChange={(e) => search.onChange(e.target.value)}
+                placeholder={search.placeholder}
+                aria-label={search.ariaLabel ?? search.placeholder}
+                className="portal-list-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                data-attr={search.dataAttr ?? "portal-list-search"}
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
+      {activeFilterChips ? <div className="min-w-0">{activeFilterChips}</div> : null}
     </div>
   );
 }

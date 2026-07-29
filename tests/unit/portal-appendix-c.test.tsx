@@ -14,6 +14,8 @@ import {
   parsePaymentBucket,
   parseServiceRequestBucket,
   parseWorkOrderBucket,
+  PROPERTY_DETAIL_TABS,
+  PROPERTY_DETAIL_TAB_LABELS,
   propertyDetailHref,
   residentDetailHref,
   calendarViewHref,
@@ -33,8 +35,14 @@ import {
 describe("portal-detail-routes", () => {
   it("parses property detail tabs with preview fallback", () => {
     expect(parsePropertyDetailTab("lease")).toBe("lease");
+    expect(parsePropertyDetailTab("promotion")).toBe("promotion");
     expect(parsePropertyDetailTab("bogus")).toBe("preview");
     expect(parsePropertyDetailTab(undefined)).toBe("preview");
+  });
+
+  it("includes promotion in PROPERTY_DETAIL_TABS", () => {
+    expect(PROPERTY_DETAIL_TABS).toContain("promotion");
+    expect(PROPERTY_DETAIL_TAB_LABELS.promotion).toBe("Promotion");
   });
 
   it("parses resident detail tabs with application fallback", () => {
@@ -95,11 +103,10 @@ describe("portal-detail-routes", () => {
 });
 
 describe("PortalListControlStack", () => {
-  it("renders filter, destinations, and search slots", () => {
+  it("renders destinations, filter, and search slots (Appendix F band order)", () => {
     render(
       <PortalListControlStack
         filterRow={<span data-testid="filter">Filter</span>}
-        primaryAction={<button type="button">Create</button>}
         destinations={[
           { id: "a", label: "Active", href: "/portal/x/a" },
           { id: "b", label: "Archived", href: "/portal/x/b" },
@@ -113,7 +120,6 @@ describe("PortalListControlStack", () => {
       />,
     );
     expect(screen.getByTestId("filter").textContent).toBe("Filter");
-    expect(screen.getByRole("button", { name: "Create" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Active/ }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByPlaceholderText("Search items")).toBeTruthy();
   });

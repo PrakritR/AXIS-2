@@ -2,9 +2,9 @@
 
 import type { ReactNode } from "react";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
@@ -15,42 +15,7 @@ export type ShellAction = {
   disabled?: boolean;
 };
 
-function PortalFilterSelect({
-  "aria-label": ariaLabel,
-  value,
-  onChange,
-  placeholder,
-  options,
-}: {
-  "aria-label": string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  options: ManagerPropertyFilterOption[];
-}) {
-  const selectOptions = useMemo(
-    () => [{ value: "", label: placeholder }, ...options.map((o) => ({ value: o.id, label: o.label }))],
-    [options, placeholder],
-  );
-
-  return (
-    <div className="w-fit max-w-full shrink-0">
-      <FieldSingleSelect
-        hideLabel
-        label={ariaLabel}
-        variant="pill"
-        wrapperClassName="w-fit max-w-full"
-        value={value}
-        placeholder={placeholder}
-        options={selectOptions}
-        dataAttr={`portal-filter-${ariaLabel.toLowerCase().replace(/\s+/g, "-")}`}
-        onChange={onChange}
-      />
-    </div>
-  );
-}
-
-/** Property / resident / application filter selects — each control is its own pill (matches Finances/Documents). */
+/** Property / resident / application filter chips — visible options, no dropdowns (Appendix E1). */
 export function PortalPropertyFilterPill({
   applications,
   residents,
@@ -138,32 +103,32 @@ export function PortalPropertyFilter({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex w-fit max-w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex w-full max-w-full flex-col gap-3">
       {hasPropertyPick ? (
-        <PortalFilterSelect
-          aria-label="Properties"
+        <PortalFilterChipRow
+          ariaLabel="Properties"
           value={propertyValue}
           onChange={(next) => onPropertyChange?.(next)}
-          placeholder={propertyPlaceholder ?? "All properties"}
-          options={propertyOptions ?? []}
+          allLabel={propertyPlaceholder ?? "All properties"}
+          options={(propertyOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
       {hasResidentPick ? (
-        <PortalFilterSelect
-          aria-label="Residents"
+        <PortalFilterChipRow
+          ariaLabel="Residents"
           value={residentValue}
           onChange={(next) => onResidentChange?.(next)}
-          placeholder="All residents"
-          options={residentOptions ?? []}
+          allLabel="All residents"
+          options={(residentOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
       {hasApplicationPick ? (
-        <PortalFilterSelect
-          aria-label="Applications"
+        <PortalFilterChipRow
+          ariaLabel="Applications"
           value={applicationValue}
           onChange={(next) => onApplicationChange?.(next)}
-          placeholder="All applications"
-          options={applicationOptions ?? []}
+          allLabel="All applications"
+          options={(applicationOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
     </div>

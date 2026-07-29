@@ -695,8 +695,22 @@ export function ManagerPromotion({
     );
   };
 
+  const promotionHeaderActions = (
+    <PortalSectionActionRow>
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => openNewPromotion()}
+        data-attr="promotion-new"
+      >
+        New promotion
+      </Button>
+    </PortalSectionActionRow>
+  );
+
   return (
-    <ManagerPortalPageShell title="Promotion" compactFilterRow>
+    <ManagerPortalPageShell title="Promotion" titleAside={promotionHeaderActions} compactFilterRow>
       <PortalListControlStack
         className="mb-3"
         filterRow={
@@ -711,19 +725,6 @@ export function ManagerPromotion({
               onPropertyChange={setPropertyFilter}
             />
           </PortalFilterSortSheet>
-        }
-        primaryAction={
-          <PortalSectionActionRow>
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => openNewPromotion()}
-              data-attr="promotion-new"
-            >
-              New promotion
-            </Button>
-          </PortalSectionActionRow>
         }
         destinations={contentTabs.map((t) => ({
           id: t.id,

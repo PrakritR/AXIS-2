@@ -4,7 +4,7 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -90,31 +90,6 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
-/** Toolbar select that shrinks to the current option label (not a fixed width). */
-function DocumentLibraryFilterSelect({
-  "aria-label": ariaLabel,
-  value,
-  onChange,
-  options,
-}: {
-  "aria-label": string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <FieldSingleSelect
-      hideLabel
-      label={ariaLabel}
-      variant="pill"
-      wrapperClassName="w-fit max-w-full shrink-0"
-      value={value}
-      options={options}
-      onChange={onChange}
-    />
-  );
-}
-
 export type ManagerDocumentLibraryHandle = {
   openUpload: () => void;
 };
@@ -144,23 +119,17 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, {
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
 
   const categoryFilterOptions = useMemo(
-    () => [
-      { value: "", label: "All categories" },
-      ...DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
-    ],
+    () => DOCUMENT_CATEGORIES.map((c) => ({ id: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
     [],
   );
 
   const scopeFilterOptions = useMemo(
-    () => SCOPE_FILTERS.map((s) => ({ value: s.id, label: s.label })),
+    () => SCOPE_FILTERS.map((s) => ({ id: s.id, label: s.label })),
     [],
   );
 
   const propertyFilterOptions = useMemo(
-    () => [
-      { value: "", label: "All properties" },
-      ...propertyOptions.map((p) => ({ value: p.id, label: p.label })),
-    ],
+    () => propertyOptions.map((p) => ({ id: p.id, label: p.label })),
     [propertyOptions],
   );
 
@@ -489,24 +458,30 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, {
           aria-label="Search documents"
           data-attr="document-search"
         />
-        <DocumentLibraryFilterSelect
-          aria-label="Filter by category"
+        <PortalFilterChipRow
+          ariaLabel="Filter by category"
           value={categoryFilter}
           onChange={setCategoryFilter}
+          allLabel="All categories"
           options={categoryFilterOptions}
+          className="w-full"
         />
-        <DocumentLibraryFilterSelect
-          aria-label="Filter by scope"
+        <PortalFilterChipRow
+          ariaLabel="Filter by scope"
           value={scopeFilter}
           onChange={setScopeFilter}
+          allowAll={false}
           options={scopeFilterOptions}
+          className="w-full"
         />
         {propertyOptions.length > 0 ? (
-          <DocumentLibraryFilterSelect
-            aria-label="Filter by property"
+          <PortalFilterChipRow
+            ariaLabel="Filter by property"
             value={propertyFilter}
             onChange={setPropertyFilter}
+            allLabel="All properties"
             options={propertyFilterOptions}
+            className="w-full"
           />
         ) : null}
       </div>

@@ -824,7 +824,7 @@ export function ManagerFinancesPanel({
   );
 
   return (
-    <ManagerPortalPageShell title="Finances" compactFilterRow>
+    <ManagerPortalPageShell title="Finances" titleAside={headerActions} compactFilterRow>
       <PortalListControlStack
         className="mb-3"
         filterRow={
@@ -844,7 +844,6 @@ export function ManagerFinancesPanel({
             </PortalFilterSortSheet>
           ) : undefined
         }
-        primaryAction={headerActions}
         destinations={financeTabItems}
         activeDestinationId={tabId}
         destinationAriaLabel="Finance report"
