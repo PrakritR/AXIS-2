@@ -372,6 +372,8 @@ export function ListingDetailSections({
   rich,
   previewModal = false,
   hidePreviewSubnav = false,
+  /** Manager property preview — show full section bodies on mobile (no View pill). */
+  expandSectionsOnMobile = false,
 }: {
   property: MockProperty;
   rich: ListingRichContent;
@@ -379,8 +381,10 @@ export function ListingDetailSections({
   previewModal?: boolean;
   /** When true, parent renders pinned preview subnav outside the scroller (manager property tab). */
   hidePreviewSubnav?: boolean;
+  expandSectionsOnMobile?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
+  const collapseOnMobile = !expandSectionsOnMobile;
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
@@ -406,6 +410,7 @@ export function ListingDetailSections({
           <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
         </div>
 
+        {!(previewModal && expandSectionsOnMobile) ? (
         <div className="order-3 mt-6 flex flex-col gap-4 lg:mt-8">
           <div className="max-w-3xl">
             <Badge tone="info">{property.neighborhood}</Badge>
@@ -425,6 +430,7 @@ export function ListingDetailSections({
             ) : null}
           </div>
         </div>
+        ) : null}
 
         <div className={`order-4 ${previewModal ? "mt-6" : "mt-6 lg:mt-8"}`}>
           {!previewModal ? <ListingStickySubnav className="mb-4 lg:mb-6" /> : null}
@@ -437,6 +443,7 @@ export function ListingDetailSections({
                 id="floor-plans"
                 title={rich.floorPlansSectionTitle ?? "Floor plans"}
                 dataAttrToggle="listing-floor-plans-toggle"
+                collapseOnMobile={collapseOnMobile}
                 headerAside={
                   roomCount > 0 ? (
                     <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
@@ -458,6 +465,7 @@ export function ListingDetailSections({
                 id="lease-basics"
                 title="Lease basics"
                 dataAttrToggle="listing-lease-basics-toggle"
+                collapseOnMobile={collapseOnMobile}
               >
                 <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
@@ -467,6 +475,7 @@ export function ListingDetailSections({
                 title="Amenities"
                 eyebrow="Building & neighborhood"
                 dataAttrToggle="listing-amenities-toggle"
+                collapseOnMobile={collapseOnMobile}
               >
                 <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
@@ -476,6 +485,7 @@ export function ListingDetailSections({
                 title="Bundles & leasing"
                 eyebrow="Packages"
                 dataAttrToggle="listing-bundles-toggle"
+                collapseOnMobile={collapseOnMobile}
                 headerAside={
                   <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
                     {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
@@ -495,6 +505,7 @@ export function ListingDetailSections({
                 hasContent={Boolean(houseRulesDisplay)}
                 emptyMessage="No house rules were added to this listing yet."
                 dataAttrToggle="listing-house-rules-toggle"
+                collapseOnMobile={collapseOnMobile}
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{houseRulesDisplay}</p>
               </ListingDetailCollapsibleSimpleSection>
@@ -503,6 +514,7 @@ export function ListingDetailSections({
                 id="location"
                 title="Location"
                 dataAttrToggle="listing-location-toggle"
+                collapseOnMobile={collapseOnMobile}
               >
                 <ListingLocationBlock property={property} embedded />
               </ListingDetailCollapsibleSection>

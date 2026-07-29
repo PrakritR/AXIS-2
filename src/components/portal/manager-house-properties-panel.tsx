@@ -338,61 +338,7 @@ function ManagerPropertyInlineDetails({
     ) : null;
 
   const previewHeaderActions = (
-    <PortalSectionActionRow
-      destructive={
-        bucket === 2 && listingId && canDeleteAction ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr="listing-delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-              deferCatalogMutation(() =>
-                run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
-              );
-            }}
-          >
-            Delete listing
-          </Button>
-        ) : bucket === 3 && canDeleteAction ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr="listing-delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-              deferCatalogMutation(() =>
-                run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
-              );
-            }}
-          >
-            Delete from queue
-          </Button>
-        ) : bucket === 5 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr="draft-delete"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
-              deferCatalogMutation(() => {
-                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
-                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
-                );
-              });
-            }}
-          >
-            Delete draft
-          </Button>
-        ) : null
-      }
-    >
+    <PortalSectionActionRow variant="grid">
       {bucket === 2 && listingId ? (
         <>
           <Button
@@ -433,6 +379,23 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
+          {canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                deferCatalogMutation(() =>
+                  run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
+                );
+              }}
+            >
+              Delete listing
+            </Button>
+          ) : null}
         </>
       ) : null}
 
@@ -472,6 +435,23 @@ function ManagerPropertyInlineDetails({
               Edit listing
             </Button>
           ) : null}
+          {canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
+                deferCatalogMutation(() =>
+                  run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
+                );
+              }}
+            >
+              Delete from queue
+            </Button>
+          ) : null}
         </>
       ) : null}
 
@@ -492,6 +472,23 @@ function ManagerPropertyInlineDetails({
             }}
           >
             Continue editing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            data-attr="draft-delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
+              deferCatalogMutation(() => {
+                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
+                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
+                );
+              });
+            }}
+          >
+            Delete draft
           </Button>
         </>
       ) : null}
@@ -568,8 +565,17 @@ function ManagerPropertyInlineDetails({
         <div className="space-y-3">
           {previewHeaderActions}
           {hasPreview ? (
-            <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-2xl border border-border">
-              <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
+            <ListingPreviewScrollShell
+              className="rounded-2xl border border-border max-lg:overflow-visible lg:max-h-[min(70vh,560px)]"
+              pageScrollOnMobile
+            >
+              <ListingDetailSections
+                property={previewProperty!}
+                rich={rich!}
+                previewModal
+                hidePreviewSubnav
+                expandSectionsOnMobile
+              />
             </ListingPreviewScrollShell>
           ) : bucket === 3 || bucket === 5 ? (
             <p className="rounded-2xl border border-border px-4 py-3 text-sm text-muted">
@@ -796,7 +802,6 @@ export function ManagerHousePropertiesPanel({
     const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
     return (
       <PortalRecordDetailPage
-        pageTitle="Properties"
         title={managerPropertyRowTitle(row, sourceBucket)}
         subtitle={address}
         backHref={`${propertiesBase}/properties/${activeStage}`}

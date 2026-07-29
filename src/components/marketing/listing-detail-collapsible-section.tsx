@@ -124,6 +124,7 @@ export function ListingDetailCollapsibleSimpleSection({
   hasContent = true,
   dataAttrToggle,
   className = "",
+  collapseOnMobile = true,
 }: {
   id?: string;
   title: string;
@@ -132,15 +133,21 @@ export function ListingDetailCollapsibleSimpleSection({
   hasContent?: boolean;
   dataAttrToggle?: string;
   className?: string;
+  collapseOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const mobileContentClass = collapseOnMobile
+    ? open
+      ? "block"
+      : "hidden md:block"
+    : "block";
 
   return (
     <section id={id} className={`${listingSectionScrollClass} ${className}`}>
       <div className={`${listingSectionCardClass} p-5 sm:p-7`}>
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h2>
-          {hasContent ? (
+          {hasContent && collapseOnMobile ? (
             <ViewToggleButton
               open={open}
               onClick={() => setOpen((v) => !v)}
@@ -152,7 +159,7 @@ export function ListingDetailCollapsibleSimpleSection({
         {!hasContent && emptyMessage ? (
           <p className="mt-4 text-sm leading-relaxed text-muted">{emptyMessage}</p>
         ) : hasContent ? (
-          <div className={`mt-5 sm:mt-6 ${open ? "block" : "hidden md:block"}`}>{children}</div>
+          <div className={`mt-5 sm:mt-6 ${mobileContentClass}`}>{children}</div>
         ) : null}
       </div>
     </section>

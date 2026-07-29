@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 
@@ -9,7 +8,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
  * Full-page record detail (Appendix E2) — no split list pane; URL is the record route.
  */
 export function PortalRecordDetailPage({
-  pageTitle,
+  pageTitle: _pageTitle,
   title,
   subtitle,
   avatarName,
@@ -19,7 +18,8 @@ export function PortalRecordDetailPage({
   children,
   dataAttrBack = "portal-record-detail-back",
 }: {
-  pageTitle: string;
+  /** @deprecated Detail chrome no longer renders a duplicate section title. */
+  pageTitle?: string;
   title: string;
   subtitle?: string;
   avatarName?: string;
@@ -31,21 +31,17 @@ export function PortalRecordDetailPage({
 }) {
   const navigate = usePortalNavigate();
   return (
-    <ManagerPortalPageShell title={pageTitle} compactFilterRow mobileFlush mobileHideFilterRow>
-      <div className="flex min-h-0 flex-col">
-        <PortalDetailHeader
-          title={title}
-          subtitle={subtitle}
-          avatarName={avatarName}
-          onBack={() => navigate(backHref)}
-          backLabel={backLabel}
-          dataAttrBack={dataAttrBack}
-          actions={actions}
-        />
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-2 [-webkit-overflow-scrolling:touch] md:px-2 md:py-3">
-          {children}
-        </div>
-      </div>
-    </ManagerPortalPageShell>
+    <div className="flex min-h-0 flex-col">
+      <PortalDetailHeader
+        title={title}
+        subtitle={subtitle}
+        avatarName={avatarName}
+        onBack={() => navigate(backHref)}
+        backLabel={backLabel}
+        dataAttrBack={dataAttrBack}
+        actions={actions}
+      />
+      <div className="min-h-0 flex-1 px-0 py-2 md:px-2 md:py-3">{children}</div>
+    </div>
   );
 }

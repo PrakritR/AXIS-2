@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PropertyLeaseFormModal } from "@/components/portal/property-lease-form-modal";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
@@ -69,7 +68,6 @@ export function ManagerPropertyLeasePanel({
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [sectionExpanded, setSectionExpanded] = useState(false);
 
   const syncedSub = useMemo(() => syncPropertyLeaseTemplatesFromListing(sub), [sub]);
   const templates = useMemo(() => readPropertyLeaseTemplates(syncedSub), [syncedSub]);
@@ -113,36 +111,29 @@ export function ManagerPropertyLeasePanel({
 
   return (
     <>
-      <PortalCollapsibleSection
-        title="Lease"
-        expanded={sectionExpanded}
-        onExpandedChange={setSectionExpanded}
-        collapsible
-        headerActionsInline
-        toggleDataAttr="lease-section-toggle"
-        headerActions={
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
+          <p className="text-sm font-semibold text-foreground">Lease</p>
           <Button
             type="button"
             variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
+            className="h-8 shrink-0 rounded-full px-3 text-xs"
             data-attr="property-lease-add"
             onClick={openAdd}
           >
             Add lease
           </Button>
-        }
-        contentClassName="px-4 py-2"
-      >
-        {sectionActions}
-        <div className="space-y-2">
+        </div>
+        <div className="space-y-2 p-3">
+          {sectionActions}
           {templates.map((template) => (
             <div
               key={template.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-3 py-2.5"
+              className="rounded-2xl border border-border bg-card px-3 py-3"
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">{template.label}</p>
-                <p className="text-xs text-muted">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">{template.label}</p>
+                <p className="mt-0.5 text-xs text-muted">
                   {propertyLeaseTypeLabel(template.kind)} · {leaseDocumentSummary(template)}
                 </p>
                 {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
@@ -151,7 +142,7 @@ export function ManagerPropertyLeasePanel({
                   </p>
                 ) : null}
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="mt-2.5 flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -175,7 +166,7 @@ export function ManagerPropertyLeasePanel({
             </div>
           ))}
         </div>
-      </PortalCollapsibleSection>
+      </div>
 
       <PropertyLeaseFormModal
         open={formOpen}

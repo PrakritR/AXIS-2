@@ -238,53 +238,62 @@ export function ManagerProperties({
     </PortalSectionActionRow>
   );
 
+  const isDetailView = Boolean(propertyKeyProp);
+
+  const listPanel = (
+    <ManagerHousePropertiesPanel
+      showToast={showToast}
+      activeStage={activeStage}
+      onStageChange={setActiveStage}
+      onSendToProspect={openShareListing}
+      skuTier={skuTier}
+      skuLoaded={skuLoaded}
+      searchQuery={searchQuery}
+      propertiesBase={basePath}
+      propertyKey={propertyKeyProp}
+      detailTab={detailTabProp}
+    />
+  );
+
   return (
     <>
-      <ManagerPortalPageShell title="Properties" titleAside={propertiesHeaderActions} compactFilterRow>
-        {atPropertyLimit && limitMax != null ? (
-          <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
-            You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
-            {/* The plan-upgrade CTA is a subscription surface — hidden on native (iOS). */}
-            <span className="native-hide">
-              {" "}
-              <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
-                View plans
-              </Link>{" "}
-              to add more.
-            </span>
-          </p>
-        ) : null}
-        <PortalListControlStack
-          className="mb-3"
-          destinations={MANAGER_STAGES.map((stage) => ({
-            id: stage.key,
-            label: stage.label,
-            href: propertyListHref(basePath, stage.key),
-            count: stageCounts[stage.key],
-            dataAttr: `manager-properties-tab-${stage.key}`,
-          }))}
-          activeDestinationId={activeStage}
-          destinationAriaLabel="Property pipeline stage"
-          search={{
-            value: searchQuery,
-            onChange: setSearchQuery,
-            placeholder: "Search properties",
-            dataAttr: "properties-search",
-          }}
-        />
-        <ManagerHousePropertiesPanel
-          showToast={showToast}
-          activeStage={activeStage}
-          onStageChange={setActiveStage}
-          onSendToProspect={openShareListing}
-          skuTier={skuTier}
-          skuLoaded={skuLoaded}
-          searchQuery={searchQuery}
-          propertiesBase={basePath}
-          propertyKey={propertyKeyProp}
-          detailTab={detailTabProp}
-        />
-      </ManagerPortalPageShell>
+      {isDetailView ? (
+        listPanel
+      ) : (
+        <ManagerPortalPageShell title="Properties" titleAside={propertiesHeaderActions} compactFilterRow>
+          {atPropertyLimit && limitMax != null ? (
+            <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
+              You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
+              <span className="native-hide">
+                {" "}
+                <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
+                  View plans
+                </Link>{" "}
+                to add more.
+              </span>
+            </p>
+          ) : null}
+          <PortalListControlStack
+            className="mb-3"
+            destinations={MANAGER_STAGES.map((stage) => ({
+              id: stage.key,
+              label: stage.label,
+              href: propertyListHref(basePath, stage.key),
+              count: stageCounts[stage.key],
+              dataAttr: `manager-properties-tab-${stage.key}`,
+            }))}
+            activeDestinationId={activeStage}
+            destinationAriaLabel="Property pipeline stage"
+            search={{
+              value: searchQuery,
+              onChange: setSearchQuery,
+              placeholder: "Search properties",
+              dataAttr: "properties-search",
+            }}
+          />
+          {listPanel}
+        </ManagerPortalPageShell>
+      )}
       {wizardOpen ? (
         <ManagerAddListingForm
           onClose={() => setWizardOpen(false)}

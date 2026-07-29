@@ -19,7 +19,7 @@ export function PortalSectionActionRow({
   className?: string;
   /** When set, renders destructive actions in a separated trailing group. */
   destructive?: ReactNode;
-  variant?: "toolbar" | "header";
+  variant?: "toolbar" | "header" | "grid";
 }) {
   if (variant === "header") {
     return (
@@ -32,6 +32,22 @@ export function PortalSectionActionRow({
         data-variant="header"
       >
         {children}
+      </div>
+    );
+  }
+
+  if (variant === "grid") {
+    return (
+      <div
+        className={cn(
+          "grid w-full grid-cols-2 gap-2 [&_button]:w-full [&_a]:w-full",
+          className,
+        )}
+        data-slot="portal-section-action-row"
+        data-variant="grid"
+      >
+        {children}
+        {destructive}
       </div>
     );
   }

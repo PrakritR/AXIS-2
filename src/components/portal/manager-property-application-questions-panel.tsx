@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
 import {
   normalizeCustomApplicationFields,
@@ -47,7 +46,7 @@ function applicationStaySubtitle(
 }
 
 /**
- * Per-property application — two stay types, same row layout as the Lease section.
+ * Per-property application — long-term and short-term rows open the editor on tap.
  */
 export function ManagerPropertyApplicationQuestionsPanel({
   sub,
@@ -66,7 +65,6 @@ export function ManagerPropertyApplicationQuestionsPanel({
 }) {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [listModalVariant, setListModalVariant] = useState<ApplicationFormVariant>("standard");
-  const [sectionExpanded, setSectionExpanded] = useState(false);
 
   const stayRows = useMemo(() => {
     return APPLICATION_STAY_ROWS.map((row) => {
@@ -89,39 +87,29 @@ export function ManagerPropertyApplicationQuestionsPanel({
 
   return (
     <>
-      <PortalCollapsibleSection
-        title="Application"
-        expanded={sectionExpanded}
-        onExpandedChange={setSectionExpanded}
-        collapsible
-        headerActionsInline
-        toggleDataAttr="application-section-toggle"
-        headerActions={headerActionsExtra}
-        contentClassName="px-4 py-2"
-      >
-        <div className="space-y-2">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
+          <p className="text-sm font-semibold text-foreground">Application</p>
+          {headerActionsExtra ? <div className="flex shrink-0 items-center gap-2">{headerActionsExtra}</div> : null}
+        </div>
+        <div className="space-y-2 p-3">
           {stayRows.map((row) => (
-            <div
+            <button
               key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-3 py-2.5"
+              type="button"
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-3 text-left transition hover:bg-accent/25 active:bg-accent/40"
+              data-attr={`application-stay-open-${row.id}`}
+              onClick={() => openListModal(row.id)}
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{row.label}</p>
                 <p className="text-xs text-muted">{row.subtitle}</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 shrink-0 rounded-full px-3 text-xs"
-                data-attr={`application-stay-edit-${row.id}`}
-                onClick={() => openListModal(row.id)}
-              >
-                Edit
-              </Button>
-            </div>
+              <span className="shrink-0 text-xs font-semibold text-primary">Edit</span>
+            </button>
           ))}
         </div>
-      </PortalCollapsibleSection>
+      </div>
 
       <ManagerApplicationQuestionsEditorModal
         open={listModalOpen}
