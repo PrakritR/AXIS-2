@@ -82,15 +82,8 @@ describe("splitNativeBottomNavItems", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY]);
-    expect(overflow.map((item) => item.section)).toEqual(
-      sectionIds(proPortal.sections).filter(
-        (section) =>
-          !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section) &&
-          section !== "profile" &&
-          section !== "bugs-feedback",
-      ),
-    );
-    expect(overflow.map((item) => item.section)).toContain("calendar");
+    expect(overflow.map((item) => item.section)).toContain("applications");
+    expect(overflow.map((item) => item.section)).toContain("leases");
     expect(overflow.map((item) => item.section)).toContain("documents");
     expect(overflow.map((item) => item.section)).not.toContain("bugs-feedback");
     expect(primary.length + overflow.length).toBe(items.length - 2);

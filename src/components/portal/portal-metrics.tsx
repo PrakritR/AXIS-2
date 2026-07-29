@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Select } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
 import { cn } from "@/lib/utils";
@@ -569,11 +570,12 @@ export function ManagerPortalPageShell({
   filterRow,
   children,
   hideTitleOnNative = false,
-  hideTitleOnMobileNav = true,
+  hideTitleOnMobileNav = false,
   welcomeSubtitle = false,
   compactFilterRow = false,
   mobileHideFilterRow = false,
   mobileFlush = false,
+  count,
 }: {
   title: string;
   subtitle?: string;
@@ -582,7 +584,7 @@ export function ManagerPortalPageShell({
   children: ReactNode;
   /** Visually hide the page title in the native app (bottom nav shows the section). */
   hideTitleOnNative?: boolean;
-  /** Hide duplicate page title on mobile when {@link PortalMobileNavBar} shows the section name. */
+  /** Hide page title on mobile when a fixed mobile header shows the section name. */
   hideTitleOnMobileNav?: boolean;
   /** Larger welcome line under the title (portal dashboards). */
   welcomeSubtitle?: boolean;
@@ -592,8 +594,11 @@ export function ManagerPortalPageShell({
   mobileHideFilterRow?: boolean;
   /** Tighter section chrome on phones (e.g. full-bleed inbox thread). */
   mobileFlush?: boolean;
+  /** Optional record count beside the title. */
+  count?: number;
 }) {
   const titleAsideDesktopOnly = Boolean(titleAside && filterRow);
+  const showTitleOnMobile = !hideTitleOnMobileNav;
   return (
     <div
       className={cn(
@@ -603,40 +608,35 @@ export function ManagerPortalPageShell({
           "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        {/* min-w-0 (not shrink-0) so a long title/subtitle shrinks + wraps within
-            the viewport on mobile instead of forcing horizontal overflow. */}
-        <div className="min-w-0">
-          <h1
-            className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
-              hideTitleOnNative ? "[html[data-native]_&]:sr-only" : ""
-            } ${hideTitleOnMobileNav ? "max-md:sr-only" : ""}`}
-          >
-            {title}
-          </h1>
-          {subtitle ? (
-            <p
-              className={
-                welcomeSubtitle
-                  ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-left max-md:text-lg [html[data-native]_&]:mt-1 [html[data-native]_&]:text-base"
-                  : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs"
-              }
-            >
-              {subtitle}
-            </p>
-          ) : null}
-        </div>
-        {titleAside ? (
-          <div
-            className={cn(
-              "ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2",
-              titleAsideDesktopOnly && "max-md:hidden",
-            )}
-          >
-            {titleAside}
-          </div>
-        ) : null}
-      </div>
+      <PageHeader
+        title={title}
+        count={count}
+        primaryAction={titleAside && !titleAsideDesktopOnly ? titleAside : undefined}
+        showTitleOnMobile={showTitleOnMobile}
+        className={cn(
+          hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
+          !showTitleOnMobile && "max-md:[&_h1]:sr-only",
+        )}
+      />
+      {subtitle ? (
+        <p
+          className={cn(
+            welcomeSubtitle
+              ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-lg [html[data-native]_&]:text-base"
+              : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:text-xs",
+            hideTitleOnNative && "[html[data-native]_&]:sr-only",
+            !showTitleOnMobile && "max-md:sr-only",
+          )}
+        >
+          {subtitle}
+        </p>
+      ) : null}
+      {titleAside && titleAsideDesktopOnly ? (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 max-md:hidden">{titleAside}</div>
+      ) : null}
+      {titleAside && !titleAsideDesktopOnly && !filterRow ? (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">{titleAside}</div>
+      ) : null}
       {filterRow ? (
         <>
           <div

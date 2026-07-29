@@ -131,6 +131,63 @@ const SheetDescription = React.forwardRef<
 ));
 SheetDescription.displayName = SheetPrimitive.Description.displayName;
 
+/** Drag-handle bar for bottom sheets (mobile modal replacement). */
+function SheetDragHandle({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-border", className)}
+      aria-hidden
+      data-slot="sheet-drag-handle"
+    />
+  );
+}
+
+interface BottomSheetContentProps
+  extends Omit<React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>, "side"> {
+  /** Max height as viewport fraction — default 92vh */
+  maxHeight?: string;
+}
+
+/**
+ * Mobile-first bottom sheet with drag handle and safe-area padding.
+ * On `md+` renders as a centred dialog-style panel instead of edge-anchored sheet.
+ */
+const BottomSheetContent = React.forwardRef<
+  React.ElementRef<typeof SheetPrimitive.Content>,
+  BottomSheetContentProps
+>(({ className, children, maxHeight = "92vh", ...props }, ref) => (
+  <SheetPortal>
+    <SheetOverlay />
+    <SheetPrimitive.Content
+      ref={ref}
+      data-slot="bottom-sheet-content"
+      className={cn(
+        "fixed z-50 gap-4 bg-background shadow-lg transition ease-in-out",
+        "inset-x-0 bottom-0 max-h-[var(--sheet-max-height)] rounded-t-2xl border-t border-border",
+        "pb-[max(1rem,var(--native-safe-bottom))] pt-3",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+        "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+        "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:max-h-[min(85vh,720px)] md:w-full md:max-w-lg",
+        "md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:pt-6",
+        "md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=open]:slide-in-from-bottom-0",
+        "md:data-[state=closed]:zoom-out-95 md:data-[state=open]:zoom-in-95",
+        "motion-reduce:transition-none motion-reduce:data-[state=open]:animate-none motion-reduce:data-[state=closed]:animate-none",
+        className,
+      )}
+      style={{ "--sheet-max-height": maxHeight } as React.CSSProperties}
+      {...props}
+    >
+      <SheetDragHandle className="md:hidden" />
+      {children}
+      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary md:top-4">
+        <CloseIcon className="h-4 w-4" />
+        <span className="sr-only">Close</span>
+      </SheetPrimitive.Close>
+    </SheetPrimitive.Content>
+  </SheetPortal>
+));
+BottomSheetContent.displayName = "BottomSheetContent";
+
 export {
   Sheet,
   SheetPortal,
@@ -142,4 +199,5 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  BottomSheetContent,
 };

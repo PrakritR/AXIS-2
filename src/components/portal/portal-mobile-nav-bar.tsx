@@ -16,8 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  portalDashboardMobileHeaderLabel,
-  portalMobileActiveSectionLabel,
   resolvePortalMobileBackTarget,
 } from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -71,19 +69,11 @@ export function PortalMobileNavBar({
     back != null && (back.label === "Dashboard" || /\/dashboard$/.test(back.href));
   const showBack = back != null && !isDashboardBack;
   const nativeChrome = useNativeChrome();
-  const dashboardLabel = useMemo(
-    () => portalDashboardMobileHeaderLabel(pathname, definition),
-    [pathname, definition],
-  );
-  const sectionTitle = useMemo(
-    () => portalMobileActiveSectionLabel(pathname, definition),
-    [pathname, definition],
-  );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
   return (
     <div className="portal-mobile-nav-bar relative mb-1 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0">
-      {/* Brand mark on tablet-only; phones use centered section/dashboard titles. */}
+      {/* Brand mark on tablet-only. */}
       <Link
         href={`${definition.basePath}/dashboard`}
         aria-label="Dashboard"
@@ -97,16 +87,14 @@ export function PortalMobileNavBar({
           type="button"
           data-attr="portal-mobile-back"
           onClick={() => router.push(back!.href)}
-          className="-ml-2 inline-flex min-h-11 max-w-[38%] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
+          className="-ml-2 inline-flex min-h-11 max-w-[55%] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
         >
           <ChevronLeftIcon />
           <span className="truncate">{back!.label}</span>
         </button>
-      ) : dashboardLabel || sectionTitle ? (
-        <h1 className="min-w-0 flex-1 truncate px-1 text-left text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
-          {dashboardLabel ?? sectionTitle}
-        </h1>
-      ) : null}
+      ) : (
+        <div className="min-w-0 flex-1" aria-hidden />
+      )}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <DropdownMenu>

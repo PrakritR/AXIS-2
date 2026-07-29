@@ -11,8 +11,9 @@ const GLOBALS_CSS = readFileSync(join(process.cwd(), "src/app/globals.css"), "ut
 
 describe("portal mobile shell conventions", () => {
   it("keeps ManagerPortalPageShell header compact on narrow screens", () => {
-    expect(PORTAL_METRICS_SOURCE).toContain("flex-wrap items-center justify-between");
+    expect(PORTAL_METRICS_SOURCE).toContain("PageHeader");
     expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnNative = false");
+    expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnMobileNav = false");
   });
 
   it("wraps status pills on mobile instead of scrolling horizontally by default", () => {
