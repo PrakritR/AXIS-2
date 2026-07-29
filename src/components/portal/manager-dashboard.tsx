@@ -288,7 +288,7 @@ function AttentionGroup<T>({
       >
         <PortalTableExpandChevron expanded={open} />
         <h3
-          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           {title}
@@ -405,7 +405,7 @@ function AiDraftsGroup({
       >
         <PortalTableExpandChevron expanded={open} />
         <h3
-          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
           style={{ color: accent.fg }}
         >
           AI drafts
@@ -803,7 +803,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-vacant"
             />
             <PortalDashboardKpiTile
-              label="Sign"
+              label="Leases"
               value={pendingLeaseRows.length}
               tone="brand"
               emphasis={managerSignatureLeaseCount > 0 || pendingLeaseRows.length > 0}
@@ -811,7 +811,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-leases"
             />
             <PortalDashboardKpiTile
-              label="Review"
+              label="Applications"
               value={pendingApps.length}
               tone={pendingApps.length > 0 ? "warning" : "brand"}
               emphasis={pendingApps.length > 0}
@@ -835,7 +835,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-services"
             />
             <PortalDashboardKpiTile
-              label="Messages to read"
+              label="Messages"
               value={inboxThreads.length}
               tone={inboxThreads.length > 0 ? "brand" : "neutral"}
               emphasis={inboxThreads.length > 0}
@@ -856,8 +856,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <span aria-hidden className="text-primary text-xl leading-none [html[data-native]_&]:text-lg">
               ✦
             </span>
-            <h2 className="text-2xl font-extrabold uppercase leading-none tracking-[0.02em] text-foreground [html[data-native]_&]:text-xl">
-              Needs Attention
+            <h2 className="text-xl font-bold leading-tight tracking-[-0.02em] text-foreground [html[data-native]_&]:text-lg">
+              Needs attention
             </h2>
             {openCount > 0 ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
@@ -915,7 +915,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.applications ? (
             <AttentionGroup
-              title="Review"
+              title="Applications"
               href={`${BASE}/applications`}
               sectionId="applications"
               tone="success"
@@ -938,7 +938,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.leases ? (
             <AttentionGroup
-              title="Sign"
+              title="Leases to sign"
               href={`${BASE}/leases`}
               sectionId="leases"
               tone="info"
@@ -993,7 +993,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.payments ? (
             <AttentionGroup
-              title="Pending & overdue payments"
+              title="Payments"
               href={`${BASE}/payments`}
               sectionId="payments"
               tone={overdueChargeCount > 0 ? "danger" : "pending"}
@@ -1064,7 +1064,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.inbox ? (
             <AttentionGroup
-              title="Messages to read"
+              title="Unread messages"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
               tone="success"

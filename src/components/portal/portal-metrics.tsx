@@ -472,8 +472,8 @@ export function PortalDashboardKpiTile({
     >
       <span
         className={cn(
-          "w-full shrink-0 px-0.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] sm:text-[10px] sm:tracking-[0.08em]",
-          "line-clamp-2 [html[data-native]_&]:text-[8px]",
+          "w-full px-0.5 text-center text-[10px] font-medium leading-tight tracking-[-0.01em] text-muted",
+          "line-clamp-2 sm:text-[11px] [html[data-native]_&]:text-[9px]",
           styles.label,
         )}
       >
