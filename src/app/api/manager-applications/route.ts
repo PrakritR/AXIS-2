@@ -9,6 +9,10 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import {
+  notifyManagerApplicationSubmitted,
+  shouldNotifyManagerOfApplicationSubmit,
+} from "@/lib/application-submitted-notification.server";
 import { reclaimApplicationPhotos } from "@/lib/rental-application/application-photos.server";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
@@ -778,7 +782,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: guest.error }, { status: guest.status });
       }
       row = anchorServerOwnedSmsConsent(guest.row, existing ?? null);
+      const previousRow = existing ?? null;
       await persistNormalizedRow(db, row.id, row);
+      if (shouldNotifyManagerOfApplicationSubmit(previousRow, row)) {
+        void notifyManagerApplicationSubmitted(db, row).catch(() => undefined);
+      }
       if (row.bucket === "pending" && row.application?.consentCredit) {
         void tryAutoOrderScreening(db, row);
       }
@@ -915,7 +923,12 @@ export async function POST(req: Request) {
         (storedLoad.record?.row_data ?? null) as DemoApplicantRow | null,
       );
     }
+    const priorLoad = await loadStoredApplicationRecord(db, row.id);
+    const previousRow = (priorLoad.record?.row_data ?? null) as DemoApplicantRow | null;
     await persistNormalizedRow(db, row.id, row);
+    if (shouldNotifyManagerOfApplicationSubmit(previousRow, row)) {
+      void notifyManagerApplicationSubmitted(db, row).catch(() => undefined);
+    }
     if (row.bucket === "pending" && row.application?.consentCredit) {
       void tryAutoOrderScreening(db, row);
     }
