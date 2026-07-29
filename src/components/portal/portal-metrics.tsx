@@ -392,10 +392,10 @@ export const PORTAL_DASHBOARD_SECTION_CARD =
 /** Vertical stack spacing for dashboard sections — tighter on native. */
 export const PORTAL_DASHBOARD_STACK = "space-y-5 max-lg:space-y-3 [html[data-native]_&]:space-y-3";
 
-/** KPI row: 2-column grid on phones (no sideways scroll); horizontal strip from `sm` up. */
+/** KPI row: 2×3 grid on all breakpoints (six manager stats). */
 export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-2 max-md:[&>*]:min-w-0 sm:-mx-1 sm:flex sm:gap-2 sm:overflow-x-auto sm:px-1 sm:pb-1 sm:[&>*]:min-w-[7.25rem] sm:[&>*]:max-w-[9.5rem] [-ms-overflow-style:none] sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden">
+    <div className="grid grid-cols-2 gap-2 sm:gap-2.5 [&>*]:min-w-0">
       {children}
     </div>
   );
@@ -463,9 +463,9 @@ export function PortalDashboardKpiTile({
       href={href}
       data-attr={dataAttr}
       className={cn(
-        "flex min-h-[5.25rem] min-w-0 flex-1 flex-col items-center justify-between rounded-xl border border-border border-l-[3px] px-2.5 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
+        "flex min-h-[5.25rem] min-w-0 w-full flex-col items-center justify-between rounded-xl border border-border border-l-[3px] px-2.5 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
         "hover:-translate-y-px hover:border-primary/35 hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]",
-        "sm:min-h-[5.5rem] sm:min-w-[7.5rem] sm:px-3 sm:py-3 [html[data-native]_&]:min-h-[4.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2",
+        "sm:min-h-[5.5rem] sm:px-3 sm:py-3 [html[data-native]_&]:min-h-[4.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2",
         styles.accent,
         styles.shell,
       )}
