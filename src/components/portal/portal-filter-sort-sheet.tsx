@@ -3,11 +3,31 @@
 import { useState, type ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
+
+function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: () => void }) {
+  return (
+    <div className="flex gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="flex-1 rounded-full"
+        onClick={() => {
+          onReset();
+        }}
+      >
+        Reset
+      </Button>
+      <Button type="button" variant="primary" className="flex-1 rounded-full" onClick={onDone}>
+        Done
+      </Button>
+    </div>
+  );
+}
 
 /**
  * Compact portal toolbar filter pattern (Communication / Payments):
- * mobile "Filter & sort" sheet + inline controls from `md` up.
+ * mobile Vaul bottom sheet + inline controls from `md` up.
  */
 export function PortalFilterSortSheet({
   children,
@@ -25,6 +45,12 @@ export function PortalFilterSortSheet({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const sheetBody = (
+    <div className="flex flex-col gap-4">
+      {children}
+      {extraModalContent}
+    </div>
+  );
 
   return (
     <>
@@ -32,7 +58,7 @@ export function PortalFilterSortSheet({
         <Button
           type="button"
           variant="outline"
-          className="h-9 min-w-0 flex-1 rounded-full text-xs font-semibold"
+          className="h-9 min-w-0 w-full rounded-full text-xs font-semibold"
           data-attr={dataAttr}
           onClick={() => setOpen(true)}
         >
@@ -43,25 +69,14 @@ export function PortalFilterSortSheet({
       <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
         {children}
       </div>
-      <Modal open={open} title="Filter & sort" onClose={() => setOpen(false)} panelClassName="max-w-md">
-        <div className="flex flex-col gap-4">{children}</div>
-        {extraModalContent}
-        <div className="mt-5 flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 rounded-full"
-            onClick={() => {
-              onReset();
-            }}
-          >
-            Reset
-          </Button>
-          <Button type="button" variant="primary" className="flex-1 rounded-full" onClick={() => setOpen(false)}>
-            Done
-          </Button>
-        </div>
-      </Modal>
+      <VaulBottomSheet
+        open={open}
+        onOpenChange={setOpen}
+        title="Filter & sort"
+        footer={<FilterSheetFooter onReset={onReset} onDone={() => setOpen(false)} />}
+      >
+        {sheetBody}
+      </VaulBottomSheet>
     </>
   );
 }

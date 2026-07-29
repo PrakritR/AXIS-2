@@ -48,7 +48,14 @@ import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import {
+  RESIDENT_DETAIL_TAB_LABELS,
+  residentDetailHref,
+  parseResidentDetailTab,
+  type ResidentDetailTabId,
+} from "@/lib/portal-detail-routes";
 import {
   PortalDetailHeader,
   PortalListDetailPane,
@@ -271,9 +278,13 @@ function shortDateLabel(iso: string): string {
 
 export function ManagerResidents({
   tabId = "current",
+  residentId: residentIdProp,
+  detailTab: detailTabProp,
   smsUiEnabled = false,
 }: {
   tabId?: ResidentsTabId;
+  residentId?: string;
+  detailTab?: ResidentDetailTabId;
   smsUiEnabled?: boolean;
 }) {
   const { showToast } = useAppUi();
@@ -347,10 +358,7 @@ export function ManagerResidents({
 
   const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
 
-  // Expanded-resident detail: collapsed section summaries, opened one at a time on click
-  const [expandedResidentSection, setExpandedResidentSection] = useState<
-    "application" | "lease" | "payments" | "services" | "communication" | null
-  >(null);
+  const activeDetailTab = parseResidentDetailTab(detailTabProp);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
   const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
@@ -767,10 +775,17 @@ export function ManagerResidents({
       setSvcReqBucket("pending");
       setSvcWoBucket("open");
       setSvcExpandedId(null);
-      setExpandedResidentSection(null);
-      ;
     }
   }
+
+  useEffect(() => {
+    if (!residentIdProp) return;
+    const decoded = decodeURIComponent(residentIdProp);
+    if (filtered.some((r) => r.id === decoded)) {
+      setSelectedId(decoded);
+      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
+    }
+  }, [residentIdProp, filtered]);
 
   if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
     setSelectedId(null);
@@ -933,6 +948,18 @@ export function ManagerResidents({
     if (!collectLinkedPropertyIds(userId).has(pid)) return true;
     return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
   }, [selected, userId, hcTick]);
+
+  const residentDetailTabsAvailable = useMemo((): ResidentDetailTabId[] => {
+    const tabs: ResidentDetailTabId[] = [];
+    if (showResidentApplication) tabs.push("application");
+    if (showResidentLease) tabs.push("lease");
+    tabs.push("payments", "services");
+    return tabs;
+  }, [showResidentApplication, showResidentLease]);
+
+  const resolvedDetailTab = residentDetailTabsAvailable.includes(activeDetailTab)
+    ? activeDetailTab
+    : (residentDetailTabsAvailable[0] ?? "payments");
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
     if (!selected?.email?.trim()) return null;
@@ -1762,8 +1789,40 @@ export function ManagerResidents({
   const residentDetailPanel =
     selectedId && selected ? (
                           <div className="flex flex-col gap-4">
+                            {selected ? (
+                              <DestinationNav
+                                items={(
+                                  [
+                                    showResidentApplication ? "application" : null,
+                                    showResidentLease ? "lease" : null,
+                                    "payments",
+                                    "services",
+                                  ] as const
+                                )
+                                  .filter((tab): tab is ResidentDetailTabId => tab !== null)
+                                  .map((tab) => ({
+                                    id: tab,
+                                    label: RESIDENT_DETAIL_TAB_LABELS[tab],
+                                    href: residentDetailHref(portalBase, residentsTab, selected.id, tab),
+                                    dataAttr: `resident-detail-tab-${tab}`,
+                                  }))}
+                                activeId={resolvedDetailTab}
+                                ariaLabel="Resident profile sections"
+                              />
+                            ) : null}
                             <div className="rounded-2xl border border-border bg-card p-4 [html[data-native]_&]:p-3">
-                              <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+                              <PortalSectionActionRow
+                                destructive={
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                                    onClick={deleteSelectedResident}
+                                  >
+                                    Delete
+                                  </Button>
+                                }
+                              >
                                 <Button
                                   type="button"
                                   variant="outline"
@@ -1785,18 +1844,10 @@ export function ManagerResidents({
                                 >
                                   Edit
                                 </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                                  onClick={deleteSelectedResident}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
+                              </PortalSectionActionRow>
                             </div>
 
-                            {showResidentApplication ? (
+                            {showResidentApplication && resolvedDetailTab === "application" ? (
                             <ResidentDetailSection
                               title="Application"
                               summary={
@@ -1804,10 +1855,8 @@ export function ManagerResidents({
                                   ? `Application: ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
                                   : "No application on file for this resident."
                               }
-                              expanded={expandedResidentSection === "application"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "application" ? null : "application"))
-                              }
+                              expanded
+                              onToggle={() => {}}
                               headerAction={
                                 selectedApplicationRow ? (
                                   <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
@@ -1890,7 +1939,7 @@ export function ManagerResidents({
                             </ResidentDetailSection>
                             ) : null}
 
-                            {showResidentLease ? (
+                            {showResidentLease && resolvedDetailTab === "lease" ? (
                             <ResidentDetailSection
                               title="Lease"
                               summary={
@@ -1898,8 +1947,8 @@ export function ManagerResidents({
                                   ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
                                   : "No lease created yet for this resident."
                               }
-                              expanded={expandedResidentSection === "lease"}
-                              onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
+                              expanded
+                              onToggle={() => {}}
                               headerAction={
                                 residentLease ? (
                                   <LeasePrimaryHeaderActions
@@ -2047,6 +2096,7 @@ export function ManagerResidents({
                             </ResidentDetailSection>
                             ) : null}
 
+                            {resolvedDetailTab === "payments" ? (
                             <ResidentDetailSection
                               title="Payments"
                               summary={
@@ -2058,10 +2108,8 @@ export function ManagerResidents({
                                       ? "Overdue charges"
                                       : "Pending charges"
                               }
-                              expanded={expandedResidentSection === "payments"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
-                              }
+                              expanded
+                              onToggle={() => {}}
                               headerAction={
                                 <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
                                   <Button
@@ -2116,7 +2164,9 @@ export function ManagerResidents({
                                 onRowsChanged={() => setHcTick((n) => n + 1)}
                               />
                             </ResidentDetailSection>
+                            ) : null}
 
+                            {resolvedDetailTab === "services" ? (
                             <ResidentDetailSection
                               title="Services"
                               summary={
@@ -2124,10 +2174,8 @@ export function ManagerResidents({
                                   ? "No add-on services or work orders yet."
                                   : `${residentServiceRequests.length} add-on service${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
                               }
-                              expanded={expandedResidentSection === "services"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "services" ? null : "services"))
-                              }
+                              expanded
+                              onToggle={() => {}}
                               headerAction={
                                 <Button
                                   type="button"
@@ -2267,33 +2315,31 @@ export function ManagerResidents({
                                   />
                                 </div>
                               )}
+                              <ResidentDetailSection
+                                title="Communication"
+                                summary={residentCommSummary}
+                                expanded
+                                onToggle={() => {}}
+                                headerAction={
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={openResidentMessageModal}
+                                  >
+                                    New message
+                                  </Button>
+                                }
+                              >
+                                <ManagerResidentDetailInbox
+                                  residentEmail={selected.email}
+                                  portalBase={portalBase}
+                                  smsUiEnabled={smsUiEnabled}
+                                  smsRef={residentSmsPanelRef}
+                                />
+                              </ResidentDetailSection>
                             </ResidentDetailSection>
-
-                            <ResidentDetailSection
-                              title="Communication"
-                              summary={residentCommSummary}
-                              expanded={expandedResidentSection === "communication"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "communication" ? null : "communication"))
-                              }
-                              headerAction={
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full px-3 py-1 text-xs"
-                                  onClick={openResidentMessageModal}
-                                >
-                                  New message
-                                </Button>
-                              }
-                            >
-                              <ManagerResidentDetailInbox
-                                residentEmail={selected.email}
-                                portalBase={portalBase}
-                                smsUiEnabled={smsUiEnabled}
-                                smsRef={residentSmsPanelRef}
-                              />
-                            </ResidentDetailSection>
+                            ) : null}
                           </div>
     ) : null;
 
@@ -2324,67 +2370,54 @@ export function ManagerResidents({
         compactFilterRow
         mobileHideFilterRow={mobileDetailOpen}
         mobileFlush={mobileDetailOpen}
-        titleAside={
-          mobileDetailOpen ? (
-            <div className="max-md:hidden">
-              <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-                + Add
-              </Button>
-            </div>
-          ) : (
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add
-            </Button>
-          )
-        }
-        filterRow={
-          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-            <DestinationNav
-              items={[
-                {
-                  id: "current",
-                  label: "Current",
-                  href: `${portalBase}/residents/current`,
-                  count: currentResidentsCount,
-                  dataAttr: "residents-tab-current",
-                },
-                {
-                  id: "previous",
-                  label: "Previous",
-                  href: `${portalBase}/residents/previous`,
-                  count: previousResidentsCount,
-                  dataAttr: "residents-tab-previous",
-                },
-              ]}
-              activeId={residentsTab}
-              ariaLabel="Resident directory"
-            />
-            <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
-              <PortalFilterSortSheet
-                activeCount={portalFilterActiveCount([propertyFilter])}
-                onReset={() => setPropertyFilter("")}
-                dataAttr="residents-filter-sheet-open"
-              >
-                <PortalPropertyFilterPill
-                  propertyOptions={propertyOptions}
-                  propertyValue={propertyFilter}
-                  onPropertyChange={setPropertyFilter}
-                />
-              </PortalFilterSortSheet>
-            </ManagerPortalFilterActions>
-          </ManagerPortalFilterRow>
-        }
       >
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="residents-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </PortalFilterSortSheet>
+        }
+        primaryAction={
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+            + Add
+          </Button>
+        }
+        destinations={[
+          {
+            id: "current",
+            label: "Current",
+            href: `${portalBase}/residents/current`,
+            count: currentResidentsCount,
+            dataAttr: "residents-tab-current",
+          },
+          {
+            id: "previous",
+            label: "Previous",
+            href: `${portalBase}/residents/previous`,
+            count: previousResidentsCount,
+            dataAttr: "residents-tab-previous",
+          },
+        ]}
+        activeDestinationId={residentsTab}
+        destinationAriaLabel="Resident directory"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search residents",
+          dataAttr: "residents-search",
+        }}
+      />
       {filtered.length === 0 ? (
         <>
-          <PortalListToolbar
-            search={{
-              value: searchQuery,
-              onChange: setSearchQuery,
-              placeholder: "Search residents",
-              dataAttr: "residents-search",
-            }}
-          />
           <PortalDataTableEmpty
             icon="residents"
             message={
@@ -2405,14 +2438,6 @@ export function ManagerResidents({
           detailOpen={mobileDetailOpen && Boolean(selected)}
           list={
             <div className="flex min-h-0 flex-1 flex-col">
-              <PortalListToolbar
-                search={{
-                  value: searchQuery,
-                  onChange: setSearchQuery,
-                  placeholder: "Search residents",
-                  dataAttr: "residents-search",
-                }}
-              />
               <div className={INBOX_LIST_SCROLL}>
                 {filtered.map((res) => {
                   const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null]
@@ -2429,6 +2454,7 @@ export function ManagerResidents({
                       onOpen={() => {
                         setSelectedId(res.id);
                         setMobileDetailOpen(true);
+                        navigate(residentDetailHref(portalBase, residentsTab, res.id, resolvedDetailTab));
                       }}
                       dataAttr="resident-list-row"
                     />

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { DestinationNav } from "@/components/ui/destination-nav";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import {
   ManagerHousePropertiesPanel,
@@ -12,12 +11,12 @@ import {
   type ManagerStageKey,
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
-import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import type { PropertyDetailTabId } from "@/lib/portal-detail-routes";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
@@ -50,9 +49,13 @@ import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 export function ManagerProperties({
   stage: stageProp = "listed",
   basePath: basePathProp,
+  propertyKey: propertyKeyProp,
+  detailTab: detailTabProp,
 }: {
   stage?: ManagerStageKey;
   basePath?: string;
+  propertyKey?: string;
+  detailTab?: PropertyDetailTabId;
 }) {
   const { showToast } = useAppUi();
   const router = useRouter();
@@ -239,28 +242,7 @@ export function ManagerProperties({
 
   return (
     <>
-      <ManagerPortalPageShell
-        title="Properties"
-        titleAside={propertiesHeaderActions}
-        compactFilterRow
-        filterRow={
-          <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-            <div className="min-w-0 w-full max-w-full">
-              <DestinationNav
-                items={MANAGER_STAGES.map((stage) => ({
-                  id: stage.key,
-                  label: stage.label,
-                  href: `${propertiesBase}/${stage.key}`,
-                  count: stageCounts[stage.key],
-                  dataAttr: `manager-properties-tab-${stage.key}`,
-                }))}
-                activeId={activeStage}
-                ariaLabel="Property pipeline stage"
-              />
-            </div>
-          </ManagerPortalFilterRow>
-        }
-      >
+      <ManagerPortalPageShell title="Properties" compactFilterRow>
         {atPropertyLimit && limitMax != null ? (
           <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
             You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
@@ -274,7 +256,18 @@ export function ManagerProperties({
             </span>
           </p>
         ) : null}
-        <PortalListToolbar
+        <PortalListControlStack
+          className="mb-3"
+          primaryAction={propertiesHeaderActions}
+          destinations={MANAGER_STAGES.map((stage) => ({
+            id: stage.key,
+            label: stage.label,
+            href: `${propertiesBase}/${stage.key}`,
+            count: stageCounts[stage.key],
+            dataAttr: `manager-properties-tab-${stage.key}`,
+          }))}
+          activeDestinationId={activeStage}
+          destinationAriaLabel="Property pipeline stage"
           search={{
             value: searchQuery,
             onChange: setSearchQuery,
@@ -290,6 +283,9 @@ export function ManagerProperties({
           skuTier={skuTier}
           skuLoaded={skuLoaded}
           searchQuery={searchQuery}
+          propertiesBase={propertiesBase}
+          propertyKey={propertyKeyProp}
+          detailTab={detailTabProp}
         />
       </ManagerPortalPageShell>
       {wizardOpen ? (

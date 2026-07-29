@@ -474,12 +474,19 @@ export async function renderPortalSection(
       if (!tabParts?.length) {
         redirect(`${def.basePath}/${section}/current`);
       }
-      if (tabParts.length > 1) notFound();
       const residentsTab = tabParts[0]!;
       if (!["current", "previous"].includes(residentsTab)) notFound();
+      if (tabParts.length > 3) notFound();
+      const residentId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      const residentDetailTab = tabParts.length >= 3 ? tabParts[2]! : undefined;
       const ManagerResidents = await loadManagerResidents();
       return subscriptionGated(
-        <ManagerResidents tabId={residentsTab as "current" | "previous"} smsUiEnabled={isSmsCommUiEnabled()} />,
+        <ManagerResidents
+          tabId={residentsTab as "current" | "previous"}
+          residentId={residentId}
+          detailTab={residentDetailTab as import("@/lib/portal-detail-routes").ResidentDetailTabId | undefined}
+          smsUiEnabled={isSmsCommUiEnabled()}
+        />,
         kind,
         "residents",
         managerOwnerSubscriptionTier,
@@ -705,7 +712,6 @@ export async function renderPortalSection(
       if (!tabParts?.length) {
         redirect(`${def.basePath}/properties/listed`);
       }
-      if (tabParts.length > 1) notFound();
       const stageRaw = tabParts[0]!;
       const stage = PROPERTY_STAGES.includes(stageRaw as typeof PROPERTY_STAGES[number])
         ? (stageRaw as typeof PROPERTY_STAGES[number])
@@ -713,9 +719,17 @@ export async function renderPortalSection(
       if (stageRaw !== stage) {
         redirect(`${def.basePath}/properties/${stage}`);
       }
+      if (tabParts.length > 3) notFound();
+      const propertyKey = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      const propertyDetailTab = tabParts.length >= 3 ? tabParts[2]! : undefined;
       const ManagerProperties = await loadManagerProperties();
       return subscriptionGated(
-        <ManagerProperties stage={stage} basePath={def.basePath} />,
+        <ManagerProperties
+          stage={stage}
+          basePath={def.basePath}
+          propertyKey={propertyKey}
+          detailTab={propertyDetailTab as import("@/lib/portal-detail-routes").PropertyDetailTabId | undefined}
+        />,
         kind,
         "properties",
         managerOwnerSubscriptionTier,

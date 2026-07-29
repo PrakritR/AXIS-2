@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { DestinationNav } from "@/components/ui/destination-nav";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -12,15 +11,13 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
   PortalDetailHeader,
   PortalListDetailPane,
@@ -842,6 +839,43 @@ export function ManagerApplications({
     );
   };
 
+  const applicationsHeaderActions = (
+    <>
+      <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="application-settings-open"
+        onClick={() => setApplicationSettingsOpen(true)}
+      >
+        Promo code
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="edit-application-open"
+        onClick={() => setEditApplicationOpen(true)}
+        disabled={propertyOptions.length === 0}
+        title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+      >
+        Edit
+        <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => setInviteModalOpen(true)}
+        disabled={shareableProperties.length === 0}
+        title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
+      >
+        Send
+      </Button>
+    </>
+  );
+
   return (
     <>
     <ManagerPortalPageShell
@@ -849,111 +883,40 @@ export function ManagerApplications({
       compactFilterRow
       mobileHideFilterRow={mobileDetailOpen}
       mobileFlush={mobileDetailOpen}
-      titleAside={
-        mobileDetailOpen ? (
-          <div className="max-md:hidden">
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                data-attr="application-settings-open"
-                onClick={() => setApplicationSettingsOpen(true)}
-              >
-                Promo code
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                data-attr="edit-application-open"
-                onClick={() => setEditApplicationOpen(true)}
-                disabled={propertyOptions.length === 0}
-                title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
-              >
-                Edit
-                <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                onClick={() => setInviteModalOpen(true)}
-                disabled={shareableProperties.length === 0}
-                title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
-              >
-                Send
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="application-settings-open"
-              onClick={() => setApplicationSettingsOpen(true)}
-            >
-              Promo code
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="edit-application-open"
-              onClick={() => setEditApplicationOpen(true)}
-              disabled={propertyOptions.length === 0}
-              title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
-            >
-              Edit
-              <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => setInviteModalOpen(true)}
-              disabled={shareableProperties.length === 0}
-              title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
-            >
-              Send
-            </Button>
-          </div>
-        )
-      }
-      filterRow={
-        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
-            <PortalFilterSortSheet
-              activeCount={portalFilterActiveCount([propertyFilter])}
-              onReset={() => setPropertyFilter("")}
-              dataAttr="applications-filter-sheet-open"
-            >
-              <PortalPropertyFilterPill
-                propertyOptions={propertyOptions}
-                propertyValue={propertyFilter}
-                onPropertyChange={(id) => setPropertyFilter(id)}
-              />
-            </PortalFilterSortSheet>
-          </ManagerPortalFilterActions>
-        </ManagerPortalFilterRow>
-      }
     >
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="applications-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(id) => setPropertyFilter(id)}
+            />
+          </PortalFilterSortSheet>
+        }
+        primaryAction={applicationsHeaderActions}
+        destinations={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${applicationsBase}/${t.id}`,
+          count: t.count,
+          dataAttr: `applications-bucket-${t.id}`,
+        }))}
+        activeDestinationId={bucket}
+        destinationAriaLabel="Application status"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search applicants",
+          dataAttr: "applications-search",
+        }}
+      />
       <div className="mt-1 space-y-3">
-        <DestinationNav
-          items={tabs.map((t) => ({
-            id: t.id,
-            label: t.label,
-            href: `${applicationsBase}/${t.id}`,
-            count: t.count,
-            dataAttr: `applications-bucket-${t.id}`,
-          }))}
-          activeId={bucket}
-          ariaLabel="Application status"
-        />
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
       <ManagerApplicationSettingsModal
         open={applicationSettingsOpen}
@@ -971,16 +934,7 @@ export function ManagerApplications({
           <ListSkeleton rows={5} showLeading={false} />
         </div>
       ) : rowsForBucket.length === 0 ? (
-        <>
-          <PortalListToolbar
-            search={{
-              value: searchQuery,
-              onChange: setSearchQuery,
-              placeholder: "Search applicants",
-              dataAttr: "applications-search",
-            }}
-          />
-          <PortalDataTableEmpty
+        <PortalDataTableEmpty
             icon="application"
             message={
               scopedRows.length === 0
@@ -996,7 +950,6 @@ export function ManagerApplications({
                         : "No applications in this tab yet."
             }
           />
-        </>
       ) : (
         <PortalListDetailPane
           mobileCompact
@@ -1004,14 +957,6 @@ export function ManagerApplications({
           detailOpen={mobileDetailOpen && Boolean(selectedRow)}
           list={
             <div className="flex min-h-0 flex-1 flex-col">
-              <PortalListToolbar
-                search={{
-                  value: searchQuery,
-                  onChange: setSearchQuery,
-                  placeholder: "Search applicants",
-                  dataAttr: "applications-search",
-                }}
-              />
               <div className={INBOX_LIST_SCROLL}>
                 {rowsForBucket.map((row) => {
                   const room = displayRoomForRow(row);
