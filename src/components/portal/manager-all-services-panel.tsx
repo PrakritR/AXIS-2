@@ -1,16 +1,24 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  MANAGER_TABLE_TH,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import {
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   buildManagerPropertyFilterOptions,
@@ -49,22 +57,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
-import {
-  PORTAL_DATA_TABLE,
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableColGroup,
-  PortalDataTableEmpty,
-  portalTableColumnPercents,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
@@ -90,8 +83,10 @@ export function ManagerAllServicesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
   const [prevWoBucketProp, setPrevWoBucketProp] = useState(workOrderBucketProp);
   if (workOrderBucketProp !== prevWoBucketProp) {
@@ -209,8 +204,16 @@ export function ManagerAllServicesPanel({
     let rows = workOrders;
     if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
-    return rows;
-  }, [workOrders, propertyFilter, activeResidentFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.title, r.propertyName, r.unit, r.residentName, r.priority, r.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [workOrders, propertyFilter, activeResidentFilter, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
@@ -220,8 +223,16 @@ export function ManagerAllServicesPanel({
       );
     }
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
-    return rows;
-  }, [serviceRequests, propertyFilter, activeResidentFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.offerName, r.residentName, r.notes, r.residentEmail]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [serviceRequests, propertyFilter, activeResidentFilter, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -257,6 +268,33 @@ export function ManagerAllServicesPanel({
         .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
     [filteredRequests, reqBucket],
   );
+
+  const requestIds = useMemo(() => bucketedRequests.map((r) => `request-${r.id}`), [bucketedRequests]);
+
+  useEffect(() => {
+    if (typeFilter !== "requests") return;
+    if (requestIds.length === 0) {
+      setExpandedId(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setExpandedId((cur) => {
+      if (cur && requestIds.includes(cur)) return cur;
+      if (portalUsesDesktopSplit()) return requestIds[0] ?? null;
+      return null;
+    });
+  }, [requestIds, typeFilter]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit()) setExpandedId(null);
+  }, [reqBucket, propertyFilter, searchQuery, typeFilter]);
+
+  const selectedRequest = useMemo(() => {
+    if (!expandedId?.startsWith("request-")) return null;
+    const rawId = expandedId.slice("request-".length);
+    return bucketedRequests.find((r) => r.id === rawId) ?? null;
+  }, [bucketedRequests, expandedId]);
 
 
   const woCounts = useMemo(() => {
@@ -332,6 +370,8 @@ export function ManagerAllServicesPanel({
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
       compactFilterRow
+      mobileHideFilterRow={mobileDetailOpen && typeFilter === "requests"}
+      mobileFlush={mobileDetailOpen && typeFilter === "requests"}
       titleAside={
         <>
           {typeFilter === "vendors" ? (
@@ -421,6 +461,14 @@ export function ManagerAllServicesPanel({
             <ManagerPortalStatusFilterRow className="justify-end">
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
+            <PortalListToolbar
+              search={{
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: "Search maintenance requests",
+                dataAttr: "services-work-orders-search",
+              }}
+            />
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
@@ -442,89 +490,74 @@ export function ManagerAllServicesPanel({
             <ManagerPortalStatusFilterRow className="justify-end">
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
+            <PortalListToolbar
+              search={{
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: "Search add-on services",
+                dataAttr: "services-requests-search",
+              }}
+            />
             {bucketedRequests.length === 0 ? (
               <PortalDataTableEmpty
                 message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}
                 icon="service"
               />
             ) : (
-          <>
-          <div className="space-y-2 lg:hidden">
-            {bucketedRequests.map((req) => {
-              const id = `request-${req.id}`;
-              const isExpanded = expandedId === id;
-              const propertyLabel = resolveRequestPropertyLabel(req);
-              const unit = resolveRequestUnit(req);
-              return (
-                <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button
-                    type="button"
-                    className="flex w-full gap-2 text-left"
-                    onClick={() => setExpandedId(isExpanded ? null : id)}
-                    aria-expanded={isExpanded}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
-                        <span className="truncate">{req.offerName}</span>
-                      </PortalTableInlineExpand>
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        {[propertyLabel, unit].filter(Boolean).join(" · ")}
-                      </p>
+              <PortalListDetailPane
+                mobileCompact
+                className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+                detailOpen={mobileDetailOpen && Boolean(selectedRequest)}
+                list={
+                  <div className={INBOX_LIST_SCROLL}>
+                    {bucketedRequests.map((req) => {
+                      const id = `request-${req.id}`;
+                      const propertyLabel = resolveRequestPropertyLabel(req);
+                      const unit = resolveRequestUnit(req);
+                      const subtitle = [req.residentName, propertyLabel, unit].filter(Boolean).join(" · ");
+                      return (
+                        <PortalServiceRecordRow
+                          key={id}
+                          title={req.offerName}
+                          subtitle={subtitle || undefined}
+                          statusLabel={reqBucket === "pending" ? "Pending" : reqBucket === "approved" ? "Approved" : "Denied"}
+                          statusTone={
+                            reqBucket === "approved" ? "success" : reqBucket === "denied" ? "danger" : "warning"
+                          }
+                          selected={expandedId === id}
+                          onOpen={() => {
+                            setExpandedId(id);
+                            setMobileDetailOpen(true);
+                          }}
+                          dataAttr="service-request-list-row"
+                        />
+                      );
+                    })}
+                  </div>
+                }
+                detail={
+                  selectedRequest ? (
+                    <div className="flex h-full min-h-0 flex-col">
+                      <PortalDetailHeader
+                        title={selectedRequest.offerName}
+                        subtitle={selectedRequest.residentName}
+                        avatarName={selectedRequest.residentName}
+                        onBack={() => setMobileDetailOpen(false)}
+                        backLabel="Back to services"
+                        dataAttrBack="service-request-detail-back"
+                      />
+                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+                        {renderRequestDetail(selectedRequest)}
+                      </div>
                     </div>
-                  </button>
-                  {isExpanded ? (
-                    <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
-            {bucketedRequests.map((req) => {
-              const id = `request-${req.id}`;
-              const isExpanded = expandedId === id;
-              const propertyLabel = resolveRequestPropertyLabel(req);
-              const unit = resolveRequestUnit(req);
-              return (
-                  <Fragment key={`req-${req.id}`}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
-                      aria-expanded={isExpanded}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={isExpanded}>{req.offerName}</PortalTableInlineExpand>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <span className="text-foreground">{propertyLabel}</span>
-                        {unit ? <span className="text-muted"> · {unit}</span> : null}
-                      </td>
-                    </tr>
-                    {isExpanded ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderRequestDetail(req)}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-              );
-            })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          </>
+                  ) : (
+                    <PortalListDetailPlaceholder
+                      title="Select a service request"
+                      hint="Choose a request from the list to review and approve."
+                    />
+                  )
+                }
+              />
             )}
           </>
         )}

@@ -133,7 +133,7 @@ const listing = (id: string, name: string) => ({ id, name }) as unknown as MockP
  * the manager actually reported.
  */
 async function settleAndDump(name: string, container: HTMLElement) {
-  await screen.findByText("Pending");
+  await screen.findByRole("link", { name: /Pending/i });
   await new Promise((resolve) => setTimeout(resolve, 0));
   dumpHtml(name, container.innerHTML);
 }
@@ -155,11 +155,14 @@ describe("manager Applications tab — pending application on a cold property ca
 
     // The manager's own row is on the Pending tab even though the property
     // pipeline has not hydrated (CACHED_LISTINGS is still empty).
-    expect(await screen.findByText("Maya Alvarez")).toBeTruthy();
+    expect(screen.getAllByText("Maya Alvarez").length).toBeGreaterThan(0);
     expect(screen.getAllByText("The Magnolia · 2B").length).toBeGreaterThan(0);
     // Pending pill carries the count, and the empty state is gone.
     expect(screen.queryByText(/^No applications yet/)).toBeNull();
-    await waitFor(() => expect(screen.getByText("Pending").textContent).toContain("1"));
+    await waitFor(() => {
+      const pendingTab = screen.getByRole("link", { name: /Pending/i });
+      expect(pendingTab.textContent).toContain("1");
+    });
     // Another manager's row is still filtered out on the same cold cache.
     expect(screen.queryByText("Not Your Applicant")).toBeNull();
   });
@@ -212,6 +215,6 @@ describe("manager Applications tab — pending application on a cold property ca
     await settleAndDump("co-manager-after-hydrate", container);
 
     // Without the `portfolioTick` memo dependency the list would never recompute.
-    expect(await screen.findByText("Maya Alvarez")).toBeTruthy();
+    expect(screen.getAllByText("Maya Alvarez").length).toBeGreaterThan(0);
   });
 });

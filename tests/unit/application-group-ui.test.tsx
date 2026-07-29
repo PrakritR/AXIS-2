@@ -10,7 +10,7 @@
 // Set GROUP_UI_HTML_DIR to also dump each rendered surface's HTML to that
 // directory so it can be screenshotted with the app's real stylesheet.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
 import type { DemoApplicantRow } from "@/data/demo-portal";
@@ -189,13 +189,14 @@ describe("group application — manager reconciliation", () => {
 
     // Switching to the Incomplete tab surfaces Sam's own "Group 2/3" badge.
     rerender(<ManagerApplications bucket="incomplete" />);
-    expect(await screen.findByText("Sam Okafor")).toBeTruthy();
+    expect(screen.getAllByText("Sam Okafor").length).toBeGreaterThan(0);
     expect(screen.getByText("Group 2/3")).toBeTruthy();
     rerender(<ManagerApplications bucket="pending" />);
-    await screen.findByText("Priya Nair");
+    await waitFor(() => expect(screen.getAllByText("Priya Nair").length).toBeGreaterThan(0));
 
     // Expand a joining member's application → roster of the whole household.
-    fireEvent.click(screen.getByText("Priya Nair").closest("button")!);
+    const priyaListRow = document.querySelector('[data-attr="application-list-row"]');
+    fireEvent.click(priyaListRow!.querySelector("button")!);
     expect(await screen.findByText("Group application")).toBeTruthy();
     expect(screen.getByText(/2 of 3 applied · waiting on 1/)).toBeTruthy();
     expect(screen.getByText(GROUP_ID)).toBeTruthy();
@@ -253,7 +254,10 @@ describe("group application — manager reconciliation", () => {
     expect(screen.getAllByText("Group 3 · 2 declared").length).toBe(3);
     dumpHtml("manager-edge-rows", container.innerHTML);
 
-    fireEvent.click(screen.getByText("Ada Vance").closest("button")!);
+    const adaRow = [...document.querySelectorAll('[data-attr="application-list-row"]')].find((el) =>
+      el.textContent?.includes("Ada Vance"),
+    );
+    fireEvent.click(adaRow!.querySelector("button")!);
     expect(
       await screen.findByText(/3 applications carry this Group ID, more than the 2 the organizer declared/),
     ).toBeTruthy();

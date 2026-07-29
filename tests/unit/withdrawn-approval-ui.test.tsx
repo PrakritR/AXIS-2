@@ -71,7 +71,11 @@ function row(over: Partial<DemoApplicantRow> & { id: string; name: string }): De
 }
 
 async function expandRow(name: string) {
-  fireEvent.click((await screen.findByText(name)).closest("button")!);
+  const listRow = document.querySelector(`[data-attr="application-list-row"]`);
+  const target = listRow?.textContent?.includes(name)
+    ? listRow.querySelector("button")
+    : (await screen.findAllByText(name))[0]?.closest("button");
+  fireEvent.click(target!);
 }
 
 describe("manager Applications — no Approve on a withdrawn row", () => {
@@ -82,7 +86,7 @@ describe("manager Applications — no Approve on a withdrawn row", () => {
     render(<ManagerApplications />);
 
     // The row is still shown on the Pending tab, labelled Withdrawn.
-    expect(await screen.findByText("Withdrawn Wanda")).toBeTruthy();
+    expect(screen.getAllByText("Withdrawn Wanda").length).toBeGreaterThan(0);
     expect(screen.getByText("Withdrawn")).toBeTruthy();
 
     await expandRow("Withdrawn Wanda");

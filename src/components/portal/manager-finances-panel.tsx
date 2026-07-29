@@ -8,10 +8,12 @@ import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
+  ManagerPortalFilterActions,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { ManagerBankReconciliationPanel } from "@/components/portal/manager-bank-reconciliation-panel";
 import { ManagerBillsPanel } from "@/components/portal/manager-bills-panel";
 import { ManagerBudgetsPanel } from "@/components/portal/manager-budgets-panel";
@@ -731,6 +733,39 @@ export function ManagerFinancesPanel({
     [basePath],
   );
 
+  const specialFinancePanels = new Set(["bills", "bank-reconciliation", "security-deposits", "owner-distributions"]);
+  const showScopedReportFilters = !specialFinancePanels.has(tabId);
+
+  const financeFilterControls = (
+    <ReportFilterBar
+      showProperty
+      showDateRange
+      showDaysAhead={false}
+      showTaxYear={false}
+      propertyOptions={propertyOptions}
+      filters={filters}
+      onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+      onRun={() => void loadTable()}
+      loading={loading}
+      showRunButton={false}
+      trailing={
+        LEDGER_TAB_IDS.has(tabId) ? null : (
+          <FinancesRowFilters
+            tabId={tabId}
+            report={report}
+            rowFilters={rowFilters}
+            onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+          />
+        )
+      }
+    />
+  );
+
+  const resetFinanceFilters = () => {
+    setFilters(defaultFilters());
+    setRowFilters(emptyRowFilters());
+  };
+
   function openAddIncome() {
     setIncomeDraft({
       categoryCode: "other_income",
@@ -797,6 +832,23 @@ export function ManagerFinancesPanel({
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
           <DestinationNav items={financeTabItems} activeId={tabId} ariaLabel="Finance report" />
+          {showScopedReportFilters ? (
+            <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
+              <PortalFilterSortSheet
+                activeCount={portalFilterActiveCount([
+                  filters.propertyId,
+                  rowFilters.resident,
+                  rowFilters.type,
+                  rowFilters.category,
+                  rowFilters.vendor,
+                ])}
+                onReset={resetFinanceFilters}
+                dataAttr="finances-filter-sheet-open"
+              >
+                {financeFilterControls}
+              </PortalFilterSortSheet>
+            </ManagerPortalFilterActions>
+          ) : null}
         </ManagerPortalFilterRow>
       }
     >
@@ -814,28 +866,6 @@ export function ManagerFinancesPanel({
         {tabId === "cash-flow-statement" ? (
           <MonthlyProfitChart points={monthlyProfitPoints} />
         ) : null}
-        <ReportFilterBar
-          showProperty
-          showDateRange
-          showDaysAhead={false}
-          showTaxYear={false}
-          propertyOptions={propertyOptions}
-          filters={filters}
-          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-          onRun={() => void loadTable()}
-          loading={loading}
-          showRunButton={false}
-          trailing={
-            LEDGER_TAB_IDS.has(tabId) ? null : (
-              <FinancesRowFilters
-                tabId={tabId}
-                report={report}
-                rowFilters={rowFilters}
-                onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
-              />
-            )
-          }
-        />
 
         {loading && !report ? (
           <div className={PORTAL_DATA_TABLE_WRAP}>

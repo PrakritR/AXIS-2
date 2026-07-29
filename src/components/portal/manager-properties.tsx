@@ -12,6 +12,7 @@ import {
   type ManagerStageKey,
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
@@ -67,6 +68,7 @@ export function ManagerProperties({
   const [shareListingOpen, setShareListingOpen] = useState(false);
   const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
   const [demoStage, setDemoStage] = useState<ManagerStageKey>("listed");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const activeStage = isDemoModeActive()
     ? demoStage
@@ -272,6 +274,14 @@ export function ManagerProperties({
             </span>
           </p>
         ) : null}
+        <PortalListToolbar
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search properties",
+            dataAttr: "properties-search",
+          }}
+        />
         <ManagerHousePropertiesPanel
           showToast={showToast}
           activeStage={activeStage}
@@ -279,6 +289,7 @@ export function ManagerProperties({
           onSendToProspect={openShareListing}
           skuTier={skuTier}
           skuLoaded={skuLoaded}
+          searchQuery={searchQuery}
         />
       </ManagerPortalPageShell>
       {wizardOpen ? (

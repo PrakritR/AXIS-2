@@ -13,6 +13,7 @@ import {
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
@@ -152,6 +153,7 @@ export const ResidentInboxPanel = forwardRef<
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const reloadScheduledMessages = useCallback(async () => {
     if (isDemoModeActive()) return;
@@ -279,9 +281,7 @@ export const ResidentInboxPanel = forwardRef<
     if (embeddedInCommunication) onTabCountsChange?.(tabCountsForParent);
   }, [embeddedInCommunication, onTabCountsChange, tabCountsForParent]);
 
-  const rowsForTab = useMemo(() => {
-    // "all" = the unified conversation list (inbox + sent, no trash) for the
-    // tabless Communication view.
+  const baseRowsForTab = useMemo(() => {
     if (tabId === "all") return emailThreads.filter((t) => t.folder !== "trash");
     if (tabId === "unopened")
       return emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
@@ -290,6 +290,14 @@ export const ResidentInboxPanel = forwardRef<
     if (tabId === "trash") return emailThreads.filter((t) => t.folder === "trash");
     return [];
   }, [emailThreads, tabId, retainedIds]);
+
+  const rowsForTab = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return baseRowsForTab;
+    return baseRowsForTab.filter((t) =>
+      [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase().includes(q),
+    );
+  }, [baseRowsForTab, searchQuery]);
 
   // Returning to Unopened (or refreshing) shows the true unread set.
   useEffect(() => {
@@ -904,6 +912,17 @@ export const ResidentInboxPanel = forwardRef<
         senderEmail={session.email?.trim().toLowerCase() || "resident@example.com"}
         liveContacts={eligibleContacts}
       />
+
+      {tabId !== "schedule" ? (
+        <PortalListToolbar
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search messages",
+            dataAttr: "resident-inbox-search",
+          }}
+        />
+      ) : null}
 
       {tabId === "schedule" ? (
         scheduledRows.length === 0 ? (

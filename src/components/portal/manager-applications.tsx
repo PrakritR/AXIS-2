@@ -20,6 +20,15 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
+import {
+  PortalDetailHeader,
+  PortalListDetailPane,
+  PortalListDetailPlaceholder,
+  portalUsesDesktopSplit,
+} from "@/components/portal/portal-list-detail-shell";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
@@ -314,7 +323,9 @@ export function ManagerApplications({
     if (bucket !== bucketProp) setBucket(bucketProp);
   }
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
   );
@@ -450,10 +461,41 @@ export function ManagerApplications({
     const filtered = !propertyFilter.trim()
       ? inBucket
       : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
-    // Sorting only special-cases "approved" today; every other tab (including
-    // the new "incomplete") falls through to the same name/id sort as "pending".
-    return sortApplicationRows(filtered, bucket === "approved" ? "approved" : "pending");
-  }, [scopedRows, bucket, propertyFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    const searched = q
+      ? filtered.filter((r) =>
+          [r.name, r.email, r.property, r.id, r.application?.email]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : filtered;
+    return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
+  }, [scopedRows, bucket, propertyFilter, searchQuery]);
+
+  const selectedRow = useMemo(
+    () => rowsForBucket.find((r) => r.id === expandedId) ?? null,
+    [rowsForBucket, expandedId],
+  );
+
+  useEffect(() => {
+    if (rowsForBucket.length === 0) {
+      setExpandedId(null);
+      setMobileDetailOpen(false);
+      return;
+    }
+    setExpandedId((cur) => {
+      if (cur && rowsForBucket.some((r) => r.id === cur)) return cur;
+      if (portalUsesDesktopSplit()) return rowsForBucket[0]!.id;
+      return null;
+    });
+  }, [rowsForBucket]);
+
+  useEffect(() => {
+    setMobileDetailOpen(false);
+    if (!portalUsesDesktopSplit()) setExpandedId(null);
+  }, [bucket, propertyFilter, searchQuery]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -805,59 +847,97 @@ export function ManagerApplications({
     <ManagerPortalPageShell
       title="Applications"
       compactFilterRow
+      mobileHideFilterRow={mobileDetailOpen}
+      mobileFlush={mobileDetailOpen}
       titleAside={
-        // min-w-0 (not shrink-0) so this 4-action toolbar can shrink and wrap to
-        // its own line on a phone instead of overflowing the header — Send was
-        // being clipped off the right edge and was unreachable at 360/390px.
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="application-settings-open"
-            onClick={() => setApplicationSettingsOpen(true)}
-          >
-            Promo code
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="edit-application-open"
-            onClick={() => setEditApplicationOpen(true)}
-            disabled={propertyOptions.length === 0}
-            title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
-          >
-            Edit
-            <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setInviteModalOpen(true)}
-            disabled={shareableProperties.length === 0}
-            title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
-          >
-            Send
-          </Button>
-        </div>
+        mobileDetailOpen ? (
+          <div className="max-md:hidden">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                data-attr="application-settings-open"
+                onClick={() => setApplicationSettingsOpen(true)}
+              >
+                Promo code
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                data-attr="edit-application-open"
+                onClick={() => setEditApplicationOpen(true)}
+                disabled={propertyOptions.length === 0}
+                title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+              >
+                Edit
+                <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                onClick={() => setInviteModalOpen(true)}
+                disabled={shareableProperties.length === 0}
+                title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
+              >
+                Send
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="application-settings-open"
+              onClick={() => setApplicationSettingsOpen(true)}
+            >
+              Promo code
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="edit-application-open"
+              onClick={() => setEditApplicationOpen(true)}
+              disabled={propertyOptions.length === 0}
+              title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+            >
+              Edit
+              <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => setInviteModalOpen(true)}
+              disabled={shareableProperties.length === 0}
+              title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
+            >
+              Send
+            </Button>
+          </div>
+        )
       }
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalFilterActions>
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="applications-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-          </PortalFilterSortSheet>
+          <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([propertyFilter])}
+              onReset={() => setPropertyFilter("")}
+              dataAttr="applications-filter-sheet-open"
+            >
+              <PortalPropertyFilterPill
+                propertyOptions={propertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={(id) => setPropertyFilter(id)}
+              />
+            </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }
@@ -891,67 +971,98 @@ export function ManagerApplications({
           <ListSkeleton rows={5} showLeading={false} />
         </div>
       ) : rowsForBucket.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="application"
-          message={
-            scopedRows.length === 0
-              ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
-              : propertyFilter.trim()
-                ? "No applications for this property yet."
-                : bucket === "pending"
-                  ? "No pending applications. Submitted applications awaiting your review will appear here."
-                  : bucket === "incomplete"
-                    ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
-                    : "No applications in this tab yet."
+        <>
+          <PortalListToolbar
+            search={{
+              value: searchQuery,
+              onChange: setSearchQuery,
+              placeholder: "Search applicants",
+              dataAttr: "applications-search",
+            }}
+          />
+          <PortalDataTableEmpty
+            icon="application"
+            message={
+              scopedRows.length === 0
+                ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
+                : searchQuery.trim()
+                  ? "No applications match your search."
+                  : propertyFilter.trim()
+                    ? "No applications for this property yet."
+                    : bucket === "pending"
+                      ? "No pending applications. Submitted applications awaiting your review will appear here."
+                      : bucket === "incomplete"
+                        ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
+                        : "No applications in this tab yet."
+            }
+          />
+        </>
+      ) : (
+        <PortalListDetailPane
+          mobileCompact
+          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+          detailOpen={mobileDetailOpen && Boolean(selectedRow)}
+          list={
+            <div className="flex min-h-0 flex-1 flex-col">
+              <PortalListToolbar
+                search={{
+                  value: searchQuery,
+                  onChange: setSearchQuery,
+                  placeholder: "Search applicants",
+                  dataAttr: "applications-search",
+                }}
+              />
+              <div className={INBOX_LIST_SCROLL}>
+                {rowsForBucket.map((row) => {
+                  const room = displayRoomForRow(row);
+                  const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
+                    .filter((part) => part && part !== "—")
+                    .join(" · ");
+                  const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+                  const groupBadge = group ? describeGroupBadge(group) : null;
+                  return (
+                    <PortalPersonRecordRow
+                      key={row.id}
+                      name={row.name}
+                      subtitle={subtitle || undefined}
+                      preview={row.email}
+                      badge={groupBadge ? <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge> : undefined}
+                      selected={expandedId === row.id}
+                      onOpen={() => {
+                        setExpandedId(row.id);
+                        setMobileDetailOpen(true);
+                      }}
+                      dataAttr="application-list-row"
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          }
+          detail={
+            selectedRow ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <PortalDetailHeader
+                  title={selectedRow.name}
+                  subtitle={selectedRow.email}
+                  avatarName={selectedRow.name}
+                  onBack={() => setMobileDetailOpen(false)}
+                  backLabel="Back to applications"
+                  dataAttrBack="application-detail-back"
+                  actions={renderApplicationRowActions(selectedRow)}
+                />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
+                  {renderApplicationDetail(selectedRow)}
+                </div>
+              </div>
+            ) : (
+              <PortalListDetailPlaceholder
+                title="Select an application"
+                hint="Choose an applicant from the list to review their submission."
+              />
+            )
           }
         />
-      ) : (
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        <ul className="divide-y divide-[var(--border)]">
-          {rowsForBucket.map((row) => {
-            const expanded = expandedId === row.id;
-            const room = displayRoomForRow(row);
-            const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
-            const groupBadge = group ? describeGroupBadge(group) : null;
-            const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
-              .filter((part) => part && part !== "—")
-              .join(" · ");
-            return (
-              <li key={row.id} id={`portal-application-${row.id}`}>
-                <div className="group flex w-full flex-wrap items-center gap-2 px-4 py-3 transition-colors hover:bg-accent/40 sm:gap-3 sm:px-5 sm:py-3.5">
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left sm:gap-3"
-                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    aria-expanded={expanded}
-                  >
-                    <InboxAvatar name={row.name} className="h-9 w-9 shrink-0 text-[11px]" />
-                    <span className="flex min-w-0 flex-1 flex-col sm:min-w-[8rem]">
-                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                        <span className="block truncate">{row.name}</span>
-                      </PortalTableInlineExpand>
-                      {subtitle ? (
-                        <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
-                      ) : null}
-                    </span>
-                  </button>
-                  {groupBadge ? (
-                    <span title={groupBadge.title} className="hidden shrink-0 sm:inline-flex">
-                      <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
-                    </span>
-                  ) : null}
-                  {renderApplicationRowActions(row)}
-                </div>
-                {expanded ? (
-                  <div className="border-t border-border px-4 py-4 sm:px-5 sm:py-5">
-                    {renderApplicationDetail(row)}
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
       )}
       </div>
     </ManagerPortalPageShell>
