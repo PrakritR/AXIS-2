@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 
 export type ReportFilterState = {
@@ -75,17 +76,15 @@ export function ReportFilterBar({
       ) : null}
 
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
-        <label className={`flex flex-col gap-1.5 text-xs font-medium text-muted ${stacked ? "w-full" : "min-w-[10rem]"}`}>
-          Property
-          <Select value={filters.propertyId} onChange={(e) => onChange({ propertyId: e.target.value })}>
-            <option value="">All properties</option>
-            {propertyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <div className={stacked ? "w-full" : "min-w-0 flex-1"}>
+          <PortalFilterChipRow
+            ariaLabel="Properties"
+            value={filters.propertyId}
+            onChange={(propertyId) => onChange({ propertyId })}
+            allLabel="All properties"
+            options={propertyOptions.map((p) => ({ id: p.id, label: p.label }))}
+          />
+        </div>
       ) : null}
 
       {showDaysAhead ? (

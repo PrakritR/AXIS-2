@@ -32,8 +32,8 @@ import {
 import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
-  AiDraftReplyCard,
   InboxComposer,
+  InboxAiAssistBar,
   InboxConversationRow,
   InboxScheduledCard,
   InboxScheduledThreadList,
@@ -1143,35 +1143,35 @@ export const ManagerInbox = forwardRef<
       emptyLabel="No messages in this conversation."
       composer={
         activeThread.folder === "trash" ? undefined : (
-          <>
-            {activeThread.folder === "inbox" && !editingDraft ? (
-              <AiDraftReplyCard
-                drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft}
-                draft={activeThread.aiDraft?.text}
-                error={draftErrorIds.has(activeThread.id) ? "error" : undefined}
-                approving={approvingDraft}
-                onApprove={() => void approveDraft(activeThread.id)}
-                onEdit={() => startEditDraft(activeThread.id)}
-                onDiscard={() => void discardDraft(activeThread.id)}
-                onGenerate={
-                  !activeThread.aiDraft &&
-                  !draftingIds.has(activeThread.id) &&
-                  !draftSkippedRef.current.has(activeThread.id) &&
-                  draftAttemptedRef.current.has(activeThread.id)
-                    ? () => void generateDraft(activeThread.id)
-                    : undefined
-                }
-              />
-            ) : null}
-            <InboxComposer
-              value={replyDraft}
-              onChange={setReplyDraft}
-              onSubmit={() => void sendActiveReply()}
-              sending={replySending}
-              placeholder={editingDraft ? "Edit the AI draft, then send…" : "Write a reply…"}
-              dataAttr="inbox-reply"
-            />
-          </>
+          <InboxComposer
+            value={replyDraft}
+            onChange={setReplyDraft}
+            onSubmit={() => void sendActiveReply()}
+            sending={replySending}
+            placeholder={editingDraft ? "Edit the AI draft, then send…" : "Write a reply…"}
+            dataAttr="inbox-reply"
+            aiAssist={
+              activeThread.folder === "inbox" && !editingDraft ? (
+                <InboxAiAssistBar
+                  drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft}
+                  draft={activeThread.aiDraft?.text}
+                  error={draftErrorIds.has(activeThread.id) ? "error" : undefined}
+                  approving={approvingDraft}
+                  onApprove={() => void approveDraft(activeThread.id)}
+                  onEdit={() => startEditDraft(activeThread.id)}
+                  onDiscard={() => void discardDraft(activeThread.id)}
+                  onGenerate={
+                    !activeThread.aiDraft &&
+                    !draftingIds.has(activeThread.id) &&
+                    !draftSkippedRef.current.has(activeThread.id) &&
+                    draftAttemptedRef.current.has(activeThread.id)
+                      ? () => void generateDraft(activeThread.id)
+                      : undefined
+                  }
+                />
+              ) : undefined
+            }
+          />
         )
       }
     />

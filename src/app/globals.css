@@ -2218,6 +2218,20 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
   .portal-communication-inbox .portal-inbox-two-pane {
     border-radius: 0.75rem;
   }
+
+  /* G3 — keep the assistant FAB bottom-right without overlapping the send button. */
+  .portal-communication-inbox .portal-inbox-composer-row {
+    padding-right: 3.25rem;
+  }
+
+  .axis-assistant-fab {
+    bottom: max(1.25rem, env(safe-area-inset-bottom)) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+  }
+
+  html[data-native] .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem) !important;
+  }
 }
 
 html[data-native] h1.text-\[1\.35rem\] {
@@ -2682,4 +2696,10 @@ html[data-theme="dark"] .portal-inbox-ai-draft-text {
   background: color-mix(in srgb, var(--primary) 5%, var(--pl-surface-raised));
   border-style: dashed;
   border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+}
+
+.portal-inbox-ai-assist-bar .portal-inbox-ai-draft {
+  border-top-width: 0;
+  border-radius: 0;
+  background: transparent;
 }

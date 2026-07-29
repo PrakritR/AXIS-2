@@ -781,6 +781,7 @@ export function InboxComposer({
   maxLength,
   hint,
   dataAttr,
+  aiAssist,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -791,61 +792,147 @@ export function InboxComposer({
   maxLength?: number;
   hint?: ReactNode;
   dataAttr?: string;
+  /** Gmail-style AI assist row rendered above the reply field (manager inbox). */
+  aiAssist?: ReactNode;
 }) {
   const canSend = !sending && !disabled && value.trim().length > 0;
   return (
-    <form
-      className="portal-inbox-composer shrink-0 border-t border-border bg-card px-2 py-2 max-md:py-1.5 md:px-3 md:py-2.5"
+    <div
+      className="portal-inbox-composer shrink-0 border-t border-border bg-card"
       style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (canSend) onSubmit();
-      }}
     >
-      <div className="flex items-end gap-2">
-        <textarea
-          rows={1}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          maxLength={maxLength}
-          disabled={disabled}
-          enterKeyHint="send"
-          data-attr={dataAttr}
-          className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (canSend) onSubmit();
-            }
-          }}
-        />
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label="Send"
-          data-attr={dataAttr ? `${dataAttr}-send` : undefined}
-          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
-          style={{ background: "var(--btn-primary)" }}
-        >
-          {sending ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          ) : (
-            <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
-          )}
-        </button>
-      </div>
-      {hint || maxLength ? (
-        <div className="mt-1 flex items-center justify-between gap-2 px-1">
-          <span className="text-[11px] text-muted">{hint}</span>
-          {maxLength ? (
-            <span className="text-[11px] tabular-nums text-muted">
-              {value.trim().length}/{maxLength}
-            </span>
-          ) : null}
+      {aiAssist ? <div className="border-b border-border/70 px-2 pt-2 md:px-3">{aiAssist}</div> : null}
+      <form
+        className="px-2 py-2 max-md:py-1.5 md:px-3 md:py-2.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSend) onSubmit();
+        }}
+      >
+        <div className="portal-inbox-composer-row flex items-end gap-2">
+          <textarea
+            rows={1}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            disabled={disabled}
+            enterKeyHint="send"
+            data-attr={dataAttr}
+            className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend) onSubmit();
+              }
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!canSend}
+            aria-label="Send"
+            data-attr={dataAttr ? `${dataAttr}-send` : undefined}
+            className="portal-inbox-composer-send mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
+            style={{ background: "var(--btn-primary)" }}
+          >
+            {sending ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            ) : (
+              <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
+            )}
+          </button>
         </div>
-      ) : null}
-    </form>
+        {hint || maxLength ? (
+          <div className="mt-1 flex items-center justify-between gap-2 px-1">
+            <span className="text-[11px] text-muted">{hint}</span>
+            {maxLength ? (
+              <span className="text-[11px] tabular-nums text-muted">
+                {value.trim().length}/{maxLength}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Gmail-style AI assist affordance above the reply composer. Wires to the existing
+ * approval-first draft flow — the Draft button calls `onGenerate`; no new model path.
+ */
+export function InboxAiAssistBar({
+  drafting = false,
+  draft,
+  error,
+  approving = false,
+  onApprove,
+  onEdit,
+  onDiscard,
+  onGenerate,
+}: {
+  drafting?: boolean;
+  draft?: string;
+  error?: string;
+  approving?: boolean;
+  onApprove: () => void;
+  onEdit: () => void;
+  onDiscard: () => void;
+  onGenerate?: () => void;
+}) {
+  if (drafting) {
+    return (
+      <div className="portal-inbox-ai-assist-bar rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5" data-attr="inbox-ai-assist-drafting">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">AI reply assist</p>
+        <div className="mt-2 flex items-center gap-2 text-[13px] font-medium text-muted">
+          <Sparkles className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} aria-hidden />
+          <span className="animate-pulse">Drafting from this conversation…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (draft) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-primary/15 bg-primary/5">
+        <AiDraftReplyCard
+          draft={draft}
+          approving={approving}
+          onApprove={onApprove}
+          onEdit={onEdit}
+          onDiscard={onDiscard}
+        />
+      </div>
+    );
+  }
+
+  if (!onGenerate) return null;
+
+  return (
+    <div className="portal-inbox-ai-assist-bar rounded-xl border border-primary/15 bg-primary/5 px-3 py-2.5" data-attr="inbox-ai-assist-bar">
+      <label className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+        AI reply assist
+      </label>
+      <div className="mt-2 flex items-stretch gap-2">
+        <div
+          className="flex min-h-10 flex-1 items-center rounded-xl border border-border/80 bg-background/80 px-3 text-sm text-muted/80"
+          aria-hidden
+        >
+          Describe what you want to say…
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 min-h-0 shrink-0 gap-1.5 rounded-xl px-3.5 text-[13px]"
+          onClick={onGenerate}
+          data-attr="inbox-ai-draft-generate"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} aria-hidden />
+          Draft
+        </Button>
+      </div>
+      {error ? <p className="mt-2 text-[12px] text-danger">Couldn’t draft a reply. Try again.</p> : null}
+    </div>
   );
 }
 

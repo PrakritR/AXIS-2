@@ -638,9 +638,6 @@ export function ManagerPortalPageShell({
       {titleAside && titleAsideDesktopOnly ? (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 max-md:hidden">{titleAside}</div>
       ) : null}
-      {titleAside && !titleAsideDesktopOnly && !filterRow ? (
-        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">{titleAside}</div>
-      ) : null}
       {filterRow ? (
         <>
           <div

@@ -7,6 +7,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -115,8 +116,6 @@ function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: Ro
     },
   };
 }
-
-const FILTER_SELECT_CLASS = "w-full min-w-0";
 
 function cellAlign(col: ReportColumn) {
   return col.align === "right" ? "text-right tabular-nums" : "text-left";
@@ -303,73 +302,39 @@ function FinancesRowFilters({
 
   if (!report || rows.length === 0) return null;
 
-  const rowFilterGrid = "grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap";
-
   return tabId === "income" ? (
-    <div className={rowFilterGrid}>
-      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
-        Resident
-        <Select
-          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
-          value={rowFilters.resident}
-          onChange={(e) => onChange({ resident: e.target.value })}
-        >
-          <option value="">All residents</option>
-          {residents.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
-        Type
-        <Select
-          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
-          value={rowFilters.type}
-          onChange={(e) => onChange({ type: e.target.value })}
-        >
-          <option value="">All types</option>
-          {types.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
-      </label>
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <PortalFilterChipRow
+        ariaLabel="Residents"
+        value={rowFilters.resident}
+        onChange={(resident) => onChange({ resident })}
+        allLabel="All residents"
+        options={residents.map((value) => ({ id: value, label: value }))}
+      />
+      <PortalFilterChipRow
+        ariaLabel="Types"
+        value={rowFilters.type}
+        onChange={(type) => onChange({ type })}
+        allLabel="All types"
+        options={types.map((value) => ({ id: value, label: value }))}
+      />
     </div>
   ) : (
-    <div className={rowFilterGrid}>
-      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
-        Category
-        <Select
-          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
-          value={rowFilters.category}
-          onChange={(e) => onChange({ category: e.target.value })}
-        >
-          <option value="">All categories</option>
-          {categories.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
-        Vendor
-        <Select
-          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
-          value={rowFilters.vendor}
-          onChange={(e) => onChange({ vendor: e.target.value })}
-        >
-          <option value="">All vendors</option>
-          {vendors.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </Select>
-      </label>
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <PortalFilterChipRow
+        ariaLabel="Categories"
+        value={rowFilters.category}
+        onChange={(category) => onChange({ category })}
+        allLabel="All categories"
+        options={categories.map((value) => ({ id: value, label: value }))}
+      />
+      <PortalFilterChipRow
+        ariaLabel="Vendors"
+        value={rowFilters.vendor}
+        onChange={(vendor) => onChange({ vendor })}
+        allLabel="All vendors"
+        options={vendors.map((value) => ({ id: value, label: value }))}
+      />
     </div>
   );
 }

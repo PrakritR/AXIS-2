@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -43,15 +43,10 @@ export function PortalPropertyFilterPill({
   onApplicationChange?: (axisId: string) => void;
   propertyPlaceholder?: string;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    queueMicrotask(() => setMounted(true));
-  }, []);
-
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
-  if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
+  if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
     <PortalPropertyFilter
       applications={applications}
