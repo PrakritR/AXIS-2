@@ -2,7 +2,7 @@
 
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { BottomSheetContent, Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { isCrossPortalNavigation, portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
@@ -72,7 +72,7 @@ function MoreNavRow({
         })(e);
         onNavigate();
       }}
-      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+      className={`portal-pressable flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition active:opacity-90 ${
         active
           ? "bg-primary/10 text-primary"
           : item.locked
@@ -83,7 +83,7 @@ function MoreNavRow({
     >
       {showNavIcons ? (
         <span className={`shrink-0 ${item.locked ? "opacity-60" : ""}`} aria-hidden>
-          <PortalNavIcon section={item.section} />
+          <PortalNavIcon section={item.section} active={active} />
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -117,14 +117,12 @@ export function PortalNativeMoreSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="portal-native-more-sheet flex max-h-[min(85dvh,720px)] flex-col rounded-t-[1.35rem] border-border px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0"
+      <BottomSheetContent
+        className="portal-native-more-sheet flex max-h-[min(85dvh,720px)] flex-col gap-0 rounded-t-[1.35rem] border-border px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0 md:px-0"
+        maxHeight="85dvh"
       >
-        <div className="shrink-0 px-4 pb-1 pt-3">
-          <div className="mx-auto h-1 w-10 rounded-full bg-border" aria-hidden />
-          <SheetTitle className="sr-only">Portal sections</SheetTitle>
-        </div>
+        <SheetTitle className="sr-only">Portal sections</SheetTitle>
+        <div className="shrink-0 px-4 pb-1 pt-1 md:hidden" />
         <nav
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-1"
           aria-label="Portal sections"
@@ -151,7 +149,7 @@ export function PortalNativeMoreSheet({
             </div>
           ))}
         </nav>
-      </SheetContent>
+      </BottomSheetContent>
     </Sheet>
   );
 }

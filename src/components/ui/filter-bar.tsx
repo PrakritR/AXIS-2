@@ -40,9 +40,11 @@ export function FilterBar({
 }) {
   return (
     <div className={cn("min-w-0 space-y-2", className)} data-slot="filter-bar">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div
+        className="flex min-w-0 flex-wrap items-center gap-2 max-md:-mx-1 max-md:flex-nowrap max-md:overflow-x-auto max-md:snap-x max-md:snap-mandatory max-md:scroll-px-1 max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] max-md:[&::-webkit-scrollbar]:hidden"
+      >
         {pills.map((pill) => (
-          <div key={pill.id} className="relative shrink-0">
+          <div key={pill.id} className="relative shrink-0 max-md:snap-start">
             {pill.menu ? (
               pill.menu
             ) : (
@@ -52,6 +54,7 @@ export function FilterBar({
                 onClick={pill.onClick}
                 className={cn(
                   FILTER_BAR_PILL_CLASS,
+                  "portal-pressable",
                   pill.active && FILTER_BAR_PILL_ACTIVE_CLASS,
                 )}
               >

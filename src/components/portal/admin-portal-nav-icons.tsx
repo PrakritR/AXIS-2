@@ -22,6 +22,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /** Section id → community-standard lucide glyph. One source for every portal nav icon. */
 const SECTION_ICONS: Record<string, LucideIcon> = {
@@ -51,17 +52,33 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   promotion: Megaphone,
 };
 
+/**
+ * Portal nav icon — Lucide outline by default; filled when `active` (Instagram tab convention).
+ * One family, one optical size; stroke weight steps with selection state.
+ */
 export function PortalNavIcon({
   section,
   className,
-  strokeWidth = 2,
+  strokeWidth,
+  active = false,
 }: {
   section: string;
   className?: string;
   strokeWidth?: number;
+  /** Selected tab / active nav destination — outline → filled. */
+  active?: boolean;
 }) {
   const Icon = SECTION_ICONS[section] ?? Circle;
-  return <Icon className={className ?? "h-[18px] w-[18px] shrink-0"} strokeWidth={strokeWidth} aria-hidden />;
+  const resolvedStroke = strokeWidth ?? (active ? 2.25 : 1.75);
+  return (
+    <Icon
+      className={cn(className ?? "h-[18px] w-[18px] shrink-0", active && "text-primary")}
+      strokeWidth={resolvedStroke}
+      fill={active ? "currentColor" : "none"}
+      fillOpacity={active ? 0.22 : 0}
+      aria-hidden
+    />
+  );
 }
 
 /** @deprecated Use PortalNavIcon */

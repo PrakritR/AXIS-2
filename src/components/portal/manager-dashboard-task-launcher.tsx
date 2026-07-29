@@ -41,7 +41,7 @@ function TaskLauncherRow({
       href={item.href}
       data-attr={item.dataAttr}
       className={cn(
-        "group flex min-h-[52px] items-center gap-3 rounded-xl border border-border px-3.5 py-2.5 transition-colors",
+        "group portal-pressable flex min-h-[52px] items-center gap-3 rounded-xl border border-border px-3.5 py-2.5 transition-colors",
         "hover:border-primary/30 hover:bg-accent/40",
         tinted && "border-[color-mix(in_srgb,var(--status-pending-bg)_55%,var(--border))] bg-[color-mix(in_srgb,var(--status-pending-bg)_28%,var(--card))]",
         item.urgent &&

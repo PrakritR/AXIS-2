@@ -355,7 +355,7 @@ export function PortalSidebar({
           onClick={portalNavClick(router, s.href, {
             preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
           })}
-          className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 transition ${
+          className={`portal-pressable flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 transition active:opacity-90 ${
             active ? "text-primary" : "text-muted"
           }`}
           aria-label={lockAriaLabel(s.label, locked)}
@@ -371,7 +371,7 @@ export function PortalSidebar({
               <PortalNavIcon
                 section={s.section}
                 className="h-[23px] w-[23px] shrink-0"
-                strokeWidth={active ? 2.35 : 1.75}
+                active={active}
               />
               {!locked && count > 0 ? (
                 <span className="absolute -top-1 -right-1.5">
@@ -409,7 +409,7 @@ export function PortalSidebar({
       >
         {showNavIcons ? (
           <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
-            <PortalNavIcon section={s.section} />
+            <PortalNavIcon section={s.section} active={active} />
           </span>
         ) : null}
         {s.label}
@@ -443,7 +443,7 @@ export function PortalSidebar({
         <span className="flex min-w-0 flex-1 items-center gap-2.5">
           {showNavIcons ? (
             <span className={active ? "text-primary" : locked ? "opacity-60" : "opacity-80"} aria-hidden>
-              <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" />
+              <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
             </span>
           ) : null}
           <span className="min-w-0 truncate">{s.label}</span>
@@ -485,7 +485,7 @@ export function PortalSidebar({
               : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
         )}
       >
-        <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" />
+        <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
         {!locked && count > 0 ? (
           <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
         ) : null}

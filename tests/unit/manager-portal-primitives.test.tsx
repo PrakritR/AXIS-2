@@ -2,6 +2,8 @@
 import { describe, expect, it, vi, beforeAll } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
+import { QuickActionRow } from "@/components/ui/quick-action-row";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { DataList } from "@/components/ui/data-list";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -143,5 +145,29 @@ describe("EmptyState", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Add one" }));
     expect(onAction).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ListSkeleton", () => {
+  it("renders shaped placeholder rows", () => {
+    const { container } = render(<ListSkeleton rows={3} />);
+    expect(container.querySelectorAll("[data-slot=list-skeleton] > div").length).toBe(3);
+  });
+});
+
+describe("QuickActionRow", () => {
+  it("renders link and button actions", () => {
+    const onClick = vi.fn();
+    render(
+      <QuickActionRow
+        actions={[
+          { id: "a", label: "Review", href: "/portal/payments" },
+          { id: "b", label: "Add", onClick, primary: true },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "Review" }).getAttribute("href")).toBe("/portal/payments");
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

@@ -55,7 +55,7 @@ export function DestinationNav({
             href={item.href}
             data-attr={item.dataAttr}
             className={cn(
-              "inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors",
+              "portal-pressable inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active
                 ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"

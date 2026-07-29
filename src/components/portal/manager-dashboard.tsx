@@ -1191,6 +1191,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                 totalPastDueLabel={overdueBalanceLabel}
                 asOfLabel={asOfLabel}
                 paymentsHref={`${BASE}/payments/incoming/pending`}
+                overdueHref={`${BASE}/payments/incoming/overdue`}
               />
             ) : null}
           </div>

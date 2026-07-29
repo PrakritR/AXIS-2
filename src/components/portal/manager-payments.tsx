@@ -4,6 +4,7 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
+import { QuickActionRow } from "@/components/ui/quick-action-row";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -647,6 +648,41 @@ export function ManagerPayments({
           }))}
           activeId={bucket}
           ariaLabel="Payment status"
+        />
+        <QuickActionRow
+          actions={
+            direction === "incoming"
+              ? [
+                  {
+                    id: "reminders",
+                    label: "Reminders",
+                    onClick: () => setReminderSettingsOpen(true),
+                    dataAttr: "payments-quick-reminders",
+                  },
+                  {
+                    id: "add",
+                    label: "Add charge",
+                    onClick: () => setAddOpen(true),
+                    primary: true,
+                    dataAttr: "payments-quick-add",
+                  },
+                ]
+              : [
+                  {
+                    id: "setup",
+                    label: "Payment setup",
+                    onClick: () => setPaymentSetupOpen(true),
+                    dataAttr: "payments-quick-setup",
+                  },
+                  {
+                    id: "add-outgoing",
+                    label: "Add expense",
+                    onClick: () => setAddOutgoingOpen(true),
+                    primary: true,
+                    dataAttr: "payments-quick-add-outgoing",
+                  },
+                ]
+          }
         />
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel

@@ -104,7 +104,7 @@ export function MonthlyProfitChart({
   const chart = useMemo(() => {
     const w = 360;
     const h = 140;
-    const padX = 8;
+    const padX = 4;
     const padY = 12;
     const values = points.map((p) => cashflowMetricValue(p, metric));
     const minV = Math.min(0, ...values);
@@ -152,8 +152,8 @@ export function MonthlyProfitChart({
                 role="tab"
                 aria-selected={metric === opt.id}
                 data-attr={`cashflow-metric-${opt.id}`}
-                className={cn(
-                  "min-h-9 min-w-0 rounded-full px-3 py-1.5 text-center text-[11px] font-semibold transition-colors sm:text-xs",
+            className={cn(
+              "portal-pressable min-h-9 min-w-0 rounded-full px-3 py-1.5 text-center text-[11px] font-semibold transition-colors sm:text-xs",
                   metric === opt.id
                     ? "bg-card text-foreground shadow-[var(--shadow-sm)]"
                     : "text-muted hover:text-foreground",
@@ -165,25 +165,33 @@ export function MonthlyProfitChart({
             ))}
           </div>
         </div>
-        {active ? (
-          <p className="shrink-0 text-sm tabular-nums text-muted">
-            <span className={heroClassForMetric(metric, activeValue)}>{formatUsd(activeValue)}</span>
-            <span className="hidden sm:inline"> · {active.label}</span>
-          </p>
-        ) : null}
       </div>
 
       {active ? (
-        <p className="mt-1 text-xs text-muted sm:hidden">
-          {active.label} · {METRIC_OPTIONS.find((m) => m.id === metric)?.label.toLowerCase()}
-        </p>
+        <div className="mt-2 min-w-0" data-attr="cashflow-hero">
+          <p
+            className={cn(
+              "text-[2rem] font-light tabular-nums tracking-[-0.04em] transition-[color,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none sm:text-[2.35rem]",
+              heroClassForMetric(metric, activeValue),
+            )}
+          >
+            {formatUsd(activeValue)}
+          </p>
+          <p className="mt-1 text-sm text-muted transition-opacity duration-300 motion-reduce:transition-none">
+            {active.label}
+            <span className="hidden sm:inline">
+              {" "}
+              · {METRIC_OPTIONS.find((m) => m.id === metric)?.subtitle}
+            </span>
+          </p>
+        </div>
       ) : null}
 
       {hasAny ? (
-        <div className="mt-3 lg:mt-4">
+        <div className="mt-3 lg:mt-4 -mx-1 sm:mx-0">
           <svg
             viewBox={`0 0 ${chart.w} ${chart.h}`}
-            className="w-full touch-pan-y min-h-[9rem] sm:min-h-[10rem] lg:min-h-[12rem]"
+            className="w-full touch-pan-y min-h-[9.5rem] sm:min-h-[10.5rem] lg:min-h-[12rem]"
             role="img"
             aria-label={`Monthly ${metric} trend`}
           >
@@ -243,6 +251,32 @@ export function MonthlyProfitChart({
             ))}
           </svg>
 
+          <div
+            className="mt-2 flex justify-center gap-1 px-1"
+            role="tablist"
+            aria-label="Chart time range"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {CASHFLOW_CHART_RANGE_MONTHS.map((months) => (
+              <button
+                key={months}
+                type="button"
+                role="tab"
+                aria-selected={rangeMonths === months}
+                data-attr={`cashflow-range-${months}`}
+                className={cn(
+                  "portal-pressable rounded-full px-3 py-1.5 text-[11px] font-semibold tabular-nums transition-colors sm:px-3.5 sm:text-xs",
+                  rangeMonths === months
+                    ? "bg-foreground text-background"
+                    : "text-muted hover:bg-accent/40 hover:text-foreground",
+                )}
+                onClick={() => setRangeMonths(months)}
+              >
+                {rangeLabel(months)}
+              </button>
+            ))}
+          </div>
+
           <div className="mt-2 flex justify-between gap-0.5 px-0.5">
             {points.map((p, i) => {
               const showLabel = cashflowChartShowMonthLabel(i, points.length, rangeMonths);
@@ -263,32 +297,6 @@ export function MonthlyProfitChart({
               </button>
             );
             })}
-          </div>
-
-          <div
-            className="mt-3 flex justify-center gap-1"
-            role="tablist"
-            aria-label="Chart time range"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {CASHFLOW_CHART_RANGE_MONTHS.map((months) => (
-              <button
-                key={months}
-                type="button"
-                role="tab"
-                aria-selected={rangeMonths === months}
-                data-attr={`cashflow-range-${months}`}
-                className={cn(
-                  "rounded-full px-3 py-1 text-[11px] font-semibold tabular-nums transition-colors sm:px-3.5 sm:text-xs",
-                  rangeMonths === months
-                    ? "bg-foreground text-background"
-                    : "text-muted hover:bg-accent/40 hover:text-foreground",
-                )}
-                onClick={() => setRangeMonths(months)}
-              >
-                {rangeLabel(months)}
-              </button>
-            ))}
           </div>
         </div>
       ) : (

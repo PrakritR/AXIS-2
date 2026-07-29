@@ -1313,6 +1313,28 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
    higher specificity and wins in the native app, so this only ever governs web. */
 :root {
   --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
+  --portal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --portal-duration-fast: 120ms;
+  --portal-duration: 220ms;
+}
+
+.portal-pressable {
+  transition:
+    opacity var(--portal-duration-fast) var(--portal-ease),
+    transform var(--portal-duration-fast) var(--portal-ease),
+    background-color var(--portal-duration) var(--portal-ease);
+}
+
+.portal-pressable:active {
+  opacity: 0.88;
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-pressable:active {
+    opacity: 0.92;
+    transform: none;
+  }
 }
 
 /* App Store compliance (Guideline 2.1(b) / 3.1.1): the iOS app must not present

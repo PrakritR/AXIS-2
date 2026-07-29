@@ -706,6 +706,7 @@ export function ManagerPaymentsLedgerPanel({
             }
           : undefined
       }
+      settledAppearance={activeBucket === "paid"}
       renderDueDateCell={(tr) => renderDueDateCell(rowById.get(tr.id)!)}
       renderAmountCell={(tr) => renderAmountOwedCell(rowById.get(tr.id)!)}
       renderExpandedActions={(tr) => renderDetailActions(rowById.get(tr.id)!)}
