@@ -16,18 +16,13 @@ import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-prope
 import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-tour-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import {
   PROPERTY_DETAIL_TAB_LABELS,
   propertyDetailHref,
   parsePropertyDetailTab,
   type PropertyDetailTabId,
 } from "@/lib/portal-detail-routes";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -552,7 +547,7 @@ function ManagerPropertyInlineDetails({
     bucket === 3 || bucket === 5
       ? ["preview"]
       : bucket === 2 && listingId
-        ? ["preview", "house-details", "application", "lease", "calendar"]
+        ? ["preview", "house-details", "application", "lease", "calendar", "promotion"]
         : ["preview", "house-details", "application", "lease"];
   const activeDetailTab = availableTabs.includes(detailTab) ? detailTab : availableTabs[0]!;
 
@@ -631,7 +626,7 @@ function ManagerPropertyInlineDetails({
         />
       ) : null}
 
-      {bucket === 2 && listingId ? (
+      {activeDetailTab === "promotion" && bucket === 2 && listingId ? (
         <ManagerPropertyPromotionPanel
           listingId={listingId}
           showToast={showToast}
@@ -686,8 +681,6 @@ export function ManagerHousePropertiesPanel({
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
-  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   const propCount = useMemo(() => {
     void tick;
@@ -751,46 +744,18 @@ export function ManagerHousePropertiesPanel({
     });
   }, [rows, searchQuery]);
 
-  const rowKeys = useMemo(() => visibleRows.map(({ row }) => row.adminRefId + (row.listingId ?? "")), [visibleRows]);
-
   const propertyKeyFromRow = (row: AdminPropertyRow) =>
     row.listingId?.trim() || row.adminRefId.trim();
 
-  useEffect(() => {
-    if (!propertyKeyProp) return;
+  const routePropertyEntry = useMemo(() => {
+    if (!propertyKeyProp) return null;
     const decoded = decodeURIComponent(propertyKeyProp);
-    const match = visibleRows.find(
-      ({ row }) => propertyKeyFromRow(row) === decoded || row.adminRefId === decoded,
+    return (
+      visibleRows.find(
+        ({ row }) => propertyKeyFromRow(row) === decoded || row.adminRefId === decoded,
+      ) ?? null
     );
-    if (!match) return;
-    const rowKey = match.row.adminRefId + (match.row.listingId ?? "");
-    setExpandedRowKey(rowKey);
-    if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
   }, [propertyKeyProp, visibleRows]);
-
-  useEffect(() => {
-    if (rowKeys.length === 0) {
-      setExpandedRowKey(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setExpandedRowKey((cur) => {
-      if (cur && rowKeys.includes(cur)) return cur;
-      if (portalUsesDesktopSplit()) return rowKeys[0] ?? null;
-      return null;
-    });
-  }, [rowKeys]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit()) setExpandedRowKey(null);
-  }, [activeStage, searchQuery]);
-
-  const selectedEntry = useMemo(
-    () =>
-      visibleRows.find(({ row }) => row.adminRefId + (row.listingId ?? "") === expandedRowKey) ?? null,
-    [visibleRows, expandedRowKey],
-  );
 
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
@@ -817,6 +782,32 @@ export function ManagerHousePropertiesPanel({
     />
   );
 
+  if (propertyKeyProp) {
+    if (!routePropertyEntry) {
+      return (
+        <PortalDataTableEmpty
+          message="Property not found."
+          icon="default"
+        />
+      );
+    }
+    const { sourceBucket, row } = routePropertyEntry;
+    const rowKey = row.adminRefId + (row.listingId ?? "");
+    const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Properties"
+        title={managerPropertyRowTitle(row, sourceBucket)}
+        subtitle={address}
+        backHref={`${propertiesBase}/properties/${activeStage}`}
+        backLabel="Back to properties"
+        dataAttrBack="property-detail-back"
+      >
+        {renderRowDetail(sourceBucket, row, rowKey)}
+      </PortalRecordDetailPage>
+    );
+  }
+
   return (
     <>
       {visibleRows.length === 0 ? (
@@ -825,64 +816,39 @@ export function ManagerHousePropertiesPanel({
           icon="default"
         />
       ) : (
-        <PortalListDetailPane
-          mobileCompact
-          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-          detailOpen={mobileDetailOpen && Boolean(selectedEntry)}
-          list={
-            <div className={INBOX_LIST_SCROLL}>
-              {visibleRows.map(({ sourceBucket, row, linked }) => {
-                const rowKey = row.adminRefId + (row.listingId ?? "");
-                const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
-                const summary = `${adminPropertyRentDisplayLabel(row)} · ${row.beds} bd / ${row.baths} ba · ${row.neighborhood}`;
-                return (
-                  <PortalPropertyRecordRow
-                    key={rowKey}
-                    title={managerPropertyRowTitle(row, sourceBucket)}
-                    address={address}
-                    summary={summary}
-                    badge={
-                      <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
-                        {linked ? "Co-managed" : "Owned"}
-                      </span>
-                    }
-                    selected={expandedRowKey === rowKey}
-                    onOpen={() => {
-                      const routeKey = propertyKeyFromRow(row);
-                      setExpandedRowKey(rowKey);
-                      setMobileDetailOpen(true);
-                      router.push(propertyDetailHref(propertiesBase, activeStage, routeKey, detailTabProp ?? "preview"), {
-                        scroll: false,
-                      });
-                    }}
-                    dataAttr="property-list-row"
-                  />
-                );
-              })}
-            </div>
-          }
-          detail={
-            selectedEntry ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <PortalDetailHeader
-                  title={managerPropertyRowTitle(selectedEntry.row, selectedEntry.sourceBucket)}
-                  subtitle={`${selectedEntry.row.address}${selectedEntry.row.zip ? `, ${selectedEntry.row.zip}` : ""}`}
-                  onBack={() => setMobileDetailOpen(false)}
-                  backLabel="Back to properties"
-                  dataAttrBack="property-detail-back"
-                />
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-                  {renderRowDetail(selectedEntry.sourceBucket, selectedEntry.row, expandedRowKey!)}
-                </div>
-              </div>
-            ) : (
-              <PortalListDetailPlaceholder
-                title="Select a property"
-                hint="Choose a listing from the list to manage units, leases, and promotion."
+        <div className={INBOX_LIST_SCROLL}>
+          {visibleRows.map(({ sourceBucket, row, linked }) => {
+            const rowKey = row.adminRefId + (row.listingId ?? "");
+            const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+            const summary = `${adminPropertyRentDisplayLabel(row)} · ${row.beds} bd / ${row.baths} ba · ${row.neighborhood}`;
+            return (
+              <PortalPropertyRecordRow
+                key={rowKey}
+                title={managerPropertyRowTitle(row, sourceBucket)}
+                address={address}
+                summary={summary}
+                badge={
+                  <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
+                    {linked ? "Co-managed" : "Owned"}
+                  </span>
+                }
+                onOpen={() => {
+                  const routeKey = propertyKeyFromRow(row);
+                  router.push(
+                    propertyDetailHref(
+                      propertiesBase,
+                      activeStage,
+                      routeKey,
+                      detailTabProp ?? "preview",
+                    ),
+                    { scroll: false },
+                  );
+                }}
+                dataAttr="property-list-row"
               />
-            )
-          }
-        />
+            );
+          })}
+        </div>
       )}
     </>
   );

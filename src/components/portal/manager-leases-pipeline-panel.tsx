@@ -1,17 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH, RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
@@ -70,8 +65,6 @@ export function ManagerLeasesPipelinePanel({
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadTargetRowIdRef = useRef<string | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
@@ -225,38 +218,11 @@ export function ManagerLeasesPipelinePanel({
   const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
-  const bucketRowIds = useMemo(() => bucketRows.map((r) => r.id), [bucketRows]);
-  const selectedRow = useMemo(
-    () => bucketRows.find((r) => r.id === expandedId) ?? null,
-    [bucketRows, expandedId],
-  );
-
-  useEffect(() => {
-    if (bucketRowIds.length === 0) {
-      setExpandedId(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setExpandedId((cur) => {
-      if (cur && bucketRowIds.includes(cur)) return cur;
-      if (portalUsesDesktopSplit()) return bucketRowIds[0] ?? null;
-      return null;
-    });
-  }, [bucketRowIds]);
-
-  useEffect(() => {
-    if (!leaseIdProp) return;
+  const detailRow = useMemo(() => {
+    if (!leaseIdProp) return null;
     const decoded = decodeURIComponent(leaseIdProp);
-    if (bucketRowIds.includes(decoded)) {
-      setExpandedId(decoded);
-      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
-    }
-  }, [leaseIdProp, bucketRowIds]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit() && !leaseIdProp) setExpandedId(null);
-  }, [tab, leaseIdProp]);
+    return rows.find((r) => r.id === decoded && leaseRowMatchesManagerTab(r, tab)) ?? null;
+  }, [leaseIdProp, rows, tab]);
 
   const navigateToList = useCallback(() => {
     if (listBasePath) navigate(leaseListHref(listBasePath, tab));
@@ -264,8 +230,6 @@ export function ManagerLeasesPipelinePanel({
 
   const openLeaseDetail = useCallback(
     (row: LeasePipelineRow) => {
-      setExpandedId(row.id);
-      setMobileDetailOpen(true);
       if (listBasePath) navigate(leaseDetailHref(listBasePath, tab, row.id));
     },
     [listBasePath, navigate, tab],
@@ -369,7 +333,6 @@ export function ManagerLeasesPipelinePanel({
     }
     appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.", managerUserId);
     showToast("Lease moved to Manager Review.");
-    setExpandedId(null);
     navigateToList();
   };
 
@@ -402,7 +365,6 @@ export function ManagerLeasesPipelinePanel({
             ? "Lease fully signed."
             : "Manager signature saved.",
       );
-      setExpandedId(null);
       navigateToList();
       setSigningRow(null);
       return true;
@@ -540,16 +502,7 @@ export function ManagerLeasesPipelinePanel({
     );
   };
 
-  if (bucketRows.length === 0) {
-    return (
-      <PortalDataTableEmpty
-        icon="lease"
-        message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
-      />
-    );
-  }
-
-  return (
+  const leaseModals = (
     <>
       {signingRow ? (
         <LeaseSigningModal
@@ -617,57 +570,6 @@ export function ManagerLeasesPipelinePanel({
           if (id) void onPickUpload(id, e.target.files);
         }}
       />
-      <PortalListDetailPane
-        mobileCompact
-        className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-        detailOpen={mobileDetailOpen && Boolean(selectedRow)}
-        list={
-          <div className={INBOX_LIST_SCROLL}>
-            {bucketRows.map((row) => (
-              <PortalPersonRecordRow
-                key={row.id}
-                name={row.residentName}
-                subtitle={row.unit}
-                preview={row.status}
-                badge={
-                  row.leaseKind === "joint_bundle" ? (
-                    <Badge tone="neutral">Joint bundle</Badge>
-                  ) : undefined
-                }
-                selected={expandedId === row.id}
-                onOpen={() => openLeaseDetail(row)}
-                dataAttr="lease-list-row"
-              />
-            ))}
-          </div>
-        }
-        detail={
-          selectedRow ? (
-            <div className="flex h-full min-h-0 flex-col">
-              <PortalDetailHeader
-                title={selectedRow.residentName}
-                subtitle={selectedRow.unit}
-                avatarName={selectedRow.residentName}
-                onBack={() => {
-                  setMobileDetailOpen(false);
-                  navigateToList();
-                }}
-                backLabel="Back to leases"
-                dataAttrBack="lease-detail-back"
-                actions={renderLeaseHeaderActions(selectedRow)}
-              />
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-                {renderLeaseRowDetail(selectedRow)}
-              </div>
-            </div>
-          ) : (
-            <PortalListDetailPlaceholder
-              title="Select a lease"
-              hint="Choose a resident from the list to review and sign their lease."
-            />
-          )
-        }
-      />
 
       {amendLeaseRow ? (
         <LeaseAmendMoveOutModal
@@ -693,6 +595,58 @@ export function ManagerLeasesPipelinePanel({
           onSuccess={() => void handleAmendLeaseSuccess()}
         />
       ) : null}
+    </>
+  );
+
+  if (leaseIdProp && detailRow) {
+    return (
+      <>
+        {leaseModals}
+        <PortalRecordDetailPage
+          pageTitle="Leases"
+          title={detailRow.residentName}
+          subtitle={detailRow.unit}
+          avatarName={detailRow.residentName}
+          backHref={listBasePath ? leaseListHref(listBasePath, tab) : "#"}
+          backLabel="Back to leases"
+          dataAttrBack="lease-detail-back"
+          actions={renderLeaseHeaderActions(detailRow)}
+        >
+          {renderLeaseRowDetail(detailRow)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  if (bucketRows.length === 0) {
+    return (
+      <PortalDataTableEmpty
+        icon="lease"
+        message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
+      />
+    );
+  }
+
+  return (
+    <>
+      {leaseModals}
+      <div className={INBOX_LIST_SCROLL}>
+        {bucketRows.map((row) => (
+          <PortalPersonRecordRow
+            key={row.id}
+            name={row.residentName}
+            subtitle={row.unit}
+            preview={row.status}
+            badge={
+              row.leaseKind === "joint_bundle" ? (
+                <Badge tone="neutral">Joint bundle</Badge>
+              ) : undefined
+            }
+            onOpen={() => openLeaseDetail(row)}
+            dataAttr="lease-list-row"
+          />
+        ))}
+      </div>
     </>
   );
 }

@@ -194,9 +194,7 @@ describe("group application — manager reconciliation", () => {
     rerender(<ManagerApplications bucket="pending" />);
     await waitFor(() => expect(screen.getAllByText("Priya Nair").length).toBeGreaterThan(0));
 
-    // Expand a joining member's application → roster of the whole household.
-    const priyaListRow = document.querySelector('[data-attr="application-list-row"]');
-    fireEvent.click(priyaListRow!.querySelector("button")!);
+    rerender(<ManagerApplications bucket="pending" applicationId="AXIS-1002" />);
     expect(await screen.findByText("Group application")).toBeTruthy();
     expect(screen.getByText(/2 of 3 applied · waiting on 1/)).toBeTruthy();
     expect(screen.getByText(GROUP_ID)).toBeTruthy();
@@ -249,15 +247,12 @@ describe("group application — manager reconciliation", () => {
       })),
     ];
 
-    const { container } = render(<ManagerApplications />);
+    const { container, rerender: rerenderEdge } = render(<ManagerApplications />);
     expect((await screen.findAllByText("Group 2 · organizer not shown")).length).toBe(2);
     expect(screen.getAllByText("Group 3 · 2 declared").length).toBe(3);
     dumpHtml("manager-edge-rows", container.innerHTML);
 
-    const adaRow = [...document.querySelectorAll('[data-attr="application-list-row"]')].find((el) =>
-      el.textContent?.includes("Ada Vance"),
-    );
-    fireEvent.click(adaRow!.querySelector("button")!);
+    rerenderEdge(<ManagerApplications bucket="pending" applicationId="AXIS-300" />);
     expect(
       await screen.findByText(/3 applications carry this Group ID, more than the 2 the organizer declared/),
     ).toBeTruthy();

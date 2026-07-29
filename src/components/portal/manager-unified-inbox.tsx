@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import { DestinationNav } from "@/components/ui/destination-nav";
@@ -119,6 +120,7 @@ export function ManagerUnifiedInbox({
   tabId,
   commBase,
   listSegment: listSegmentProp = "active",
+  routeThreadId,
   threadFilters,
   filterContacts,
   listSort = "recent",
@@ -135,6 +137,8 @@ export function ManagerUnifiedInbox({
   tabId: string;
   commBase: string;
   listSegment?: InboxListSegment;
+  /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
+  routeThreadId?: string;
   threadFilters?: CommunicationThreadFilters;
   filterContacts?: InboxScopedContact[];
   /** Conversation list order — default is most recent activity. */
@@ -152,6 +156,7 @@ export function ManagerUnifiedInbox({
   listChrome?: "internal" | "external";
   onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
 }) {
+  const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
   );
@@ -162,8 +167,18 @@ export function ManagerUnifiedInbox({
   const query = onSearchQueryChange ? (searchQueryProp ?? "") : internalQuery;
   const setQuery = onSearchQueryChange ?? setInternalQuery;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(Boolean(routeThreadId));
   const listSegment = listSegmentProp;
+
+  const threadListHref = useCallback(
+    () => `${commBase}/${listSegment}`,
+    [commBase, listSegment],
+  );
+
+  const threadDetailHref = useCallback(
+    (threadId: string) => `${commBase}/${listSegment}/${encodeURIComponent(threadId)}`,
+    [commBase, listSegment],
+  );
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
@@ -373,14 +388,29 @@ export function ManagerUnifiedInbox({
     onThreadOpenChange?.(mobileThreadOpen && Boolean(selection));
   }, [onThreadOpenChange, mobileThreadOpen, selection]);
 
+  useEffect(() => {
+    setMobileThreadOpen(Boolean(routeThreadId));
+  }, [routeThreadId]);
+
+  useEffect(() => {
+    if (!routeThreadId) return;
+    const match = mergedRows.find((r) => r.threadId === routeThreadId);
+    if (match) {
+      setSelectedKey(match.key);
+      setMobileThreadOpen(true);
+    }
+  }, [routeThreadId, mergedRows]);
+
   // Toggling the segment is a different result set — clear search; return to list on phones.
   useEffect(() => {
     setQuery("");
-    setMobileThreadOpen(false);
-    if (!inboxUsesDesktopSplit()) {
-      setSelectedKey(null);
+    if (!routeThreadId) {
+      setMobileThreadOpen(false);
+      if (!inboxUsesDesktopSplit()) {
+        setSelectedKey(null);
+      }
     }
-  }, [listSegment]);
+  }, [listSegment, routeThreadId]);
 
   useEffect(() => {
     if (mergedRows.length === 0) {
@@ -390,10 +420,14 @@ export function ManagerUnifiedInbox({
     }
     setSelectedKey((cur) => {
       if (cur && mergedRows.some((r) => r.key === cur)) return cur;
+      if (routeThreadId) {
+        const routed = mergedRows.find((r) => r.threadId === routeThreadId);
+        if (routed) return routed.key;
+      }
       if (inboxUsesDesktopSplit()) return mergedRows[0]!.key;
       return null;
     });
-  }, [mergedRows]);
+  }, [mergedRows, routeThreadId]);
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -474,6 +508,7 @@ export function ManagerUnifiedInbox({
               onOpen={() => {
                 setSelectedKey(row.key);
                 setMobileThreadOpen(true);
+                navigate(threadDetailHref(row.threadId));
               }}
             />
           ))
@@ -499,6 +534,7 @@ export function ManagerUnifiedInbox({
           if (!id) {
             setSelectedKey(null);
             setMobileThreadOpen(false);
+            navigate(threadListHref());
           }
         }}
       />
@@ -514,6 +550,7 @@ export function ManagerUnifiedInbox({
           if (!id) {
             setSelectedKey(null);
             setMobileThreadOpen(false);
+            navigate(threadListHref());
           }
         }}
         onUnreadCountChange={onSmsUnreadCountChange}
@@ -530,7 +567,7 @@ export function ManagerUnifiedInbox({
     <InboxTwoPane
       mobileCompact
       className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-      threadOpen={mobileThreadOpen && Boolean(selection)}
+      threadOpen={(mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection)}
       list={listPane}
       thread={threadPane}
     />

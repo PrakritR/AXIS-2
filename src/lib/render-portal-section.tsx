@@ -519,7 +519,12 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/communication/active`);
       }
 
-      if (tabParts.length > 1) notFound();
+      let threadId: string | undefined;
+      if (tabParts.length === 2) {
+        threadId = decodeURIComponent(tabParts[1]!);
+      } else if (tabParts.length > 2) {
+        notFound();
+      }
 
       const segmentRaw = channel;
       const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
@@ -531,7 +536,11 @@ export async function renderPortalSection(
 
       const ManagerCommunication = await loadManagerCommunication();
       return subscriptionGated(
-        <ManagerCommunication listSegment={listSegment} smsUiEnabled={isSmsCommUiEnabled()} />,
+        <ManagerCommunication
+          listSegment={listSegment}
+          threadId={threadId}
+          smsUiEnabled={isSmsCommUiEnabled()}
+        />,
         kind,
         "communication",
         managerOwnerSubscriptionTier,

@@ -6,7 +6,7 @@
 // provisions a resident account + rent/deposit charges for someone who withdrew).
 // A normal pending row is the control: it still offers Approve.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 /** Rows the mocked storage layer hands the manager panel; swapped per scenario. */
@@ -70,29 +70,20 @@ function row(over: Partial<DemoApplicantRow> & { id: string; name: string }): De
   };
 }
 
-async function expandRow(name: string) {
-  const listRow = document.querySelector(`[data-attr="application-list-row"]`);
-  const target = listRow?.textContent?.includes(name)
-    ? listRow.querySelector("button")
-    : (await screen.findAllByText(name))[0]?.closest("button");
-  fireEvent.click(target!);
-}
-
 describe("manager Applications — no Approve on a withdrawn row", () => {
   it("hides Approve (and the reminder) but keeps the row visible + labelled Withdrawn", async () => {
     ROWS = [
       row({ id: "AXIS-W1", name: "Withdrawn Wanda", withdrawnAt: "2026-07-22T00:00:00.000Z" }),
     ];
-    render(<ManagerApplications />);
+    const { rerender } = render(<ManagerApplications bucket="pending" />);
 
     // The row is still shown on the Pending tab, labelled Withdrawn.
     expect(screen.getAllByText("Withdrawn Wanda").length).toBeGreaterThan(0);
     expect(screen.getByText("Withdrawn")).toBeTruthy();
 
-    await expandRow("Withdrawn Wanda");
+    rerender(<ManagerApplications bucket="pending" applicationId="AXIS-W1" />);
 
-    // No Approve button and no "Send reminder" — but Reject/Delete remain so the
-    // manager can still formally close the row.
+    // Detail route — no Approve button and no "Send reminder".
     expect(screen.queryByText("Approve")).toBeNull();
     expect(screen.queryByText("Send reminder")).toBeNull();
     expect(screen.getByText("Reject")).toBeTruthy();
@@ -101,9 +92,8 @@ describe("manager Applications — no Approve on a withdrawn row", () => {
 
   it("still offers Approve on a normal (non-withdrawn) pending row — the control", async () => {
     ROWS = [row({ id: "AXIS-N1", name: "Normal Nora" })];
-    render(<ManagerApplications />);
+    render(<ManagerApplications bucket="pending" applicationId="AXIS-N1" />);
 
-    await expandRow("Normal Nora");
     expect(screen.getByText("Approve")).toBeTruthy();
     expect(screen.getByText("Reject")).toBeTruthy();
   });

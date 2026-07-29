@@ -5,6 +5,7 @@ export const PROPERTY_DETAIL_TABS = [
   "application",
   "lease",
   "calendar",
+  "promotion",
 ] as const;
 
 export type PropertyDetailTabId = (typeof PROPERTY_DETAIL_TABS)[number];
@@ -15,6 +16,7 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
   application: "Application",
   lease: "Lease",
   calendar: "Calendar",
+  promotion: "Promotion",
 };
 
 /** Routed detail tabs for manager resident profile (Appendix C2). */

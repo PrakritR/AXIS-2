@@ -9,12 +9,7 @@ import {
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
@@ -91,8 +86,6 @@ export function ManagerPaymentsLedgerPanel({
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [editDueDateDraft, setEditDueDateDraft] = useState("");
@@ -113,10 +106,11 @@ export function ManagerPaymentsLedgerPanel({
   const showSelection = rows.length > 0;
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
-  const selectedRow = useMemo(
-    () => rows.find((row) => row.id === expandedId) ?? null,
-    [rows, expandedId],
-  );
+  const detailRow = useMemo(() => {
+    if (!paymentIdProp) return null;
+    const decoded = decodeURIComponent(paymentIdProp);
+    return rows.find((row) => row.id === decoded) ?? null;
+  }, [paymentIdProp, rows]);
 
   const navigateToList = useCallback(() => {
     if (listBasePath) navigate(paymentListHref(listBasePath, direction, activeBucket));
@@ -124,39 +118,10 @@ export function ManagerPaymentsLedgerPanel({
 
   const openPaymentDetail = useCallback(
     (row: DemoManagerPaymentLedgerRow) => {
-      setExpandedId(row.id);
-      setMobileDetailOpen(true);
       if (listBasePath) navigate(paymentDetailHref(listBasePath, direction, activeBucket, row.id));
     },
     [activeBucket, direction, listBasePath, navigate],
   );
-
-  useEffect(() => {
-    if (rows.length === 0) {
-      setExpandedId(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setExpandedId((cur) => {
-      if (cur && rows.some((row) => row.id === cur)) return cur;
-      if (portalUsesDesktopSplit()) return rows[0]!.id;
-      return null;
-    });
-  }, [rowIdsKey, rows]);
-
-  useEffect(() => {
-    if (!paymentIdProp) return;
-    const decoded = decodeURIComponent(paymentIdProp);
-    if (rows.some((row) => row.id === decoded)) {
-      setExpandedId(decoded);
-      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
-    }
-  }, [paymentIdProp, rows]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit() && !paymentIdProp) setExpandedId(null);
-  }, [activeBucket, paymentIdProp]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -198,7 +163,6 @@ export function ManagerPaymentsLedgerPanel({
       }
     }
     setSelectedIds(new Set());
-    setExpandedId(null);
     onRowsChanged?.();
     onScheduleChanged?.();
     showToast(ok === 1 ? "Marked as paid." : `Marked ${ok} payments as paid.`);
@@ -224,7 +188,6 @@ export function ManagerPaymentsLedgerPanel({
     }
     onScheduleChanged?.();
     setSelectedIds(new Set());
-    setExpandedId(null);
     showToast(ok === 1 ? "Moved to pending." : `Moved ${ok} payments to pending.`);
   };
 
@@ -241,7 +204,6 @@ export function ManagerPaymentsLedgerPanel({
       }
     }
     setSelectedIds(new Set());
-    setExpandedId(null);
     onRowsChanged?.();
     showToast(ok === 1 ? "Payment removed." : `Removed ${ok} payments.`);
   };
@@ -250,7 +212,6 @@ export function ManagerPaymentsLedgerPanel({
     setEditingRowId(row.id);
     setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
     setEditDueDateDraft(dueDateDisplayToInputValue(row.dueDate));
-    setExpandedId(row.id);
   };
 
   const cancelEdit = () => {
@@ -536,7 +497,6 @@ export function ManagerPaymentsLedgerPanel({
     if (row.householdChargeId) {
       if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
         showToast("Payment removed.");
-        setExpandedId(null);
         navigateToList();
         onRowsChanged?.();
         return;
@@ -546,7 +506,7 @@ export function ManagerPaymentsLedgerPanel({
     }
     if (deleteManagerPaymentLedgerEntry(row.id)) {
       showToast("Payment removed.");
-      setExpandedId(null);
+      navigateToList();
       onRowsChanged?.();
       return;
     }
@@ -558,7 +518,7 @@ export function ManagerPaymentsLedgerPanel({
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
         await cancelFutureRemindersForPaidCharge(row.householdChargeId, scheduledMessages).catch(() => undefined);
         showToast(toastMessage);
-        setExpandedId(null);
+        navigateToList();
         onRowsChanged?.();
         onScheduleChanged?.();
         return;
@@ -568,7 +528,7 @@ export function ManagerPaymentsLedgerPanel({
     }
     markManagerPaymentLedgerPaid(row.id);
     showToast(toastMessage);
-    setExpandedId(null);
+    navigateToList();
     onRowsChanged?.();
   };
 
@@ -580,7 +540,7 @@ export function ManagerPaymentsLedgerPanel({
         await restoreFutureRemindersForPendingCharge(row.householdChargeId).catch(() => undefined);
         onScheduleChanged?.();
         showToast("Moved to pending.");
-        setExpandedId(null);
+        navigateToList();
         return;
       }
       showToast("Could not update this line.");
@@ -588,7 +548,7 @@ export function ManagerPaymentsLedgerPanel({
     }
     markManagerPaymentLedgerPending(row.id);
     showToast("Moved to pending.");
-    setExpandedId(null);
+    navigateToList();
     onRowsChanged?.();
   };
 
@@ -755,83 +715,64 @@ export function ManagerPaymentsLedgerPanel({
         </Button>
       </BulkActionBar>
     ) : null}
-    <PortalListDetailPane
-      mobileCompact
-      className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-      detailOpen={mobileDetailOpen && Boolean(selectedRow)}
-      list={
-        <div className={INBOX_LIST_SCROLL}>
-          {showSelection ? (
-            <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
-              <input
-                type="checkbox"
-                className="size-4 shrink-0 rounded border-border"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                aria-label="Select all payments"
-              />
-              <span className="text-xs text-muted">Select all</span>
-            </div>
-          ) : null}
-          {rows.map((row) => (
-            <div key={row.id} className="flex items-stretch gap-2">
-              {showSelection ? (
-                <div className="flex items-center pl-3 max-md:pl-2.5">
-                  <input
-                    type="checkbox"
-                    className="size-4 shrink-0 rounded border-border"
-                    checked={selectedIds.has(row.id)}
-                    onChange={() => toggleSelected(row.id)}
-                    aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                  />
-                </div>
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <PortalPersonRecordRow
-                  name={row.residentName}
-                  subtitle={
-                    row.manualPaymentReportedAt && row.manualPaymentChannel
-                      ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-                      : row.chargeTitle
-                  }
-                  preview={row.propertyName}
-                  meta={row.lineAmount}
-                  selected={expandedId === row.id}
-                  onOpen={() => openPaymentDetail(row)}
-                  dataAttr="payment-list-row"
+    {paymentIdProp && detailRow ? (
+      <PortalRecordDetailPage
+        pageTitle="Payments"
+        title={detailRow.residentName}
+        subtitle={detailRow.chargeTitle}
+        avatarName={detailRow.residentName}
+        backHref={listBasePath ? paymentListHref(listBasePath, direction, activeBucket) : "#"}
+        backLabel="Back to payments"
+        dataAttrBack="payment-detail-back"
+        actions={renderDetailActions(detailRow)}
+      >
+        {renderPaymentDetailPanel(detailRow)}
+      </PortalRecordDetailPage>
+    ) : (
+      <div className={INBOX_LIST_SCROLL}>
+        {showSelection ? (
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 rounded border-border"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              aria-label="Select all payments"
+            />
+            <span className="text-xs text-muted">Select all</span>
+          </div>
+        ) : null}
+        {rows.map((row) => (
+          <div key={row.id} className="flex items-stretch gap-2">
+            {showSelection ? (
+              <div className="flex items-center pl-3 max-md:pl-2.5">
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 rounded border-border"
+                  checked={selectedIds.has(row.id)}
+                  onChange={() => toggleSelected(row.id)}
+                  aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
                 />
               </div>
-            </div>
-          ))}
-        </div>
-      }
-      detail={
-        selectedRow ? (
-          <div className="flex h-full min-h-0 flex-col">
-            <PortalDetailHeader
-              title={selectedRow.residentName}
-              subtitle={selectedRow.chargeTitle}
-              avatarName={selectedRow.residentName}
-              onBack={() => {
-                setMobileDetailOpen(false);
-                navigateToList();
-              }}
-              backLabel="Back to payments"
-              dataAttrBack="payment-detail-back"
-              actions={renderDetailActions(selectedRow)}
-            />
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-              {renderPaymentDetailPanel(selectedRow)}
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <PortalPersonRecordRow
+                name={row.residentName}
+                subtitle={
+                  row.manualPaymentReportedAt && row.manualPaymentChannel
+                    ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+                    : row.chargeTitle
+                }
+                preview={row.propertyName}
+                meta={row.lineAmount}
+                onOpen={() => openPaymentDetail(row)}
+                dataAttr="payment-list-row"
+              />
             </div>
           </div>
-        ) : (
-          <PortalListDetailPlaceholder
-            title="Select a payment"
-            hint="Choose a charge from the list to review, remind, or mark paid."
-          />
-        )
-      }
-    />
+        ))}
+      </div>
+    )}
     </>
   );
 }

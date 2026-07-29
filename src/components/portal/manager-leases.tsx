@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -203,14 +203,46 @@ export function ManagerLeases({
         onClick={() => setEditLeasesOpen(true)}
       >
         Edit
-        <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
       </Button>
     </PortalSectionActionRow>
   );
 
+  if (leaseIdProp) {
+    return (
+      <>
+        <ManagerLeasesPipelinePanel
+          rows={rows}
+          tab={tab}
+          refreshKey={tick}
+          managerUserId={userId}
+          residentAccountEmails={residentAccountEmails}
+          leaseId={leaseIdProp}
+          listBasePath={leasesBase}
+          onEmailAccountSetup={(email) => {
+            setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+          }}
+        />
+        <ManagerEditLeasesModal
+          open={editLeasesOpen}
+          onClose={() => setEditLeasesOpen(false)}
+          propertyOptions={editablePropertyOptions}
+          managerUserId={userId}
+          onSaved={() => setPropertyTick((n) => n + 1)}
+          showToast={showToast}
+        />
+        <ShareLeadLinkModal
+          open={shareLeasesOpen}
+          onClose={() => setShareLeasesOpen(false)}
+          kind="listing"
+          properties={shareableProperties}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-    <ManagerPortalPageShell title="Leases" compactFilterRow>
+    <ManagerPortalPageShell title="Leases" titleAside={leasesHeaderActions} compactFilterRow>
       <PortalListControlStack
         className="mb-3"
         filterRow={
@@ -226,7 +258,6 @@ export function ManagerLeases({
             />
           </PortalFilterSortSheet>
         }
-        primaryAction={leasesHeaderActions}
         destinations={tabs.map((t) => ({
           id: t.id,
           label: t.label,
@@ -236,21 +267,32 @@ export function ManagerLeases({
         }))}
         activeDestinationId={tab}
         destinationAriaLabel="Lease pipeline stage"
+        activeFilterChips={
+          propertyFilter ? (
+            <PortalActiveFilterChips
+              chips={[
+                {
+                  id: "property",
+                  label: `Property: ${propertyFilter}`,
+                  onRemove: () => setPropertyFilter(""),
+                },
+              ]}
+            />
+          ) : null
+        }
       />
-      <div className="mt-1 space-y-3">
-        <ManagerLeasesPipelinePanel
-          rows={rows}
-          tab={tab}
-          refreshKey={tick}
-          managerUserId={userId}
-          residentAccountEmails={residentAccountEmails}
-          leaseId={leaseIdProp}
-          listBasePath={leasesBase}
-          onEmailAccountSetup={(email) => {
-            setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
-          }}
-        />
-      </div>
+      <ManagerLeasesPipelinePanel
+        rows={rows}
+        tab={tab}
+        refreshKey={tick}
+        managerUserId={userId}
+        residentAccountEmails={residentAccountEmails}
+        leaseId={leaseIdProp}
+        listBasePath={leasesBase}
+        onEmailAccountSetup={(email) => {
+          setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+        }}
+      />
     </ManagerPortalPageShell>
     <ManagerEditLeasesModal
       open={editLeasesOpen}

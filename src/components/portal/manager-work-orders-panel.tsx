@@ -41,15 +41,10 @@ import { notifyResidentOfWorkOrderUpdate } from "@/lib/work-order-resident-notif
 import { buildWorkOrderCompletedNotice } from "@/lib/resident-service-notices";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { track } from "@/lib/analytics/track-client";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { workOrderDetailHref, workOrderListHref } from "@/lib/portal-detail-routes";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
-import { workOrderDetailHref, workOrderListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 function priorityClass(p: string) {
@@ -136,8 +131,6 @@ export function ManagerWorkOrdersPanel({
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [billDraftById, setBillDraftById] = useState<Record<string, BillDraft>>({});
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
@@ -191,7 +184,6 @@ export function ManagerWorkOrdersPanel({
 
   const openExpand = useCallback(
     (row: DemoManagerWorkOrderRow) => {
-      setExpandedId(row.id);
       setVisitAtById((prev) => ({
         ...prev,
         [row.id]: row.scheduledAtIso ? toDatetimeLocalValue(row.scheduledAtIso) : prev[row.id] ?? "",
@@ -205,52 +197,26 @@ export function ManagerWorkOrdersPanel({
     [loadBids],
   );
 
-  const selectedRow = useMemo(
-    () => rows.find((row) => row.id === expandedId) ?? null,
-    [rows, expandedId],
+  const routeWorkOrderId = workOrderIdProp ? decodeURIComponent(workOrderIdProp) : null;
+  const routeWorkOrder = useMemo(() => {
+    if (!routeWorkOrderId) return null;
+    return rows.find((r) => r.id === routeWorkOrderId) ?? allRows.find((r) => r.id === routeWorkOrderId) ?? null;
+  }, [routeWorkOrderId, rows, allRows]);
+
+  useEffect(() => {
+    if (routeWorkOrder) openExpand(routeWorkOrder);
+  }, [routeWorkOrder, openExpand]);
+
+  const openWorkOrderDetail = useCallback(
+    (row: DemoManagerWorkOrderRow) => {
+      if (listBasePath) navigate(workOrderDetailHref(listBasePath, bucket, row.id));
+    },
+    [bucket, listBasePath, navigate],
   );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
 
   const navigateToList = useCallback(() => {
     if (listBasePath) navigate(workOrderListHref(listBasePath, bucket));
   }, [bucket, listBasePath, navigate]);
-
-  const openWorkOrderDetail = useCallback(
-    (row: DemoManagerWorkOrderRow) => {
-      openExpand(row);
-      setMobileDetailOpen(true);
-      if (listBasePath) navigate(workOrderDetailHref(listBasePath, bucket, row.id));
-    },
-    [bucket, listBasePath, navigate, openExpand],
-  );
-
-  useEffect(() => {
-    if (rowIds.length === 0) {
-      setExpandedId(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setExpandedId((cur) => {
-      if (cur && rowIds.includes(cur)) return cur;
-      if (portalUsesDesktopSplit()) return rowIds[0] ?? null;
-      return null;
-    });
-  }, [rowIds]);
-
-  useEffect(() => {
-    if (!workOrderIdProp) return;
-    const decoded = decodeURIComponent(workOrderIdProp);
-    if (rowIds.includes(decoded)) {
-      const row = rows.find((r) => r.id === decoded);
-      if (row) openExpand(row);
-      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
-    }
-  }, [workOrderIdProp, rowIds, rows, openExpand]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit() && !workOrderIdProp) setExpandedId(null);
-  }, [bucket, workOrderIdProp]);
 
   const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
 
@@ -380,7 +346,7 @@ export function ManagerWorkOrdersPanel({
           : " Pending payment created."
         : "";
       showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
       onAfterSchedule?.();
     },
     [billDraftById, effectiveManagerId, onAfterSchedule, sendVendorVisitEmail, showToast],
@@ -526,7 +492,7 @@ export function ManagerWorkOrdersPanel({
         }));
         showToast("Work order marked complete.");
         setCompleteRow(null);
-        setExpandedId(null);
+        if (workOrderIdProp) navigateToList();
         return;
       }
       const res = await fetch("/api/portal/work-orders/complete", {
@@ -579,7 +545,7 @@ export function ManagerWorkOrdersPanel({
         );
       }
       setCompleteRow(null);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not complete work order.");
     } finally {
@@ -602,7 +568,7 @@ export function ManagerWorkOrdersPanel({
         approveDemoWorkOrderPay(row.id);
         showToast("Approved and paid.");
         setApprovePayRow(null);
-        setExpandedId(null);
+        if (workOrderIdProp) navigateToList();
         return;
       }
       const res = await fetch("/api/portal/work-orders/approve-pay", {
@@ -617,7 +583,7 @@ export function ManagerWorkOrdersPanel({
       void syncManagerWorkOrdersFromServer();
       showToast("Approved and paid.");
       setApprovePayRow(null);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not approve payment.");
     } finally {
@@ -691,7 +657,7 @@ export function ManagerWorkOrdersPanel({
     if (!row) return;
     if (deleteManagerWorkOrderRow(row.id)) {
       showToast("Work order removed.");
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
       setHcTick((n) => n + 1);
     } else showToast("Could not delete work order.");
     setDeleteRow(null);
@@ -1157,6 +1123,24 @@ export function ManagerWorkOrdersPanel({
     );
   };
 
+  if (routeWorkOrderId) {
+    if (!routeWorkOrder) {
+      return <PortalDataTableEmpty icon="work-order" message="Work order not found." />;
+    }
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Work orders"
+        title={routeWorkOrder.title}
+        subtitle={[routeWorkOrder.propertyName, routeWorkOrder.unit].filter(Boolean).join(" · ") || undefined}
+        backHref={listBasePath ? workOrderListHref(listBasePath, bucket) : "#"}
+        backLabel="Back to work orders"
+        dataAttrBack="work-order-detail-back"
+      >
+        {renderRowDetail(routeWorkOrder)}
+      </PortalRecordDetailPage>
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <PortalDataTableEmpty
@@ -1168,58 +1152,26 @@ export function ManagerWorkOrdersPanel({
 
   return (
     <div>
-      <PortalListDetailPane
-        mobileCompact
-        className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-        detailOpen={mobileDetailOpen && Boolean(selectedRow)}
-        list={
-          <div className={INBOX_LIST_SCROLL}>
-            {rows.map((row) => {
-              const subtitle = [row.propertyName, row.unit].filter(Boolean).join(" · ");
-              const statusLabel =
-                bucket === "open" ? "Open" : bucket === "scheduled" ? "Scheduled" : "Completed";
-              const statusTone =
-                bucket === "completed" ? "success" : bucket === "scheduled" ? "warning" : "neutral";
-              return (
-                <PortalServiceRecordRow
-                  key={row.id}
-                  title={row.title}
-                  subtitle={subtitle || undefined}
-                  statusLabel={statusLabel}
-                  statusTone={statusTone}
-                  selected={expandedId === row.id}
-                  onOpen={() => openWorkOrderDetail(row)}
-                  dataAttr="work-order-list-row"
-                />
-              );
-            })}
-          </div>
-        }
-        detail={
-          selectedRow ? (
-            <div className="flex h-full min-h-0 flex-col">
-              <PortalDetailHeader
-                title={selectedRow.title}
-                subtitle={[selectedRow.propertyName, selectedRow.unit].filter(Boolean).join(" · ") || undefined}
-                onBack={() => {
-                  setMobileDetailOpen(false);
-                  navigateToList();
-                }}
-                backLabel="Back to work orders"
-                dataAttrBack="work-order-detail-back"
-              />
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-                {renderRowDetail(selectedRow)}
-              </div>
-            </div>
-          ) : (
-            <PortalListDetailPlaceholder
-              title="Select a work order"
-              hint="Choose a maintenance request from the list to schedule, assign, or complete."
+      <div className={INBOX_LIST_SCROLL}>
+        {rows.map((row) => {
+          const subtitle = [row.propertyName, row.unit].filter(Boolean).join(" · ");
+          const statusLabel =
+            bucket === "open" ? "Open" : bucket === "scheduled" ? "Scheduled" : "Completed";
+          const statusTone =
+            bucket === "completed" ? "success" : bucket === "scheduled" ? "warning" : "neutral";
+          return (
+            <PortalServiceRecordRow
+              key={row.id}
+              title={row.title}
+              subtitle={subtitle || undefined}
+              statusLabel={statusLabel}
+              statusTone={statusTone}
+              onOpen={() => openWorkOrderDetail(row)}
+              dataAttr="work-order-list-row"
             />
-          )
-        }
-      />
+          );
+        })}
+      </div>
 
       <Modal
         open={Boolean(completeRow)}

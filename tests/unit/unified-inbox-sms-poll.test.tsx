@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, render, cleanup, waitFor } from "@testing-library/react";
 
+vi.mock("@/lib/portal-nav-client", () => ({ usePortalNavigate: () => () => {} }));
 vi.mock("@/lib/portal-inbox-storage", () => ({
   collapsePersonInboxThreads: (threads: unknown[]) => threads,
   resolveCollapsedInboxThread: (id: string | null, collapsed: Array<{ id: string }>) => collapsed.find((t) => t.id === id) ?? null,

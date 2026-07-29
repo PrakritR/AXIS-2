@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalMultiFilterChipRow, PortalSortChipRow } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
 import { type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
@@ -14,8 +15,7 @@ import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PORTAL_HEADER_ACTION_BTN, PortalToolbarSortSelect } from "@/components/portal/portal-metrics";
-import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   axisAdminFilterContact,
   EMPTY_COMMUNICATION_THREAD_FILTERS,
@@ -60,11 +60,14 @@ function communicationFilterTouches(
 
 export function ManagerCommunication({
   listSegment = "active",
+  threadId,
   inboxTabId = "unopened",
   smsUiEnabled = false,
 }: {
   /** Routed conversation list segment (Active / Unread / Archived). */
   listSegment?: "active" | "unread" | "archived";
+  /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
+  threadId?: string;
   /** @deprecated Channel is always unified; kept for route compatibility. */
   channel?: ManagerCommunicationChannel;
   /** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
@@ -88,7 +91,11 @@ export function ManagerCommunication({
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
-  const [threadOpen, setThreadOpen] = useState(false);
+  const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
+
+  useEffect(() => {
+    setThreadOpen(Boolean(threadId));
+  }, [threadId]);
   const [searchQuery, setSearchQuery] = useState("");
   const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
 
@@ -163,20 +170,16 @@ export function ManagerCommunication({
 
   const filterControls = (
     <>
-      <CheckboxMultiSelect
-        variant="pill"
+      <PortalMultiFilterChipRow
         label="House"
-        emptyLabel="All houses"
+        ariaLabel="Filter by house"
         options={propertyOptions}
         selected={filters.propertyIds}
         onChange={(propertyIds) => setFilters((f) => ({ ...f, propertyIds }))}
-        emptyMenuText="No houses yet"
-        dataAttr="communication-filter-property"
       />
-      <CheckboxMultiSelect
-        variant="pill"
+      <PortalMultiFilterChipRow
         label="Role"
-        emptyLabel="All roles"
+        ariaLabel="Filter by role"
         options={ROLE_OPTIONS}
         selected={filters.roles}
         onChange={(roles) =>
@@ -186,19 +189,15 @@ export function ManagerCommunication({
             contactIds: [],
           }))
         }
-        dataAttr="communication-filter-role"
       />
-      <CheckboxMultiSelect
-        variant="pill"
+      <PortalMultiFilterChipRow
         label="Resident"
-        emptyLabel="All residents"
+        ariaLabel="Filter by resident"
         options={residentOptions}
         selected={filters.contactIds}
         onChange={(contactIds) => setFilters((f) => ({ ...f, contactIds }))}
-        emptyMenuText="No residents yet"
-        dataAttr="communication-filter-resident"
       />
-      <PortalToolbarSortSelect
+      <PortalSortChipRow
         label="Sort"
         value={listSort}
         onChange={setListSort}
@@ -242,7 +241,6 @@ export function ManagerCommunication({
   const controlStack = (
     <PortalListControlStack
       filterRow={threadFilters}
-      primaryAction={titleAside}
       destinations={[
         { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
         {
@@ -274,6 +272,7 @@ export function ManagerCommunication({
   return (
     <PortalCommunicationShell
       title="Communication"
+      titleAside={titleAside}
       controlStack={controlStack}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
@@ -292,6 +291,7 @@ export function ManagerCommunication({
         tabId={inboxTabId}
         commBase={commBase}
         listSegment={listSegment}
+        routeThreadId={threadId}
         threadFilters={filters}
         filterContacts={filterContacts}
         listSort={listSort}

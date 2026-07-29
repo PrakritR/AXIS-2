@@ -7,11 +7,11 @@ import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSortChipRow, PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
-  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
@@ -192,6 +192,7 @@ export function ManagerPayments({
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [listSort, setListSort] = useState<PaymentListSort>(DEFAULT_PAYMENT_LIST_SORT);
+  const [searchQuery, setSearchQuery] = useState("");
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
@@ -450,8 +451,17 @@ export function ManagerPayments({
 
   const outgoingRowsForBucket = useMemo(() => {
     const filtered = outgoingRowsForCounts.filter((row) => row.bucket === bucket);
-    return sortOutgoingRows(filtered, bucket, listSort);
-  }, [outgoingRowsForCounts, bucket, listSort]);
+    const sorted = sortOutgoingRows(filtered, bucket, listSort);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((row) => {
+      const hay = [row.payeeLabel, row.propertyName, row.chargeTitle, row.amountLabel]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [outgoingRowsForCounts, bucket, listSort, searchQuery]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -488,8 +498,17 @@ export function ManagerPayments({
       return true;
     });
 
-    return sortLedgerRows(filtered, bucket, listSort);
-  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, listSort]);
+    const sorted = sortLedgerRows(filtered, bucket, listSort);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((row) => {
+      const hay = [row.residentName, row.propertyName, row.chargeTitle, row.balanceDue]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, listSort, searchQuery]);
 
   const filterTouchCount = paymentFilterTouches(propertyFilter, residentFilter, listSort, direction);
 
@@ -525,7 +544,7 @@ export function ManagerPayments({
   const filterControls = (
     <>
       {propertyFilterPill}
-      <PortalToolbarSortSelect
+      <PortalSortChipRow
         label="Sort"
         value={listSort}
         onChange={setListSort}
@@ -541,6 +560,36 @@ export function ManagerPayments({
     setListSort(DEFAULT_PAYMENT_LIST_SORT);
   };
 
+  const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    const chips: PortalActiveFilterChip[] = [];
+    if (propertyFilter) {
+      chips.push({
+        id: "property",
+        label: `Property: ${propertyFilter}`,
+        onRemove: () => {
+          setPropertyFilter("");
+          setResidentFilter("");
+        },
+      });
+    }
+    if (direction === "incoming" && activeResidentFilter) {
+      chips.push({
+        id: "resident",
+        label: `Resident: ${activeResidentFilter}`,
+        onRemove: () => setResidentFilter(""),
+      });
+    }
+    if (listSort !== DEFAULT_PAYMENT_LIST_SORT) {
+      const sortLabel = sortOptions.find((opt) => opt.value === listSort)?.label ?? listSort;
+      chips.push({
+        id: "sort",
+        label: `Sort: ${sortLabel}`,
+        onRemove: () => setListSort(DEFAULT_PAYMENT_LIST_SORT),
+      });
+    }
+    return chips;
+  }, [propertyFilter, activeResidentFilter, listSort, direction, sortOptions]);
+
   const paymentsHeaderActions = (
     <PortalSectionActionRow className="max-sm:flex-row max-sm:[&_button]:w-auto max-sm:[&_button]:flex-1">
       {direction === "incoming" ? (
@@ -553,17 +602,16 @@ export function ManagerPayments({
         >
           Reminders
         </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => setPaymentSetupOpen(true)}
-          data-attr="payments-setup"
-        >
-          Payment setup
-        </Button>
-      )}
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => setPaymentSetupOpen(true)}
+        data-attr="payments-setup"
+      >
+        Payment setup
+      </Button>
       <Button
         type="button"
         variant="primary"
@@ -571,7 +619,7 @@ export function ManagerPayments({
         onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
         data-attr="payments-add"
       >
-        Add
+        {direction === "incoming" ? "Add charge" : "Add payment"}
       </Button>
     </PortalSectionActionRow>
   );
@@ -595,69 +643,41 @@ export function ManagerPayments({
       activeCount={filterTouchCount}
       onReset={resetPaymentFilters}
       dataAttr="payments-filter-sheet-open"
-      extraModalContent={
-        direction === "incoming" ? (
-          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => setReminderSettingsOpen(true)}
-              data-attr="payments-reminder-settings-mobile"
-            >
-              Reminders
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => setPaymentSetupOpen(true)}
-              data-attr="payments-setup-mobile"
-            >
-              Payment setup
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-4 border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => setPaymentSetupOpen(true)}
-              data-attr="payments-setup-mobile"
-            >
-              Payment setup
-            </Button>
-          </div>
-        )
-      }
     >
       {filterControls}
     </PortalFilterSortSheet>
   );
 
   return (
-    <ManagerPortalPageShell title="Payments" titleTrailing={directionNav} compactFilterRow>
+    <ManagerPortalPageShell
+      title="Payments"
+      titleTrailing={directionNav}
+      titleAside={paymentsHeaderActions}
+      compactFilterRow
+    >
       <PortalListControlStack
         className="mb-3"
+        destinations={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${paymentsBase}/${direction}/${t.id}`,
+          count: t.count,
+          alert: t.alert,
+          dataAttr: `payments-bucket-${t.id}`,
+        }))}
+        activeDestinationId={bucket}
+        destinationAriaLabel="Payment status"
         filterRow={paymentsFilterSheet}
-        primaryAction={paymentsHeaderActions}
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search charges",
+          dataAttr: "payments-search",
+        }}
+        activeFilterChips={<PortalActiveFilterChips chips={activeFilterChips} />}
       />
-      <div className="mt-1 space-y-3">
-        <DestinationNav
-          items={tabs.map((t) => ({
-            id: t.id,
-            label: t.label,
-            href: `${paymentsBase}/${direction}/${t.id}`,
-            count: t.count,
-            alert: t.alert,
-            dataAttr: `payments-bucket-${t.id}`,
-          }))}
-          activeId={bucket}
-          ariaLabel="Payment status"
-        />
-        {direction === "incoming" ? (
-          <ManagerPaymentsLedgerPanel
+      {direction === "incoming" ? (
+        <ManagerPaymentsLedgerPanel
             rows={rowsForBucket}
             managerUserId={userId ?? null}
             activeBucket={bucket}
@@ -684,7 +704,6 @@ export function ManagerPayments({
             }}
           />
         )}
-      </div>
       <ReminderSettingsModal
         open={reminderSettingsOpen}
         onClose={() => setReminderSettingsOpen(false)}

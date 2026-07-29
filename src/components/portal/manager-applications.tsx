@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
@@ -17,14 +16,10 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import {
@@ -332,8 +327,6 @@ export function ManagerApplications({
   }
   const [propertyFilter, setPropertyFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
   );
@@ -482,37 +475,11 @@ export function ManagerApplications({
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
   }, [scopedRows, bucket, propertyFilter, searchQuery]);
 
-  const selectedRow = useMemo(
-    () => rowsForBucket.find((r) => r.id === expandedId) ?? null,
-    [rowsForBucket, expandedId],
-  );
-
-  useEffect(() => {
-    if (rowsForBucket.length === 0) {
-      setExpandedId(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setExpandedId((cur) => {
-      if (cur && rowsForBucket.some((r) => r.id === cur)) return cur;
-      if (portalUsesDesktopSplit()) return rowsForBucket[0]!.id;
-      return null;
-    });
-  }, [rowsForBucket]);
-
-  useEffect(() => {
-    if (!applicationIdProp) return;
+  const detailRow = useMemo(() => {
+    if (!applicationIdProp) return null;
     const decoded = decodeURIComponent(applicationIdProp);
-    if (rowsForBucket.some((r) => r.id === decoded)) {
-      setExpandedId(decoded);
-      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
-    }
-  }, [applicationIdProp, rowsForBucket]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit() && !applicationIdProp) setExpandedId(null);
-  }, [bucket, propertyFilter, searchQuery, applicationIdProp]);
+    return scopedRows.find((r) => r.id === decoded) ?? null;
+  }, [applicationIdProp, scopedRows]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -527,7 +494,7 @@ export function ManagerApplications({
       const tab = tabForRow(hit);
       setBucket(tab);
       router.replace(`${applicationsBase}/${tab}${window.location.search}`, { scroll: false });
-      setExpandedId(hit.id);
+      navigate(applicationDetailHref(applicationsBase, tab, hit.id));
     });
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -536,7 +503,7 @@ export function ManagerApplications({
     params.delete("axisId");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [scopedRows, pathname, router]);
+  }, [scopedRows, pathname, router, applicationsBase, navigate]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const result = await transitionApplicationBucket(id, nextBucket, {
@@ -550,7 +517,6 @@ export function ManagerApplications({
       return;
     }
 
-    setExpandedId(null);
     router.push(applicationListHref(applicationsBase, nextBucket));
     const msg =
       nextBucket === "approved"
@@ -602,7 +568,6 @@ export function ManagerApplications({
     // cache is resurrected on the next poll/focus sync (the captain's "glitch" report).
     writeManagerApplicationRows(nextRows);
     setRows(nextRows);
-    setExpandedId(null);
 
     let serverError: string | null = null;
     if (email || id) {
@@ -642,6 +607,10 @@ export function ManagerApplications({
       syncHouseholdChargesFromServer(),
     ]);
     setRows(syncedRows);
+
+    if (applicationIdProp) {
+      navigate(applicationListHref(applicationsBase, bucket));
+    }
 
     showToast(
       email
@@ -887,7 +856,6 @@ export function ManagerApplications({
         title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
       >
         Edit
-        <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
       </Button>
       <Button
         type="button"
@@ -902,145 +870,8 @@ export function ManagerApplications({
     </PortalSectionActionRow>
   );
 
-  return (
+  const applicationModals = (
     <>
-    <ManagerPortalPageShell
-      title="Applications"
-      compactFilterRow
-      mobileHideFilterRow={mobileDetailOpen}
-      mobileFlush={mobileDetailOpen}
-    >
-      <PortalListControlStack
-        className="mb-3"
-        filterRow={
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="applications-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-          </PortalFilterSortSheet>
-        }
-        primaryAction={applicationsHeaderActions}
-        destinations={tabs.map((t) => ({
-          id: t.id,
-          label: t.label,
-          href: `${applicationsBase}/${t.id}`,
-          count: t.count,
-          dataAttr: `applications-bucket-${t.id}`,
-        }))}
-        activeDestinationId={bucket}
-        destinationAriaLabel="Application status"
-        search={{
-          value: searchQuery,
-          onChange: setSearchQuery,
-          placeholder: "Search applicants",
-          dataAttr: "applications-search",
-        }}
-      />
-      <div className="mt-1 space-y-3">
-      <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
-      <ManagerApplicationSettingsModal
-        open={applicationSettingsOpen}
-        onClose={() => setApplicationSettingsOpen(false)}
-      />
-      <CheckrScreeningModal
-        key={checkrScreeningRowId ?? "none"}
-        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
-        open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
-        onUpdated={handleScreeningUpdated}
-      />
-      {!authReady && rows.length === 0 ? (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <ListSkeleton rows={5} showLeading={false} />
-        </div>
-      ) : rowsForBucket.length === 0 ? (
-        <PortalDataTableEmpty
-            icon="application"
-            message={
-              scopedRows.length === 0
-                ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
-                : searchQuery.trim()
-                  ? "No applications match your search."
-                  : propertyFilter.trim()
-                    ? "No applications for this property yet."
-                    : bucket === "pending"
-                      ? "No pending applications. Submitted applications awaiting your review will appear here."
-                      : bucket === "incomplete"
-                        ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
-                        : "No applications in this tab yet."
-            }
-          />
-      ) : (
-        <PortalListDetailPane
-          mobileCompact
-          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-          detailOpen={mobileDetailOpen && Boolean(selectedRow)}
-          list={
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className={INBOX_LIST_SCROLL}>
-                {rowsForBucket.map((row) => {
-                  const room = displayRoomForRow(row);
-                  const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
-                    .filter((part) => part && part !== "—")
-                    .join(" · ");
-                  const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
-                  const groupBadge = group ? describeGroupBadge(group) : null;
-                  return (
-                    <PortalPersonRecordRow
-                      key={row.id}
-                      name={row.name}
-                      subtitle={subtitle || undefined}
-                      preview={row.email}
-                      badge={groupBadge ? <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge> : undefined}
-                      selected={expandedId === row.id}
-                      onOpen={() => {
-                        setExpandedId(row.id);
-                        setMobileDetailOpen(true);
-                        navigate(applicationDetailHref(applicationsBase, bucket, row.id));
-                      }}
-                      dataAttr="application-list-row"
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          }
-          detail={
-            selectedRow ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <PortalDetailHeader
-                  title={selectedRow.name}
-                  subtitle={selectedRow.email}
-                  avatarName={selectedRow.name}
-                  onBack={() => {
-                    setMobileDetailOpen(false);
-                    navigate(applicationListHref(applicationsBase, bucket));
-                  }}
-                  backLabel="Back to applications"
-                  dataAttrBack="application-detail-back"
-                  actions={renderApplicationRowActions(selectedRow)}
-                />
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-                  {renderApplicationDetail(selectedRow)}
-                </div>
-              </div>
-            ) : (
-              <PortalListDetailPlaceholder
-                title="Select an application"
-                hint="Choose an applicant from the list to review their submission."
-              />
-            )
-          }
-        />
-      )}
-      </div>
-    </ManagerPortalPageShell>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}
         title="Approve application: account setup email"
@@ -1107,6 +938,146 @@ export function ManagerApplications({
         onSaved={() => setPortfolioTick((n) => n + 1)}
         showToast={showToast}
       />
+    </>
+  );
+
+  if (applicationIdProp && detailRow) {
+    return (
+      <>
+        {applicationModals}
+        <PortalRecordDetailPage
+          pageTitle="Applications"
+          title={detailRow.name}
+          subtitle={detailRow.email}
+          avatarName={detailRow.name}
+          backHref={applicationListHref(applicationsBase, bucket)}
+          backLabel="Back to applications"
+          dataAttrBack="application-detail-back"
+          actions={renderApplicationRowActions(detailRow)}
+        >
+          {renderApplicationDetail(detailRow)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  return (
+    <>
+    <ManagerPortalPageShell
+      title="Applications"
+      titleAside={applicationsHeaderActions}
+      compactFilterRow
+    >
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="applications-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(id) => setPropertyFilter(id)}
+            />
+          </PortalFilterSortSheet>
+        }
+        destinations={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${applicationsBase}/${t.id}`,
+          count: t.count,
+          dataAttr: `applications-bucket-${t.id}`,
+        }))}
+        activeDestinationId={bucket}
+        destinationAriaLabel="Application status"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search applicants",
+          dataAttr: "applications-search",
+        }}
+        activeFilterChips={
+          propertyFilter ? (
+            <PortalActiveFilterChips
+              chips={[
+                {
+                  id: "property",
+                  label: `Property: ${propertyFilter}`,
+                  onRemove: () => setPropertyFilter(""),
+                },
+              ]}
+            />
+          ) : null
+        }
+      />
+      <div className="mt-1 space-y-3">
+      <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
+      <ManagerApplicationSettingsModal
+        open={applicationSettingsOpen}
+        onClose={() => setApplicationSettingsOpen(false)}
+      />
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        open={checkrScreeningRowId !== null}
+        onClose={() => setCheckrScreeningRowId(null)}
+        onUpdated={handleScreeningUpdated}
+      />
+      {!authReady && rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <ListSkeleton rows={5} showLeading={false} />
+        </div>
+      ) : rowsForBucket.length === 0 ? (
+        <PortalDataTableEmpty
+            icon="application"
+            message={
+              scopedRows.length === 0
+                ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
+                : searchQuery.trim()
+                  ? "No applications match your search."
+                  : propertyFilter.trim()
+                    ? "No applications for this property yet."
+                    : bucket === "pending"
+                      ? "No pending applications. Submitted applications awaiting your review will appear here."
+                      : bucket === "incomplete"
+                        ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
+                        : "No applications in this tab yet."
+            }
+          />
+      ) : (
+        <div className={INBOX_LIST_SCROLL}>
+          {rowsForBucket.map((row) => {
+            const room = displayRoomForRow(row);
+            const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
+              .filter((part) => part && part !== "—")
+              .join(" · ");
+            const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+            const groupBadge = group ? describeGroupBadge(group) : null;
+            const status = applicationStatusPill(row);
+            return (
+              <PortalPersonRecordRow
+                key={row.id}
+                name={row.name}
+                subtitle={subtitle || undefined}
+                preview={row.email}
+                badge={
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupBadge ? <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge> : null}
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                  </div>
+                }
+                onOpen={() => navigate(applicationDetailHref(applicationsBase, bucket, row.id))}
+                dataAttr="application-list-row"
+              />
+            );
+          })}
+        </div>
+      )}
+      </div>
+    </ManagerPortalPageShell>
+      {applicationModals}
     </>
   );
 }

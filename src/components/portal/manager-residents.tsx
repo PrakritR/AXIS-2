@@ -46,6 +46,7 @@ import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -54,12 +55,7 @@ import {
   parseResidentDetailTab,
   type ResidentDetailTabId,
 } from "@/lib/portal-detail-routes";
-import {
-  PortalDetailHeader,
-  PortalListDetailPane,
-  PortalListDetailPlaceholder,
-  portalUsesDesktopSplit,
-} from "@/components/portal/portal-list-detail-shell";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
@@ -292,8 +288,6 @@ export function ManagerResidents({
   const [searchQuery, setSearchQuery] = useState("");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [chargeBucket, setChargeBucket] = useState<ManagerPaymentBucket>("pending");
   const [residentReminderSettingsOpen, setResidentReminderSettingsOpen] = useState(false);
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
@@ -746,11 +740,15 @@ export function ManagerResidents({
   const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
   const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
 
-  const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
+  const activeResidentId = residentIdProp ? decodeURIComponent(residentIdProp) : null;
+  const selected = useMemo(
+    () => (activeResidentId ? residents.find((r) => r.id === activeResidentId) ?? null : null),
+    [residents, activeResidentId],
+  );
 
-  if (selectedId !== prevSelectedId) {
-    setPrevSelectedId(selectedId);
-    if (selectedId) {
+  if (activeResidentId !== prevSelectedId) {
+    setPrevSelectedId(activeResidentId);
+    if (activeResidentId) {
       setChargeBucket("pending");
       setSvcSubTab("requests");
       setSvcReqBucket("pending");
@@ -758,38 +756,6 @@ export function ManagerResidents({
       setSvcExpandedId(null);
     }
   }
-
-  useEffect(() => {
-    if (!residentIdProp) return;
-    const decoded = decodeURIComponent(residentIdProp);
-    if (filtered.some((r) => r.id === decoded)) {
-      setSelectedId(decoded);
-      if (!portalUsesDesktopSplit()) setMobileDetailOpen(true);
-    }
-  }, [residentIdProp, filtered]);
-
-  if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
-    setSelectedId(null);
-    setMobileDetailOpen(false);
-  }
-
-  useEffect(() => {
-    if (filtered.length === 0) {
-      setSelectedId(null);
-      setMobileDetailOpen(false);
-      return;
-    }
-    setSelectedId((cur) => {
-      if (cur && filtered.some((r) => r.id === cur)) return cur;
-      if (portalUsesDesktopSplit()) return filtered[0]!.id;
-      return null;
-    });
-  }, [filtered]);
-
-  useEffect(() => {
-    setMobileDetailOpen(false);
-    if (!portalUsesDesktopSplit()) setSelectedId(null);
-  }, [residentsTab, propertyFilter, searchQuery]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -1699,7 +1665,7 @@ export function ManagerResidents({
     }
 
     await syncManagerApplicationsFromServer({ force: true, managerUserId: userId });
-    setSelectedId(null);
+    navigate(`${portalBase}/residents/${residentsTab}`);
     setHcTick((n) => n + 1);
     setLeaseTick((n) => n + 1);
     setWorkOrderTick((n) => n + 1);
@@ -1768,7 +1734,7 @@ export function ManagerResidents({
   }
 
   const residentDetailPanel =
-    selectedId && selected ? (
+    selected ? (
                           <div className="flex flex-col gap-4">
                             {selected ? (
                               <DestinationNav
@@ -2300,37 +2266,50 @@ export function ManagerResidents({
           onClose={() => setSigningLease(null)}
         />
       ) : null}
+      {residentIdProp && selected ? (
+        <PortalRecordDetailPage
+          pageTitle="Residents"
+          title={selected.name || "Resident"}
+          subtitle={selected.email || undefined}
+          avatarName={selected.name || selected.email}
+          backHref={`${portalBase}/residents/${residentsTab}`}
+          backLabel="Back to residents"
+          dataAttrBack="resident-detail-back"
+        >
+          {residentDetailPanel}
+        </PortalRecordDetailPage>
+      ) : (
       <ManagerPortalPageShell
         title="Residents"
-        titleTrailing={
-          <DestinationNav
-            items={[
-              {
-                id: "current",
-                label: "Current",
-                href: `${portalBase}/residents/current`,
-                count: currentResidentsCount,
-                dataAttr: "residents-tab-current",
-              },
-              {
-                id: "previous",
-                label: "Previous",
-                href: `${portalBase}/residents/previous`,
-                count: previousResidentsCount,
-                dataAttr: "residents-tab-previous",
-              },
-            ]}
-            activeId={residentsTab}
-            ariaLabel="Resident directory"
-            className="max-w-none"
-          />
+        titleAside={
+          <PortalSectionActionRow>
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add
+            </Button>
+          </PortalSectionActionRow>
         }
         compactFilterRow
-        mobileHideFilterRow={mobileDetailOpen}
-        mobileFlush={mobileDetailOpen}
       >
       <PortalListControlStack
         className="mb-3"
+        destinations={[
+          {
+            id: "current",
+            label: "Current",
+            href: `${portalBase}/residents/current`,
+            count: currentResidentsCount,
+            dataAttr: "residents-tab-current",
+          },
+          {
+            id: "previous",
+            label: "Previous",
+            href: `${portalBase}/residents/previous`,
+            count: previousResidentsCount,
+            dataAttr: "residents-tab-previous",
+          },
+        ]}
+        activeDestinationId={residentsTab}
+        destinationAriaLabel="Resident directory"
         filterRow={
           <PortalFilterSortSheet
             activeCount={portalFilterActiveCount([propertyFilter])}
@@ -2344,19 +2323,25 @@ export function ManagerResidents({
             />
           </PortalFilterSortSheet>
         }
-        primaryAction={
-          <PortalSectionActionRow>
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add
-            </Button>
-          </PortalSectionActionRow>
-        }
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
           placeholder: "Search residents",
           dataAttr: "residents-search",
         }}
+        activeFilterChips={
+          propertyFilter ? (
+            <PortalActiveFilterChips
+              chips={[
+                {
+                  id: "property",
+                  label: `Property: ${propertyFilter}`,
+                  onRemove: () => setPropertyFilter(""),
+                },
+              ]}
+            />
+          ) : null
+        }
       />
       {filtered.length === 0 ? (
         <>
@@ -2374,60 +2359,29 @@ export function ManagerResidents({
           />
         </>
       ) : (
-        <PortalListDetailPane
-          mobileCompact
-          className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-          detailOpen={mobileDetailOpen && Boolean(selected)}
-          list={
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className={INBOX_LIST_SCROLL}>
-                {filtered.map((res) => {
-                  const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return (
-                    <PortalPersonRecordRow
-                      key={res.id}
-                      name={res.name || "—"}
-                      subtitle={housingLabel || undefined}
-                      preview={res.email || housingLabel || " "}
-                      meta={res.leaseStart ? shortDateLabel(res.leaseStart) : undefined}
-                      selected={selectedId === res.id}
-                      onOpen={() => {
-                        setSelectedId(res.id);
-                        setMobileDetailOpen(true);
-                        navigate(residentDetailHref(portalBase, residentsTab, res.id, resolvedDetailTab));
-                      }}
-                      dataAttr="resident-list-row"
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          }
-          detail={
-            selected ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <PortalDetailHeader
-                  title={selected.name || "Resident"}
-                  subtitle={selected.email || undefined}
-                  avatarName={selected.name || selected.email}
-                  onBack={() => setMobileDetailOpen(false)}
-                  backLabel="Back to residents"
-                  dataAttrBack="resident-detail-back"
-                />
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3">
-                  {residentDetailPanel}
-                </div>
-              </div>
-            ) : (
-              <PortalListDetailPlaceholder
-                title="Select a resident"
-                hint="Choose someone from the list to view their profile, lease, and payments."
+        <div className={INBOX_LIST_SCROLL}>
+          {filtered.map((res) => {
+            const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <PortalPersonRecordRow
+                key={res.id}
+                name={res.name || "—"}
+                subtitle={housingLabel || undefined}
+                preview={res.email || housingLabel || " "}
+                meta={res.leaseStart ? shortDateLabel(res.leaseStart) : undefined}
+                onOpen={() =>
+                  navigate(residentDetailHref(portalBase, residentsTab, res.id, resolvedDetailTab))
+                }
+                dataAttr="resident-list-row"
               />
-            )
-          }
-        />
+            );
+          })}
+        </div>
+      )}
+
+      </ManagerPortalPageShell>
       )}
 
       <ReminderSettingsModal
@@ -3160,7 +3114,6 @@ export function ManagerResidents({
           ) : null}
         </div>
       </Modal>
-      </ManagerPortalPageShell>
     </>
   );
 }
