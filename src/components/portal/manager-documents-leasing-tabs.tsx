@@ -14,6 +14,7 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PortalTableInlineExpand,
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
@@ -218,11 +219,17 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
 
   return (
     <div className="space-y-4">
-      <PortalPropertyFilterPill
-        propertyOptions={propertyOptions}
-        propertyValue={propertyFilter}
-        onPropertyChange={setPropertyFilter}
-      />
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilter])}
+        onReset={() => setPropertyFilter("")}
+        dataAttr="documents-applications-filter-sheet-open"
+      >
+        <PortalPropertyFilterPill
+          propertyOptions={propertyOptions}
+          propertyValue={propertyFilter}
+          onPropertyChange={setPropertyFilter}
+        />
+      </PortalFilterSortSheet>
 
       {rows.length === 0 ? (
         <PortalDataTableEmpty icon="application" message="No application documents yet." />
@@ -351,11 +358,17 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
 
   return (
     <div className="space-y-4">
-      <PortalPropertyFilterPill
-        propertyOptions={propertyOptions}
-        propertyValue={propertyFilter}
-        onPropertyChange={setPropertyFilter}
-      />
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilter])}
+        onReset={() => setPropertyFilter("")}
+        dataAttr="documents-leases-filter-sheet-open"
+      >
+        <PortalPropertyFilterPill
+          propertyOptions={propertyOptions}
+          propertyValue={propertyFilter}
+          onPropertyChange={setPropertyFilter}
+        />
+      </PortalFilterSortSheet>
 
       {rows.length === 0 ? (
         <PortalDataTableEmpty icon="lease" message="No lease documents yet." />

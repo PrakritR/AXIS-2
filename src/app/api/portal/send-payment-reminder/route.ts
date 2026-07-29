@@ -172,6 +172,7 @@ export async function POST(req: Request) {
       String(body.text ?? "").trim() ||
       buildPaymentReminderBody({
         residentName,
+        residentEmail: ownedCharge.residentEmail?.trim(),
         chargeTitle,
         balanceDue,
         dueDate,

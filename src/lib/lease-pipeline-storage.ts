@@ -25,7 +25,7 @@ import {
 } from "@/lib/lease-execution-evidence";
 import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
 import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
-import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
+import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel, getBundleChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
@@ -955,8 +955,9 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
     const iso = new Date().toISOString();
 
     if (app.manuallyAdded) {
-      const existing = idx !== -1 ? next[idx]! : null;
       const manualPdf = manualResidentSignedLeasePdf(app);
+      if (manualPdf) {
+      const existing = idx !== -1 ? next[idx]! : null;
       const residentName = String(app.name ?? "").trim() || "Resident";
       const residentSignature =
         existing?.residentSignature ??
@@ -1028,6 +1029,8 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       else next[idx] = seeded;
       changed = true;
       continue;
+      }
+      // No uploaded off-platform PDF — same manager-review workflow as approved applicants.
     }
 
     const seeded = normalizeLeasePipelineRow({
@@ -1039,7 +1042,11 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       updated: formatUpdatedLabel(iso),
       bucket: idx === -1 ? "manager" : next[idx]!.bucket,
       pdfVersion: idx === -1 ? 1 : next[idx]!.pdfVersion,
-      notes: idx === -1 ? "Created from approved application." : next[idx]!.notes,
+      notes: idx === -1
+        ? app.manuallyAdded
+          ? "Manager-added resident — generate or upload a lease."
+          : "Created from approved application."
+        : next[idx]!.notes,
       updatedAtIso: idx === -1 ? iso : next[idx]!.updatedAtIso,
       axisId: app.id,
       propertyId: propertyId || undefined,
@@ -1063,6 +1070,49 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       continue;
     }
     const current = next[idx]!;
+    if (
+      app.manuallyAdded &&
+      !manualResidentSignedLeasePdf(app) &&
+      (current.externallySignedLease || hasBothLeaseSignatures(current)) &&
+      !current.generatedHtml &&
+      !current.managerUploadedPdf?.dataUrl
+    ) {
+      const repairedIso = new Date().toISOString();
+      next[idx] = normalizeLeasePipelineRow({
+        ...current,
+        residentName: seeded.residentName,
+        residentEmail: seeded.residentEmail,
+        unit: seeded.unit,
+        axisId: app.id,
+        propertyId: seeded.propertyId,
+        managerUserId: seeded.managerUserId ?? managerUserId ?? current.managerUserId ?? null,
+        roomChoice: seeded.roomChoice,
+        signedRentLabel: seeded.signedRentLabel,
+        application: enrichApplicationForLease(app, effectiveApplicationForRow(app), current.application),
+        bucket: "manager",
+        generatedHtml: null,
+        generatedAtIso: null,
+        managerUploadedPdf: null,
+        managerSignature: null,
+        residentSignature: null,
+        signatureName: null,
+        signedAtIso: null,
+        residentSignedAt: null,
+        managerSignedAt: null,
+        sentToResidentAt: null,
+        fullySignedAt: null,
+        adminReviewRequestedAt: null,
+        voidedAt: null,
+        externallySignedLease: false,
+        leaseDocumentRemovedAt: current.leaseDocumentRemovedAt ?? repairedIso,
+        status: "Manager Review",
+        currentActorRole: "manager",
+        updatedAtIso: repairedIso,
+        updated: formatUpdatedLabel(repairedIso),
+      });
+      changed = true;
+      continue;
+    }
     const merged = normalizeLeasePipelineRow({
       ...current,
       residentName: seeded.residentName,
@@ -1324,6 +1374,31 @@ function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
   };
 }
 
+/** Clears off-platform lease upload metadata on the application so sync cannot re-mark the lease signed. */
+export function clearManualResidentOffPlatformLeaseFromApplication(axisId: string): void {
+  const id = axisId.trim();
+  if (!id) return;
+  const rows = readManagerApplicationRows();
+  const idx = rows.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  const row = rows[idx]!;
+  if (!row.manuallyAdded) return;
+  const details = row.manualResidentDetails;
+  if (!details) return;
+  const hasOffPlatform =
+    details.externallySignedLease === true ||
+    Boolean(details.signedLeaseDataUrl?.trim());
+  if (!hasOffPlatform) return;
+  const nextDetails = { ...details };
+  delete nextDetails.externallySignedLease;
+  delete nextDetails.signedLeaseDataUrl;
+  delete nextDetails.signedLeaseFileName;
+  delete nextDetails.signedLeaseUploadedAt;
+  const next = [...rows];
+  next[idx] = { ...row, manualResidentDetails: nextDetails };
+  writeManagerApplicationRows(next);
+}
+
 /** Removes lease document content and resets workflow to manager review on the same row. */
 export function deleteLeasePipelineRow(id: string, managerUserId?: string | null): boolean {
   const rows = readLeasePipeline(managerUserId);
@@ -1336,6 +1411,9 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
   const rawIdx = findRawLeaseRowIndex(id, managerUserId);
   if (rawIdx === -1) return false;
   const iso = new Date().toISOString();
+  if (row.axisId?.trim()) {
+    clearManualResidentOffPlatformLeaseFromApplication(row.axisId);
+  }
   raw[rawIdx] = normalizeLeasePipelineRow({
     ...row,
     bucket: "manager",
@@ -1356,6 +1434,7 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
     versionNumber: 1,
     status: "Manager Review",
     currentActorRole: "manager",
+    externallySignedLease: false,
     leaseDocumentRemovedAt: iso,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),

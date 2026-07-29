@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
@@ -92,18 +93,12 @@ export function ManagerLeasesPipelinePanel({
 
   function leaseSentToResidentBody(row: LeasePipelineRow): string {
     const unit = row.unit.trim() || "your unit";
-    const lines = [
-      `Hi ${row.residentName || "there"},`,
-      "",
-      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
-      "",
-      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ];
-    return lines.join("\n");
+    return buildLeaseReadyForResidentMessage({
+      residentName: row.residentName || "there",
+      residentEmail: row.residentEmail.trim(),
+      unit,
+      variant: "send",
+    });
   }
 
   async function notifyResidentLeaseReady(row: LeasePipelineRow): Promise<{ ok: boolean; skipped?: boolean }> {
@@ -127,17 +122,13 @@ export function ManagerLeasesPipelinePanel({
         ? `Lease dates: ${leaseStart} to ${leaseEnd}`
         : `Lease start date: ${leaseStart}`
       : "";
-    const lines = [
-      `Hi ${row.residentName || "there"},`,
-      "",
-      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
+    return buildLeaseReadyForResidentMessage({
+      residentName: row.residentName || "there",
+      residentEmail: row.residentEmail.trim(),
+      unit,
+      variant: "reminder",
       dateLine,
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].filter(Boolean);
-    return lines.join("\n");
+    });
   }
 
   async function sendAccountEmail(row: LeasePipelineRow) {

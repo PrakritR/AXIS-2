@@ -13,6 +13,8 @@ import {
 import { ensureSubmissionListingFees, listingPresetFeeAmount } from "@/lib/listing-fees";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
+import { residentLeaseTermToApplicationFields } from "@/lib/resident-manual-lease-terms";
+import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 
 /**
  * Placement / dates / charges for a resident, auto-filled from the application and
@@ -148,5 +150,98 @@ export function resolvePlacementValuesForRow(
     otherCostLabel,
     otherCostAmount,
     missing,
+  };
+}
+
+export type ManualResidentPricing = {
+  rentalType: "standard" | "short_term";
+  rent: string;
+  utilities: string;
+  moveInFee: string;
+  securityDeposit: string;
+};
+
+function manualResidentMoneyField(amount: number): string {
+  if (!Number.isFinite(amount) || amount < 0) return "0";
+  if (amount === 0) return "0";
+  return amount % 1 === 0 ? String(amount) : amount.toFixed(2);
+}
+
+function resolveManualResidentRoom(sub: NormalizedSub, roomId: string) {
+  const id = roomId.trim();
+  if (id) {
+    const byId = sub.rooms.find((r) => r.id === id);
+    if (byId) return byId;
+  }
+  if (sub.rooms.length === 1) return sub.rooms[0]!;
+  return null;
+}
+
+/**
+ * Pricing for the manual add-resident form from the property listing (and room when
+ * selected). Mirrors `recordApprovedApplicationCharges` / placement preview precedence.
+ */
+export function resolveManualResidentPlacementValues(input: {
+  propertyId: string;
+  roomId: string;
+  leaseTerm: string;
+  leaseTermCustomMode: boolean;
+}): ManualResidentPricing | null {
+  const propertyId = input.propertyId.trim();
+  const leaseTerm = input.leaseTerm.trim();
+  if (!propertyId || !leaseTerm) return null;
+
+  const prop = getPropertyById(propertyId);
+  if (prop?.listingSubmission?.v !== 1) return null;
+  const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
+  const room = resolveManualResidentRoom(sub, input.roomId);
+
+  const appFields = residentLeaseTermToApplicationFields(leaseTerm, input.leaseTermCustomMode);
+  const rentalType = appFields.rentalType;
+
+  if (rentalType === "short_term") {
+    const stRentRaw = (room?.shortTermRent ?? "").trim() || sub.shortTermDailyCost;
+    const nightly = shortTermNightlyRate(stRentRaw);
+    const securityDeposit =
+      room?.shortTermDeposit?.trim()
+        ? parseMoneyAmount(room.shortTermDeposit)
+        : listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? "");
+    const moveInFee =
+      room?.shortTermMoveInFee?.trim()
+        ? parseMoneyAmount(room.shortTermMoveInFee)
+        : listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? "");
+    return {
+      rentalType,
+      rent: manualResidentMoneyField(nightly),
+      utilities: "0",
+      moveInFee: manualResidentMoneyField(moveInFee),
+      securityDeposit: manualResidentMoneyField(securityDeposit),
+    };
+  }
+
+  let rent = 0;
+  if (isEntireHomeListing(sub)) rent = entireHomeMonthlyRentAmount(sub);
+  else if (room?.monthlyRent && room.monthlyRent > 0) rent = room.monthlyRent;
+
+  const utilities = utilitiesBillableMonthlyAmount(sub, room ?? undefined);
+
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
+  const securityDeposit =
+    roomSecurityDeposit != null
+      ? parseMoneyAmount(roomSecurityDeposit)
+      : listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "");
+
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
+  const moveInFee =
+    roomMoveInFee != null
+      ? parseMoneyAmount(roomMoveInFee)
+      : listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "");
+
+  return {
+    rentalType,
+    rent: manualResidentMoneyField(rent),
+    utilities: manualResidentMoneyField(utilities),
+    moveInFee: manualResidentMoneyField(moveInFee),
+    securityDeposit: manualResidentMoneyField(securityDeposit),
   };
 }

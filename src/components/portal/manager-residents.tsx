@@ -46,6 +46,7 @@ import {
 import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
@@ -82,6 +83,8 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
+import { resolveManualResidentPlacementValues } from "@/lib/rental-application/placement-values";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   isResidentMonthToMonthLease,
@@ -92,6 +95,7 @@ import {
   residentLeaseTermToApplicationFields,
   shouldUseResidentLeaseCustomMode,
 } from "@/lib/resident-manual-lease-terms";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
@@ -661,6 +665,37 @@ export function ManagerResidents({
 
   const isMonthToMonthLease = isResidentMonthToMonthLease(arLeaseTerm);
 
+  const arManualLeaseFields = useMemo(
+    () => residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode),
+    [arLeaseTerm, arLeaseTermCustomMode],
+  );
+  const arIsShortTermStay = arManualLeaseFields.rentalType === "short_term";
+
+  useEffect(() => {
+    if (!addResidentOpen) return;
+    if (!arPropertyId.trim() || !arLeaseTerm.trim()) return;
+    const pricing = resolveManualResidentPlacementValues({
+      propertyId: arPropertyId,
+      roomId: arRoomId,
+      leaseTerm: arLeaseTerm,
+      leaseTermCustomMode: arLeaseTermCustomMode,
+    });
+    if (!pricing) return;
+    setArRent(pricing.rent);
+    setArUtilities(pricing.utilities);
+    setArMoveInFee(pricing.moveInFee);
+    setArSecurityDeposit(pricing.securityDeposit);
+  }, [addResidentOpen, arPropertyId, arRoomId, arLeaseTerm, arLeaseTermCustomMode, propertyTick]);
+
+  useEffect(() => {
+    if (!addResidentOpen) return;
+    if (arManualLeaseFields.rentalType === "short_term") return;
+    const term = arManualLeaseFields.leaseTerm;
+    if (!arMoveInDate.trim() || !shouldAutoComputeLeaseEnd(term, arManualLeaseFields.rentalType)) return;
+    const end = computeLeaseEndDate(arMoveInDate, term);
+    if (end) setArMoveOutDate(end);
+  }, [addResidentOpen, arMoveInDate, arLeaseTerm, arLeaseTermCustomMode, arManualLeaseFields.leaseTerm, arManualLeaseFields.rentalType]);
+
   const erLeaseTermSelectValue = useMemo(
     () => residentLeaseTermSelectValue(erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues),
     [erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues],
@@ -1083,16 +1118,13 @@ export function ManagerResidents({
         : `Lease start date: ${leaseStart}`
       : "";
     const subject = `Reminder: sign your lease for ${unit}`;
-    const body = [
-      `Hi ${res.name.split(" ")[0] ?? res.name},`,
-      "",
-      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
+    const body = buildLeaseReadyForResidentMessage({
+      residentName: res.name.split(" ")[0] ?? res.name,
+      residentEmail: recipient,
+      unit,
+      variant: "reminder",
       dateLine,
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].filter(Boolean).join("\n");
+    });
 
     setLeaseReminderPreview({
       res,
@@ -1105,17 +1137,12 @@ export function ManagerResidents({
 
   function leaseSentToResidentBody(res: ActiveResident, lease: LeasePipelineRow): string {
     const unit = lease.unit.trim() || "your unit";
-    return [
-      `Hi ${lease.residentName || res.name || "there"},`,
-      "",
-      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
-      "",
-      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].join("\n");
+    return buildLeaseReadyForResidentMessage({
+      residentName: lease.residentName || res.name || "there",
+      residentEmail: res.email.trim(),
+      unit,
+      variant: "send",
+    });
   }
 
   function openLeaseSendPreview(res: ActiveResident, lease: LeasePipelineRow) {
@@ -1225,6 +1252,7 @@ export function ManagerResidents({
       const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
       const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
       const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
+      const hasUploadedLeasePdf = Boolean(arSignedLeaseDataUrl.trim());
       const nextRow: DemoApplicantRow = {
         id: axisId,
         name: arName.trim(),
@@ -1250,7 +1278,7 @@ export function ManagerResidents({
           signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
           signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
           signedLeaseUploadedAt,
-          externallySignedLease: true,
+          ...(hasUploadedLeasePdf ? { externallySignedLease: true as const } : {}),
         },
         application: arAppLeaseFields.leaseTerm
           ? // Manual add-resident supplies only the lease-relevant fields; the rest of the
@@ -1939,6 +1967,7 @@ export function ManagerResidents({
                                   </PortalTableDetailActions>
                                   <LeaseDocumentPreview
                                     row={residentLease}
+                                    suppressApplicationDraft={Boolean(selected.manuallyAdded)}
                                     emptyHint="No lease document yet. Generate or upload one from Manager Review first."
                                   />
                                   {residentLease.thread.length ? (
@@ -2283,12 +2312,18 @@ export function ManagerResidents({
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
-<ManagerPortalFilterActions className="hidden md:flex">
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
+<ManagerPortalFilterActions>
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([propertyFilter])}
+              onReset={() => setPropertyFilter("")}
+              dataAttr="residents-filter-sheet-open"
+            >
+              <PortalPropertyFilterPill
+                propertyOptions={propertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={setPropertyFilter}
+              />
+            </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
           </ManagerPortalFilterRow>
         }
@@ -2608,8 +2643,7 @@ export function ManagerResidents({
       >
         <div className="space-y-3">
           <p className="text-xs text-muted">
-            Onboard an existing tenant: creates an active resident record, treats the lease as already signed,
-            sets up payments, and can email portal instructions (no application or screening).
+            Onboard an existing tenant: creates an active resident record, sets up payments, and can email portal instructions (no application or screening). Generate or upload a lease in Manager Review unless you attach an already-signed PDF below.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -2647,7 +2681,6 @@ export function ManagerResidents({
                   setArLeaseTermCustomMode(false);
                   setArLeaseTerm(selected);
                 }}
-               
               >
                 <option value="">Select…</option>
                 {arLeaseTermOptions.map((opt) => (
@@ -2691,8 +2724,15 @@ export function ManagerResidents({
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Monthly rent ($)</span>
-              <Input type="number" min={0} step={0.01} value={arRent} onChange={(e) => setArRent(e.target.value)} placeholder="875.00" />
+              <span className="font-medium text-muted">{arIsShortTermStay ? "Daily rate ($)" : "Monthly rent ($)"}</span>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={arRent}
+                onChange={(e) => setArRent(e.target.value)}
+                placeholder={arIsShortTermStay ? "225.00" : "875.00"}
+              />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Monthly utilities ($)</span>

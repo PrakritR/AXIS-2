@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
 import { type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
@@ -84,7 +83,6 @@ export function ManagerCommunication({
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [threadOpen, setThreadOpen] = useState(false);
 
   const filterContacts = useMemo(() => {
@@ -207,52 +205,16 @@ export function ManagerCommunication({
   );
 
   const threadFilters = (
-    <>
-      <div className="flex min-w-0 flex-1 md:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 min-w-0 flex-1 rounded-full text-xs font-semibold"
-          data-attr="communication-filter-sheet-open"
-          onClick={() => setFilterSheetOpen(true)}
-        >
-          <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
-          Filter &amp; sort{filterTouchCount > 0 ? ` · ${filterTouchCount} active` : ""}
-        </Button>
-      </div>
-      <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
-        {filterControls}
-      </div>
-      <Modal
-        open={filterSheetOpen}
-        title="Filter & sort"
-        onClose={() => setFilterSheetOpen(false)}
-        panelClassName="max-w-md"
-      >
-        <div className="flex flex-col gap-4">{filterControls}</div>
-        <div className="mt-5 flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 rounded-full"
-            onClick={() => {
-              setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
-              setListSort("recent");
-            }}
-          >
-            Reset
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="flex-1 rounded-full"
-            onClick={() => setFilterSheetOpen(false)}
-          >
-            Done
-          </Button>
-        </div>
-      </Modal>
-    </>
+    <PortalFilterSortSheet
+      activeCount={filterTouchCount}
+      onReset={() => {
+        setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
+        setListSort("recent");
+      }}
+      dataAttr="communication-filter-sheet-open"
+    >
+      {filterControls}
+    </PortalFilterSortSheet>
   );
 
   const titleAside = (

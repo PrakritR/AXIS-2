@@ -238,6 +238,7 @@ export function projectScheduledPaymentMessages(input: {
 
     const baseParams = {
       residentName: charge.residentName || "Resident",
+      residentEmail: charge.residentEmail.trim().toLowerCase(),
       chargeTitle: charge.title,
       balanceDue: charge.balanceLabel,
       propertyLabel: charge.propertyLabel,

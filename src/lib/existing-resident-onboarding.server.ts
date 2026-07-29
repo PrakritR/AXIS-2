@@ -61,31 +61,48 @@ export async function runExistingResidentOnboarding(
   const leaseId = `lease_app_${axisId}`;
   const manualPdf = manualResidentSignedLeasePdf(row);
 
-  const leaseRow = normalizeLeasePipelineRow({
-    id: leaseId,
-    residentName,
-    residentEmail: email,
-    unit: row.property?.trim() || "—",
-    updated: iso,
-    bucket: "signed",
-    pdfVersion: 1,
-    notes: "Existing resident — lease executed off-platform.",
-    updatedAtIso: iso,
-    axisId: row.id,
-    propertyId: propertyId || undefined,
-    managerUserId: actor.userId,
-    managerUploadedPdf: manualPdf,
-    managerSignature: { role: "manager", name: managerName, signedAtIso: iso },
-    residentSignature: { role: "resident", name: residentName, signedAtIso: iso },
-    signatureName: residentName,
-    signedAtIso: iso,
-    sentToResidentAt: iso,
-    fullySignedAt: iso,
-    residentSignedAt: iso,
-    managerSignedAt: iso,
-    externallySignedLease: true,
-    thread: [],
-  });
+  const leaseRow = manualPdf
+    ? normalizeLeasePipelineRow({
+        id: leaseId,
+        residentName,
+        residentEmail: email,
+        unit: row.property?.trim() || "—",
+        updated: iso,
+        bucket: "signed",
+        pdfVersion: 1,
+        notes: "Existing resident — lease executed off-platform.",
+        updatedAtIso: iso,
+        axisId: row.id,
+        propertyId: propertyId || undefined,
+        managerUserId: actor.userId,
+        managerUploadedPdf: manualPdf,
+        managerSignature: { role: "manager", name: managerName, signedAtIso: iso },
+        residentSignature: { role: "resident", name: residentName, signedAtIso: iso },
+        signatureName: residentName,
+        signedAtIso: iso,
+        sentToResidentAt: iso,
+        fullySignedAt: iso,
+        residentSignedAt: iso,
+        managerSignedAt: iso,
+        externallySignedLease: true,
+        thread: [],
+      })
+    : normalizeLeasePipelineRow({
+        id: leaseId,
+        residentName,
+        residentEmail: email,
+        unit: row.property?.trim() || "—",
+        updated: iso,
+        bucket: "manager",
+        pdfVersion: 1,
+        notes: "Manager-added resident — generate or upload a lease.",
+        updatedAtIso: iso,
+        axisId: row.id,
+        propertyId: propertyId || undefined,
+        managerUserId: actor.userId,
+        application: row.application ?? undefined,
+        thread: [],
+      });
 
   // `leaseId` is derived from the application's axis id, which is the SAME id
   // space real approved-application leases use, and the route falls back to a
@@ -133,7 +150,7 @@ export async function runExistingResidentOnboarding(
       manualResidentDetails: {
         ...row.manualResidentDetails,
         onboardingWelcomeSentAt: iso,
-        externallySignedLease: true,
+        ...(manualPdf ? { externallySignedLease: true as const } : {}),
       },
     };
     await db

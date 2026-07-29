@@ -2,10 +2,9 @@
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/input";
+import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
@@ -186,7 +185,6 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [listSort, setListSort] = useState<PaymentListSort>(DEFAULT_PAYMENT_LIST_SORT);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
@@ -566,85 +564,49 @@ export function ManagerPayments() {
           }}
         />
       </div>
-      <div className="flex min-w-0 flex-1 md:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 min-w-0 flex-1 rounded-full text-xs font-semibold"
-          data-attr="payments-filter-sheet-open"
-          onClick={() => setFilterSheetOpen(true)}
-        >
-          <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
-          Filter &amp; sort{filterTouchCount > 0 ? ` · ${filterTouchCount} active` : ""}
-        </Button>
-      </div>
-      <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
-        {filterControls}
-      </div>
-      <Modal
-        open={filterSheetOpen}
-        title="Filter & sort"
-        onClose={() => setFilterSheetOpen(false)}
-        panelClassName="max-w-md"
+      <PortalFilterSortSheet
+        activeCount={filterTouchCount}
+        onReset={resetPaymentFilters}
+        dataAttr="payments-filter-sheet-open"
+        extraModalContent={
+          direction === "incoming" ? (
+            <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => setReminderSettingsOpen(true)}
+                data-attr="payments-reminder-settings-mobile"
+              >
+                Reminders
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => setPaymentSetupOpen(true)}
+                data-attr="payments-setup-mobile"
+              >
+                Payment setup
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-4 border-t border-border pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => setPaymentSetupOpen(true)}
+                data-attr="payments-setup-mobile"
+              >
+                Payment setup
+              </Button>
+            </div>
+          )
+        }
       >
-        <div className="flex flex-col gap-4">{filterControls}</div>
-        {direction === "incoming" ? (
-          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => {
-                setFilterSheetOpen(false);
-                setReminderSettingsOpen(true);
-              }}
-              data-attr="payments-reminder-settings-mobile"
-            >
-              Reminders
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => {
-                setFilterSheetOpen(false);
-                setPaymentSetupOpen(true);
-              }}
-              data-attr="payments-setup-mobile"
-            >
-              Payment setup
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-4 border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              onClick={() => {
-                setFilterSheetOpen(false);
-                setPaymentSetupOpen(true);
-              }}
-              data-attr="payments-setup-mobile"
-            >
-              Payment setup
-            </Button>
-          </div>
-        )}
-        <div className="mt-5 flex gap-2">
-          <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={resetPaymentFilters}>
-            Reset
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="flex-1 rounded-full"
-            onClick={() => setFilterSheetOpen(false)}
-          >
-            Done
-          </Button>
-        </div>
-      </Modal>
+        {filterControls}
+      </PortalFilterSortSheet>
     </ManagerPortalFilterRow>
   );
 

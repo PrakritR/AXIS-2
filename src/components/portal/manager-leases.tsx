@@ -15,6 +15,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -207,11 +208,17 @@ export function ManagerLeases() {
             onChange={(id) => setTab(id as ManagerLeaseTab)}
           />
 <ManagerPortalFilterActions>
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="leases-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }

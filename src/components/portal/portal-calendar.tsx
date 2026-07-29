@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -357,14 +357,18 @@ export function PortalCalendar({
 
   const calendarPropertyFilter =
     portal === "manager" ? (
-      <ManagerPortalFilterActions>
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([activeCalendarPropertyId])}
+        onReset={() => setCalendarPropertyId("")}
+        dataAttr="calendar-filter-sheet-open"
+      >
         <PortalPropertyFilterPill
           propertyOptions={managerPropertyFilterOptions}
           propertyValue={activeCalendarPropertyId}
           onPropertyChange={setCalendarPropertyId}
           propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All properties"}
         />
-      </ManagerPortalFilterActions>
+      </PortalFilterSortSheet>
     ) : null;
 
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";

@@ -17,6 +17,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
@@ -811,11 +812,17 @@ export function ManagerApplications() {
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
 <ManagerPortalFilterActions>
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={(id) => setPropertyFilter(id)}
-          />
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="applications-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(id) => setPropertyFilter(id)}
+            />
+          </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }

@@ -12,6 +12,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -1501,11 +1502,17 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             onChange={(id) => setTeamLinkFilter(id === "pending" ? "pending" : "linked")}
           />
           <ManagerPortalFilterActions>
-            <PortalPropertyFilterPill
-              propertyOptions={teamFilterPropertyOptions}
-              propertyValue={teamPropertyFilter}
-              onPropertyChange={setTeamPropertyFilter}
-            />
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([teamPropertyFilter])}
+              onReset={() => setTeamPropertyFilter("")}
+              dataAttr="team-links-filter-sheet-open"
+            >
+              <PortalPropertyFilterPill
+                propertyOptions={teamFilterPropertyOptions}
+                propertyValue={teamPropertyFilter}
+                onPropertyChange={setTeamPropertyFilter}
+              />
+            </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalStatusFilterRow>
       }

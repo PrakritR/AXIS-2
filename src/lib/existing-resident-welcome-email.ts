@@ -38,7 +38,7 @@ export function buildExistingResidentWelcomeEmailBody(params: {
     "Create your resident portal account here:",
     params.signupUrl,
     "",
-    "Use the same email address shown on your lease when you create your account.",
+    "Use the same email address on your lease or application when you sign in. Continue with Google usually works when that email is a Gmail account.",
     "",
     "— PropLane",
   ].join("\n");

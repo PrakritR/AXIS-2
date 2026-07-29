@@ -2,6 +2,7 @@
 
 import type { NotificationCategory } from "@/lib/notification-preferences";
 import { residentPortalUrl } from "@/lib/claw-resident-links";
+import { appendResidentPortalLoginInstructions } from "@/lib/resident-portal-login-copy";
 
 export type PortalMessageDeliveryResult = {
   ok: boolean;
@@ -56,6 +57,7 @@ export async function deliverPortalInboxMessage(input: {
 
 export function buildNewChargeNoticeBody(input: {
   residentName: string;
+  residentEmail?: string;
   chargeTitle: string;
   amountLabel: string;
   dueDateLabel?: string;
@@ -79,5 +81,8 @@ export function buildNewChargeNoticeBody(input: {
     "",
     "PropLane",
   );
-  return lines.join("\n");
+  return appendResidentPortalLoginInstructions(lines.join("\n"), {
+    residentEmail: input.residentEmail,
+    afterLoginHint: "payments",
+  });
 }

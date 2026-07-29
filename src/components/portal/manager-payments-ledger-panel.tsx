@@ -306,6 +306,7 @@ export function ManagerPaymentsLedgerPanel({
     });
     const body = buildPaymentReminderBody({
       residentName,
+      residentEmail: row.residentEmail?.trim(),
       chargeTitle,
       balanceDue: row.balanceDue,
       dueDate: row.dueDate,

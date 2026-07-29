@@ -317,6 +317,7 @@ export function ManagerAddPaymentModal({
         draft?.body?.trim() ||
         buildNewChargeNoticeBody({
           residentName: noticePreview.residentName,
+          residentEmail: noticePreview.residentEmail,
           chargeTitle: noticePreview.chargeTitle,
           amountLabel,
           dueDateLabel: noticePreview.dueDateLabel,
@@ -350,6 +351,7 @@ export function ManagerAddPaymentModal({
     noticePreview &&
     buildNewChargeNoticeBody({
       residentName: noticePreview.residentName,
+      residentEmail: noticePreview.residentEmail,
       chargeTitle: noticePreview.chargeTitle,
       amountLabel: `$${noticePreview.amount.toFixed(2)}`,
       dueDateLabel: noticePreview.dueDateLabel,

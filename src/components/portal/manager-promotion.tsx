@@ -11,6 +11,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
@@ -705,11 +706,17 @@ export function ManagerPromotion() {
             onChange={(id) => setContentFilter(id as PromotionContentFilter)}
           />
           <ManagerPortalFilterActions>
-            <PortalPropertyFilterPill
-              propertyOptions={filterPropertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([propertyFilter])}
+              onReset={() => setPropertyFilter("")}
+              dataAttr="promotion-filter-sheet-open"
+            >
+              <PortalPropertyFilterPill
+                propertyOptions={filterPropertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={setPropertyFilter}
+              />
+            </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalStatusFilterRow>
       }

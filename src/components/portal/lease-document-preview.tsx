@@ -9,6 +9,8 @@ type Props = {
   row: LeasePipelineRow;
   /** Shown when there is no PDF and no generated HTML */
   emptyHint?: string;
+  /** When true, do not render a synthetic draft from application answers (manual add-resident). */
+  suppressApplicationDraft?: boolean;
   className?: string;
 };
 
@@ -24,7 +26,7 @@ function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | 
 /**
  * Preview of uploaded PDF, saved generated HTML, or a read-only draft built from application data.
  */
-export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
+export function LeaseDocumentPreview({ row, emptyHint, suppressApplicationDraft, className }: Props) {
   const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
   const html = getLeaseDocumentHtml(row);
   const defaultEmpty =
@@ -32,9 +34,9 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
     "No lease document yet. Click Generate lease (from application data) or upload a PDF to preview it here.";
 
   const syntheticHtml = useMemo(() => {
-    if (pdfSrc || html || row.leaseDocumentRemovedAt) return null;
+    if (suppressApplicationDraft || pdfSrc || html || row.leaseDocumentRemovedAt) return null;
     return draftHtmlFromApplication(row.application ?? undefined);
-  }, [pdfSrc, html, row.application, row.leaseDocumentRemovedAt]);
+  }, [pdfSrc, html, row.application, row.leaseDocumentRemovedAt, suppressApplicationDraft]);
 
   const showSynthetic = Boolean(syntheticHtml);
 

@@ -3,7 +3,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
@@ -11,6 +10,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   buildManagerPropertyFilterOptions,
@@ -274,7 +274,17 @@ export function ManagerAllServicesPanel({
   );
 
   const portfolioScopeFilters = (
-    <ManagerPortalFilterActions>
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([
+        propertyFilter,
+        typeFilter !== "vendors" ? activeResidentFilter : "",
+      ])}
+      onReset={() => {
+        setPropertyFilter("");
+        setResidentFilter("");
+      }}
+      dataAttr="services-filter-sheet-open"
+    >
       <PortalPropertyFilterPill
         propertyOptions={filterPropertyOptions}
         propertyValue={propertyFilter}
@@ -287,7 +297,7 @@ export function ManagerAllServicesPanel({
         residentValue={activeResidentFilter}
         onResidentChange={setResidentFilter}
       />
-    </ManagerPortalFilterActions>
+    </PortalFilterSortSheet>
   );
 
   const renderRequestDetail = (req: ServiceRequest) => {
@@ -362,7 +372,9 @@ export function ManagerAllServicesPanel({
       <div className="mt-1">
         {typeFilter === "vendors" ? (
           <>
-            <div className="mb-4 flex w-full justify-end">{portfolioScopeFilters}</div>
+            <ManagerPortalStatusFilterRow className="mb-4 justify-end">
+              {portfolioScopeFilters}
+            </ManagerPortalStatusFilterRow>
             <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
           </>
         ) : typeFilter === "work-orders" ? (

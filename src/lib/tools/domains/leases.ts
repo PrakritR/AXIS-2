@@ -18,6 +18,7 @@ import { loadManagerApplications } from "./residents";
 import { findOwnedResident } from "./residents-logic";
 import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease } from "@/lib/lease-amendment.server";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { loadAllManagerRows } from "./load-manager-rows";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 
@@ -411,7 +412,12 @@ export const sendLeaseForSignatureTool = defineWriteTool({
         senderEmail: ctx.email,
         fromName,
         subject: "Your lease is ready to sign",
-        text: `Your lease${row.unit && row.unit !== "—" ? ` for ${row.unit}` : ""} is ready for your electronic signature. Log in to your PropLane resident portal to review and sign it.`,
+        text: buildLeaseReadyForResidentMessage({
+          residentName: row.residentName || "there",
+          residentEmail,
+          unit: row.unit && row.unit !== "—" ? row.unit : "your unit",
+          variant: "send",
+        }),
         toEmails: [residentEmail],
         deliverToPortalInbox: true,
         deliverViaEmail: true,
