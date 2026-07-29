@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { QuickActionRow } from "@/components/ui/quick-action-row";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
   PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
@@ -539,103 +540,101 @@ export function ManagerPayments({
     setListSort(DEFAULT_PAYMENT_LIST_SORT);
   };
 
-  const filterRow = (
-    <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-      <DestinationNav
-        items={DIRECTION_LABELS.map((d) => ({
+  const paymentsHeaderActions = (
+    <PortalSectionActionRow>
+      {direction === "incoming" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={() => setReminderSettingsOpen(true)}
+          data-attr="payments-reminder-settings"
+        >
+          Reminders
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => setPaymentSetupOpen(true)}
+        data-attr="payments-setup"
+      >
+        Payment setup
+      </Button>
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+        data-attr="payments-add"
+      >
+        Add
+      </Button>
+    </PortalSectionActionRow>
+  );
+
+  const paymentsFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={filterTouchCount}
+      onReset={resetPaymentFilters}
+      dataAttr="payments-filter-sheet-open"
+      extraModalContent={
+        direction === "incoming" ? (
+          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => setReminderSettingsOpen(true)}
+              data-attr="payments-reminder-settings-mobile"
+            >
+              Reminders
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => setPaymentSetupOpen(true)}
+              data-attr="payments-setup-mobile"
+            >
+              Payment setup
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-4 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => setPaymentSetupOpen(true)}
+              data-attr="payments-setup-mobile"
+            >
+              Payment setup
+            </Button>
+          </div>
+        )
+      }
+    >
+      {filterControls}
+    </PortalFilterSortSheet>
+  );
+
+  return (
+    <ManagerPortalPageShell title="Payments" compactFilterRow>
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={paymentsFilterSheet}
+        primaryAction={paymentsHeaderActions}
+        destinations={DIRECTION_LABELS.map((d) => ({
           id: d.id,
           label: d.label,
           href: `${paymentsBase}/${d.id}/pending`,
           dataAttr: `payments-direction-${d.id}`,
         }))}
-        activeId={direction}
-        ariaLabel="Payment direction"
+        activeDestinationId={direction}
+        destinationAriaLabel="Payment direction"
       />
-      <PortalFilterSortSheet
-        activeCount={filterTouchCount}
-        onReset={resetPaymentFilters}
-        dataAttr="payments-filter-sheet-open"
-        extraModalContent={
-          direction === "incoming" ? (
-            <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-full"
-                onClick={() => setReminderSettingsOpen(true)}
-                data-attr="payments-reminder-settings-mobile"
-              >
-                Reminders
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-full"
-                onClick={() => setPaymentSetupOpen(true)}
-                data-attr="payments-setup-mobile"
-              >
-                Payment setup
-              </Button>
-            </div>
-          ) : (
-            <div className="mt-4 border-t border-border pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-full"
-                onClick={() => setPaymentSetupOpen(true)}
-                data-attr="payments-setup-mobile"
-              >
-                Payment setup
-              </Button>
-            </div>
-          )
-        }
-      >
-        {filterControls}
-      </PortalFilterSortSheet>
-    </ManagerPortalFilterRow>
-  );
-
-  return (
-    <ManagerPortalPageShell
-      title="Payments"
-      compactFilterRow
-      titleAside={
-        <>
-          {direction === "incoming" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => setReminderSettingsOpen(true)}
-              data-attr="payments-reminder-settings"
-            >
-              Reminders
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setPaymentSetupOpen(true)}
-            data-attr="payments-setup"
-          >
-            Payment setup
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
-            data-attr="payments-add"
-          >
-            Add
-          </Button>
-        </>
-      }
-      filterRow={filterRow}
-    >
       <div className="mt-1 space-y-3">
         <DestinationNav
           items={tabs.map((t) => ({

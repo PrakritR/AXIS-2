@@ -127,6 +127,10 @@ export function ManagerUnifiedInbox({
   inboxRef,
   smsRef,
   onThreadOpenChange,
+  searchQuery: searchQueryProp,
+  onSearchQueryChange,
+  listChrome = "internal",
+  onFolderCountsChange,
 }: {
   tabId: string;
   commBase: string;
@@ -141,6 +145,12 @@ export function ManagerUnifiedInbox({
   inboxRef?: React.RefObject<ManagerInboxHandle | null>;
   smsRef?: React.RefObject<ManagerSmsPanelHandle | null>;
   onThreadOpenChange?: (open: boolean) => void;
+  /** Controlled search when list chrome is rendered by the parent control stack. */
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
+  /** `external` — segment tabs + search live in {@link PortalListControlStack}. */
+  listChrome?: "internal" | "external";
+  onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
@@ -148,7 +158,9 @@ export function ManagerUnifiedInbox({
   const [smsResidents, setSmsResidents] = useState<ManagerSmsResidentConversation[]>([]);
   const [smsOpenedIds, setSmsOpenedIds] = useState<Set<string>>(() => loadSmsOpenedIds());
   const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
-  const [query, setQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const query = onSearchQueryChange ? (searchQueryProp ?? "") : internalQuery;
+  const setQuery = onSearchQueryChange ?? setInternalQuery;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const listSegment = listSegmentProp;
@@ -351,6 +363,10 @@ export function ManagerUnifiedInbox({
     return emailUnread + smsUnread;
   }, [filteredEmail, allSmsItems]);
 
+  useEffect(() => {
+    onFolderCountsChange?.({ unread: unreadCount, archived: archivedCount });
+  }, [archivedCount, onFolderCountsChange, unreadCount]);
+
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
   useEffect(() => {
@@ -381,46 +397,52 @@ export function ManagerUnifiedInbox({
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
-        <DestinationNav
-          items={[
-            { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
-            {
-              id: "unread",
-              label: "Unread",
-              href: `${commBase}/unread`,
-              count: unreadCount,
-              dataAttr: "communication-segment-unread",
-            },
-            {
-              id: "archived",
-              label: "Archived",
-              href: `${commBase}/archived`,
-              count: archivedCount,
-              dataAttr: "communication-segment-archived",
-            },
-          ]}
-          activeId={listSegment}
-          ariaLabel="Conversation folders"
-          className="mb-2"
-        />
-        <div className="relative min-w-0">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search residents or messages"
-            className="portal-inbox-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-            data-attr="unified-inbox-search"
+      {listChrome === "internal" ? (
+        <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
+          <DestinationNav
+            items={[
+              { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+              {
+                id: "unread",
+                label: "Unread",
+                href: `${commBase}/unread`,
+                count: unreadCount,
+                dataAttr: "communication-segment-unread",
+              },
+              {
+                id: "archived",
+                label: "Archived",
+                href: `${commBase}/archived`,
+                count: archivedCount,
+                dataAttr: "communication-segment-archived",
+              },
+            ]}
+            activeId={listSegment}
+            ariaLabel="Conversation folders"
+            className="mb-2"
           />
+          <div className="relative min-w-0">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search residents or messages"
+              className="portal-inbox-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+              data-attr="unified-inbox-search"
+            />
+          </div>
+          {mergedRows.length > 0 ? (
+            <p className="hidden px-1 text-[11px] text-muted sm:block">
+              {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
+              {query.trim() ? ` matching “${query.trim()}”` : ""}
+            </p>
+          ) : null}
         </div>
-        {mergedRows.length > 0 ? (
-          <p className="hidden px-1 text-[11px] text-muted sm:block">
-            {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
-            {query.trim() ? ` matching “${query.trim()}”` : ""}
-          </p>
-        ) : null}
-      </div>
+      ) : mergedRows.length > 0 && query.trim() ? (
+        <p className="mb-2 hidden px-1 text-[11px] text-muted sm:block">
+          {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"} matching “{query.trim()}”
+        </p>
+      ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {mergedRows.length === 0 ? (
           <div className="p-4">

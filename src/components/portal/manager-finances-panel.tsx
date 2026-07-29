@@ -4,16 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalFilterActions,
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { ManagerBankReconciliationPanel } from "@/components/portal/manager-bank-reconciliation-panel";
 import { ManagerBillsPanel } from "@/components/portal/manager-bills-panel";
 import { ManagerBudgetsPanel } from "@/components/portal/manager-budgets-panel";
@@ -793,7 +792,7 @@ export function ManagerFinancesPanel({
   }
 
   const headerActions = (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+    <PortalSectionActionRow>
       {tabId === "owner-statement" ? (
         <a
           href={`/api/reports/owner-statement/formal-export?${query}`}
@@ -821,37 +820,35 @@ export function ManagerFinancesPanel({
           Add expense
         </PortalSectionPrimaryButton>
       ) : null}
-    </div>
+    </PortalSectionActionRow>
   );
 
   return (
-    <ManagerPortalPageShell
-      title="Finances"
-      compactFilterRow
-      titleAside={headerActions}
-      filterRow={
-        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <DestinationNav items={financeTabItems} activeId={tabId} ariaLabel="Finance report" />
-          {showScopedReportFilters ? (
-            <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
-              <PortalFilterSortSheet
-                activeCount={portalFilterActiveCount([
-                  filters.propertyId,
-                  rowFilters.resident,
-                  rowFilters.type,
-                  rowFilters.category,
-                  rowFilters.vendor,
-                ])}
-                onReset={resetFinanceFilters}
-                dataAttr="finances-filter-sheet-open"
-              >
-                {financeFilterControls}
-              </PortalFilterSortSheet>
-            </ManagerPortalFilterActions>
-          ) : null}
-        </ManagerPortalFilterRow>
-      }
-    >
+    <ManagerPortalPageShell title="Finances" compactFilterRow>
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
+          showScopedReportFilters ? (
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([
+                filters.propertyId,
+                rowFilters.resident,
+                rowFilters.type,
+                rowFilters.category,
+                rowFilters.vendor,
+              ])}
+              onReset={resetFinanceFilters}
+              dataAttr="finances-filter-sheet-open"
+            >
+              {financeFilterControls}
+            </PortalFilterSortSheet>
+          ) : undefined
+        }
+        primaryAction={headerActions}
+        destinations={financeTabItems}
+        activeDestinationId={tabId}
+        destinationAriaLabel="Finance report"
+      />
       {tabId === "bills" ? (
         <ManagerBillsPanel />
       ) : tabId === "bank-reconciliation" ? (

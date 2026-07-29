@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -396,62 +397,59 @@ export function PortalCalendar({
 
   return (
     <>
-      <ManagerPortalPageShell
-        title={pageTitle}
-        titleAside={
-          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-            {portal === "manager" ? (
-              <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
-            ) : null}
-            {portal === "manager" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                disabled={shareableProperties.length === 0 || calendarView === "services"}
-                title={
-                  calendarView === "services"
-                    ? "Switch to Tours or All to share a tour link"
-                    : shareableProperties.length === 0
-                      ? "List a property as active before sharing tour links"
-                      : "Share tour links"
-                }
-                onClick={() => setShareTourModalOpen(true)}
-              >
-                Share tour
-              </Button>
-            ) : null}
-          </div>
-        }
-        filterRow={
-          portal === "manager" && showCoManagerCoordination ? (
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 accent-primary"
-                checked={shareAvailability}
-                onChange={(e) => setShareAvailabilityPreference(e.target.checked)}
-              />
-              <span>
-                <span className="font-semibold text-foreground">Share availability with co-managers</span>
-                <span className="mt-0.5 block text-xs text-muted">
-                  Linked managers on this house can see when you are open for tours. You only see their availability when they opt in too.
-                </span>
-              </span>
-            </label>
-          ) : undefined
-        }
-      >
+      <ManagerPortalPageShell title={pageTitle}>
         {portal === "manager" ? (
-          <div className="mt-1">
-            <ManagerPortalStatusFilterRow>
+          <PortalListControlStack
+            className="mb-3"
+            filterRow={calendarPropertyFilter ?? undefined}
+            primaryAction={
+              <PortalSectionActionRow>
+                <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                  disabled={shareableProperties.length === 0 || calendarView === "services"}
+                  title={
+                    calendarView === "services"
+                      ? "Switch to Tours or All to share a tour link"
+                      : shareableProperties.length === 0
+                        ? "List a property as active before sharing tour links"
+                        : "Share tour links"
+                  }
+                  onClick={() => setShareTourModalOpen(true)}
+                >
+                  Share tour
+                </Button>
+              </PortalSectionActionRow>
+            }
+            destinationRow={
               <ManagerPortalStatusPills
                 tabs={calendarTabs}
                 activeId={calendarView}
                 onChange={(id) => setCalendarView(id as ManagerCalendarView)}
               />
-              {calendarPropertyFilter}
-            </ManagerPortalStatusFilterRow>
+            }
+          />
+        ) : null}
+        {portal === "manager" && showCoManagerCoordination ? (
+          <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-primary"
+              checked={shareAvailability}
+              onChange={(e) => setShareAvailabilityPreference(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold text-foreground">Share availability with co-managers</span>
+              <span className="mt-0.5 block text-xs text-muted">
+                Linked managers on this house can see when you are open for tours. You only see their availability when they opt in too.
+              </span>
+            </span>
+          </label>
+        ) : null}
+        {portal === "manager" ? (
+          <div className="mt-1">
             {calendarView !== "services" ? (
               <div className="mb-4">
                 <TourProposalsPanel />

@@ -12,6 +12,7 @@ import {
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
@@ -214,7 +215,7 @@ export function ManagerProperties({
   };
 
   const propertiesHeaderActions = (
-    <>
+    <PortalSectionActionRow>
       <Button
         type="button"
         variant="outline"
@@ -237,7 +238,7 @@ export function ManagerProperties({
       >
         {!skuLoaded ? "Loading…" : "Create"}
       </Button>
-    </>
+    </PortalSectionActionRow>
   );
 
   return (

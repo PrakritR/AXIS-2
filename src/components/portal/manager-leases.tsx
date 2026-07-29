@@ -3,19 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DestinationNav } from "@/components/ui/destination-nav";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -179,41 +178,40 @@ export function ManagerLeases({
     return buildManagerShareablePropertyOptions(userId);
   }, [userId, propertyTick]);
 
+  const leasesHeaderActions = (
+    <PortalSectionActionRow>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="leases-share"
+        disabled={shareableProperties.length === 0}
+        title={shareableProperties.length === 0 ? "List a property as active before sharing" : "Share listing links"}
+        onClick={() => setShareLeasesOpen(true)}
+      >
+        Share
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="leases-edit-properties"
+        disabled={editablePropertyOptions.length === 0}
+        title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
+        onClick={() => setEditLeasesOpen(true)}
+      >
+        Edit
+        <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+      </Button>
+    </PortalSectionActionRow>
+  );
+
   return (
     <>
-    <ManagerPortalPageShell
-      title="Leases"
-      compactFilterRow
-      titleAside={
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="leases-share"
-            disabled={shareableProperties.length === 0}
-            title={shareableProperties.length === 0 ? "List a property as active before sharing" : "Share listing links"}
-            onClick={() => setShareLeasesOpen(true)}
-          >
-            Share
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="leases-edit-properties"
-            disabled={editablePropertyOptions.length === 0}
-            title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
-            onClick={() => setEditLeasesOpen(true)}
-          >
-            Edit
-            <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-          </Button>
-        </div>
-      }
-      filterRow={
-        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalFilterActions>
+    <ManagerPortalPageShell title="Leases" compactFilterRow>
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
           <PortalFilterSortSheet
             activeCount={portalFilterActiveCount([propertyFilter])}
             onReset={() => setPropertyFilter("")}
@@ -225,22 +223,19 @@ export function ManagerLeases({
               onPropertyChange={setPropertyFilter}
             />
           </PortalFilterSortSheet>
-          </ManagerPortalFilterActions>
-        </ManagerPortalFilterRow>
-      }
-    >
+        }
+        primaryAction={leasesHeaderActions}
+        destinations={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${leasesBase}/${t.id}`,
+          count: t.count,
+          dataAttr: t.dataAttr,
+        }))}
+        activeDestinationId={tab}
+        destinationAriaLabel="Lease pipeline stage"
+      />
       <div className="mt-1 space-y-3">
-        <DestinationNav
-          items={tabs.map((t) => ({
-            id: t.id,
-            label: t.label,
-            href: `${leasesBase}/${t.id}`,
-            count: t.count,
-            dataAttr: t.dataAttr,
-          }))}
-          activeId={tab}
-          ariaLabel="Lease pipeline stage"
-        />
         <ManagerLeasesPipelinePanel
           rows={rows}
           tab={tab}

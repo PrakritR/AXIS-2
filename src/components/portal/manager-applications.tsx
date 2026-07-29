@@ -18,6 +18,7 @@ import {
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   PortalDetailHeader,
   PortalListDetailPane,
@@ -840,7 +841,7 @@ export function ManagerApplications({
   };
 
   const applicationsHeaderActions = (
-    <>
+    <PortalSectionActionRow>
       <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
       <Button
         type="button"
@@ -873,7 +874,7 @@ export function ManagerApplications({
       >
         Send
       </Button>
-    </>
+    </PortalSectionActionRow>
   );
 
   return (

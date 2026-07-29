@@ -2,15 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import {
   PortalDetailHeader,
   PortalListDetailPane,
@@ -366,86 +365,93 @@ export function ManagerAllServicesPanel({
     );
   };
 
+  const servicesPrimaryAction = (
+    <PortalSectionActionRow>
+      {typeFilter === "vendors" ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={() => vendorsPanelRef.current?.openSettings()}
+          data-attr="manager-vendor-settings-open"
+        >
+          Vendor settings
+        </Button>
+      ) : null}
+      {typeFilter === "requests" ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="manager-service-request-add"
+          onClick={() => setAddRequestOpen(true)}
+        >
+          Add add-on service
+        </Button>
+      ) : null}
+      {typeFilter === "work-orders" ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="manager-work-order-add"
+          onClick={() => setAddWorkOrderOpen(true)}
+        >
+          Add work order
+        </Button>
+      ) : null}
+    </PortalSectionActionRow>
+  );
+
   return (
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
       compactFilterRow
       mobileHideFilterRow={mobileDetailOpen && typeFilter === "requests"}
       mobileFlush={mobileDetailOpen && typeFilter === "requests"}
-      titleAside={
-        <>
-          {typeFilter === "vendors" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => vendorsPanelRef.current?.openSettings()}
-              data-attr="manager-vendor-settings-open"
-            >
-              Vendor settings
-            </Button>
-          ) : null}
-          {typeFilter === "requests" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="manager-service-request-add"
-              onClick={() => setAddRequestOpen(true)}
-            >
-              Add add-on service
-            </Button>
-          ) : null}
-          {typeFilter === "work-orders" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="manager-work-order-add"
-              onClick={() => setAddWorkOrderOpen(true)}
-            >
-              Add work order
-            </Button>
-          ) : null}
-        </>
-      }
-      filterRow={
-        <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <DestinationNav
-            items={[
-              {
-                id: "requests",
-                label: "Add-on services",
-                href: `${basePath}/services/requests/pending`,
-                dataAttr: "manager-services-tab-requests",
-              },
-              {
-                id: "work-orders",
-                label: "Work orders",
-                href: `${basePath}/services/work-orders/open`,
-                dataAttr: "manager-services-tab-work-orders",
-              },
-              {
-                id: "vendors",
-                label: "Vendors",
-                href: `${basePath}/services/vendors`,
-                dataAttr: "manager-services-tab-vendors",
-              },
-            ]}
-            activeId={typeFilter}
-            ariaLabel="Services section"
-          />
-        </ManagerPortalFilterRow>
-      }
     >
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={typeFilter === "vendors" ? undefined : portfolioScopeFilters}
+        primaryAction={servicesPrimaryAction}
+        destinations={[
+          {
+            id: "requests",
+            label: "Add-on services",
+            href: `${basePath}/services/requests/pending`,
+            dataAttr: "manager-services-tab-requests",
+          },
+          {
+            id: "work-orders",
+            label: "Work orders",
+            href: `${basePath}/services/work-orders/open`,
+            dataAttr: "manager-services-tab-work-orders",
+          },
+          {
+            id: "vendors",
+            label: "Vendors",
+            href: `${basePath}/services/vendors`,
+            dataAttr: "manager-services-tab-vendors",
+          },
+        ]}
+        activeDestinationId={typeFilter}
+        destinationAriaLabel="Services section"
+        search={
+          typeFilter === "vendors"
+            ? undefined
+            : {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder:
+                  typeFilter === "work-orders" ? "Search maintenance requests" : "Search add-on services",
+                dataAttr:
+                  typeFilter === "work-orders" ? "services-work-orders-search" : "services-requests-search",
+              }
+        }
+      />
       <div className="mt-1 space-y-3">
         {typeFilter === "vendors" ? (
-          <>
-            <ManagerPortalStatusFilterRow className="mb-4 justify-end">
-              {portfolioScopeFilters}
-            </ManagerPortalStatusFilterRow>
-            <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
-          </>
+          <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
         ) : typeFilter === "work-orders" ? (
           <>
             <DestinationNav
@@ -457,17 +463,6 @@ export function ManagerAllServicesPanel({
               }))}
               activeId={woBucket}
               ariaLabel="Work order status"
-            />
-            <ManagerPortalStatusFilterRow className="justify-end">
-              {portfolioScopeFilters}
-            </ManagerPortalStatusFilterRow>
-            <PortalListToolbar
-              search={{
-                value: searchQuery,
-                onChange: setSearchQuery,
-                placeholder: "Search maintenance requests",
-                dataAttr: "services-work-orders-search",
-              }}
             />
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
@@ -486,17 +481,6 @@ export function ManagerAllServicesPanel({
               }))}
               activeId={reqBucket}
               ariaLabel="Add-on service status"
-            />
-            <ManagerPortalStatusFilterRow className="justify-end">
-              {portfolioScopeFilters}
-            </ManagerPortalStatusFilterRow>
-            <PortalListToolbar
-              search={{
-                value: searchQuery,
-                onChange: setSearchQuery,
-                placeholder: "Search add-on services",
-                dataAttr: "services-requests-search",
-              }}
             />
             {bucketedRequests.length === 0 ? (
               <PortalDataTableEmpty

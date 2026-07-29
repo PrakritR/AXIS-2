@@ -12,6 +12,8 @@ import {
 } from "@/components/portal/manager-communication-compose-modal";
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_ACTION_BTN, PortalToolbarSortSelect } from "@/components/portal/portal-metrics";
 import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import {
@@ -87,6 +89,8 @@ export function ManagerCommunication({
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
   const [threadOpen, setThreadOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -221,7 +225,7 @@ export function ManagerCommunication({
   );
 
   const titleAside = (
-    <>
+    <PortalSectionActionRow>
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
       <Button
         type="button"
@@ -232,16 +236,46 @@ export function ManagerCommunication({
       >
         New message
       </Button>
-    </>
+    </PortalSectionActionRow>
+  );
+
+  const controlStack = (
+    <PortalListControlStack
+      filterRow={threadFilters}
+      primaryAction={titleAside}
+      destinations={[
+        { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+        {
+          id: "unread",
+          label: "Unread",
+          href: `${commBase}/unread`,
+          count: folderCounts.unread,
+          dataAttr: "communication-segment-unread",
+        },
+        {
+          id: "archived",
+          label: "Archived",
+          href: `${commBase}/archived`,
+          count: folderCounts.archived,
+          dataAttr: "communication-segment-archived",
+        },
+      ]}
+      activeDestinationId={listSegment}
+      destinationAriaLabel="Conversation folders"
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: "Search residents or messages",
+        dataAttr: "unified-inbox-search",
+      }}
+    />
   );
 
   return (
     <PortalCommunicationShell
       title="Communication"
-      titleAside={titleAside}
-      threadFilters={threadFilters}
+      controlStack={controlStack}
       hideMobileFilterRow={threadOpen}
-      hideMobileTitleActions={threadOpen}
       mobileThreadReading={threadOpen}
     >
       <ManagerCommunicationComposeModal
@@ -265,6 +299,10 @@ export function ManagerCommunication({
         inboxRef={inboxRef}
         smsRef={smsRef}
         onThreadOpenChange={setThreadOpen}
+        listChrome="external"
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onFolderCountsChange={setFolderCounts}
       />
     </PortalCommunicationShell>
   );

@@ -4,19 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ManagerPortalPageShell,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
-  ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
 } from "@/lib/manager-portfolio-access";
 import { Button } from "@/components/ui/button";
-import { DestinationNav } from "@/components/ui/destination-nav";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -698,49 +695,43 @@ export function ManagerPromotion({
   };
 
   return (
-    <ManagerPortalPageShell
-      title="Promotion"
-      compactFilterRow
-      titleAside={
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => openNewPromotion()}
-          data-attr="promotion-new"
-        >
-          New promotion
-        </Button>
-      }
-      filterRow={
-        <ManagerPortalStatusFilterRow className="mb-0">
-          <DestinationNav
-            items={contentTabs.map((t) => ({
-              id: t.id,
-              label: t.label,
-              href: `${promotionBase}/${t.id}`,
-              count: t.count,
-              dataAttr: t.dataAttr,
-            }))}
-            activeId={contentFilter}
-            ariaLabel="Promotion content type"
-          />
-          <ManagerPortalFilterActions>
-            <PortalFilterSortSheet
-              activeCount={portalFilterActiveCount([propertyFilter])}
-              onReset={() => setPropertyFilter("")}
-              dataAttr="promotion-filter-sheet-open"
-            >
-              <PortalPropertyFilterPill
-                propertyOptions={filterPropertyOptions}
-                propertyValue={propertyFilter}
-                onPropertyChange={setPropertyFilter}
-              />
-            </PortalFilterSortSheet>
-          </ManagerPortalFilterActions>
-        </ManagerPortalStatusFilterRow>
-      }
-    >
+    <ManagerPortalPageShell title="Promotion" compactFilterRow>
+      <PortalListControlStack
+        className="mb-3"
+        filterRow={
+          <PortalFilterSortSheet
+            activeCount={portalFilterActiveCount([propertyFilter])}
+            onReset={() => setPropertyFilter("")}
+            dataAttr="promotion-filter-sheet-open"
+          >
+            <PortalPropertyFilterPill
+              propertyOptions={filterPropertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </PortalFilterSortSheet>
+        }
+        primaryAction={
+          <Button
+            type="button"
+            variant="primary"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => openNewPromotion()}
+            data-attr="promotion-new"
+          >
+            New promotion
+          </Button>
+        }
+        destinations={contentTabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${promotionBase}/${t.id}`,
+          count: t.count,
+          dataAttr: t.dataAttr,
+        }))}
+        activeDestinationId={contentFilter}
+        destinationAriaLabel="Promotion content type"
+      />
       <div data-attr="promotion-content-direct">
         <PromotionAssetStack
           assets={filteredAssets}

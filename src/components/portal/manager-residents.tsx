@@ -2387,9 +2387,11 @@ export function ManagerResidents({
           </PortalFilterSortSheet>
         }
         primaryAction={
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-            + Add
-          </Button>
+          <PortalSectionActionRow>
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add
+            </Button>
+          </PortalSectionActionRow>
         }
         destinations={[
           {
@@ -2673,7 +2675,7 @@ export function ManagerResidents({
               </div>
             </div>
           )}
-          <div className="flex flex-wrap justify-end gap-2 pt-1">
+          <PortalSectionActionRow className="pt-1">
             <Button
               type="button"
               variant="outline"
@@ -2692,7 +2694,7 @@ export function ManagerResidents({
             >
               {pmSaving ? "Saving…" : "Save"}
             </Button>
-          </div>
+          </PortalSectionActionRow>
         </div>
       </Modal>
 

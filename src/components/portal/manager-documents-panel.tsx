@@ -5,13 +5,12 @@ import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
@@ -306,46 +305,42 @@ export function ManagerDocumentsPanel({
       Boolean(incomeReceiptExportHref && generated));
 
   return (
-    <ManagerPortalPageShell
-      title="Documents"
-      titleAside={
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {hasExportActions ? (
-            <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
-          ) : null}
-          {isLibraryTab ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              onClick={() => libraryRef.current?.openUpload()}
-              disabled={isDemoModeActive()}
-              data-attr="document-upload-open"
-            >
-              Upload
-            </Button>
-          ) : null}
-          {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
-          <Button
-            type="button"
-            variant="primary"
-            className={PORTAL_HEADER_ACTION_BTN}
-            onClick={() => setGenerateModalOpen(true)}
-            disabled={loading}
-            data-attr="documents-generate-report"
-          >
-            {loading ? "Generating…" : "Generate report"}
-          </Button>
-          ) : null}
-        </div>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <DestinationNav items={documentTabItems} activeId={tabId} ariaLabel="Document views" />
-          {hasExportActions ? <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>{exportActions}</div> : null}
-        </ManagerPortalFilterRow>
-      }
-    >
+    <ManagerPortalPageShell title="Documents" compactFilterRow>
+      <PortalListControlStack
+        className="mb-3"
+        primaryAction={
+          <PortalSectionActionRow>
+            {hasExportActions ? exportActions : null}
+            {isLibraryTab ? (
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={() => libraryRef.current?.openUpload()}
+                disabled={isDemoModeActive()}
+                data-attr="document-upload-open"
+              >
+                Upload
+              </Button>
+            ) : null}
+            {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={() => setGenerateModalOpen(true)}
+                disabled={loading}
+                data-attr="documents-generate-report"
+              >
+                {loading ? "Generating…" : "Generate report"}
+              </Button>
+            ) : null}
+          </PortalSectionActionRow>
+        }
+        destinations={documentTabItems}
+        activeDestinationId={tabId}
+        destinationAriaLabel="Document views"
+      />
       <div className="space-y-4">
         {tabId === "library" ? (
           <ManagerDocumentLibrary ref={libraryRef} userId={userId ?? null} />

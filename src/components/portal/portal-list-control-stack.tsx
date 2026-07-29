@@ -16,6 +16,7 @@ export function PortalListControlStack({
   destinations,
   activeDestinationId,
   destinationAriaLabel = "Section views",
+  destinationRow,
   search,
   className,
 }: {
@@ -25,6 +26,8 @@ export function PortalListControlStack({
   destinations?: DestinationNavItem[];
   activeDestinationId?: string;
   destinationAriaLabel?: string;
+  /** When set, renders instead of {@link DestinationNav} (e.g. local-state pill rows). */
+  destinationRow?: ReactNode;
   search?: {
     value: string;
     onChange: (value: string) => void;
@@ -35,7 +38,7 @@ export function PortalListControlStack({
   className?: string;
 }) {
   const showFilterPrimary = filterRow || primaryAction;
-  const showDestinations = destinations && destinations.length > 0;
+  const showDestinations = Boolean(destinationRow) || (destinations && destinations.length > 0);
 
   if (!showFilterPrimary && !showDestinations && !search) return null;
 
@@ -52,11 +55,13 @@ export function PortalListControlStack({
         </div>
       ) : null}
       {showDestinations ? (
-        <DestinationNav
-          items={destinations}
-          activeId={activeDestinationId}
-          ariaLabel={destinationAriaLabel}
-        />
+        destinationRow ?? (
+          <DestinationNav
+            items={destinations!}
+            activeId={activeDestinationId}
+            ariaLabel={destinationAriaLabel}
+          />
+        )
       ) : null}
       {search ? (
         <Input
