@@ -19,7 +19,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { promotionListHref, type PromotionContentFilterId } from "@/lib/portal-detail-routes";
 import {
   DEMO_PROMOTION_AUTOFILL_EVENT,
   DEMO_PROMOTION_GENERATED_EVENT,
@@ -136,15 +136,13 @@ function flyerEntryToDraft(
 
 export function ManagerPromotion({
   contentFilter: contentFilterProp = "text",
-  basePath: basePathProp,
+  basePath = "/portal",
 }: {
   contentFilter?: PromotionContentFilter;
   basePath?: string;
 } = {}) {
   const { showToast } = useAppUi();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
-  const portalBase = usePaidPortalBasePath();
-  const promotionBase = basePathProp ?? `${portalBase}/promotion`;
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -224,10 +222,11 @@ export function ManagerPromotion({
   }, [propertyScopedAssets]);
 
   const contentTabs = useMemo(
-    () => [
-      { id: "text", label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
-      { id: "image", label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
-    ],
+    () =>
+      [
+        { id: "text" as const, label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
+        { id: "image" as const, label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
+      ] satisfies { id: PromotionContentFilterId; label: string; count: number; dataAttr: string }[],
     [contentCounts],
   );
 
@@ -729,7 +728,7 @@ export function ManagerPromotion({
         destinations={contentTabs.map((t) => ({
           id: t.id,
           label: t.label,
-          href: `${promotionBase}/${t.id}`,
+          href: promotionListHref(basePath, t.id),
           count: t.count,
           dataAttr: t.dataAttr,
         }))}

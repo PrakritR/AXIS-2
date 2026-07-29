@@ -99,7 +99,6 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   applicationDetailHref,
@@ -304,7 +303,7 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
 
 export function ManagerApplications({
   bucket: bucketProp = "pending",
-  basePath: basePathProp,
+  basePath = "/portal",
   applicationId: applicationIdProp,
 }: {
   bucket?: ManagerApplicationTabId;
@@ -316,8 +315,6 @@ export function ManagerApplications({
   const pathname = usePathname();
   const router = useRouter();
   const navigate = usePortalNavigate();
-  const portalBase = usePaidPortalBasePath();
-  const applicationsBase = basePathProp ?? `${portalBase}/applications`;
   const openHandled = useRef(false);
   const [bucket, setBucket] = useState<ManagerApplicationTabId>(bucketProp);
   const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
@@ -493,8 +490,8 @@ export function ManagerApplications({
     queueMicrotask(() => {
       const tab = tabForRow(hit);
       setBucket(tab);
-      router.replace(`${applicationsBase}/${tab}${window.location.search}`, { scroll: false });
-      navigate(applicationDetailHref(applicationsBase, tab, hit.id));
+      router.replace(`${applicationListHref(basePath, tab)}${window.location.search}`, { scroll: false });
+      navigate(applicationDetailHref(basePath, tab, hit.id));
     });
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -503,7 +500,7 @@ export function ManagerApplications({
     params.delete("axisId");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [scopedRows, pathname, router, applicationsBase, navigate]);
+  }, [scopedRows, pathname, router, basePath, navigate]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const result = await transitionApplicationBucket(id, nextBucket, {
@@ -517,7 +514,7 @@ export function ManagerApplications({
       return;
     }
 
-    router.push(applicationListHref(applicationsBase, nextBucket));
+    router.push(applicationListHref(basePath, nextBucket));
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
@@ -609,7 +606,7 @@ export function ManagerApplications({
     setRows(syncedRows);
 
     if (applicationIdProp) {
-      navigate(applicationListHref(applicationsBase, bucket));
+      navigate(applicationListHref(basePath, bucket));
     }
 
     showToast(
@@ -950,7 +947,7 @@ export function ManagerApplications({
           title={detailRow.name}
           subtitle={detailRow.email}
           avatarName={detailRow.name}
-          backHref={applicationListHref(applicationsBase, bucket)}
+          backHref={applicationListHref(basePath, bucket)}
           backLabel="Back to applications"
           dataAttrBack="application-detail-back"
           actions={renderApplicationRowActions(detailRow)}
@@ -986,7 +983,7 @@ export function ManagerApplications({
         destinations={tabs.map((t) => ({
           id: t.id,
           label: t.label,
-          href: `${applicationsBase}/${t.id}`,
+          href: applicationListHref(basePath, t.id),
           count: t.count,
           dataAttr: `applications-bucket-${t.id}`,
         }))}
@@ -1068,7 +1065,7 @@ export function ManagerApplications({
                     <Badge tone={status.tone}>{status.label}</Badge>
                   </div>
                 }
-                onOpen={() => navigate(applicationDetailHref(applicationsBase, bucket, row.id))}
+                onOpen={() => navigate(applicationDetailHref(basePath, bucket, row.id))}
                 dataAttr="application-list-row"
               />
             );

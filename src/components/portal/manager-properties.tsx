@@ -17,7 +17,7 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import type { PropertyDetailTabId } from "@/lib/portal-detail-routes";
+import { propertyListHref, type PropertyDetailTabId } from "@/lib/portal-detail-routes";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
@@ -45,11 +45,10 @@ import {
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 export function ManagerProperties({
   stage: stageProp = "listed",
-  basePath: basePathProp,
+  basePath = "/portal",
   propertyKey: propertyKeyProp,
   detailTab: detailTabProp,
 }: {
@@ -60,8 +59,6 @@ export function ManagerProperties({
 }) {
   const { showToast } = useAppUi();
   const router = useRouter();
-  const portalBase = usePaidPortalBasePath();
-  const propertiesBase = basePathProp ?? `${portalBase}/properties`;
   const { userId } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(userId);
   const [skuLoaded, setSkuLoaded] = useState(false);
@@ -84,9 +81,9 @@ export function ManagerProperties({
         setDemoStage(stage);
         return;
       }
-      router.push(`${propertiesBase}/${stage}`, { scroll: false });
+      router.push(propertyListHref(basePath, stage), { scroll: false });
     },
-    [propertiesBase, router],
+    [basePath, router],
   );
 
   const refreshPortfolio = useCallback(async () => {
@@ -262,7 +259,7 @@ export function ManagerProperties({
           destinations={MANAGER_STAGES.map((stage) => ({
             id: stage.key,
             label: stage.label,
-            href: `${propertiesBase}/${stage.key}`,
+            href: propertyListHref(basePath, stage.key),
             count: stageCounts[stage.key],
             dataAttr: `manager-properties-tab-${stage.key}`,
           }))}
@@ -283,7 +280,7 @@ export function ManagerProperties({
           skuTier={skuTier}
           skuLoaded={skuLoaded}
           searchQuery={searchQuery}
-          propertiesBase={propertiesBase}
+          propertiesBase={basePath}
           propertyKey={propertyKeyProp}
           detailTab={detailTabProp}
         />

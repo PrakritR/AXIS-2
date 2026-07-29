@@ -54,6 +54,21 @@ export function propertyDetailHref(
   return `${basePath}/properties/${stage}/${encodeURIComponent(propertyKey)}/${tab}`;
 }
 
+/** Manager property pipeline stages (listed / drafts / unlisted). */
+export const PROPERTY_STAGES = ["listed", "drafts", "unlisted"] as const;
+export type PropertyStageId = (typeof PROPERTY_STAGES)[number];
+
+export function parsePropertyStage(raw: string | undefined | null): PropertyStageId {
+  if (raw && (PROPERTY_STAGES as readonly string[]).includes(raw)) {
+    return raw as PropertyStageId;
+  }
+  return "listed";
+}
+
+export function propertyListHref(basePath: string, stage: string): string {
+  return `${basePath}/properties/${stage}`;
+}
+
 export function residentDetailHref(
   basePath: string,
   residentsTab: string,
@@ -223,4 +238,35 @@ export function workOrderDetailHref(
   workOrderId: string,
 ): string {
   return `${basePath}/services/work-orders/${bucket}/${encodeURIComponent(workOrderId)}`;
+}
+
+/** Manager promotion content filters (text flyers vs image assets). */
+export const PROMOTION_CONTENT_FILTERS = ["text", "image"] as const;
+export type PromotionContentFilterId = (typeof PROMOTION_CONTENT_FILTERS)[number];
+
+export function promotionListHref(basePath: string, filter: PromotionContentFilterId): string {
+  return `${basePath}/promotion/${filter}`;
+}
+
+/** Map mistaken top-level portal segments to their routed section paths. */
+export function legacyManagerPortalSectionPath(section: string): string | null {
+  if ((APPLICATION_BUCKETS as readonly string[]).includes(section)) {
+    return `applications/${section}`;
+  }
+  if ((PROPERTY_STAGES as readonly string[]).includes(section)) {
+    return `properties/${section}`;
+  }
+  if ((LEASE_PIPELINE_TABS as readonly string[]).includes(section)) {
+    return `leases/${section}`;
+  }
+  if ((PROMOTION_CONTENT_FILTERS as readonly string[]).includes(section)) {
+    return `promotion/${section}`;
+  }
+  if ((SERVICE_REQUEST_BUCKETS as readonly string[]).includes(section)) {
+    return `services/requests/${section}`;
+  }
+  if ((WORK_ORDER_BUCKETS as readonly string[]).includes(section)) {
+    return `services/work-orders/${section}`;
+  }
+  return null;
 }

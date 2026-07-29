@@ -30,7 +30,7 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { leaseListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
@@ -42,7 +42,7 @@ const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] =
 
 export function ManagerLeases({
   tab: tabProp = "manager",
-  basePath: basePathProp,
+  basePath = "/portal",
   leaseId: leaseIdProp,
 }: {
   tab?: ManagerLeaseTab;
@@ -52,8 +52,6 @@ export function ManagerLeases({
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const { userId, ready: authReady } = useManagerUserId();
-  const portalBase = usePaidPortalBasePath();
-  const leasesBase = basePathProp ?? `${portalBase}/leases`;
   const [tab, setTab] = useState<ManagerLeaseTab>(tabProp);
   const [prevTabProp, setPrevTabProp] = useState(tabProp);
   if (tabProp !== prevTabProp) {
@@ -236,7 +234,7 @@ export function ManagerLeases({
             dataAttr: t.dataAttr,
           }))}
           activeId={tab}
-          onChange={(id) => navigate(`${leasesBase}/${id}`)}
+          onChange={(id) => navigate(leaseListHref(basePath, id as ManagerLeaseTab))}
           compact
           mobileSelect
           selectAriaLabel="Lease pipeline stage"
@@ -290,7 +288,7 @@ export function ManagerLeases({
           managerUserId={userId}
           residentAccountEmails={residentAccountEmails}
           leaseId={leaseIdProp}
-          listBasePath={leasesBase}
+          listBasePath={basePath}
           onEmailAccountSetup={(email) => {
             setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
           }}
@@ -329,7 +327,7 @@ export function ManagerLeases({
         managerUserId={userId}
         residentAccountEmails={residentAccountEmails}
         leaseId={leaseIdProp}
-        listBasePath={leasesBase}
+        listBasePath={basePath}
         onEmailAccountSetup={(email) => {
           setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
         }}

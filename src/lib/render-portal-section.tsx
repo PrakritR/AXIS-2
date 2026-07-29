@@ -60,6 +60,7 @@ import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
+import { legacyManagerPortalSectionPath } from "@/lib/portal-detail-routes";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
@@ -472,6 +473,13 @@ export async function renderPortalSection(
         "relationships",
         managerOwnerSubscriptionTier,
       );
+    }
+
+    if (kind === "pro") {
+      const legacyPath = legacyManagerPortalSectionPath(section);
+      if (legacyPath) {
+        redirect(`${def.basePath}/${legacyPath}`);
+      }
     }
 
     if (section === "residents") {
