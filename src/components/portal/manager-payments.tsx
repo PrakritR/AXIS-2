@@ -2,17 +2,23 @@
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_MOBILE_STATUS_SELECT_CLASS,
+  PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
 import { PillTabs } from "@/components/ui/tabs";
+import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
+import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoing-payments-panel";
@@ -76,6 +82,79 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 
 const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
 
+type PaymentListSort = "dueSoon" | "dueLatest" | "amountDesc" | "amountAsc" | "resident";
+
+const DEFAULT_PAYMENT_LIST_SORT: PaymentListSort = "dueSoon";
+
+function paymentFilterTouches(
+  propertyFilter: string,
+  residentFilter: string,
+  listSort: PaymentListSort,
+  direction: ManagerPaymentDirection,
+): number {
+  let count = 0;
+  if (propertyFilter) count += 1;
+  if (direction === "incoming" && residentFilter) count += 1;
+  if (listSort !== DEFAULT_PAYMENT_LIST_SORT) count += 1;
+  return count;
+}
+
+function sortLedgerRows(
+  rows: DemoManagerPaymentLedgerRow[],
+  bucket: ManagerPaymentBucket,
+  listSort: PaymentListSort,
+): DemoManagerPaymentLedgerRow[] {
+  const paid = bucket === "paid";
+  return [...rows].sort((a, b) => {
+    switch (listSort) {
+      case "dueSoon": {
+        const dir = paid ? "desc" : "asc";
+        return compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, dir);
+      }
+      case "dueLatest": {
+        const dir = paid ? "asc" : "desc";
+        return compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, dir);
+      }
+      case "amountDesc":
+        return parseMoneyLabel(b.balanceDue) - parseMoneyLabel(a.balanceDue);
+      case "amountAsc":
+        return parseMoneyLabel(a.balanceDue) - parseMoneyLabel(b.balanceDue);
+      case "resident":
+        return (a.residentName || "").localeCompare(b.residentName || "", undefined, { sensitivity: "base" });
+      default:
+        return 0;
+    }
+  });
+}
+
+function sortOutgoingRows(
+  rows: DemoManagerOutgoingPaymentRow[],
+  bucket: ManagerPaymentBucket,
+  listSort: PaymentListSort,
+): DemoManagerOutgoingPaymentRow[] {
+  const paid = bucket === "paid";
+  return [...rows].sort((a, b) => {
+    switch (listSort) {
+      case "dueSoon": {
+        const dir = paid ? "desc" : "asc";
+        return compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, dir);
+      }
+      case "dueLatest": {
+        const dir = paid ? "asc" : "desc";
+        return compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, dir);
+      }
+      case "amountDesc":
+        return parseMoneyLabel(b.amountLabel) - parseMoneyLabel(a.amountLabel);
+      case "amountAsc":
+        return parseMoneyLabel(a.amountLabel) - parseMoneyLabel(b.amountLabel);
+      case "resident":
+        return (a.payeeLabel || "").localeCompare(b.payeeLabel || "", undefined, { sensitivity: "base" });
+      default:
+        return 0;
+    }
+  });
+}
+
 function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
   const name = (residentName ?? "").trim().toLowerCase();
   const email = (residentEmail ?? "").trim().toLowerCase();
@@ -107,6 +186,8 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [listSort, setListSort] = useState<PaymentListSort>(DEFAULT_PAYMENT_LIST_SORT);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
@@ -360,8 +441,9 @@ export function ManagerPayments() {
   }, [outgoingRowsForCounts]);
 
   const outgoingRowsForBucket = useMemo(() => {
-    return outgoingRowsForCounts.filter((row) => row.bucket === bucket);
-  }, [outgoingRowsForCounts, bucket]);
+    const filtered = outgoingRowsForCounts.filter((row) => row.bucket === bucket);
+    return sortOutgoingRows(filtered, bucket, listSort);
+  }, [outgoingRowsForCounts, bucket, listSort]);
 
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -398,10 +480,24 @@ export function ManagerPayments() {
       return true;
     });
 
-    // Order by due date: pending/overdue soonest-first (what's due next), paid most-recent-first.
-    const direction = bucket === "paid" ? "desc" : "asc";
-    return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
-  }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
+    return sortLedgerRows(filtered, bucket, listSort);
+  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, listSort]);
+
+  const filterTouchCount = paymentFilterTouches(propertyFilter, residentFilter, listSort, direction);
+
+  const sortOptions = useMemo(
+    () => [
+      { value: "dueSoon" as const, label: "Due soonest" },
+      { value: "dueLatest" as const, label: "Due latest" },
+      { value: "amountDesc" as const, label: "Amount (high to low)" },
+      { value: "amountAsc" as const, label: "Amount (low to high)" },
+      {
+        value: "resident" as const,
+        label: direction === "incoming" ? "Resident (A–Z)" : "Payee (A–Z)",
+      },
+    ],
+    [direction],
+  );
 
   const propertyFilterPill = (
     <PortalPropertyFilterPill
@@ -418,18 +514,137 @@ export function ManagerPayments() {
     />
   );
 
+  const filterControls = (
+    <>
+      {propertyFilterPill}
+      <PortalToolbarSortSelect
+        label="Sort"
+        value={listSort}
+        onChange={setListSort}
+        ariaLabel="Sort payments"
+        options={sortOptions}
+      />
+    </>
+  );
+
+  const resetPaymentFilters = () => {
+    setPropertyFilter("");
+    setResidentFilter("");
+    setListSort(DEFAULT_PAYMENT_LIST_SORT);
+  };
+
   const filterRow = (
     <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-      <PillTabs
-        items={DIRECTION_LABELS}
-        activeId={direction}
-        selectAriaLabel="Payment direction"
-        onChange={(id) => {
-          setDirection(id as ManagerPaymentDirection);
-          setBucket("pending");
-          setResidentFilter("");
-        }}
-      />
+      <label className="flex shrink-0 md:hidden">
+        <span className="sr-only">Payment direction</span>
+        <Select
+          className={PORTAL_MOBILE_STATUS_SELECT_CLASS}
+          value={direction}
+          onChange={(e) => {
+            setDirection(e.target.value as ManagerPaymentDirection);
+            setBucket("pending");
+            setResidentFilter("");
+          }}
+          data-attr="payments-direction-mobile-select"
+        >
+          {DIRECTION_LABELS.map(({ id, label }) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="hidden w-fit shrink-0 md:block">
+        <PillTabs
+          items={DIRECTION_LABELS}
+          activeId={direction}
+          selectAriaLabel="Payment direction"
+          onChange={(id) => {
+            setDirection(id as ManagerPaymentDirection);
+            setBucket("pending");
+            setResidentFilter("");
+          }}
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 md:hidden">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 min-w-0 flex-1 rounded-full text-xs font-semibold"
+          data-attr="payments-filter-sheet-open"
+          onClick={() => setFilterSheetOpen(true)}
+        >
+          <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+          Filter &amp; sort{filterTouchCount > 0 ? ` · ${filterTouchCount} active` : ""}
+        </Button>
+      </div>
+      <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
+        {filterControls}
+      </div>
+      <Modal
+        open={filterSheetOpen}
+        title="Filter & sort"
+        onClose={() => setFilterSheetOpen(false)}
+        panelClassName="max-w-md"
+      >
+        <div className="flex flex-col gap-4">{filterControls}</div>
+        {direction === "incoming" ? (
+          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => {
+                setFilterSheetOpen(false);
+                setReminderSettingsOpen(true);
+              }}
+              data-attr="payments-reminder-settings-mobile"
+            >
+              Reminders
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => {
+                setFilterSheetOpen(false);
+                setPaymentSetupOpen(true);
+              }}
+              data-attr="payments-setup-mobile"
+            >
+              Payment setup
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-4 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={() => {
+                setFilterSheetOpen(false);
+                setPaymentSetupOpen(true);
+              }}
+              data-attr="payments-setup-mobile"
+            >
+              Payment setup
+            </Button>
+          </div>
+        )}
+        <div className="mt-5 flex gap-2">
+          <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={resetPaymentFilters}>
+            Reset
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            className="flex-1 rounded-full"
+            onClick={() => setFilterSheetOpen(false)}
+          >
+            Done
+          </Button>
+        </div>
+      </Modal>
     </ManagerPortalFilterRow>
   );
 
@@ -443,7 +658,7 @@ export function ManagerPayments() {
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
               onClick={() => setReminderSettingsOpen(true)}
               data-attr="payments-reminder-settings"
             >
@@ -453,7 +668,7 @@ export function ManagerPayments() {
           <Button
             type="button"
             variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            className={`max-md:hidden shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => setPaymentSetupOpen(true)}
             data-attr="payments-setup"
           >
@@ -477,9 +692,9 @@ export function ManagerPayments() {
           <ManagerPortalStatusPills
             tabs={tabs}
             activeId={bucket}
+            selectAriaLabel="Payment status"
             onChange={(id) => setBucket(id as ManagerPaymentBucket)}
           />
-          <ManagerPortalFilterActions>{propertyFilterPill}</ManagerPortalFilterActions>
         </ManagerPortalStatusFilterRow>
         {direction === "incoming" ? (
           <ManagerPaymentsLedgerPanel

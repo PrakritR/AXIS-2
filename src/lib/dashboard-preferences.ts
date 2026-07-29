@@ -56,8 +56,8 @@ export const MANAGER_DASHBOARD_SECTIONS: readonly DashboardSectionDef[] = [
   },
   {
     id: "applications",
-    label: "Applications",
-    description: "Applicants awaiting your review.",
+    label: "Applications to sign",
+    description: "Submitted applications awaiting your review or signature.",
     defaultVisible: true,
   },
   {
@@ -80,8 +80,8 @@ export const MANAGER_DASHBOARD_SECTIONS: readonly DashboardSectionDef[] = [
   },
   {
     id: "services",
-    label: "Services",
-    description: "Add-on service requests and work orders.",
+    label: "Services needed",
+    description: "Open work orders, scheduled visits, and pending add-on requests.",
     defaultVisible: true,
   },
   {

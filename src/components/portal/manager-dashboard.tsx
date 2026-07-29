@@ -106,10 +106,8 @@ type PillTone = "pending" | "success" | "danger" | "info";
 
 /**
  * Status accent tokens for a whole "Needs attention" group — the header rail,
- * title colour and count badge all read in the group's status colour so the
- * queue is scannable by colour alone (overdue → red, pending review → orange,
- * signatures/unread → blue, active → green). Reuses the shared `--status-*`
- * tokens so it flips with the light/dark theme like every other status surface.
+ * title colour and count badge all read in the group's status colour.
+ * Yellow = pending, red = danger/overdue, green = confirmed/active, blue = info.
  */
 type AttentionTone = PillTone;
 const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
@@ -122,6 +120,20 @@ const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
 function sectionAccentDot(tone: AttentionTone): string {
   return ATTENTION_TONE[tone].fg;
 }
+
+type DashboardServiceAttentionItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  sortKey: number;
+  rowTone: AttentionTone;
+  pillLabel: string;
+};
+
+type DashboardResidentAttentionItem = {
+  lease: LeasePipelineRow;
+  activated: boolean;
+};
 
 /**
  * Compact relative-time label ("in 3d", "2h ago", "now") for time-bearing
@@ -517,6 +529,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
   const { visibility, setVisible, reset } = useDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
 
   // The assistant dock + AI-draft chips are live, auth-gated manager surfaces:
   // off in the /demo sandbox (which uses its own scripted assistant and must
@@ -540,6 +553,49 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         if (data?.summary) setDocExpirySummary(data.summary as DocumentExpirationSummary);
       })
       .catch(() => setDocExpirySummary(null));
+  }, [authReady, userId, tick]);
+
+  useEffect(() => {
+    if (!authReady || !userId) {
+      setResidentAccountEmails(new Set());
+      return;
+    }
+    const emails = [
+      ...new Set(
+        readLeasePipeline(userId)
+          .filter((l) => l.status === "Fully Signed")
+          .map((l) => l.residentEmail.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+    let cancelled = false;
+    if (emails.length === 0) {
+      setResidentAccountEmails(new Set());
+      return;
+    }
+    if (isDemoModeActive()) {
+      setResidentAccountEmails(new Set(emails));
+      return;
+    }
+    void fetch("/api/manager/resident-account-emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails }),
+    })
+      .then(async (res) => {
+        const body = (await res.json()) as { emails?: string[] };
+        if (!cancelled && res.ok) {
+          setResidentAccountEmails(
+            new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResidentAccountEmails(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [authReady, userId, tick]);
 
   useEffect(() => {
@@ -608,24 +664,26 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     const pendingServiceRequests = readAllServiceRequests().filter(
       (r) => moduleRowVisibleToPortalUser(r, userId, "services") && r.status === "pending",
     );
-    const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open");
-    const serviceItems = [
+    const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open" || w.bucket === "scheduled");
+    const serviceItems: DashboardServiceAttentionItem[] = [
       ...pendingServiceRequests.map((r) => ({
         id: `sr-${r.id}`,
         title: r.offerName || "Add-on service",
         subtitle: [r.residentName || r.residentEmail, r.price].filter(Boolean).join(" · ") || "—",
-        status: "pending" as const,
+        rowTone: "pending" as const,
+        pillLabel: "Scheduled",
         sortKey: new Date(r.requestedAt).getTime() || 0,
       })),
       ...pendingWorkOrders.map((w) => ({
         id: `wo-${w.id}`,
         title: w.title || "Work order",
         subtitle: [w.propertyName, w.unit].filter(Boolean).join(" · ") || "—",
-        status: "pending" as const,
-        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : 0,
+        rowTone: (w.bucket === "open" ? "danger" : "pending") as AttentionTone,
+        pillLabel: w.bucket === "open" ? "Open" : "Scheduled",
+        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : Date.now(),
       })),
     ].sort((a, b) => b.sortKey - a.sortKey);
-    const pendingServiceCount = pendingServiceRequests.length + pendingWorkOrders.length;
+    const pendingServiceCount = serviceItems.length;
 
     const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -728,9 +786,28 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const pendingTours = tours.filter((t) => t.status === "pending");
   const overdueCharges = pendingCharges.filter((c) => isHouseholdChargeOverdue(c));
   const overdueChargeCount = overdueCharges.length;
+  const pendingPaymentCount = pendingCharges.length - overdueChargeCount;
   const overdueBalanceLabel = formatUsd(
     overdueCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
   );
+
+  const residentAttentionItems: DashboardResidentAttentionItem[] = activeResidents.map((lease) => ({
+    lease,
+    activated: residentAccountEmails.has(lease.residentEmail.trim().toLowerCase()),
+  }));
+
+  const residentsSectionTone: AttentionTone =
+    residentAttentionItems.length === 0
+      ? "success"
+      : residentAttentionItems.some((r) => !r.activated)
+        ? "pending"
+        : "success";
+
+  const paymentsSectionTone: AttentionTone = overdueChargeCount > 0 ? "danger" : "pending";
+
+  const servicesSectionTone: AttentionTone = serviceItems.some((i) => i.rowTone === "danger")
+    ? "danger"
+    : "pending";
 
   // Reflect only the sections the manager keeps visible, so the "N open" badge
   // matches what's actually on their dashboard.
@@ -740,6 +817,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     (visibility.tours ? pendingTours.length : 0) +
     (visibility.applications ? pendingApps.length : 0) +
     (visibility.leases ? pendingLeaseRows.length : 0) +
+    (visibility.residents ? residentAttentionItems.length : 0) +
     (visibility.payments ? pendingCharges.length : 0) +
     (visibility.services ? serviceItems.length : 0) +
     (visibility.inbox ? inboxThreads.length : 0);
@@ -894,7 +972,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Tour requests"
               href={`${BASE}/calendar`}
               sectionId="tours"
-              tone="info"
+              tone="pending"
               order={0}
               items={pendingTours}
               emptyMessage="No pending tour requests right now."
@@ -915,13 +993,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.applications ? (
             <AttentionGroup
-              title="Applications"
+              title="Applications to sign"
               href={`${BASE}/applications`}
               sectionId="applications"
-              tone="success"
+              tone="pending"
               order={1}
               items={pendingApps}
-              emptyMessage="No pending applications. You're all caught up."
+              emptyMessage="No applications waiting for your review."
               keyForItem={(app) => app.id}
               renderRow={(app: DemoApplicantRow, sectionTone) => (
                 <IssueRow
@@ -929,7 +1007,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                   dot={sectionAccentDot(sectionTone)}
                   title={app.name || app.email || "Unknown"}
                   subtitle={app.property || "—"}
-                  pill={<StatusPill tone={sectionTone}>{app.stage || "Pending"}</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>{app.stage || "To sign"}</StatusPill>}
                   dataAttr="dashboard-attention-application"
                 />
               )}
@@ -941,7 +1019,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Leases to sign"
               href={`${BASE}/leases`}
               sectionId="leases"
-              tone="info"
+              tone="pending"
               order={2}
               items={pendingLeaseRows}
               emptyMessage="No leases waiting for a signature."
@@ -972,22 +1050,30 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Residents"
               href={`${BASE}/residents/current`}
               sectionId="residents"
-              tone="success"
+              tone={residentsSectionTone}
               order={3}
-              items={activeResidents}
+              items={residentAttentionItems}
               emptyMessage="No current residents yet."
-              keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow, sectionTone) => (
-                <IssueRow
-                  href={`${BASE}/residents/current`}
-                  dot={sectionAccentDot(sectionTone)}
-                  title={lease.residentName || lease.residentEmail}
-                  subtitle={formatCompactPlacementLine(lease.unit || "—")}
-                  meta={lease.signedRentLabel}
-                  pill={<StatusPill tone={sectionTone}>Active</StatusPill>}
-                  dataAttr="dashboard-attention-resident"
-                />
-              )}
+              keyForItem={(item) => item.lease.id}
+              renderRow={(item: DashboardResidentAttentionItem) => {
+                const rowTone: AttentionTone = item.activated ? "success" : "pending";
+                const lease = item.lease;
+                return (
+                  <IssueRow
+                    href={`${BASE}/residents/current`}
+                    dot={sectionAccentDot(rowTone)}
+                    title={lease.residentName || lease.residentEmail}
+                    subtitle={formatCompactPlacementLine(lease.unit || "—")}
+                    meta={lease.signedRentLabel}
+                    pill={
+                      <StatusPill tone={rowTone}>
+                        {item.activated ? "Activated" : "No account yet"}
+                      </StatusPill>
+                    }
+                    dataAttr="dashboard-attention-resident"
+                  />
+                );
+              }}
             />
           ) : null}
 
@@ -996,25 +1082,36 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Payments"
               href={`${BASE}/payments`}
               sectionId="payments"
-              tone={overdueChargeCount > 0 ? "danger" : "pending"}
+              tone={paymentsSectionTone}
               order={4}
               badge={
-                overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-danger">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {overdueChargeCount} overdue
+                pendingPaymentCount > 0 || overdueChargeCount > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {pendingPaymentCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-pending">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                        {pendingPaymentCount} pending
+                      </span>
+                    ) : null}
+                    {overdueChargeCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-danger">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                        {overdueChargeCount} overdue
+                      </span>
+                    ) : null}
                   </span>
                 ) : null
               }
               items={pendingCharges}
               emptyMessage="No pending or overdue payments right now."
               keyForItem={(charge) => charge.id}
-              renderRow={(charge, sectionTone) => {
+              renderRow={(charge) => {
                 const overdue = isHouseholdChargeOverdue(charge);
+                const rowTone: AttentionTone = overdue ? "danger" : "pending";
                 return (
                   <IssueRow
                     href={`${BASE}/payments`}
-                    dot={sectionAccentDot(sectionTone)}
+                    dot={sectionAccentDot(rowTone)}
                     title={charge.residentName || charge.residentEmail}
                     subtitle={formatCompactChargeLine(
                       charge.title || "Charge",
@@ -1023,7 +1120,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                       { omitBalance: true },
                     )}
                     meta={charge.balanceLabel}
-                    pill={<StatusPill tone={sectionTone}>{overdue ? "Overdue" : "Pending"}</StatusPill>}
+                    pill={<StatusPill tone={rowTone}>{overdue ? "Overdue" : "Pending"}</StatusPill>}
                     dataAttr="dashboard-attention-payment"
                   />
                 );
@@ -1033,29 +1130,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.services ? (
             <AttentionGroup
-              title="Services"
+              title="Services needed"
               href={`${BASE}/services/requests`}
               sectionId="services"
-              tone="info"
+              tone={servicesSectionTone}
               order={5}
-              badge={
-                pendingServiceCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-info">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {pendingServiceCount} pending
-                  </span>
-                ) : null
-              }
               items={serviceItems}
-              emptyMessage="No pending add-on services or work orders."
+              emptyMessage="No open or scheduled services right now."
               keyForItem={(item) => item.id}
-              renderRow={(item, sectionTone) => (
+              renderRow={(item: DashboardServiceAttentionItem) => (
                 <IssueRow
                   href={`${BASE}/services/requests`}
-                  dot={sectionAccentDot(sectionTone)}
+                  dot={sectionAccentDot(item.rowTone)}
                   title={item.title}
                   subtitle={item.subtitle}
-                  pill={<StatusPill tone={sectionTone}>Pending</StatusPill>}
+                  pill={<StatusPill tone={item.rowTone}>{item.pillLabel}</StatusPill>}
                   dataAttr="dashboard-attention-service"
                 />
               )}
@@ -1067,7 +1156,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Unread messages"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
-              tone="success"
+              tone="danger"
               order={6}
               items={inboxThreads}
               emptyMessage="No unread messages. Communication is clear."

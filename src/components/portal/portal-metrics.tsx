@@ -440,7 +440,7 @@ const KPI_TONE_STYLES: Record<
   },
 };
 
-/** Restrained KPI tile: header label on top, centered value (no subtext). */
+/** Restrained KPI tile: centered value on top, label beneath (no subtext). */
 export function PortalDashboardKpiTile({
   label,
   value,
@@ -463,22 +463,13 @@ export function PortalDashboardKpiTile({
       href={href}
       data-attr={dataAttr}
       className={cn(
-        "flex min-h-[5.25rem] min-w-0 w-full flex-col items-center justify-between rounded-xl border border-border border-l-[3px] px-2.5 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
+        "flex min-h-[5.25rem] min-w-0 w-full flex-col items-center justify-between gap-0.5 rounded-xl border border-border border-l-[3px] px-2.5 py-2 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
         "hover:-translate-y-px hover:border-primary/35 hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]",
         "sm:min-h-[5.5rem] sm:px-3 sm:py-3 [html[data-native]_&]:min-h-[4.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2",
         styles.accent,
         styles.shell,
       )}
     >
-      <span
-        className={cn(
-          "w-full px-0.5 text-center text-[10px] font-medium leading-tight tracking-[-0.01em] text-muted",
-          "line-clamp-2 sm:text-[11px] [html[data-native]_&]:text-[9px]",
-          styles.label,
-        )}
-      >
-        {label}
-      </span>
       <span
         className={cn(
           "flex w-full flex-1 items-center justify-center whitespace-nowrap tabular-nums tracking-[-0.02em]",
@@ -488,6 +479,15 @@ export function PortalDashboardKpiTile({
         )}
       >
         {value}
+      </span>
+      <span
+        className={cn(
+          "w-full shrink-0 px-0.5 text-center text-[10px] font-medium leading-tight tracking-[-0.01em]",
+          "line-clamp-2 sm:text-[11px] [html[data-native]_&]:text-[9px]",
+          styles.label,
+        )}
+      >
+        {label}
       </span>
     </Link>
   );
