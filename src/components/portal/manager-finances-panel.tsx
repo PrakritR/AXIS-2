@@ -50,7 +50,7 @@ import {
 import {
   bucketByMonth,
   lastNMonths,
-  mergeMonthlyProfit,
+  mergeMonthlyCashflow,
   parseMoneyLabel,
 } from "@/lib/portal-monthly-profit";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -524,7 +524,7 @@ export function ManagerFinancesPanel({
   const monthlyProfitPoints = useMemo(() => {
     void cashflowChartTick;
     if (!userId || tabId !== "cash-flow-statement") return [];
-    const months = lastNMonths(Date.now(), 6);
+    const months = lastNMonths(Date.now(), 24);
     const charges = readChargesForManager(userId, {
       linkedPropertyIds: collectLinkedPropertyIdsForModule(userId, "payments"),
     }).filter((c) => c.status === "paid");
@@ -546,7 +546,7 @@ export function ManagerFinancesPanel({
       (e) => e.expenseDate,
       (e) => e.amountCents / 100,
     );
-    return mergeMonthlyProfit(paymentsByMonth, expensesByMonth);
+    return mergeMonthlyCashflow(paymentsByMonth, expensesByMonth);
   }, [userId, tabId, cashflowChartTick, filters.propertyId]);
 
   useEffect(() => {
@@ -811,7 +811,7 @@ export function ManagerFinancesPanel({
       <div className="space-y-5">
         {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}
         {tabId === "cash-flow-statement" ? (
-          <MonthlyProfitChart points={monthlyProfitPoints} subtitle="Last 6 months" />
+          <MonthlyProfitChart points={monthlyProfitPoints} />
         ) : null}
         <ReportFilterBar
           showProperty

@@ -2,6 +2,19 @@ export type MonthPoint = { key: string; label: string; value: number };
 
 export type MonthlyProfitPoint = { key: string; label: string; profit: number };
 
+export type MonthlyCashflowPoint = {
+  key: string;
+  label: string;
+  revenue: number;
+  expense: number;
+  profit: number;
+};
+
+export type CashflowChartMetric = "revenue" | "profit" | "expense";
+
+export const CASHFLOW_CHART_RANGE_MONTHS = [3, 6, 12, 24] as const;
+export type CashflowChartRangeMonths = (typeof CASHFLOW_CHART_RANGE_MONTHS)[number];
+
 /** The last N calendar months (oldest → current), keyed `YYYY-MM` with a short label. */
 export function lastNMonths(nowMs: number, count = 6): { key: string; label: string }[] {
   const base = new Date(nowMs);
@@ -40,11 +53,28 @@ export function bucketByMonth<T>(
 }
 
 export function mergeMonthlyProfit(payments: MonthPoint[], expenses: MonthPoint[]): MonthlyProfitPoint[] {
-  return payments.map((p, i) => ({
+  return mergeMonthlyCashflow(payments, expenses).map((p) => ({
     key: p.key,
     label: p.label,
-    profit: p.value - (expenses[i]?.value ?? 0),
+    profit: p.profit,
   }));
+}
+
+export function mergeMonthlyCashflow(payments: MonthPoint[], expenses: MonthPoint[]): MonthlyCashflowPoint[] {
+  return payments.map((p, i) => {
+    const expense = expenses[i]?.value ?? 0;
+    return {
+      key: p.key,
+      label: p.label,
+      revenue: p.value,
+      expense,
+      profit: p.value - expense,
+    };
+  });
+}
+
+export function cashflowMetricValue(point: MonthlyCashflowPoint, metric: CashflowChartMetric): number {
+  return point[metric];
 }
 
 /** Parse a "$1,200.00" balance label into a numeric dollar amount. */

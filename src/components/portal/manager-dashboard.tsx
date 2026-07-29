@@ -44,7 +44,7 @@ import {
 import {
   bucketByMonth,
   lastNMonths,
-  mergeMonthlyProfit,
+  mergeMonthlyCashflow,
   parseMoneyLabel,
 } from "@/lib/portal-monthly-profit";
 import {
@@ -702,7 +702,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     // Cash-flow trend series (last 6 months), computed from real local stores:
     // payments = PAID charges bucketed by paid/created date; expenses = logged
     // outgoing expenses bucketed by expense date.
-    const months = lastNMonths(nowMs, 6);
+    const months = lastNMonths(nowMs, 24);
     const paymentsByMonth = bucketByMonth(
       charges.filter((c) => c.status === "paid"),
       months,
@@ -877,7 +877,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
         {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
         {visibility.cashflow ? (
-          <MonthlyProfitChart points={mergeMonthlyProfit(paymentsByMonth, expensesByMonth)} />
+          <MonthlyProfitChart points={mergeMonthlyCashflow(paymentsByMonth, expensesByMonth)} />
         ) : null}
 
         {/* Needs attention — a live, colour-coded queue: big all-caps heading over

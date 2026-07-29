@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mergeMonthlyProfit, parseMoneyLabel } from "@/lib/portal-monthly-profit";
+import { mergeMonthlyCashflow, mergeMonthlyProfit, parseMoneyLabel } from "@/lib/portal-monthly-profit";
 
 describe("portal-monthly-profit", () => {
-  it("merges payments and expenses into monthly profit", () => {
+  it("merges payments and expenses into monthly cashflow", () => {
     const payments = [
       { key: "2026-01", label: "Jan", value: 1000 },
       { key: "2026-02", label: "Feb", value: 500 },
@@ -11,6 +11,10 @@ describe("portal-monthly-profit", () => {
       { key: "2026-01", label: "Jan", value: 200 },
       { key: "2026-02", label: "Feb", value: 800 },
     ];
+    expect(mergeMonthlyCashflow(payments, expenses)).toEqual([
+      { key: "2026-01", label: "Jan", revenue: 1000, expense: 200, profit: 800 },
+      { key: "2026-02", label: "Feb", revenue: 500, expense: 800, profit: -300 },
+    ]);
     expect(mergeMonthlyProfit(payments, expenses)).toEqual([
       { key: "2026-01", label: "Jan", profit: 800 },
       { key: "2026-02", label: "Feb", profit: -300 },
