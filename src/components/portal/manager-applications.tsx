@@ -15,14 +15,13 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PortalTableDetailActions,
   PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
 import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
@@ -64,7 +63,7 @@ import {
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
-import { ApplicationGroupSection, applicationStatusPill, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
+import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
   buildBundleApplicationGroups,
 } from "@/lib/bundle-group/bundle-group-application";
@@ -676,6 +675,68 @@ export function ManagerApplications() {
     }
   };
 
+  const renderApplicationRowActions = (row: DemoApplicantRow) => (
+    <div
+      className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      role="presentation"
+    >
+      {row.bucket === "pending" ? (
+        <>
+          {isWithdrawnApplicationRow(row) ? null : (
+            <Button
+              type="button"
+              variant="primary"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="application-approve"
+              onClick={() => setApprovePreviewRow(row)}
+            >
+              Approve
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+            onClick={() => setRowBucket(row.id, "rejected")}
+          >
+            Reject
+          </Button>
+          {!isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="application-send-reminder"
+              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+              onClick={() => void openReminderPreview(row)}
+            >
+              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+            </Button>
+          ) : null}
+        </>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+          onClick={() => setRowBucket(row.id, "pending")}
+        >
+          Move to pending
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        onClick={() => void deleteApplication(row.id)}
+      >
+        Delete
+      </Button>
+    </div>
+  );
+
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
     // A holding deposit collected AT APPLICATION (a since-removed per-listing
@@ -701,52 +762,6 @@ export function ManagerApplications() {
           terms.
         </div>
       ) : null}
-      <PortalTableDetailActions placement="top">
-        {row.bucket === "pending" ? (
-          // A resident-withdrawn row keeps `bucket === "pending"`, but approving it
-          // would provision a resident account + rent/deposit charges for someone who
-          // explicitly pulled out — so it offers neither Approve nor the completion
-          // reminder. The row stays visible + reversible (withdrawal is a stamp, not a
-          // delete); Reject/Delete remain so the manager can formally close it.
-          <>
-            {isWithdrawnApplicationRow(row) ? null : (
-              <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} data-attr="application-approve" onClick={() => setApprovePreviewRow(row)}>
-                Approve
-              </Button>
-            )}
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
-              Reject
-            </Button>
-            {!isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="application-send-reminder"
-                // Disabled while ANY reminder preview/send is in flight so a click on
-                // another row isn't silently dropped by the single-flight guards.
-                disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-                onClick={() => void openReminderPreview(row)}
-              >
-                {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
-            Move to pending
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          onClick={() => void deleteApplication(row.id)}
-        >
-          Delete
-        </Button>
-      </PortalTableDetailActions>
-
       {group ? (
         <ApplicationGroupSection group={group} bundleGroup={group} currentRowId={row.id} />
       ) : null}
@@ -863,7 +878,6 @@ export function ManagerApplications() {
         <ul className="divide-y divide-[var(--border)]">
           {rowsForBucket.map((row) => {
             const expanded = expandedId === row.id;
-            const status = applicationStatusPill(row);
             const room = displayRoomForRow(row);
             const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
             const groupBadge = group ? describeGroupBadge(group) : null;
@@ -872,34 +886,30 @@ export function ManagerApplications() {
               .join(" · ");
             return (
               <li key={row.id} id={`portal-application-${row.id}`}>
-                <button
-                  type="button"
-                  className="group flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 sm:gap-3.5 sm:px-5 sm:py-3.5"
-                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                  aria-expanded={expanded}
-                >
-                  <InboxAvatar name={row.name} className="h-9 w-9 text-[11px]" />
-                  {/* Floor the name column so a long group badge wraps to its own line
-                      instead of squeezing the applicant's name down to one letter. */}
-                  <span className="flex min-w-24 flex-1 flex-col">
-                    <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                      {/* `block` so `truncate` actually ellipsizes — an inline span ignores
-                          overflow/text-overflow and would run under the trailing badges. */}
-                      <span className="block truncate">{row.name}</span>
-                    </PortalTableInlineExpand>
-                    {subtitle ? (
-                      <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
-                    ) : null}
-                  </span>
-                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                    {groupBadge ? (
-                      <span title={groupBadge.title}>
-                        <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
-                      </span>
-                    ) : null}
-                    <Badge tone={status.tone}>{status.label}</Badge>
-                  </span>
-                </button>
+                <div className="group flex w-full flex-wrap items-center gap-2 px-4 py-3 transition-colors hover:bg-accent/40 sm:gap-3 sm:px-5 sm:py-3.5">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left sm:gap-3"
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    aria-expanded={expanded}
+                  >
+                    <InboxAvatar name={row.name} className="h-9 w-9 shrink-0 text-[11px]" />
+                    <span className="flex min-w-0 flex-1 flex-col sm:min-w-[8rem]">
+                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                        <span className="block truncate">{row.name}</span>
+                      </PortalTableInlineExpand>
+                      {subtitle ? (
+                        <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                  {groupBadge ? (
+                    <span title={groupBadge.title} className="hidden shrink-0 sm:inline-flex">
+                      <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
+                    </span>
+                  ) : null}
+                  {renderApplicationRowActions(row)}
+                </div>
                 {expanded ? (
                   <div className="border-t border-border px-4 py-4 sm:px-5 sm:py-5">
                     {renderApplicationDetail(row)}

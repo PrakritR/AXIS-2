@@ -41,6 +41,7 @@ import {
   type BundleGroupRowInput,
 } from "@/lib/bundle-group/bundle-group-application";
 import { applyLeaseBillingToContext } from "@/lib/lease-billing-snapshot";
+import { buildJointLeaseMembers, buildJointLeasePipelineRow } from "@/lib/bundle-group/joint-lease";
 import type { JointLeaseMember, LeaseKind } from "@/lib/bundle-group/types";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";

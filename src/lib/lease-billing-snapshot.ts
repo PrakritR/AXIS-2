@@ -1,10 +1,10 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
-  collectLinkedPropertyIdsForModule,
   type HouseholdCharge,
   type HouseholdChargeKind,
   readChargesForManager,
 } from "@/lib/household-charges";
+import { collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-access";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { resolvePlacementValuesForRow } from "@/lib/rental-application/placement-values";

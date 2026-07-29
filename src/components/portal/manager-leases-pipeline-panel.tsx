@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
@@ -368,6 +368,34 @@ export function ManagerLeasesPipelinePanel({
     } else showToast(res.error ?? "Upload failed.");
   };
 
+  const renderLeaseHeaderActions = (row: LeasePipelineRow) => (
+    <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+      <LeasePrimaryHeaderActions
+        row={row}
+        btnClass={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        downloadLabel="Download"
+        downloadDataAttr="lease-download"
+        signManagerDataAttr="lease-manager-sign"
+        signingReminderDataAttr="lease-signing-reminder"
+        deleteDataAttr="lease-delete"
+        onDownload={() => onDownload(row)}
+        onSignManager={() => onManagerSign(row)}
+        onSigningReminder={() => openLeaseSigningReminderPreview(row)}
+        signingReminderBusy={reminderBusyForRow === row.id}
+        sendToResidentDataAttr="lease-send-resident"
+        moveToManagerReviewDataAttr="lease-move-manager-review"
+        onSendToResident={() => openSendLeasePreview(row)}
+        sendToResidentBusy={sendingToResidentRowId === row.id}
+        sendToResidentDisabled={
+          !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+          (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
+        }
+        onMoveToManagerReview={() => onMoveToManagerReview(row)}
+        onDelete={row.status !== "Fully Signed" ? () => onDeleteLease(row) : undefined}
+      />
+    </div>
+  );
+
   const renderLeaseRowDetail = (row: LeasePipelineRow) => {
     const generation = generationGate(row);
     const canEditDocument = leaseAllowsManagerDocumentEdits(row);
@@ -375,31 +403,6 @@ export function ManagerLeasesPipelinePanel({
 
     return (
     <>
-      <div className="mb-3 flex justify-end">
-        <LeasePrimaryHeaderActions
-          row={row}
-          btnClass={PORTAL_HEADER_ACTION_BTN}
-          downloadLabel="Download"
-          downloadDataAttr="lease-download"
-          signManagerDataAttr="lease-manager-sign"
-          signingReminderDataAttr="lease-signing-reminder"
-          deleteDataAttr="lease-delete"
-          onDownload={() => onDownload(row)}
-          onSignManager={() => onManagerSign(row)}
-          onSigningReminder={() => openLeaseSigningReminderPreview(row)}
-          signingReminderBusy={reminderBusyForRow === row.id}
-          sendToResidentDataAttr="lease-send-resident"
-          moveToManagerReviewDataAttr="lease-move-manager-review"
-          onSendToResident={() => openSendLeasePreview(row)}
-          sendToResidentBusy={sendingToResidentRowId === row.id}
-          sendToResidentDisabled={
-            !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-            (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
-          }
-          onMoveToManagerReview={() => onMoveToManagerReview(row)}
-          onDelete={row.status !== "Fully Signed" ? () => onDeleteLease(row) : undefined}
-        />
-      </div>
       <PortalTableDetailActions placement="top">
             {showGenerate ? (
               <>
@@ -561,23 +564,22 @@ export function ManagerLeasesPipelinePanel({
       <div className="space-y-2 lg:hidden">
         {bucketRows.map((row) => (
           <div key={row.id} id={`portal-lease-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="flex w-full gap-2 text-left"
-              onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-              aria-expanded={expandedId === row.id}
-            >
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 gap-2 text-left"
+                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                aria-expanded={expandedId === row.id}
+              >
                 <PortalTableInlineExpand expanded={expandedId === row.id} className="font-semibold text-foreground">
                   <span className="truncate">{row.residentName}</span>
                   {row.leaseKind === "joint_bundle" ? (
                     <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground">Joint bundle</span>
                   ) : null}
                 </PortalTableInlineExpand>
-                <p className="mt-0.5 truncate text-xs text-muted">{row.unit}</p>
-                <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
-              </div>
-            </button>
+              </button>
+              {renderLeaseHeaderActions(row)}
+            </div>
             {expandedId === row.id ? (
               <div className="mt-3 border-t border-border pt-3">{renderLeaseRowDetail(row)}</div>
             ) : null}
@@ -588,12 +590,11 @@ export function ManagerLeasesPipelinePanel({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
+            <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
+                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -611,12 +612,11 @@ export function ManagerLeasesPipelinePanel({
                     <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                       <PortalTableInlineExpand expanded={expandedId === row.id}>{row.residentName}</PortalTableInlineExpand>
                     </td>
-                    <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                    <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
+                    <td className={`${PORTAL_TABLE_TD} text-right`}>{renderLeaseHeaderActions(row)}</td>
                   </tr>
                   {expandedId === row.id ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                         {renderLeaseRowDetail(row)}
                       </td>
                     </tr>
