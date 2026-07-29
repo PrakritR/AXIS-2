@@ -176,7 +176,7 @@ describe("group application — applicant Group ID hand-off", () => {
 describe("group application — manager reconciliation", () => {
   it("badges each member row and rosters the household in the expanded application", async () => {
     ROWS = HOUSEHOLD_ROWS;
-    const { container } = render(<ManagerApplications />);
+    const { container, rerender } = render(<ManagerApplications bucket="pending" />);
 
     // Row badge on the default (Pending) tab: Priya has actually submitted, so
     // she is the only member visible there — Sam is still a draft and now
@@ -188,10 +188,10 @@ describe("group application — manager reconciliation", () => {
     dumpHtml("manager-rows", container.innerHTML);
 
     // Switching to the Incomplete tab surfaces Sam's own "Group 2/3" badge.
-    fireEvent.click(screen.getByText("Incomplete"));
+    rerender(<ManagerApplications bucket="incomplete" />);
     expect(await screen.findByText("Sam Okafor")).toBeTruthy();
     expect(screen.getByText("Group 2/3")).toBeTruthy();
-    fireEvent.click(screen.getByText("Pending"));
+    rerender(<ManagerApplications bucket="pending" />);
     await screen.findByText("Priya Nair");
 
     // Expand a joining member's application → roster of the whole household.

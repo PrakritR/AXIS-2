@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { TabNav, useShallowTabId } from "@/components/ui/tabs";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalFilterRow,
@@ -795,7 +796,7 @@ export function ManagerFinancesPanel({
       titleAside={headerActions}
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <TabNav shallow activeId={tabId} items={financeTabItems} selectAriaLabel="Finance report" />
+          <DestinationNav items={financeTabItems} activeId={tabId} ariaLabel="Finance report" />
         </ManagerPortalFilterRow>
       }
     >

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import {
   INBOX_LIST_SCROLL,
   InboxConversationRow,
-  InboxListSegmentTabs,
   InboxThreadEmpty,
   InboxTwoPane,
   PORTAL_INBOX_LIST_TOOLBAR_CLASS,
@@ -118,6 +118,7 @@ function inboxUsesDesktopSplit(): boolean {
 export function ManagerUnifiedInbox({
   tabId,
   commBase,
+  listSegment: listSegmentProp = "active",
   threadFilters,
   filterContacts,
   listSort = "recent",
@@ -129,6 +130,7 @@ export function ManagerUnifiedInbox({
 }: {
   tabId: string;
   commBase: string;
+  listSegment?: InboxListSegment;
   threadFilters?: CommunicationThreadFilters;
   filterContacts?: InboxScopedContact[];
   /** Conversation list order — default is most recent activity. */
@@ -149,7 +151,7 @@ export function ManagerUnifiedInbox({
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
-  const [listSegment, setListSegment] = useState<InboxListSegment>("active");
+  const listSegment = listSegmentProp;
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
@@ -380,11 +382,27 @@ export function ManagerUnifiedInbox({
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
-        <InboxListSegmentTabs
-          value={listSegment}
-          onChange={setListSegment}
-          unreadTotal={unreadCount}
-          archivedTotal={archivedCount}
+        <DestinationNav
+          items={[
+            { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+            {
+              id: "unread",
+              label: "Unread",
+              href: `${commBase}/unread`,
+              count: unreadCount,
+              dataAttr: "communication-segment-unread",
+            },
+            {
+              id: "archived",
+              label: "Archived",
+              href: `${commBase}/archived`,
+              count: archivedCount,
+              dataAttr: "communication-segment-archived",
+            },
+          ]}
+          activeId={listSegment}
+          ariaLabel="Conversation folders"
+          className="mb-2"
         />
         <div className="relative min-w-0">
           <input

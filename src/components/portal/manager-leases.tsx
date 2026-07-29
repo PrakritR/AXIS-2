@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   ManagerPortalFilterActions,
   PORTAL_HEADER_ACTION_BTN,
@@ -30,6 +30,7 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
   { id: "manager", label: "Manager review", dataAttr: "leases-tab-manager" },
@@ -38,10 +39,23 @@ const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] =
   { id: "completed", label: "Signed", dataAttr: "leases-tab-completed" },
 ];
 
-export function ManagerLeases() {
+export function ManagerLeases({
+  tab: tabProp = "manager",
+  basePath: basePathProp,
+}: {
+  tab?: ManagerLeaseTab;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
-  const [tab, setTab] = useState<ManagerLeaseTab>("manager");
+  const portalBase = usePaidPortalBasePath();
+  const leasesBase = basePathProp ?? `${portalBase}/leases`;
+  const [tab, setTab] = useState<ManagerLeaseTab>(tabProp);
+  const [prevTabProp, setPrevTabProp] = useState(tabProp);
+  if (tabProp !== prevTabProp) {
+    setPrevTabProp(tabProp);
+    if (tab !== tabProp) setTab(tabProp);
+  }
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
@@ -125,8 +139,6 @@ export function ManagerLeases() {
         setResidentAccountEmails(new Set());
         return;
       }
-      // Demo sandbox: every demo resident already has an Axis account, so
-      // leases are sendable/signable instead of blocked on account creation.
       if (isDemoModeActive()) {
         setResidentAccountEmails(new Set(emails));
         return;
@@ -201,13 +213,7 @@ export function ManagerLeases() {
       }
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalStatusPills
-            compact
-            tabs={tabs}
-            activeId={tab}
-            onChange={(id) => setTab(id as ManagerLeaseTab)}
-          />
-<ManagerPortalFilterActions>
+          <ManagerPortalFilterActions>
           <PortalFilterSortSheet
             activeCount={portalFilterActiveCount([propertyFilter])}
             onReset={() => setPropertyFilter("")}
@@ -223,16 +229,29 @@ export function ManagerLeases() {
         </ManagerPortalFilterRow>
       }
     >
-      <ManagerLeasesPipelinePanel
-        rows={rows}
-        tab={tab}
-        refreshKey={tick}
-        managerUserId={userId}
-        residentAccountEmails={residentAccountEmails}
-        onEmailAccountSetup={(email) => {
-          setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
-        }}
-      />
+      <div className="mt-1 space-y-3">
+        <DestinationNav
+          items={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: `${leasesBase}/${t.id}`,
+            count: t.count,
+            dataAttr: t.dataAttr,
+          }))}
+          activeId={tab}
+          ariaLabel="Lease pipeline stage"
+        />
+        <ManagerLeasesPipelinePanel
+          rows={rows}
+          tab={tab}
+          refreshKey={tick}
+          managerUserId={userId}
+          residentAccountEmails={residentAccountEmails}
+          onEmailAccountSetup={(email) => {
+            setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+          }}
+        />
+      </div>
     </ManagerPortalPageShell>
     <ManagerEditLeasesModal
       open={editLeasesOpen}

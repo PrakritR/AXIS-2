@@ -5,6 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import {Input, Textarea, Select} from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -2288,29 +2289,25 @@ export function ManagerResidents({
         }
         filterRow={
           <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-            <ManagerPortalStatusPills
-              compact
-              selectAriaLabel="Show current or previous residents"
-              tabs={[
+            <DestinationNav
+              items={[
                 {
                   id: "current",
                   label: "Current",
+                  href: `${portalBase}/residents/current`,
                   count: currentResidentsCount,
                   dataAttr: "residents-tab-current",
                 },
                 {
                   id: "previous",
                   label: "Previous",
+                  href: `${portalBase}/residents/previous`,
                   count: previousResidentsCount,
                   dataAttr: "residents-tab-previous",
                 },
               ]}
               activeId={residentsTab}
-              onChange={(id) => {
-                const next = id as ResidentsTabId;
-                setResidentsTab(next);
-                navigate(`${portalBase}/residents/${next}`);
-              }}
+              ariaLabel="Resident directory"
             />
 <ManagerPortalFilterActions>
             <PortalFilterSortSheet

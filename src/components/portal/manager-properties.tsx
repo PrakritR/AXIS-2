@@ -1,21 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import {
   ManagerHousePropertiesPanel,
   MANAGER_STAGES,
-  managerStageFromParam,
   type ManagerStageKey,
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -45,12 +44,19 @@ import {
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
-export function ManagerProperties() {
+export function ManagerProperties({
+  stage: stageProp = "listed",
+  basePath: basePathProp,
+}: {
+  stage?: ManagerStageKey;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const portalBase = usePaidPortalBasePath();
+  const propertiesBase = basePathProp ?? `${portalBase}/properties`;
   const { userId } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(userId);
   const [skuLoaded, setSkuLoaded] = useState(false);
@@ -64,7 +70,7 @@ export function ManagerProperties() {
 
   const activeStage = isDemoModeActive()
     ? demoStage
-    : managerStageFromParam(searchParams.get("status"));
+    : stageProp;
 
   const setActiveStage = useCallback(
     (stage: ManagerStageKey) => {
@@ -72,12 +78,9 @@ export function ManagerProperties() {
         setDemoStage(stage);
         return;
       }
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("status", stage);
-      const query = next.toString();
-      router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      router.push(`${propertiesBase}/${stage}`, { scroll: false });
     },
-    [pathname, router, searchParams],
+    [propertiesBase, router],
   );
 
   const refreshPortfolio = useCallback(async () => {
@@ -241,16 +244,16 @@ export function ManagerProperties() {
         filterRow={
           <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
             <div className="min-w-0 w-full max-w-full">
-              <ManagerPortalStatusPills
-                compact
-                tabs={MANAGER_STAGES.map((stage) => ({
+              <DestinationNav
+                items={MANAGER_STAGES.map((stage) => ({
                   id: stage.key,
                   label: stage.label,
+                  href: `${propertiesBase}/${stage.key}`,
                   count: stageCounts[stage.key],
                   dataAttr: `manager-properties-tab-${stage.key}`,
                 }))}
                 activeId={activeStage}
-                onChange={(id) => setActiveStage(id as ManagerStageKey)}
+                ariaLabel="Property pipeline stage"
               />
             </div>
           </ManagerPortalFilterRow>

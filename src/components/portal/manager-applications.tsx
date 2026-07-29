@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
@@ -13,7 +15,6 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
@@ -63,7 +64,7 @@ import {
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
-import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
+import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow, applicationStatusPill } from "@/components/portal/application-group-section";
 import {
   buildBundleApplicationGroups,
 } from "@/lib/bundle-group/bundle-group-application";
@@ -96,6 +97,7 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -291,13 +293,26 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
   });
 }
 
-export function ManagerApplications() {
+export function ManagerApplications({
+  bucket: bucketProp = "pending",
+  basePath: basePathProp,
+}: {
+  bucket?: ManagerApplicationTabId;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const pathname = usePathname();
   const router = useRouter();
+  const portalBase = usePaidPortalBasePath();
+  const applicationsBase = basePathProp ?? `${portalBase}/applications`;
   const openHandled = useRef(false);
-  const [bucket, setBucket] = useState<ManagerApplicationTabId>("pending");
+  const [bucket, setBucket] = useState<ManagerApplicationTabId>(bucketProp);
+  const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
+  if (bucketProp !== prevBucketProp) {
+    setPrevBucketProp(bucketProp);
+    if (bucket !== bucketProp) setBucket(bucketProp);
+  }
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
@@ -450,7 +465,9 @@ export function ManagerApplications() {
     if (!hit) return;
     openHandled.current = true;
     queueMicrotask(() => {
-      setBucket(tabForRow(hit));
+      const tab = tabForRow(hit);
+      setBucket(tab);
+      router.replace(`${applicationsBase}/${tab}${window.location.search}`, { scroll: false });
       setExpandedId(hit.id);
     });
     requestAnimationFrame(() => {
@@ -475,7 +492,7 @@ export function ManagerApplications() {
     }
 
     setExpandedId(null);
-    setBucket(nextBucket);
+    router.push(`${applicationsBase}/${nextBucket}`);
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
@@ -675,13 +692,16 @@ export function ManagerApplications() {
     }
   };
 
-  const renderApplicationRowActions = (row: DemoApplicantRow) => (
+  const renderApplicationRowActions = (row: DemoApplicantRow) => {
+    const status = applicationStatusPill(row);
+    return (
     <div
       className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
       role="presentation"
     >
+      <Badge tone={status.tone}>{status.label}</Badge>
       {row.bucket === "pending" ? (
         <>
           {isWithdrawnApplicationRow(row) ? null : (
@@ -735,7 +755,8 @@ export function ManagerApplications() {
         Delete
       </Button>
     </div>
-  );
+    );
+  };
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
@@ -825,8 +846,7 @@ export function ManagerApplications() {
       }
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
-<ManagerPortalFilterActions>
+          <ManagerPortalFilterActions>
           <PortalFilterSortSheet
             activeCount={portalFilterActiveCount([propertyFilter])}
             onReset={() => setPropertyFilter("")}
@@ -842,6 +862,18 @@ export function ManagerApplications() {
         </ManagerPortalFilterRow>
       }
     >
+      <div className="mt-1 space-y-3">
+        <DestinationNav
+          items={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: `${applicationsBase}/${t.id}`,
+            count: t.count,
+            dataAttr: `applications-bucket-${t.id}`,
+          }))}
+          activeId={bucket}
+          ariaLabel="Application status"
+        />
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
       <ManagerApplicationSettingsModal
         open={applicationSettingsOpen}
@@ -856,7 +888,7 @@ export function ManagerApplications() {
       />
       {!authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+          <ListSkeleton rows={5} showLeading={false} />
         </div>
       ) : rowsForBucket.length === 0 ? (
         <PortalDataTableEmpty
@@ -921,6 +953,7 @@ export function ManagerApplications() {
         </ul>
       </div>
       )}
+      </div>
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}

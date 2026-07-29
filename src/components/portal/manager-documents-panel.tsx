@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TabNav, useShallowTabId } from "@/components/ui/tabs";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalFilterRow,
@@ -340,7 +341,7 @@ export function ManagerDocumentsPanel({
       }
       filterRow={
         <ManagerPortalFilterRow>
-          <TabNav shallow activeId={tabId} items={documentTabItems} />
+          <DestinationNav items={documentTabItems} activeId={tabId} ariaLabel="Document views" />
           {hasExportActions ? <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>{exportActions}</div> : null}
         </ManagerPortalFilterRow>
       }

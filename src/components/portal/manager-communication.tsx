@@ -57,9 +57,12 @@ function communicationFilterTouches(
 }
 
 export function ManagerCommunication({
+  listSegment = "active",
   inboxTabId = "unopened",
   smsUiEnabled = false,
 }: {
+  /** Routed conversation list segment (Active / Unread / Archived). */
+  listSegment?: "active" | "unread" | "archived";
   /** @deprecated Channel is always unified; kept for route compatibility. */
   channel?: ManagerCommunicationChannel;
   /** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
@@ -254,6 +257,7 @@ export function ManagerCommunication({
       <ManagerUnifiedInbox
         tabId={inboxTabId}
         commBase={commBase}
+        listSegment={listSegment}
         threadFilters={filters}
         filterContacts={filterContacts}
         listSort={listSort}

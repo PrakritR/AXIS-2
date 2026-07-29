@@ -6,7 +6,6 @@ import {
   ManagerPortalPageShell,
   ManagerPortalFilterRow,
   ManagerPortalFilterActions,
-  ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
@@ -17,10 +16,12 @@ import {
   samePropertyId,
 } from "@/lib/manager-portfolio-access";
 import { Button } from "@/components/ui/button";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
   DEMO_PROMOTION_AUTOFILL_EVENT,
   DEMO_PROMOTION_GENERATED_EVENT,
@@ -135,9 +136,17 @@ function flyerEntryToDraft(
 }
 
 
-export function ManagerPromotion() {
+export function ManagerPromotion({
+  contentFilter: contentFilterProp = "text",
+  basePath: basePathProp,
+}: {
+  contentFilter?: PromotionContentFilter;
+  basePath?: string;
+} = {}) {
   const { showToast } = useAppUi();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  const portalBase = usePaidPortalBasePath();
+  const promotionBase = basePathProp ?? `${portalBase}/promotion`;
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -159,7 +168,12 @@ export function ManagerPromotion() {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
-  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("text");
+  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>(contentFilterProp);
+  const [prevContentFilterProp, setPrevContentFilterProp] = useState(contentFilterProp);
+  if (contentFilterProp !== prevContentFilterProp) {
+    setPrevContentFilterProp(contentFilterProp);
+    if (contentFilter !== contentFilterProp) setContentFilter(contentFilterProp);
+  }
   const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
@@ -700,10 +714,16 @@ export function ManagerPromotion() {
       }
       filterRow={
         <ManagerPortalStatusFilterRow className="mb-0">
-          <ManagerPortalStatusPills
-            tabs={contentTabs}
+          <DestinationNav
+            items={contentTabs.map((t) => ({
+              id: t.id,
+              label: t.label,
+              href: `${promotionBase}/${t.id}`,
+              count: t.count,
+              dataAttr: t.dataAttr,
+            }))}
             activeId={contentFilter}
-            onChange={(id) => setContentFilter(id as PromotionContentFilter)}
+            ariaLabel="Promotion content type"
           />
           <ManagerPortalFilterActions>
             <PortalFilterSortSheet

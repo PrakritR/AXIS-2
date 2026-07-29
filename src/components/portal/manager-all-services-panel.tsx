@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
-  ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
@@ -47,7 +47,8 @@ import {
 } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
-import { TabNav, useShallowTabId } from "@/components/ui/tabs";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { useShallowTabId } from "@/components/ui/tabs";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -74,12 +75,16 @@ const SERVICES_TAB_IDS = ["requests", "work-orders", "vendors"] as const;
 export function ManagerAllServicesPanel({
   tabId: serverTabId,
   basePath,
+  requestBucket: requestBucketProp = "pending",
+  workOrderBucket: workOrderBucketProp = "open",
 }: {
   tabId: FilterType;
   basePath: string;
+  requestBucket?: RequestBucket;
+  workOrderBucket?: ManagerWorkOrderBucket;
 }) {
-  // Tab switches are shallow (client-only) — see TabNav `shallow` below.
   const tabId = useShallowTabId<FilterType>(serverTabId, SERVICES_TAB_IDS);
+  const router = useRouter();
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
@@ -87,8 +92,18 @@ export function ManagerAllServicesPanel({
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
-  const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
+  const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
+  const [prevWoBucketProp, setPrevWoBucketProp] = useState(workOrderBucketProp);
+  if (workOrderBucketProp !== prevWoBucketProp) {
+    setPrevWoBucketProp(workOrderBucketProp);
+    if (woBucket !== workOrderBucketProp) setWoBucket(workOrderBucketProp);
+  }
+  const [reqBucket, setReqBucket] = useState<RequestBucket>(requestBucketProp);
+  const [prevReqBucketProp, setPrevReqBucketProp] = useState(requestBucketProp);
+  if (requestBucketProp !== prevReqBucketProp) {
+    setPrevReqBucketProp(requestBucketProp);
+    if (reqBucket !== requestBucketProp) setReqBucket(requestBucketProp);
+  }
   const [addRequestOpen, setAddRequestOpen] = useState(false);
   const [addWorkOrderOpen, setAddWorkOrderOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
@@ -306,8 +321,8 @@ export function ManagerAllServicesPanel({
         req={req}
         propertyLabel={resolveRequestPropertyLabel(req)}
         onUpdated={() => setDataTick((t) => t + 1)}
-        onApproved={() => setReqBucket("approved")}
-        onDenied={() => setReqBucket("denied")}
+        onApproved={() => router.push(`${basePath}/services/requests/approved`)}
+        onDenied={() => router.push(`${basePath}/services/requests/denied`)}
         onCollapsed={() => setExpandedId(null)}
       />
     );
@@ -356,20 +371,34 @@ export function ManagerAllServicesPanel({
       }
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <TabNav
-            shallow
-            activeId={typeFilter}
-            selectAriaLabel="Services section"
+          <DestinationNav
             items={[
-              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },
-              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
+              {
+                id: "requests",
+                label: "Add-on services",
+                href: `${basePath}/services/requests/pending`,
+                dataAttr: "manager-services-tab-requests",
+              },
+              {
+                id: "work-orders",
+                label: "Work orders",
+                href: `${basePath}/services/work-orders/open`,
+                dataAttr: "manager-services-tab-work-orders",
+              },
+              {
+                id: "vendors",
+                label: "Vendors",
+                href: `${basePath}/services/vendors`,
+                dataAttr: "manager-services-tab-vendors",
+              },
             ]}
+            activeId={typeFilter}
+            ariaLabel="Services section"
           />
         </ManagerPortalFilterRow>
       }
     >
-      <div className="mt-1">
+      <div className="mt-1 space-y-3">
         {typeFilter === "vendors" ? (
           <>
             <ManagerPortalStatusFilterRow className="mb-4 justify-end">
@@ -379,28 +408,38 @@ export function ManagerAllServicesPanel({
           </>
         ) : typeFilter === "work-orders" ? (
           <>
-            <ManagerPortalStatusFilterRow>
-              <ManagerPortalStatusPills
-                tabs={woTabs}
-                activeId={woBucket}
-                onChange={(id) => setWoBucket(id as ManagerWorkOrderBucket)}
-              />
+            <DestinationNav
+              items={woTabs.map((t) => ({
+                id: t.id,
+                label: t.label,
+                href: `${basePath}/services/work-orders/${t.id}`,
+                count: t.count,
+              }))}
+              activeId={woBucket}
+              ariaLabel="Work order status"
+            />
+            <ManagerPortalStatusFilterRow className="justify-end">
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
-              onAfterSchedule={() => setWoBucket("scheduled")}
+              onAfterSchedule={() => router.push(`${basePath}/services/work-orders/scheduled`)}
             />
           </>
         ) : (
           <>
-            <ManagerPortalStatusFilterRow>
-              <ManagerPortalStatusPills
-                tabs={reqTabs}
-                activeId={reqBucket}
-                onChange={(id) => setReqBucket(id as RequestBucket)}
-              />
+            <DestinationNav
+              items={reqTabs.map((t) => ({
+                id: t.id,
+                label: t.label,
+                href: `${basePath}/services/requests/${t.id}`,
+                count: t.count,
+              }))}
+              activeId={reqBucket}
+              ariaLabel="Add-on service status"
+            />
+            <ManagerPortalStatusFilterRow className="justify-end">
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
             {bucketedRequests.length === 0 ? (
