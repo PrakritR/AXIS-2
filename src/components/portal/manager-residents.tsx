@@ -47,6 +47,7 @@ import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
@@ -287,6 +288,7 @@ export function ManagerResidents({
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -716,8 +718,18 @@ export function ManagerResidents({
     const base = propertyFilter
       ? inTab.filter((r) => r.propertyId === propertyFilter)
       : inTab;
+    const q = searchQuery.trim().toLowerCase();
+    const searched = q
+      ? base.filter((r) =>
+          [r.name, r.email, r.roomLabel, r.propertyLabel, r.axisId]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : base;
 
-    return [...base].sort((a, b) => {
+    return [...searched].sort((a, b) => {
       if (!propertyFilter) {
         const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
         if (propCmp !== 0) return propCmp;
@@ -730,7 +742,7 @@ export function ManagerResidents({
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, residentsTab, propertyFilter]);
+  }, [residents, residentsTab, propertyFilter, searchQuery]);
 
   const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
   const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
@@ -2288,52 +2300,64 @@ export function ManagerResidents({
         }
         filterRow={
           <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-            <ManagerPortalStatusPills
-              compact
-              selectAriaLabel="Show current or previous residents"
-              tabs={[
-                {
-                  id: "current",
-                  label: "Current",
-                  count: currentResidentsCount,
-                  dataAttr: "residents-tab-current",
-                },
-                {
-                  id: "previous",
-                  label: "Previous",
-                  count: previousResidentsCount,
-                  dataAttr: "residents-tab-previous",
-                },
-              ]}
-              activeId={residentsTab}
-              onChange={(id) => {
-                const next = id as ResidentsTabId;
-                setResidentsTab(next);
-                navigate(`${portalBase}/residents/${next}`);
-              }}
-            />
-<ManagerPortalFilterActions>
-            <PortalFilterSortSheet
-              activeCount={portalFilterActiveCount([propertyFilter])}
-              onReset={() => setPropertyFilter("")}
-              dataAttr="residents-filter-sheet-open"
-            >
-              <PortalPropertyFilterPill
-                propertyOptions={propertyOptions}
-                propertyValue={propertyFilter}
-                onPropertyChange={setPropertyFilter}
-              />
-            </PortalFilterSortSheet>
-          </ManagerPortalFilterActions>
+            <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
+              <PortalFilterSortSheet
+                activeCount={portalFilterActiveCount([propertyFilter])}
+                onReset={() => setPropertyFilter("")}
+                dataAttr="residents-filter-sheet-open"
+              >
+                <PortalPropertyFilterPill
+                  propertyOptions={propertyOptions}
+                  propertyValue={propertyFilter}
+                  onPropertyChange={setPropertyFilter}
+                />
+              </PortalFilterSortSheet>
+            </ManagerPortalFilterActions>
           </ManagerPortalFilterRow>
         }
       >
+      <PortalListToolbar
+        statusPills={
+          <ManagerPortalStatusPills
+            compact
+            selectAriaLabel="Show current or previous residents"
+            tabs={[
+              {
+                id: "current",
+                label: "Current",
+                count: currentResidentsCount,
+                dataAttr: "residents-tab-current",
+              },
+              {
+                id: "previous",
+                label: "Previous",
+                count: previousResidentsCount,
+                dataAttr: "residents-tab-previous",
+              },
+            ]}
+            activeId={residentsTab}
+            onChange={(id) => {
+              const next = id as ResidentsTabId;
+              setResidentsTab(next);
+              navigate(`${portalBase}/residents/${next}`);
+            }}
+          />
+        }
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search residents",
+          dataAttr: "residents-search",
+        }}
+      />
       {filtered.length === 0 ? (
         <PortalDataTableEmpty
           icon="residents"
           message={
             residents.length === 0
               ? "No residents yet."
+              : searchQuery.trim()
+                ? "No residents match your search."
               : residentsTab === "current"
                 ? "No current residents yet."
                 : "No previous residents yet."

@@ -11,6 +11,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   buildManagerPropertyFilterOptions,
@@ -85,6 +86,7 @@ export function ManagerAllServicesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
@@ -194,8 +196,16 @@ export function ManagerAllServicesPanel({
     let rows = workOrders;
     if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
-    return rows;
-  }, [workOrders, propertyFilter, activeResidentFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.title, r.propertyName, r.unit, r.residentName, r.priority, r.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [workOrders, propertyFilter, activeResidentFilter, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
@@ -205,8 +215,16 @@ export function ManagerAllServicesPanel({
       );
     }
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
-    return rows;
-  }, [serviceRequests, propertyFilter, activeResidentFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.offerName, r.residentName, r.notes, r.residentEmail]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [serviceRequests, propertyFilter, activeResidentFilter, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -387,6 +405,14 @@ export function ManagerAllServicesPanel({
               />
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
+            <PortalListToolbar
+              search={{
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: "Search maintenance requests",
+                dataAttr: "services-work-orders-search",
+              }}
+            />
             <ManagerWorkOrdersPanel
               allRows={filteredWorkOrders}
               bucket={woBucket}
@@ -403,6 +429,14 @@ export function ManagerAllServicesPanel({
               />
               {portfolioScopeFilters}
             </ManagerPortalStatusFilterRow>
+            <PortalListToolbar
+              search={{
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: "Search add-on services",
+                dataAttr: "services-requests-search",
+              }}
+            />
             {bucketedRequests.length === 0 ? (
               <PortalDataTableEmpty
                 message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}

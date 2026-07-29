@@ -643,15 +643,15 @@ export function ManagerHousePropertiesPanel({
   onSendToProspect,
   skuTier,
   skuLoaded,
+  searchQuery = "",
 }: {
   showToast: (m: string) => void;
   activeStage: ManagerStageKey;
   onStageChange: (stage: ManagerStageKey) => void;
   onSendToProspect?: (listingId: string) => void;
-  /** Plan tier from the page-level subscription load — publishing a draft is gated on it. */
   skuTier: string | null;
-  /** False until that load settles; publishing must not proceed on an unknown plan. */
   skuLoaded: boolean;
+  searchQuery?: string;
 }) {
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
@@ -708,6 +708,18 @@ export function ManagerHousePropertiesPanel({
     return [...mapped].sort((a, b) => compareAdminPropertyRowsForDisplay(a.row, b.row));
   }, [tick, scopeUserId, activeStage]);
 
+  const visibleRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(({ row, sourceBucket }) => {
+      const hay = [managerPropertyRowTitle(row, sourceBucket), row.address, row.zip]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, searchQuery]);
+
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
   }
@@ -732,12 +744,15 @@ export function ManagerHousePropertiesPanel({
 
   return (
     <>
-      {rows.length === 0 ? (
-        <PortalDataTableEmpty message={MANAGER_PROPERTY_EMPTY_COPY[activeStage]} icon="default" />
+      {visibleRows.length === 0 ? (
+        <PortalDataTableEmpty
+          message={searchQuery.trim() ? "No properties match your search." : MANAGER_PROPERTY_EMPTY_COPY[activeStage]}
+          icon="default"
+        />
       ) : (
         <>
           <div className="space-y-2 lg:hidden">
-            {rows.map(({ sourceBucket, row, linked }) => {
+            {visibleRows.map(({ sourceBucket, row, linked }) => {
               const rowKey = row.adminRefId + (row.listingId ?? "");
               const expanded = expandedRowKey === rowKey;
 
@@ -788,7 +803,7 @@ export function ManagerHousePropertiesPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ sourceBucket, row, linked }) => {
+                  {visibleRows.map(({ sourceBucket, row, linked }) => {
                     const rowKey = row.adminRefId + (row.listingId ?? "");
                     const expanded = expandedRowKey === rowKey;
 

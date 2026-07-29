@@ -19,6 +19,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
@@ -299,6 +300,7 @@ export function ManagerApplications() {
   const openHandled = useRef(false);
   const [bucket, setBucket] = useState<ManagerApplicationTabId>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
@@ -435,10 +437,18 @@ export function ManagerApplications() {
     const filtered = !propertyFilter.trim()
       ? inBucket
       : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
-    // Sorting only special-cases "approved" today; every other tab (including
-    // the new "incomplete") falls through to the same name/id sort as "pending".
-    return sortApplicationRows(filtered, bucket === "approved" ? "approved" : "pending");
-  }, [scopedRows, bucket, propertyFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    const searched = q
+      ? filtered.filter((r) =>
+          [r.name, r.email, r.property, r.id, r.application?.email]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : filtered;
+    return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
+  }, [scopedRows, bucket, propertyFilter, searchQuery]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -825,23 +835,33 @@ export function ManagerApplications() {
       }
       filterRow={
         <ManagerPortalFilterRow className="mb-0 max-md:gap-2">
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
-<ManagerPortalFilterActions>
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="applications-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-          </PortalFilterSortSheet>
+          <ManagerPortalFilterActions className="ml-0 w-full md:ml-auto md:w-auto">
+            <PortalFilterSortSheet
+              activeCount={portalFilterActiveCount([propertyFilter])}
+              onReset={() => setPropertyFilter("")}
+              dataAttr="applications-filter-sheet-open"
+            >
+              <PortalPropertyFilterPill
+                propertyOptions={propertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={(id) => setPropertyFilter(id)}
+              />
+            </PortalFilterSortSheet>
           </ManagerPortalFilterActions>
         </ManagerPortalFilterRow>
       }
     >
+      <PortalListToolbar
+        statusPills={
+          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
+        }
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search applicants",
+          dataAttr: "applications-search",
+        }}
+      />
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
       <ManagerApplicationSettingsModal
         open={applicationSettingsOpen}
@@ -864,6 +884,8 @@ export function ManagerApplications() {
           message={
             scopedRows.length === 0
               ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
+              : searchQuery.trim()
+                ? "No applications match your search."
               : propertyFilter.trim()
                 ? "No applications for this property yet."
                 : bucket === "pending"
