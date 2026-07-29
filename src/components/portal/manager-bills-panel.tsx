@@ -15,6 +15,7 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { centsToUsd } from "@/lib/reports/money";
 import { managerBillBadgeTone, type ManagerBill } from "@/lib/manager-bills";
@@ -105,11 +106,11 @@ export function ManagerBillsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <PortalSectionActionRow>
         <PortalSectionPrimaryButton onClick={() => setModalOpen(true)} data-attr="finances-add-bill">
           Add bill
         </PortalSectionPrimaryButton>
-      </div>
+      </PortalSectionActionRow>
       {loading ? (
         <PortalDataTableEmpty message="Loading bills…" icon="finance" />
       ) : bills.length === 0 ? (

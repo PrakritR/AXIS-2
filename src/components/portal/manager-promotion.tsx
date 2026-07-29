@@ -9,6 +9,7 @@ import {
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
@@ -712,15 +713,17 @@ export function ManagerPromotion({
           </PortalFilterSortSheet>
         }
         primaryAction={
-          <Button
-            type="button"
-            variant="primary"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => openNewPromotion()}
-            data-attr="promotion-new"
-          >
-            New promotion
-          </Button>
+          <PortalSectionActionRow>
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => openNewPromotion()}
+              data-attr="promotion-new"
+            >
+              New promotion
+            </Button>
+          </PortalSectionActionRow>
         }
         destinations={contentTabs.map((t) => ({
           id: t.id,

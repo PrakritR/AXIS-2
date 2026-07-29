@@ -181,7 +181,7 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { Badge } from "@/components/ui/badge";
-import { PillTabs } from "@/components/ui/tabs";
+import { RadixSegmentedTabs } from "@/components/ui/radix-segmented-tabs";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
@@ -2131,7 +2131,7 @@ export function ManagerResidents({
                               }
                             >
                               <div className="mb-4">
-                                <PillTabs
+                                <RadixSegmentedTabs
                                   items={[
                                     { id: "requests", label: "Add-on services" },
                                     { id: "work-orders", label: "Work orders" },
@@ -2141,6 +2141,7 @@ export function ManagerResidents({
                                     setSvcSubTab(id as "requests" | "work-orders");
                                     setSvcExpandedId(null);
                                   }}
+                                  ariaLabel="Resident services type"
                                 />
                               </div>
 

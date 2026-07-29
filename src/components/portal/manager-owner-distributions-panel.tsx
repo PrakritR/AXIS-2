@@ -16,6 +16,7 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { centsToUsd } from "@/lib/reports/money";
 import {
@@ -130,11 +131,11 @@ export function ManagerOwnerDistributionsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <PortalSectionActionRow>
         <PortalSectionPrimaryButton onClick={() => setModalOpen(true)} data-attr="finances-add-distribution">
           New distribution
         </PortalSectionPrimaryButton>
-      </div>
+      </PortalSectionActionRow>
       {loading ? (
         <PortalDataTableEmpty message="Loading distributions…" icon="finance" />
       ) : distributions.length === 0 ? (
