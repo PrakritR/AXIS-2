@@ -39,8 +39,12 @@ create index if not exists stripe_disputes_charge_idx on public.stripe_disputes 
 alter table public.stripe_payouts enable row level security;
 alter table public.stripe_disputes enable row level security;
 
+drop policy if exists stripe_payouts_manager_read on public.stripe_payouts;
+
 create policy stripe_payouts_manager_read on public.stripe_payouts
   for select using (manager_user_id = auth.uid());
+
+drop policy if exists stripe_disputes_manager_read on public.stripe_disputes;
 
 create policy stripe_disputes_manager_read on public.stripe_disputes
   for select using (manager_user_id = auth.uid());

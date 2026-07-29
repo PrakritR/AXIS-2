@@ -53,8 +53,10 @@ alter table public.vendor_invoices enable row level security;
 -- re-verify ownership. Mirrors the vendor_payouts / work_order_bids policy split:
 -- the vendor owns their own rows, the manager gets read access to invoices billed
 -- to them.
+drop policy if exists vendor_invoices_vendor_owner on public.vendor_invoices;
 create policy vendor_invoices_vendor_owner on public.vendor_invoices
   for all using (vendor_user_id = auth.uid()) with check (vendor_user_id = auth.uid());
+drop policy if exists vendor_invoices_manager_read on public.vendor_invoices;
 create policy vendor_invoices_manager_read on public.vendor_invoices
   for select using (manager_user_id = auth.uid());
 
