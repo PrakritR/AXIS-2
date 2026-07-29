@@ -404,90 +404,50 @@ export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
 /** Small palette for dashboard stat tiles — uses portal status tokens (light + dark safe). */
 export type PortalDashboardKpiTone = "brand" | "success" | "warning" | "danger" | "neutral";
 
-const KPI_TONE_STYLES: Record<
-  PortalDashboardKpiTone,
-  { accent: string; shell: string; value: string; label: string }
-> = {
-  brand: {
-    accent: "border-l-[var(--status-approved-fg)]",
-    shell: "bg-[color-mix(in_srgb,var(--status-approved-bg)_42%,var(--card))]",
-    value: "text-[var(--status-approved-fg)]",
-    label: "text-[color-mix(in_srgb,var(--status-approved-fg)_70%,var(--muted))]",
-  },
-  success: {
-    accent: "border-l-[var(--status-confirmed-fg)]",
-    shell: "bg-[color-mix(in_srgb,var(--status-confirmed-bg)_45%,var(--card))]",
-    value: "text-[var(--status-confirmed-fg)]",
-    label: "text-[color-mix(in_srgb,var(--status-confirmed-fg)_68%,var(--muted))]",
-  },
-  warning: {
-    accent: "border-l-[var(--status-pending-fg)]",
-    shell: "bg-[color-mix(in_srgb,var(--status-pending-bg)_50%,var(--card))]",
-    value: "text-[var(--status-pending-fg)]",
-    label: "text-[color-mix(in_srgb,var(--status-pending-fg)_72%,var(--muted))]",
-  },
-  danger: {
-    accent: "border-l-[var(--status-overdue-fg)]",
-    shell: "bg-[color-mix(in_srgb,var(--status-overdue-bg)_48%,var(--card))]",
-    value: "text-[var(--status-overdue-fg)]",
-    label: "text-[color-mix(in_srgb,var(--status-overdue-fg)_70%,var(--muted))]",
-  },
-  neutral: {
-    accent: "border-l-primary/55",
-    shell: "bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))]",
-    value: "text-foreground",
-    label: "text-muted",
-  },
-};
-
-/** Restrained KPI tile: header label on top, centered value (no subtext). */
+/** Restrained KPI tile: centered value + label on plain card (no status tint). */
 export function PortalDashboardKpiTile({
   label,
   value,
   href,
-  tone = "neutral",
+  tone: _tone = "neutral",
   emphasis = false,
   dataAttr,
 }: {
   label: string;
   value: string | number;
   href: string;
+  /** @deprecated Visual tint removed; kept for call-site compatibility. */
   tone?: PortalDashboardKpiTone;
-  /** Stronger value weight when the metric needs attention. */
   emphasis?: boolean;
   dataAttr?: string;
 }) {
-  const styles = KPI_TONE_STYLES[tone];
   return (
     <Link
       href={href}
       data-attr={dataAttr}
       className={cn(
-        "flex min-h-[5.25rem] min-w-0 flex-1 flex-col items-center justify-between rounded-xl border border-border border-l-[3px] px-2.5 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
-        "hover:-translate-y-px hover:border-primary/35 hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]",
-        "sm:min-h-[5.5rem] sm:min-w-[7.5rem] sm:px-3 sm:py-3 [html[data-native]_&]:min-h-[4.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2",
-        styles.accent,
-        styles.shell,
+        "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-3 text-center",
+        "shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
+        "hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_4px_14px_rgba(15,23,42,0.06)]",
+        "sm:min-h-[5rem] sm:min-w-[7.25rem] sm:px-3 [html[data-native]_&]:min-h-[4.5rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-2 [html[data-native]_&]:py-2.5",
       )}
     >
       <span
         className={cn(
-          "w-full shrink-0 px-0.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] sm:text-[10px] sm:tracking-[0.08em]",
-          "line-clamp-2 [html[data-native]_&]:text-[8px]",
-          styles.label,
-        )}
-      >
-        {label}
-      </span>
-      <span
-        className={cn(
-          "flex w-full flex-1 items-center justify-center whitespace-nowrap tabular-nums tracking-[-0.02em]",
+          "w-full whitespace-nowrap tabular-nums tracking-[-0.02em] text-foreground",
           "text-[1.5rem] sm:text-[1.65rem] [html[data-native]_&]:text-[1.35rem]",
           emphasis ? "font-bold" : "font-semibold",
-          styles.value,
         )}
       >
         {value}
+      </span>
+      <span
+        className={cn(
+          "w-full px-0.5 text-center text-[9px] font-semibold uppercase leading-tight tracking-[0.07em] text-muted",
+          "line-clamp-2 sm:text-[10px] [html[data-native]_&]:text-[8px]",
+        )}
+      >
+        {label}
       </span>
     </Link>
   );
