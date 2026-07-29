@@ -84,29 +84,36 @@ export function PortalDetailHeader({
   dataAttrBack?: string;
 }) {
   return (
-    <header className="portal-detail-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]">
-      {onBack ? (
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
-          aria-label={backLabel}
-          data-attr={dataAttrBack}
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-          <span className="sr-only">{backLabel}</span>
-        </button>
-      ) : null}
-      <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
-        {avatarName ? (
-          <InboxAvatar name={avatarName} className="h-8 w-8 text-[10px] md:h-9 md:w-9 md:text-[11px]" />
+    <header className="portal-detail-header flex shrink-0 flex-col border-b border-border bg-card max-md:gap-2 md:gap-0">
+      <div className="flex items-center gap-0.5 px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
+            aria-label={backLabel}
+            data-attr={dataAttrBack}
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
+            <span className="sr-only">{backLabel}</span>
+          </button>
         ) : null}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-          {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
+          {avatarName ? (
+            <InboxAvatar name={avatarName} className="h-8 w-8 text-[10px] md:h-9 md:w-9 md:text-[11px]" />
+          ) : null}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+            {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+          </div>
         </div>
+        {actions ? <div className="hidden shrink-0 items-center gap-1.5 md:flex">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+      {actions ? (
+        <div className="flex w-full min-w-0 flex-col gap-2 border-t border-border/60 px-2 pb-2 pt-2 md:hidden">
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }

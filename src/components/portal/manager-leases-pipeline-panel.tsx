@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH, RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -8,7 +8,6 @@ import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
-import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +52,7 @@ export function ManagerLeasesPipelinePanel({
   onEmailAccountSetup,
   leaseId: leaseIdProp,
   listBasePath,
+  onDetailOpenChange,
 }: {
   rows: LeasePipelineRow[];
   tab: ManagerLeaseTab;
@@ -62,6 +62,7 @@ export function ManagerLeasesPipelinePanel({
   onEmailAccountSetup?: (email: string, name: string, axisId?: string) => void;
   leaseId?: string;
   listBasePath?: string;
+  onDetailOpenChange?: (open: boolean) => void;
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
@@ -230,10 +231,15 @@ export function ManagerLeasesPipelinePanel({
 
   const openLeaseDetail = useCallback(
     (row: LeasePipelineRow) => {
+      onDetailOpenChange?.(true);
       if (listBasePath) navigate(leaseDetailHref(listBasePath, tab, row.id));
     },
-    [listBasePath, navigate, tab],
+    [listBasePath, navigate, onDetailOpenChange, tab],
   );
+
+  useEffect(() => {
+    onDetailOpenChange?.(Boolean(leaseIdProp && detailRow));
+  }, [detailRow, leaseIdProp, onDetailOpenChange]);
 
   const runGenerateLease = (row: LeasePipelineRow) => {
     if (generatingRowId) return;
@@ -630,13 +636,14 @@ export function ManagerLeasesPipelinePanel({
   return (
     <>
       {leaseModals}
-      <div className={INBOX_LIST_SCROLL}>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-sm)]">
         {bucketRows.map((row) => (
           <PortalPersonRecordRow
             key={row.id}
             name={row.residentName}
             subtitle={row.unit}
             preview={row.status}
+            meta={row.updated}
             badge={
               row.leaseKind === "joint_bundle" ? (
                 <Badge tone="neutral">Joint bundle</Badge>

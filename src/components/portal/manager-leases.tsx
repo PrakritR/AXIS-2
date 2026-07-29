@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -30,6 +31,7 @@ import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-lin
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
   { id: "manager", label: "Manager review", dataAttr: "leases-tab-manager" },
@@ -48,6 +50,7 @@ export function ManagerLeases({
   leaseId?: string;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
   const leasesBase = basePathProp ?? `${portalBase}/leases`;
@@ -60,6 +63,8 @@ export function ManagerLeases({
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [leaseDetailOpen, setLeaseDetailOpen] = useState(Boolean(leaseIdProp));
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
   const [editLeasesOpen, setEditLeasesOpen] = useState(false);
@@ -131,8 +136,21 @@ export function ManagerLeases({
     });
   }, [clientReady, tick, propertyFilter, userId]);
 
+  const searchedRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const hay = [row.residentName, row.unit, row.residentEmail, row.status].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, searchQuery]);
+
   useEffect(() => {
-    const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
+    setLeaseDetailOpen(Boolean(leaseIdProp));
+  }, [leaseIdProp]);
+
+  useEffect(() => {
+    const emails = [...new Set(searchedRows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (cancelled) return;
@@ -162,9 +180,9 @@ export function ManagerLeases({
     return () => {
       cancelled = true;
     };
-  }, [rows]);
+  }, [searchedRows]);
 
-  const counts = useMemo(() => countManagerLeaseTabs(rows), [rows]);
+  const counts = useMemo(() => countManagerLeaseTabs(searchedRows), [searchedRows]);
   const tabs = useMemo(
     () => LEASE_LABELS.map(({ id, label, dataAttr }) => ({ id, label, count: counts[id], dataAttr })),
     [counts],
@@ -207,6 +225,61 @@ export function ManagerLeases({
     </PortalSectionActionRow>
   );
 
+  const leaseControlStack = (
+    <PortalListControlStack
+      destinationRow={
+        <ManagerPortalStatusPills
+          tabs={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            count: t.count,
+            dataAttr: t.dataAttr,
+          }))}
+          activeId={tab}
+          onChange={(id) => navigate(`${leasesBase}/${id}`)}
+          compact
+          mobileSelect
+          selectAriaLabel="Lease pipeline stage"
+        />
+      }
+      filterRow={
+        <PortalFilterSortSheet
+          activeCount={portalFilterActiveCount([propertyFilter])}
+          onReset={() => setPropertyFilter("")}
+          dataAttr="leases-filter-sheet-open"
+          extraModalContent={
+            <div className="flex flex-col gap-2 border-t border-border pt-4 md:hidden">{leasesHeaderActions}</div>
+          }
+        >
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+        </PortalFilterSortSheet>
+      }
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: "Search residents or units",
+        dataAttr: "leases-search",
+      }}
+      activeFilterChips={
+        propertyFilter ? (
+          <PortalActiveFilterChips
+            chips={[
+              {
+                id: "property",
+                label: `Property: ${propertyFilter}`,
+                onRemove: () => setPropertyFilter(""),
+              },
+            ]}
+          />
+        ) : null
+      }
+    />
+  );
+
   if (leaseIdProp) {
     return (
       <>
@@ -242,47 +315,15 @@ export function ManagerLeases({
 
   return (
     <>
-    <ManagerPortalPageShell title="Leases" titleAside={leasesHeaderActions} compactFilterRow>
-      <PortalListControlStack
-        className="mb-3"
-        filterRow={
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="leases-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-          </PortalFilterSortSheet>
-        }
-        destinations={tabs.map((t) => ({
-          id: t.id,
-          label: t.label,
-          href: `${leasesBase}/${t.id}`,
-          count: t.count,
-          dataAttr: t.dataAttr,
-        }))}
-        activeDestinationId={tab}
-        destinationAriaLabel="Lease pipeline stage"
-        activeFilterChips={
-          propertyFilter ? (
-            <PortalActiveFilterChips
-              chips={[
-                {
-                  id: "property",
-                  label: `Property: ${propertyFilter}`,
-                  onRemove: () => setPropertyFilter(""),
-                },
-              ]}
-            />
-          ) : null
-        }
-      />
+    <PortalCommunicationShell
+      title="Leases"
+      titleAside={<div className="hidden md:contents">{leasesHeaderActions}</div>}
+      controlStack={leaseControlStack}
+      hideMobileFilterRow={leaseDetailOpen}
+      mobileThreadReading={leaseDetailOpen}
+    >
       <ManagerLeasesPipelinePanel
-        rows={rows}
+        rows={searchedRows}
         tab={tab}
         refreshKey={tick}
         managerUserId={userId}
@@ -292,8 +333,9 @@ export function ManagerLeases({
         onEmailAccountSetup={(email) => {
           setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
         }}
+        onDetailOpenChange={setLeaseDetailOpen}
       />
-    </ManagerPortalPageShell>
+    </PortalCommunicationShell>
     <ManagerEditLeasesModal
       open={editLeasesOpen}
       onClose={() => setEditLeasesOpen(false)}
