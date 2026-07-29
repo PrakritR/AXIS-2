@@ -70,10 +70,7 @@ import {
 } from "@/lib/portal-inbox-storage";
 import {
   ManagerPortalPageShell,
-  portalDashboardWelcomeSubtitle,
   PORTAL_DASHBOARD_STACK,
-  PortalDashboardKpiRow,
-  PortalDashboardKpiTile,
   formatCompactChargeLine,
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
@@ -222,6 +219,48 @@ function IssueRow({
         ›
       </span>
     </Link>
+  );
+}
+
+/** Compact attention strip — only surfaces that genuinely need action. */
+function DashboardAttentionStrip({
+  items,
+}: {
+  items: { id: string; label: string; href: string; tone: AttentionTone; dataAttr?: string }[];
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-muted" data-attr="dashboard-attention-strip-calm">
+        You&apos;re all caught up — nothing needs your attention right now.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-wrap gap-2 [html[data-native]_&]:gap-1.5"
+      data-attr="dashboard-attention-strip"
+    >
+      {items.map((item) => {
+        const accent = ATTENTION_TONE[item.tone];
+        return (
+          <Link
+            key={item.id}
+            href={item.href}
+            data-attr={item.dataAttr}
+            className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-semibold transition hover:shadow-[var(--shadow-sm)]"
+            style={{
+              borderColor: `color-mix(in srgb, ${accent.fg} 35%, var(--border))`,
+              background: `color-mix(in srgb, ${accent.bg} 55%, var(--card))`,
+              color: accent.fg,
+            }}
+          >
+            <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: accent.fg }} />
+            <span className="truncate">{item.label}</span>
+          </Link>
+        );
+      })}
+    </div>
   );
 }
 
@@ -832,6 +871,63 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     visibility.services ||
     visibility.inbox;
 
+  const attentionStripItems = useMemo(() => {
+    const items: { id: string; label: string; href: string; tone: AttentionTone; dataAttr?: string }[] = [];
+    if (overdueChargeCount > 0) {
+      items.push({
+        id: "overdue",
+        label: `${overdueChargeCount} overdue · ${overdueBalanceLabel}`,
+        href: `${BASE}/payments`,
+        tone: "danger",
+        dataAttr: "dashboard-attention-strip-overdue",
+      });
+    }
+    if (pendingApps.length > 0) {
+      items.push({
+        id: "applications",
+        label: `${pendingApps.length} application${pendingApps.length === 1 ? "" : "s"} to review`,
+        href: `${BASE}/applications`,
+        tone: "pending",
+        dataAttr: "dashboard-attention-strip-applications",
+      });
+    }
+    if (managerSignatureLeaseCount > 0) {
+      items.push({
+        id: "leases-sign",
+        label: `${managerSignatureLeaseCount} lease${managerSignatureLeaseCount === 1 ? "" : "s"} need your signature`,
+        href: `${BASE}/leases`,
+        tone: "pending",
+        dataAttr: "dashboard-attention-strip-leases",
+      });
+    } else if (pendingLeaseRows.length > 0) {
+      items.push({
+        id: "leases",
+        label: `${pendingLeaseRows.length} unsigned lease${pendingLeaseRows.length === 1 ? "" : "s"}`,
+        href: `${BASE}/leases`,
+        tone: "info",
+        dataAttr: "dashboard-attention-strip-leases",
+      });
+    }
+    if (serviceItems.length > 0) {
+      items.push({
+        id: "services",
+        label: `${serviceItems.length} open service request${serviceItems.length === 1 ? "" : "s"}`,
+        href: `${BASE}/services/requests`,
+        tone: servicesSectionTone,
+        dataAttr: "dashboard-attention-strip-services",
+      });
+    }
+    return items;
+  }, [
+    overdueChargeCount,
+    overdueBalanceLabel,
+    pendingApps.length,
+    managerSignatureLeaseCount,
+    pendingLeaseRows.length,
+    serviceItems.length,
+    servicesSectionTone,
+  ]);
+
   const showDocExpiryBanner =
     docExpirySummary && (docExpirySummary.expired > 0 || docExpirySummary.within30 > 0);
   const docExpiryHref =
@@ -840,12 +936,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       : `${BASE}/documents/library?expiry=expiring30`;
 
   return (
-    <ManagerPortalPageShell
-      title="Dashboard"
-      subtitle={portalDashboardWelcomeSubtitle(displayName)}
-      hideTitleOnNative
-      welcomeSubtitle
-    >
+    <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
       {/* Full width: the assistant is the floating popup by default, and a
           manager who pins it gets the portal-wide rail from the shell layout
           (`PortalAssistantDockRail`) rather than a dashboard-only column.
@@ -870,62 +961,11 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
           </Link>
         ) : null}
 
-        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
-        <PortalDashboardKpiRow>
-            <PortalDashboardKpiTile
-              label="Rooms vacant"
-              value={roomsVacant}
-              tone={roomsVacant > 0 ? "warning" : "success"}
-              emphasis={roomsVacant > 0}
-              href={`${BASE}/properties`}
-              dataAttr="dashboard-kpi-vacant"
-            />
-            <PortalDashboardKpiTile
-              label="Leases"
-              value={pendingLeaseRows.length}
-              tone="brand"
-              emphasis={managerSignatureLeaseCount > 0 || pendingLeaseRows.length > 0}
-              href={`${BASE}/leases`}
-              dataAttr="dashboard-kpi-leases"
-            />
-            <PortalDashboardKpiTile
-              label="Applications"
-              value={pendingApps.length}
-              tone={pendingApps.length > 0 ? "warning" : "brand"}
-              emphasis={pendingApps.length > 0}
-              href={`${BASE}/applications`}
-              dataAttr="dashboard-kpi-applications"
-            />
-            <PortalDashboardKpiTile
-              label="Overdue"
-              value={overdueBalanceLabel}
-              tone={overdueChargeCount > 0 ? "danger" : "success"}
-              emphasis={overdueChargeCount > 0}
-              href={`${BASE}/payments`}
-              dataAttr="dashboard-kpi-overdue"
-            />
-            <PortalDashboardKpiTile
-              label="Services"
-              value={serviceItems.length}
-              tone={serviceItems.length > 0 ? "warning" : "neutral"}
-              emphasis={serviceItems.length > 0}
-              href={`${BASE}/services/requests`}
-              dataAttr="dashboard-kpi-services"
-            />
-            <PortalDashboardKpiTile
-              label="Messages"
-              value={inboxThreads.length}
-              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
-              emphasis={inboxThreads.length > 0}
-              href={`${BASE}/communication/inbox/unopened`}
-              dataAttr="dashboard-kpi-messages"
-            />
-        </PortalDashboardKpiRow>
-
-        {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
         {visibility.cashflow ? (
           <MonthlyProfitChart points={mergeMonthlyCashflow(paymentsByMonth, expensesByMonth)} />
         ) : null}
+
+        <DashboardAttentionStrip items={attentionStripItems} />
 
         {/* Needs attention — a live, colour-coded queue: big all-caps heading over
             status-railed group cards that stream in with a staggered entrance. */}

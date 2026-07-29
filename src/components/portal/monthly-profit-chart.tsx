@@ -96,22 +96,14 @@ export function MonthlyProfitChart({
   const active = points[activeIndex] ?? points[points.length - 1];
   const activeValue = active ? cashflowMetricValue(active, metric) : 0;
 
-  const periodTotal = useMemo(
-    () => points.reduce((s, p) => s + cashflowMetricValue(p, metric), 0),
-    [points, metric],
-  );
-
   const hasAny = useMemo(
     () => allPoints.some((p) => p.revenue !== 0 || p.expense !== 0 || p.profit !== 0),
     [allPoints],
   );
 
-  const metricSubtitle =
-    subtitle ?? METRIC_OPTIONS.find((m) => m.id === metric)?.subtitle ?? "Per month";
-
   const chart = useMemo(() => {
     const w = 360;
-    const h = 100;
+    const h = 140;
     const padX = 8;
     const padY = 12;
     const values = points.map((p) => cashflowMetricValue(p, metric));
@@ -144,65 +136,54 @@ export function MonthlyProfitChart({
       )}
       data-attr="monthly-profit-chart"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground lg:text-base">{title}</h2>
-          <p className="mt-0.5 text-[11px] uppercase tracking-[0.07em] text-muted/70">{metricSubtitle}</p>
-        </div>
-        <p className="text-[11px] tabular-nums text-muted lg:text-xs">
-          {rangeLabel(rangeMonths)} total{" "}
-          <span className={heroClassForMetric(metric, periodTotal)}>{formatUsd(periodTotal)}</span>
-        </p>
-      </div>
-
-      <div
-        className="mt-3 flex rounded-full border border-border bg-accent/25 p-0.5 [html[data-native]_&]:mt-2.5"
-        role="tablist"
-        aria-label="Cash flow metric"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {METRIC_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            role="tab"
-            aria-selected={metric === opt.id}
-            data-attr={`cashflow-metric-${opt.id}`}
-            className={cn(
-              "min-w-0 flex-1 rounded-full py-1.5 text-center text-[11px] font-semibold transition-colors sm:text-xs",
-              metric === opt.id
-                ? "bg-card text-foreground shadow-[var(--shadow-sm)]"
-                : "text-muted hover:text-foreground",
-            )}
-            onClick={() => setMetric(opt.id)}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <h2 className="text-base font-semibold tracking-[-0.01em] text-foreground lg:text-lg">{title}</h2>
+          <div
+            className="flex rounded-full border border-border bg-accent/25 p-0.5"
+            role="tablist"
+            aria-label="Cash flow metric"
+            onClick={(e) => e.stopPropagation()}
           >
-            {opt.label}
-          </button>
-        ))}
+            {METRIC_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                role="tab"
+                aria-selected={metric === opt.id}
+                data-attr={`cashflow-metric-${opt.id}`}
+                className={cn(
+                  "min-h-9 min-w-0 rounded-full px-3 py-1.5 text-center text-[11px] font-semibold transition-colors sm:text-xs",
+                  metric === opt.id
+                    ? "bg-card text-foreground shadow-[var(--shadow-sm)]"
+                    : "text-muted hover:text-foreground",
+                )}
+                onClick={() => setMetric(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {active ? (
+          <p className="shrink-0 text-sm tabular-nums text-muted">
+            <span className={heroClassForMetric(metric, activeValue)}>{formatUsd(activeValue)}</span>
+            <span className="hidden sm:inline"> · {active.label}</span>
+          </p>
+        ) : null}
       </div>
 
       {active ? (
-        <div className="mt-3 lg:mt-4">
-          <p
-            className={cn(
-              "text-3xl font-bold tabular-nums tracking-tight sm:text-[2rem] lg:text-[2.25rem]",
-              heroClassForMetric(metric, activeValue),
-            )}
-            data-attr="monthly-profit-chart-hero"
-          >
-            {formatUsd(activeValue)}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {active.label} · {METRIC_OPTIONS.find((m) => m.id === metric)?.label.toLowerCase()}
-          </p>
-        </div>
+        <p className="mt-1 text-xs text-muted sm:hidden">
+          {active.label} · {METRIC_OPTIONS.find((m) => m.id === metric)?.label.toLowerCase()}
+        </p>
       ) : null}
 
       {hasAny ? (
         <div className="mt-3 lg:mt-4">
           <svg
             viewBox={`0 0 ${chart.w} ${chart.h}`}
-            className="w-full touch-pan-y lg:min-h-[7.5rem]"
+            className="w-full touch-pan-y min-h-[9rem] sm:min-h-[10rem] lg:min-h-[12rem]"
             role="img"
             aria-label={`Monthly ${metric} trend`}
           >
