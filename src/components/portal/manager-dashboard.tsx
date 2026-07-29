@@ -73,6 +73,7 @@ import {
   portalDashboardWelcomeSubtitle,
   PORTAL_DASHBOARD_STACK,
   PortalDashboardKpiRow,
+  PortalDashboardKpiTile,
   formatCompactChargeLine,
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
@@ -155,45 +156,6 @@ function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode })
     >
       {children}
     </span>
-  );
-}
-
-/** Restrained KPI tile: big tabular number + small uppercase muted label. */
-function KpiTile({
-  label,
-  value,
-  sub,
-  href,
-  accent,
-  dataAttr,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href: string;
-  accent?: boolean;
-  dataAttr?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
-    >
-      <span
-        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
-          accent ? "text-[var(--status-overdue-fg)]" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
-        {label}
-      </span>
-      {sub ? (
-        <span className="mt-0.5 text-[11px] text-muted/80 [html[data-native]_&]:text-[10px]">{sub}</span>
-      ) : null}
-    </Link>
   );
 }
 
@@ -826,50 +788,43 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
         {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
         <PortalDashboardKpiRow>
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Rooms vacant"
               value={roomsVacant}
-              sub={roomsVacant > 0 ? "listed & available" : "fully occupied"}
-              accent={roomsVacant > 0}
+              tone={roomsVacant > 0 ? "warning" : "success"}
+              emphasis={roomsVacant > 0}
               href={`${BASE}/properties`}
               dataAttr="dashboard-kpi-vacant"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Leases to sign"
               value={pendingLeaseRows.length}
-              sub={
-                managerSignatureLeaseCount > 0
-                  ? `${managerSignatureLeaseCount} need your signature`
-                  : pendingLeaseRows.length > 0
-                    ? "awaiting resident"
-                    : "none pending"
-              }
-              accent={managerSignatureLeaseCount > 0}
+              tone="brand"
+              emphasis={managerSignatureLeaseCount > 0 || pendingLeaseRows.length > 0}
               href={`${BASE}/leases`}
               dataAttr="dashboard-kpi-leases"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Applicants to review"
               value={pendingApps.length}
-              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
+              tone={pendingApps.length > 0 ? "warning" : "brand"}
+              emphasis={pendingApps.length > 0}
               href={`${BASE}/applications`}
               dataAttr="dashboard-kpi-applications"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Overdue balance"
               value={overdueBalanceLabel}
-              sub={
-                overdueChargeCount > 0
-                  ? `${overdueChargeCount} overdue ${overdueChargeCount === 1 ? "charge" : "charges"}`
-                  : "None overdue"
-              }
-              accent={overdueChargeCount > 0}
+              tone={overdueChargeCount > 0 ? "danger" : "success"}
+              emphasis={overdueChargeCount > 0}
               href={`${BASE}/payments`}
               dataAttr="dashboard-kpi-overdue"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Open services"
               value={serviceItems.length}
+              tone={serviceItems.length > 0 ? "warning" : "neutral"}
+              emphasis={serviceItems.length > 0}
               href={`${BASE}/services/requests`}
               dataAttr="dashboard-kpi-services"
             />

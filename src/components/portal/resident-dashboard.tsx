@@ -8,6 +8,7 @@ import {
   PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
   PortalDashboardKpiRow,
+  PortalDashboardKpiTile,
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import {
@@ -90,45 +91,6 @@ function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode })
     >
       {children}
     </span>
-  );
-}
-
-/** Restrained KPI tile: big tabular number + small uppercase muted label. */
-function KpiTile({
-  label,
-  value,
-  sub,
-  href,
-  accent,
-  dataAttr,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href: string;
-  accent?: boolean;
-  dataAttr?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
-    >
-      <span
-        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
-          accent ? "text-[var(--status-overdue-fg)]" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
-        {label}
-      </span>
-      {sub ? (
-        <span className="mt-0.5 text-[11px] text-muted/80 [html[data-native]_&]:text-[10px]">{sub}</span>
-      ) : null}
-    </Link>
   );
 }
 
@@ -536,12 +498,6 @@ export function ResidentDashboard({
 
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
-  const balanceSub =
-    overdueChargeCount > 0
-      ? `${overdueChargeCount} overdue ${overdueChargeCount === 1 ? "charge" : "charges"}`
-      : pendingCharges.length > 0
-        ? `${pendingCharges.length} pending`
-        : "All paid";
 
   const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
   const leaseKpi = leaseKpiValue(lease.tone);
@@ -578,38 +534,43 @@ export function ResidentDashboard({
     >
       <div className={PORTAL_DASHBOARD_STACK}>
         <PortalDashboardKpiRow>
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Balance due"
               value={formatUsd(totalBalanceDue)}
-              sub={balanceSub}
-              accent={overdueChargeCount > 0}
+              tone={overdueChargeCount > 0 ? "danger" : totalBalanceDue > 0 ? "warning" : "success"}
+              emphasis={overdueChargeCount > 0 || totalBalanceDue > 0}
               href={`${BASE}/payments`}
               dataAttr="resident-dashboard-kpi-balance"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Open requests"
               value={openServiceCount}
+              tone={openServiceCount > 0 ? "warning" : "neutral"}
+              emphasis={openServiceCount > 0}
               href={servicesHref}
               dataAttr="resident-dashboard-kpi-services"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Lease"
               value={leaseKpi.value}
-              sub={lease.label}
-              accent={leaseKpi.accent}
+              tone={leaseKpi.accent ? "warning" : "brand"}
+              emphasis={leaseKpi.accent}
               href={`${BASE}/lease`}
               dataAttr="resident-dashboard-kpi-lease"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Applications"
               value={pendingApplicationCount}
-              sub={approvedApplicationCount > 0 ? `${approvedApplicationCount} approved` : undefined}
+              tone={pendingApplicationCount > 0 ? "warning" : "brand"}
+              emphasis={pendingApplicationCount > 0}
               href={`${BASE}/applications`}
               dataAttr="resident-dashboard-kpi-applications"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Unread messages"
               value={inbox}
+              tone={inbox > 0 ? "brand" : "neutral"}
+              emphasis={inbox > 0}
               href={`${BASE}/communication/inbox/unopened`}
               dataAttr="resident-dashboard-kpi-inbox"
             />

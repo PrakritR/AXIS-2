@@ -11,6 +11,7 @@ import {
   PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
   PortalDashboardKpiRow,
+  PortalDashboardKpiTile,
   PORTAL_DASHBOARD_SECTION_CARD,
 } from "@/components/portal/portal-metrics";
 import {
@@ -50,40 +51,6 @@ function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode })
     >
       {children}
     </span>
-  );
-}
-
-/** Restrained KPI tile: big tabular number + small uppercase muted label. */
-function KpiTile({
-  label,
-  value,
-  href,
-  accent,
-  dataAttr,
-}: {
-  label: string;
-  value: string | number;
-  href: string;
-  accent?: boolean;
-  dataAttr?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex min-w-0 flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
-    >
-      <span
-        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
-          accent ? "text-[var(--status-pending-fg)]" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
-        {label}
-      </span>
-    </Link>
   );
 }
 
@@ -387,34 +354,43 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
           </div>
         ) : null}
         <PortalDashboardKpiRow>
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Open work orders"
               value={openWorkOrders.length}
+              tone={openWorkOrders.length > 0 ? "warning" : "neutral"}
+              emphasis={openWorkOrders.length > 0}
               href={`${BASE}/work-orders`}
               dataAttr="vendor-dashboard-kpi-work-orders"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Awaiting quote"
               value={quotesPending.length}
-              accent={quotesPending.length > 0}
+              tone="brand"
+              emphasis={quotesPending.length > 0}
               href={`${BASE}/work-orders`}
               dataAttr="vendor-dashboard-kpi-quotes"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Scheduled visits"
               value={upcomingVisits.length}
+              tone={upcomingVisits.length > 0 ? "success" : "neutral"}
+              emphasis={upcomingVisits.length > 0}
               href={`${BASE}/calendar`}
               dataAttr="vendor-dashboard-kpi-visits"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Pending payouts"
               value={payoutItems.length}
+              tone={payoutItems.length > 0 ? "warning" : "success"}
+              emphasis={payoutItems.length > 0}
               href={`${BASE}/payments`}
               dataAttr="vendor-dashboard-kpi-payouts"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Unread messages"
               value={inboxThreads.length}
+              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
+              emphasis={inboxThreads.length > 0}
               href={`${BASE}/inbox/unopened`}
               dataAttr="vendor-dashboard-kpi-inbox"
             />

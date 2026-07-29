@@ -401,6 +401,96 @@ export function PortalDashboardKpiRow({ children }: { children: ReactNode }) {
   );
 }
 
+/** Small palette for dashboard stat tiles — uses portal status tokens (light + dark safe). */
+export type PortalDashboardKpiTone = "brand" | "success" | "warning" | "danger" | "neutral";
+
+const KPI_TONE_STYLES: Record<
+  PortalDashboardKpiTone,
+  { accent: string; shell: string; value: string; label: string }
+> = {
+  brand: {
+    accent: "border-l-[var(--status-approved-fg)]",
+    shell: "bg-[color-mix(in_srgb,var(--status-approved-bg)_42%,var(--card))]",
+    value: "text-[var(--status-approved-fg)]",
+    label: "text-[color-mix(in_srgb,var(--status-approved-fg)_70%,var(--muted))]",
+  },
+  success: {
+    accent: "border-l-[var(--status-confirmed-fg)]",
+    shell: "bg-[color-mix(in_srgb,var(--status-confirmed-bg)_45%,var(--card))]",
+    value: "text-[var(--status-confirmed-fg)]",
+    label: "text-[color-mix(in_srgb,var(--status-confirmed-fg)_68%,var(--muted))]",
+  },
+  warning: {
+    accent: "border-l-[var(--status-pending-fg)]",
+    shell: "bg-[color-mix(in_srgb,var(--status-pending-bg)_50%,var(--card))]",
+    value: "text-[var(--status-pending-fg)]",
+    label: "text-[color-mix(in_srgb,var(--status-pending-fg)_72%,var(--muted))]",
+  },
+  danger: {
+    accent: "border-l-[var(--status-overdue-fg)]",
+    shell: "bg-[color-mix(in_srgb,var(--status-overdue-bg)_48%,var(--card))]",
+    value: "text-[var(--status-overdue-fg)]",
+    label: "text-[color-mix(in_srgb,var(--status-overdue-fg)_70%,var(--muted))]",
+  },
+  neutral: {
+    accent: "border-l-primary/55",
+    shell: "bg-[color-mix(in_srgb,var(--primary)_6%,var(--card))]",
+    value: "text-foreground",
+    label: "text-muted",
+  },
+};
+
+/** Restrained KPI tile: tinted accent, colored value + label (no subtext row). */
+export function PortalDashboardKpiTile({
+  label,
+  value,
+  href,
+  tone = "neutral",
+  emphasis = false,
+  dataAttr,
+}: {
+  label: string;
+  value: string | number;
+  href: string;
+  tone?: PortalDashboardKpiTone;
+  /** Stronger value weight when the metric needs attention. */
+  emphasis?: boolean;
+  dataAttr?: string;
+}) {
+  const styles = KPI_TONE_STYLES[tone];
+  return (
+    <Link
+      href={href}
+      data-attr={dataAttr}
+      className={cn(
+        "flex min-w-0 flex-1 flex-col rounded-xl border border-border border-l-[3px] px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow,transform] duration-150",
+        "hover:-translate-y-px hover:border-primary/35 hover:shadow-[0_4px_14px_rgba(15,23,42,0.07)]",
+        "max-md:min-w-0 sm:min-w-[8.75rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3",
+        styles.accent,
+        styles.shell,
+      )}
+    >
+      <span
+        className={cn(
+          "text-[1.75rem] leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem]",
+          emphasis ? "font-bold" : "font-semibold",
+          styles.value,
+        )}
+      >
+        {value}
+      </span>
+      <span
+        className={cn(
+          "mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]",
+          styles.label,
+        )}
+      >
+        {label}
+      </span>
+    </Link>
+  );
+}
+
 /** Compact list row used in dashboard section previews. */
 export function PortalDashboardCompactRow({
   title,
