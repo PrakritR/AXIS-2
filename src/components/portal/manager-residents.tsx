@@ -17,6 +17,8 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -1700,12 +1702,12 @@ export function ManagerResidents({
   const residentDetailPanel =
     selectedId && selected ? (
                           <div className="flex flex-col gap-4">
-                            <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center gap-2">
+                            <div className="rounded-2xl border border-border bg-card p-4 [html[data-native]_&]:p-3">
+                              <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                  className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
                                   onClick={() => {
                                     const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
                                     const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
@@ -1713,23 +1715,23 @@ export function ManagerResidents({
                                     setWelcomePreviewFor(selected);
                                   }}
                                 >
-                                  Email account setup
+                                  Email setup
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full px-3 py-1 text-xs"
+                                  className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                   onClick={openEditResidentModal}
                                 >
-                                  Edit resident
+                                  Edit
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+                                  className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                                   onClick={deleteSelectedResident}
                                 >
-                                  Delete resident
+                                  Delete
                                 </Button>
                               </div>
                             </div>
@@ -1748,13 +1750,13 @@ export function ManagerResidents({
                               }
                               headerAction={
                                 selectedApplicationRow ? (
-                                  <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                                  <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
                                     {selectedApplicationRow.bucket === "pending" ? (
                                       <>
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={PORTAL_HEADER_ACTION_BTN}
+                                          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                           data-attr="resident-application-reject"
                                           onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
                                         >
@@ -1763,7 +1765,7 @@ export function ManagerResidents({
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                                           data-attr="resident-application-delete"
                                           onClick={() => void deleteSelectedResident()}
                                         >
@@ -1773,7 +1775,7 @@ export function ManagerResidents({
                                           <Button
                                             type="button"
                                             variant="primary"
-                                            className={PORTAL_HEADER_ACTION_BTN}
+                                            className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                             data-attr="resident-application-approve"
                                             onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                           >
@@ -1786,16 +1788,16 @@ export function ManagerResidents({
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={PORTAL_HEADER_ACTION_BTN}
+                                          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                           data-attr="resident-application-move-pending"
                                           onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
                                         >
-                                          Move to pending
+                                          To pending
                                         </Button>
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className={`${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                                           data-attr="resident-application-delete"
                                           onClick={() => void deleteSelectedResident()}
                                         >
@@ -2000,11 +2002,11 @@ export function ManagerResidents({
                                 setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
                               }
                               headerAction={
-                                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                                <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                     onClick={() => setResidentReminderSettingsOpen(true)}
                                     data-attr="resident-payments-reminder-settings"
                                   >
@@ -2013,20 +2015,20 @@ export function ManagerResidents({
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                     onClick={openPaymentMethodEditor}
                                     data-attr="resident-payment-method-open"
                                   >
-                                    Payment method
+                                    Pay method
                                   </Button>
                                   <Button
                                     type="button"
                                     variant="primary"
-                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
                                     onClick={() => setAddResidentPaymentOpen(true)}
                                     data-attr="resident-add-payment"
                                   >
-                                    Add payment
+                                    Add
                                   </Button>
                                 </div>
                               }

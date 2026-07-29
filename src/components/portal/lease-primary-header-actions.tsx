@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { residentHasSignedLease } from "@/lib/lease-pipeline-storage";
 
@@ -27,12 +27,12 @@ type LeasePrimaryHeaderActionsProps = {
   moveToManagerReviewDataAttr?: string;
 };
 
-/** Download, Sign, and Delete lease — aligned top-right on resident LEASE and leases table rows. */
+/** Download, Sign, and Delete — aligned top-right on resident LEASE and leases table rows. */
 export function LeasePrimaryHeaderActions({
   row,
-  btnClass = PORTAL_HEADER_ACTION_BTN,
+  btnClass = RESIDENT_DETAIL_HEADER_ACTION_BTN,
   downloadLabel = "Download",
-  deleteLabel = "Delete lease",
+  deleteLabel = "Delete",
   onDownload,
   onSignManager,
   onSigningReminder,
@@ -52,7 +52,7 @@ export function LeasePrimaryHeaderActions({
   const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
 
   return (
-    <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+    <div className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0">
       {hasDocument ? (
         <Button type="button" variant="outline" className={btnClass} data-attr={downloadDataAttr} onClick={onDownload}>
           {downloadLabel}
@@ -78,7 +78,7 @@ export function LeasePrimaryHeaderActions({
           data-attr={moveToManagerReviewDataAttr}
           onClick={onMoveToManagerReview}
         >
-          Move to manager review
+          Move to review
         </Button>
       ) : null}
       {!row.managerSignature && residentHasSignedLease(row) && onSignManager ? (

@@ -634,6 +634,13 @@ export function PortalToolbarSelectWrap({
 export const PORTAL_HEADER_ACTION_BTN =
   "h-10 rounded-full px-5 text-sm font-semibold [html[data-native]_&]:h-9 [html[data-native]_&]:px-3.5 [html[data-native]_&]:text-xs";
 
+/** Compact toolbar buttons (resident profile sections on mobile). */
+export const RESIDENT_DETAIL_HEADER_ACTION_BTN =
+  "h-8 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold sm:h-9 sm:px-3.5 sm:text-xs [html[data-native]_&]:h-8 [html[data-native]_&]:px-2.5 [html[data-native]_&]:text-[11px]";
+
+export const RESIDENT_DETAIL_HEADER_ACTIONS_ROW =
+  "flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0";
+
 /** Desktop-only page actions — pair with {@link PORTAL_FILTER_ACTIONS_MOBILE} in filter rows. */
 export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";
 

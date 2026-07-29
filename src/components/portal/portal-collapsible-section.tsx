@@ -115,7 +115,16 @@ export function PortalCollapsibleSection({
               />
             ) : null}
           </div>
-          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+          {subtitle ? (
+            <p
+              className={cn(
+                "mt-1 text-sm text-muted",
+                headerActionsInline && titleVariant === "resident" && "mt-0.5 line-clamp-2 text-xs sm:line-clamp-none sm:text-sm",
+              )}
+            >
+              {subtitle}
+            </p>
+          ) : null}
         </div>
         {headerActions ? (
           <div
