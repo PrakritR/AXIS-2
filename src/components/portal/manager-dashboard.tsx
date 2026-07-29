@@ -803,7 +803,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               dataAttr="dashboard-kpi-vacant"
             />
             <PortalDashboardKpiTile
-              label="Sign"
+              label="Leases to sign"
               value={pendingLeaseRows.length}
               tone="brand"
               emphasis={managerSignatureLeaseCount > 0 || pendingLeaseRows.length > 0}
