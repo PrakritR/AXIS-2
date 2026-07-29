@@ -6,8 +6,12 @@ import { PortalSectionActionRow } from "@/components/portal/portal-section-actio
 import {
   parsePropertyDetailTab,
   parseResidentDetailTab,
+  parseCalendarViewTab,
+  parseTeamLinkTab,
   propertyDetailHref,
   residentDetailHref,
+  calendarViewHref,
+  teamLinkHref,
 } from "@/lib/portal-detail-routes";
 
 describe("portal-detail-routes", () => {
@@ -29,6 +33,15 @@ describe("portal-detail-routes", () => {
     expect(residentDetailHref("/portal", "current", "res-1", "lease")).toBe(
       "/portal/residents/current/res-1/lease",
     );
+    expect(calendarViewHref("/portal", "tours")).toBe("/portal/calendar/tours");
+    expect(teamLinkHref("/portal", "linked")).toBe("/portal/relationships/linked");
+  });
+
+  it("parses calendar and team routed tabs", () => {
+    expect(parseCalendarViewTab("services")).toBe("services");
+    expect(parseCalendarViewTab("")).toBe("all");
+    expect(parseTeamLinkTab("linked")).toBe("linked");
+    expect(parseTeamLinkTab(undefined)).toBe("pending");
   });
 });
 

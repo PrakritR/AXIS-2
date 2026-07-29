@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { residentHasSignedLease } from "@/lib/lease-pipeline-storage";
@@ -27,7 +28,7 @@ type LeasePrimaryHeaderActionsProps = {
   moveToManagerReviewDataAttr?: string;
 };
 
-/** Download, Sign, and Delete — aligned top-right on resident LEASE and leases table rows. */
+/** Download, sign, send — Appendix C3 aligned action row for lease detail surfaces. */
 export function LeasePrimaryHeaderActions({
   row,
   btnClass = RESIDENT_DETAIL_HEADER_ACTION_BTN,
@@ -52,7 +53,21 @@ export function LeasePrimaryHeaderActions({
   const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
 
   return (
-    <div className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0">
+    <PortalSectionActionRow
+      destructive={
+        onDelete ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            data-attr={deleteDataAttr}
+            onClick={onDelete}
+          >
+            {deleteLabel}
+          </Button>
+        ) : undefined
+      }
+    >
       {hasDocument ? (
         <Button type="button" variant="outline" className={btnClass} data-attr={downloadDataAttr} onClick={onDownload}>
           {downloadLabel}
@@ -84,7 +99,7 @@ export function LeasePrimaryHeaderActions({
       {!row.managerSignature && residentHasSignedLease(row) && onSignManager ? (
         <Button
           type="button"
-          variant="outline"
+          variant="primary"
           className={btnClass}
           data-attr={signManagerDataAttr}
           onClick={onSignManager}
@@ -94,7 +109,7 @@ export function LeasePrimaryHeaderActions({
       ) : row.status === "Resident Signature Pending" && onSigningReminder ? (
         <Button
           type="button"
-          variant="outline"
+          variant="primary"
           className={btnClass}
           data-attr={signingReminderDataAttr}
           disabled={signingReminderBusy}
@@ -104,17 +119,6 @@ export function LeasePrimaryHeaderActions({
           {signingReminderBusy ? "Sending…" : "Sign"}
         </Button>
       ) : null}
-      {onDelete ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          data-attr={deleteDataAttr}
-          onClick={onDelete}
-        >
-          {deleteLabel}
-        </Button>
-      ) : null}
-    </div>
+    </PortalSectionActionRow>
   );
 }

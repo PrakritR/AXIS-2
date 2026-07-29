@@ -7,7 +7,6 @@ import { PortalListControlStack } from "@/components/portal/portal-list-control-
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -53,17 +52,25 @@ import {
   readPlannedEvents,
   getPartnerInquiryWindows,
 } from "@/lib/demo-admin-scheduling";
+import {
+  calendarViewHref,
+  parseCalendarViewTab,
+  type CalendarViewTabId,
+} from "@/lib/portal-detail-routes";
 
-type ManagerCalendarView = "all" | "tours" | "services";
+const MANAGER_PORTAL_BASE = "/portal";
 
 export function PortalCalendar({
   portal,
   initialUserId,
   initialEmail,
+  calendarView: calendarViewProp,
 }: {
   portal: "manager" | "admin";
   initialUserId?: string | null;
   initialEmail?: string | null;
+  /** Routed view tab (manager portal only). */
+  calendarView?: CalendarViewTabId;
 }) {
   const { userId, email, ready: authReady } = useManagerUserId({
     userId: initialUserId,
@@ -79,7 +86,7 @@ export function PortalCalendar({
   const [shareAvailability, setShareAvailability] = useState(false);
   const [googleExternalMeetings, setGoogleExternalMeetings] = useState<DemoMeeting[]>([]);
   const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
-  const [calendarView, setCalendarView] = useState<ManagerCalendarView>("all");
+  const calendarView = portal === "manager" ? parseCalendarViewTab(calendarViewProp) : "all";
   const [workOrderTick, setWorkOrderTick] = useState(0);
 
 
@@ -325,12 +332,25 @@ export function PortalCalendar({
 
   const calendarTabs = useMemo(
     () => [
-      { id: "all", label: "All", count: calendarTabCounts.all, dataAttr: "calendar-tab-all" },
-      { id: "tours", label: "Tours", count: calendarTabCounts.tours, dataAttr: "calendar-tab-tours" },
       {
-        id: "services",
+        id: "all" as const,
+        label: "All",
+        count: calendarTabCounts.all,
+        href: calendarViewHref(MANAGER_PORTAL_BASE, "all"),
+        dataAttr: "calendar-tab-all",
+      },
+      {
+        id: "tours" as const,
+        label: "Tours",
+        count: calendarTabCounts.tours,
+        href: calendarViewHref(MANAGER_PORTAL_BASE, "tours"),
+        dataAttr: "calendar-tab-tours",
+      },
+      {
+        id: "services" as const,
         label: "Service orders",
         count: calendarTabCounts.services,
+        href: calendarViewHref(MANAGER_PORTAL_BASE, "services"),
         dataAttr: "calendar-tab-services",
       },
     ],
@@ -423,13 +443,9 @@ export function PortalCalendar({
                 </Button>
               </PortalSectionActionRow>
             }
-            destinationRow={
-              <ManagerPortalStatusPills
-                tabs={calendarTabs}
-                activeId={calendarView}
-                onChange={(id) => setCalendarView(id as ManagerCalendarView)}
-              />
-            }
+            destinations={calendarTabs}
+            activeDestinationId={calendarView}
+            destinationAriaLabel="Calendar views"
           />
         ) : null}
         {portal === "manager" && showCoManagerCoordination ? (

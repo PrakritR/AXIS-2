@@ -3,7 +3,6 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import {Input, Textarea, Select} from "@/components/ui/input";
@@ -19,7 +18,6 @@ import {
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -211,41 +209,24 @@ import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 
 /**
- * Expanded-resident section: collapsed to a one-line summary by default; clicking the
- * header opens the full content (PDF preview, document, action buttons) inline.
+ * Routed resident detail tab panel — flat content (no collapsible chevron stack).
  */
-function ResidentDetailSection({
-  title,
-  summary,
-  expanded,
-  onToggle,
+function ResidentDetailTabPanel({
   headerAction,
+  destructive,
   children,
 }: {
-  title: string;
-  summary: ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
   headerAction?: ReactNode;
+  destructive?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <PortalCollapsibleSection
-      title={title}
-      titleVariant="resident"
-      subtitle={summary}
-      expanded={expanded}
-      onExpandedChange={(open) => {
-        if (open !== expanded) onToggle();
-      }}
-      headerActions={headerAction}
-      headerActionsInline={Boolean(headerAction)}
-      contentClassName="pb-6"
-      surfaceMuted={false}
-      toggleDataAttr="resident-section-toggle"
-    >
+    <div className="space-y-4" data-slot="resident-detail-tab-panel">
+      {headerAction || destructive ? (
+        <PortalSectionActionRow destructive={destructive}>{headerAction}</PortalSectionActionRow>
+      ) : null}
       {children}
-    </PortalCollapsibleSection>
+    </div>
   );
 }
 
@@ -1848,73 +1829,56 @@ export function ManagerResidents({
                             </div>
 
                             {showResidentApplication && resolvedDetailTab === "application" ? (
-                            <ResidentDetailSection
-                              title="Application"
-                              summary={
-                                selectedApplicationRow
-                                  ? `Application: ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
-                                  : "No application on file for this resident."
-                              }
-                              expanded
-                              onToggle={() => {}}
+                            <ResidentDetailTabPanel
                               headerAction={
                                 selectedApplicationRow ? (
-                                  <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
-                                    {selectedApplicationRow.bucket === "pending" ? (
-                                      <>
+                                  selectedApplicationRow.bucket === "pending" ? (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+                                        data-attr="resident-application-reject"
+                                        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                      >
+                                        Reject
+                                      </Button>
+                                      {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
                                         <Button
                                           type="button"
-                                          variant="outline"
+                                          variant="primary"
                                           className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                                          data-attr="resident-application-reject"
-                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                          data-attr="resident-application-approve"
+                                          onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                         >
-                                          Reject
+                                          Approve
                                         </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                          data-attr="resident-application-delete"
-                                          onClick={() => void deleteSelectedResident()}
-                                        >
-                                          Delete
-                                        </Button>
-                                        {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
-                                          <Button
-                                            type="button"
-                                            variant="primary"
-                                            className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                                            data-attr="resident-application-approve"
-                                            onClick={() => setApprovePreviewRow(selectedApplicationRow)}
-                                          >
-                                            Approve
-                                          </Button>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                                          data-attr="resident-application-move-pending"
-                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
-                                        >
-                                          To pending
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                          data-attr="resident-application-delete"
-                                          onClick={() => void deleteSelectedResident()}
-                                        >
-                                          Delete
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+                                      data-attr="resident-application-move-pending"
+                                      onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+                                    >
+                                      To pending
+                                    </Button>
+                                  )
+                                ) : undefined
+                              }
+                              destructive={
+                                selectedApplicationRow ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                                    data-attr="resident-application-delete"
+                                    onClick={() => void deleteSelectedResident()}
+                                  >
+                                    Delete
+                                  </Button>
                                 ) : undefined
                               }
                             >
@@ -1936,22 +1900,13 @@ export function ManagerResidents({
                               ) : (
                                 <p className="text-sm text-muted">No application on file for this resident.</p>
                               )}
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
                             ) : null}
 
                             {showResidentLease && resolvedDetailTab === "lease" ? (
-                            <ResidentDetailSection
-                              title="Lease"
-                              summary={
-                                residentLease
-                                  ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
-                                  : "No lease created yet for this resident."
-                              }
-                              expanded
-                              onToggle={() => {}}
-                              headerAction={
-                                residentLease ? (
-                                  <LeasePrimaryHeaderActions
+                            <ResidentDetailTabPanel>
+                              {residentLease ? (
+                                <LeasePrimaryHeaderActions
                                     row={residentLease}
                                     downloadDataAttr="resident-lease-download"
                                     signManagerDataAttr="resident-lease-sign-manager"
@@ -2007,9 +1962,7 @@ export function ManagerResidents({
                                       }
                                     }}
                                   />
-                                ) : undefined
-                              }
-                            >
+                              ) : null}
                               {residentLease ? (
                                 <>
                                   <PortalTableDetailActions placement="top">
@@ -2093,25 +2046,13 @@ export function ManagerResidents({
                               ) : (
                                 <p className="text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
                             ) : null}
 
                             {resolvedDetailTab === "payments" ? (
-                            <ResidentDetailSection
-                              title="Payments"
-                              summary={
-                                residentCharges.length === 0
-                                  ? "No charges yet."
-                                  : chargeBucket === "paid"
-                                    ? "Paid charges"
-                                    : chargeBucket === "overdue"
-                                      ? "Overdue charges"
-                                      : "Pending charges"
-                              }
-                              expanded
-                              onToggle={() => {}}
+                            <ResidentDetailTabPanel
                               headerAction={
-                                <div className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+                                <>
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -2139,7 +2080,7 @@ export function ManagerResidents({
                                   >
                                     Add
                                   </Button>
-                                </div>
+                                </>
                               }
                             >
                               <ManagerPortalStatusFilterRow className="mt-3">
@@ -2163,19 +2104,11 @@ export function ManagerResidents({
                                 onScheduleChanged={() => void reloadResidentPaymentSchedule()}
                                 onRowsChanged={() => setHcTick((n) => n + 1)}
                               />
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
                             ) : null}
 
                             {resolvedDetailTab === "services" ? (
-                            <ResidentDetailSection
-                              title="Services"
-                              summary={
-                                residentServiceRequests.length + residentWorkOrders.length === 0
-                                  ? "No add-on services or work orders yet."
-                                  : `${residentServiceRequests.length} add-on service${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
-                              }
-                              expanded
-                              onToggle={() => {}}
+                            <ResidentDetailTabPanel
                               headerAction={
                                 <Button
                                   type="button"
@@ -2315,30 +2248,31 @@ export function ManagerResidents({
                                   />
                                 </div>
                               )}
-                              <ResidentDetailSection
-                                title="Communication"
-                                summary={residentCommSummary}
-                                expanded
-                                onToggle={() => {}}
-                                headerAction={
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full px-3 py-1 text-xs"
-                                    onClick={openResidentMessageModal}
-                                  >
-                                    New message
-                                  </Button>
-                                }
-                              >
+                              <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Communication</p>
+                                    <p className="mt-1 text-sm text-muted">{residentCommSummary}</p>
+                                  </div>
+                                  <PortalSectionActionRow>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full px-3 py-1 text-xs"
+                                      onClick={openResidentMessageModal}
+                                    >
+                                      New message
+                                    </Button>
+                                  </PortalSectionActionRow>
+                                </div>
                                 <ManagerResidentDetailInbox
                                   residentEmail={selected.email}
                                   portalBase={portalBase}
                                   smsUiEnabled={smsUiEnabled}
                                   smsRef={residentSmsPanelRef}
                                 />
-                              </ResidentDetailSection>
-                            </ResidentDetailSection>
+                              </div>
+                            </ResidentDetailTabPanel>
                             ) : null}
                           </div>
     ) : null;

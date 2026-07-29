@@ -5,6 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -1181,7 +1182,7 @@ export const ManagerInbox = forwardRef<
   const inboxBody = (
     <>
       {embeddedInCommunication && !externalTitleActions ? (
-        <div className="mb-4 flex flex-wrap justify-end gap-2">
+        <PortalSectionActionRow className="mb-4">
           {tabId === "trash" ? (
             <Button
               type="button"
@@ -1201,7 +1202,7 @@ export const ManagerInbox = forwardRef<
           >
             New message
           </Button>
-        </div>
+        </PortalSectionActionRow>
       ) : null}
 
       {!suppressCompose ? (

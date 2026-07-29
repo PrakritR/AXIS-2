@@ -60,3 +60,39 @@ export function residentDetailHref(
 ): string {
   return `${basePath}/residents/${residentsTab}/${encodeURIComponent(residentId)}/${tab}`;
 }
+
+/** Routed calendar views (manager portal). */
+export const CALENDAR_VIEW_TABS = ["all", "tours", "services"] as const;
+export type CalendarViewTabId = (typeof CALENDAR_VIEW_TABS)[number];
+
+export const CALENDAR_VIEW_TAB_LABELS: Record<CalendarViewTabId, string> = {
+  all: "All",
+  tours: "Tours",
+  services: "Service orders",
+};
+
+export function parseCalendarViewTab(raw: string | undefined | null): CalendarViewTabId {
+  if (raw && (CALENDAR_VIEW_TABS as readonly string[]).includes(raw)) {
+    return raw as CalendarViewTabId;
+  }
+  return "all";
+}
+
+export function calendarViewHref(basePath: string, tab: CalendarViewTabId): string {
+  return `${basePath}/calendar/${tab}`;
+}
+
+/** Routed team link filters (manager relationships). */
+export const TEAM_LINK_TABS = ["pending", "linked"] as const;
+export type TeamLinkTabId = (typeof TEAM_LINK_TABS)[number];
+
+export function parseTeamLinkTab(raw: string | undefined | null): TeamLinkTabId {
+  if (raw && (TEAM_LINK_TABS as readonly string[]).includes(raw)) {
+    return raw as TeamLinkTabId;
+  }
+  return "pending";
+}
+
+export function teamLinkHref(basePath: string, tab: TeamLinkTabId): string {
+  return `${basePath}/relationships/${tab}`;
+}

@@ -8,11 +8,14 @@ import { PortalListControlStack } from "@/components/portal/portal-list-control-
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { teamLinkHref, type TeamLinkTabId } from "@/lib/portal-detail-routes";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+
+const MANAGER_PORTAL_BASE = "/portal";
+
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -358,7 +361,13 @@ function AddPropertyToCoManager({
   );
 }
 
-export function ProAccountLinksPanel({ userId }: { userId: string }) {
+export function ProAccountLinksPanel({
+  userId,
+  teamTab = "pending",
+}: {
+  userId: string;
+  teamTab?: TeamLinkTabId;
+}) {
   const { showToast } = useAppUi();
 
   const [localTick, setLocalTick] = useState(0);
@@ -387,9 +396,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     propertyIds: string[];
   } | null>(null);
 
-  const [teamLinkFilter, setTeamLinkFilter] = useState<"linked" | "pending">("pending");
+  const teamLinkFilter = teamTab;
   const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
-  const initialTeamTabSetRef = useRef(false);
 
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
@@ -555,32 +563,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const teamLinkTabs = useMemo(
     () => [
       {
-        id: "pending",
+        id: "pending" as const,
         label: "Pending",
         count: useRemote ? incomingPending.length + outgoingPending.length : 0,
+        href: teamLinkHref(MANAGER_PORTAL_BASE, "pending"),
         dataAttr: "team-filter-pending",
       },
       {
-        id: "linked",
+        id: "linked" as const,
         label: "Linked",
         count: (useRemote ? activeRemote.length : 0) + localRows.length,
+        href: teamLinkHref(MANAGER_PORTAL_BASE, "linked"),
         dataAttr: "team-filter-linked",
       },
     ],
     [useRemote, activeRemote.length, localRows.length, incomingPending.length, outgoingPending.length],
   );
-
-  useEffect(() => {
-    if (!remoteLoaded || initialTeamTabSetRef.current) return;
-    initialTeamTabSetRef.current = true;
-    if (useRemote && incomingPending.length > 0) {
-      setTeamLinkFilter("pending");
-      return;
-    }
-    if ((useRemote ? activeRemote.length : 0) + localRows.length > 0) {
-      setTeamLinkFilter("linked");
-    }
-  }, [remoteLoaded, useRemote, incomingPending.length, activeRemote.length, localRows.length]);
 
   const visibleIncomingPending = useMemo(() => {
     if (teamLinkFilter !== "pending" || !useRemote) return [];
@@ -1508,13 +1506,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </Button>
           </PortalSectionActionRow>
         }
-        destinationRow={
-          <ManagerPortalStatusPills
-            tabs={teamLinkTabs}
-            activeId={teamLinkFilter}
-            onChange={(id) => setTeamLinkFilter(id === "pending" ? "pending" : "linked")}
-          />
-        }
+        destinations={teamLinkTabs}
+        activeDestinationId={teamLinkFilter}
+        destinationAriaLabel="Team link status"
       />
       <div className="space-y-4" data-attr="co-manager-unified-view">
         {loadError ? (

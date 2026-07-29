@@ -149,8 +149,8 @@ interface BottomSheetContentProps
 }
 
 /**
- * Mobile-first bottom sheet with drag handle and safe-area padding.
- * On `md+` renders as a centred dialog-style panel instead of edge-anchored sheet.
+ * @deprecated Prefer {@link VaulBottomSheet} or Vaul `Drawer` directly for mobile sheets.
+ * Radix Dialog-based bottom sheet kept for legacy callers on desktop-centred layouts.
  */
 const BottomSheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,

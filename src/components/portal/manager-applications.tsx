@@ -241,7 +241,9 @@ export function ApplicationDocumentPreview({
   if (!collapsible) {
     return (
       <div className="mt-4 space-y-3">
-        {downloadButton ? <div className="flex justify-end">{downloadButton}</div> : null}
+        {downloadButton ? (
+          <PortalSectionActionRow className="mt-0">{downloadButton}</PortalSectionActionRow>
+        ) : null}
         {previewBody}
       </div>
     );
@@ -735,12 +737,25 @@ export function ManagerApplications({
   const renderApplicationRowActions = (row: DemoApplicantRow) => {
     const status = applicationStatusPill(row);
     return (
-    <div
-      className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-      role="presentation"
+    <PortalSectionActionRow
+      className="shrink-0"
+      destructive={
+        <Button
+          type="button"
+          variant="outline"
+          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+          onClick={() => void deleteApplication(row.id)}
+        >
+          Delete
+        </Button>
+      }
     >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        role="presentation"
+        className="contents"
+      >
       <Badge tone={status.tone}>{status.label}</Badge>
       {row.bucket === "pending" ? (
         <>
@@ -786,15 +801,8 @@ export function ManagerApplications({
           Move to pending
         </Button>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-        onClick={() => void deleteApplication(row.id)}
-      >
-        Delete
-      </Button>
-    </div>
+      </div>
+    </PortalSectionActionRow>
     );
   };
 

@@ -7,6 +7,7 @@ import {
   InboxThreadEmpty,
   InboxTwoPane,
 } from "@/components/portal/portal-inbox-ui";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   MANAGER_INBOX_STORAGE_KEY,
@@ -252,7 +253,7 @@ export function ManagerResidentDetailInbox({
   return (
     <div className="flex flex-col">
       {archivedCount > 0 ? (
-        <div className="mb-2 flex justify-end">
+        <PortalSectionActionRow className="mb-2">
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -266,7 +267,7 @@ export function ManagerResidentDetailInbox({
           >
             {showArchived ? "← Back to messages" : `Archived (${archivedCount})`}
           </button>
-        </div>
+        </PortalSectionActionRow>
       ) : null}
       <InboxTwoPane
         className="min-h-0 flex-1"
