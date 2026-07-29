@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PortalDataTableEmpty,
@@ -618,76 +619,74 @@ export function ManagerPaymentsLedgerPanel({
       />
     ) : null}
     {selectedIds.size > 0 ? (
-      <div className="mb-3">
-        <PortalTableDetailActions>
-          {selectedRows.some(isMarkableAsPaid) ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="payments-mark-selected-paid"
-              onClick={markSelectedAsPaid}
-            >
-              Mark as paid
-            </Button>
-          ) : null}
-          {selectedRows.some((row) => !isPaidRow(row)) ? (
-            <Button
-              type="button"
-              variant={remindableSelectedRows.length > 0 ? "primary" : "outline"}
-              className={PORTAL_DETAIL_BTN}
-              disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
-              data-attr="payments-send-reminder"
-              title={
-                remindableSelectedRows.length === 0
-                  ? "Select at least one unpaid charge."
-                  : undefined
+      <BulkActionBar count={selectedIds.size}>
+        {selectedRows.some(isMarkableAsPaid) ? (
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="payments-mark-selected-paid"
+            onClick={markSelectedAsPaid}
+          >
+            Mark as paid
+          </Button>
+        ) : null}
+        {selectedRows.some((row) => !isPaidRow(row)) ? (
+          <Button
+            type="button"
+            variant={remindableSelectedRows.length > 0 ? "primary" : "outline"}
+            className={PORTAL_DETAIL_BTN}
+            disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
+            data-attr="payments-send-reminder"
+            title={
+              remindableSelectedRows.length === 0
+                ? "Select at least one unpaid charge."
+                : undefined
+            }
+            onClick={() => {
+              if (remindableSelectedRows.length === 1) {
+                openReminderPreview(remindableSelectedRows[0]!);
+                return;
               }
-              onClick={() => {
-                if (remindableSelectedRows.length === 1) {
-                  openReminderPreview(remindableSelectedRows[0]!);
-                  return;
-                }
-                void sendBulkReminders();
-              }}
-            >
-              {sendingReminderId ? "Sending…" : "Send reminder"}
-            </Button>
-          ) : null}
-          {activeBucket === "paid" && selectedRows.length > 0 ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={moveSelectedToPending}>
-              Move to pending
-            </Button>
-          ) : null}
-          {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
-            editingRowId === singleSelectedRow.id ? (
-              <>
-                <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={saveBulkEditAmount}>
-                  Save
-                </Button>
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => startEdit(singleSelectedRow)}
-              >
-                Edit
+              void sendBulkReminders();
+            }}
+          >
+            {sendingReminderId ? "Sending…" : "Send reminder"}
+          </Button>
+        ) : null}
+        {activeBucket === "paid" && selectedRows.length > 0 ? (
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={moveSelectedToPending}>
+            Move to pending
+          </Button>
+        ) : null}
+        {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
+          editingRowId === singleSelectedRow.id ? (
+            <>
+              <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={saveBulkEditAmount}>
+                Save
               </Button>
-            )
-          ) : null}
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={deleteSelected}>
-            Delete
-          </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setSelectedIds(new Set())}>
-            Clear selection
-          </Button>
-        </PortalTableDetailActions>
-      </div>
+              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => startEdit(singleSelectedRow)}
+            >
+              Edit
+            </Button>
+          )
+        ) : null}
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={deleteSelected}>
+          Delete
+        </Button>
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setSelectedIds(new Set())}>
+          Clear
+        </Button>
+      </BulkActionBar>
     ) : null}
     <PortalPaymentsTable
       rows={tableRows}

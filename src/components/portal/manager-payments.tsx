@@ -8,14 +8,13 @@ import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sh
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_MOBILE_STATUS_SELECT_CLASS,
   PortalToolbarSortSelect,
 } from "@/components/portal/portal-metrics";
-import { PillTabs } from "@/components/ui/tabs";
+import { PortalTabs } from "@/components/ui/portal-tabs";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -553,10 +552,10 @@ export function ManagerPayments() {
         </Select>
       </label>
       <div className="hidden w-fit shrink-0 md:block">
-        <PillTabs
-          items={DIRECTION_LABELS}
+        <PortalTabs
+          items={DIRECTION_LABELS.map((d) => ({ id: d.id, label: d.label }))}
           activeId={direction}
-          selectAriaLabel="Payment direction"
+          ariaLabel="Payment direction"
           onChange={(id) => {
             setDirection(id as ManagerPaymentDirection);
             setBucket("pending");
@@ -651,10 +650,14 @@ export function ManagerPayments() {
     >
       <div className="mt-1">
         <ManagerPortalStatusFilterRow>
-          <ManagerPortalStatusPills
-            tabs={tabs}
+          <PortalTabs
+            items={tabs.map((t) => ({
+              id: t.id,
+              label: t.label,
+              count: t.count,
+            }))}
             activeId={bucket}
-            selectAriaLabel="Payment status"
+            ariaLabel="Payment status"
             onChange={(id) => setBucket(id as ManagerPaymentBucket)}
           />
         </ManagerPortalStatusFilterRow>
