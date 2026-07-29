@@ -78,7 +78,6 @@ import {
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import {
-  PortalPreviewOverflowLink,
   PortalTableExpandChevron,
   isPortalRowClickIgnored,
   usePortalPreviewSlice,
@@ -100,10 +99,8 @@ import type { DocumentExpirationSummary } from "@/lib/documents/document-expirat
 const BASE = "/portal";
 
 /** Semantic status foreground tokens for the leading issue-row dots. */
-const DOT_OVERDUE = "var(--status-overdue-fg)";
-const DOT_PENDING = "var(--status-pending-fg)";
-const DOT_CONFIRMED = "var(--status-confirmed-fg)";
 const DOT_INFO = "var(--status-approved-fg)";
+const DOT_CONFIRMED = "var(--status-confirmed-fg)";
 
 type PillTone = "pending" | "success" | "danger" | "info";
 
@@ -121,6 +118,10 @@ const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
   info: { fg: "var(--status-approved-fg)", bg: "var(--status-approved-bg)" },
   success: { fg: "var(--status-confirmed-fg)", bg: "var(--status-confirmed-bg)" },
 };
+
+function sectionAccentDot(tone: AttentionTone): string {
+  return ATTENTION_TONE[tone].fg;
+}
 
 /**
  * Compact relative-time label ("in 3d", "2h ago", "now") for time-bearing
@@ -181,7 +182,7 @@ function IssueRow({
     <Link
       href={href}
       data-attr={dataAttr}
-      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_40%,transparent)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
     >
       {dot ? (
         <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
@@ -245,7 +246,7 @@ function AttentionGroup<T>({
   items: T[];
   emptyMessage: string;
   keyForItem: (item: T) => string;
-  renderRow: (item: T) => ReactNode;
+  renderRow: (item: T, sectionTone: AttentionTone) => ReactNode;
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
@@ -259,13 +260,15 @@ function AttentionGroup<T>({
 
   return (
     <div
-      className="pl-attn-enter overflow-hidden rounded-lg border border-border bg-card"
+      className="pl-attn-enter overflow-hidden rounded-xl border border-border bg-card"
       style={{
         animationDelay: `${Math.min(order, 8) * 55}ms`,
-        // A status rail on the leading edge — only lit when the group has items,
-        // so empty groups stay quiet instead of shouting a colour with a 0 next to it.
         borderLeftWidth: isEmpty ? undefined : 3,
         borderLeftColor: isEmpty ? undefined : accent.fg,
+        background: isEmpty ? undefined : `color-mix(in srgb, ${accent.bg} 32%, var(--card))`,
+        // Row hover wash matches this section (IssueRow).
+        ["--attn-section-bg" as string]: accent.bg,
+        ["--attn-section-fg" as string]: accent.fg,
       }}
     >
       <div
@@ -281,7 +284,7 @@ function AttentionGroup<T>({
             setOverride(!open);
           }
         }}
-        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
         <PortalTableExpandChevron expanded={open} />
         <h3
@@ -306,7 +309,8 @@ function AttentionGroup<T>({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Open ${title}`}
           data-attr="dashboard-attention-link"
-          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold text-primary hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           →
         </Link>
@@ -318,18 +322,20 @@ function AttentionGroup<T>({
           </p>
         ) : (
           <div className="border-t border-border">
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border/80">
               {visible.map((item) => (
-                <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+                <Fragment key={keyForItem(item)}>{renderRow(item, tone)}</Fragment>
               ))}
             </div>
             {overflow > 0 ? (
-              <div className="border-t border-border px-3.5 py-2 [html[data-native]_&]:px-3">
-                <PortalPreviewOverflowLink
-                  overflow={overflow}
+              <div className="border-t border-border/80 px-3.5 py-2 [html[data-native]_&]:px-3">
+                <Link
                   href={href}
-                  label={isNative ? `View all (${count}) →` : `View all ${count} →`}
-                />
+                  className="inline-block text-xs font-semibold hover:underline underline-offset-2"
+                  style={{ color: accent.fg }}
+                >
+                  {isNative ? `View all (${count}) →` : `View all ${count} →`}
+                </Link>
               </div>
             ) : null}
           </div>
@@ -888,19 +894,19 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Tour requests"
               href={`${BASE}/calendar`}
               sectionId="tours"
-              tone="pending"
+              tone="info"
               order={0}
               items={pendingTours}
               emptyMessage="No pending tour requests right now."
               keyForItem={(tour) => tour.id}
-              renderRow={(tour) => (
+              renderRow={(tour, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/calendar`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={tour.label}
                   subtitle={tour.propertyTitle || "—"}
                   meta={[fmt(tour.start), relativeFromNow(tour.start, nowTick)].filter(Boolean).join(" · ")}
-                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Pending</StatusPill>}
                   dataAttr="dashboard-attention-tour"
                 />
               )}
@@ -909,21 +915,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.applications ? (
             <AttentionGroup
-              title="Applications"
+              title="Review"
               href={`${BASE}/applications`}
               sectionId="applications"
-              tone="pending"
+              tone="success"
               order={1}
               items={pendingApps}
               emptyMessage="No pending applications. You're all caught up."
               keyForItem={(app) => app.id}
-              renderRow={(app: DemoApplicantRow) => (
+              renderRow={(app: DemoApplicantRow, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/applications`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={app.name || app.email || "Unknown"}
                   subtitle={app.property || "—"}
-                  pill={<StatusPill tone="pending">{app.stage || "Pending"}</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>{app.stage || "Pending"}</StatusPill>}
                   dataAttr="dashboard-attention-application"
                 />
               )}
@@ -932,7 +938,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.leases ? (
             <AttentionGroup
-              title="Leases pending signature"
+              title="Sign"
               href={`${BASE}/leases`}
               sectionId="leases"
               tone="info"
@@ -940,17 +946,17 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               items={pendingLeaseRows}
               emptyMessage="No leases waiting for a signature."
               keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow) => {
+              renderRow={(lease: LeasePipelineRow, sectionTone) => {
                 const yourTurn = lease.status === "Manager Signature Pending";
                 return (
                   <IssueRow
                     href={`${BASE}/leases`}
-                    dot={yourTurn ? DOT_INFO : DOT_PENDING}
+                    dot={sectionAccentDot(sectionTone)}
                     title={lease.residentName || lease.residentEmail}
                     subtitle={formatCompactPlacementLine(lease.unit || "—")}
                     meta={lease.signedRentLabel}
                     pill={
-                      <StatusPill tone={yourTurn ? "info" : "pending"}>
+                      <StatusPill tone={sectionTone}>
                         {yourTurn ? "Your signature" : "Resident signing"}
                       </StatusPill>
                     }
@@ -971,14 +977,14 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               items={activeResidents}
               emptyMessage="No current residents yet."
               keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow) => (
+              renderRow={(lease: LeasePipelineRow, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/residents/current`}
-                  dot={DOT_CONFIRMED}
+                  dot={sectionAccentDot(sectionTone)}
                   title={lease.residentName || lease.residentEmail}
                   subtitle={formatCompactPlacementLine(lease.unit || "—")}
                   meta={lease.signedRentLabel}
-                  pill={<StatusPill tone="success">Active</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Active</StatusPill>}
                   dataAttr="dashboard-attention-resident"
                 />
               )}
@@ -994,7 +1000,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               order={4}
               badge={
                 overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-danger">
                     <span aria-hidden className="size-1.5 rounded-full bg-current" />
                     {overdueChargeCount} overdue
                   </span>
@@ -1003,12 +1009,12 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               items={pendingCharges}
               emptyMessage="No pending or overdue payments right now."
               keyForItem={(charge) => charge.id}
-              renderRow={(charge) => {
+              renderRow={(charge, sectionTone) => {
                 const overdue = isHouseholdChargeOverdue(charge);
                 return (
                   <IssueRow
                     href={`${BASE}/payments`}
-                    dot={overdue ? DOT_OVERDUE : DOT_PENDING}
+                    dot={sectionAccentDot(sectionTone)}
                     title={charge.residentName || charge.residentEmail}
                     subtitle={formatCompactChargeLine(
                       charge.title || "Charge",
@@ -1017,11 +1023,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                       { omitBalance: true },
                     )}
                     meta={charge.balanceLabel}
-                    pill={
-                      <StatusPill tone={overdue ? "danger" : "pending"}>
-                        {overdue ? "Overdue" : "Pending"}
-                      </StatusPill>
-                    }
+                    pill={<StatusPill tone={sectionTone}>{overdue ? "Overdue" : "Pending"}</StatusPill>}
                     dataAttr="dashboard-attention-payment"
                   />
                 );
@@ -1034,11 +1036,11 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Services"
               href={`${BASE}/services/requests`}
               sectionId="services"
-              tone="pending"
+              tone="info"
               order={5}
               badge={
                 pendingServiceCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-info">
                     <span aria-hidden className="size-1.5 rounded-full bg-current" />
                     {pendingServiceCount} pending
                   </span>
@@ -1047,13 +1049,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               items={serviceItems}
               emptyMessage="No pending add-on services or work orders."
               keyForItem={(item) => item.id}
-              renderRow={(item) => (
+              renderRow={(item, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/services/requests`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={item.title}
                   subtitle={item.subtitle}
-                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Pending</StatusPill>}
                   dataAttr="dashboard-attention-service"
                 />
               )}
@@ -1062,21 +1064,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.inbox ? (
             <AttentionGroup
-              title="Communication"
+              title="Messages to read"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
-              tone="info"
+              tone="success"
               order={6}
               items={inboxThreads}
               emptyMessage="No unread messages. Communication is clear."
               keyForItem={(thread) => thread.id}
-              renderRow={(thread) => (
+              renderRow={(thread, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/communication/inbox/unopened`}
-                  dot={DOT_INFO}
+                  dot={sectionAccentDot(sectionTone)}
                   title={thread.from || "Unknown sender"}
                   subtitle={thread.subject || thread.preview || "—"}
-                  pill={<StatusPill tone="info">Unread</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Unread</StatusPill>}
                   dataAttr="dashboard-attention-inbox"
                 />
               )}
