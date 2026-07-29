@@ -1,13 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Drawer } from "vaul";
 import { X } from "lucide-react";
 import { useIsClient } from "@/hooks/use-is-client";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
-import { MODAL_PANEL_CLASS } from "@/components/ui/modal-styles";
+import { MODAL_PANEL_CLASS, MODAL_OVERLAY_BACKDROP_CLASS } from "@/components/ui/modal-styles";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
@@ -25,6 +25,154 @@ export const MODAL_HEADER_CLOSE_CLASS =
  */
 export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("flex flex-wrap items-center justify-end gap-2", className)}>{children}</div>;
+}
+
+const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
+
+/** Desktop dialog vs mobile Vaul drawer — matches portal `lg` breakpoint. */
+function useModalPresentation(): "drawer" | "dialog" {
+  const [presentation, setPresentation] = useState<"drawer" | "dialog">(() => {
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      return window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY).matches ? "drawer" : "dialog";
+    }
+    return "dialog";
+  });
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY);
+    const sync = () => setPresentation(mql.matches ? "drawer" : "dialog");
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+
+  return presentation;
+}
+
+type ModalTitlePrimitiveProps = {
+  asChild?: boolean;
+  children: ReactNode;
+  className?: string;
+  id?: string;
+};
+
+type ModalDescriptionPrimitiveProps = {
+  asChild?: boolean;
+  children: ReactNode;
+  className?: string;
+  id?: string;
+};
+
+type ModalClosePrimitiveProps = {
+  asChild?: boolean;
+  children: ReactNode;
+};
+
+function ModalPanelInner({
+  title,
+  description,
+  children,
+  footer,
+  dense,
+  onClose,
+  showAssistantStrip,
+  assistantHint,
+  assistantStorageScopeKey,
+  assistantConversationInstance,
+  assistantExpanded,
+  onAssistantExpandedChange,
+  TitlePrimitive,
+  DescriptionPrimitive,
+  ClosePrimitive,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  dense: boolean;
+  onClose: () => void;
+  showAssistantStrip: boolean;
+  assistantHint: string;
+  assistantStorageScopeKey?: string;
+  assistantConversationInstance: number;
+  assistantExpanded: boolean;
+  onAssistantExpandedChange: (expanded: boolean) => void;
+  TitlePrimitive: ComponentType<ModalTitlePrimitiveProps>;
+  DescriptionPrimitive: ComponentType<ModalDescriptionPrimitiveProps>;
+  ClosePrimitive: ComponentType<ModalClosePrimitiveProps>;
+}) {
+  return (
+    <>
+      <div
+        className={cn(
+          "flex shrink-0 flex-col border-b border-border",
+          dense ? "gap-2 pb-2" : "gap-3 pb-4",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <TitlePrimitive asChild>
+            <h3
+              id="modal-title"
+              className={cn(
+                "min-w-0 flex-1 font-semibold leading-tight text-foreground",
+                dense ? "text-base" : "text-lg",
+              )}
+            >
+              {title}
+            </h3>
+          </TitlePrimitive>
+          <ClosePrimitive asChild>
+            <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </ClosePrimitive>
+        </div>
+        {description ? (
+          <DescriptionPrimitive asChild>
+            <p id="modal-description" className="text-sm leading-relaxed text-muted">
+              {description}
+            </p>
+          </DescriptionPrimitive>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "flex min-h-0 flex-1",
+          showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
+        )}
+      >
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+            footer && "flex flex-col",
+            dense ? "pt-2" : "pt-4",
+          )}
+        >
+          {children}
+        </div>
+        {showAssistantStrip && assistantConversationInstance > 0 ? (
+          <ModalAssistantStrip
+            contextHint={assistantHint}
+            storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
+            conversationInstance={assistantConversationInstance}
+            onExpandedChange={onAssistantExpandedChange}
+            className={cn(dense ? "px-0" : undefined)}
+          />
+        ) : null}
+      </div>
+      {footer ? (
+        <div
+          className={cn(
+            "shrink-0 border-t border-border bg-card",
+            dense ? "mt-2 pt-3" : "mt-4 pt-4",
+          )}
+        >
+          {footer}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 export function Modal({
@@ -45,41 +193,23 @@ export function Modal({
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
-  /** Optional one-line context under the title (visual + `aria-describedby`). */
   description?: ReactNode;
-  /** Sticky footer below the scrollable body (action buttons, etc.). */
   footer?: ReactNode;
-  /** Width / layout overrides merged onto the default glass panel shell. */
   panelClassName?: string;
-  /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
   stackClassName?: string;
-  /** Tighter padding for compact dialogs. */
   dense?: boolean;
-  /** When true (default in portal), show a compact PropLane Assistant strip. */
   assistantStrip?: boolean;
-  /** Passed to the assistant as modal context (defaults to stringified title). */
   assistantContext?: string;
-  /** Stable assistant thread scope when contextHint is long or dynamic. */
   assistantStorageScopeKey?: string;
 }) {
   const isClient = useIsClient();
+  const presentation = useModalPresentation();
   const portalContainer = usePortalContainer();
-  const panelRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(open, panelRef);
 
   useEffect(() => {
     if (!open) return;
     return lockPortalScroll();
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   const portalAssistant = usePortalAssistantConfig();
   const showAssistantStrip = assistantStrip && portalAssistant != null;
@@ -89,8 +219,6 @@ export function Modal({
     "Portal modal";
 
   const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
-  /** Mirrors the assistant strip's own open/closed state so the body can lay
-   * out beside it (wide enough modals) instead of always stacking above it. */
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const wasOpenRef = useRef(false);
   useLayoutEffect(() => {
@@ -102,95 +230,87 @@ export function Modal({
 
   if (!open || !isClient) return null;
 
-  return createPortal(
-    <div className={stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto overscroll-contain"}>
-      <button
-        type="button"
-        aria-label="Close"
-        className="modal-overlay fixed inset-0"
-        onClick={onClose}
-      />
-      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]">
-        <div
-          ref={panelRef}
-          className={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-          aria-describedby={description ? "modal-description" : undefined}
-        >
-          <div
+  const handleOpenChange = (next: boolean) => {
+    if (!next) onClose();
+  };
+
+  const stackShellClass = stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto overscroll-contain";
+
+  const panelInnerProps = {
+    title,
+    description,
+    children,
+    footer,
+    dense,
+    onClose,
+    showAssistantStrip,
+    assistantHint,
+    assistantStorageScopeKey,
+    assistantConversationInstance,
+    assistantExpanded,
+    onAssistantExpandedChange: setAssistantExpanded,
+  };
+
+  if (presentation === "drawer") {
+    return (
+      <Drawer.Root open={open} onOpenChange={handleOpenChange} shouldScaleBackground>
+        <Drawer.Portal container={portalContainer ?? undefined}>
+          <Drawer.Overlay
             className={cn(
-              "flex shrink-0 flex-col border-b border-border",
-              dense ? "gap-2 pb-2" : "gap-3 pb-4",
+              MODAL_OVERLAY_BACKDROP_CLASS,
+              "z-[70] motion-reduce:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             )}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h3
-                id="modal-title"
-                className={cn(
-                  "min-w-0 flex-1 font-semibold leading-tight text-foreground",
-                  dense ? "text-base" : "text-lg",
-                )}
-              >
-                {title}
-              </h3>
-              <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
-                <X className="h-5 w-5" aria-hidden />
-              </button>
-            </div>
-            {description ? (
-              <p id="modal-description" className="text-sm leading-relaxed text-muted">
-                {description}
-              </p>
-            ) : null}
-          </div>
-          {/* `@container` lives on the dialog panel above (a container cannot query
-              its own size for its own layout), so this row/column switch below it
-              can react to how much space the panel actually has. */}
-          <div
+          />
+          <Drawer.Content
+            data-slot="modal-vaul-drawer"
             className={cn(
-              "flex min-h-0 flex-1",
-              showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
+              "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none",
+              "pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3",
+              "motion-reduce:transition-none",
+              dense ? "px-4" : "px-5",
+              panelClassName,
             )}
+            aria-describedby={description ? "modal-description" : undefined}
           >
-            <div
-              className={cn(
-                // The body is the modal's one scroll container. Children may still
-                // pin an inner region (`min-h-0 flex-1 overflow-y-auto`) so only e.g.
-                // a message body scrolls, but plain content must never be clipped —
-                // `overflow-hidden` here made every below-the-fold field unreachable
-                // on phones.
-                "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-                footer && "flex flex-col",
-                dense ? "pt-2" : "pt-4",
-              )}
+            <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+            <ModalPanelInner
+              {...panelInnerProps}
+              TitlePrimitive={Drawer.Title}
+              DescriptionPrimitive={Drawer.Description}
+              ClosePrimitive={Drawer.Close}
+            />
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+    );
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Portal container={portalContainer ?? undefined}>
+        <div className={stackShellClass}>
+          <Dialog.Overlay
+            className={cn(
+              MODAL_OVERLAY_BACKDROP_CLASS,
+              "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
+            )}
+          />
+          <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]">
+            <Dialog.Content
+              data-slot="modal-radix-dialog"
+              className={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
+              aria-describedby={description ? "modal-description" : undefined}
             >
-              {children}
-            </div>
-            {showAssistantStrip && assistantConversationInstance > 0 ? (
-              <ModalAssistantStrip
-                contextHint={assistantHint}
-                storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
-                conversationInstance={assistantConversationInstance}
-                onExpandedChange={setAssistantExpanded}
-                className={cn(dense ? "px-0" : undefined)}
+              <ModalPanelInner
+                {...panelInnerProps}
+                TitlePrimitive={Dialog.Title}
+                DescriptionPrimitive={Dialog.Description}
+                ClosePrimitive={Dialog.Close}
               />
-            ) : null}
+            </Dialog.Content>
           </div>
-          {footer ? (
-            <div
-              className={cn(
-                "shrink-0 border-t border-border bg-card",
-                dense ? "mt-2 pt-3" : "mt-4 pt-4",
-              )}
-            >
-              {footer}
-            </div>
-          ) : null}
         </div>
-      </div>
-    </div>,
-    portalContainer ?? document.body,
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

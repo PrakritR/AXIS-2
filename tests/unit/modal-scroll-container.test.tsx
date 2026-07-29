@@ -6,11 +6,32 @@
 // simply clipped and unreachable (no way to scroll to the remaining fields or
 // even see them). These tests pin the body as scrollable so that class of bug
 // cannot ship again.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Modal } from "@/components/ui/modal";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+function mockMatchMedia(matches: boolean) {
+  const listeners = new Set<() => void>();
+  const mql = {
+    matches,
+    media: "(max-width: 1023px)",
+    addEventListener: (_: string, cb: () => void) => {
+      listeners.add(cb);
+    },
+    removeEventListener: (_: string, cb: () => void) => {
+      listeners.delete(cb);
+    },
+    dispatchEvent: () => true,
+  };
+  vi.stubGlobal("matchMedia", () => mql);
+  return { mql, listeners };
+}
 
 function modalBody(): HTMLElement {
   const dialog = screen.getByRole("dialog");
@@ -42,5 +63,40 @@ describe("Modal scroll container", () => {
       </Modal>,
     );
     expect(modalBody().className).toContain("overflow-y-auto");
+  });
+});
+
+describe("Modal Radix / Vaul shell", () => {
+  it("calls onClose when Escape is pressed (Radix Dialog)", async () => {
+    mockMatchMedia(false);
+    const onClose = vi.fn();
+    render(
+      <Modal open title="Escape test" onClose={onClose}>
+        <input aria-label="focus field" />
+      </Modal>,
+    );
+    screen.getByLabelText("focus field").focus();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Vaul drawer on small portal viewports", () => {
+    mockMatchMedia(true);
+    render(
+      <Modal open title="Mobile sheet" onClose={() => {}}>
+        <p>content</p>
+      </Modal>,
+    );
+    expect(document.querySelector('[data-slot="modal-vaul-drawer"]')).toBeTruthy();
+  });
+
+  it("renders Radix dialog on large portal viewports", () => {
+    mockMatchMedia(false);
+    render(
+      <Modal open title="Desktop dialog" onClose={() => {}}>
+        <p>content</p>
+      </Modal>,
+    );
+    expect(document.querySelector('[data-slot="modal-radix-dialog"]')).toBeTruthy();
   });
 });
