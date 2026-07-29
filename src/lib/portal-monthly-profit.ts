@@ -15,6 +15,16 @@ export type CashflowChartMetric = "revenue" | "profit" | "expense";
 export const CASHFLOW_CHART_RANGE_MONTHS = [3, 6, 12, 24] as const;
 export type CashflowChartRangeMonths = (typeof CASHFLOW_CHART_RANGE_MONTHS)[number];
 
+/** X-axis month labels: 2Y view shows every third month (plus the latest). */
+export function cashflowChartShowMonthLabel(
+  index: number,
+  total: number,
+  rangeMonths: CashflowChartRangeMonths,
+): boolean {
+  if (rangeMonths !== 24 || total <= 12) return true;
+  return index % 3 === 0 || index === total - 1;
+}
+
 /** The last N calendar months (oldest → current), keyed `YYYY-MM` with a short label. */
 export function lastNMonths(nowMs: number, count = 6): { key: string; label: string }[] {
   const base = new Date(nowMs);

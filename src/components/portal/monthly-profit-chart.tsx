@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   CASHFLOW_CHART_RANGE_MONTHS,
+  cashflowChartShowMonthLabel,
   cashflowMetricValue,
   type CashflowChartMetric,
   type CashflowChartRangeMonths,
@@ -262,20 +263,25 @@ export function MonthlyProfitChart({
           </svg>
 
           <div className="mt-2 flex justify-between gap-0.5 px-0.5">
-            {points.map((p, i) => (
+            {points.map((p, i) => {
+              const showLabel = cashflowChartShowMonthLabel(i, points.length, rangeMonths);
+              return (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => setActiveIndex(i)}
+                aria-label={showLabel ? undefined : `${p.label} ${metric}`}
                 className={cn(
                   "min-w-0 flex-1 rounded-md py-1 text-center text-[10px] font-medium transition-colors sm:text-[11px]",
                   activeIndex === i ? "bg-primary/10 text-foreground" : "text-muted hover:text-foreground",
+                  !showLabel && "text-transparent [html[data-native]_&]:min-h-[1.25rem]",
                 )}
                 data-attr={`monthly-profit-month-${p.key}`}
               >
-                {p.label}
+                {showLabel ? p.label : "\u00a0"}
               </button>
-            ))}
+            );
+            })}
           </div>
 
           <div
