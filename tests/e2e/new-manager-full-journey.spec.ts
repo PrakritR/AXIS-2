@@ -52,7 +52,6 @@ test.describe("New manager — full journey from scratch", () => {
     const email = `fresh-manager-${stamp}@test.proplane.local`;
     const password = "FreshManager123!";
     const fullName = "Fresh Journey Manager";
-    const phone = "2065550199";
 
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
     fs.writeFileSync(
@@ -69,13 +68,16 @@ test.describe("New manager — full journey from scratch", () => {
     ]);
     await shot(page, "02-create-account-form");
 
-    // ── 2. Create manager account (signed out) ──────────────────────────────
+    // ── 2. Create account, then pick property manager portal ─────────────────
     await page.getByPlaceholder("Full name").fill(fullName);
     await page.getByPlaceholder("Email").fill(email);
-    await page.getByPlaceholder("Phone number").fill(phone);
     await page.getByPlaceholder(/Password \(8\+/).fill(password);
     await shot(page, "03-create-account-filled");
-    await page.getByRole("button", { name: /create property account|set up property manager/i }).click();
+    await page.getByRole("button", { name: /create account/i }).click();
+
+    await page.waitForURL(/\/auth\/get-started/, { timeout: 90_000 });
+    await shot(page, "03b-get-started-chooser");
+    await page.getByRole("button", { name: /set up as a property manager/i }).click();
 
     // Portal chooser or continue may appear for multi-role; fresh account is manager-only.
     await page.waitForURL(/\/portal/, { timeout: 90_000 });

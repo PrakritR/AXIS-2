@@ -1,6 +1,6 @@
 "use client";
 
-import { NativeAuthHub } from "@/components/auth/native-auth-hub";
+import { PortalAuthForm } from "@/components/auth/portal-auth-form";
 import { ResidentSignupBlocked } from "@/components/auth/resident-signup-blocked";
 import { AuthCard } from "@/components/auth/auth-card";
 import { useSearchParams } from "next/navigation";
@@ -8,12 +8,9 @@ import CreateAccountClient from "./create-account-client";
 
 /**
  * Unified create-account surface.
- * Generic resident create-account (`role=resident`, no legacy `axis_id`) routes to
- * the enabled `ResidentSignupForm` via `NativeAuthHub` — an anonymous visitor
- * self-serves a resident account; a signed-in manager/vendor is offered the
- * additive path instead. Legacy `axis_id` links keep `ResidentSignupBlocked`
- * (they complete an emailed setup-token handoff). Manager checkout `session_id`
- * still uses CreateAccountClient.
+ * Default path: role-agnostic account creation, then `/auth/get-started` for
+ * resident / manager / vendor. Legacy `axis_id` links keep `ResidentSignupBlocked`
+ * (emailed setup-token handoff). Manager checkout `session_id` uses CreateAccountClient.
  */
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
@@ -24,9 +21,6 @@ export default function CreateAccountRouter() {
     return <CreateAccountClient />;
   }
 
-  // Legacy resident links that pinned an Axis ID keep the setup-link message
-  // (that flow completes an emailed handoff). Generic resident signup now goes
-  // to the unified hub, which renders the resident create-account form.
   if (axisId) {
     return (
       <AuthCard>
@@ -35,5 +29,5 @@ export default function CreateAccountRouter() {
     );
   }
 
-  return <NativeAuthHub defaultMode="create" />;
+  return <PortalAuthForm mode="create" variant="hub" />;
 }
