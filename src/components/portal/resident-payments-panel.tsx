@@ -468,24 +468,6 @@ export function ResidentPaymentsPanel({
     [bucketCounts],
   );
 
-  const allBucketSelected = useMemo(
-    () => rowsForBucket.length > 0 && rowsForBucket.every((charge) => selectedIds.has(charge.id)),
-    [rowsForBucket, selectedIds],
-  );
-
-  const toggleSelectAllBucket = useCallback(() => {
-    setSelectedIds((prev) => {
-      const allSelected = rowsForBucket.every((charge) => prev.has(charge.id));
-      const next = new Set(prev);
-      if (allSelected) {
-        for (const charge of rowsForBucket) next.delete(charge.id);
-      } else {
-        for (const charge of rowsForBucket) next.add(charge.id);
-      }
-      return next;
-    });
-  }, [rowsForBucket]);
-
   const loadCheckout = useCallback(
     async (chargeIds: string[], method: ResidentAxisPaymentMethod) => {
       const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
@@ -853,28 +835,9 @@ export function ResidentPaymentsPanel({
 
   const showSelectCol = rowsForBucket.length > 0;
 
-  const chargeById = useMemo(() => new Map(charges.map((row) => [row.id, row])), [charges]);
-
   const residentPayeeLabel = isDemoModeActive() ? CANONICAL_DEMO_MANAGER_NAME : "Property manager";
 
-  const tableRows = useMemo<PortalPaymentTableRow[]>(
-    () =>
-      rowsForBucket.map((row) => ({
-        id: row.id,
-        charge: row.title,
-        property: row.propertyLabel,
-        payee: residentPayeeLabel,
-        dueDate: chargeDueLabel(row),
-        // Face amount of the charge (paid rows have a $0.00 balance); the Pay
-        // button below still uses the outstanding balanceLabel.
-        amount: row.amountLabel,
-      })),
-    [rowsForBucket, residentPayeeLabel],
-  );
-
-  const renderExpandedActions = (tr: PortalPaymentTableRow) => {
-    const row = chargeById.get(tr.id);
-    if (!row) return null;
+  const renderExpandedActions = (row: HouseholdCharge) => {
     const payable = isPayableHouseholdCharge(row);
     const rowPayIds = filterChargesForPayMethod([row], paymentMethod).map((c) => c.id);
     const manualReportable =
@@ -1343,14 +1306,7 @@ export function ResidentPaymentsPanel({
           bareHeader
           dataAttrBack="resident-payment-detail-back"
           inlineActions
-          actions={renderExpandedActions({
-            id: detailCharge.id,
-            charge: detailCharge.title,
-            property: detailCharge.propertyLabel,
-            payee: residentPayeeLabel,
-            dueDate: chargeDueLabel(detailCharge),
-            amount: detailCharge.amountLabel,
-          })}
+          actions={renderExpandedActions(detailCharge)}
         >
           {renderRowDetail(detailCharge)}
         </PortalRecordDetailPage>
