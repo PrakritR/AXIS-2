@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   appendNativeOAuthBridgeParam,
   httpsCallbackToNativeSchemeUrl,
+  httpsCallbackWithoutBridgeParam,
+  nativeOAuthBridgeResponse,
   NATIVE_OAUTH_BRIDGE_PARAM,
   shouldRenderNativeOAuthBridge,
 } from "@/lib/auth/native-oauth-bridge";
@@ -47,5 +49,31 @@ describe("native OAuth bridge", () => {
       { headers: { "user-agent": "Mozilla/5.0 Mobile Safari" } },
     );
     expect(shouldRenderNativeOAuthBridge(req)).toBe(true);
+  });
+
+  it("strips native_bridge from the https web fallback URL", () => {
+    const https = new URL(
+      "https://www.axis-seattle-housing.com/auth/callback?native_bridge=1&code=abc123",
+    );
+    expect(httpsCallbackWithoutBridgeParam(https)).toBe(
+      "https://www.axis-seattle-housing.com/auth/callback?code=abc123",
+    );
+  });
+
+  it("bridge HTML falls back to https callback without native_bridge", async () => {
+    const callbackUrl = new URL(
+      "https://www.axis-seattle-housing.com/auth/callback?native_bridge=1&code=abc123",
+    );
+    const webFallback = "https://www.axis-seattle-housing.com/auth/callback?code=abc123";
+    const response = nativeOAuthBridgeResponse(callbackUrl);
+    const html = await response.text();
+
+    expect(html).toContain("Continue in your browser");
+    expect(html).toContain(`id="continue-browser" href="${webFallback}"`);
+    expect(html).toContain(`var webFallback = ${JSON.stringify(webFallback)}`);
+    expect(html).toContain("continueInBrowser()");
+    expect(html).toContain('document.visibilityState === "visible"');
+    expect(html).not.toContain("setTimeout(openDeepLink");
+    expect(html).not.toContain("native_bridge=1");
   });
 });

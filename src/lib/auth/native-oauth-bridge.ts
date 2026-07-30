@@ -10,6 +10,13 @@ export function appendNativeOAuthBridgeParam(url: string): string {
   return parsed.toString();
 }
 
+/** Same OAuth callback URL without the bridge flag — completes sign-in in a normal browser. */
+export function httpsCallbackWithoutBridgeParam(callbackUrl: URL): string {
+  const parsed = new URL(callbackUrl.toString());
+  parsed.searchParams.delete(NATIVE_OAUTH_BRIDGE_PARAM);
+  return parsed.toString();
+}
+
 /** Map an https /auth/callback URL to the app custom scheme (Capacitor deep link). */
 export function httpsCallbackToNativeSchemeUrl(callbackUrl: URL): string {
   const params = new URLSearchParams(callbackUrl.searchParams);
@@ -34,6 +41,7 @@ export function shouldRenderNativeOAuthBridge(request: NextRequest): boolean {
 
 export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
   const schemeUrl = httpsCallbackToNativeSchemeUrl(callbackUrl);
+  const webFallbackUrl = httpsCallbackWithoutBridgeParam(callbackUrl);
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,14 +52,25 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
     body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-height: 100vh; margin: 0; padding: 1.5rem; background: #080b14; color: #e2e8f0; text-align: center; }
     a { color: #8fb4ff; font-weight: 600; text-decoration: none; }
     a:active { opacity: 0.85; }
+    .hint { color: #94a3b8; font-size: 0.95rem; max-width: 20rem; }
   </style>
 </head>
 <body>
   <p>Returning to PropLane…</p>
+  <p class="hint">If the app does not open automatically, continue in your browser below.</p>
   <p><a id="open-app" href="${schemeUrl.replace(/"/g, "&quot;")}">Open PropLane</a></p>
+  <p><a id="continue-browser" href="${webFallbackUrl.replace(/"/g, "&quot;")}">Continue in your browser</a></p>
   <script>
     (function () {
-      var target = ${JSON.stringify(schemeUrl)};
+      var schemeTarget = ${JSON.stringify(schemeUrl)};
+      var webFallback = ${JSON.stringify(webFallbackUrl)};
+      var leftPage = false;
+      function markLeft() { leftPage = true; }
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") markLeft();
+      });
+      window.addEventListener("pagehide", markLeft);
+      window.addEventListener("blur", markLeft);
       function openDeepLink() {
         try {
           var link = document.getElementById("open-app");
@@ -62,17 +81,23 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
         } catch (e) {}
         try {
           var a = document.createElement("a");
-          a.href = target;
+          a.href = schemeTarget;
           a.style.display = "none";
           document.body.appendChild(a);
           a.click();
         } catch (e2) {
-          try { window.location.href = target; } catch (e3) {}
+          try { window.location.href = schemeTarget; } catch (e3) {}
+        }
+      }
+      function continueInBrowser() {
+        try { window.location.replace(webFallback); } catch (e) {
+          try { window.location.href = webFallback; } catch (e2) {}
         }
       }
       openDeepLink();
-      setTimeout(openDeepLink, 150);
-      setTimeout(openDeepLink, 500);
+      setTimeout(function () {
+        if (!leftPage && document.visibilityState === "visible") continueInBrowser();
+      }, 1500);
     })();
   </script>
 </body>
