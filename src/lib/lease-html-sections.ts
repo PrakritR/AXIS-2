@@ -15,6 +15,33 @@ export function extractLeaseDocumentStyles(html: string): string {
   return match?.[1]?.trim() ?? "";
 }
 
+/**
+ * Prefix lease document CSS so it can be embedded in the portal without leaking `body` / `html` rules.
+ * Prefer an isolated iframe editor when possible; this helper is for tests and narrow fallbacks.
+ */
+export function scopeLeaseDocumentStyles(css: string, scopeSelector: string): string {
+  const trimmed = css.trim();
+  if (!trimmed) return "";
+
+  const scopeSelectors = (selectors: string): string =>
+    selectors
+      .split(",")
+      .map((raw) => {
+        const selector = raw.trim();
+        if (!selector) return selector;
+        if (selector === "body" || selector === "html") return scopeSelector;
+        if (selector.startsWith("body ") || selector.startsWith("html ")) {
+          return `${scopeSelector} ${selector.replace(/^(body|html)\s+/, "")}`;
+        }
+        return `${scopeSelector} ${selector}`;
+      })
+      .join(", ");
+
+  return trimmed.replace(/(^|})\s*([^@{}][^{]*)\{/g, (_match, before: string, selectors: string) => {
+    return `${before} ${scopeSelectors(selectors)} {`;
+  });
+}
+
 function stripHtmlTags(value: string): string {
   return value.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 }
@@ -115,4 +142,70 @@ export function applyLeaseSectionBodyEdits(
     edits[section.id] !== undefined ? { ...section, bodyHtml: edits[section.id]! } : section,
   );
   return rebuildLeaseHtmlFromSections(originalHtml, next);
+}
+
+const LEASE_PREVIEW_SECTION_STYLE = `
+.lease-preview-section { transition: outline-color 0.15s ease, background-color 0.15s ease; }
+.lease-preview-section:hover { outline: 2px dashed rgba(47, 107, 255, 0.45); outline-offset: 4px; background: rgba(47, 107, 255, 0.04); }
+.lease-preview-section:focus { outline: 2px solid rgba(47, 107, 255, 0.7); outline-offset: 4px; }
+`;
+
+const LEASE_PREVIEW_SECTION_SCRIPT = `
+<script>
+(function () {
+  function bind() {
+    document.querySelectorAll("[data-lease-section-id]").forEach(function (el) {
+      if (el.getAttribute("data-lease-bound") === "1") return;
+      el.setAttribute("data-lease-bound", "1");
+      el.setAttribute("tabindex", "0");
+      el.style.cursor = "pointer";
+      el.title = "Double-click to edit this section";
+      el.addEventListener("dblclick", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var sectionId = el.getAttribute("data-lease-section-id");
+        if (!sectionId) return;
+        parent.postMessage({ type: "lease-preview-section-dblclick", sectionId: sectionId }, "*");
+      });
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+})();
+</script>`;
+
+/** Wrap each lease section for interactive preview (double-click posts section id to parent). */
+export function injectLeasePreviewSectionMarkers(html: string): string {
+  const sections = parseLeaseHtmlSections(html);
+  if (!sections.length) return html;
+
+  const styledHtml = html.includes("</head>")
+    ? html.replace("</head>", `<style>${LEASE_PREVIEW_SECTION_STYLE}</style></head>`)
+    : `<style>${LEASE_PREVIEW_SECTION_STYLE}</style>${html}`;
+
+  let preamble = "";
+  let offset = 0;
+  if (sections[0]?.id === LEASE_DOCUMENT_HEADER_ID) {
+    preamble = `<section class="lease-preview-section" data-lease-section-id="${sections[0]!.id}">${sections[0]!.bodyHtml}</section>`;
+    offset = 1;
+  } else {
+    const firstHeadingIndex = styledHtml.search(/<h2\b/i);
+    preamble = firstHeadingIndex >= 0 ? styledHtml.slice(0, firstHeadingIndex) : "";
+  }
+
+  const body = sections
+    .slice(offset)
+    .map(
+      (section) =>
+        `${section.headingHtml}<section class="lease-preview-section" data-lease-section-id="${section.id}">${section.bodyHtml}</section>`,
+    )
+    .join("");
+
+  const merged = `${preamble}${body}`;
+  return merged.includes("</body>")
+    ? merged.replace("</body>", `${LEASE_PREVIEW_SECTION_SCRIPT}</body>`)
+    : `${merged}${LEASE_PREVIEW_SECTION_SCRIPT}`;
 }

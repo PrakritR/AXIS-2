@@ -107,6 +107,228 @@ const NOW = new Date();
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const daysFromNow = (n) => new Date(NOW.getTime() + n * 86400000);
 
+function startOfWeekMonday(d = NOW) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+  const weekday = x.getDay();
+  x.setDate(x.getDate() + (weekday === 0 ? -6 : 1 - weekday));
+  return x;
+}
+
+function slotIsoFromDateStr(dateStr, slotIndex) {
+  const [y, m, day] = dateStr.split("-").map(Number);
+  const minutes = slotIndex * 30;
+  return new Date(y, m - 1, day, Math.floor(minutes / 60), minutes % 60, 0, 0).toISOString();
+}
+
+/** Half-hour slot keys (`YYYY-MM-DD:slotIndex`) for tour availability painting. */
+function buildTourAvailabilitySlotKeys(weekMonday, { weeks = 2, weekdays = [0, 1, 2, 3, 4, 5], startSlot = 18, endSlotExclusive = 34 } = {}) {
+  const keys = [];
+  for (let week = 0; week < weeks; week += 1) {
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      if (!weekdays.includes(dayIndex)) continue;
+      const d = new Date(weekMonday);
+      d.setDate(d.getDate() + week * 7 + dayIndex);
+      const ds = isoDate(d);
+      for (let slot = startSlot; slot < endSlotExclusive; slot += 1) {
+        keys.push(`${ds}:${slot}`);
+      }
+    }
+  }
+  return keys;
+}
+
+function managerPropertyAvailabilityRecordId(managerUserId, propertyId) {
+  const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return `axis_mgr_avail_slots_v2_${managerUserId}_prop_${safe}`;
+}
+
+async function upsertPropertyTourAvailability(managerUserId, propertyId, slotKeys) {
+  const id = managerPropertyAvailabilityRecordId(managerUserId, propertyId);
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id,
+        manager_user_id: managerUserId,
+        property_id: propertyId,
+        record_type: "manager_property_availability",
+        row_data: {
+          id,
+          recordType: "manager_property_availability",
+          managerUserId,
+          propertyId,
+          payload: slotKeys,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    `portal_schedule_records(avail:${propertyId})`,
+  );
+}
+
+async function mergeScheduleSingletonPayload(singletonId, recordType, ownerUserId, items) {
+  const { data: existing, error } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data, manager_user_id")
+    .eq("id", singletonId)
+    .maybeSingle();
+  if (error) throw new Error(`select ${singletonId}: ${error.message}`);
+  const current = Array.isArray(existing?.row_data?.payload) ? existing.row_data.payload : [];
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of items) byId.set(item.id, item);
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id: singletonId,
+        manager_user_id: existing?.manager_user_id ?? ownerUserId,
+        record_type: recordType,
+        row_data: {
+          id: singletonId,
+          recordType,
+          managerUserId: existing?.row_data?.managerUserId ?? ownerUserId,
+          payload: [...byId.values()],
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    `portal_schedule_records(${singletonId})`,
+  );
+}
+
+async function mergeTourHostRegistry(entries) {
+  const registryId = "axis_property_mgr_registry_v1";
+  const { data: existing, error } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data")
+    .eq("id", registryId)
+    .maybeSingle();
+  if (error) throw new Error(`select ${registryId}: ${error.message}`);
+  const current =
+    existing?.row_data?.payload && typeof existing.row_data.payload === "object" && !Array.isArray(existing.row_data.payload)
+      ? { ...existing.row_data.payload }
+      : {};
+  for (const { propertyId, userId, label } of entries) {
+    const hosts = Array.isArray(current[propertyId]) ? [...current[propertyId]] : [];
+    if (!hosts.some((host) => host.userId === userId)) {
+      hosts.push({ userId, label, propertyId });
+    }
+    current[propertyId] = hosts;
+  }
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id: registryId,
+        manager_user_id: null,
+        record_type: "axis_property_mgr_registry_v1",
+        row_data: {
+          id: registryId,
+          recordType: "axis_property_mgr_registry_v1",
+          payload: current,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    registryId,
+  );
+}
+
+/**
+ * Paint tour availability, register tour hosts, and upsert confirmed + pending
+ * tour rows into the calendar singletons the portal sync reads.
+ */
+async function seedScheduleToursForManager({ managerUserId, hostLabel, properties }) {
+  if (!properties.length) return;
+  const weekMonday = startOfWeekMonday();
+  const availabilitySlotKeys = buildTourAvailabilitySlotKeys(weekMonday);
+  const createdAt = NOW.toISOString();
+
+  for (const property of properties) {
+    await upsertPropertyTourAvailability(managerUserId, property.id, availabilitySlotKeys);
+    await mergeTourHostRegistry([{ propertyId: property.id, userId: managerUserId, label: hostLabel }]);
+  }
+
+  const plannedEvents = [];
+  const partnerInquiries = [];
+  const tourSpecs = [
+    {
+      plannedId: `seed-planned-${managerUserId.slice(0, 8)}-a`,
+      inquiryId: `seed-pending-${managerUserId.slice(0, 8)}-a`,
+      property: properties[0],
+      daysOut: 2,
+      slot: 20,
+      guest: { name: "Jamie Rivera", email: "jamie.tour@axis.local", phone: "+12025550111" },
+      pendingGuest: { name: "Sam Ortiz", email: "sam.tour@axis.local", phone: "+12025550112" },
+    },
+    {
+      plannedId: `seed-planned-${managerUserId.slice(0, 8)}-b`,
+      inquiryId: `seed-pending-${managerUserId.slice(0, 8)}-b`,
+      property: properties[1] ?? properties[0],
+      daysOut: 4,
+      slot: 24,
+      guest: { name: "Alex Kim", email: "alex.tour@axis.local", phone: "+12025550113" },
+      pendingGuest: { name: "Jordan Lee", email: "jordan.tour@axis.local", phone: "+12025550114" },
+    },
+  ];
+
+  for (const spec of tourSpecs) {
+    const ds = isoDate(daysFromNow(spec.daysOut));
+    const slotKey = `${ds}:${spec.slot}`;
+    const start = slotIsoFromDateStr(ds, spec.slot);
+    const end = slotIsoFromDateStr(ds, spec.slot + 2);
+
+    plannedEvents.push({
+      id: spec.plannedId,
+      title: `Tour · ${spec.guest.name}`,
+      start,
+      end,
+      kind: "tour",
+      managerUserId,
+      propertyId: spec.property.id,
+      propertyTitle: spec.property.name,
+      attendeeName: spec.guest.name,
+      attendeeEmail: spec.guest.email,
+      attendeePhone: spec.guest.phone,
+      slotKey,
+    });
+
+    const pendingStart = slotIsoFromDateStr(ds, spec.slot + 4);
+    const pendingEnd = slotIsoFromDateStr(ds, spec.slot + 6);
+    const pendingSlotKey = `${ds}:${spec.slot + 4}`;
+    partnerInquiries.push({
+      id: spec.inquiryId,
+      name: spec.pendingGuest.name,
+      email: spec.pendingGuest.email,
+      phone: spec.pendingGuest.phone,
+      notes: "Interested in a furnished room with a desk setup.",
+      kind: "tour",
+      status: "pending",
+      managerUserId,
+      propertyId: spec.property.id,
+      propertyTitle: spec.property.name,
+      proposedStart: pendingStart,
+      proposedEnd: pendingEnd,
+      createdAt,
+      tourGroupId: `seed-grp-${spec.inquiryId}`,
+      requestedWindows: [{ start: pendingStart, end: pendingEnd, slotKey: pendingSlotKey, adminUserId: managerUserId }],
+    });
+  }
+
+  await mergeScheduleSingletonPayload(
+    "axis_admin_planned_events_v1",
+    "axis_admin_planned_events_v1",
+    managerUserId,
+    plannedEvents,
+  );
+  await mergeScheduleSingletonPayload(
+    "axis_admin_partner_inquiries_v1",
+    "axis_admin_partner_inquiries_v1",
+    managerUserId,
+    partnerInquiries,
+  );
+}
+
 async function ensureUser(
   email,
   password,
@@ -912,36 +1134,29 @@ try {
   });
   await must(supabase.from("manager_property_records").upsert(propertyRows, { onConflict: "id" }), "manager_property_records(catalog)");
 
-  // Calendar tours for catalog properties (idempotent: stable ids + upsert).
-  // Each references a canonical seeded property id so the SAME property shows
-  // in the Calendar and the Properties tab — never a dangling/foreign id.
-  const catalogTours = [
-    { id: "test-tour-fir", propId: "mgr-test-fir", managerUserId: manager2UserId, title: "Fir Lofts Tour", daysOut: 3 },
-    { id: "test-tour-cedar", propId: "mgr-test-cedar", managerUserId: manager2UserId, title: "Cedar Flat 2B Tour", daysOut: 5 },
-  ];
-  for (const tour of catalogTours) {
-    const startsAt = daysFromNow(tour.daysOut).toISOString();
-    await must(
-      supabase.from("portal_schedule_records").upsert(
-        {
-          id: tour.id,
-          manager_user_id: tour.managerUserId,
-          record_type: "event",
-          starts_at: startsAt,
-          ends_at: new Date(daysFromNow(tour.daysOut).getTime() + 60 * 60 * 1000).toISOString(),
-          row_data: {
-            id: tour.id,
-            title: tour.title,
-            type: "tour",
-            propertyId: tour.propId,
-            managerUserId: tour.managerUserId,
-            testRunId,
-          },
-        },
-        { onConflict: "id" },
-      ),
-      `portal_schedule_records(${tour.id})`,
-    );
+  // Tour calendar: open availability slots, confirmed tours, and pending requests
+  // for manager2's browse catalog and manager@test's demo portfolio.
+  const manager2TourProperties = catalog
+    .filter((p) => p.ownerUserId === manager2UserId)
+    .map((p) => ({ id: p.id, name: p.name }));
+  const managerTourProperties = catalog
+    .filter((p) => p.ownerUserId === managerUserId)
+    .map((p) => ({ id: p.id, name: p.name }));
+
+  await seedScheduleToursForManager({
+    managerUserId: manager2UserId,
+    hostLabel: "Test Manager 2",
+    properties: manager2TourProperties,
+  });
+  await seedScheduleToursForManager({
+    managerUserId,
+    hostLabel: CANONICAL_DEMO_MANAGER_NAME,
+    properties: managerTourProperties,
+  });
+
+  // Retire legacy `record_type: event` rows — the portal reads planned/inquiry singletons.
+  for (const legacyId of ["test-tour-fir", "test-tour-cedar"]) {
+    await supabase.from("portal_schedule_records").delete().eq("id", legacyId);
   }
 
   const propById = new Map(catalog.map((p) => [p.id, p]));

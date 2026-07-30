@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { LeaseSectionEditor } from "@/components/portal/lease-section-editor";
 import { patchLeasePacketFromManager } from "@/lib/lease-packet-edit.client";
 import {
   buildLeasePacketUpdateFromForm,
@@ -22,21 +21,11 @@ import { cn } from "@/lib/utils";
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
-const LEASE_EDIT_SECTIONS = [
-  { id: "lease-section-placement", label: "Placement" },
-  { id: "lease-section-terms", label: "Terms" },
-  { id: "lease-section-fees", label: "Fees" },
-  { id: "lease-section-notes", label: "Notes" },
-  { id: "lease-section-document", label: "Document" },
-] as const;
-
 type Props = {
   row: LeasePipelineRow;
   managerUserId?: string | null;
   onSaved: (row: LeasePipelineRow) => void;
   className?: string;
-  /** Panel layout: section nav + scrollable fields + sticky save bar (lease edit modal left column). */
-  layout?: "default" | "panel";
 };
 
 function patchFormValues(values: LeasePacketFormValues, patch: Partial<LeasePacketFormValues>): LeasePacketFormValues {
@@ -55,48 +44,25 @@ function patchFormValues(values: LeasePacketFormValues, patch: Partial<LeasePack
   return next;
 }
 
-type PanelMode = "terms" | "document";
-
-export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className, layout = "default" }: Props) {
+export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className }: Props) {
   const { showToast } = useAppUi();
   const baseline = useMemo(() => leasePacketFormValuesFromRow(row), [row]);
   const [values, setValues] = useState<LeasePacketFormValues>(baseline);
   const [saving, setSaving] = useState(false);
-  const [panelMode, setPanelMode] = useState<PanelMode>("document");
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValues(leasePacketFormValuesFromRow(row));
   }, [row]);
 
-  useEffect(() => {
-    setPanelMode("document");
-  }, [row.id]);
-
   const dirty = !leasePacketFormValuesEqual(values, baseline);
   const willRegenerate = dirty && leasePacketFormValuesRegeneratesDocument(baseline, values);
   const leaseEndAuto = shouldAutoComputeLeaseEnd(values.leaseTerm, values.rentalType);
-  const isPanel = layout === "panel";
 
   const update = (patch: Partial<LeasePacketFormValues>) => {
     setValues((cur) => patchFormValues(cur, patch));
   };
 
   const reset = () => setValues(baseline);
-
-  const jumpToSection = (sectionId: string) => {
-    if (sectionId === "lease-section-document") {
-      setPanelMode("document");
-      return;
-    }
-    setPanelMode("terms");
-    window.requestAnimationFrame(() => {
-      const root = scrollRef.current;
-      if (!root) return;
-      const target = root.querySelector<HTMLElement>(`#${sectionId}`);
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
 
   const save = async () => {
     const built = buildLeasePacketUpdateFromForm(row.id, values, baseline);
@@ -125,79 +91,21 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
 
   return (
     <form
-      className={cn(
-        "flex min-h-0 flex-col",
-        isPanel ? "h-full gap-0" : "gap-4",
-        className,
-      )}
+      className={cn("flex min-h-0 flex-col gap-4", className)}
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
       data-attr="lease-packet-inline-editor"
     >
-      {isPanel ? (
-        <div className="shrink-0 border-b border-border pb-3">
-          <p className="text-sm font-semibold text-foreground">{row.residentName || "Resident"}</p>
-          <p className="mt-0.5 text-xs text-muted">
-            Open <strong className="font-semibold text-foreground">Document</strong> to edit every section (1–26 + addenda A–E) — words, tables, and images. Use Terms for rent and dates.
-          </p>
-          <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Lease form sections">
-            {LEASE_EDIT_SECTIONS.map((section) => {
-              const isDocument = section.id === "lease-section-document";
-              const active = isDocument ? panelMode === "document" : panelMode === "terms";
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => jumpToSection(section.id)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-xs font-medium transition",
-                    active
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border bg-card text-muted hover:border-primary/30 hover:text-foreground",
-                    isDocument && "font-semibold",
-                  )}
-                  data-attr={`lease-edit-jump-${section.id}`}
-                >
-                  {section.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      ) : null}
-
-      {panelMode === "document" && isPanel ? (
-        <LeaseSectionEditor
-          row={row}
-          managerUserId={managerUserId}
-          onSaved={onSaved}
-          embedded
-          fullHeight
-          className="mt-3 min-h-0 flex-1"
-        />
-      ) : (
-        <>
       {willRegenerate ? (
-        <p
-          className={cn(
-            "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950",
-            isPanel ? "mx-0 mt-3 shrink-0" : "",
-          )}
-        >
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           Term or fee changes will regenerate the lease document. It stays in manager review until you send it.
         </p>
       ) : null}
 
-      <div
-        ref={scrollRef}
-        className={cn(
-          "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]",
-          isPanel ? "mt-3 space-y-5 pb-2" : "space-y-4",
-        )}
-      >
-        <section id="lease-section-placement" className="scroll-mt-2 space-y-3">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+        <section className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Placement</h3>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
             <div>
@@ -227,7 +135,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           </div>
         </section>
 
-        <section id="lease-section-terms" className="scroll-mt-2 space-y-3">
+        <section className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Lease terms</h3>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
             <div>
@@ -291,7 +199,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           </div>
         </section>
 
-        <section id="lease-section-fees" className="scroll-mt-2 space-y-3">
+        <section className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Fees</h3>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
             {(
@@ -319,7 +227,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           </div>
         </section>
 
-        <section id="lease-section-notes" className="scroll-mt-2 space-y-2">
+        <section className="space-y-2">
           <label className={fieldLabelClass} htmlFor="lease-edit-notes">
             Internal notes
           </label>
@@ -334,13 +242,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
         </section>
       </div>
 
-      <div
-        className={cn(
-          "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card pt-3",
-          isPanel && dirty ? "shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]" : "",
-          isPanel ? "mt-2" : "",
-        )}
-      >
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card pt-3">
         <Button type="button" variant="outline" className="rounded-full" disabled={!dirty || saving} onClick={reset}>
           Reset
         </Button>
@@ -354,8 +256,6 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           {saving ? "Saving…" : "Save changes"}
         </Button>
       </div>
-        </>
-      )}
     </form>
   );
 }

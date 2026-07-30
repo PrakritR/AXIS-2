@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -14,25 +14,73 @@ type Props = {
   onChange: (html: string) => void;
 };
 
+function escapeStyleTagClose(css: string): string {
+  return css.replace(/<\/style/gi, "<\\/style");
+}
+
+function buildVisualEditorDocument(bodyHtml: string, documentStyles: string): string {
+  const safeStyles = escapeStyleTagClose(documentStyles);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${safeStyles}</style></head><body class="lease-doc">${bodyHtml}</body></html>`;
+}
+
 /** WYSIWYG-style section body editor with optional raw HTML mode (tables, images, all markup). */
 export function LeaseSectionBodyEditor({ sectionId, title, value, documentStyles, onChange }: Props) {
   const [mode, setMode] = useState<EditorMode>("visual");
-  const visualRef = useRef<HTMLDivElement>(null);
-  const lastSyncedValue = useRef(value);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const localValueRef = useRef(value);
 
-  useLayoutEffect(() => {
-    if (mode !== "visual" || !visualRef.current) return;
-    visualRef.current.innerHTML = value;
-    lastSyncedValue.current = value;
-  }, [mode, sectionId]);
+  const visualDocument = useMemo(
+    () => buildVisualEditorDocument(value, documentStyles),
+    // Remount iframe when the section or stylesheet changes, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- value is applied on load and via sync effect
+    [documentStyles, sectionId],
+  );
 
   useEffect(() => {
-    if (mode !== "visual" || !visualRef.current) return;
-    if (lastSyncedValue.current !== value) {
-      visualRef.current.innerHTML = value;
-      lastSyncedValue.current = value;
-    }
-  }, [mode, value, sectionId]);
+    localValueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    if (mode !== "visual") return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const bindEditor = () => {
+      const body = iframe.contentDocument?.body;
+      if (!body) return undefined;
+      if (body.innerHTML !== localValueRef.current) {
+        body.innerHTML = localValueRef.current;
+      }
+      body.contentEditable = "true";
+      body.setAttribute("data-attr", "lease-section-visual-editor");
+      const onInput = () => {
+        const html = body.innerHTML;
+        localValueRef.current = html;
+        onChange(html);
+      };
+      body.addEventListener("input", onInput);
+      return () => body.removeEventListener("input", onInput);
+    };
+
+    const onLoad = () => {
+      bindEditor();
+    };
+
+    iframe.addEventListener("load", onLoad);
+    const cleanup = iframe.contentDocument?.readyState === "complete" ? bindEditor() : undefined;
+    return () => {
+      iframe.removeEventListener("load", onLoad);
+      cleanup?.();
+    };
+  }, [mode, onChange, sectionId, visualDocument]);
+
+  useEffect(() => {
+    if (mode !== "visual") return;
+    const body = iframeRef.current?.contentDocument?.body;
+    if (!body || body.innerHTML === value) return;
+    body.innerHTML = value;
+    localValueRef.current = value;
+  }, [mode, sectionId, value]);
 
   return (
     <div className="space-y-2" data-attr={`lease-section-body-editor-${sectionId}`}>
@@ -58,19 +106,13 @@ export function LeaseSectionBodyEditor({ sectionId, title, value, documentStyles
 
       {mode === "visual" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-white">
-          <style dangerouslySetInnerHTML={{ __html: documentStyles }} />
-          <div
-            ref={visualRef}
-            contentEditable
-            suppressContentEditableWarning
-            className="lease-doc min-h-[12rem] max-h-[min(50vh,22rem)] overflow-y-auto px-4 py-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            onInput={() => {
-              const html = visualRef.current?.innerHTML ?? "";
-              lastSyncedValue.current = html;
-              onChange(html);
-            }}
-            aria-label={`${title} visual editor`}
-            data-attr="lease-section-visual-editor"
+          <iframe
+            key={`${sectionId}-visual`}
+            ref={iframeRef}
+            title={`${title} visual editor`}
+            srcDoc={visualDocument}
+            sandbox="allow-same-origin"
+            className="min-h-[12rem] max-h-[min(50vh,22rem)] w-full border-0 bg-white"
           />
         </div>
       ) : (

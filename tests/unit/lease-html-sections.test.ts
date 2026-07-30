@@ -3,6 +3,7 @@ import {
   applyLeaseSectionBodyEdits,
   parseLeaseHtmlSections,
   rebuildLeaseHtmlFromSections,
+  scopeLeaseDocumentStyles,
 } from "@/lib/lease-html-sections";
 
 const SAMPLE = `<!DOCTYPE html><html><body>
@@ -46,5 +47,11 @@ describe("lease-html-sections", () => {
     );
     expect(rebuilt.startsWith("<!DOCTYPE html>")).toBe(true);
     expect(rebuilt).toContain("<p>x</p>");
+  });
+
+  it("scopes body rules under an editor wrapper selector", () => {
+    const scoped = scopeLeaseDocumentStyles("body { background: #fff; color: #111; }", ".lease-doc");
+    expect(scoped).toContain(".lease-doc {");
+    expect(scoped).not.toMatch(/\bbody\s*\{/);
   });
 });
