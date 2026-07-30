@@ -16,7 +16,11 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import { FilterSingleSelectList } from "@/components/portal/filter-field-lists";
+import {
+  FilterCollapsibleSection,
+  FilterSingleSelectList,
+  filterSingleSelectSummary,
+} from "@/components/portal/filter-field-lists";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -341,18 +345,11 @@ export function ManagerAllServicesPanel({
             dataAttr="services-filter-property"
           />
           {residentOptions.length > 0 ? (
-            <div>
-              <p className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Resident</p>
-              <FilterSingleSelectList
-                options={[
-                  { value: "", label: "All residents" },
-                  ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
-                ]}
-                value={activeResidentFilter}
-                onChange={setResidentFilter}
-                dataAttr="services-filter-resident"
-              />
-            </div>
+            <ServicesResidentFilterDropdown
+              residentOptions={residentOptions}
+              value={activeResidentFilter}
+              onChange={setResidentFilter}
+            />
           ) : null}
         </div>
       </PortalFilterSortSheet>
@@ -660,5 +657,35 @@ export function ManagerAllServicesPanel({
         }}
       />
     </ManagerPortalPageShell>
+  );
+}
+
+function ServicesResidentFilterDropdown({
+  residentOptions,
+  value,
+  onChange,
+}: {
+  residentOptions: { id: string; label: string }[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const options = [
+    { value: "", label: "All residents" },
+    ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
+  ];
+
+  return (
+    <FilterCollapsibleSection
+      label="Resident"
+      summary={filterSingleSelectSummary(value, options, "All residents")}
+      dataAttr="services-filter-resident-trigger"
+    >
+      <FilterSingleSelectList
+        options={options}
+        value={value}
+        onChange={onChange}
+        dataAttr="services-filter-resident"
+      />
+    </FilterCollapsibleSection>
   );
 }

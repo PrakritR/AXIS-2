@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { DestinationNav, type DestinationNavItem } from "@/components/ui/destination-nav";
+import { HorizontalScrollCapture } from "@/components/portal/portal-horizontal-scroll";
 import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import { cn } from "@/lib/utils";
 
@@ -76,9 +77,7 @@ export function PortalListControlStack({
   return (
     <div className={cn("space-y-2.5 max-lg:space-y-2", className)} data-slot="portal-list-control-stack">
       {showDestinations ? (
-        <div
-          ref={destinationRef}
-          data-portal-list-destination-nav
+        <HorizontalScrollCapture
           className={cn(
             "sticky z-[38] bg-background/95 backdrop-blur-md lg:static lg:mx-0",
             destinationInset ? "mx-0" : "-mx-2.5 sm:-mx-4",
@@ -86,18 +85,20 @@ export function PortalListControlStack({
             "lg:bg-transparent lg:backdrop-blur-none",
           )}
         >
-          {destinationRow ?? (
-            <DestinationNav
-              items={destinations!}
-              activeId={activeDestinationId}
-              ariaLabel={destinationAriaLabel}
-              className={cn(
-                "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent",
-                destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:p-0",
-              )}
-            />
-          )}
-        </div>
+          <div ref={destinationRef} data-portal-list-destination-nav>
+            {destinationRow ?? (
+              <DestinationNav
+                items={destinations!}
+                activeId={activeDestinationId}
+                ariaLabel={destinationAriaLabel}
+                className={cn(
+                  "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent",
+                  destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:p-0",
+                )}
+              />
+            )}
+          </div>
+        </HorizontalScrollCapture>
       ) : null}
       {showFindRow ? (
         <div className="flex w-full min-w-0 items-stretch gap-2 max-md:flex-col md:items-center">

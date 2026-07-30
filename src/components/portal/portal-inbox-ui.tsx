@@ -9,7 +9,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, PORTAL_TOOLBAR_GROUP, PORTAL_TOOLBAR_PILL_BUTTON, PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
@@ -773,6 +773,52 @@ export function InboxBubble({
   );
 }
 
+/** Email / SMS channel toggles for thread replies — matches New message compose. */
+export function InboxReplyChannelPicker({
+  viaEmail,
+  viaSms,
+  onViaEmailChange,
+  onViaSmsChange,
+  emailAvailable = true,
+  smsAvailable = true,
+}: {
+  viaEmail: boolean;
+  viaSms: boolean;
+  onViaEmailChange: (next: boolean) => void;
+  onViaSmsChange: (next: boolean) => void;
+  emailAvailable?: boolean;
+  smsAvailable?: boolean;
+}) {
+  if (!emailAvailable && !smsAvailable) return null;
+  if (!smsAvailable || !emailAvailable) return null;
+
+  return (
+    <div className="border-b border-border/70 px-2 pt-2 md:px-3" data-attr="inbox-reply-channel-picker">
+      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send via</p>
+      <div className={PORTAL_TOOLBAR_GROUP} role="group" aria-label="Send platform">
+        <button
+          type="button"
+          className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaEmail ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+          aria-pressed={viaEmail}
+          data-attr="inbox-reply-via-email"
+          onClick={() => onViaEmailChange(!viaEmail)}
+        >
+          Email
+        </button>
+        <button
+          type="button"
+          className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaSms ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+          aria-pressed={viaSms}
+          data-attr="inbox-reply-via-sms"
+          onClick={() => onViaSmsChange(!viaSms)}
+        >
+          SMS
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Persistent composer pinned to the bottom of an open thread. */
 export function InboxComposer({
   value,
@@ -784,7 +830,7 @@ export function InboxComposer({
   maxLength,
   hint,
   dataAttr,
-  aiAssist,
+  channelBar,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -795,8 +841,8 @@ export function InboxComposer({
   maxLength?: number;
   hint?: ReactNode;
   dataAttr?: string;
-  /** Gmail-style AI assist row rendered above the reply field (manager inbox). */
-  aiAssist?: ReactNode;
+  /** Channel picker or other controls above the reply field. */
+  channelBar?: ReactNode;
 }) {
   const canSend = !sending && !disabled && value.trim().length > 0;
   return (
@@ -804,7 +850,7 @@ export function InboxComposer({
       className="portal-inbox-composer shrink-0 border-t border-border bg-card"
       style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
     >
-      {aiAssist ? <div className="border-b border-border/70 px-2 pt-2 md:px-3">{aiAssist}</div> : null}
+      {channelBar ?? null}
       <form
         className="px-2 py-2 max-md:py-1.5 md:px-3 md:py-2.5"
         onSubmit={(e) => {

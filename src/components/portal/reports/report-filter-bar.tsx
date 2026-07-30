@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
+import { Input, Select } from "@/components/ui/input";
+import { FilterCollapsibleSection, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 
 export type ReportFilterState = {
@@ -76,15 +76,30 @@ export function ReportFilterBar({
       ) : null}
 
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
-        <div className={stacked ? "w-full" : "min-w-0 flex-1"}>
-          <PortalFilterChipRow
-            ariaLabel="Properties"
+        stacked ? (
+          <ReportPropertyFilterDropdown
+            propertyOptions={propertyOptions}
             value={filters.propertyId}
             onChange={(propertyId) => onChange({ propertyId })}
-            allLabel="All properties"
-            options={propertyOptions.map((p) => ({ id: p.id, label: p.label }))}
           />
-        </div>
+        ) : (
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
+            Property
+            <Select
+              className="h-10 w-full min-w-[12rem] sm:w-auto"
+              value={filters.propertyId}
+              onChange={(e) => onChange({ propertyId: e.target.value })}
+              data-attr="report-filter-property"
+            >
+              <option value="">All properties</option>
+              {propertyOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )
       ) : null}
 
       {showDaysAhead ? (
@@ -122,6 +137,39 @@ export function ReportFilterBar({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ReportPropertyFilterDropdown({
+  propertyOptions,
+  value,
+  onChange,
+}: {
+  propertyOptions: { id: string; label: string }[];
+  value: string;
+  onChange: (propertyId: string) => void;
+}) {
+  const closeDropdown = useFilterAccordionClose();
+  const options = [
+    { value: "", label: "All properties" },
+    ...propertyOptions.map((p) => ({ value: p.id, label: p.label })),
+  ];
+
+  return (
+    <FilterCollapsibleSection
+      sectionId="property"
+      label="Property"
+      summary={filterSingleSelectSummary(value, options, "All properties")}
+      dataAttr="report-filter-property-trigger"
+    >
+      <FilterSingleSelectList
+        options={options}
+        value={value}
+        onChange={onChange}
+        onPick={closeDropdown}
+        dataAttr="report-filter-property"
+      />
+    </FilterCollapsibleSection>
   );
 }
 

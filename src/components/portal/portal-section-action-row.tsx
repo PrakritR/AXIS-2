@@ -2,12 +2,19 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 
-const PORTAL_FOOTER_INLINE_ACTIONS_ROW =
-  "flex max-w-full shrink-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:gap-2 sm:overflow-visible sm:pb-0";
+const PORTAL_FOOTER_INLINE_ACTIONS_ROW = cn(
+  "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-start gap-1 pb-0.5",
+  PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+  "overscroll-x-contain scroll-px-1 sm:justify-end sm:gap-2 sm:pb-0",
+);
 
-const PORTAL_FOOTER_HEADER_ACTIONS_ROW =
-  "flex max-w-full shrink-0 flex-nowrap items-center justify-center gap-1 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0";
+const PORTAL_FOOTER_HEADER_ACTIONS_ROW = cn(
+  "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-center gap-1 pb-0.5",
+  PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+  "overscroll-x-contain scroll-px-1 sm:gap-2 sm:pb-0",
+);
 
 const PORTAL_FOOTER_INLINE_SPACER =
   "h-[calc(2.5rem+var(--portal-native-bottom-nav-inset,0px)+env(safe-area-inset-bottom,0px))] shrink-0 md:hidden";
@@ -45,15 +52,17 @@ export function PortalPageFooterActions({
         data-slot="portal-page-footer-actions"
         data-row-variant={rowVariant}
       >
-        <div className="mx-auto w-full max-w-5xl">
+        <div className="mx-auto w-full min-w-0 max-w-5xl">
           {rowVariant === "header" ? (
-            <div className={PORTAL_FOOTER_HEADER_ACTIONS_ROW}>
+            <div className={PORTAL_FOOTER_HEADER_ACTIONS_ROW} {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}>
               <PortalSectionActionRow variant="header" className="mx-auto w-max justify-center gap-1 sm:gap-2">
                 {children}
               </PortalSectionActionRow>
             </div>
           ) : (
-            <PortalSectionActionRow>{children}</PortalSectionActionRow>
+            <div {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}>
+              <PortalSectionActionRow>{children}</PortalSectionActionRow>
+            </div>
           )}
         </div>
       </div>

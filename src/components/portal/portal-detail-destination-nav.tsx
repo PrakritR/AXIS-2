@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { DestinationNav, type DestinationNavItem } from "@/components/ui/destination-nav";
+import { HorizontalScrollCapture } from "@/components/portal/portal-horizontal-scroll";
 import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import { cn } from "@/lib/utils";
 
@@ -42,22 +43,23 @@ export function PortalDetailDestinationNav({
   }, []);
 
   return (
-    <div
-      ref={wrapRef}
-      data-portal-detail-destination-nav
+    <HorizontalScrollCapture
       className={cn("-mx-2.5 bg-background sm:-mx-4 lg:mx-0")}
+      data-portal-detail-destination-nav
     >
-      <DestinationNav
-        items={items}
-        activeId={activeId}
-        activeHref={activeHref}
-        ariaLabel={ariaLabel}
-        className={cn(
-          "rounded-none border-0 border-b border-border bg-transparent p-0",
-          "md:rounded-2xl md:border md:border-border md:bg-accent/30 md:p-1",
-          className,
-        )}
-      />
-    </div>
+      <div ref={wrapRef}>
+        <DestinationNav
+          items={items}
+          activeId={activeId}
+          activeHref={activeHref}
+          ariaLabel={ariaLabel}
+          className={cn(
+            "rounded-none border-0 border-b border-border bg-transparent p-0",
+            "md:rounded-2xl md:border md:border-border md:bg-accent/30 md:p-1",
+            className,
+          )}
+        />
+      </div>
+    </HorizontalScrollCapture>
   );
 }

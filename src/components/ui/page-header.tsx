@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { HorizontalScrollCapture } from "@/components/portal/portal-horizontal-scroll";
 import { cn } from "@/lib/utils";
 
 /** Compact portal page header — title scrolls on mobile; not a fixed chrome bar. */
@@ -63,7 +64,9 @@ export function PageHeader({
             </span>
           ) : null}
         </h1>
-        {titleTrailing ? <div className="min-w-0 flex-1">{titleTrailing}</div> : null}
+        {titleTrailing ? (
+          <HorizontalScrollCapture className="min-w-0 flex-1">{titleTrailing}</HorizontalScrollCapture>
+        ) : null}
         {primaryAction ? (
           <div className="flex shrink-0 items-center gap-2">{primaryAction}</div>
         ) : null}

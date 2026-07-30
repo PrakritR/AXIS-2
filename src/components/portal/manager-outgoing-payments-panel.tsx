@@ -190,7 +190,10 @@ export function ManagerOutgoingPaymentsPanel({
         subtitle={detailRow.payeeLabel}
         backHref={listBasePath ? paymentListHref(listBasePath, "outgoing", activeBucket) : "#"}
         backLabel="Back to payments"
+        hideBackText
+        bareHeader
         dataAttrBack="outgoing-payment-detail-back"
+        inlineActions
         actions={renderHeaderActions(detailRow)}
       >
         {renderDetailBody(detailRow)}

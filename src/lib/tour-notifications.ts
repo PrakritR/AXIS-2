@@ -24,6 +24,9 @@ export type TourNotificationContext = {
   managerLabel?: string;
   instructions?: string;
   applyUrl: string;
+  /** Resident sign-up — track tours and message the property team in PropLane. */
+  createAccountUrl?: string;
+  residentPortalUrl?: string;
 };
 
 export function formatTourTimeRange(startIso: string, endIso: string): string {
@@ -89,9 +92,16 @@ export function buildTourRequestTenantBody(ctx: TourNotificationContext): string
   lines.push(
     "",
     "You will receive a separate confirmation email once the manager approves your tour time.",
-    "",
-    "— PropLane",
   );
+  if (ctx.createAccountUrl?.trim()) {
+    lines.push(
+      "",
+      "Track this tour in PropLane",
+      "Create a free resident account to see tour updates, message your property team, and apply when you are ready:",
+      ctx.createAccountUrl.trim(),
+    );
+  }
+  lines.push("", "— PropLane");
   return lines.join("\n");
 }
 
@@ -124,9 +134,17 @@ export function buildTourConfirmedTenantBody(ctx: TourNotificationContext): stri
     "• Application fee payment (when required for this listing)",
     "",
     "Questions before or after your tour? Reply in your PropLane inbox and your property team will help.",
-    "",
-    "— PropLane",
   );
+  if (ctx.createAccountUrl?.trim()) {
+    lines.push(
+      "",
+      "Create a free resident account to track this tour, read manager messages, and apply when you are ready:",
+      ctx.createAccountUrl.trim(),
+    );
+  } else if (ctx.residentPortalUrl?.trim()) {
+    lines.push("", "Sign in to your PropLane resident portal to view messages:", ctx.residentPortalUrl.trim());
+  }
+  lines.push("", "— PropLane");
   return lines.join("\n");
 }
 
@@ -158,6 +176,11 @@ export function buildTourConfirmedTenantHtml(ctx: TourNotificationContext): stri
     : "";
   const href = escapeHtmlAttr(ctx.applyUrl);
   const urlPlain = escapeHtmlText(ctx.applyUrl);
+  const accountBlock = ctx.createAccountUrl?.trim()
+    ? `<p style="margin:16px 0 8px 0"><strong>Track this tour in PropLane</strong></p>
+<p style="margin:0 0 12px 0">Create a free resident account to see tour updates, message your property team, and apply when you are ready.</p>
+<p style="margin:0 0 16px 0"><a href="${escapeHtmlAttr(ctx.createAccountUrl.trim())}" style="color:#2563eb;font-weight:600">${escapeHtmlText(ctx.createAccountUrl.trim())}</a></p>`
+    : "";
   const cta = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 8px 0">
 <tr>
 <td style="border-radius:10px;background:#2563eb">
@@ -179,6 +202,7 @@ ${room}${address}${host}${instructions}
 <p style="margin:16px 0 8px 0"><strong>Next step — apply for this home</strong></p>
 <p style="margin:0 0 12px 0">If you are interested after your tour, submit your rental application using the link below.</p>
 ${cta}
+${accountBlock}
 <p style="margin:0;font-size:13px;color:#64748b">Questions? Reply in your PropLane inbox and your property team will help.</p>
 </div>
 </body>
@@ -200,6 +224,13 @@ export function buildTourNotificationContext(input: {
   managerLabel?: string | null;
   instructions?: string | null;
 }): TourNotificationContext {
+  const origin = input.origin.replace(/\/$/, "");
+  const nextPath = input.propertyId?.trim()
+    ? `/rent/tours-contact?propertyId=${encodeURIComponent(input.propertyId.trim())}`
+    : "/resident/applications";
+  const createAccountParams = new URLSearchParams({ role: "resident", next: nextPath });
+  const email = input.guestEmail?.trim().toLowerCase();
+  if (email) createAccountParams.set("email", email);
   return {
     guestName: input.guestName.trim(),
     guestEmail: input.guestEmail.trim(),
@@ -213,5 +244,7 @@ export function buildTourNotificationContext(input: {
     managerLabel: input.managerLabel?.trim() || undefined,
     instructions: input.instructions?.trim() || undefined,
     applyUrl: buildTourApplyUrl(input.origin, input.propertyId, input.roomLabel),
+    createAccountUrl: `${origin}/auth/create-account?${createAccountParams.toString()}`,
+    residentPortalUrl: `${origin}/resident/applications`,
   };
 }

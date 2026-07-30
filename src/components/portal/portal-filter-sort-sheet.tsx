@@ -123,6 +123,7 @@ export function PortalFilterSortSheet({
           onOpenChange={setOpen}
           title="Filter"
           footer={footer}
+          autoElevate
         >
           {sheetBody}
         </VaulBottomSheet>
@@ -132,9 +133,9 @@ export function PortalFilterSortSheet({
           onClose={() => setOpen(false)}
           title="Filter"
           footer={footer}
-          panelClassName="h-auto max-h-[min(92dvh,36rem)] max-w-md"
+          panelClassName="flex max-h-[min(92dvh,40rem)] w-full max-w-md flex-col"
           dense
-          scrollableContent={false}
+          scrollableContent
           assistantStrip={false}
         >
           {sheetBody}

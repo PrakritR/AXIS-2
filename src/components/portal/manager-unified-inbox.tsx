@@ -529,6 +529,8 @@ export function ManagerUnifiedInbox({
         commBase={commBase}
         threadFilters={threadFilters}
         filterContacts={filterContacts}
+        smsUiEnabled={smsUiEnabled}
+        smsRecipients={smsResidents}
         controlledExpandedId={selection.threadId}
         onControlledExpandedIdChange={(id) => {
           if (!id) {

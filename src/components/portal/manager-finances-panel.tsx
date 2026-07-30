@@ -7,7 +7,9 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalActiveFilterChips, PortalFilterChipRow, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { FilterCollapsibleSection, FilterFieldsAccordion, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
+import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -299,43 +301,88 @@ function FinancesRowFilters({
   const types = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
   const categories = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
   const vendors = useMemo(() => uniqueRowValues(rows, "vendor"), [rows]);
+  const closeDropdown = useFilterAccordionClose();
 
   if (!report || rows.length === 0) return null;
 
   return tabId === "income" ? (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <PortalFilterChipRow
-        ariaLabel="Residents"
-        value={rowFilters.resident}
-        onChange={(resident) => onChange({ resident })}
-        allLabel="All residents"
-        options={residents.map((value) => ({ id: value, label: value }))}
-      />
-      <PortalFilterChipRow
-        ariaLabel="Types"
-        value={rowFilters.type}
-        onChange={(type) => onChange({ type })}
-        allLabel="All types"
-        options={types.map((value) => ({ id: value, label: value }))}
-      />
-    </div>
+    <>
+      <FilterCollapsibleSection
+        sectionId="resident"
+        label="Resident"
+        summary={filterSingleSelectSummary(
+          rowFilters.resident,
+          [{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))],
+          "All residents",
+        )}
+        dataAttr="finances-filter-resident-trigger"
+      >
+        <FilterSingleSelectList
+          options={[{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))]}
+          value={rowFilters.resident}
+          onChange={(resident) => onChange({ resident })}
+          onPick={closeDropdown}
+          dataAttr="finances-filter-resident"
+        />
+      </FilterCollapsibleSection>
+      <FilterCollapsibleSection
+        sectionId="type"
+        label="Type"
+        summary={filterSingleSelectSummary(
+          rowFilters.type,
+          [{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))],
+          "All types",
+        )}
+        dataAttr="finances-filter-type-trigger"
+      >
+        <FilterSingleSelectList
+          options={[{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))]}
+          value={rowFilters.type}
+          onChange={(type) => onChange({ type })}
+          onPick={closeDropdown}
+          dataAttr="finances-filter-type"
+        />
+      </FilterCollapsibleSection>
+    </>
   ) : (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      <PortalFilterChipRow
-        ariaLabel="Categories"
-        value={rowFilters.category}
-        onChange={(category) => onChange({ category })}
-        allLabel="All categories"
-        options={categories.map((value) => ({ id: value, label: value }))}
-      />
-      <PortalFilterChipRow
-        ariaLabel="Vendors"
-        value={rowFilters.vendor}
-        onChange={(vendor) => onChange({ vendor })}
-        allLabel="All vendors"
-        options={vendors.map((value) => ({ id: value, label: value }))}
-      />
-    </div>
+    <>
+      <FilterCollapsibleSection
+        sectionId="category"
+        label="Category"
+        summary={filterSingleSelectSummary(
+          rowFilters.category,
+          [{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))],
+          "All categories",
+        )}
+        dataAttr="finances-filter-category-trigger"
+      >
+        <FilterSingleSelectList
+          options={[{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))]}
+          value={rowFilters.category}
+          onChange={(category) => onChange({ category })}
+          onPick={closeDropdown}
+          dataAttr="finances-filter-category"
+        />
+      </FilterCollapsibleSection>
+      <FilterCollapsibleSection
+        sectionId="vendor"
+        label="Vendor"
+        summary={filterSingleSelectSummary(
+          rowFilters.vendor,
+          [{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))],
+          "All vendors",
+        )}
+        dataAttr="finances-filter-vendor-trigger"
+      >
+        <FilterSingleSelectList
+          options={[{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))]}
+          value={rowFilters.vendor}
+          onChange={(vendor) => onChange({ vendor })}
+          onPick={closeDropdown}
+          dataAttr="finances-filter-vendor"
+        />
+      </FilterCollapsibleSection>
+    </>
   );
 }
 
@@ -701,29 +748,31 @@ export function ManagerFinancesPanel({
   const showScopedReportFilters = !specialFinancePanels.has(tabId);
 
   const financeFilterControls = (
-    <ReportFilterBar
-      showProperty
-      showDateRange
-      showDaysAhead={false}
-      showTaxYear={false}
-      propertyOptions={propertyOptions}
-      filters={filters}
-      onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-      onRun={() => void loadTable()}
-      loading={loading}
-      showRunButton={false}
-      stacked
-      trailing={
-        LEDGER_TAB_IDS.has(tabId) ? null : (
-          <FinancesRowFilters
-            tabId={tabId}
-            report={report}
-            rowFilters={rowFilters}
-            onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
-          />
-        )
-      }
-    />
+    <FilterFieldsAccordion>
+      <ReportFilterBar
+        showProperty
+        showDateRange
+        showDaysAhead={false}
+        showTaxYear={false}
+        propertyOptions={propertyOptions}
+        filters={filters}
+        onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+        onRun={() => void loadTable()}
+        loading={loading}
+        showRunButton={false}
+        stacked
+        trailing={
+          LEDGER_TAB_IDS.has(tabId) ? null : (
+            <FinancesRowFilters
+              tabId={tabId}
+              report={report}
+              rowFilters={rowFilters}
+              onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+            />
+          )
+        }
+      />
+    </FilterFieldsAccordion>
   );
 
   const resetFinanceFilters = () => {
@@ -856,13 +905,13 @@ export function ManagerFinancesPanel({
   );
 
   const financesMobileActionsRow =
-    showScopedReportFilters || financesPrimaryButton ? (
-      <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="finances-mobile-actions">
+    showScopedReportFilters || financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
+      <div className="mb-3 flex flex-col gap-2 md:hidden" data-slot="finances-mobile-actions">
         {showScopedReportFilters ? <div className="min-w-0">{financesFilterSheet}</div> : null}
-        <div className={showScopedReportFilters ? "min-w-0" : "col-span-2 min-w-0"}>
-          {financesFormalPdfLink}
-          {financesExportButtons}
-          {financesPrimaryButton}
+        <div className="flex min-w-0 flex-wrap items-stretch gap-2 [&_a]:min-w-0 [&_button]:min-w-0">
+          {financesFormalPdfLink ? <div className="min-w-0 flex-1">{financesFormalPdfLink}</div> : null}
+          {financesExportButtons ? <div className="min-w-0 shrink-0">{financesExportButtons}</div> : null}
+          {financesPrimaryButton ? <div className="min-w-0 flex-1">{financesPrimaryButton}</div> : null}
         </div>
       </div>
     ) : null;
@@ -877,9 +926,7 @@ export function ManagerFinancesPanel({
       {financesMobileActionsRow}
       <PortalListControlStack
         className="mb-3"
-        destinations={financeTabItems}
-        activeDestinationId={tabId}
-        destinationAriaLabel="Finance report"
+        destinationRow={<FinanceDestinationNav tabId={tabId} tabItems={financeTabItems} basePath={basePath} />}
         activeFilterChips={
           activeFinanceFilterChips.length > 0 ? (
             <PortalActiveFilterChips chips={activeFinanceFilterChips} />

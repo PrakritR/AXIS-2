@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeasePacketInlineEditor } from "@/components/portal/lease-packet-inline-editor";
 import { AxisAssistantSparkleIcon } from "@/components/portal/assistant-shared";
 import { AssistantConversationProvider } from "@/lib/axis-assistant/assistant-conversation-context";
 import { modalAssistantStorageScope } from "@/lib/axis-assistant/assistant-chat-storage";
@@ -14,8 +15,11 @@ import { buildLeasePacketEditAssistantContext } from "@/lib/lease-assistant-cont
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { cn } from "@/lib/utils";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
-/** Manager-review lease editor — assistant applies changes via update_lease_packet. */
+type EditPane = "form" | "preview";
+
+/** Desktop: scrollable inline editor (left) + document preview (right); AI assistant pinned at bottom. */
 export function ManagerPipelineLeaseEditModal({
   open,
   row,
@@ -28,15 +32,20 @@ export function ManagerPipelineLeaseEditModal({
   onDone: () => void;
 }) {
   const config = usePortalAssistantConfig();
-  const assistantContext = useMemo(() => buildLeasePacketEditAssistantContext(row), [row]);
+  const { userId: managerUserId } = useManagerUserId();
+  const [activeRow, setActiveRow] = useState(row);
+  const assistantContext = useMemo(() => buildLeasePacketEditAssistantContext(activeRow), [activeRow]);
   const [conversationInstance, setConversationInstance] = useState(0);
   const [chatOpen, setChatOpen] = useState(true);
+  const [mobilePane, setMobilePane] = useState<EditPane>("form");
 
   useEffect(() => {
     if (!open) return;
+    setActiveRow(row);
     setConversationInstance((n) => n + 1);
     setChatOpen(true);
-  }, [open, row.id]);
+    setMobilePane("form");
+  }, [open, row.id, row]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,19 +61,24 @@ export function ManagerPipelineLeaseEditModal({
     onClose();
   };
 
-  const storageScope = modalAssistantStorageScope(`Lease packet edit · ${row.id}`, conversationInstance);
+  const handleSaved = (updated: LeasePipelineRow) => {
+    setActiveRow(updated);
+    onDone();
+  };
+
+  const storageScope = modalAssistantStorageScope(`Lease packet edit · ${activeRow.id}`, conversationInstance);
 
   return (
     <Modal
       open={open}
       title="Edit lease"
-      description="Describe the change you want. After you confirm a proposal, the lease preview updates here and on the page behind this dialog."
+      description="Edit terms on the left, preview the document on the right, or describe changes to PropLane Assistant below."
       onClose={onClose}
       assistantStrip={false}
       fullScreenMobile
       scrollableContent={false}
       dense
-      panelClassName="flex w-full max-w-3xl flex-col md:max-h-[min(92dvh,48rem)]"
+      panelClassName="flex w-full max-w-6xl flex-col overflow-hidden md:max-h-[min(92dvh,52rem)]"
       footer={
         <ModalFooter>
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
@@ -76,15 +90,74 @@ export function ManagerPipelineLeaseEditModal({
         </ModalFooter>
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <LeaseDocumentPreview row={row} fill className="min-h-0 flex-1" />
+      <div
+        className={cn(
+          "flex flex-col gap-3",
+          "h-[calc(100dvh-15rem)] max-md:min-h-0",
+          "md:h-[min(calc(92dvh-13rem),44rem)]",
+        )}
+      >
+        <div className="flex shrink-0 gap-1 rounded-full border border-border bg-muted/40 p-1 md:hidden" role="tablist" aria-label="Lease edit view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === "form"}
+            className={cn(
+              "flex-1 rounded-full px-3 py-1.5 text-sm font-medium transition",
+              mobilePane === "form" ? "bg-card text-foreground shadow-sm" : "text-muted",
+            )}
+            onClick={() => setMobilePane("form")}
+            data-attr="lease-edit-tab-form"
+          >
+            Edit terms
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === "preview"}
+            className={cn(
+              "flex-1 rounded-full px-3 py-1.5 text-sm font-medium transition",
+              mobilePane === "preview" ? "bg-card text-foreground shadow-sm" : "text-muted",
+            )}
+            onClick={() => setMobilePane("preview")}
+            data-attr="lease-edit-tab-preview"
+          >
+            Preview
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:gap-4">
+          <div
+            className={cn(
+              "flex min-h-0 flex-col overflow-hidden md:border-r md:border-border md:pr-4",
+              mobilePane === "form" ? "flex" : "hidden md:flex",
+            )}
+          >
+            <LeasePacketInlineEditor
+              row={activeRow}
+              managerUserId={managerUserId}
+              onSaved={handleSaved}
+              layout="panel"
+              className="min-h-0 flex-1"
+            />
+          </div>
+
+          <div
+            className={cn(
+              "flex min-h-0 flex-col overflow-hidden",
+              mobilePane === "preview" ? "flex" : "hidden md:flex",
+            )}
+          >
+            <LeaseDocumentPreview row={activeRow} fill className="min-h-0 flex-1" />
+          </div>
+        </div>
 
         {config ? (
           <AssistantConversationProvider endpoint={config.endpoint} storageScope={storageScope}>
             <div
               className={cn(
-                "flex min-h-0 w-full flex-col",
-                chatOpen ? "min-h-[11.5rem] max-h-[min(38vh,17rem)] shrink-0" : "shrink-0",
+                "flex w-full shrink-0 flex-col",
+                chatOpen ? "min-h-[11.5rem] max-h-[min(34vh,16rem)]" : "",
               )}
               data-attr="lease-edit-assistant"
               data-expanded={chatOpen ? "true" : "false"}

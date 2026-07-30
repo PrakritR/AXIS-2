@@ -1,6 +1,14 @@
 "use client";
 
-import { FilterCheckboxList, FilterSingleSelectList } from "@/components/portal/filter-field-lists";
+import {
+  FilterCheckboxList,
+  FilterCollapsibleSection,
+  FilterFieldsAccordion,
+  FilterSingleSelectList,
+  filterMultiSelectSummary,
+  filterSingleSelectSummary,
+  useFilterAccordionClose,
+} from "@/components/portal/filter-field-lists";
 import {
   contactsForSelectedRoles,
   type CommunicationFilterRole,
@@ -8,8 +16,6 @@ import {
 } from "@/lib/communication-thread-filters";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import type { CommunicationListSort } from "@/lib/unified-inbox-merge";
-
-const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
 
 const SORT_OPTIONS: { value: CommunicationListSort; label: string }[] = [
   { value: "recent", label: "Most recent" },
@@ -31,7 +37,23 @@ function residentOptionsFromContacts(contacts: InboxScopedContact[]) {
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 }
 
-export function CommunicationFilterSortFields({
+export function CommunicationFilterSortFields(props: {
+  propertyOptions: { value: string; label: string }[];
+  roleOptions: { value: CommunicationFilterRole; label: string }[];
+  filterContacts: InboxScopedContact[];
+  filters: CommunicationThreadFilters;
+  onFiltersChange: (next: CommunicationThreadFilters) => void;
+  listSort: CommunicationListSort;
+  onListSortChange: (next: CommunicationListSort) => void;
+}) {
+  return (
+    <FilterFieldsAccordion>
+      <CommunicationFilterSortFieldsBody {...props} />
+    </FilterFieldsAccordion>
+  );
+}
+
+function CommunicationFilterSortFieldsBody({
   propertyOptions,
   roleOptions,
   filterContacts,
@@ -48,15 +70,20 @@ export function CommunicationFilterSortFields({
   listSort: CommunicationListSort;
   onListSortChange: (next: CommunicationListSort) => void;
 }) {
+  const closeDropdown = useFilterAccordionClose();
   const residentPool = contactsForSelectedRoles(filterContacts, filters.roles).filter(
     (contact) => contact.role === "resident",
   );
   const residentOptions = residentOptionsFromContacts(residentPool);
 
   return (
-    <div className="grid gap-4">
-      <div>
-        <p className={FIELD_LABEL_CLASS}>House</p>
+    <>
+      <FilterCollapsibleSection
+        sectionId="house"
+        label="House"
+        summary={filterMultiSelectSummary(filters.propertyIds, propertyOptions, "All houses")}
+        dataAttr="communication-filter-house-trigger"
+      >
         <FilterCheckboxList
           options={propertyOptions}
           selected={filters.propertyIds}
@@ -64,10 +91,14 @@ export function CommunicationFilterSortFields({
           emptyMenuText="No houses"
           dataAttr="communication-filter-house"
         />
-      </div>
+      </FilterCollapsibleSection>
 
-      <div>
-        <p className={FIELD_LABEL_CLASS}>Role</p>
+      <FilterCollapsibleSection
+        sectionId="role"
+        label="Role"
+        summary={filterMultiSelectSummary(filters.roles, roleOptions, "All roles")}
+        dataAttr="communication-filter-role-trigger"
+      >
         <FilterCheckboxList
           options={roleOptions}
           selected={filters.roles}
@@ -81,10 +112,14 @@ export function CommunicationFilterSortFields({
           emptyMenuText="No roles"
           dataAttr="communication-filter-role"
         />
-      </div>
+      </FilterCollapsibleSection>
 
-      <div>
-        <p className={FIELD_LABEL_CLASS}>Resident</p>
+      <FilterCollapsibleSection
+        sectionId="resident"
+        label="Resident"
+        summary={filterMultiSelectSummary(filters.contactIds, residentOptions, "All residents")}
+        dataAttr="communication-filter-resident-trigger"
+      >
         <FilterCheckboxList
           options={residentOptions}
           selected={filters.contactIds}
@@ -92,17 +127,22 @@ export function CommunicationFilterSortFields({
           emptyMenuText="No residents match the current filters"
           dataAttr="communication-filter-resident"
         />
-      </div>
+      </FilterCollapsibleSection>
 
-      <div>
-        <p className={FIELD_LABEL_CLASS}>Sort</p>
+      <FilterCollapsibleSection
+        sectionId="sort"
+        label="Sort"
+        summary={filterSingleSelectSummary(listSort, SORT_OPTIONS, "Most recent")}
+        dataAttr="communication-filter-sort-trigger"
+      >
         <FilterSingleSelectList
           options={SORT_OPTIONS}
           value={listSort}
           onChange={(value) => onListSortChange(value as CommunicationListSort)}
+          onPick={closeDropdown}
           dataAttr="communication-filter-sort"
         />
-      </div>
-    </div>
+      </FilterCollapsibleSection>
+    </>
   );
 }

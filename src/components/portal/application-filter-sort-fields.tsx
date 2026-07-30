@@ -1,8 +1,14 @@
 "use client";
 
-import { FilterCheckboxList, FilterSingleSelectList } from "@/components/portal/filter-field-lists";
-
-const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
+import {
+  FilterCheckboxList,
+  FilterCollapsibleSection,
+  FilterFieldsAccordion,
+  FilterSingleSelectList,
+  filterMultiSelectSummary,
+  filterSingleSelectSummary,
+  useFilterAccordionClose,
+} from "@/components/portal/filter-field-lists";
 
 export function ApplicationFilterSortFields({
   propertyOptions,
@@ -19,16 +25,50 @@ export function ApplicationFilterSortFields({
   dataAttr?: string;
   selectionMode?: "single" | "multi";
 }) {
+  return (
+    <FilterFieldsAccordion>
+      <ApplicationFilterSortFieldsBody
+        propertyOptions={propertyOptions}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={onPropertyFiltersChange}
+        allLabel={allLabel}
+        dataAttr={dataAttr}
+        selectionMode={selectionMode}
+      />
+    </FilterFieldsAccordion>
+  );
+}
+
+function ApplicationFilterSortFieldsBody({
+  propertyOptions,
+  propertyFilters,
+  onPropertyFiltersChange,
+  allLabel,
+  dataAttr,
+  selectionMode,
+}: {
+  propertyOptions: { id: string; label: string }[];
+  propertyFilters: string[];
+  onPropertyFiltersChange: (next: string[]) => void;
+  allLabel: string;
+  dataAttr: string;
+  selectionMode: "single" | "multi";
+}) {
+  const closeDropdown = useFilterAccordionClose();
   const options = propertyOptions.map((option) => ({ value: option.id, label: option.label }));
+  const summary =
+    selectionMode === "single"
+      ? filterSingleSelectSummary(propertyFilters[0] ?? "", [{ value: "", label: allLabel }, ...options], allLabel)
+      : filterMultiSelectSummary(propertyFilters, options, allLabel);
 
   return (
-    <div>
-      <p className={FIELD_LABEL_CLASS}>Property</p>
+    <FilterCollapsibleSection sectionId="property" label="Property" summary={summary} dataAttr={`${dataAttr}-trigger`}>
       {selectionMode === "single" ? (
         <FilterSingleSelectList
           options={[{ value: "", label: allLabel }, ...options]}
           value={propertyFilters[0] ?? ""}
           onChange={(next) => onPropertyFiltersChange(next ? [next] : [])}
+          onPick={closeDropdown}
           dataAttr={dataAttr}
         />
       ) : (
@@ -40,6 +80,6 @@ export function ApplicationFilterSortFields({
           dataAttr={dataAttr}
         />
       )}
-    </div>
+    </FilterCollapsibleSection>
   );
 }

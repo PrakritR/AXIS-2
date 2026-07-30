@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,11 @@ export function VaulBottomSheet({
   children,
   footer,
   fullScreen = false,
+  /**
+   * When true, short sheets sit higher on the screen (filter panels) instead of hugging
+   * the bottom nav with a large empty gap above.
+   */
+  autoElevate = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,19 +39,56 @@ export function VaulBottomSheet({
   footer?: ReactNode;
   /** Nearly full viewport — dense panels that need maximum height. */
   fullScreen?: boolean;
+  autoElevate?: boolean;
 }) {
   const contentHugging = !fullScreen;
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [elevated, setElevated] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!open || !autoElevate || fullScreen) {
+      setElevated(false);
+      return;
+    }
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+
+    const measure = () => {
+      const height = sheet.getBoundingClientRect().height;
+      const viewport = window.innerHeight || document.documentElement.clientHeight;
+      setElevated(height < viewport * 0.52);
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(sheet);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, autoElevate, fullScreen, children, footer, title, description]);
+
+  const elevatedPlacement =
+    autoElevate &&
+    elevated &&
+    !fullScreen &&
+    "bottom-[max(26vh,calc(var(--portal-native-bottom-nav-inset,0px)+5.5rem))] top-auto";
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} shouldScaleBackground>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content
+          ref={sheetRef}
           className={cn(
             "fixed inset-x-0 bottom-0 z-[71] flex flex-col border-t border-border bg-background outline-none motion-reduce:transition-none",
             fullScreen
               ? "top-[max(1.25rem,var(--native-safe-top,0px))] max-h-none rounded-t-2xl"
-              : "h-auto max-h-[min(88dvh,36rem)] rounded-t-2xl",
+              : cn(
+                  "h-auto max-h-[min(88dvh,36rem)] rounded-t-2xl",
+                  elevatedPlacement,
+                ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
           data-slot="vaul-bottom-sheet"

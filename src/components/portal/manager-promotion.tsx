@@ -23,6 +23,13 @@ import {
   DEMO_PROMOTION_GENERATED_EVENT,
 } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
@@ -284,9 +291,12 @@ export function ManagerPromotion({
   }, []);
 
   const revealAsset = useCallback((assetId: string, rowPropertyId: string | null | undefined) => {
-    setPropertyFilter((cur) =>
-      !cur || samePropertyId(rowPropertyId, cur) ? cur : rowPropertyId?.trim() || "",
-    );
+    const pid = rowPropertyId?.trim();
+    if (pid) {
+      setPropertyFilters((cur) =>
+        cur.length === 0 || cur.some((id) => samePropertyId(id, pid)) ? cur : [pid],
+      );
+    }
     setExpandedId(assetId);
   }, []);
 
@@ -671,8 +681,17 @@ export function ManagerPromotion({
       onClick={() => openNewPromotion()}
       data-attr="promotion-new"
     >
-      New promotion
+      + New promotion
     </Button>
+  );
+
+  const promotionListAddRow = (
+    <PortalListAddRow
+      label="Add promotion"
+      icon={PORTAL_LIST_ADD_ICONS.promotion}
+      onClick={() => openNewPromotion()}
+      dataAttr="promotion-list-add"
+    />
   );
 
   const promotionDesktopHeaderActions = (
@@ -698,19 +717,26 @@ export function ManagerPromotion({
     >
       {promotionMobileActionsRow}
       <div data-attr="promotion-content-direct">
-        <PromotionAssetStack
-          assets={propertyScopedAssets}
-          emptyMessage={
-            assets.length === 0
-              ? "No promotions yet."
-              : "No promotions match these filters."
-          }
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          onSaveTitle={saveAssetTitle}
-          renderHeaderActions={renderHeaderActions}
-          renderExpanded={renderExpanded}
-        />
+        {propertyScopedAssets.length === 0 ? (
+          <div className="space-y-3">
+            {assets.length > 0 ? (
+              <PortalDataTableEmpty icon="data" message="No promotions match these filters." />
+            ) : null}
+            <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
+          </div>
+        ) : (
+          <div className={PORTAL_LIST_PAGE_BODY}>
+            <PromotionAssetStack
+              assets={propertyScopedAssets}
+              expandedId={expandedId}
+              onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+              onSaveTitle={saveAssetTitle}
+              renderHeaderActions={renderHeaderActions}
+              renderExpanded={renderExpanded}
+            />
+            <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
+          </div>
+        )}
       </div>
 
       <PromotionNewModal

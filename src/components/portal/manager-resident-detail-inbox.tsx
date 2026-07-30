@@ -226,6 +226,8 @@ export function ManagerResidentDetailInbox({
         suppressCompose
         suppressListPane
         commBase={commBase}
+        smsUiEnabled={smsUiEnabled}
+        smsRecipients={smsResidents}
         controlledExpandedId={selection.threadId}
         onControlledExpandedIdChange={(id) => {
           if (!id) setSelectedKey(null);

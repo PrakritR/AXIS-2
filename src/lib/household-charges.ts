@@ -453,8 +453,41 @@ function currentRentMonth() {
 }
 
 function chargeKeyPart(raw: string): string {
-  const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const trimmed = raw.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper.startsWith("AXIS-")) {
+    const suffix = upper
+      .slice(5)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return suffix ? `pl_${suffix}` : "unknown";
+  }
+  if (upper.startsWith("PROPLANE-")) {
+    const suffix = upper
+      .slice(9)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return suffix ? `pl_${suffix}` : "unknown";
+  }
+  const cleaned = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return cleaned || "unknown";
+}
+
+/** Legacy charge URLs used `axis_` slug segments; new ones use `pl_`. */
+export function legacyChargeIdAliases(id: string): string[] {
+  const trimmed = id.trim();
+  if (!trimmed) return [];
+  const variants = new Set<string>([trimmed]);
+  if (trimmed.includes("_axis_")) variants.add(trimmed.replace(/_axis_/g, "_pl_"));
+  if (trimmed.includes("_pl_")) variants.add(trimmed.replace(/_pl_/g, "_axis_"));
+  return [...variants];
+}
+
+/** PropLane-branded charge id for payment detail URLs (no legacy `axis_` segment). */
+export function publicChargeIdForUrl(id: string): string {
+  return id.replace(/_axis_/g, "_pl_");
 }
 
 function applicationFeeChargeIdForApplication(applicationId: string): string {

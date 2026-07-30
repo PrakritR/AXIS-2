@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import { cn } from "@/lib/utils";
 
 export type DestinationNavItem = {
@@ -36,17 +37,14 @@ export function DestinationNav({
   size?: "default" | "toolbar";
 }) {
   const normalize = (href: string) => href.replace(/\/$/, "");
+  const compactItems = items.length > 4;
 
   return (
     <nav
-      className={cn(
-        "flex w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
-        "[scrollbar-width:none] [-ms-overflow-style:none] snap-x snap-mandatory scroll-px-1 [&::-webkit-scrollbar]:hidden",
-        "md:flex md:overflow-visible md:snap-none",
-        className,
-      )}
+      className={destinationNavShellClassName(className)}
       aria-label={ariaLabel}
       data-slot="destination-nav"
+      {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
     >
       {items.map((item) => {
         const active =
@@ -58,7 +56,8 @@ export function DestinationNav({
             href={item.href}
             data-attr={item.dataAttr}
             className={cn(
-              "portal-pressable inline-flex flex-1 basis-0 justify-center items-center gap-1.5 rounded-xl font-semibold transition-colors",
+              destinationNavItemWidthClass(compactItems),
+              "portal-pressable inline-flex justify-center items-center gap-1.5 rounded-xl font-semibold transition-colors",
               size === "toolbar"
                 ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
                 : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
@@ -98,11 +97,16 @@ export type LocalDestinationNavItem = {
 
 function destinationNavShellClassName(className?: string) {
   return cn(
-    "flex w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1",
-    "[scrollbar-width:none] [-ms-overflow-style:none] snap-x snap-mandatory scroll-px-1 [&::-webkit-scrollbar]:hidden",
-    "md:flex md:overflow-visible md:snap-none",
+    "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
+    PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+    "snap-x snap-mandatory scroll-px-1 md:snap-none",
     className,
   );
+}
+
+/** Few tabs share width; wider sets scroll horizontally instead of clipping. */
+function destinationNavItemWidthClass(compactItems: boolean) {
+  return compactItems ? "shrink-0 whitespace-nowrap" : "min-w-0 flex-1 basis-0";
 }
 
 function destinationNavItemClassName({
@@ -117,7 +121,7 @@ function destinationNavItemClassName({
   tone?: "default" | "monochrome";
 }) {
   return cn(
-    "portal-pressable inline-flex flex-1 basis-0 items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
+    "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
     size === "toolbar" ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm" : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     tone === "monochrome"
@@ -160,8 +164,15 @@ export function LocalDestinationNav({
   size?: "default" | "toolbar";
   tone?: "default" | "monochrome";
 }) {
+  const compactItems = items.length > 4;
+
   return (
-    <nav className={destinationNavShellClassName(className)} aria-label={ariaLabel} data-slot="local-destination-nav">
+    <nav
+      className={destinationNavShellClassName(className)}
+      aria-label={ariaLabel}
+      data-slot="local-destination-nav"
+      {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
+    >
       {items.map((item) => {
         const active = item.id === activeId;
         return (
@@ -169,7 +180,10 @@ export function LocalDestinationNav({
             key={item.id}
             type="button"
             data-attr={item.dataAttr}
-            className={destinationNavItemClassName({ active, alert: item.alert, size, tone })}
+            className={cn(
+              destinationNavItemWidthClass(compactItems),
+              destinationNavItemClassName({ active, alert: item.alert, size, tone }),
+            )}
             aria-current={active ? "page" : undefined}
             onClick={() => onChange(item.id)}
           >

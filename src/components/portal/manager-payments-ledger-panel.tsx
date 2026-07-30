@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -18,7 +23,7 @@ import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
-import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
+import { deleteHouseholdCharge, legacyChargeIdAliases, markHouseholdChargePaid, markHouseholdChargePending, publicChargeIdForUrl, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import {
   PortalBulkPaymentReminderPreviewModal,
@@ -51,6 +56,27 @@ function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
 
 function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
   return !isPaidRow(row) && Boolean(row.householdChargeId || row.id);
+}
+
+function paymentReminderLabel(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string | null {
+  if (!row.householdChargeId || isPaidRow(row)) return null;
+  const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
+  if (!reminders.length) return null;
+  return summarizeChargeReminders(reminders);
+}
+
+function paymentListPreview(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string {
+  const parts = [row.propertyName];
+  if (row.dueDate?.trim()) parts.push(`Due ${row.dueDate}`);
+  const reminder = paymentReminderLabel(row, scheduledMessages);
+  if (reminder) parts.push(reminder);
+  return parts.filter(Boolean).join(" · ");
 }
 
 function dueDateDisplayToInputValue(display: string): string {
@@ -127,7 +153,8 @@ export function ManagerPaymentsLedgerPanel({
   const detailRow = useMemo(() => {
     if (!paymentIdProp) return null;
     const decoded = decodeURIComponent(paymentIdProp);
-    return rows.find((row) => row.id === decoded) ?? null;
+    const aliases = new Set(legacyChargeIdAliases(decoded));
+    return rows.find((row) => aliases.has(row.id)) ?? null;
   }, [paymentIdProp, rows]);
 
   const navigateToList = useCallback(() => {
@@ -136,11 +163,12 @@ export function ManagerPaymentsLedgerPanel({
 
   const openPaymentDetail = useCallback(
     (row: DemoManagerPaymentLedgerRow) => {
+      const paymentKey = publicChargeIdForUrl(row.id);
       if (buildPaymentDetailHref) {
-        navigate(buildPaymentDetailHref(row));
+        navigate(buildPaymentDetailHref({ ...row, id: paymentKey }));
         return;
       }
-      if (listBasePath) navigate(paymentDetailHref(listBasePath, direction, activeBucket, row.id));
+      if (listBasePath) navigate(paymentDetailHref(listBasePath, direction, activeBucket, paymentKey));
     },
     [activeBucket, buildPaymentDetailHref, direction, listBasePath, navigate],
   );
@@ -302,34 +330,7 @@ export function ManagerPaymentsLedgerPanel({
         />
       );
     }
-    return (
-      <>
-        <span className="block">{row.dueDate}</span>
-        {row.householdChargeId && !isPaidRow(row) ? (() => {
-          const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
-          if (!reminders.length) return null;
-          return (
-            <span
-              role="button"
-              tabIndex={0}
-              className="mt-1 inline-block cursor-pointer text-[11px] font-semibold text-primary hover:underline"
-              onClick={(e) => {
-                e.stopPropagation();
-                setChargeRemindersRow(row);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                e.stopPropagation();
-                setChargeRemindersRow(row);
-              }}
-            >
-              {summarizeChargeReminders(reminders)}
-            </span>
-          );
-        })() : null}
-      </>
-    );
+    return <span className="block">{row.dueDate}</span>;
   };
 
   const buildReminderPreviewForRow = (row: DemoManagerPaymentLedgerRow): BulkPaymentReminderPreviewItem | null => {
@@ -520,51 +521,54 @@ export function ManagerPaymentsLedgerPanel({
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
 
-  const renderPaymentDetailPanel = (row: DemoManagerPaymentLedgerRow) => (
-    <div className="space-y-3 text-sm">
-      <div>
-        <p className="text-xs font-medium text-muted">Property</p>
-        <p className="text-foreground">{row.propertyName}</p>
+  const renderPaymentDetailPanel = (row: DemoManagerPaymentLedgerRow) => {
+    return (
+      <div className="space-y-4 px-3 py-2 text-sm sm:px-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium text-muted">Property</p>
+            <p className="text-foreground">{row.propertyName}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Status</p>
+            <p className="font-medium text-foreground">{row.statusLabel}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium text-muted">Charge</p>
+            <p className="text-foreground">{row.chargeTitle}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Due date</p>
+            <div className="text-foreground">{renderDueDateCell(row)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Amount</p>
+            <div className="text-foreground">{renderAmountOwedCell(row)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Balance due</p>
+            <p className="font-semibold tabular-nums text-foreground">{row.balanceDue}</p>
+          </div>
+          {row.residentEmail ? (
+            <div>
+              <p className="text-xs font-medium text-muted">Resident email</p>
+              <p className="text-foreground">{row.residentEmail}</p>
+            </div>
+          ) : null}
+        </div>
+        {row.notes ? (
+          <div>
+            <p className="text-xs font-medium text-muted">Details</p>
+            <p className="leading-relaxed text-foreground/90">{row.notes}</p>
+          </div>
+        ) : null}
       </div>
-      <div>
-        <p className="text-xs font-medium text-muted">Charge</p>
-        <p className="text-foreground">{row.chargeTitle}</p>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-muted">Due date</p>
-        <div className="text-foreground">{renderDueDateCell(row)}</div>
-      </div>
-      <div>
-        <p className="text-xs font-medium text-muted">Amount</p>
-        <div className="text-foreground">{renderAmountOwedCell(row)}</div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   if (!hasAnySource) {
     return <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />;
   }
-
-  const removePayment = (row: DemoManagerPaymentLedgerRow) => {
-    if (row.householdChargeId) {
-      if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
-        showToast("Payment removed.");
-        navigateToList();
-        onRowsChanged?.();
-        return;
-      }
-      showToast("Could not remove this line.");
-      return;
-    }
-    if (deleteManagerPaymentLedgerEntry(row.id)) {
-      showToast("Payment removed.");
-      navigateToList();
-      onRowsChanged?.();
-      return;
-    }
-    showToast("Could not remove this line.");
-  };
-
 
   const doSendBulkReminders = async () => {
     if (!bulkReminderPreview?.length) return;
@@ -593,6 +597,27 @@ export function ManagerPaymentsLedgerPanel({
     onRowsChanged?.();
   };
 
+  const removePayment = (row: DemoManagerPaymentLedgerRow) => {
+    if (!window.confirm(`Delete "${row.chargeTitle}" for ${row.residentName}?`)) return;
+    if (row.householdChargeId) {
+      if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
+        showToast("Payment removed.");
+        navigateToList();
+        onRowsChanged?.();
+        return;
+      }
+      showToast("Could not remove this line.");
+      return;
+    }
+    if (deleteManagerPaymentLedgerEntry(row.id)) {
+      showToast("Payment removed.");
+      navigateToList();
+      onRowsChanged?.();
+      return;
+    }
+    showToast("Could not remove this line.");
+  };
+
   const moveToPending = async (row: DemoManagerPaymentLedgerRow) => {
     if (row.householdChargeId) {
       if (markHouseholdChargePending(row.householdChargeId, managerUserId)) {
@@ -613,118 +638,154 @@ export function ManagerPaymentsLedgerPanel({
     onRowsChanged?.();
   };
 
-  const detailActionBtnClass = embeddedInResident ? RESIDENT_DETAIL_HEADER_ACTION_BTN : PORTAL_DETAIL_BTN;
+  const renderDetailActions = (row: DemoManagerPaymentLedgerRow) => {
+    const canEdit = Boolean(row.householdChargeId && !isPaidRow(row));
+    const editing = canEdit && editingRowId === row.id;
+    const showSendReminder = !isPaidRow(row);
+    const showScheduleReminders = !isPaidRow(row) && Boolean(row.householdChargeId);
+    const showMoveToPending = activeBucket === "paid";
+    const btnClass = RESIDENT_DETAIL_HEADER_ACTION_BTN;
 
-  const renderDetailActions = (row: DemoManagerPaymentLedgerRow) => (
-    embeddedInResident ? (
-      <>
-      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-        <Button type="button" variant="primary" className={detailActionBtnClass} onClick={() => recordPaid(row, "Marked as paid.")}>
+    const markPaidButton =
+      !editing && row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+        <Button type="button" variant="outline" className={btnClass} onClick={() => recordPaid(row, "Marked as paid.")}>
           Mark as paid
         </Button>
-      ) : null}
-      {!isPaidRow(row) ? (
+      ) : null;
+
+    const editButtons = canEdit ? (
+      editing ? (
         <>
-          <Button
-            type="button"
-            variant="outline"
-            className={detailActionBtnClass}
-            disabled={sendingReminderId === row.id}
-            onClick={() => openReminderPreview(row)}
-          >
-            {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+          <Button type="button" variant="outline" className={btnClass} onClick={() => saveEdit(row)}>
+            Save
           </Button>
-          {row.householdChargeId ? (
-            <Button type="button" variant="outline" className={detailActionBtnClass} onClick={() => setChargeRemindersRow(row)}>
-              Edit reminder
-            </Button>
-          ) : null}
+          <Button type="button" variant="outline" className={btnClass} onClick={cancelEdit}>
+            Cancel
+          </Button>
         </>
-      ) : null}
-      {activeBucket === "paid" ? (
-        <Button type="button" variant="outline" className={detailActionBtnClass} onClick={() => moveToPending(row)}>
-          Move to pending
+      ) : (
+        <Button type="button" variant="outline" className={btnClass} onClick={() => startEdit(row)}>
+          Edit
         </Button>
-      ) : null}
-      {row.householdChargeId && !isPaidRow(row) ? (
-        editingRowId === row.id ? (
-          <>
-            <Button type="button" variant="primary" className={detailActionBtnClass} onClick={() => saveEdit(row)}>
-              Save
-            </Button>
-            <Button type="button" variant="outline" className={detailActionBtnClass} onClick={cancelEdit}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button type="button" variant="outline" className={detailActionBtnClass} onClick={() => startEdit(row)}>
-            Edit
-          </Button>
-        )
-      ) : null}
+      )
+    ) : null;
+
+    const sendReminderButton = showSendReminder ? (
       <Button
         type="button"
         variant="outline"
-        className={`${detailActionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        className={btnClass}
+        disabled={sendingReminderId === row.id}
+        data-attr="payments-send-reminder"
+        onClick={() => openReminderPreview(row)}
+      >
+        {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+      </Button>
+    ) : null;
+
+    const scheduleRemindersButton = showScheduleReminders ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={btnClass}
+        data-attr="payments-schedule-reminders"
+        onClick={() => setChargeRemindersRow(row)}
+      >
+        Schedule reminders
+      </Button>
+    ) : null;
+
+    const moveToPendingButton = showMoveToPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={btnClass}
+        data-attr="payments-move-pending"
+        onClick={() => void moveToPending(row)}
+      >
+        Move to pending
+      </Button>
+    ) : null;
+
+    const deleteButton = (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="payments-delete"
         onClick={() => removePayment(row)}
       >
         Delete
       </Button>
+    );
+
+    const mobileOverflowMenu =
+      !editing ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${btnClass} max-md:px-2.5 max-md:text-base`}
+              data-attr="payment-more-actions"
+              aria-label="More payment actions"
+            >
+              …
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" backdrop>
+            {showSendReminder ? (
+              <DropdownMenuItem
+                data-attr="payments-send-reminder"
+                disabled={sendingReminderId === row.id}
+                onSelect={() => openReminderPreview(row)}
+              >
+                {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+              </DropdownMenuItem>
+            ) : null}
+            {showScheduleReminders ? (
+              <DropdownMenuItem
+                data-attr="payments-schedule-reminders"
+                onSelect={() => setChargeRemindersRow(row)}
+              >
+                Schedule reminders
+              </DropdownMenuItem>
+            ) : null}
+            {showMoveToPending ? (
+              <DropdownMenuItem data-attr="payments-move-pending" onSelect={() => void moveToPending(row)}>
+                Move to pending
+              </DropdownMenuItem>
+            ) : null}
+            {showSendReminder || showScheduleReminders || showMoveToPending ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              data-attr="payments-delete"
+              className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+              onSelect={() => removePayment(row)}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null;
+
+    return (
+      <>
+        <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+          {markPaidButton}
+          {editButtons}
+          {mobileOverflowMenu}
+        </div>
+        <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+          {markPaidButton}
+          {editButtons}
+          {sendReminderButton}
+          {scheduleRemindersButton}
+          {moveToPendingButton}
+          {deleteButton}
+        </div>
       </>
-    ) : (
-    <PortalTableDetailActions>
-      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-        <>
-          <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Marked as paid.")}>
-            Mark as paid
-          </Button>
-        </>
-      ) : null}
-      {!isPaidRow(row) ? (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_DETAIL_BTN}
-            disabled={sendingReminderId === row.id}
-            onClick={() => openReminderPreview(row)}
-          >
-            {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
-          </Button>
-          {row.householdChargeId ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-              Edit reminder
-            </Button>
-          ) : null}
-        </>
-      ) : null}
-      {activeBucket === "paid" ? (
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
-          Move to pending
-        </Button>
-      ) : null}
-      {row.householdChargeId && !isPaidRow(row) ? (
-        editingRowId === row.id ? (
-          <>
-            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => saveEdit(row)}>
-              Save
-            </Button>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => startEdit(row)}>
-            Edit
-          </Button>
-        )
-      ) : null}
-      <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
-        Delete
-      </Button>
-    </PortalTableDetailActions>
-    )
-  );
+    );
+  };
 
   useEffect(() => {
     if (!embeddedInResident || !onEmbeddedDetailActions) return;
@@ -843,14 +904,27 @@ export function ManagerPaymentsLedgerPanel({
               </Button>
             </>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className={PAYMENTS_BULK_BAR_BTN}
-              onClick={() => startEdit(singleSelectedRow)}
-            >
-              Edit
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => {
+                  startEdit(singleSelectedRow);
+                  openPaymentDetail(singleSelectedRow);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => setChargeRemindersRow(singleSelectedRow)}
+              >
+                Schedule reminders
+              </Button>
+            </>
           )
         ) : null}
         <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={deleteSelected}>
@@ -879,6 +953,8 @@ export function ManagerPaymentsLedgerPanel({
         avatarName={detailRow.residentName}
         backHref={listBasePath ? paymentListHref(listBasePath, direction, activeBucket) : "#"}
         backLabel="Back to payments"
+        hideBackText
+        bareHeader
         dataAttrBack="payment-detail-back"
         inlineActions
         actions={renderDetailActions(detailRow)}
@@ -900,35 +976,80 @@ export function ManagerPaymentsLedgerPanel({
             <span className="text-xs text-muted">Select all</span>
           </div>
         ) : null}
-        {rows.map((row) => (
-          <div key={row.id} className="flex items-stretch gap-2">
-            {showSelection ? (
-              <div className="flex items-center pl-3 max-md:pl-2.5">
-                <input
-                  type="checkbox"
-                  className="size-4 shrink-0 rounded border-border"
-                  checked={selectedIds.has(row.id)}
-                  onChange={() => toggleSelected(row.id)}
-                  aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                />
+        {rows.map((row) => {
+          const isSelected = selectedIds.has(row.id);
+          const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
+          return (
+            <div key={row.id} className="flex items-stretch gap-2">
+              {showSelection ? (
+                <div className="flex items-center pl-3 max-md:pl-2.5">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 rounded border-border"
+                    checked={isSelected}
+                    onChange={() => toggleSelected(row.id)}
+                    aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                  />
+                </div>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                {isEditing ? (
+                  <div
+                    className="border-b border-border/50 bg-accent/15 px-3 py-3 max-md:px-2.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-sm font-semibold text-foreground">{row.residentName}</p>
+                    <p className="text-xs text-muted">{row.chargeTitle}</p>
+                    <p className="mt-0.5 text-xs text-muted">{row.propertyName}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          Amount
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted">$</span>
+                          <Input
+                            className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
+                            inputMode="decimal"
+                            value={editAmountDraft}
+                            onChange={(e) => setEditAmountDraft(e.target.value)}
+                            aria-label="Amount owed"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          Due date
+                        </label>
+                        <Input
+                          type="date"
+                          className="h-9 w-full rounded-lg px-2 py-1 text-sm"
+                          value={editDueDateDraft}
+                          onChange={(e) => setEditDueDateDraft(e.target.value)}
+                          aria-label="Due date"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <PortalPersonRecordRow
+                    name={row.residentName}
+                    subtitle={
+                      row.manualPaymentReportedAt && row.manualPaymentChannel
+                        ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+                        : row.chargeTitle
+                    }
+                    preview={paymentListPreview(row, scheduledMessages)}
+                    meta={row.lineAmount}
+                    selected={isSelected}
+                    onOpen={() => openPaymentDetail(row)}
+                    dataAttr="payment-list-row"
+                  />
+                )}
               </div>
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <PortalPersonRecordRow
-                name={row.residentName}
-                subtitle={
-                  row.manualPaymentReportedAt && row.manualPaymentChannel
-                    ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-                    : row.chargeTitle
-                }
-                preview={row.propertyName}
-                meta={row.lineAmount}
-                onOpen={() => openPaymentDetail(row)}
-                dataAttr="payment-list-row"
-              />
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     )}
     </>

@@ -16,6 +16,7 @@ import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-
 import {
   INBOX_LIST_SCROLL,
   InboxAvatar,
+  InboxReplyChannelPicker,
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
@@ -213,6 +214,8 @@ export const ManagerSmsPanel = forwardRef<
     [controlledActiveId, onControlledActiveIdChange],
   );
   const [draft, setDraft] = useState("");
+  const [replyViaEmail, setReplyViaEmail] = useState(false);
+  const [replyViaSms, setReplyViaSms] = useState(true);
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
@@ -498,38 +501,89 @@ export const ManagerSmsPanel = forwardRef<
     [load, messagesDeleteEndpoint, showToast],
   );
 
+  useEffect(() => {
+    setDraft("");
+    setReplyViaEmail(false);
+    setReplyViaSms(true);
+  }, [activeId]);
+
   async function sendReply() {
-    if (!active?.resident.phone) return;
+    if (!active?.resident.phone && !replyViaEmail) return;
     const text = draft.trim();
     if (!text) return;
+    if (!replyViaEmail && !replyViaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
     setSending(true);
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toPhone: active.resident.phone,
-          text,
-          residentUserId: active.resident.residentUserId,
-          // Which of this phone's threads the reply belongs to.
-          conversationKey: active.resident.conversationKey ?? null,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        showToast(body.error ?? "Could not send.");
-        return;
+      let smsOk = !replyViaSms;
+      let emailOk = !replyViaEmail;
+
+      if (replyViaSms) {
+        if (!active?.resident.phone) {
+          showToast("No phone on this conversation.");
+          return;
+        }
+        const res = await fetch(endpoint, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toPhone: active.resident.phone,
+            text,
+            residentUserId: active.resident.residentUserId,
+            conversationKey: active.resident.conversationKey ?? null,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        smsOk = res.ok;
+        if (!smsOk && !replyViaEmail) {
+          showToast(body.error ?? "Could not send.");
+          return;
+        }
       }
+
+      if (replyViaEmail) {
+        const email = active?.resident.residentEmail?.trim();
+        if (!email) {
+          showToast("No email on file for this resident.");
+          return;
+        }
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: "Property manager",
+            toEmails: [email],
+            subject: `Message from your property manager`,
+            text,
+            deliverToPortalInbox: true,
+            eventCategory: "messages",
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        emailOk = res.ok && data.ok === true;
+        if (!emailOk && !smsOk) {
+          showToast(data.error ?? "Could not send email.");
+          return;
+        }
+      }
+
       setDraft("");
-      // Un-hide if previously deleted locally and a new text was sent.
-      setHiddenConversationIds((prev) => {
-        if (!prev.has(active.rowId)) return prev;
-        const next = new Set(prev);
-        next.delete(active.rowId);
-        persistHiddenConversationIds(next);
-        return next;
-      });
+      if (replyViaSms) {
+        setHiddenConversationIds((prev) => {
+          if (!active || !prev.has(active.rowId)) return prev;
+          const next = new Set(prev);
+          next.delete(active.rowId);
+          persistHiddenConversationIds(next);
+          return next;
+        });
+      }
+      if (replyViaEmail && replyViaSms) showToast("Sent via email and SMS.");
+      else if (replyViaEmail) showToast("Email sent.");
+      else showToast("SMS sent.");
       await load();
     } catch {
       showToast("Could not send.");
@@ -537,6 +591,8 @@ export const ManagerSmsPanel = forwardRef<
       setSending(false);
     }
   }
+
+  const activeEmailAvailable = Boolean(active?.resident.residentEmail?.trim());
 
   const showThread = Boolean(activeId && active);
 
@@ -679,19 +735,28 @@ export const ManagerSmsPanel = forwardRef<
       </div>
 
       <form
-        className="portal-inbox-composer flex shrink-0 items-end gap-2 border-t border-border bg-card px-3 pt-2.5"
+        className="portal-inbox-composer flex shrink-0 flex-col border-t border-border bg-card"
         style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
         onSubmit={(e) => {
           e.preventDefault();
           void sendReply();
         }}
       >
+        {activeEmailAvailable ? (
+          <InboxReplyChannelPicker
+            viaEmail={replyViaEmail}
+            viaSms={replyViaSms}
+            onViaEmailChange={setReplyViaEmail}
+            onViaSmsChange={setReplyViaSms}
+          />
+        ) : null}
+        <div className="flex items-end gap-2 px-3 pt-2.5">
         <textarea
           rows={1}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Text message"
-          maxLength={1600}
+          placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
+          maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
           enterKeyHint="send"
           className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
           data-attr="sms-messages-reply"
@@ -704,7 +769,7 @@ export const ManagerSmsPanel = forwardRef<
         />
         <button
           type="submit"
-          disabled={sending || !draft.trim()}
+          disabled={sending || !draft.trim() || (!replyViaEmail && !replyViaSms)}
           className="mb-0.5 flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
           style={{ background: BUBBLE_OUT_BG }}
           aria-label="Send"
@@ -716,6 +781,7 @@ export const ManagerSmsPanel = forwardRef<
             <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
           )}
         </button>
+        </div>
       </form>
     </div>
   );

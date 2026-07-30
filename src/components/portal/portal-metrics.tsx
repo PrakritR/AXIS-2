@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
+import { PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import { cn } from "@/lib/utils";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
@@ -742,8 +743,11 @@ export const PORTAL_HEADER_ACTION_BTN =
 export const RESIDENT_DETAIL_HEADER_ACTION_BTN =
   "h-7 shrink-0 whitespace-nowrap rounded-full px-2 text-[10px] font-semibold sm:h-9 sm:px-3.5 sm:text-xs [html[data-native]_&]:h-7 [html[data-native]_&]:px-2 [html[data-native]_&]:text-[10px]";
 
-export const RESIDENT_DETAIL_HEADER_ACTIONS_ROW =
-  "flex max-w-full shrink-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:gap-2 sm:overflow-visible sm:pb-0";
+export const RESIDENT_DETAIL_HEADER_ACTIONS_ROW = cn(
+  "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-start gap-1 pb-0.5",
+  PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+  "overscroll-x-contain scroll-px-1 sm:justify-end sm:gap-2 sm:pb-0",
+);
 
 /** Desktop-only page actions — pair with {@link PORTAL_FILTER_ACTIONS_MOBILE} in filter rows. */
 export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";

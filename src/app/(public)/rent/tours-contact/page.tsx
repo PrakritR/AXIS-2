@@ -1009,6 +1009,14 @@ function Step3({
 
       <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="tour-sms-consent" />
 
+      <div className="rounded-2xl border border-border bg-accent/25 px-4 py-3 text-sm text-muted">
+        <p className="font-semibold text-foreground">Tour updates by email and inbox</p>
+        <p className="mt-1 leading-relaxed">
+          We email tour confirmations and reminders. Create a free resident account to track this tour, read manager
+          messages in Communication, and apply when you are ready.
+        </p>
+      </div>
+
       <button
         type="button"
         disabled={submitting}

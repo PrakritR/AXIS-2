@@ -1129,8 +1129,13 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+              onClick={closeSelectedBlock}
+            >
               Close
             </Button>
             {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
@@ -1138,18 +1143,29 @@ export function PortalCalendarPanels({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               onClick={deleteSelectedMeeting}
             >
               {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
             </Button>
             {selectedBlock.meeting.source === "inquiry" ? (
               selectedBlock.meeting.kind === "tour" ? (
-                <Button type="button" variant="primary" className="rounded-full" onClick={openTourConfirmPreview}>
-                  Review & confirm tour
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-9 min-w-0 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                  onClick={openTourConfirmPreview}
+                >
+                  <span className="sm:hidden">Confirm tour</span>
+                  <span className="hidden sm:inline">Review & confirm tour</span>
                 </Button>
               ) : (
-                <Button type="button" variant="primary" className="rounded-full" onClick={() => void approveSelectedInquiry()}>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                  onClick={() => void approveSelectedInquiry()}
+                >
                   Approve
                 </Button>
               )
@@ -1170,14 +1186,19 @@ export function PortalCalendarPanels({
             </p>
           </div>
           <p className="text-sm text-muted">Delete this slot if you no longer want applicants to book it.</p>
-          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
+          <div className="flex flex-nowrap items-center gap-1.5 border-t border-border pt-4 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+              onClick={closeSelectedBlock}
+            >
               Close
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               onClick={deleteAvailabilitySlot}
             >
               Delete slot
