@@ -223,7 +223,7 @@ export function ManagerResidentDetailInbox({
         tabId={showArchived ? "trash" : "unopened"}
         embeddedInCommunication
         externalTitleActions
-        suppressCompose
+        suppressCompose={false}
         suppressListPane
         commBase={commBase}
         smsUiEnabled={smsUiEnabled}
@@ -248,7 +248,7 @@ export function ManagerResidentDetailInbox({
     ) : (
       <InboxThreadEmpty
         title={showArchived ? "No archived messages" : "No messages yet"}
-        hint={showArchived ? "Archived conversations with this resident will appear here." : "Use New message to start a conversation."}
+        hint={showArchived ? "Archived conversations with this resident will appear here." : "Reply in the thread below or ask PropLane Assistant for help drafting a message."}
       />
     );
 

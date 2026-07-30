@@ -1068,14 +1068,15 @@ export function AiDraftReplyCard({
 
   return (
     <div
-      className="portal-inbox-ai-draft shrink-0 border-t border-border bg-accent/40 px-3.5 py-3"
+      className="portal-inbox-ai-draft mx-2 shrink-0 border border-dashed border-primary/25 bg-primary/5 px-3.5 py-3 md:mx-3"
       data-attr="inbox-ai-draft-card"
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10">
           <Sparkles className="h-3 w-3 text-primary" strokeWidth={2.25} />
         </span>
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+        <span className="text-sm font-semibold text-foreground">PropLane AI</span>
+        <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
           Draft · Pending approval
         </span>
       </div>

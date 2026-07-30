@@ -182,11 +182,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
-import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
+import {
+  ApplicationReviewLauncherRow,
+  type ApplicationReviewSubTab,
+} from "@/components/portal/application-review-launcher-row";
+import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
+import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
@@ -349,7 +355,7 @@ export function ManagerResidents({
   const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
   const [addResidentWorkOrderOpen, setAddResidentWorkOrderOpen] = useState(false);
   const [embeddedPaymentFooterActions, setEmbeddedPaymentFooterActions] = useState<ReactNode>(null);
-  const [screeningDetailActions, setScreeningDetailActions] = useState<ReactNode>(null);
+  const [applicationReviewSubTab, setApplicationReviewSubTab] = useState<ApplicationReviewSubTab>("application");
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
@@ -885,6 +891,20 @@ export function ManagerResidents({
     return groupForRow(applicationGroups, { groupId: groupIdForRow(selectedApplicationRow) });
   }, [applicationGroups, selectedApplicationRow]);
 
+  useEffect(() => {
+    setApplicationReviewSubTab("application");
+  }, [selected?.id]);
+
+  useEffect(() => {
+    if (!paymentIdProp || activeDetailTab !== "payments") {
+      setEmbeddedPaymentFooterActions(null);
+    }
+  }, [paymentIdProp, activeDetailTab]);
+
+  const handleScreeningUpdated = useCallback(() => {
+    void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
+  }, [userId]);
+
   // The resident's Application section is hidden for a LINKED (co-managed)
   // property when the co-manager lacks the `applications` grant on it. Own
   // properties always show it.
@@ -917,6 +937,18 @@ export function ManagerResidents({
   const resolvedDetailTab = residentDetailTabsAvailable.includes(activeDetailTab)
     ? activeDetailTab
     : (residentDetailTabsAvailable[0] ?? "payments");
+
+  useEffect(() => {
+    const hideFab = Boolean(residentIdProp && resolvedDetailTab === "communication");
+    if (hideFab) {
+      document.documentElement.dataset.hideAssistantFab = "true";
+    } else {
+      delete document.documentElement.dataset.hideAssistantFab;
+    }
+    return () => {
+      delete document.documentElement.dataset.hideAssistantFab;
+    };
+  }, [residentIdProp, resolvedDetailTab]);
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
     if (!selected?.email?.trim()) return null;
@@ -1092,7 +1124,13 @@ export function ManagerResidents({
     }
   }
 
-  async function sendLeaseSigningReminder(res: ActiveResident, leaseId: string, subject: string, body: string) {
+  async function sendLeaseSigningReminder(
+    res: ActiveResident,
+    leaseId: string,
+    subject: string,
+    body: string,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+  ) {
     setLeaseReminderBusy(true);
     try {
       const response = await fetch("/api/portal/send-inbox-message", {
@@ -1105,6 +1143,8 @@ export function ManagerResidents({
           subject,
           text: body,
           deliverToPortalInbox: true,
+          deliverViaEmail: channels?.viaEmail !== false,
+          deliverViaSms: channels?.viaSms === true,
         }),
       });
 
@@ -1190,9 +1230,15 @@ export function ManagerResidents({
     });
   }
 
-  async function confirmSendLeaseToResident(skipMessage: boolean) {
+  async function confirmSendLeaseToResident(
+    skipMessage: boolean,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject: string; body: string },
+  ) {
     if (!leaseSentPreview || leaseSendBusy) return;
     const { res, lease, subject, body } = leaseSentPreview;
+    const messageSubject = draft?.subject ?? subject;
+    const messageBody = draft?.body ?? body;
     setLeaseSendBusy(true);
     try {
       const sendResult = await sendLeaseToResident(lease.id, userId);
@@ -1209,8 +1255,10 @@ export function ManagerResidents({
           eventCategory: "leases",
           fromName: managerEmail ?? "Property Manager",
           toEmails: [res.email],
-          subject,
-          text: body,
+          subject: messageSubject,
+          text: messageBody,
+          deliverViaEmail: channels?.viaEmail !== false,
+          deliverViaSms: channels?.viaSms === true,
         });
         if (notice.ok) {
           showToast(
@@ -1294,10 +1342,6 @@ export function ManagerResidents({
     showToast("Application deleted.");
     navigate(`${portalBase}/residents/${residentsTab}`);
   };
-
-  const handleScreeningUpdated = useCallback(() => {
-    void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
-  }, [userId]);
 
   function saveManualResident() {
     void (async () => {
@@ -1798,6 +1842,36 @@ export function ManagerResidents({
         <span className="max-md:hidden">Email setup</span>
         <span className="md:hidden">Email</span>
       </Button>
+      {showResidentApplication && resolvedDetailTab === "application" && selectedApplicationRow ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+          data-attr="resident-application-download"
+          disabled={
+            applicationReviewSubTab === "background-check" &&
+            !(
+              selectedApplicationRow.backgroundCheck?.status === "complete" ||
+              (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow))
+            )
+          }
+          onClick={() => {
+            if (!selectedApplicationRow) return;
+            if (
+              applicationReviewSubTab === "background-check" &&
+              applicationShowsBackgroundCheck(selectedApplicationRow)
+            ) {
+              downloadBackgroundCheckForApplication(selectedApplicationRow);
+              showToast("Background check download started.");
+              return;
+            }
+            downloadApplicationPdf(selectedApplicationRow);
+            showToast("Application download started.");
+          }}
+        >
+          Download
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="outline"
@@ -1819,49 +1893,72 @@ export function ManagerResidents({
     </>
   ) : null;
 
-  const residentApplicationTabActions = selectedApplicationRow ? (
-    selectedApplicationRow.bucket === "pending" ? (
-      <>
+  const residentApplicationTabFooterActions = selectedApplicationRow ? (
+    <>
+      {selectedApplicationRow.bucket === "pending" ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="resident-application-reject"
+            onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+          >
+            Reject
+          </Button>
+          {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_DETAIL_BTN_PRIMARY}
+              data-attr="resident-application-approve"
+              onClick={() => setApprovePreviewRow(selectedApplicationRow)}
+            >
+              Approve
+            </Button>
+          )}
+        </>
+      ) : (
         <Button
           type="button"
           variant="outline"
-          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-          data-attr="resident-application-reject"
-          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+          className={PORTAL_DETAIL_BTN}
+          data-attr="resident-application-move-pending"
+          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
         >
-          Reject
+          <span className="max-md:hidden">To pending</span>
+          <span className="md:hidden">Pending</span>
         </Button>
-        {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
-          <Button
-            type="button"
-            variant="primary"
-            className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-            data-attr="resident-application-approve"
-            onClick={() => setApprovePreviewRow(selectedApplicationRow)}
-          >
-            Approve
-          </Button>
-        )}
-      </>
-    ) : (
+      )}
       <Button
         type="button"
         variant="outline"
-        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-        data-attr="resident-application-move-pending"
-        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+        className={PORTAL_DETAIL_BTN}
+        data-attr="resident-application-download-footer"
+        disabled={
+          applicationReviewSubTab === "background-check" &&
+          !(
+            selectedApplicationRow.backgroundCheck?.status === "complete" ||
+            (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow))
+          )
+        }
+        onClick={() => {
+          if (
+            applicationReviewSubTab === "background-check" &&
+            applicationShowsBackgroundCheck(selectedApplicationRow)
+          ) {
+            downloadBackgroundCheckForApplication(selectedApplicationRow);
+            showToast("Background check download started.");
+            return;
+          }
+          downloadApplicationPdf(selectedApplicationRow);
+          showToast("Application download started.");
+        }}
       >
-        <span className="max-md:hidden">To pending</span>
-        <span className="md:hidden">Pending</span>
+        Download
       </Button>
-    )
+    </>
   ) : null;
-
-  useEffect(() => {
-    if (!paymentIdProp || activeDetailTab !== "payments") {
-      setEmbeddedPaymentFooterActions(null);
-    }
-  }, [paymentIdProp, activeDetailTab]);
 
   const residentPaymentsListHref = selected
     ? residentDetailHref(portalBase, residentsTab, selected.id, "payments")
@@ -1892,7 +1989,7 @@ export function ManagerResidents({
                               />
 
                             {showResidentApplication && resolvedDetailTab === "application" ? (
-                            <ResidentDetailTabPanel>
+                            <ResidentDetailTabPanel footerActions={residentApplicationTabFooterActions}>
                               {selectedApplicationRow ? (
                                 <div className="space-y-0">
                                   {selectedApplicationGroup ? (
@@ -1903,6 +2000,10 @@ export function ManagerResidents({
                                   ) : null}
                                   <ApplicationReviewLauncherRow
                                     row={selectedApplicationRow}
+                                    bareCanvas
+                                    showDownload={false}
+                                    activeSubTab={applicationReviewSubTab}
+                                    onSubTabChange={setApplicationReviewSubTab}
                                     onScreeningUpdated={handleScreeningUpdated}
                                     onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
                                   />
@@ -2297,27 +2398,28 @@ export function ManagerResidents({
                             ) : null}
 
                             {resolvedDetailTab === "communication" ? (
-                            <ResidentDetailTabPanel
-                              footerActions={<Button
-                                  type="button"
-                                  variant="primary"
-                                  className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                                  onClick={openResidentMessageModal}
-                                  data-attr="resident-new-message"
-                                >
-                                  New message
-                                </Button>
-                              }
-                            >
-                              <div className="mb-3">
-                                <p className="text-sm text-muted">{residentCommSummary}</p>
+                            <ResidentDetailTabPanel>
+                              <div className="@container flex min-h-[min(70vh,720px)] flex-col gap-0 @2xl:flex-row @2xl:items-stretch">
+                                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                                  <div className="mb-3">
+                                    <p className="text-sm text-muted">{residentCommSummary}</p>
+                                  </div>
+                                  <ManagerResidentDetailInbox
+                                    residentEmail={selected.email}
+                                    portalBase={portalBase}
+                                    smsUiEnabled={smsUiEnabled}
+                                    smsRef={residentSmsPanelRef}
+                                  />
+                                </div>
+                                <ModalAssistantStrip
+                                  contextHint={`Resident communication · ${selected.name || selected.email}`}
+                                  storageScopeKey={`resident-communication-${selected.id}`}
+                                  conversationInstance={hcTick}
+                                  defaultExpanded
+                                  side="right"
+                                  className="min-h-0 @2xl:max-w-[22rem]"
+                                />
                               </div>
-                              <ManagerResidentDetailInbox
-                                residentEmail={selected.email}
-                                portalBase={portalBase}
-                                smsUiEnabled={smsUiEnabled}
-                                smsRef={residentSmsPanelRef}
-                              />
                             </ResidentDetailTabPanel>
                             ) : null}
                           </div>
@@ -3124,7 +3226,7 @@ export function ManagerResidents({
         confirmLabelWithoutMessage="Send lease only"
         confirmBusy={leaseSendBusy}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
+        onConfirm={(skipMessage, channels, draft) => void confirmSendLeaseToResident(skipMessage, channels, draft)}
       />
 
       <PortalNotificationPreviewModal
@@ -3134,11 +3236,12 @@ export function ManagerResidents({
         recipient={leaseReminderPreview?.recipient ?? ""}
         subject={leaseReminderPreview?.subject ?? ""}
         body={leaseReminderPreview?.body ?? ""}
+        showSkipMessage={false}
         confirmLabel="Send reminder"
         confirmLabelWithoutMessage="Close without sending"
         confirmBusy={leaseReminderBusy}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
+        onConfirm={(skipMessage, channels, draft) => {
           if (!leaseReminderPreview) return;
           if (skipMessage) {
             setLeaseReminderPreview(null);
@@ -3146,7 +3249,13 @@ export function ManagerResidents({
           }
           const preview = leaseReminderPreview;
           setLeaseReminderPreview(null);
-          void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
+          void sendLeaseSigningReminder(
+            preview.res,
+            preview.leaseId,
+            draft?.subject ?? preview.subject,
+            draft?.body ?? preview.body,
+            channels,
+          );
         }}
       />
 

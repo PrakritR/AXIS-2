@@ -52,6 +52,7 @@ function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: (
  * Compact portal toolbar filter pattern (Communication / Payments):
  * `inline` — mobile Vaul bottom sheet + inline controls from `md` up (default).
  * `panel` — Filter button on all breakpoints; sheet on mobile, modal on desktop.
+ * `dropdown` — Filter button on all breakpoints; sheet on mobile, anchored popover on desktop.
  */
 export function PortalFilterSortSheet({
   children,
@@ -68,11 +69,11 @@ export function PortalFilterSortSheet({
   dataAttr?: string;
   extraModalContent?: ReactNode;
   className?: string;
-  desktopPresentation?: "inline" | "panel";
+  desktopPresentation?: "inline" | "panel" | "dropdown";
 }) {
   const [open, setOpen] = useState(false);
   const isMobile = useSmallPortalViewport();
-  const panelOnly = desktopPresentation === "panel";
+  const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
   const sheetBody = (
     <div className="flex flex-col gap-4">
       {children}
@@ -92,8 +93,8 @@ export function PortalFilterSortSheet({
     <>
       <div
         className={cn(
-          "flex min-w-0",
-          panelOnly ? "shrink-0 max-md:flex-1 md:flex-initial" : "flex-1 md:hidden",
+          "relative flex min-w-0",
+          compactTrigger ? "shrink-0 max-md:flex-1 md:flex-initial" : "flex-1 md:hidden",
           className,
         )}
       >
@@ -101,18 +102,47 @@ export function PortalFilterSortSheet({
           type="button"
           variant="outline"
           className={cn(
-            panelOnly
+            compactTrigger
               ? cn(PORTAL_HEADER_ACTION_BTN, "whitespace-nowrap w-full max-md:min-w-0 md:w-auto")
               : "h-9 min-w-0 w-full rounded-full text-xs font-semibold whitespace-nowrap",
           )}
           data-attr={dataAttr}
-          onClick={() => setOpen(true)}
+          aria-expanded={compactTrigger ? open : undefined}
+          onClick={() => {
+            if (desktopPresentation === "dropdown" && !isMobile) {
+              setOpen((prev) => !prev);
+              return;
+            }
+            setOpen(true);
+          }}
         >
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
           Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
         </Button>
+        {!isMobile && desktopPresentation === "dropdown" && open ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 cursor-default"
+              aria-label="Close filters"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-label="Filter"
+              className="absolute right-0 top-[calc(100%+0.5rem)] z-50 flex w-[min(20rem,calc(100vw-2rem))] max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]"
+              data-attr="portal-filter-dropdown-panel"
+            >
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">Filter</p>
+              </div>
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4">{sheetBody}</div>
+              <div className="shrink-0 border-t border-border p-4">{footer}</div>
+            </div>
+          </>
+        ) : null}
       </div>
-      {!panelOnly ? (
+      {!compactTrigger ? (
         <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
           {children}
         </div>
@@ -127,7 +157,7 @@ export function PortalFilterSortSheet({
         >
           {sheetBody}
         </VaulBottomSheet>
-      ) : panelOnly ? (
+      ) : desktopPresentation === "panel" ? (
         <Modal
           open={open}
           onClose={() => setOpen(false)}
