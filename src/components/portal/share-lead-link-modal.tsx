@@ -59,18 +59,19 @@ function ShareLinkCopyRow({
   return (
     <div>
       <p className={FIELD_LABEL_CLASS}>{label}</p>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-        <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted break-all">
-          {url || "Select a property to generate a link."}
+      <div className="flex items-stretch gap-2">
+        <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
+          <span className="truncate">{url || "Select a property to generate a link."}</span>
         </div>
         <Button
           type="button"
           variant="outline"
-          className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+          className="h-10 shrink-0 rounded-full px-3 text-xs whitespace-nowrap sm:px-4 sm:text-sm"
           disabled={!url}
           onClick={onCopy}
         >
-          {copyLabel}
+          <span className="sm:hidden">Copy</span>
+          <span className="hidden sm:inline">{copyLabel}</span>
         </Button>
       </div>
       {hint ? <div className="mt-1.5 text-xs leading-relaxed text-muted">{hint}</div> : null}
@@ -508,14 +509,14 @@ export function ShareLeadLinkModal({
                         {individualTourLinks.map((entry) => (
                           <div key={entry.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
                             <p className="mb-2 text-sm font-semibold text-foreground">{entry.label}</p>
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                              <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-card px-3 py-2 text-xs leading-relaxed text-muted break-all">
-                                {entry.url}
+                            <div className="flex items-stretch gap-2">
+                              <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted">
+                                <span className="truncate">{entry.url}</span>
                               </div>
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-10 shrink-0 rounded-full px-4 sm:h-auto sm:self-stretch"
+                                className="h-10 shrink-0 rounded-full px-3 text-xs whitespace-nowrap sm:px-4 sm:text-sm"
                                 onClick={() => void handleCopy(entry.url, "Tour link copied.")}
                               >
                                 Copy link
