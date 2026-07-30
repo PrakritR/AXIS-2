@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { TabNav } from "@/components/ui/tabs";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { Button } from "@/components/ui/button";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
@@ -542,22 +542,43 @@ export function ResidentDocumentsPanel({
   return (
     <ManagerPortalPageShell
       title="Documents"
+      hideTitleOnMobileNav
       titleAside={
+        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+          <Button
+            type="button"
+            className={PORTAL_HEADER_ACTION_BTN}
+            data-attr="resident-documents-add"
+            onClick={openAdd}
+          >
+            Add
+          </Button>
+        </PortalSectionActionRow>
+      }
+      compactFilterRow
+    >
+      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-documents-mobile-actions">
         <Button
           type="button"
-          className={PORTAL_HEADER_ACTION_BTN}
+          className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
           data-attr="resident-documents-add"
           onClick={openAdd}
         >
           Add
         </Button>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav items={tabItems} activeId={tabId} />
-        </ManagerPortalFilterRow>
-      }
-    >
+      </div>
+      <PortalListControlStack
+        className="mb-3 max-lg:mb-4"
+        destinationInset
+        destinations={tabItems.map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          href: tab.href,
+          dataAttr: `resident-documents-tab-${tab.id}`,
+        }))}
+        activeDestinationId={tabId}
+        destinationAriaLabel="Documents"
+      />
       {tabId === "application" ? <ApplicationDocumentsTable /> : null}
 
       {tabId === "lease" ? <SignedLeaseDocumentsTable /> : null}
