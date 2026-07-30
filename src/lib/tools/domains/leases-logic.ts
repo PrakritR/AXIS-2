@@ -63,3 +63,63 @@ export function buildLeaseDraftPreview(row: LeasePipelineRow, mode: "create" | "
     ],
   };
 }
+
+export type UpdateLeasePacketInput = {
+  leaseId: string;
+  unit?: string;
+  notes?: string;
+  monthlyRent?: number;
+  monthlyUtilities?: number;
+  securityDeposit?: number;
+  moveInFee?: number;
+  leaseStart?: string;
+  leaseEnd?: string;
+  leaseTerm?: string;
+  roomChoice?: string;
+  rentalType?: "standard" | "short_term";
+};
+
+export function applicationPatchFromLeasePacketInput(
+  input: UpdateLeasePacketInput,
+): Record<string, string> | null {
+  const patch: Record<string, string> = {};
+  const money = (n: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
+  if (input.monthlyRent !== undefined) patch.managerRentOverride = money(input.monthlyRent);
+  if (input.monthlyUtilities !== undefined) patch.managerUtilitiesOverride = money(input.monthlyUtilities);
+  if (input.securityDeposit !== undefined) patch.managerSecurityDepositOverride = money(input.securityDeposit);
+  if (input.moveInFee !== undefined) patch.managerMoveInFeeOverride = money(input.moveInFee);
+  if (input.leaseStart !== undefined) patch.leaseStart = input.leaseStart.trim();
+  if (input.leaseEnd !== undefined) patch.leaseEnd = input.leaseEnd.trim();
+  if (input.leaseTerm !== undefined) patch.leaseTerm = input.leaseTerm.trim();
+  if (input.roomChoice !== undefined) patch.roomChoice1 = input.roomChoice.trim();
+  if (input.rentalType !== undefined) patch.rentalType = input.rentalType;
+  return Object.keys(patch).length ? patch : null;
+}
+
+export function buildLeasePacketPreview(row: LeasePipelineRow, input: UpdateLeasePacketInput): ActionPreview {
+  const fields: { label: string; value: string }[] = [
+    { label: "Resident", value: row.residentName },
+    { label: "Unit", value: input.unit?.trim() || row.unit || "—" },
+  ];
+  const appPatch = applicationPatchFromLeasePacketInput(input);
+  if (appPatch?.managerRentOverride) fields.push({ label: "Monthly rent", value: appPatch.managerRentOverride });
+  if (appPatch?.managerUtilitiesOverride) fields.push({ label: "Monthly utilities", value: appPatch.managerUtilitiesOverride });
+  if (appPatch?.managerSecurityDepositOverride) fields.push({ label: "Security deposit", value: appPatch.managerSecurityDepositOverride });
+  if (appPatch?.managerMoveInFeeOverride) fields.push({ label: "Move-in fee", value: appPatch.managerMoveInFeeOverride });
+  if (appPatch?.leaseStart) fields.push({ label: "Lease start", value: appPatch.leaseStart });
+  if (appPatch?.leaseEnd) fields.push({ label: "Lease end", value: appPatch.leaseEnd || "Month-to-month" });
+  if (appPatch?.leaseTerm) fields.push({ label: "Lease term", value: appPatch.leaseTerm });
+  if (appPatch?.roomChoice1) fields.push({ label: "Room", value: appPatch.roomChoice1 });
+  if (appPatch?.rentalType) fields.push({ label: "Stay type", value: appPatch.rentalType === "short_term" ? "Short-term" : "Long-term" });
+  if (input.notes !== undefined) fields.push({ label: "Notes", value: input.notes.trim() || "—" });
+  return {
+    kind: "lease_packet_edit",
+    title: `Update lease for ${row.residentName}`,
+    summary: "Regenerates the lease document with these terms and keeps it in manager review.",
+    confirmLabel: "Update lease",
+    fields,
+    warnings: appPatch ? ["The lease document will be regenerated with these changes."] : undefined,
+  };
+}
+

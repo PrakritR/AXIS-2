@@ -41,6 +41,7 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
+import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { cn } from "@/lib/utils";
 
@@ -495,12 +496,16 @@ export function AxisAssistant({
     [dockEnabled, mode, setMode],
   );
 
+  const chatEndpoint = endpoint ?? "/api/agent/chat";
+
   return (
-    <AxisAssistantPresenceContext.Provider value={true}>
-      <AxisAssistantDockContext.Provider value={dockState}>
-        <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-        <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
-      </AxisAssistantDockContext.Provider>
-    </AxisAssistantPresenceContext.Provider>
+    <PortalAssistantConfigProvider endpoint={chatEndpoint} managerName={managerName ?? null}>
+      <AxisAssistantPresenceContext.Provider value={true}>
+        <AxisAssistantDockContext.Provider value={dockState}>
+          <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+          <AxisAssistantChrome managerName={managerName} endpoint={chatEndpoint} />
+        </AxisAssistantDockContext.Provider>
+      </AxisAssistantPresenceContext.Provider>
+    </PortalAssistantConfigProvider>
   );
 }

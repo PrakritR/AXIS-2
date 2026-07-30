@@ -209,7 +209,7 @@ async function syncApplicationLeaseDates(
     .eq("id", id);
 }
 
-async function regenerateLeaseHtmlForApplication(
+export async function regenerateLeaseHtmlForApplication(
   db: SupabaseClient,
   leaseRecord: { property_id?: string | null },
   leaseRow: LeasePipelineRow,

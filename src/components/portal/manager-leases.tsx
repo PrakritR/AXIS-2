@@ -30,6 +30,7 @@ import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-lin
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { leaseListHref } from "@/lib/portal-detail-routes";
+import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
   { id: "manager", label: "Manager review", dataAttr: "leases-tab-manager" },
@@ -75,11 +76,16 @@ export function ManagerLeases({
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
     ]).then(on);
+    const onAgentActions = () => {
+      void syncLeasePipelineFromServer(userId, { force: true }).then(on);
+    };
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    window.addEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+      window.removeEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     };
   }, [authReady, userId]);
 

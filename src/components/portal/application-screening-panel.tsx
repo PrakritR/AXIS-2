@@ -31,7 +31,7 @@ function downloadBackgroundCheckPdf(applicationId: string): void {
   anchor.remove();
 }
 
-function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo: boolean }) {
+function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { row: DemoApplicantRow; demo: boolean; bareCanvas?: boolean }) {
   const bg = row.backgroundCheck;
   const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
   const pdfSrc = useOfficialPdf
@@ -55,7 +55,7 @@ function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo
         src={pdfSrc}
         title="Background check report preview"
         loading="lazy"
-        className="h-[min(52vh,420px)] w-full border-0 bg-white"
+        className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
       />
     );
   }
@@ -66,7 +66,7 @@ function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo
       title="Background check report preview"
       sandbox="allow-same-origin"
       loading="lazy"
-      className="h-[min(52vh,420px)] w-full border-0 bg-white"
+      className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
     />
   );
 }
@@ -91,6 +91,7 @@ export function ApplicationScreeningPanel({
   onUpdated,
   onOpenScreeningModal,
   collapsible = true,
+  bareCanvas = false,
   headerActionsPlacement = "section",
   onHeaderActionsChange,
 }: {
@@ -100,6 +101,7 @@ export function ApplicationScreeningPanel({
   onOpenScreeningModal?: () => void;
   /** When false, renders flat content (e.g. inside a review modal). */
   collapsible?: boolean;
+  bareCanvas?: boolean;
   /** When `parent`, header buttons render via `onHeaderActionsChange` instead of the Screening sub-section. */
   headerActionsPlacement?: "section" | "parent";
   onHeaderActionsChange?: (actions: React.ReactNode) => void;
@@ -250,7 +252,7 @@ export function ApplicationScreeningPanel({
         {canRunBackgroundCheck ? (
           <Button
             type="button"
-            variant="primary"
+            variant="outline"
             data-attr="run-background-check"
             className={headerActionBtnClass}
             onClick={onOpenScreeningModal}
@@ -344,9 +346,7 @@ export function ApplicationScreeningPanel({
         <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-        <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} />
-      </div>
+      <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} bareCanvas={bareCanvas} />
 
       {screening?.adverseActionRequired ? (
         <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
@@ -360,7 +360,7 @@ export function ApplicationScreeningPanel({
   if (!collapsible) {
     return (
       <div className="space-y-3" data-slot="application-screening-inline">
-        {headerActions ? (
+        {headerActionsPlacement === "section" && headerActions ? (
           <div className="flex flex-nowrap items-center justify-start gap-2 overflow-x-auto">{headerActions}</div>
         ) : null}
         {panelBody}

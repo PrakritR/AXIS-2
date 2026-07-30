@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
@@ -13,6 +13,7 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
@@ -169,10 +170,13 @@ export function ApplicationDocumentPreview({
   row,
   collapsible = true,
   showDownload = true,
+  bareCanvas = false,
 }: {
   row: DemoApplicantRow;
   collapsible?: boolean;
   showDownload?: boolean;
+  /** Flat on the portal page canvas — no white document card chrome. */
+  bareCanvas?: boolean;
 }) {
   const demo = isDemoModeActive();
   const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
@@ -224,22 +228,34 @@ export function ApplicationDocumentPreview({
     </Button>
   ) : null;
 
+  const iframeHtml = useMemo(() => {
+    if (!bareCanvas) return previewHtml;
+    return previewHtml.replace(
+      "html, body { background: #fff; }",
+      "html, body { background: transparent; }",
+    );
+  }, [bareCanvas, previewHtml]);
+
   const previewBody = (
-    <div className="overflow-hidden border-t border-border bg-white">
+    <div className={bareCanvas ? "w-full" : "overflow-hidden border-t border-border bg-white"}>
       <iframe
         key={previewKey}
-        srcDoc={previewHtml}
+        srcDoc={iframeHtml}
         title="Application document"
         sandbox="allow-same-origin"
         loading="lazy"
-        className="h-[min(52vh,420px)] w-full border-0 bg-white"
+        className={
+          bareCanvas
+            ? "h-[min(70vh,720px)] w-full border-0 bg-transparent"
+            : "h-[min(52vh,420px)] w-full border-0 bg-white"
+        }
       />
     </div>
   );
 
   if (!collapsible) {
     return (
-      <div className="mt-4 space-y-3">
+      <div className={bareCanvas ? "space-y-3" : "mt-4 space-y-3"}>
         {downloadButton ? (
           <div className="flex flex-nowrap items-center justify-start gap-2">{downloadButton}</div>
         ) : null}
@@ -344,6 +360,7 @@ export function ManagerApplications({
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [screeningDetailActions, setScreeningDetailActions] = useState<ReactNode>(null);
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -478,6 +495,10 @@ export function ManagerApplications({
       : filtered;
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
   }, [scopedRows, bucket, propertyFilter, searchQuery]);
+
+  useEffect(() => {
+    if (!applicationIdProp) setScreeningDetailActions(null);
+  }, [applicationIdProp]);
 
   const detailRow = useMemo(() => {
     if (!applicationIdProp) return null;
@@ -725,19 +746,24 @@ export function ManagerApplications({
   };
 
   const renderApplicationRowActions = (row: DemoApplicantRow) => (
-    <PortalSectionActionRow variant="header" className="shrink-0">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="presentation"
-        className="contents"
-      >
+    <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+      <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+          data-attr="application-pdf-download"
+          onClick={() => downloadApplicationPdf(row)}
+        >
+          Download PDF
+        </Button>
+        {screeningDetailActions}
       {row.bucket === "pending" ? (
         <>
           {isWithdrawnApplicationRow(row) ? null : (
             <Button
               type="button"
-              variant="primary"
+              variant="outline"
               className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
               data-attr="application-approve"
               onClick={() => setApprovePreviewRow(row)}
@@ -784,8 +810,8 @@ export function ManagerApplications({
       >
         Delete
       </Button>
-      </div>
-    </PortalSectionActionRow>
+      </PortalSectionActionRow>
+    </div>
   );
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
@@ -819,8 +845,11 @@ export function ManagerApplications({
 
       <ApplicationReviewLauncherRow
         row={row}
+        bareCanvas
+        showDownload={false}
         onScreeningUpdated={handleScreeningUpdated}
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
+        onScreeningHeaderActionsChange={setScreeningDetailActions}
       />
 
       <ApplicationVerificationPhotos row={row} />
@@ -990,8 +1019,9 @@ export function ManagerApplications({
           title={detailRow.name}
           subtitle={detailRow.email}
           avatarName={detailRow.name}
-          backHref={applicationListHref(basePath, bucket)}
-          backLabel="Back to applications"
+          backHref={applicationListHref(basePath, tabForRow(detailRow))}
+          hideBackText
+          bareHeader
           dataAttrBack="application-detail-back"
           inlineActions
           actions={renderApplicationRowActions(detailRow)}

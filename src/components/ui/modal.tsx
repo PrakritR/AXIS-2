@@ -227,6 +227,7 @@ function ModalPanelInner({
   assistantConversationInstance,
   assistantExpanded,
   onAssistantExpandedChange,
+  assistantDefaultExpanded = false,
   TitlePrimitive,
   DescriptionPrimitive,
   ClosePrimitive,
@@ -243,6 +244,7 @@ function ModalPanelInner({
   assistantConversationInstance: number;
   assistantExpanded: boolean;
   onAssistantExpandedChange: (expanded: boolean) => void;
+  assistantDefaultExpanded?: boolean;
   TitlePrimitive: ComponentType<ModalTitlePrimitiveProps>;
   DescriptionPrimitive: ComponentType<ModalDescriptionPrimitiveProps>;
   ClosePrimitive: ComponentType<ModalClosePrimitiveProps>;
@@ -302,6 +304,7 @@ function ModalPanelInner({
             storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
             conversationInstance={assistantConversationInstance}
             onExpandedChange={onAssistantExpandedChange}
+            defaultExpanded={assistantDefaultExpanded}
             className={cn(dense ? "px-0" : undefined)}
           />
         ) : null}
@@ -333,6 +336,7 @@ export function Modal({
   assistantStrip = true,
   assistantContext,
   assistantStorageScopeKey,
+  assistantDefaultExpanded = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -346,6 +350,8 @@ export function Modal({
   assistantStrip?: boolean;
   assistantContext?: string;
   assistantStorageScopeKey?: string;
+  /** Open the assistant strip expanded when the modal opens. */
+  assistantDefaultExpanded?: boolean;
 }) {
   const presentation = useModalPresentation();
   const portalAssistant = usePortalAssistantConfig();
@@ -356,11 +362,12 @@ export function Modal({
     "Portal modal";
 
   const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
-  const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(assistantDefaultExpanded);
   const wasOpenRef = useRef(false);
   useLayoutEffect(() => {
     if (open && !wasOpenRef.current) {
       setAssistantConversationInstance((n) => n + 1);
+      setAssistantExpanded(assistantDefaultExpanded);
     }
     wasOpenRef.current = open;
   }, [open]);
@@ -378,6 +385,7 @@ export function Modal({
     assistantConversationInstance,
     assistantExpanded,
     onAssistantExpandedChange: setAssistantExpanded,
+    assistantDefaultExpanded,
   };
 
   if (!open) return null;

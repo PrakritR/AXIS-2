@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
-import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
+import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
 import { applySignedLeaseRenewal } from "@/lib/lease-renewal-payments";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
@@ -93,6 +93,7 @@ export function ManagerLeasesPipelinePanel({
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [editLeaseRowId, setEditLeaseRowId] = useState<string | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -333,7 +334,6 @@ export function ManagerLeasesPipelinePanel({
     if (!window.confirm(`Delete the lease document for ${row.residentName} (${row.unit})? Generate or upload can recreate it.`)) return;
     if (deleteLeasePipelineRow(row.id, managerUserId)) {
       showToast("Lease document deleted.");
-      if (leaseIdProp) navigateToList();
     } else showToast("Could not delete lease.");
   };
 
@@ -406,33 +406,26 @@ export function ManagerLeasesPipelinePanel({
       (row.status === "Manager Review" || row.status === "Draft") &&
       !residentAccountEmails.has(row.residentEmail.trim().toLowerCase());
 
+    const hasDocument = hasLeaseDocument(row);
+    const sendToResidentDisabled =
+      !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+      (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl);
+    const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
+
     return (
       <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
-          <LeasePrimaryHeaderActions
-            embedded
-            row={row}
-            btnClass={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-            downloadLabel="Download"
-            downloadDataAttr="lease-download"
-            signManagerDataAttr="lease-manager-sign"
-            signingReminderDataAttr="lease-signing-reminder"
-            deleteDataAttr="lease-delete"
-            onDownload={() => onDownload(row)}
-            onSignManager={() => onManagerSign(row)}
-            onSigningReminder={() => openLeaseSigningReminderPreview(row)}
-            signingReminderBusy={reminderBusyForRow === row.id}
-            sendToResidentDataAttr="lease-send-resident"
-            moveToManagerReviewDataAttr="lease-move-manager-review"
-            onSendToResident={() => openSendLeasePreview(row)}
-            sendToResidentBusy={sendingToResidentRowId === row.id}
-            sendToResidentDisabled={
-              !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-              (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
-            }
-            onMoveToManagerReview={() => onMoveToManagerReview(row)}
-            onDelete={row.status !== "Fully Signed" ? () => onDeleteLease(row) : undefined}
-          />
+          {hasDocument ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-download"
+              onClick={() => onDownload(row)}
+            >
+              Download
+            </Button>
+          ) : null}
           {showGenerate ? (
             <Button
               type="button"
@@ -457,7 +450,88 @@ export function ManagerLeasesPipelinePanel({
               }}
               disabled={pendingRowId === row.id}
             >
-              {pendingRowId === row.id ? "Uploading…" : hasLeaseDocument(row) ? "Upload replacement" : "Upload PDF"}
+              {pendingRowId === row.id ? "Uploading…" : hasDocument ? "Upload replacement" : "Upload PDF"}
+            </Button>
+          ) : null}
+          {canEditDocument ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-edit"
+              onClick={() => setEditLeaseRowId(row.id)}
+            >
+              Edit
+            </Button>
+          ) : null}
+          {row.status !== "Fully Signed" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="lease-delete"
+              onClick={() => onDeleteLease(row)}
+            >
+              Delete
+            </Button>
+          ) : null}
+          {showSendToResident ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-send-resident"
+              disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
+              onClick={() => openSendLeasePreview(row)}
+            >
+              {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
+            </Button>
+          ) : null}
+          {showGenerate ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-generate"
+              disabled={generatingRowId === row.id || !generation.ok}
+              title={generation.ok ? undefined : generation.error}
+              onClick={() => runGenerateLease(row)}
+            >
+              {generatingRowId === row.id ? "Generating…" : "Generate lease"}
+            </Button>
+          ) : null}
+          {row.status === "Resident Signature Pending" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-move-manager-review"
+              onClick={() => onMoveToManagerReview(row)}
+            >
+              Move to review
+            </Button>
+          ) : null}
+          {!row.managerSignature && residentHasSignedLease(row) ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-manager-sign"
+              onClick={() => onManagerSign(row)}
+            >
+              Sign
+            </Button>
+          ) : row.status === "Resident Signature Pending" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+              data-attr="lease-signing-reminder"
+              disabled={reminderBusyForRow === row.id}
+              title="Send signing reminder"
+              onClick={() => openLeaseSigningReminderPreview(row)}
+            >
+              {reminderBusyForRow === row.id ? "Sending…" : "Sign"}
             </Button>
           ) : null}
           {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
@@ -581,6 +655,15 @@ export function ManagerLeasesPipelinePanel({
         />
       ) : null}
 
+      {editLeaseRowId && detailRow && editLeaseRowId === detailRow.id ? (
+        <ManagerPipelineLeaseEditModal
+          open
+          row={detailRow}
+          onClose={() => setEditLeaseRowId(null)}
+          onDone={() => void syncLeasePipelineFromServer(managerUserId, { force: true })}
+        />
+      ) : null}
+
       {renewLeaseRow ? (
         <LeaseRenewModal
           open
@@ -604,7 +687,8 @@ export function ManagerLeasesPipelinePanel({
           title={detailRow.residentName}
           subtitle={detailRow.unit}
           avatarName={detailRow.residentName}
-          hideBack
+          backHref={listBasePath ? leaseListHref(listBasePath, tab) : undefined}
+          hideBackText
           bareHeader
           dataAttrBack="lease-detail-back"
           inlineActions

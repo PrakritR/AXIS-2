@@ -1,3 +1,4 @@
+import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
 
@@ -27,6 +28,28 @@ export function buildLeaseModalAssistantContext(opts: {
   parts.push(`currentLeaseSource=${propertyLeaseSourceLabel(opts.currentSource)}`);
   parts.push(
     "Propose update_property_lease_config with propertyId above: axis_default (PropLane standard), custom_comments (+ customLeaseTerms), or custom_format (+ leaseTemplateDocUrl from an uploaded PDF).",
+  );
+  return parts.join(" · ");
+}
+
+/** Rich context for the Leases-page packet edit assistant (manager review). */
+export function buildLeasePacketEditAssistantContext(row: LeasePipelineRow): string {
+  const app = row.application ?? {};
+  const parts = [
+    `Lease packet edit`,
+    `leaseId=${row.id}`,
+    `resident=${row.residentName.trim() || "Resident"}`,
+  ];
+  if (row.unit?.trim()) parts.push(`unit=${row.unit.trim()}`);
+  if (app.managerRentOverride?.trim()) parts.push(`rent=${app.managerRentOverride.trim()}`);
+  if (app.managerUtilitiesOverride?.trim()) parts.push(`utilities=${app.managerUtilitiesOverride.trim()}`);
+  if (app.leaseTerm?.trim()) parts.push(`term=${app.leaseTerm.trim()}`);
+  if (app.leaseStart?.trim()) parts.push(`start=${app.leaseStart.trim()}`);
+  if (app.leaseEnd?.trim()) parts.push(`end=${app.leaseEnd.trim()}`);
+  else if (app.leaseTerm?.toLowerCase().includes("month")) parts.push("end=month-to-month");
+  if (app.rentalType === "short_term") parts.push("stay=short-term");
+  parts.push(
+    "Propose update_lease_packet with this leaseId when the manager asks to change rent, fees, dates, term, room, stay type, unit label, or notes. The lease document regenerates and stays in manager review.",
   );
   return parts.join(" · ");
 }
