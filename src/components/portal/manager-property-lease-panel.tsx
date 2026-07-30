@@ -112,8 +112,7 @@ export function ManagerPropertyLeasePanel({
   return (
     <>
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
-          <p className="text-sm font-semibold text-foreground">Lease</p>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
           <Button
             type="button"
             variant="outline"

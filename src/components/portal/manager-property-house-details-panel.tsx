@@ -142,10 +142,7 @@ export function ManagerPropertyHouseDetailsPanel({
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="text-sm font-semibold text-foreground">House details</p>
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
-        </div>
+        <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
         <Button
           type="button"
           variant="primary"

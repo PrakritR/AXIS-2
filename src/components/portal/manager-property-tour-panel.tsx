@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalCalendarPanels } from "@/components/portal/portal-calendar-panels";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { managerPropertyAvailabilityStorageKey } from "@/lib/demo-admin-scheduling";
@@ -18,7 +17,6 @@ export function ManagerPropertyTourPanel({
   propertyLabel: string;
   showToast?: (message: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [sendTourOpen, setSendTourOpen] = useState(false);
 
   const storageKey = useMemo(() => {
@@ -33,48 +31,39 @@ export function ManagerPropertyTourPanel({
 
   return (
     <>
-      <PortalCollapsibleSection
-        title="Calendar"
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        collapsible
-        headerActionsInline
-        toggleDataAttr="property-calendar-section-toggle"
-        headerActions={
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
           <Button
             type="button"
             variant="outline"
             className="h-8 rounded-full px-3 text-xs"
             data-attr="listing-send-tour-link"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSendTourOpen(true);
-            }}
+            onClick={() => setSendTourOpen(true)}
           >
             Send tour link
           </Button>
-        }
-        contentClassName="px-4 py-2"
-      >
-        <PortalCalendarPanels
-          key={storageKey ?? "property-calendar-unavailable"}
-          storageKey={storageKey}
-          compactAvailability
-          defaultViewMode="week"
-          availabilityHeading="Your availability"
-          tourScopeLabel={propertyLabel}
-          unavailableMessage="Sign in to manage tour availability for this property."
-          scheduledTourFilter={
-            managerUserId
-              ? {
-                  viewerUserId: managerUserId,
-                  propertyId: listingId,
-                  peers: [],
-                }
-              : undefined
-          }
-        />
-      </PortalCollapsibleSection>
+        </div>
+        <div className="px-4 py-2">
+          <PortalCalendarPanels
+            key={storageKey ?? "property-calendar-unavailable"}
+            storageKey={storageKey}
+            compactAvailability
+            defaultViewMode="week"
+            availabilityHeading="Your availability"
+            tourScopeLabel={propertyLabel}
+            unavailableMessage="Sign in to manage tour availability for this property."
+            scheduledTourFilter={
+              managerUserId
+                ? {
+                    viewerUserId: managerUserId,
+                    propertyId: listingId,
+                    peers: [],
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </div>
 
       <ShareLeadLinkModal
         open={sendTourOpen}

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   EMPTY_DRAFT,
@@ -124,7 +123,6 @@ export function ManagerPropertyPromotionPanel({
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [sectionExpanded, setSectionExpanded] = useState(false);
   const [contentFilter, setContentFilter] = useState<"text" | "image">("text");
 
   useEffect(() => {
@@ -576,50 +574,42 @@ export function ManagerPropertyPromotionPanel({
 
   return (
     <>
-      <PortalCollapsibleSection
-        title="Promotion"
-        expanded={sectionExpanded}
-        onExpandedChange={setSectionExpanded}
-        collapsible
-        headerActionsInline
-        toggleDataAttr="promotion-section-toggle"
-        headerActions={
-          <>
-            {headerActionsExtra}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              onClick={openNewPromotion}
-              data-attr="manager-property-new-promotion"
-            >
-              New promotion
-            </Button>
-          </>
-        }
-        contentClassName="px-4 py-3"
-      >
-        <div className="mb-4">
-          <ManagerPortalStatusPills
-            tabs={contentTabs}
-            activeId={contentFilter}
-            onChange={(id) => setContentFilter(id as "text" | "image")}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
+          {headerActionsExtra}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={openNewPromotion}
+            data-attr="manager-property-new-promotion"
+          >
+            New promotion
+          </Button>
+        </div>
+        <div className="px-4 py-3">
+          <div className="mb-4">
+            <ManagerPortalStatusPills
+              tabs={contentTabs}
+              activeId={contentFilter}
+              onChange={(id) => setContentFilter(id as "text" | "image")}
+            />
+          </div>
+          <PromotionAssetStack
+            assets={filteredAssets}
+            expandedId={expandedId}
+            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+            onSaveTitle={saveAssetTitle}
+            renderHeaderActions={renderHeaderActions}
+            renderExpanded={renderExpanded}
+            emptyMessage={
+              assets.length === 0
+                ? "No promotions for this property yet."
+                : "No promotions match this filter."
+            }
           />
         </div>
-        <PromotionAssetStack
-          assets={filteredAssets}
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          onSaveTitle={saveAssetTitle}
-          renderHeaderActions={renderHeaderActions}
-          renderExpanded={renderExpanded}
-          emptyMessage={
-            assets.length === 0
-              ? "No promotions for this property yet."
-              : "No promotions match this filter."
-          }
-        />
-      </PortalCollapsibleSection>
+      </div>
 
       <PromotionNewModal
         open={showNewModal}

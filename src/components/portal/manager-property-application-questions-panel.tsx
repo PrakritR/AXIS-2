@@ -88,10 +88,11 @@ export function ManagerPropertyApplicationQuestionsPanel({
   return (
     <>
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
-          <p className="text-sm font-semibold text-foreground">Application</p>
-          {headerActionsExtra ? <div className="flex shrink-0 items-center gap-2">{headerActionsExtra}</div> : null}
-        </div>
+        {headerActionsExtra ? (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
+            <div className="flex shrink-0 items-center gap-2">{headerActionsExtra}</div>
+          </div>
+        ) : null}
         <div className="space-y-2 p-3">
           {stayRows.map((row) => (
             <button
