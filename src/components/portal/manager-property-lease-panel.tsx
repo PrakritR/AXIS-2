@@ -128,9 +128,9 @@ export function ManagerPropertyLeasePanel({
           {templates.map((template) => (
             <div
               key={template.id}
-              className="rounded-2xl border border-border bg-card px-3 py-3"
+              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-3"
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{template.label}</p>
                 <p className="mt-0.5 text-xs text-muted">
                   {propertyLeaseTypeLabel(template.kind)} · {leaseDocumentSummary(template)}
@@ -141,7 +141,7 @@ export function ManagerPropertyLeasePanel({
                   </p>
                 ) : null}
               </div>
-              <div className="mt-2.5 flex flex-wrap gap-2">
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
