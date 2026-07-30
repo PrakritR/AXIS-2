@@ -371,9 +371,6 @@ export function ManagerAddPaymentModal({
         panelClassName="max-w-xl p-3 sm:p-4"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-sm" onClick={handleClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

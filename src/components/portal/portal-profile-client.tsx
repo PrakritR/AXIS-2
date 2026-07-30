@@ -118,9 +118,6 @@ export function PortalProfileClient({
 
   const editAction = editing ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={cancel}>
-        Cancel
-      </Button>
       <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={saving} onClick={() => void save()}>
         {saving ? "Saving…" : "Save"}
       </Button>

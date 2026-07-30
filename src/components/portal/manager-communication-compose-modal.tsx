@@ -465,9 +465,6 @@ export function ManagerCommunicationComposeModal({
       panelClassName="max-h-[min(92dvh,36rem)]"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={sending}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

@@ -88,9 +88,6 @@ export function ManagerEditLeasesModal({
         panelClassName="max-w-md"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeAll}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

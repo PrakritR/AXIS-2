@@ -20,8 +20,8 @@ export const MODAL_HEADER_CLOSE_CLASS =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-10 sm:w-10";
 
 /**
- * Sticky footer action row: secondary actions first, primary action last (rightmost).
- * Pair with Modal `footer` — header × dismisses; Cancel in footer is explicit for forms.
+ * Sticky footer action row: primary and secondary *actions* only (Save, Delete, Send).
+ * Dismiss via the header × — do not add Cancel / Close buttons in footers.
  */
 export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("flex flex-wrap items-center justify-end gap-2", className)}>{children}</div>;

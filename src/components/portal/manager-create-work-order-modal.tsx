@@ -471,9 +471,6 @@ export function ManagerCreateWorkOrderModal({
       assistantStrip={false}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

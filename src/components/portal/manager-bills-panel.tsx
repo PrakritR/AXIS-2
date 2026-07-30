@@ -171,9 +171,6 @@ export function ManagerBillsPanel() {
         title="Add bill"
         footer={
           <ModalFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
             <Button variant="primary" onClick={() => void createBill()}>
               Create bill
             </Button>

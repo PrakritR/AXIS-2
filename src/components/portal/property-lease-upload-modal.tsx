@@ -88,9 +88,6 @@ export function PropertyLeaseUploadModal({
       panelClassName="max-w-md"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={close}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

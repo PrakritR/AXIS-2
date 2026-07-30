@@ -34,10 +34,7 @@ export function PropertyRequestEditForm({
         <Button type="button" className="rounded-full" onClick={() => onSend(note)}>
           Send edit request
         </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
+        </div>
     </div>
   );
 }

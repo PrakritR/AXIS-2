@@ -1183,9 +1183,6 @@ export function ManagerWorkOrdersPanel({
         footer={
           completeRow ? (
             <ModalFooter>
-              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
-                Cancel
-              </Button>
               <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
                 {completeBusy
                   ? "Completing…"
@@ -1326,9 +1323,6 @@ export function ManagerWorkOrdersPanel({
         footer={
           approvePayRow ? (
             <ModalFooter>
-              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
-                Cancel
-              </Button>
               <Button
                 type="button"
                 variant="primary"

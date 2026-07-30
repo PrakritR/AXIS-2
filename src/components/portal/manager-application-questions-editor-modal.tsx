@@ -283,9 +283,6 @@ export function ManagerApplicationQuestionsEditorModal({
         panelClassName="max-w-2xl"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={requestClose} disabled={saving}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

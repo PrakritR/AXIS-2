@@ -659,10 +659,7 @@ export function ManagerPaymentsLedgerPanel({
           <Button type="button" variant="outline" className={btnClass} onClick={() => saveEdit(row)}>
             Save
           </Button>
-          <Button type="button" variant="outline" className={btnClass} onClick={cancelEdit}>
-            Cancel
-          </Button>
-        </>
+          </>
       ) : (
         <Button type="button" variant="outline" className={btnClass} onClick={() => startEdit(row)}>
           Edit
@@ -899,10 +896,7 @@ export function ManagerPaymentsLedgerPanel({
               <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={saveBulkEditAmount}>
                 Save
               </Button>
-              <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={cancelEdit}>
-                Cancel
-              </Button>
-            </>
+              </>
           ) : (
             <>
               <Button

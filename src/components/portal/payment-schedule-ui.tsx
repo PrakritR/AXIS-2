@@ -515,10 +515,7 @@ export function ScheduledMessageEditForm({
               Cancel send
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Close
-          </Button>
-        </div>
+          </div>
     </div>
   );
 }

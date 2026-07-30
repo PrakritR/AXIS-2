@@ -61,9 +61,6 @@ export function ManagerWorkNumberButton({ className }: { className?: string }) {
         onClose={() => setOpen(false)}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setOpen(false)}>
-              Close
-            </Button>
             <Button
               type="button"
               variant="primary"

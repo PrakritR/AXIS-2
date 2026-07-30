@@ -51,9 +51,6 @@ export function ReportGenerateModal({
       panelClassName="max-w-lg"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

@@ -146,9 +146,6 @@ export function PortalNotificationPreviewModal({
 
   const footer = (
     <ModalFooter>
-      <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={confirmBusy}>
-        {cancelLabel}
-      </Button>
       <Button
         type="button"
         variant="primary"
@@ -318,9 +315,6 @@ export function PortalBulkPaymentReminderPreviewModal({
 
   const footer = (
     <ModalFooter>
-      <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={confirmBusy}>
-        Cancel
-      </Button>
       <Button
         type="button"
         variant="primary"

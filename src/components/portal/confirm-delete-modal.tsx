@@ -38,9 +38,6 @@ export function ConfirmDeleteModal({
       }}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="danger"

@@ -420,9 +420,6 @@ function ComposeModal({
         </div>
 
       <div className="mt-5 flex flex-wrap justify-start gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
         <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
           {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
         </Button>

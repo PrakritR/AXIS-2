@@ -259,9 +259,6 @@ export function ManagerLeaseEditorModal({
       assistantStorageScopeKey="Lease modal"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={dismiss}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

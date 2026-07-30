@@ -473,8 +473,10 @@ export function formatAvailabilitySlotLabel(slotIndex: number) {
   const mins = slotIndex * 30;
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
-  const d = new Date(2000, 0, 1, h24, m);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const ampm = h24 < 12 ? "am" : "pm";
+  if (m === 0) return `${h12} ${ampm}`;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 /** Local start time for a painted half-hour on a calendar date (midnight + slotIndex×30 min). */
