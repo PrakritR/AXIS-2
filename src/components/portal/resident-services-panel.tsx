@@ -13,6 +13,7 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_INLINE_UNLOCK_NOTICE_CLASS,
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -1262,7 +1263,7 @@ export function ResidentServicesPanel({
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
       {!servicesUnlocked ? (
-        <p className="mb-4 rounded-lg border border-border bg-[var(--status-pending-bg)] px-4 py-3 text-sm text-foreground">
+        <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
           Maintenance and add-on service requests become available once you and your manager have both signed.
         </p>

@@ -24,6 +24,12 @@ export const PORTAL_SECTION_SURFACE =
 /** Flat manager page shell — content sits on the portal gradient canvas. */
 export const PORTAL_PAGE_SHELL_BARE = "relative z-0 min-w-0 w-full";
 
+/** Compact inline unlock / status copy (Payments-style), not a stacked empty-state card. */
+export const PORTAL_INLINE_STATUS_NOTICE_CLASS =
+  "mb-3 rounded-lg border border-border px-3 py-2.5 text-sm leading-snug sm:mb-4 sm:px-4 sm:py-3";
+
+export const PORTAL_INLINE_UNLOCK_NOTICE_CLASS = `${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-foreground`;
+
 /** Subtitle under the Dashboard heading — shared across all portal dashboards. */
 export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
   const trimmed = displayName?.trim();

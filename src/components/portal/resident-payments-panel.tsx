@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, formatCompactChargeLine } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_INLINE_STATUS_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_CLASS, formatCompactChargeLine } from "@/components/portal/portal-metrics";
 import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -723,7 +723,7 @@ export function ResidentPaymentsPanel({
           Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
         </p>
         {row.status === "processing" ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
+          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]`}>
             <p className="text-xs font-semibold">Bank transfer in progress</p>
             <p className="mt-1 text-sm leading-relaxed">
               Your payment was submitted and is clearing. Bank transfers take 3–5 business days. No late fees or
@@ -732,7 +732,7 @@ export function ResidentPaymentsPanel({
           </div>
         ) : null}
         {row.manualPaymentReportedAt && row.manualPaymentChannel ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
+          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]`}>
             <p className="text-xs font-semibold">
               {residentManualPaymentMethodLabel(row.manualPaymentChannel)} payment reported
             </p>
@@ -744,7 +744,7 @@ export function ResidentPaymentsPanel({
           </div>
         ) : null}
         {row.paymentReference && (row.zelleContactSnapshot || row.venmoContactSnapshot) ? (
-          <div className="glass-card mb-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} border-primary/20 bg-primary/5`}>
             <p className="text-xs font-semibold text-foreground">Payment reference</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
               Include code{" "}
@@ -763,7 +763,7 @@ export function ResidentPaymentsPanel({
           </div>
         ) : null}
         {row.zelleContactSnapshot ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
+          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]`}>
             <p className="text-xs font-semibold">Pay with Zelle</p>
             <p className="mt-1 text-sm leading-relaxed">
               Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>.
@@ -780,7 +780,7 @@ export function ResidentPaymentsPanel({
           </div>
         ) : null}
         {row.venmoContactSnapshot ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
+          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-approved-bg)] text-[var(--status-approved-fg)]`}>
             <p className="text-xs font-semibold">Pay with Venmo</p>
             <p className="mt-1 text-sm leading-relaxed">
               Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>.
@@ -1010,7 +1010,7 @@ export function ResidentPaymentsPanel({
   const paymentsBody = (
     <>
       {!paymentsUnlocked ? (
-        <p className="mb-4 rounded-lg border border-border bg-[var(--status-pending-bg)] px-4 py-3 text-sm text-foreground">
+        <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Payments unlock after your lease is fully signed.</span>{" "}
           Rent, deposits, and online pay become available once you and your manager have both signed.
         </p>
@@ -1023,7 +1023,7 @@ export function ResidentPaymentsPanel({
       ) : (
         <>
           {showBulkCheckoutBar && checkout ? (
-            <div className="mb-6 glass-card rounded-2xl border border-border p-4">
+            <div className="mb-4 rounded-xl border border-border bg-card p-3 sm:p-4">
               {renderCheckoutBlock(
                 checkout.chargeIds.length > 1
                   ? `Pay ${checkout.chargeIds.length} charges (${formatUsd(

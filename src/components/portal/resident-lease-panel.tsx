@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
@@ -268,9 +267,9 @@ export function ResidentLeasePanel() {
             emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
           />
           {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
-            <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
+            <p className="mt-3 rounded-lg border border-border bg-[var(--status-approved-bg)] px-3 py-2.5 text-sm leading-snug text-[var(--status-approved-fg)]">
               Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
-            </Card>
+            </p>
           ) : null}
         </div>
       </>
@@ -294,7 +293,7 @@ export function ResidentLeasePanel() {
           />
         </div>
         {upgradeBreakdown ? (
-          <Card className="glass-card mt-6 border-border p-5">
+          <div className="mt-4 rounded-xl border border-border bg-card p-3 sm:p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-approved-fg)]">Upgrade to long-term rental</p>
             <p className="mt-1.5 text-sm text-muted">
               You are currently on a short-term stay. Upgrading creates a new long-term lease. Rent is due on the <strong>1st of every month</strong>; your first month will be prorated based on your move-in date.
@@ -344,7 +343,7 @@ export function ResidentLeasePanel() {
             <p className="mt-3 text-xs text-muted">
               Payments will update automatically in your Payments tab once the manager processes your upgrade. If you switch to month-to-month, a new lease at the adjusted rate is required.
             </p>
-          </Card>
+          </div>
         ) : null}
       </>
     );
@@ -518,6 +517,7 @@ export function ResidentLeasePanel() {
               activeId={tab}
               onChange={(id) => setTab(id as LeaseStatusTab)}
               ariaLabel="Lease status"
+              className="w-full"
             />
           }
         />

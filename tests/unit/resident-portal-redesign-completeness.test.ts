@@ -134,5 +134,51 @@ describe("resident portal redesign completeness", () => {
       expect(src).not.toMatch(/subtitle=\{?["'].*[Ww]elcome/);
       expect(src).toContain("hideTitleOnMobileNav");
     });
+
+    it("dashboard openCount respects customize visibility", () => {
+      const src = readPanel("resident-dashboard.tsx");
+      expect(src).toMatch(/visibility\.payments \? pendingCharges\.length : 0/);
+      expect(src).toMatch(/visibility\.services && canUseFullPortal/);
+      expect(src).toMatch(/visibility\.communication \? inboxThreads\.length : 0/);
+    });
+  });
+
+  describe("390px mobile density sweep", () => {
+    it("unlock and tier gates use compact inline notices, not glass cards", () => {
+      const unlockSurfaces = [
+        readPanel("resident-payments-panel.tsx"),
+        readPanel("resident-services-panel.tsx"),
+        readPanel("resident-move-in-panel.tsx"),
+        readFileSync(join(process.cwd(), "src/lib/render-portal-section.tsx"), "utf8"),
+      ];
+      for (const src of unlockSurfaces) {
+        expect(src).toContain("PORTAL_INLINE_UNLOCK_NOTICE_CLASS");
+        expect(src).not.toMatch(/glass-card.*unlock/i);
+      }
+      expect(readPanel("resident-payments-panel.tsx")).not.toContain("glass-card");
+      expect(readPanel("resident-lease-panel.tsx")).not.toContain("glass-card");
+    });
+
+    it("status filter rows span full width on lease and services", () => {
+      expect(readPanel("resident-lease-panel.tsx")).toMatch(/LocalDestinationNav[\s\S]*className="w-full"/);
+      const services = readPanel("resident-services-panel.tsx");
+      expect(services.match(/className="w-full"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    });
+
+    it("stranded header actions are duplicated in mobile action rows", () => {
+      const services = readPanel("resident-services-panel.tsx");
+      expect(services).toContain("resident-services-mobile-actions");
+      expect(services).toMatch(/\[&_button\]:w-full/);
+      const lease = readPanel("resident-lease-panel.tsx");
+      expect(lease).toMatch(/leaseMobileActionsRow|md:hidden/);
+    });
+
+    it("application phase dashboard is route-guarded; limited omits services; approved adds it", () => {
+      expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).not.toContain("dashboard");
+      expect(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS)).toContain("dashboard");
+      expect(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS)).not.toContain("services");
+      expect(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS)).toContain("services");
+      expect(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS)).toContain("dashboard");
+    });
   });
 });

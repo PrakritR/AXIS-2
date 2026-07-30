@@ -590,11 +590,11 @@ export function ResidentDashboard({
 
   const openServiceCount = canUseFullPortal ? serviceItems.length : 0;
   const openCount =
-    pendingCharges.length +
-    openServiceCount +
-    inboxThreads.length +
-    pendingApplicationCount +
-    (lease.cta ? 1 : 0);
+    (visibility.payments ? pendingCharges.length : 0) +
+    (visibility.services && canUseFullPortal ? openServiceCount : 0) +
+    (visibility.communication ? inboxThreads.length : 0) +
+    (visibility.applications ? pendingApplicationCount : 0) +
+    (visibility.lease && lease.cta ? 1 : 0);
 
   return (
     <ManagerPortalPageShell
