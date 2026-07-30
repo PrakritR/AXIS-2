@@ -506,6 +506,11 @@ export function ManagerApplications({
     return scopedRows.find((r) => r.id === decoded) ?? null;
   }, [applicationIdProp, scopedRows]);
 
+  const openDetailScreeningModal = useCallback(() => {
+    if (!detailRow) return;
+    setCheckrScreeningRowId(detailRow.id);
+  }, [detailRow]);
+
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
     const params = new URLSearchParams(window.location.search);
@@ -848,7 +853,7 @@ export function ManagerApplications({
         bareCanvas
         showDownload={false}
         onScreeningUpdated={handleScreeningUpdated}
-        onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
+        onOpenScreeningModal={openDetailScreeningModal}
         onScreeningHeaderActionsChange={setScreeningDetailActions}
       />
 

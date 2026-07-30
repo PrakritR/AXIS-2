@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -287,15 +287,60 @@ export function ApplicationScreeningPanel({
     ],
   );
 
-  useEffect(() => {
-    if (headerActionsPlacement !== "parent" || !onHeaderActionsChange) return;
+  const headerActionsSignature = useMemo(
+    () =>
+      [
+        showsBackgroundCheck,
+        headerActionsPlacement,
+        bg?.status ?? "",
+        busy,
+        canOrder,
+        canRunBackgroundCheck,
+        screening?.status ?? "",
+        testButtonLabel,
+      ].join("|"),
+    [
+      bg?.status,
+      busy,
+      canOrder,
+      canRunBackgroundCheck,
+      headerActionsPlacement,
+      screening?.status,
+      showsBackgroundCheck,
+      testButtonLabel,
+    ],
+  );
+
+  const headerActionsRef = useRef(headerActions);
+  headerActionsRef.current = headerActions;
+  const publishedHeaderActionsSignatureRef = useRef<string | null>(null);
+  const onHeaderActionsChangeRef = useRef(onHeaderActionsChange);
+  onHeaderActionsChangeRef.current = onHeaderActionsChange;
+
+  useLayoutEffect(() => {
+    const notify = onHeaderActionsChangeRef.current;
+    if (headerActionsPlacement !== "parent" || !notify) return;
+
     if (!showsBackgroundCheck) {
-      onHeaderActionsChange(null);
+      if (publishedHeaderActionsSignatureRef.current !== null) {
+        publishedHeaderActionsSignatureRef.current = null;
+        notify(null);
+      }
       return;
     }
-    onHeaderActionsChange(headerActions);
-    return () => onHeaderActionsChange(null);
-  }, [headerActions, headerActionsPlacement, onHeaderActionsChange, showsBackgroundCheck]);
+
+    if (publishedHeaderActionsSignatureRef.current === headerActionsSignature) return;
+    publishedHeaderActionsSignatureRef.current = headerActionsSignature;
+    notify(headerActionsRef.current);
+  }, [headerActionsPlacement, headerActionsSignature, showsBackgroundCheck]);
+
+  useEffect(() => {
+    if (headerActionsPlacement !== "parent") return;
+    return () => {
+      publishedHeaderActionsSignatureRef.current = null;
+      onHeaderActionsChangeRef.current?.(null);
+    };
+  }, [headerActionsPlacement]);
 
   if (!showsBackgroundCheck) return null;
 

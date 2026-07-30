@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType, CSSProperties, ReactNode, Ref } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
@@ -29,25 +29,25 @@ export function ModalFooter({ children, className }: { children: ReactNode; clas
 
 const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
 
+function subscribeSmallPortalViewport(onStoreChange: () => void): () => void {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const mql = window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY);
+  mql.addEventListener("change", onStoreChange);
+  return () => mql.removeEventListener("change", onStoreChange);
+}
+
+function getSmallPortalViewportPresentation(): "drawer" | "dialog" {
+  if (typeof window.matchMedia !== "function") return "dialog";
+  return window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY).matches ? "drawer" : "dialog";
+}
+
 /** Desktop dialog vs mobile Vaul drawer — matches portal `lg` breakpoint. */
 function useModalPresentation(): "drawer" | "dialog" {
-  const [presentation, setPresentation] = useState<"drawer" | "dialog">(() => {
-    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
-      return window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY).matches ? "drawer" : "dialog";
-    }
-    return "dialog";
-  });
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const mql = window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY);
-    const sync = () => setPresentation(mql.matches ? "drawer" : "dialog");
-    sync();
-    mql.addEventListener("change", sync);
-    return () => mql.removeEventListener("change", sync);
-  }, []);
-
-  return presentation;
+  return useSyncExternalStore(
+    subscribeSmallPortalViewport,
+    getSmallPortalViewportPresentation,
+    () => "dialog",
+  );
 }
 
 const DEFAULT_STACK_CLASS = "fixed inset-0 z-[70] overflow-y-auto overscroll-contain";
