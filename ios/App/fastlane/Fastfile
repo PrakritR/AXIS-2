@@ -74,19 +74,25 @@ platform :ios do
       initial_build_number: 6,
     ).to_i + 1).to_s
 
+    # Manual signing must be scoped to the App target only. Global xcargs would also
+    # set PROVISIONING_PROFILE_SPECIFIER on Swift Package dependency targets, which
+    # cannot accept a provisioning profile.
+    update_code_signing_settings(
+      path: "App.xcodeproj",
+      targets: ["App"],
+      build_configurations: ["Release"],
+      use_automatic_signing: false,
+      code_sign_identity: "Apple Distribution",
+      profile_name: profile_name,
+      team_id: "8FH3GVHCZ9",
+    )
+
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
       configuration: "Release",
       export_method: "app-store",
-      # Archive uses the Xcode project's signing settings unless overridden here.
-      xcargs: [
-        "CURRENT_PROJECT_VERSION=#{next_build}",
-        "CODE_SIGN_STYLE=Manual",
-        "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}",
-        "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(profile_name)}",
-        "DEVELOPMENT_TEAM=8FH3GVHCZ9",
-      ].join(" "),
+      xcargs: "CURRENT_PROJECT_VERSION=#{next_build}",
       export_options: {
         signingStyle: "manual",
         teamID: "8FH3GVHCZ9",
