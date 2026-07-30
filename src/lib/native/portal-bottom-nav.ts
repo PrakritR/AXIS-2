@@ -95,9 +95,9 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
-  "dashboard",
   "lease",
   "payments",
+  "dashboard",
   "communication",
 ] as const;
 
