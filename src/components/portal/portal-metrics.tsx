@@ -593,6 +593,8 @@ export function ManagerPortalPageShell({
   compactFilterRow = false,
   mobileHideFilterRow = false,
   mobileFlush = false,
+  /** Communication thread reading: flex-fill children to the bottom nav on phones. */
+  mobileThreadFill = false,
   surfaceCard = false,
   count,
 }: {
@@ -617,6 +619,8 @@ export function ManagerPortalPageShell({
   mobileHideFilterRow?: boolean;
   /** Tighter section chrome on phones (e.g. full-bleed inbox thread). */
   mobileFlush?: boolean;
+  /** Flex-fill page body on phones so inbox thread + composer reach the bottom nav. */
+  mobileThreadFill?: boolean;
   /** Legacy white card shell — default is flat on the page canvas. */
   surfaceCard?: boolean;
   /** Optional record count beside the title. */
@@ -641,6 +645,7 @@ export function ManagerPortalPageShell({
         surfaceCard && "relative z-0 min-w-0 w-full shrink-0",
         mobileFlush &&
           "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
+        mobileThreadFill && "max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
       )}
     >
       {useInlineTitleBand ? (
@@ -726,6 +731,7 @@ export function ManagerPortalPageShell({
             tightChrome
               ? "mt-1.5 max-lg:mt-0 sm:mt-2 [html[data-native]_&]:mt-0"
               : "mt-4 sm:mt-6 max-lg:mt-0 [html[data-native]_&]:mt-0",
+            mobileThreadFill && "max-md:mt-0 max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
           )}
         >
           {children}

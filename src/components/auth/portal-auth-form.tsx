@@ -2,18 +2,22 @@
 
 import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
-import { AuthDivider, AuthLegalConsent, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { AuthBrandHeader, AuthDivider, AuthLegalConsent, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
 import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
+import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
+import { portalNavClick } from "@/lib/portal-nav-client";
+import { residentBrowseFromAuthHref } from "@/lib/resident-public-nav";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 const LOGIN_TIMEOUT_MS = 6000;
 const REMEMBERED_EMAIL_KEY = "axis:remembered-login-email";
@@ -80,11 +84,22 @@ async function tryResidentAutoConfirm(email: string): Promise<boolean> {
  * AFTER authentication (the single engine + /auth/get-started chooser), so this screen
  * has no role toggle, no plan selection, and no "change role" affordance.
  */
-export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
+export function PortalAuthForm({
+  mode,
+  variant = "default",
+}: {
+  mode: "sign-in" | "create";
+  /** Hub layout matches the legacy NativeAuthHub create surface (placeholders, no role toggle). */
+  variant?: "default" | "hub";
+}) {
+  const router = useRouter();
   const { showToast } = useAppUi();
+  const { isNative } = useIsNativeApp();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
   const isCreate = mode === "create";
+  const isHub = variant === "hub";
+  useAuthWelcomeChrome(isCreate);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -224,6 +239,150 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
 
   const submit = isCreate ? handleCreate : handleSignIn;
 
+  const browseHomesHref = residentBrowseFromAuthHref();
+  const onBrowseHomesClick = useMemo(
+    () => portalNavClick(router, browseHomesHref, { preferFullNavigation: true }),
+    [browseHomesHref, router],
+  );
+
+  const stackClassName = `native-auth-hub-stack mx-auto w-full self-center ${isHub && isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
+
+  const hubFields = (
+    <div className="space-y-3">
+      {isCreate ? (
+        <Input
+          autoComplete="name"
+          placeholder="Full name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          disabled={busy}
+        />
+      ) : null}
+      <Input
+        type="email"
+        autoComplete="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        disabled={busy}
+      />
+      <PasswordInput
+        autoComplete={isCreate ? "new-password" : "current-password"}
+        placeholder={isCreate ? "Password (8+ characters)" : "Password"}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        disabled={busy}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void submit();
+        }}
+      />
+    </div>
+  );
+
+  const labeledFields = (
+    <div className="space-y-3 sm:space-y-4">
+      {isCreate ? (
+        <div>
+          <label className="text-xs font-semibold text-muted" htmlFor="full-name">
+            Full name
+          </label>
+          <Input
+            id="full-name"
+            className="mt-1.5"
+            autoComplete="name"
+            placeholder="Your name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            disabled={busy}
+          />
+        </div>
+      ) : null}
+      <div>
+        <label className="text-xs font-semibold text-muted" htmlFor="email">
+          Email
+        </label>
+        <Input
+          id="email"
+          className="mt-1.5"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-muted" htmlFor="password">
+          {isCreate ? "Create password" : "Password"}
+        </label>
+        <PasswordInput
+          id="password"
+          className="mt-1.5"
+          autoComplete={isCreate ? "new-password" : "current-password"}
+          placeholder={isCreate ? "Minimum 8 characters" : undefined}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={busy}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  if (isHub && isCreate) {
+    return (
+      <div className={stackClassName} data-auth-mode="create-compact">
+        <AuthCard variant="blend" wide>
+          <div className="native-auth-hub">
+            {isNative ? (
+              <div className="auth-brand-header-wrap mb-4">
+                <AuthBrandHeader homeLink />
+              </div>
+            ) : null}
+
+            <div className="space-y-3">
+              <OAuthSocialStack nextPath={nextPath} disabled={busy} />
+              <AuthDivider label="or enter your details" />
+              {hubFields}
+              {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
+              <Button
+                type="button"
+                data-attr="portal-auth-create-submit"
+                className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                onClick={() => void submit()}
+                disabled={busy}
+              >
+                {busy ? "Creating…" : "Create account"}
+              </Button>
+            </div>
+          </div>
+        </AuthCard>
+
+        <div className="native-auth-hub-footer relative z-10 mt-5 space-y-3 text-center text-[12px]">
+          <p className="text-muted">
+            Already have an account?{" "}
+            <Link className="font-semibold text-primary hover:opacity-90" href="/auth/sign-in" data-attr="auth-hub-sign-in">
+              Sign in
+            </Link>
+          </p>
+          <AuthLegalConsent action="create" className="px-1" />
+          <p>
+            <Link
+              href={browseHomesHref}
+              onClick={onBrowseHomesClick}
+              data-attr="resident-browse-homes"
+              className="text-sm font-semibold text-primary hover:opacity-90"
+            >
+              Browse homes
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthCard>
       <AuthPageHeader
@@ -241,55 +400,7 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
         <AuthDivider />
       </div>
 
-      <div className="space-y-3 sm:space-y-4">
-        {isCreate ? (
-          <div>
-            <label className="text-xs font-semibold text-muted" htmlFor="full-name">
-              Full name
-            </label>
-            <Input
-              id="full-name"
-              className="mt-1.5"
-              autoComplete="name"
-              placeholder="Your name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-        ) : null}
-        <div>
-          <label className="text-xs font-semibold text-muted" htmlFor="email">
-            Email
-          </label>
-          <Input
-            id="email"
-            className="mt-1.5"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-muted" htmlFor="password">
-            {isCreate ? "Create password" : "Password"}
-          </label>
-          <PasswordInput
-            id="password"
-            className="mt-1.5"
-            autoComplete={isCreate ? "new-password" : "current-password"}
-            placeholder={isCreate ? "Minimum 8 characters" : undefined}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={busy}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void submit();
-            }}
-          />
-        </div>
-      </div>
+      {labeledFields}
 
       {!isCreate ? (
         <div className="mt-3 text-sm sm:mt-4">

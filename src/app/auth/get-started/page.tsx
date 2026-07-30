@@ -9,7 +9,8 @@ import {
   AUTH_PORTAL_PICKER_OPTIONS,
   type AuthPortalPickerId,
 } from "@/lib/auth/auth-portal-picker-options";
-import { authCreateAccountHref } from "@/lib/auth/auth-role-signup-routes";
+import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
+import { provisionPortalFromGetStarted } from "@/lib/auth/provision-portal-from-get-started";
 import { isGetStartedDestination, resolvePostAuthDestination } from "@/lib/auth/resolve-post-auth-destination";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
@@ -32,7 +33,7 @@ function GetStartedContent() {
       AUTH_PORTAL_PICKER_OPTIONS.map((opt) => ({
         id: opt.id,
         label: opt.chooserLabel,
-        hint: opt.chooserHint,
+        hint: opt.id === "vendor" ? opt.chooserHint : undefined,
         icon: opt.icon,
         tone: opt.tone,
       })),
@@ -58,11 +59,17 @@ function GetStartedContent() {
     };
   }, [showToast]);
 
-  const choose = (id: string) => {
+  const choose = async (id: string) => {
     const role = id as AuthPortalPickerId;
     if (!AUTH_PORTAL_PICKER_OPTIONS.some((opt) => opt.id === role)) return;
     setBusy(id);
-    window.location.replace(authCreateAccountHref(role));
+    const result = await provisionPortalFromGetStarted(role);
+    if (!result.ok) {
+      showToast(result.error);
+      setBusy(null);
+      return;
+    }
+    await navigateAfterRoleSignup(result.redirectTo);
   };
 
   const signOut = async () => {
@@ -90,7 +97,6 @@ function GetStartedContent() {
       <AuthPageHeader
         showLogo
         title="How do you want to use PropLane?"
-        subtitle="Pick the option that fits you; you can add other portal types later from Settings."
         accent={false}
       />
 

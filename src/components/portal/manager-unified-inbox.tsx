@@ -565,11 +565,14 @@ export function ManagerUnifiedInbox({
       />
     );
 
+  const threadOpen = (mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection);
+
   return (
     <InboxTwoPane
       mobileCompact
+      fillViewport={threadOpen}
       className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
-      threadOpen={(mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection)}
+      threadOpen={threadOpen}
       list={listPane}
       thread={threadPane}
     />

@@ -43,6 +43,8 @@ export type PropertyLeaseTemplate = {
   customLeaseTerms: string;
   leaseTemplateDocUrl: string | null;
   leaseTemplateDocName: string;
+  /** Manager-edited full HTML override for this template (PropLane default or uploaded shell). */
+  leaseTemplateHtmlOverride?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -143,6 +145,7 @@ export function createPropertyLeaseTemplate(args: {
     customLeaseTerms: args.customLeaseTerms?.trim() ?? "",
     leaseTemplateDocUrl: args.leaseTemplateDocUrl ?? null,
     leaseTemplateDocName: args.leaseTemplateDocName?.trim() ?? "",
+    leaseTemplateHtmlOverride: "",
     listingSeedKey: args.listingSeedKey,
     applicationLeaseTerms: args.applicationLeaseTerms?.length ? [...args.applicationLeaseTerms] : undefined,
     createdAt: stamp,
@@ -157,7 +160,12 @@ function isPropertyLeaseTemplate(raw: unknown): raw is PropertyLeaseTemplate & {
 }
 
 function normalizeTemplate(row: PropertyLeaseTemplate & { kind: string }): PropertyLeaseTemplate {
-  return { ...row, kind: normalizeLeaseTemplateKind(row.kind) };
+  return {
+    ...row,
+    kind: normalizeLeaseTemplateKind(row.kind),
+    leaseTemplateHtmlOverride:
+      typeof row.leaseTemplateHtmlOverride === "string" ? row.leaseTemplateHtmlOverride : "",
+  };
 }
 
 /** Migrate legacy single lease fields into a template list when needed. */
@@ -191,6 +199,7 @@ export function readPropertyLeaseTemplates(
           ? sub.leaseTemplateDocUrl
           : null,
       leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
+      leaseTemplateHtmlOverride: "",
       createdAt: stamp,
       updatedAt: stamp,
     },

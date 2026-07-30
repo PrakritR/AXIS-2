@@ -194,7 +194,7 @@ export function PortalFilterSortSheet({
         </div>
       ) : null}
       {isMobile ? (
-        <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" autoElevate flushBody>
+        <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" fullScreen flushBody>
           <div className="flex w-full flex-col overflow-hidden">{fields}</div>
         </VaulBottomSheet>
       ) : desktopPresentation === "panel" ? (

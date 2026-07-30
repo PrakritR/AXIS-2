@@ -8,12 +8,18 @@ type SegmentedTwoProps<T extends string> = {
   className?: string;
 };
 
+type SegmentedThreeOption<T extends string> = {
+  id: T;
+  label: string;
+  count?: number;
+};
+
 type SegmentedThreeProps<T extends string> = {
   value: T;
   onChange: (id: T) => void;
-  first: { id: T; label: string };
-  second: { id: T; label: string };
-  third: { id: T; label: string };
+  first: SegmentedThreeOption<T>;
+  second: SegmentedThreeOption<T>;
+  third: SegmentedThreeOption<T>;
   className?: string;
   disabled?: boolean;
 };
@@ -50,6 +56,9 @@ export function SegmentedThree<T extends string>({
             style={active ? { background: "var(--btn-primary)" } : undefined}
           >
             {opt.label}
+            {opt.count !== undefined ? (
+              <span className="ml-1 tabular-nums opacity-80">{opt.count}</span>
+            ) : null}
           </button>
         );
       })}

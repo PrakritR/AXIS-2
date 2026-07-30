@@ -7,6 +7,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import {
+  buildInboxThreadAssistantContext,
+  InboxThreadAssistantStrip,
+} from "@/components/portal/inbox-thread-assistant-strip";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -148,6 +152,8 @@ export const ManagerInbox = forwardRef<
     onControlledExpandedIdChange?: (id: string | null) => void;
     smsUiEnabled?: boolean;
     smsRecipients?: ManagerSmsResidentConversation[];
+    /** Let the portal page scroll the thread instead of a nested pane (resident profile). */
+    pageScroll?: boolean;
   }
 >(function ManagerInbox(
   {
@@ -163,6 +169,7 @@ export const ManagerInbox = forwardRef<
     controlledExpandedId,
     onControlledExpandedIdChange,
     smsUiEnabled = false,
+    pageScroll = false,
     smsRecipients = [],
   },
   ref,
@@ -1205,6 +1212,7 @@ export const ManagerInbox = forwardRef<
       onBack={() => setExpandedId(null)}
       headerActions={threadHeaderActions}
       emptyLabel="No messages in this conversation."
+      scrollMode={pageScroll ? "page" : "pane"}
       composer={
         activeThread.folder === "trash" ? undefined : (
           <>
@@ -1229,6 +1237,14 @@ export const ManagerInbox = forwardRef<
                 }
               />
             ) : null}
+            <InboxThreadAssistantStrip
+              contextHint={buildInboxThreadAssistantContext({
+                subject: activeThread.subject,
+                email: activeThread.email,
+                from: activeThread.from,
+                sentSemantics: activeIsSent,
+              })}
+            />
             <InboxComposer
               value={replyDraft}
               onChange={setReplyDraft}
@@ -1297,7 +1313,7 @@ export const ManagerInbox = forwardRef<
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : suppressListPane ? (
-        <div className="flex min-h-0 flex-1 flex-col">{threadPane}</div>
+        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,7 +17,7 @@ import {
 
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
-import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -110,6 +110,7 @@ export function ManagerPaymentsLedgerPanel({
   embeddedInResident = false,
   buildPaymentDetailHref,
   onEmbeddedDetailActions,
+  onEmbeddedBulkActions,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
@@ -126,6 +127,7 @@ export function ManagerPaymentsLedgerPanel({
   embeddedInResident?: boolean;
   buildPaymentDetailHref?: (row: DemoManagerPaymentLedgerRow) => string;
   onEmbeddedDetailActions?: (actions: ReactNode | null) => void;
+  onEmbeddedBulkActions?: (actions: ReactNode | null) => void;
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
@@ -566,10 +568,6 @@ export function ManagerPaymentsLedgerPanel({
     );
   };
 
-  if (!hasAnySource) {
-    return <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />;
-  }
-
   const doSendBulkReminders = async () => {
     if (!bulkReminderPreview?.length) return;
     const targetIds = new Set(bulkReminderPreview.map((item) => item.id));
@@ -804,6 +802,138 @@ export function ManagerPaymentsLedgerPanel({
     activeBucket,
   ]);
 
+  const bulkActionsSignature = useMemo(() => {
+    if (selectedIds.size === 0) return "";
+    const selectedIdList = [...selectedIds].sort().join(",");
+    const meta = [
+      activeBucket,
+      editingRowId ?? "",
+      sendingReminderId ?? "",
+      singleSelectedRow?.id ?? "",
+      singleSelectedRow?.householdChargeId ?? "",
+      remindableSelectedRows.length,
+      selectedRows.some(isMarkableAsPaid) ? "1" : "0",
+      selectedRows.some((row) => !isPaidRow(row)) ? "1" : "0",
+      activeBucket === "paid" && selectedRows.length > 0 ? "1" : "0",
+      singleSelectedRow && !isPaidRow(singleSelectedRow) ? "1" : "0",
+      editingRowId === singleSelectedRow?.id ? "1" : "0",
+    ].join("|");
+    return `${selectedIdList}|${meta}`;
+  }, [
+    selectedIds,
+    activeBucket,
+    editingRowId,
+    sendingReminderId,
+    singleSelectedRow,
+    remindableSelectedRows.length,
+    selectedRows,
+  ]);
+
+  const bulkSelectionActions =
+    selectedIds.size > 0 ? (
+      <>
+        {selectedRows.some(isMarkableAsPaid) ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PAYMENTS_BULK_BAR_BTN}
+            data-attr="payments-mark-selected-paid"
+            onClick={markSelectedAsPaid}
+          >
+            Mark as paid
+          </Button>
+        ) : null}
+        {selectedRows.some((row) => !isPaidRow(row)) ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PAYMENTS_BULK_BAR_BTN}
+            disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
+            data-attr="payments-send-reminder"
+            title={
+              remindableSelectedRows.length === 0
+                ? "Select at least one unpaid charge."
+                : undefined
+            }
+            onClick={() => {
+              if (remindableSelectedRows.length === 1) {
+                openReminderPreview(remindableSelectedRows[0]!);
+                return;
+              }
+              openBulkReminderPreview();
+            }}
+          >
+            {sendingReminderId ? "Sending…" : "Send reminder"}
+          </Button>
+        ) : null}
+        {activeBucket === "paid" && selectedRows.length > 0 ? (
+          <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={moveSelectedToPending}>
+            Move to pending
+          </Button>
+        ) : null}
+        {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
+          editingRowId === singleSelectedRow.id ? (
+            <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={saveBulkEditAmount}>
+              Save
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => {
+                  startEdit(singleSelectedRow);
+                  openPaymentDetail(singleSelectedRow);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => setChargeRemindersRow(singleSelectedRow)}
+              >
+                Schedule reminders
+              </Button>
+            </>
+          )
+        ) : null}
+        <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={deleteSelected}>
+          Delete
+        </Button>
+      </>
+    ) : null;
+
+  const bulkSelectionActionsRef = useRef<ReactNode>(null);
+  bulkSelectionActionsRef.current = bulkSelectionActions;
+  const publishedBulkSignatureRef = useRef<string | null>(null);
+  const onEmbeddedBulkActionsRef = useRef(onEmbeddedBulkActions);
+  onEmbeddedBulkActionsRef.current = onEmbeddedBulkActions;
+
+  useLayoutEffect(() => {
+    const notify = onEmbeddedBulkActionsRef.current;
+    if (!embeddedInResident || !notify) return;
+
+    const signature = bulkActionsSignature || "__empty__";
+    if (publishedBulkSignatureRef.current === signature) return;
+    publishedBulkSignatureRef.current = signature;
+
+    notify(bulkActionsSignature ? bulkSelectionActionsRef.current : null);
+  }, [bulkActionsSignature, embeddedInResident]);
+
+  useEffect(() => {
+    if (!embeddedInResident) {
+      publishedBulkSignatureRef.current = null;
+      onEmbeddedBulkActionsRef.current?.(null);
+    }
+    return () => {
+      publishedBulkSignatureRef.current = null;
+      onEmbeddedBulkActionsRef.current?.(null);
+    };
+  }, [embeddedInResident]);
+
   return (
     <>
     {reminderPreview && (
@@ -852,81 +982,9 @@ export function ManagerPaymentsLedgerPanel({
         onOpenSettings={onOpenReminderSettings}
       />
     ) : null}
-    {selectedIds.size > 0 ? (
+    {selectedIds.size > 0 && !(embeddedInResident && onEmbeddedBulkActions) ? (
       <BulkActionBar count={selectedIds.size} variant="payments">
-        {selectedRows.some(isMarkableAsPaid) ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={PAYMENTS_BULK_BAR_BTN}
-            data-attr="payments-mark-selected-paid"
-            onClick={markSelectedAsPaid}
-          >
-            Mark as paid
-          </Button>
-        ) : null}
-        {selectedRows.some((row) => !isPaidRow(row)) ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={PAYMENTS_BULK_BAR_BTN}
-            disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
-            data-attr="payments-send-reminder"
-            title={
-              remindableSelectedRows.length === 0
-                ? "Select at least one unpaid charge."
-                : undefined
-            }
-            onClick={() => {
-              if (remindableSelectedRows.length === 1) {
-                openReminderPreview(remindableSelectedRows[0]!);
-                return;
-              }
-              openBulkReminderPreview();
-            }}
-          >
-            {sendingReminderId ? "Sending…" : "Send reminder"}
-          </Button>
-        ) : null}
-        {activeBucket === "paid" && selectedRows.length > 0 ? (
-          <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={moveSelectedToPending}>
-            Move to pending
-          </Button>
-        ) : null}
-        {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
-          editingRowId === singleSelectedRow.id ? (
-            <>
-              <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={saveBulkEditAmount}>
-                Save
-              </Button>
-              </>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className={PAYMENTS_BULK_BAR_BTN}
-                onClick={() => {
-                  startEdit(singleSelectedRow);
-                  openPaymentDetail(singleSelectedRow);
-                }}
-              >
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={PAYMENTS_BULK_BAR_BTN}
-                onClick={() => setChargeRemindersRow(singleSelectedRow)}
-              >
-                Schedule reminders
-              </Button>
-            </>
-          )
-        ) : null}
-        <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={deleteSelected}>
-          Delete
-        </Button>
+        {bulkSelectionActions}
       </BulkActionBar>
     ) : null}
     {paymentIdProp && detailRow ? (
@@ -959,8 +1017,10 @@ export function ManagerPaymentsLedgerPanel({
         {renderPaymentDetailPanel(detailRow)}
       </PortalRecordDetailPage>
       )
+    ) : !hasAnySource ? (
+      <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
     ) : (
-      <div className={INBOX_LIST_SCROLL}>
+      <div className={PORTAL_LIST_PAGE_BODY}>
         {showSelection ? (
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
             <input

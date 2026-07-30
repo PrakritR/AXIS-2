@@ -1241,43 +1241,39 @@ export function PortalCalendarPanels({
                 : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
             )}
           >
-            <div className="flex min-w-0 items-center justify-center sm:justify-start">
-              <div
-                className={cn(
-                  bareSurface
-                    ? "inline-flex shrink-0 items-center gap-0.5"
-                    : "inline-flex shrink-0 items-center rounded-full border border-border/70 bg-card p-0.5 shadow-sm",
-                )}
+            <div className="flex w-full min-w-0 items-center gap-1 sm:gap-2">
+              <Button
+                type="button"
+                variant={bareSurface ? "ghost" : "outline"}
+                className="h-8 w-8 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(-1)}
+                aria-label="Previous week"
               >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
-                  onClick={() => shiftAvailabilityWeek(-1)}
-                  aria-label="Previous week"
-                >
-                  ←
-                </Button>
-                <p className="whitespace-nowrap px-2 text-xs font-semibold text-foreground sm:text-sm">
+                ←
+              </Button>
+
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                <p className="whitespace-nowrap text-center text-xs font-semibold text-foreground sm:text-sm">
                   {formatWeekRangeMonSun(weekMonday)}
                 </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
-                  onClick={() => shiftAvailabilityWeek(1)}
-                  aria-label="Next week"
-                >
-                  →
-                </Button>
+                {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
               </div>
+
+              <Button
+                type="button"
+                variant={bareSurface ? "ghost" : "outline"}
+                className="h-8 w-8 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(1)}
+                aria-label="Next week"
+              >
+                →
+              </Button>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5 sm:justify-start sm:gap-2">
               {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
               {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
               {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
-              {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
               {vendorMode ? (
                 <Button
                   type="button"
@@ -1300,35 +1296,34 @@ export function PortalCalendarPanels({
                   Add work
                 </Button>
               ) : null}
-            </div>
-
-            {!vendorMode && !readOnly ? (
-              <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
-                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
-                  Copy previous week
-                </Button>
-                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
-                  Block
-                </Button>
-                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
-                  Clear
-                </Button>
-                {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    onClick={() => {
-                      setSelectedHouseIds(new Set());
-                      setCopyToHousesScope("week");
-                      setUpdateToHousesOpen(true);
-                    }}
-                  >
-                    Copy to houses
+              {!vendorMode && !readOnly ? (
+                <>
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
+                    Copy previous week
                   </Button>
-                ) : null}
-              </div>
-            ) : null}
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
+                    Block
+                  </Button>
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
+                    Clear
+                  </Button>
+                  {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={COMPACT_CALENDAR_ACTION_BTN}
+                      onClick={() => {
+                        setSelectedHouseIds(new Set());
+                        setCopyToHousesScope("week");
+                        setUpdateToHousesOpen(true);
+                      }}
+                    >
+                      Copy to houses
+                    </Button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           </div>
 
           <div className={bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5"}>

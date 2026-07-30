@@ -10,7 +10,7 @@ import {
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -202,7 +202,7 @@ export function ManagerOutgoingPaymentsPanel({
   }
 
   return (
-    <div className={INBOX_LIST_SCROLL}>
+    <div className={PORTAL_LIST_PAGE_BODY}>
       {rows.map((row) => (
         <PortalPersonRecordRow
           key={row.id}

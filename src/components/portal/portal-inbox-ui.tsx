@@ -816,6 +816,13 @@ export function InboxReplyChannelPicker({
   );
 }
 
+/** Shared thread-reply field + send affordance — keep identical across email/SMS/resident chat. */
+export const PORTAL_INBOX_COMPOSER_INPUT_CLASS =
+  "portal-inbox-composer-input max-h-32 min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-[15px] leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60 sm:text-sm";
+
+export const PORTAL_INBOX_COMPOSER_SEND_CLASS =
+  "portal-inbox-composer-send mb-0.5 flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full bg-[var(--btn-primary)] text-primary-foreground shadow-[0_4px_14px_-6px_rgba(47,107,255,0.65)] transition-[filter,opacity] hover:brightness-110 disabled:opacity-40";
+
 /** Persistent composer pinned to the bottom of an open thread. */
 export function InboxComposer({
   value,
@@ -844,12 +851,11 @@ export function InboxComposer({
   const canSend = !sending && !disabled && value.trim().length > 0;
   return (
     <div
-      className="portal-inbox-composer shrink-0 border-t border-border bg-card"
-      style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
+      className="portal-inbox-composer shrink-0 border-t border-border bg-card max-md:pb-[max(0.375rem,env(safe-area-inset-bottom,0px))] md:pb-[max(0.625rem,env(safe-area-inset-bottom,0px))]"
     >
       {channelBar ?? null}
       <form
-        className="px-2 py-2 max-md:py-1.5 md:px-3 md:py-2.5"
+        className="px-2 py-1.5 max-md:py-1 md:px-3 md:py-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (canSend) onSubmit();
@@ -857,7 +863,7 @@ export function InboxComposer({
       >
         <div className="portal-inbox-composer-row flex items-end gap-2">
           <textarea
-            rows={3}
+            rows={1}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
@@ -865,7 +871,7 @@ export function InboxComposer({
             disabled={disabled}
             enterKeyHint="send"
             data-attr={dataAttr}
-            className="portal-inbox-composer-input max-h-48 min-h-[3.25rem] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-3 text-[15px] leading-relaxed text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60 sm:text-sm"
+            className={PORTAL_INBOX_COMPOSER_INPUT_CLASS}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -878,8 +884,7 @@ export function InboxComposer({
             disabled={!canSend}
             aria-label="Send"
             data-attr={dataAttr ? `${dataAttr}-send` : undefined}
-            className="portal-inbox-composer-send mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
-            style={{ background: "var(--btn-primary)" }}
+            className={PORTAL_INBOX_COMPOSER_SEND_CLASS}
           >
             {sending ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -1414,6 +1419,8 @@ export function InboxThreadView({
   afterMessages,
   emptyLabel = "No messages yet.",
   threadKey,
+  /** `pane` scrolls inside the thread body; `page` lets the portal main scroller handle it (embedded resident chat). */
+  scrollMode = "pane",
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
@@ -1441,7 +1448,9 @@ export function InboxThreadView({
    * near the bottom — so scrolling up through history is never yanked back.
    */
   threadKey?: string;
+  scrollMode?: "pane" | "page";
 }) {
+  const pageScroll = scrollMode === "page";
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevThreadKeyRef = useRef<string | undefined>(undefined);
@@ -1471,7 +1480,7 @@ export function InboxThreadView({
   }, [messages.length, threadKey]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
       <header
         className="portal-inbox-thread-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]"
       >
@@ -1501,15 +1510,19 @@ export function InboxThreadView({
 
       <div
         ref={scrollRef}
-        onScroll={handleThreadScroll}
-        className="portal-inbox-thread-body flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background/40 px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3"
+        onScroll={pageScroll ? undefined : handleThreadScroll}
+        className={
+          pageScroll
+            ? "portal-inbox-thread-body flex flex-col bg-background/40 px-2 py-2 md:px-3 md:py-3"
+            : "portal-inbox-thread-body flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background/40 px-2 py-2 [-webkit-overflow-scrolling:touch] md:px-3 md:py-3"
+        }
       >
         {messages.length === 0 && !afterMessages ? (
-          <div className="flex min-h-full flex-1 items-center justify-center py-4">
+          <div className={`flex flex-col items-center justify-center py-4 ${pageScroll ? "" : "min-h-full flex-1"}`}>
             <PortalInboxEmptyState title={emptyLabel} />
           </div>
         ) : (
-          <div className="mt-auto flex w-full flex-col gap-2 md:gap-3">
+          <div className={`flex w-full flex-col gap-2 md:gap-3 ${pageScroll ? "" : "mt-auto"}`}>
             {messages.map((m) => (
               <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />
             ))}
@@ -1539,11 +1552,13 @@ export function InboxTwoPane({
   listHidden = false,
   /**
    * `section` caps height for embedded profile panels; `viewport` fills available
-   * screen space (full inbox pages).
+   * screen space (full inbox pages); `flow` grows with content (resident profile chat).
    */
   heightMode = "viewport",
   /** Tighter viewport fill on phones (Communication page with heavy filter chrome). */
   mobileCompact = false,
+  /** Mobile thread reading: stretch to the bottom nav with no dead space below the composer. */
+  fillViewport = false,
 }: {
   list: ReactNode;
   thread: ReactNode;
@@ -1551,14 +1566,15 @@ export function InboxTwoPane({
   threadOpen: boolean;
   className?: string;
   listHidden?: boolean;
-  heightMode?: "viewport" | "section";
+  heightMode?: "viewport" | "section" | "flow";
   mobileCompact?: boolean;
+  fillViewport?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
 
   useEffect(() => {
-    if (heightMode === "section") return;
+    if (heightMode === "section" || heightMode === "flow") return;
     const measure = () => {
       const el = rootRef.current;
       if (!el || typeof window === "undefined") return;
@@ -1570,8 +1586,13 @@ export function InboxTwoPane({
       const navHeight = bottomNav ? bottomNav.getBoundingClientRect().height : 0;
       const narrow = window.innerWidth < 768;
       const compact = mobileCompact && narrow;
-      const edgePad = compact ? 8 : 16;
+      const flushThread = fillViewport && narrow;
+      const edgePad = flushThread ? 0 : compact ? 8 : 16;
       const avail = window.innerHeight - top - navHeight - edgePad;
+      if (flushThread) {
+        setMeasuredHeight(Math.max(240, avail));
+        return;
+      }
       const minH = compact ? 280 : narrow ? 360 : 440;
       const maxH = compact ? 600 : narrow ? 680 : 760;
       setMeasuredHeight(Math.max(minH, Math.min(maxH, avail)));
@@ -1587,21 +1608,33 @@ export function InboxTwoPane({
       window.clearTimeout(timer);
       window.removeEventListener("resize", measure);
     };
-  }, [heightMode, mobileCompact]);
+  }, [fillViewport, heightMode, mobileCompact]);
 
   const sectionHeight = "min(20rem, 38dvh)";
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
+  const flexFillMobile = fillViewport && threadOpen;
+  const flowLayout = heightMode === "flow";
   const height =
-    heightMode === "section" ? sectionHeight : measuredHeight ? `${measuredHeight}px` : fallback;
+    flowLayout
+      ? undefined
+      : heightMode === "section"
+        ? sectionHeight
+        : flexFillMobile
+          ? undefined
+          : measuredHeight
+            ? `${measuredHeight}px`
+            : fallback;
 
   return (
     <div
       ref={rootRef}
-      className={`portal-inbox-two-pane overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] max-md:rounded-xl max-md:border-x-0 max-md:shadow-none ${className}`}
-      style={{ height }}
+      className={`portal-inbox-two-pane rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] max-md:rounded-xl max-md:border-x-0 max-md:shadow-none ${flowLayout ? "overflow-visible" : "overflow-hidden"} ${flexFillMobile ? "max-md:flex max-md:min-h-0 max-md:flex-1" : ""} ${className}`}
+      style={height ? { height } : undefined}
       data-attr="portal-inbox-two-pane"
+      data-fill-viewport={flexFillMobile ? "true" : undefined}
+      data-height-mode={flowLayout ? "flow" : undefined}
     >
-      <div className={`grid h-full ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(320px,38%)_1fr]"}`}>
+      <div className={`grid ${flowLayout ? "" : "h-full"} ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(320px,38%)_1fr]"}`}>
         <section
           className={`portal-inbox-list-pane min-h-0 min-w-0 flex-col border-border lg:border-r ${
             listHidden ? "hidden" : threadOpen ? "hidden lg:flex" : "flex"

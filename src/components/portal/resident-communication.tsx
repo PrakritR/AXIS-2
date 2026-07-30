@@ -58,9 +58,11 @@ function loadOpenedIds(): Set<string> {
 function ResidentUnifiedInbox({
   inboxRef,
   smsUiEnabled,
+  onThreadOpenChange,
 }: {
   inboxRef: React.RefObject<ResidentInboxPanelHandle | null>;
   smsUiEnabled: boolean;
+  onThreadOpenChange?: (open: boolean) => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
@@ -162,6 +164,10 @@ function ResidentUnifiedInbox({
   const merged = useMemo(() => mergeUnifiedInboxItems([...emailItems, ...smsItems]), [emailItems, smsItems]);
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
   const archivedCount = useMemo(() => filteredEmail.filter((t) => t.folder === "trash").length, [filteredEmail]);
+
+  useEffect(() => {
+    onThreadOpenChange?.(Boolean(selection));
+  }, [onThreadOpenChange, selection]);
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -271,7 +277,10 @@ function ResidentUnifiedInbox({
     </>
   );
 
-  return <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />;
+  const threadOpen = Boolean(selection);
+  return (
+    <InboxTwoPane fillViewport={threadOpen} threadOpen={threadOpen} list={listPane} thread={threadPane} />
+  );
 }
 
 export type ResidentEmailTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
@@ -284,6 +293,7 @@ export function ResidentCommunication({
   smsUiEnabled?: boolean;
 }) {
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
+  const [threadOpen, setThreadOpen] = useState(false);
 
   const titleAside = (
     <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
@@ -312,8 +322,18 @@ export function ResidentCommunication({
   );
 
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside} mobileActionsRow={mobileActionsRow}>
-      <ResidentUnifiedInbox inboxRef={inboxRef} smsUiEnabled={smsUiEnabled} />
+    <PortalCommunicationShell
+      title="Communication"
+      titleAside={titleAside}
+      mobileActionsRow={mobileActionsRow}
+      hideMobileFilterRow={threadOpen}
+      mobileThreadReading={threadOpen}
+    >
+      <ResidentUnifiedInbox
+        inboxRef={inboxRef}
+        smsUiEnabled={smsUiEnabled}
+        onThreadOpenChange={setThreadOpen}
+      />
     </PortalCommunicationShell>
   );
 }

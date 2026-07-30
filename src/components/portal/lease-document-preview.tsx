@@ -17,6 +17,8 @@ type Props = {
   peek?: boolean;
   /** Fill the parent flex area with a scrollable document frame (lease edit modal). */
   fill?: boolean;
+  /** Grow to fill the parent while keeping the lease document label (resident profile). */
+  stretch?: boolean;
   /** Enable double-click section selection (posts section id to parent). */
   interactive?: boolean;
   onSectionSelect?: (sectionId: string) => void;
@@ -41,6 +43,7 @@ export function LeaseDocumentPreview({
   className,
   peek = false,
   fill = false,
+  stretch = false,
   interactive = false,
   onSectionSelect,
 }: Props) {
@@ -72,12 +75,13 @@ export function LeaseDocumentPreview({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [interactive, onSectionSelect]);
-  const frameClass = fill
+  const flexibleHeight = fill || stretch;
+  const frameClass = flexibleHeight
     ? "absolute inset-0 h-full w-full border-0 bg-card"
     : peek
       ? "h-[7.25rem] w-full bg-card pointer-events-none sm:h-[8.5rem]"
       : "h-[min(52vh,420px)] w-full bg-card";
-  const emptyClass = fill
+  const emptyClass = flexibleHeight
     ? "flex min-h-[12rem] flex-1 items-center justify-center px-4 text-center text-sm text-muted"
     : peek
       ? "flex h-[7.25rem] items-center justify-center px-4 text-center text-sm text-muted sm:h-[8.5rem]"
@@ -86,7 +90,7 @@ export function LeaseDocumentPreview({
 
   return (
     <div
-      className={`mt-4 overflow-hidden rounded-2xl border border-border bg-accent/30 ${peek || fill ? "mt-0" : ""} ${fill ? "flex min-h-0 flex-1 flex-col" : ""} ${className ?? ""}`}
+      className={`mt-4 overflow-hidden rounded-2xl border border-border bg-accent/30 ${peek || flexibleHeight ? "mt-0" : ""} ${flexibleHeight ? "flex flex-1 flex-col" : ""} ${className ?? ""}`}
     >
       {fill && interactive ? (
         <p className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted">
@@ -107,19 +111,19 @@ export function LeaseDocumentPreview({
         </p>
       ) : null}
       {pdfSrc ? (
-        <div className={fill ? "relative flex min-h-[min(42vh,20rem)] flex-1 flex-col" : undefined}>
+        <div className={flexibleHeight ? "relative flex min-h-0 flex-1 flex-col" : undefined}>
           {(row.residentSignature || row.managerSignature) && row.managerUploadedPdf?.dataUrl ? (
             <p className="shrink-0 border-b px-3 py-2 text-xs portal-banner-success">
               Signature certificate page appended to this PDF.
             </p>
           ) : null}
-          <div className={fill ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
+          <div className={flexibleHeight ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
             <iframe title="Lease PDF preview" src={pdfSrc} scrolling={frameScroll} className={frameClass} />
           </div>
         </div>
       ) : previewHtml ? (
-        <div className={fill ? "relative flex min-h-[min(42vh,20rem)] flex-1 flex-col" : undefined}>
-          <div className={fill ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
+        <div className={flexibleHeight ? "relative flex min-h-0 flex-1 flex-col" : undefined}>
+          <div className={flexibleHeight ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
             <iframe
               title="Lease document"
               srcDoc={previewHtml}
@@ -130,8 +134,8 @@ export function LeaseDocumentPreview({
           </div>
         </div>
       ) : syntheticHtml ? (
-        <div className={fill ? "relative flex min-h-[min(42vh,20rem)] flex-1 flex-col" : undefined}>
-          <div className={fill ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
+        <div className={flexibleHeight ? "relative flex min-h-0 flex-1 flex-col" : undefined}>
+          <div className={flexibleHeight ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
             <iframe
               title="Lease draft preview"
               srcDoc={syntheticHtml}

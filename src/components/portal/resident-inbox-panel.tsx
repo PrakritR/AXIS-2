@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxScheduledCard, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import {
+  buildInboxThreadAssistantContext,
+  InboxThreadAssistantStrip,
+} from "@/components/portal/inbox-thread-assistant-strip";
 import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
 import {
   PortalInboxSelectionToolbar,
@@ -986,14 +990,24 @@ export const ResidentInboxPanel = forwardRef<
               emptyLabel="No messages in this conversation."
               composer={
                 activeThread.folder === "trash" || tabId === "trash" ? undefined : (
-                  <InboxComposer
-                    value={replyDraft}
-                    onChange={setReplyDraft}
-                    onSubmit={() => void sendActiveReply()}
-                    sending={replySending}
-                    placeholder="Write a reply…"
-                    dataAttr="resident-inbox-reply"
-                  />
+                  <>
+                    <InboxThreadAssistantStrip
+                      contextHint={buildInboxThreadAssistantContext({
+                        subject: activeThread.subject,
+                        email: activeThread.email,
+                        from: activeThread.from,
+                        sentSemantics: activeIsSent,
+                      })}
+                    />
+                    <InboxComposer
+                      value={replyDraft}
+                      onChange={setReplyDraft}
+                      onSubmit={() => void sendActiveReply()}
+                      sending={replySending}
+                      placeholder="Write a reply…"
+                      dataAttr="resident-inbox-reply"
+                    />
+                  </>
                 )
               }
             />
@@ -1109,14 +1123,24 @@ export const ResidentInboxPanel = forwardRef<
                 emptyLabel="No messages in this conversation."
                 composer={
                   activeThread.folder === "trash" || tabId === "trash" ? undefined : (
-                    <InboxComposer
-                      value={replyDraft}
-                      onChange={setReplyDraft}
-                      onSubmit={() => void sendActiveReply()}
-                      sending={replySending}
-                      placeholder="Write a reply…"
-                      dataAttr="resident-inbox-reply"
-                    />
+                    <>
+                      <InboxThreadAssistantStrip
+                        contextHint={buildInboxThreadAssistantContext({
+                          subject: activeThread.subject,
+                          email: activeThread.email,
+                          from: activeThread.from,
+                          sentSemantics: activeIsSent,
+                        })}
+                      />
+                      <InboxComposer
+                        value={replyDraft}
+                        onChange={setReplyDraft}
+                        onSubmit={() => void sendActiveReply()}
+                        sending={replySending}
+                        placeholder="Write a reply…"
+                        dataAttr="resident-inbox-reply"
+                      />
+                    </>
                   )
                 }
               />
