@@ -572,6 +572,7 @@ export function ResidentDashboard({
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
   void welcomeName;
 
+  const communicationHref = `${BASE}/communication`;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
 
@@ -617,6 +618,7 @@ export function ResidentDashboard({
               href={`${BASE}/payments`}
               dataAttr="resident-dashboard-kpi-balance"
             />
+            {canUseFullPortal ? (
             <PortalDashboardKpiTile
               label="Open requests"
               value={openServiceCount}
@@ -625,6 +627,7 @@ export function ResidentDashboard({
               href={servicesHref}
               dataAttr="resident-dashboard-kpi-services"
             />
+            ) : null}
             <PortalDashboardKpiTile
               label="Lease"
               value={leaseKpi.value}
@@ -646,7 +649,7 @@ export function ResidentDashboard({
               value={inbox}
               tone={inbox > 0 ? "brand" : "neutral"}
               emphasis={inbox > 0}
-              href={`${BASE}/communication/inbox/unopened`}
+              href={communicationHref}
               dataAttr="resident-dashboard-kpi-inbox"
             />
         </PortalDashboardKpiRow>
@@ -772,6 +775,7 @@ export function ResidentDashboard({
             }}
           />
 
+          {canUseFullPortal ? (
           <AttentionGroup
             title="Services"
             href={servicesHref}
@@ -779,11 +783,10 @@ export function ResidentDashboard({
             tone="pending"
             order={3}
             badge={
-              canUseFullPortal &&
-              (openWorkOrderCount > 0 ||
+              openWorkOrderCount > 0 ||
                 scheduledWorkOrderCount > 0 ||
                 pendingRequestCount > 0 ||
-                approvedRequestCount > 0) ? (
+                approvedRequestCount > 0 ? (
                 <span className="flex flex-wrap items-center gap-1.5">
                   {openWorkOrderCount > 0 ? (
                     <StatusPill tone="pending">{openWorkOrderCount} open</StatusPill>
@@ -799,12 +802,8 @@ export function ResidentDashboard({
                 </span>
               ) : null
             }
-            items={canUseFullPortal ? serviceItems : []}
-            emptyMessage={
-              canUseFullPortal
-                ? "No open work orders or pending add-on services."
-                : "Available after your application is approved."
-            }
+            items={serviceItems}
+            emptyMessage="No open work orders or pending add-on services."
             keyForItem={(item) => item.id}
             renderRow={(item, sectionTone) => {
               if (item.kind === "request") {
@@ -842,10 +841,11 @@ export function ResidentDashboard({
               );
             }}
           />
+          ) : null}
 
           <AttentionGroup
             title="Communication"
-            href={`${BASE}/communication/inbox/unopened`}
+            href={communicationHref}
             sectionId="communication"
             tone="info"
             order={4}
@@ -862,7 +862,7 @@ export function ResidentDashboard({
             keyForItem={(thread) => thread.id}
             renderRow={(thread, sectionTone) => (
               <IssueRow
-                href={`${BASE}/communication/inbox/unopened`}
+                href={communicationHref}
                 dot={sectionAccentDot(sectionTone)}
                 title={thread.from || "Unknown sender"}
                 subtitle={thread.subject || thread.preview || "—"}
