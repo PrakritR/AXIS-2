@@ -133,9 +133,6 @@ export function ManagerBudgetsPanel() {
         title="Add / update budget"
         footer={
           <ModalFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
             <Button variant="primary" onClick={() => void createBudget()}>
               Save budget
             </Button>

@@ -10,6 +10,8 @@ import {
   buildManagerApplyUrl,
   buildManagerBrowseUrl,
   buildManagerListingUrl,
+  buildManagerPortfolioApplyUrl,
+  buildManagerPortfolioTourUrl,
   buildManagerTourUrl,
 } from "@/lib/manager-property-links";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
       listingRoomId?: unknown;
       roomName?: unknown;
       note?: unknown;
+      rentalType?: unknown;
     };
     try {
       body = (await req.json()) as typeof body;
@@ -70,13 +73,14 @@ export async function POST(req: Request) {
     const listingRoomId = typeof body.listingRoomId === "string" ? body.listingRoomId.trim() : "";
     const roomName = typeof body.roomName === "string" ? body.roomName.trim() : "";
     const note = typeof body.note === "string" ? body.note.trim() : "";
+    const rentalType = body.rentalType === "short_term" ? "short_term" : "standard";
 
     if (!kind) return NextResponse.json({ error: "kind must be apply, tour, or listing." }, { status: 400 });
     if (!to || !EMAIL_RE.test(to)) return NextResponse.json({ error: "A valid recipient email is required." }, { status: 400 });
 
-    // Multi-select is a "listing" affordance only — apply/tour target a single
-    // property/room flow. Normalize both shapes (array or legacy scalar) into a
-    // deduped id list; the room selector only applies to a single-property send.
+    // Listing, apply, and tour sends may include several properties at once.
+    // Normalize both shapes (array or legacy scalar) into a deduped id list; the
+    // room selector only applies to a single-property apply send.
     const rawIds = Array.isArray(body.propertyIds)
       ? body.propertyIds.filter((v): v is string => typeof v === "string")
       : [];
@@ -98,9 +102,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    // Only a listing send fans out to several properties; apply/tour collapse to
-    // the first requested id so their single-property semantics are preserved.
-    const effectiveIds = kind === "listing" ? requestedIds : requestedIds.slice(0, 1);
+    const effectiveIds = requestedIds;
 
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
@@ -128,36 +130,59 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You cannot share links for one or more of these properties." }, { status: 403 });
     }
 
+    if (kind === "apply" && rentalType === "short_term") {
+      const shortTermBlocked = authorized.some(
+        (entry) => !entry.listing?.listingSubmission?.shortTermRentalsAllowed,
+      );
+      if (shortTermBlocked) {
+        return NextResponse.json(
+          { error: "Short-term applications are not enabled for one or more selected properties." },
+          { status: 400 },
+        );
+      }
+    }
+
     const isMultiListing = kind === "listing" && authorized.length > 1;
+    const isMultiApply = kind === "apply" && authorized.length > 1;
+    const isPortfolioTour = kind === "tour" && authorized.length > 1;
     const primary = authorized[0];
     const propertyId = primary.id;
     const listing = primary.listing;
     const origin = appOrigin();
 
-    const propertyTitle = isMultiListing
+    const propertyTitle = isMultiListing || isMultiApply
       ? `${authorized.length} homes`
-      : (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
+      : isPortfolioTour
+        ? `${authorized.length} properties`
+        : (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
     const applyUrl = buildManagerApplyUrl(origin, {
       propertyId,
       listingRoomId: listingRoomId || undefined,
       roomName: roomName || undefined,
+      rentalType: rentalType === "short_term" ? "short_term" : undefined,
     });
     const tourUrl = buildManagerTourUrl(origin, propertyId);
     const listingPageUrl = buildManagerListingUrl(origin, propertyId);
-    const listingCount = isMultiListing ? authorized.length : undefined;
-    // Multi-listing sends land the prospect on the browse grid pre-filtered to
-    // exactly these homes; a single send keeps the direct listing/apply link.
+    const listingCount = isMultiListing || isMultiApply ? authorized.length : undefined;
+    const tourCount = isPortfolioTour ? authorized.length : undefined;
+    const authorizedIds = authorized.map((entry) => entry.id);
     const linkUrl = isMultiListing
-      ? buildManagerBrowseUrl(origin, authorized.map((entry) => entry.id))
-      : kind === "tour"
-        ? tourUrl
-        : applyUrl;
+      ? buildManagerBrowseUrl(origin, authorizedIds)
+      : isMultiApply
+        ? buildManagerPortfolioApplyUrl(origin, authorizedIds, {
+            rentalType: rentalType === "short_term" ? "short_term" : undefined,
+          })
+        : isPortfolioTour
+        ? buildManagerPortfolioTourUrl(origin, authorizedIds)
+        : kind === "tour"
+          ? tourUrl
+          : applyUrl;
     const listingSummary =
       kind === "listing" && !isMultiListing && listing
         ? buildListingShareSummary(listing, { roomChoice: roomName || undefined, roomId: listingRoomId || undefined })
         : undefined;
 
-    const subject = leadInviteSubject(kind, propertyTitle, listingCount);
+    const subject = leadInviteSubject(kind, propertyTitle, listingCount ?? tourCount);
     const emailParams = {
       kind,
       prospectName: prospectName || undefined,
@@ -168,6 +193,7 @@ export async function POST(req: Request) {
       listingSummary,
       managerNote: note || undefined,
       listingCount,
+      tourCount,
     } satisfies Parameters<typeof buildLeadInviteEmailBody>[0];
     const text = buildLeadInviteEmailBody(emailParams);
     const html = buildLeadInviteEmailHtml(emailParams);

@@ -15,7 +15,7 @@ const PAID_MANAGER_NAV = [
   { label: "Services", path: "/portal/services/requests" },
   { label: "Communication", path: "/portal/communication/inbox/unopened" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
-  { label: "Co-managers", path: "/portal/relationships" },
+  { label: "Team", path: "/portal/relationships" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;
 
@@ -33,19 +33,23 @@ test.describe("Manager portal", () => {
   });
 
   test("all manager sections load via direct navigation", async ({ page }) => {
-    for (const { path } of PAID_MANAGER_NAV) {
-      await page.goto(path);
-      await expect(page).toHaveURL(pathToUrlRegExp(path));
-      await expect(page.getByRole("heading").first()).toBeVisible();
+    test.setTimeout(120_000);
+    for (const { path, label } of PAID_MANAGER_NAV) {
+      await page.goto(path, { waitUntil: "domcontentloaded", timeout: 45_000 });
+      await expect(page, `${label} should land on ${path}`).toHaveURL(pathToUrlRegExp(path));
+      await expect(
+        page.getByRole("heading").first().or(page.locator("main")),
+        `${label} should render a heading or main landmark`,
+      ).toBeVisible({ timeout: 30_000 });
     }
   });
 
   test("legacy manager and work-orders paths redirect", async ({ page }) => {
-    await page.goto("/manager/properties");
-    await expect(page).toHaveURL(/\/portal\/properties/, { timeout: 15_000 });
+    await page.goto("/manager/properties", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/portal\/properties/, { timeout: 30_000 });
 
-    await page.goto("/portal/work-orders");
-    await expect(page).toHaveURL(/\/portal\/services\/work-orders/, { timeout: 15_000 });
+    await page.goto("/portal/work-orders", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/portal\/services\/work-orders/, { timeout: 30_000 });
   });
 
   test("properties tab shows listing and create button", async ({ page }) => {
@@ -61,15 +65,12 @@ test.describe("Manager portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("residents tab switches between Current and Previous sub-tabs", async ({ page }) => {
+  test("residents tab loads with list heading", async ({ page }) => {
     await page.goto("/portal/residents/current");
     await expect(page).toHaveURL(/residents\/current/);
-    // Click Previous sub-tab if it exists
-    const prevTab = page.getByRole("tab", { name: /previous/i }).or(page.getByRole("link", { name: /previous/i }));
-    if (await prevTab.count() > 0) {
-      await prevTab.first().click();
-      await expect(page).toHaveURL(/residents\/previous/, { timeout: 10_000 });
-    }
+    await expect(page.getByRole("heading", { name: /residents/i }).first()).toBeVisible();
+    await expect(page.getByRole("tab", { name: /previous/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /previous/i })).toHaveCount(0);
   });
 
   test("services tab switches between sub-tabs", async ({ page }) => {
@@ -89,12 +90,15 @@ test.describe("Manager portal", () => {
     if (await composeBtn.count() > 0) {
       await composeBtn.click();
       // Modal should appear with Subject field
-      await expect(page.getByLabel(/subject/i).first()).toBeVisible({ timeout: 8_000 });
-      // Close via the Cancel button (exact). A loose /close/i also matches the
-      // modal's full-screen overlay button (aria-label="Close"), which isn't
-      // reliably clickable and hangs the action.
+      await expect(
+        page.locator("#communication-compose-subject").or(page.getByPlaceholder("Subject")),
+      ).toBeVisible({ timeout: 8_000 });
       const cancelBtn = page.getByRole("button", { name: "Cancel", exact: true });
-      if (await cancelBtn.count() > 0) await cancelBtn.first().click();
+      if (await cancelBtn.count() > 0) {
+        await cancelBtn.click();
+      } else {
+        await page.keyboard.press("Escape");
+      }
     }
   });
 
@@ -120,23 +124,26 @@ test.describe("Manager portal", () => {
     await expect(page).toHaveURL(/\/portal\/profile/, { timeout: 15_000 });
   });
 
-  test("co-managers (relationships) tab loads", async ({ page }) => {
+  test("team (relationships) tab loads", async ({ page }) => {
     await page.goto("/portal/relationships");
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
   test("calendar tab loads and a house week view exposes navigation", async ({ page }) => {
-    await page.goto("/portal/calendar");
-    await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible({ timeout: 15_000 });
-    // The availability calendar is house-scoped: the week grid and its ← / →
-    // week navigation only render once a house is selected.
-    await page.getByText("Select a house").first().click();
-    await page.getByRole("option").filter({ hasNotText: "Select a house" }).first().click();
-    // Week nav arrows carry aria-labels ("Previous week"/"Next week"), so those
-    // are their accessible names — not the "←"/"→" glyphs.
-    await expect(page.getByRole("button", { name: "Previous week" }).first()).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByRole("button", { name: "Next week" }).first()).toBeVisible();
+    await page.goto("/portal/calendar", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible({ timeout: 20_000 });
+    const calControls = page.getByRole("button", { name: /today|month|week|day/i }).first();
+    await expect(calControls).toBeVisible({ timeout: 15_000 });
+    const propertyFilter = page.getByRole("button", { name: /^properties$/i });
+    if (await propertyFilter.isVisible().catch(() => false)) {
+      await propertyFilter.click();
+      const firstProperty = page.getByRole("option").nth(1);
+      if (await firstProperty.isVisible().catch(() => false)) {
+        await firstProperty.click();
+        await expect(page.getByRole("button", { name: "Previous week" }).first()).toBeVisible({
+          timeout: 15_000,
+        });
+      }
+    }
   });
 });

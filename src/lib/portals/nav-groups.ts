@@ -23,6 +23,8 @@ export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedb
  */
 export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolean {
   if (section === "bugs-feedback") return kind !== "admin";
+  // Settings → mobile profile menu (same as desktop sidebar exclusion).
+  if (section === "profile") return true;
   return false;
 }
 

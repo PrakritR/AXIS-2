@@ -35,11 +35,18 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import { MonthlyProfitChart } from "@/components/portal/monthly-profit-chart";
 import {
   applicationVisibleToPortalUser,
   collectLinkedPropertyIdsForModule,
   moduleRowVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
+import {
+  bucketByMonth,
+  lastNMonths,
+  mergeMonthlyCashflow,
+  parseMoneyLabel,
+} from "@/lib/portal-monthly-profit";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
@@ -65,11 +72,12 @@ import {
   ManagerPortalPageShell,
   portalDashboardWelcomeSubtitle,
   PORTAL_DASHBOARD_STACK,
+  PortalDashboardKpiRow,
+  PortalDashboardKpiTile,
   formatCompactChargeLine,
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import {
-  PortalPreviewOverflowLink,
   PortalTableExpandChevron,
   isPortalRowClickIgnored,
   usePortalPreviewSlice,
@@ -91,19 +99,15 @@ import type { DocumentExpirationSummary } from "@/lib/documents/document-expirat
 const BASE = "/portal";
 
 /** Semantic status foreground tokens for the leading issue-row dots. */
-const DOT_OVERDUE = "var(--status-overdue-fg)";
-const DOT_PENDING = "var(--status-pending-fg)";
-const DOT_CONFIRMED = "var(--status-confirmed-fg)";
 const DOT_INFO = "var(--status-approved-fg)";
+const DOT_CONFIRMED = "var(--status-confirmed-fg)";
 
 type PillTone = "pending" | "success" | "danger" | "info";
 
 /**
  * Status accent tokens for a whole "Needs attention" group — the header rail,
- * title colour and count badge all read in the group's status colour so the
- * queue is scannable by colour alone (overdue → red, pending review → orange,
- * signatures/unread → blue, active → green). Reuses the shared `--status-*`
- * tokens so it flips with the light/dark theme like every other status surface.
+ * title colour and count badge all read in the group's status colour.
+ * Yellow = pending, red = danger/overdue, green = confirmed/active, blue = info.
  */
 type AttentionTone = PillTone;
 const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
@@ -111,6 +115,24 @@ const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
   pending: { fg: "var(--status-pending-fg)", bg: "var(--status-pending-bg)" },
   info: { fg: "var(--status-approved-fg)", bg: "var(--status-approved-bg)" },
   success: { fg: "var(--status-confirmed-fg)", bg: "var(--status-confirmed-bg)" },
+};
+
+function sectionAccentDot(tone: AttentionTone): string {
+  return ATTENTION_TONE[tone].fg;
+}
+
+type DashboardServiceAttentionItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  sortKey: number;
+  rowTone: AttentionTone;
+  pillLabel: string;
+};
+
+type DashboardResidentAttentionItem = {
+  lease: LeasePipelineRow;
+  activated: boolean;
 };
 
 /**
@@ -150,45 +172,6 @@ function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode })
   );
 }
 
-/** Restrained KPI tile: big tabular number + small uppercase muted label. */
-function KpiTile({
-  label,
-  value,
-  sub,
-  href,
-  accent,
-  dataAttr,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href: string;
-  accent?: boolean;
-  dataAttr?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
-    >
-      <span
-        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
-          accent ? "text-[var(--status-overdue-fg)]" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
-        {label}
-      </span>
-      {sub ? (
-        <span className="mt-0.5 text-[11px] text-muted/80 [html[data-native]_&]:text-[10px]">{sub}</span>
-      ) : null}
-    </Link>
-  );
-}
-
 /** Dense Linear "issue" row: status dot · label + subtitle · meta · status pill · chevron. */
 function IssueRow({
   href,
@@ -211,7 +194,7 @@ function IssueRow({
     <Link
       href={href}
       data-attr={dataAttr}
-      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_40%,transparent)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
     >
       {dot ? (
         <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
@@ -275,7 +258,7 @@ function AttentionGroup<T>({
   items: T[];
   emptyMessage: string;
   keyForItem: (item: T) => string;
-  renderRow: (item: T) => ReactNode;
+  renderRow: (item: T, sectionTone: AttentionTone) => ReactNode;
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
@@ -289,13 +272,15 @@ function AttentionGroup<T>({
 
   return (
     <div
-      className="pl-attn-enter overflow-hidden rounded-lg border border-border bg-card"
+      className="pl-attn-enter overflow-hidden rounded-xl border border-border bg-card"
       style={{
         animationDelay: `${Math.min(order, 8) * 55}ms`,
-        // A status rail on the leading edge — only lit when the group has items,
-        // so empty groups stay quiet instead of shouting a colour with a 0 next to it.
         borderLeftWidth: isEmpty ? undefined : 3,
         borderLeftColor: isEmpty ? undefined : accent.fg,
+        background: isEmpty ? undefined : `color-mix(in srgb, ${accent.bg} 32%, var(--card))`,
+        // Row hover wash matches this section (IssueRow).
+        ["--attn-section-bg" as string]: accent.bg,
+        ["--attn-section-fg" as string]: accent.fg,
       }}
     >
       <div
@@ -311,11 +296,11 @@ function AttentionGroup<T>({
             setOverride(!open);
           }
         }}
-        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
         <PortalTableExpandChevron expanded={open} />
         <h3
-          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           {title}
@@ -336,7 +321,8 @@ function AttentionGroup<T>({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Open ${title}`}
           data-attr="dashboard-attention-link"
-          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold text-primary hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           →
         </Link>
@@ -348,18 +334,20 @@ function AttentionGroup<T>({
           </p>
         ) : (
           <div className="border-t border-border">
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border/80">
               {visible.map((item) => (
-                <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
+                <Fragment key={keyForItem(item)}>{renderRow(item, tone)}</Fragment>
               ))}
             </div>
             {overflow > 0 ? (
-              <div className="border-t border-border px-3.5 py-2 [html[data-native]_&]:px-3">
-                <PortalPreviewOverflowLink
-                  overflow={overflow}
+              <div className="border-t border-border/80 px-3.5 py-2 [html[data-native]_&]:px-3">
+                <Link
                   href={href}
-                  label={isNative ? `View all (${count}) →` : `View all ${count} →`}
-                />
+                  className="inline-block text-xs font-semibold hover:underline underline-offset-2"
+                  style={{ color: accent.fg }}
+                >
+                  {isNative ? `View all (${count}) →` : `View all ${count} →`}
+                </Link>
               </div>
             ) : null}
           </div>
@@ -429,7 +417,7 @@ function AiDraftsGroup({
       >
         <PortalTableExpandChevron expanded={open} />
         <h3
-          className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] [html[data-native]_&]:leading-snug"
+          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
           style={{ color: accent.fg }}
         >
           AI drafts
@@ -513,11 +501,6 @@ function fmt(iso: string) {
   return formatPacificDateTime(d);
 }
 
-/** Parse a "$1,200.00" balance label into a numeric dollar amount for KPI sums. */
-function parseMoneyLabel(label: string): number {
-  const n = Number(String(label).replace(/[^0-9.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
-}
 
 function formatUsd(amount: number): string {
   return amount.toLocaleString("en-US", {
@@ -525,145 +508,6 @@ function formatUsd(amount: number): string {
     currency: "USD",
     maximumFractionDigits: 0,
   });
-}
-
-type MonthPoint = { key: string; label: string; value: number };
-
-/** The last 6 calendar months (oldest → current), keyed `YYYY-MM` with a short label. */
-function lastSixMonths(nowMs: number): { key: string; label: string }[] {
-  const base = new Date(nowMs);
-  const out: { key: string; label: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const m = new Date(base.getFullYear(), base.getMonth() - i, 1);
-    out.push({
-      key: `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`,
-      label: m.toLocaleString("en-US", { month: "short" }),
-    });
-  }
-  return out;
-}
-
-/** `YYYY-MM` bucket key for an ISO date, or null when unparseable. */
-function monthKeyOf(iso: string | undefined | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** Sum a list into the 6 month buckets by an ISO-date accessor. */
-function bucketByMonth<T>(
-  items: T[],
-  months: { key: string; label: string }[],
-  dateOf: (item: T) => string | undefined | null,
-  amountOf: (item: T) => number,
-): MonthPoint[] {
-  const sums = new Map(months.map((m) => [m.key, 0]));
-  for (const item of items) {
-    const key = monthKeyOf(dateOf(item));
-    if (key && sums.has(key)) sums.set(key, sums.get(key)! + (amountOf(item) || 0));
-  }
-  return months.map((m) => ({ key: m.key, label: m.label, value: sums.get(m.key) ?? 0 }));
-}
-
-function formatUsdShort(amount: number): string {
-  if (amount >= 1000) return `$${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}k`;
-  return `$${Math.round(amount)}`;
-}
-
-/**
- * Cash-flow trend card: payments collected vs. expenses over the last 6 months,
- * as a theme-aware grouped bar chart (CSS heights, no chart lib). Bars scale to
- * the tallest value across both series; totals + net summarize the window.
- */
-function DashboardTrends({ payments, expenses }: { payments: MonthPoint[]; expenses: MonthPoint[] }) {
-  const totalIn = payments.reduce((s, p) => s + p.value, 0);
-  const totalOut = expenses.reduce((s, e) => s + e.value, 0);
-  const net = totalIn - totalOut;
-  const max = Math.max(1, ...payments.map((p) => p.value), ...expenses.map((e) => e.value));
-  const hasAny = totalIn > 0 || totalOut > 0;
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5 [html[data-native]_&]:p-3.5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Cash flow</h2>
-          <p className="mt-0.5 text-[11px] uppercase tracking-[0.07em] text-muted/70">Last 6 months</p>
-        </div>
-        <div className="flex items-center gap-4 text-right">
-          <div>
-            <div className="text-sm font-semibold tabular-nums text-[var(--status-confirmed-fg)]">
-              {formatUsd(totalIn)}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Collected</div>
-          </div>
-          <div>
-            <div className="text-sm font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-              {formatUsd(totalOut)}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Expenses</div>
-          </div>
-          <div>
-            <div
-              className={`text-sm font-semibold tabular-nums ${net >= 0 ? "text-foreground" : "text-[var(--status-overdue-fg)]"}`}
-            >
-              {net >= 0 ? "" : "−"}
-              {formatUsd(Math.abs(net))}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.06em] text-muted/70">Net</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="mt-3 flex items-center gap-4 text-[11px] text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-confirmed-fg)" }} />
-          Payments
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-[3px]" style={{ background: "var(--status-overdue-fg)" }} />
-          Expenses
-        </span>
-      </div>
-
-      {hasAny ? (
-        <div className="mt-4 flex h-40 items-end gap-2 sm:gap-4 [html[data-native]_&]:h-32">
-          {payments.map((p, i) => {
-            const e = expenses[i];
-            const inPct = Math.round((p.value / max) * 100);
-            const outPct = Math.round(((e?.value ?? 0) / max) * 100);
-            return (
-              <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-                <div className="flex h-full w-full items-end justify-center gap-1">
-                  <div
-                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-confirmed-fg)] transition-[height] duration-500"
-                    style={{ height: `${Math.max(p.value > 0 ? 3 : 0, inPct)}%` }}
-                    title={`Payments · ${p.label}: ${formatUsd(p.value)}`}
-                  />
-                  <div
-                    className="group relative w-full max-w-[1.6rem] rounded-t-[3px] bg-[var(--status-overdue-fg)] transition-[height] duration-500"
-                    style={{ height: `${Math.max((e?.value ?? 0) > 0 ? 3 : 0, outPct)}%` }}
-                    title={`Expenses · ${e?.label ?? p.label}: ${formatUsd(e?.value ?? 0)}`}
-                  />
-                </div>
-                <span className="text-[10px] font-medium text-muted [html[data-native]_&]:text-[9px]">
-                  {p.label}
-                </span>
-                <span className="text-[9px] tabular-nums text-muted/60 [html[data-native]_&]:hidden">
-                  {formatUsdShort(p.value)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-muted [html[data-native]_&]:text-xs">
-          No payments or expenses recorded yet. Collected rent and logged expenses will chart here.
-        </p>
-      )}
-    </div>
-  );
 }
 
 export function ManagerDashboard({ displayName = "there" }: { displayName?: string }) {
@@ -685,6 +529,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
   const { visibility, setVisible, reset } = useDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
 
   // The assistant dock + AI-draft chips are live, auth-gated manager surfaces:
   // off in the /demo sandbox (which uses its own scripted assistant and must
@@ -708,6 +553,49 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         if (data?.summary) setDocExpirySummary(data.summary as DocumentExpirationSummary);
       })
       .catch(() => setDocExpirySummary(null));
+  }, [authReady, userId, tick]);
+
+  useEffect(() => {
+    if (!authReady || !userId) {
+      setResidentAccountEmails(new Set());
+      return;
+    }
+    const emails = [
+      ...new Set(
+        readLeasePipeline(userId)
+          .filter((l) => l.status === "Fully Signed")
+          .map((l) => l.residentEmail.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+    let cancelled = false;
+    if (emails.length === 0) {
+      setResidentAccountEmails(new Set());
+      return;
+    }
+    if (isDemoModeActive()) {
+      setResidentAccountEmails(new Set(emails));
+      return;
+    }
+    void fetch("/api/manager/resident-account-emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails }),
+    })
+      .then(async (res) => {
+        const body = (await res.json()) as { emails?: string[] };
+        if (!cancelled && res.ok) {
+          setResidentAccountEmails(
+            new Set((body.emails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResidentAccountEmails(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [authReady, userId, tick]);
 
   useEffect(() => {
@@ -776,24 +664,26 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     const pendingServiceRequests = readAllServiceRequests().filter(
       (r) => moduleRowVisibleToPortalUser(r, userId, "services") && r.status === "pending",
     );
-    const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open");
-    const serviceItems = [
+    const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open" || w.bucket === "scheduled");
+    const serviceItems: DashboardServiceAttentionItem[] = [
       ...pendingServiceRequests.map((r) => ({
         id: `sr-${r.id}`,
         title: r.offerName || "Add-on service",
         subtitle: [r.residentName || r.residentEmail, r.price].filter(Boolean).join(" · ") || "—",
-        status: "pending" as const,
+        rowTone: "pending" as const,
+        pillLabel: "Scheduled",
         sortKey: new Date(r.requestedAt).getTime() || 0,
       })),
       ...pendingWorkOrders.map((w) => ({
         id: `wo-${w.id}`,
         title: w.title || "Work order",
         subtitle: [w.propertyName, w.unit].filter(Boolean).join(" · ") || "—",
-        status: "pending" as const,
-        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : 0,
+        rowTone: (w.bucket === "open" ? "danger" : "pending") as AttentionTone,
+        pillLabel: w.bucket === "open" ? "Open" : "Scheduled",
+        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : Date.now(),
       })),
     ].sort((a, b) => b.sortKey - a.sortKey);
-    const pendingServiceCount = pendingServiceRequests.length + pendingWorkOrders.length;
+    const pendingServiceCount = serviceItems.length;
 
     const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -838,7 +728,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     // Cash-flow trend series (last 6 months), computed from real local stores:
     // payments = PAID charges bucketed by paid/created date; expenses = logged
     // outgoing expenses bucketed by expense date.
-    const months = lastSixMonths(nowMs);
+    const months = lastNMonths(nowMs, 24);
     const paymentsByMonth = bucketByMonth(
       charges.filter((c) => c.status === "paid"),
       months,
@@ -896,9 +786,28 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const pendingTours = tours.filter((t) => t.status === "pending");
   const overdueCharges = pendingCharges.filter((c) => isHouseholdChargeOverdue(c));
   const overdueChargeCount = overdueCharges.length;
+  const pendingPaymentCount = pendingCharges.length - overdueChargeCount;
   const overdueBalanceLabel = formatUsd(
     overdueCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0),
   );
+
+  const residentAttentionItems: DashboardResidentAttentionItem[] = activeResidents.map((lease) => ({
+    lease,
+    activated: residentAccountEmails.has(lease.residentEmail.trim().toLowerCase()),
+  }));
+
+  const residentsSectionTone: AttentionTone =
+    residentAttentionItems.length === 0
+      ? "success"
+      : residentAttentionItems.some((r) => !r.activated)
+        ? "pending"
+        : "success";
+
+  const paymentsSectionTone: AttentionTone = overdueChargeCount > 0 ? "danger" : "pending";
+
+  const servicesSectionTone: AttentionTone = serviceItems.some((i) => i.rowTone === "danger")
+    ? "danger"
+    : "pending";
 
   // Reflect only the sections the manager keeps visible, so the "N open" badge
   // matches what's actually on their dashboard.
@@ -908,6 +817,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     (visibility.tours ? pendingTours.length : 0) +
     (visibility.applications ? pendingApps.length : 0) +
     (visibility.leases ? pendingLeaseRows.length : 0) +
+    (visibility.residents ? residentAttentionItems.length : 0) +
     (visibility.payments ? pendingCharges.length : 0) +
     (visibility.services ? serviceItems.length : 0) +
     (visibility.inbox ? inboxThreads.length : 0);
@@ -934,6 +844,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
+      hideTitleOnMobileNav
+      welcomeSubtitle
     >
       {/* Full width: the assistant is the floating popup by default, and a
           manager who pins it gets the portal-wide rail from the shell layout
@@ -960,61 +872,60 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         ) : null}
 
         {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
-            <KpiTile
+        <PortalDashboardKpiRow>
+            <PortalDashboardKpiTile
               label="Rooms vacant"
               value={roomsVacant}
-              sub={roomsVacant > 0 ? "listed & available" : "fully occupied"}
-              accent={roomsVacant > 0}
+              tone={roomsVacant > 0 ? "warning" : "success"}
+              emphasis={roomsVacant > 0}
               href={`${BASE}/properties`}
               dataAttr="dashboard-kpi-vacant"
             />
-            <KpiTile
-              label="Leases to sign"
+            <PortalDashboardKpiTile
+              label="Leases"
               value={pendingLeaseRows.length}
-              sub={
-                managerSignatureLeaseCount > 0
-                  ? `${managerSignatureLeaseCount} need your signature`
-                  : pendingLeaseRows.length > 0
-                    ? "awaiting resident"
-                    : "none pending"
-              }
-              accent={managerSignatureLeaseCount > 0}
+              tone="brand"
+              emphasis={managerSignatureLeaseCount > 0 || pendingLeaseRows.length > 0}
               href={`${BASE}/leases`}
               dataAttr="dashboard-kpi-leases"
             />
-            <KpiTile
-              label="Applicants to review"
+            <PortalDashboardKpiTile
+              label="Applications"
               value={pendingApps.length}
-              sub={pendingApps.length > 0 ? "pending review" : "all caught up"}
+              tone={pendingApps.length > 0 ? "warning" : "brand"}
+              emphasis={pendingApps.length > 0}
               href={`${BASE}/applications`}
               dataAttr="dashboard-kpi-applications"
             />
-            <KpiTile
-              label="Overdue balance"
+            <PortalDashboardKpiTile
+              label="Overdue"
               value={overdueBalanceLabel}
-              sub={
-                overdueChargeCount > 0
-                  ? `${overdueChargeCount} overdue ${overdueChargeCount === 1 ? "charge" : "charges"}`
-                  : "None overdue"
-              }
-              accent={overdueChargeCount > 0}
+              tone={overdueChargeCount > 0 ? "danger" : "success"}
+              emphasis={overdueChargeCount > 0}
               href={`${BASE}/payments`}
               dataAttr="dashboard-kpi-overdue"
             />
-            <KpiTile
-              label="Open services"
+            <PortalDashboardKpiTile
+              label="Services"
               value={serviceItems.length}
+              tone={serviceItems.length > 0 ? "warning" : "neutral"}
+              emphasis={serviceItems.length > 0}
               href={`${BASE}/services/requests`}
               dataAttr="dashboard-kpi-services"
             />
-          </div>
-        </div>
+            <PortalDashboardKpiTile
+              label="Messages"
+              value={inboxThreads.length}
+              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
+              emphasis={inboxThreads.length > 0}
+              href={`${BASE}/communication/inbox/unopened`}
+              dataAttr="dashboard-kpi-messages"
+            />
+        </PortalDashboardKpiRow>
 
         {/* Financial trend graphs — payments collected vs. expenses, last 6 months. */}
         {visibility.cashflow ? (
-          <DashboardTrends payments={paymentsByMonth} expenses={expensesByMonth} />
+          <MonthlyProfitChart points={mergeMonthlyCashflow(paymentsByMonth, expensesByMonth)} />
         ) : null}
 
         {/* Needs attention — a live, colour-coded queue: big all-caps heading over
@@ -1024,8 +935,8 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             <span aria-hidden className="text-primary text-xl leading-none [html[data-native]_&]:text-lg">
               ✦
             </span>
-            <h2 className="text-2xl font-extrabold uppercase leading-none tracking-[0.02em] text-foreground [html[data-native]_&]:text-xl">
-              Needs Attention
+            <h2 className="text-xl font-bold leading-tight tracking-[-0.02em] text-foreground [html[data-native]_&]:text-lg">
+              Needs attention
             </h2>
             {openCount > 0 ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
@@ -1067,14 +978,14 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               items={pendingTours}
               emptyMessage="No pending tour requests right now."
               keyForItem={(tour) => tour.id}
-              renderRow={(tour) => (
+              renderRow={(tour, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/calendar`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={tour.label}
                   subtitle={tour.propertyTitle || "—"}
                   meta={[fmt(tour.start), relativeFromNow(tour.start, nowTick)].filter(Boolean).join(" · ")}
-                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Pending</StatusPill>}
                   dataAttr="dashboard-attention-tour"
                 />
               )}
@@ -1083,21 +994,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.applications ? (
             <AttentionGroup
-              title="Applications"
+              title="Applications to sign"
               href={`${BASE}/applications`}
               sectionId="applications"
               tone="pending"
               order={1}
               items={pendingApps}
-              emptyMessage="No pending applications. You're all caught up."
+              emptyMessage="No applications waiting for your review."
               keyForItem={(app) => app.id}
-              renderRow={(app: DemoApplicantRow) => (
+              renderRow={(app: DemoApplicantRow, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/applications`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={app.name || app.email || "Unknown"}
                   subtitle={app.property || "—"}
-                  pill={<StatusPill tone="pending">{app.stage || "Pending"}</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>{app.stage || "To sign"}</StatusPill>}
                   dataAttr="dashboard-attention-application"
                 />
               )}
@@ -1106,25 +1017,25 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.leases ? (
             <AttentionGroup
-              title="Leases pending signature"
+              title="Leases to sign"
               href={`${BASE}/leases`}
               sectionId="leases"
-              tone="info"
+              tone="pending"
               order={2}
               items={pendingLeaseRows}
               emptyMessage="No leases waiting for a signature."
               keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow) => {
+              renderRow={(lease: LeasePipelineRow, sectionTone) => {
                 const yourTurn = lease.status === "Manager Signature Pending";
                 return (
                   <IssueRow
                     href={`${BASE}/leases`}
-                    dot={yourTurn ? DOT_INFO : DOT_PENDING}
+                    dot={sectionAccentDot(sectionTone)}
                     title={lease.residentName || lease.residentEmail}
                     subtitle={formatCompactPlacementLine(lease.unit || "—")}
                     meta={lease.signedRentLabel}
                     pill={
-                      <StatusPill tone={yourTurn ? "info" : "pending"}>
+                      <StatusPill tone={sectionTone}>
                         {yourTurn ? "Your signature" : "Resident signing"}
                       </StatusPill>
                     }
@@ -1140,37 +1051,55 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               title="Residents"
               href={`${BASE}/residents/current`}
               sectionId="residents"
-              tone="success"
+              tone={residentsSectionTone}
               order={3}
-              items={activeResidents}
+              items={residentAttentionItems}
               emptyMessage="No current residents yet."
-              keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow) => (
-                <IssueRow
-                  href={`${BASE}/residents/current`}
-                  dot={DOT_CONFIRMED}
-                  title={lease.residentName || lease.residentEmail}
-                  subtitle={formatCompactPlacementLine(lease.unit || "—")}
-                  meta={lease.signedRentLabel}
-                  pill={<StatusPill tone="success">Active</StatusPill>}
-                  dataAttr="dashboard-attention-resident"
-                />
-              )}
+              keyForItem={(item) => item.lease.id}
+              renderRow={(item: DashboardResidentAttentionItem) => {
+                const rowTone: AttentionTone = item.activated ? "success" : "pending";
+                const lease = item.lease;
+                return (
+                  <IssueRow
+                    href={`${BASE}/residents/current`}
+                    dot={sectionAccentDot(rowTone)}
+                    title={lease.residentName || lease.residentEmail}
+                    subtitle={formatCompactPlacementLine(lease.unit || "—")}
+                    meta={lease.signedRentLabel}
+                    pill={
+                      <StatusPill tone={rowTone}>
+                        {item.activated ? "Activated" : "No account yet"}
+                      </StatusPill>
+                    }
+                    dataAttr="dashboard-attention-resident"
+                  />
+                );
+              }}
             />
           ) : null}
 
           {visibility.payments ? (
             <AttentionGroup
-              title="Pending & overdue payments"
+              title="Payments"
               href={`${BASE}/payments`}
               sectionId="payments"
-              tone={overdueChargeCount > 0 ? "danger" : "pending"}
+              tone={paymentsSectionTone}
               order={4}
               badge={
-                overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {overdueChargeCount} overdue
+                pendingPaymentCount > 0 || overdueChargeCount > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {pendingPaymentCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-pending">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                        {pendingPaymentCount} pending
+                      </span>
+                    ) : null}
+                    {overdueChargeCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-danger">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                        {overdueChargeCount} overdue
+                      </span>
+                    ) : null}
                   </span>
                 ) : null
               }
@@ -1179,10 +1108,11 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               keyForItem={(charge) => charge.id}
               renderRow={(charge) => {
                 const overdue = isHouseholdChargeOverdue(charge);
+                const rowTone: AttentionTone = overdue ? "danger" : "pending";
                 return (
                   <IssueRow
                     href={`${BASE}/payments`}
-                    dot={overdue ? DOT_OVERDUE : DOT_PENDING}
+                    dot={sectionAccentDot(rowTone)}
                     title={charge.residentName || charge.residentEmail}
                     subtitle={formatCompactChargeLine(
                       charge.title || "Charge",
@@ -1191,11 +1121,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                       { omitBalance: true },
                     )}
                     meta={charge.balanceLabel}
-                    pill={
-                      <StatusPill tone={overdue ? "danger" : "pending"}>
-                        {overdue ? "Overdue" : "Pending"}
-                      </StatusPill>
-                    }
+                    pill={<StatusPill tone={rowTone}>{overdue ? "Overdue" : "Pending"}</StatusPill>}
                     dataAttr="dashboard-attention-payment"
                   />
                 );
@@ -1205,29 +1131,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.services ? (
             <AttentionGroup
-              title="Services"
+              title="Services needed"
               href={`${BASE}/services/requests`}
               sectionId="services"
-              tone="pending"
+              tone={servicesSectionTone}
               order={5}
-              badge={
-                pendingServiceCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {pendingServiceCount} pending
-                  </span>
-                ) : null
-              }
               items={serviceItems}
-              emptyMessage="No pending add-on services or work orders."
+              emptyMessage="No open or scheduled services right now."
               keyForItem={(item) => item.id}
-              renderRow={(item) => (
+              renderRow={(item: DashboardServiceAttentionItem) => (
                 <IssueRow
                   href={`${BASE}/services/requests`}
-                  dot={DOT_PENDING}
+                  dot={sectionAccentDot(item.rowTone)}
                   title={item.title}
                   subtitle={item.subtitle}
-                  pill={<StatusPill tone="pending">Pending</StatusPill>}
+                  pill={<StatusPill tone={item.rowTone}>{item.pillLabel}</StatusPill>}
                   dataAttr="dashboard-attention-service"
                 />
               )}
@@ -1236,21 +1154,21 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
 
           {visibility.inbox ? (
             <AttentionGroup
-              title="Communication"
+              title="Unread messages"
               href={`${BASE}/communication/inbox/unopened`}
               sectionId="inbox"
-              tone="info"
+              tone="danger"
               order={6}
               items={inboxThreads}
               emptyMessage="No unread messages. Communication is clear."
               keyForItem={(thread) => thread.id}
-              renderRow={(thread) => (
+              renderRow={(thread, sectionTone) => (
                 <IssueRow
                   href={`${BASE}/communication/inbox/unopened`}
-                  dot={DOT_INFO}
+                  dot={sectionAccentDot(sectionTone)}
                   title={thread.from || "Unknown sender"}
                   subtitle={thread.subject || thread.preview || "—"}
-                  pill={<StatusPill tone="info">Unread</StatusPill>}
+                  pill={<StatusPill tone={sectionTone}>Unread</StatusPill>}
                   dataAttr="dashboard-attention-inbox"
                 />
               )}
@@ -1276,7 +1194,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         open={customizeOpen}
         onClose={() => setCustomizeOpen(false)}
         visibility={visibility}
-        onToggle={setVisible}
+        onToggle={(id, visible) => setVisible(id as DashboardSectionId, visible)}
         onReset={reset}
       />
     </ManagerPortalPageShell>

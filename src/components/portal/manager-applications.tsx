@@ -1,33 +1,46 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
+  RESIDENT_DETAIL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PortalTableDetailActions,
   PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
 import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
+import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
-import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
@@ -49,20 +62,31 @@ import {
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { transitionApplicationBucket } from "@/lib/application-review";
+import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   fetchCosignerSubmissionsForSignerAppId,
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
+import { buildApplicationHtml } from "@/lib/manager-application-html";
+import { applicationPdfFilename } from "@/lib/manager-application-pdf";
+import {
+  downloadFetchedUrl,
+  portalDownloadToastMessage,
+  type PortalDownloadResult,
+} from "@/lib/portal-document-download";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
-import { ApplicationGroupSection, applicationStatusPill, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
+import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
-  buildApplicationGroups,
+  buildBundleApplicationGroups,
+} from "@/lib/bundle-group/bundle-group-application";
+import {
   describeGroupBadge,
   groupForRow,
 } from "@/lib/rental-application/application-groups";
@@ -91,6 +115,25 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  applicationDetailHref,
+  applicationListHref,
+} from "@/lib/portal-detail-routes";
+import {
+  appendPortalPropertyFilterQuery,
+  parsePortalPropertyFilterQuery,
+  sanitizePortalPropertyFilterIds,
+} from "@/lib/portal-property-list-filters";
+
+function applicationRowPropertyId(row: DemoApplicantRow): string {
+  return row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+}
+
+function applicationRowsForPropertyFilters(rows: DemoApplicantRow[], propertyFilters: string[]): DemoApplicantRow[] {
+  if (propertyFilters.length === 0) return rows;
+  return rows.filter((r) => propertyFilters.includes(applicationRowPropertyId(r)));
+}
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -138,148 +181,140 @@ export function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: bool
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
 
-/** Trigger a browser download of the application PDF without opening a blank tab. */
-export function downloadApplicationPdf(row: DemoApplicantRow): void {
-  const anchor = document.createElement("a");
-  anchor.href = applicationPdfHref(row);
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+/** Fetch the application PDF and save it — works on phone via blob download or the share sheet. */
+export async function downloadApplicationPdf(row: DemoApplicantRow): Promise<PortalDownloadResult> {
+  if (typeof window === "undefined") return "failed";
+  return downloadFetchedUrl(
+    applicationPdfHref(row),
+    applicationPdfFilename(row),
+    "application/pdf",
+    "Application",
+  );
+}
+
+/** Fire-and-forget helper for click handlers that already show their own toast. */
+export function runApplicationPdfDownload(
+  row: DemoApplicantRow,
+  showToast: (message: string) => void,
+): void {
+  void downloadApplicationPdf(row).then((result) => {
+    const message = portalDownloadToastMessage(result, "application");
+    if (message) showToast(message);
+  });
+}
+
+function ApplicationPdfDownloadButton({
+  row,
+  label = "Download PDF",
+  className = "h-8 rounded-full px-4 text-xs",
+}: {
+  row: DemoApplicantRow;
+  label?: string;
+  className?: string;
+}) {
+  const { showToast } = useAppUi();
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={className}
+      data-attr="application-pdf-download"
+      onClick={() => runApplicationPdfDownload(row, showToast)}
+    >
+      {label}
+    </Button>
+  );
 }
 
 /**
- * Inline application preview — the same PDF bytes as Download PDF, embedded without
- * opening a new tab (demo builds the PDF locally; production uses the API route).
+ * Inline application preview — rendered from the application answers already on
+ * the row (same HTML as the Documents tab). Download PDF still uses the API route.
  */
 export function ApplicationDocumentPreview({
   row,
   collapsible = true,
   showDownload = true,
+  bareCanvas = false,
 }: {
   row: DemoApplicantRow;
   collapsible?: boolean;
   showDownload?: boolean;
+  /** Flat on the portal page canvas — no white document card chrome. */
+  bareCanvas?: boolean;
 }) {
   const demo = isDemoModeActive();
-  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState(false);
-  // Every sync/autosave tick re-mints the row OBJECT (new refs for identical
-  // data), so the fetch must key on the values the PDF actually derives from —
-  // otherwise an open preview re-generates the PDF server-side and remounts the
-  // iframe on every background tick. The ref keeps the latest row for the
-  // fetch body without widening the dependency back to object identity.
-  const rowRef = useRef(row);
-  // Updated in an effect (never during render); declared BEFORE the fetch
-  // effect so it always sees this commit's row.
-  useEffect(() => {
-    rowRef.current = row;
-  });
+  const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
   const previewKey = [
     row.id,
     row.bucket,
     applicationRoomLabel(row),
     row.application?.hasCosigner === "yes" ? "cosigner" : "",
+    row.application?.rentalType ?? "",
   ].join("|");
 
   useEffect(() => {
-    let cancelled = false;
-    const row = rowRef.current;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale error/preview when the row changes
-    setPdfError(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when the row changes
+    setCosignerSubmissions([]);
+    if (row.application?.hasCosigner !== "yes") return;
     if (demo) {
-      void (async () => {
-        const cosignerSubmissions =
-          row.application?.hasCosigner === "yes"
-            ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
-                readCosignerSubmissionsForSignerAppId(row.id),
-              )
-            : [];
-        const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-        const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
-        if (!cancelled) setPdfSrc(url);
-      })();
-      return () => {
-        cancelled = true;
-      };
+      setCosignerSubmissions(readCosignerSubmissionsForSignerAppId(row.id));
+      return;
     }
-    // Fetch the PDF ourselves rather than pointing the frame at the API URL: an
-    // error response (403/404) is a JSON body, and an <iframe> would render that
-    // raw JSON straight into the UI. Validate it's really a PDF, embed it via a
-    // blob URL, and on any failure show a plain message + log the detail.
-    let objectUrl: string | null = null;
-    setPdfSrc(null);
-    void (async () => {
-      try {
-        const res = await fetch(applicationPdfHref(row, { inline: true }), { credentials: "include" });
-        const contentType = res.headers.get("content-type") ?? "";
-        if (!res.ok || !contentType.includes("application/pdf")) {
-          let detail = `HTTP ${res.status}`;
-          try {
-            detail = (await res.clone().text()).slice(0, 300) || detail;
-          } catch {
-            /* body already consumed / unavailable */
-          }
-          console.error("Application document preview failed", { applicationId: row.id, status: res.status, detail });
-          if (!cancelled) setPdfError(true);
-          return;
-        }
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-        setPdfSrc(`${objectUrl}#toolbar=0&navpanes=0`);
-      } catch (e) {
-        console.error("Application document preview error", e);
-        if (!cancelled) setPdfError(true);
-      }
-    })();
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(row.id)
+      .catch(() => readCosignerSubmissionsForSignerAppId(row.id))
+      .then((rows) => {
+        if (!cancelled) setCosignerSubmissions(rows);
+      });
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [previewKey, demo]);
+  }, [previewKey, demo, row.application?.hasCosigner, row.id]);
+
+  const previewHtml = useMemo(
+    () =>
+      buildApplicationHtml(row, {
+        roomLabel: applicationRoomLabel(row) || undefined,
+        cosignerSubmissions,
+      }),
+    [row, cosignerSubmissions, previewKey],
+  );
 
   const downloadButton = showDownload ? (
-    <Button
-      type="button"
-      variant="outline"
-      className="h-8 rounded-full px-4 text-xs"
-      data-attr="application-pdf-download"
-      onClick={() => downloadApplicationPdf(row)}
-    >
-      Download PDF
-    </Button>
+    <ApplicationPdfDownloadButton row={row} />
   ) : null;
 
+  const iframeHtml = useMemo(() => {
+    if (!bareCanvas) return previewHtml;
+    return previewHtml.replace(
+      "html, body { background: #fff; }",
+      "html, body { background: transparent; }",
+    );
+  }, [bareCanvas, previewHtml]);
+
   const previewBody = (
-    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-      {pdfError ? (
-        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-          Couldn&apos;t load this application document. Refresh and try again.
-        </div>
-      ) : pdfSrc ? (
-        <iframe
-          key={pdfSrc}
-          src={pdfSrc}
-          title="Application document"
-          loading="lazy"
-          className="h-[min(52vh,420px)] w-full border-0 bg-white"
-        />
-      ) : (
-        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-          Loading application PDF…
-        </div>
-      )}
+    <div className={bareCanvas ? "w-full" : "overflow-hidden border-t border-border bg-white"}>
+      <iframe
+        key={previewKey}
+        srcDoc={iframeHtml}
+        title="Application document"
+        sandbox="allow-same-origin"
+        loading="lazy"
+        className={
+          bareCanvas
+            ? "h-[min(70vh,720px)] w-full border-0 bg-transparent"
+            : "h-[min(52vh,420px)] w-full border-0 bg-white"
+        }
+      />
     </div>
   );
 
   if (!collapsible) {
     return (
-      <div className="mt-4 space-y-3">
-        {downloadButton ? <div className="flex justify-end">{downloadButton}</div> : null}
+      <div className={bareCanvas ? "space-y-3" : "mt-4 space-y-3"}>
+        {downloadButton ? (
+          <div className="flex flex-nowrap items-center justify-start gap-2">{downloadButton}</div>
+        ) : null}
         {previewBody}
       </div>
     );
@@ -290,10 +325,13 @@ export function ApplicationDocumentPreview({
       title="Application"
       defaultExpanded={false}
       surfaceMuted={false}
-      className="mt-4"
-      contentClassName="p-4 pt-0"
+      bareSurface
+      hideToggleIcon
+      className="mt-0"
+      contentClassName="pt-0"
       toggleDataAttr="application-document-toggle"
       headerActions={downloadButton ?? undefined}
+      headerActionsInline={Boolean(downloadButton)}
     >
       {previewBody}
     </PortalCollapsibleSection>
@@ -337,15 +375,30 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
   });
 }
 
-export function ManagerApplications() {
+export function ManagerApplications({
+  bucket: bucketProp = "pending",
+  basePath = "/portal",
+  applicationId: applicationIdProp,
+}: {
+  bucket?: ManagerApplicationTabId;
+  basePath?: string;
+  applicationId?: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navigate = usePortalNavigate();
   const openHandled = useRef(false);
-  const [bucket, setBucket] = useState<ManagerApplicationTabId>("pending");
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [bucket, setBucket] = useState<ManagerApplicationTabId>(bucketProp);
+  const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
+  if (bucketProp !== prevBucketProp) {
+    setPrevBucketProp(bucketProp);
+    if (bucket !== bucketProp) setBucket(bucketProp);
+  }
+  // propertyFilters derived from URL (see appliedPropertyFilters below)
+  const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
   );
@@ -434,6 +487,36 @@ export function ManagerApplications() {
   const scopeUserId = resolveManagerScopeUserId(userId);
 
   const propertyOptions = buildManagerPropertyFilterOptions(scopeUserId);
+
+  const propertyFilters = useMemo(
+    () =>
+      sanitizePortalPropertyFilterIds(
+        parsePortalPropertyFilterQuery(searchParams),
+        propertyOptions.map((o) => o.id),
+      ),
+    [searchParams, propertyOptions],
+  );
+
+  const setPropertyFilters = useCallback(
+    (next: string[] | ((prev: string[]) => string[])) => {
+      const resolved = typeof next === "function" ? next(propertyFilters) : next;
+      const sanitized = sanitizePortalPropertyFilterIds(
+        resolved,
+        propertyOptions.map((o) => o.id),
+      );
+      router.replace(appendPortalPropertyFilterQuery(applicationListHref(basePath, bucket), sanitized), {
+        scroll: false,
+      });
+    },
+    [propertyFilters, propertyOptions, basePath, bucket, router],
+  );
+
+  const applicationsListHref = useCallback(
+    (tab: ManagerApplicationTabId) =>
+      appendPortalPropertyFilterQuery(applicationListHref(basePath, tab), propertyFilters),
+    [basePath, propertyFilters],
+  );
+
   const shareableProperties = useMemo(() => {
     void portfolioTick;
     return buildManagerShareablePropertyOptions(scopeUserId);
@@ -452,14 +535,19 @@ export function ManagerApplications() {
   // Reconcile group applications across every bucket (a group can span pending / approved /
   // in-progress) so the whole household is visible from any one member's row.
   const applicationGroups = useMemo(
-    () => buildApplicationGroups(scopedRows.map(groupRowInputForRow)),
+    () => buildBundleApplicationGroups(scopedRows.map(groupRowInputForRow)),
     [scopedRows],
   );
 
-  const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
+  const propertyFilteredRows = useMemo(
+    () => applicationRowsForPropertyFilters(scopedRows, propertyFilters),
+    [scopedRows, propertyFilters],
+  );
+
+  const counts = useMemo(() => countByBucket(propertyFilteredRows), [propertyFilteredRows]);
   const incompleteCount = useMemo(
-    () => scopedRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
-    [scopedRows],
+    () => propertyFilteredRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
+    [propertyFilteredRows],
   );
   // "Pending" now means submitted and awaiting review — Incomplete (still a
   // draft) is its own tab, so it is subtracted out here rather than shown as
@@ -476,15 +564,38 @@ export function ManagerApplications() {
     [counts, incompleteCount, pendingReviewCount],
   );
 
+  const propertyFilterLabel = useMemo(() => {
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return propertyOptions.find((o) => o.id === propertyFilters[0])?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, propertyOptions]);
+
   const rowsForBucket = useMemo(() => {
-    const inBucket = scopedRows.filter((r) => tabForRow(r) === bucket);
-    const filtered = !propertyFilter.trim()
-      ? inBucket
-      : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
-    // Sorting only special-cases "approved" today; every other tab (including
-    // the new "incomplete") falls through to the same name/id sort as "pending".
-    return sortApplicationRows(filtered, bucket === "approved" ? "approved" : "pending");
-  }, [scopedRows, bucket, propertyFilter]);
+    const inBucket = propertyFilteredRows.filter((r) => tabForRow(r) === bucket);
+    const q = searchQuery.trim().toLowerCase();
+    const searched = q
+      ? inBucket.filter((r) =>
+          [r.name, r.email, r.property, r.id, r.application?.email]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : inBucket;
+    return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
+  }, [propertyFilteredRows, bucket, searchQuery]);
+
+  const openDetailScreeningModal = useCallback((row: DemoApplicantRow) => {
+    setCheckrScreeningRowId(row.id);
+  }, []);
+
+  const detailRow = useMemo(() => {
+    if (!applicationIdProp) return null;
+    const decoded = decodeURIComponent(applicationIdProp);
+    return scopedRows.find((r) => r.id === decoded) ?? null;
+  }, [applicationIdProp, scopedRows]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -496,8 +607,10 @@ export function ManagerApplications() {
     if (!hit) return;
     openHandled.current = true;
     queueMicrotask(() => {
-      setBucket(tabForRow(hit));
-      setExpandedId(hit.id);
+      const tab = tabForRow(hit);
+      setBucket(tab);
+      router.replace(applicationsListHref(tab), { scroll: false });
+      navigate(applicationDetailHref(basePath, tab, hit.id));
     });
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -506,7 +619,7 @@ export function ManagerApplications() {
     params.delete("axisId");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [scopedRows, pathname, router]);
+  }, [scopedRows, pathname, router, basePath, navigate]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const result = await transitionApplicationBucket(id, nextBucket, {
@@ -520,8 +633,7 @@ export function ManagerApplications() {
       return;
     }
 
-    setExpandedId(null);
-    setBucket(nextBucket);
+    router.push(applicationsListHref(nextBucket));
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
@@ -572,7 +684,6 @@ export function ManagerApplications() {
     // cache is resurrected on the next poll/focus sync (the captain's "glitch" report).
     writeManagerApplicationRows(nextRows);
     setRows(nextRows);
-    setExpandedId(null);
 
     let serverError: string | null = null;
     if (email || id) {
@@ -612,6 +723,10 @@ export function ManagerApplications() {
       syncHouseholdChargesFromServer(),
     ]);
     setRows(syncedRows);
+
+    if (applicationIdProp) {
+      navigate(applicationsListHref(bucket));
+    }
 
     showToast(
       email
@@ -721,6 +836,187 @@ export function ManagerApplications() {
     }
   };
 
+  const renderApplicationRowActions = (row: DemoApplicantRow) => {
+    const isPending = row.bucket === "pending";
+    const showsRunCheck =
+      applicationShowsBackgroundCheck(row) && Boolean(row.application?.consentCredit) && row.backgroundCheck?.status !== "pending";
+    const canDownloadScreening =
+      row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
+
+    const approveButton =
+      isPending && !isWithdrawnApplicationRow(row) ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+          data-attr="application-approve"
+          onClick={() => setApprovePreviewRow(row)}
+        >
+          Approve
+        </Button>
+      ) : null;
+
+    const rejectButton = isPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-reject"
+        onClick={() => setRowBucket(row.id, "rejected")}
+      >
+        Reject
+      </Button>
+    ) : null;
+
+    const runCheckButton = showsRunCheck ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="run-background-check"
+        onClick={() => openDetailScreeningModal(row)}
+      >
+        Run background check
+      </Button>
+    ) : null;
+
+    const downloadApplicationButton = (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-pdf-download"
+        onClick={() => runApplicationPdfDownload(row, showToast)}
+      >
+        Download application
+      </Button>
+    );
+
+    const downloadScreeningButton = canDownloadScreening ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="screening-pdf-download"
+        onClick={() => downloadBackgroundCheckForApplication(row)}
+      >
+        Download background check
+      </Button>
+    ) : null;
+
+    const moveToPendingButton = !isPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-move-pending"
+        onClick={() => setRowBucket(row.id, "pending")}
+      >
+        Move to pending
+      </Button>
+    ) : null;
+
+    const sendReminderButton =
+      isPending && !isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+          data-attr="application-send-reminder"
+          disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+          onClick={() => void openReminderPreview(row)}
+        >
+          {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+        </Button>
+      ) : null;
+
+    const deleteButton = (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="application-delete"
+        onClick={() => void deleteApplication(row.id)}
+      >
+        Delete
+      </Button>
+    );
+
+    const mobileOverflowMenu = (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} max-md:px-2.5 max-md:text-base`}
+            data-attr="application-more-actions"
+            aria-label="More application actions"
+          >
+            …
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" backdrop>
+          <DropdownMenuItem data-attr="application-pdf-download" onSelect={() => runApplicationPdfDownload(row, showToast)}>
+            Download application
+          </DropdownMenuItem>
+          {canDownloadScreening ? (
+            <DropdownMenuItem
+              data-attr="screening-pdf-download"
+              onSelect={() => downloadBackgroundCheckForApplication(row)}
+            >
+              Download background check
+            </DropdownMenuItem>
+          ) : null}
+          {moveToPendingButton ? (
+            <DropdownMenuItem data-attr="application-move-pending" onSelect={() => setRowBucket(row.id, "pending")}>
+              Move to pending
+            </DropdownMenuItem>
+          ) : null}
+          {sendReminderButton ? (
+            <DropdownMenuItem
+              data-attr="application-send-reminder"
+              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+              onSelect={() => void openReminderPreview(row)}
+            >
+              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            data-attr="application-delete"
+            className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+            onSelect={() => void deleteApplication(row.id)}
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+    return (
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+        <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+          <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+            {approveButton}
+            {rejectButton}
+            {runCheckButton}
+            {mobileOverflowMenu}
+          </div>
+          <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+            {approveButton}
+            {rejectButton}
+            {runCheckButton}
+            {downloadApplicationButton}
+            {downloadScreeningButton}
+            {moveToPendingButton}
+            {sendReminderButton}
+            {deleteButton}
+          </div>
+        </PortalSectionActionRow>
+      </div>
+    );
+  };
+
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
     // A holding deposit collected AT APPLICATION (a since-removed per-listing
@@ -746,206 +1042,109 @@ export function ManagerApplications() {
           terms.
         </div>
       ) : null}
-      <PortalTableDetailActions placement="top">
-        {row.bucket === "pending" ? (
-          // A resident-withdrawn row keeps `bucket === "pending"`, but approving it
-          // would provision a resident account + rent/deposit charges for someone who
-          // explicitly pulled out — so it offers neither Approve nor the completion
-          // reminder. The row stays visible + reversible (withdrawal is a stamp, not a
-          // delete); Reject/Delete remain so the manager can formally close it.
-          <>
-            {isWithdrawnApplicationRow(row) ? null : (
-              <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} data-attr="application-approve" onClick={() => setApprovePreviewRow(row)}>
-                Approve
-              </Button>
-            )}
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
-              Reject
-            </Button>
-            {!isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="application-send-reminder"
-                // Disabled while ANY reminder preview/send is in flight so a click on
-                // another row isn't silently dropped by the single-flight guards.
-                disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-                onClick={() => void openReminderPreview(row)}
-              >
-                {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
-            Move to pending
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          onClick={() => void deleteApplication(row.id)}
-        >
-          Delete
-        </Button>
-      </PortalTableDetailActions>
+      {group ? (
+        <ApplicationGroupSection group={group} bundleGroup={group} currentRowId={row.id} />
+      ) : null}
 
-      {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
-
-      <ApplicationDocumentPreview row={row} />
+      <ApplicationReviewLauncherRow
+        row={row}
+        bareCanvas
+        showDownload={false}
+        onScreeningUpdated={handleScreeningUpdated}
+        onOpenScreeningModal={() => openDetailScreeningModal(row)}
+      />
 
       <ApplicationVerificationPhotos row={row} />
-
-      <ApplicationScreeningPanel
-        row={row}
-        onUpdated={handleScreeningUpdated}
-        onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
-      />
     </>
     );
   };
 
-  return (
-    <>
-    <ManagerPortalPageShell
-      title="Applications"
-      titleAside={
-        // min-w-0 (not shrink-0) so this 4-action toolbar can shrink and wrap to
-        // its own line on a phone instead of overflowing the header — Send was
-        // being clipped off the right edge and was unreachable at 360/390px.
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="application-settings-open"
-            onClick={() => setApplicationSettingsOpen(true)}
-          >
-            Application fee
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="edit-application-open"
-            onClick={() => setEditApplicationOpen(true)}
-            disabled={propertyOptions.length === 0}
-            title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
-          >
-            Edit
-            <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setInviteModalOpen(true)}
-            disabled={shareableProperties.length === 0}
-            title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
-          >
-            Send
-          </Button>
-        </div>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationTabId)} />
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={(id) => setPropertyFilter(id)}
-          />
-        </ManagerPortalFilterRow>
-      }
+  const applicationsFilterSort = (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([propertyFilters])}
+      compactPanel
+      onReset={() => setPropertyFilters([])}
+      dataAttr="applications-filter-sheet-open"
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0"
     >
-      <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
-      <ManagerApplicationSettingsModal
-        open={applicationSettingsOpen}
-        onClose={() => setApplicationSettingsOpen(false)}
+      <ApplicationFilterSortFields
+        layout="inline"
+        propertyOptions={propertyOptions}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
       />
-      <CheckrScreeningModal
-        key={checkrScreeningRowId ?? "none"}
-        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
-        open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
-        onUpdated={handleScreeningUpdated}
-      />
-      {!authReady && rows.length === 0 ? (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
-        </div>
-      ) : rowsForBucket.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="application"
-          message={
-            scopedRows.length === 0
-              ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
-              : propertyFilter.trim()
-                ? "No applications for this property yet."
-                : bucket === "pending"
-                  ? "No pending applications. Submitted applications awaiting your review will appear here."
-                  : bucket === "incomplete"
-                    ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
-                    : "No applications in this tab yet."
-          }
-        />
-      ) : (
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        <ul className="divide-y divide-[var(--border)]">
-          {rowsForBucket.map((row) => {
-            const expanded = expandedId === row.id;
-            const status = applicationStatusPill(row);
-            const room = displayRoomForRow(row);
-            const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
-            const groupBadge = group ? describeGroupBadge(group) : null;
-            const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
-              .filter((part) => part && part !== "—")
-              .join(" · ");
-            return (
-              <li key={row.id} id={`portal-application-${row.id}`}>
-                <button
-                  type="button"
-                  className="group flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 sm:gap-3.5 sm:px-5 sm:py-3.5"
-                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                  aria-expanded={expanded}
-                >
-                  <InboxAvatar name={row.name} className="h-9 w-9 text-[11px]" />
-                  {/* Floor the name column so a long group badge wraps to its own line
-                      instead of squeezing the applicant's name down to one letter. */}
-                  <span className="flex min-w-24 flex-1 flex-col">
-                    <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                      {/* `block` so `truncate` actually ellipsizes — an inline span ignores
-                          overflow/text-overflow and would run under the trailing badges. */}
-                      <span className="block truncate">{row.name}</span>
-                    </PortalTableInlineExpand>
-                    {subtitle ? (
-                      <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
-                    ) : null}
-                  </span>
-                  <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                    {groupBadge ? (
-                      <span title={groupBadge.title}>
-                        <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
-                      </span>
-                    ) : null}
-                    <Badge tone={status.tone}>{status.label}</Badge>
-                  </span>
-                </button>
-                {expanded ? (
-                  <div className="border-t border-border px-4 py-4 sm:px-5 sm:py-5">
-                    {renderApplicationDetail(row)}
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      )}
-    </ManagerPortalPageShell>
+    </PortalFilterSortSheet>
+  );
+
+  const applicationsScreeningButton = (
+    <ManagerScreeningSettingsButton
+      className="w-full shrink-0 md:w-auto"
+      onClick={() => setScreeningModalOpen(true)}
+    />
+  );
+
+  const applicationsPromoButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="application-settings-open"
+      onClick={() => setApplicationSettingsOpen(true)}
+    >
+      Promo
+    </Button>
+  );
+
+  const applicationsEditButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="edit-application-open"
+      onClick={() => setEditApplicationOpen(true)}
+      disabled={propertyOptions.length === 0}
+      title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+    >
+      Edit
+    </Button>
+  );
+
+  const applicationsSendButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      onClick={() => setInviteModalOpen(true)}
+      disabled={shareableProperties.length === 0}
+      title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
+    >
+      Send
+    </Button>
+  );
+
+  const applicationsHeaderActions = (
+    <>
+      {applicationsScreeningButton}
+      {applicationsPromoButton}
+      {applicationsEditButton}
+      {applicationsSendButton}
+    </>
+  );
+
+  const applicationsMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow
+      filter={applicationsFilterSort}
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {applicationsHeaderActions}
+        </PortalSectionActionRow>
+      }
+    />
+  );
+
+  const applicationModals = (
+    <>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}
         title="Approve application: account setup email"
@@ -1012,6 +1211,141 @@ export function ManagerApplications() {
         onSaved={() => setPortfolioTick((n) => n + 1)}
         showToast={showToast}
       />
+    </>
+  );
+
+  if (applicationIdProp && detailRow) {
+    return (
+      <>
+        {applicationModals}
+        <PortalRecordDetailPage
+          pageTitle="Applications"
+          title={detailRow.name}
+          subtitle={detailRow.email}
+          avatarName={detailRow.name}
+          backHref={applicationsListHref(tabForRow(detailRow))}
+          hideBackText
+          bareHeader
+          dataAttrBack="application-detail-back"
+          inlineActions
+          actions={renderApplicationRowActions(detailRow)}
+        >
+          {renderApplicationDetail(detailRow)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  return (
+    <>
+    <ManagerPortalPageShell
+      title="Applications"
+      hideTitleOnMobileNav
+      titleInlineFilter={applicationsFilterSort}
+      titleAside={applicationsHeaderActions}
+      compactFilterRow
+    >
+      {applicationsMobileActionsRow}
+      <PortalListControlStack
+        className="mb-2 max-lg:mb-2"
+        destinationInset
+        destinations={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: applicationsListHref(t.id),
+          count: t.count,
+          dataAttr: `applications-bucket-${t.id}`,
+        }))}
+        activeDestinationId={bucket}
+        destinationAriaLabel="Application status"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search applicants",
+          dataAttr: "applications-search",
+        }}
+        activeFilterChips={
+          propertyFilters.length > 0 ? (
+            <PortalActiveFilterChips
+              chips={[
+                {
+                  id: "property",
+                  label: `Property: ${propertyFilterLabel}`,
+                  onRemove: () => setPropertyFilters([]),
+                },
+              ]}
+            />
+          ) : null
+        }
+      />
+      <div className="mt-2 space-y-4 max-md:mt-3">
+      <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
+      <ManagerApplicationSettingsModal
+        open={applicationSettingsOpen}
+        onClose={() => setApplicationSettingsOpen(false)}
+      />
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        open={checkrScreeningRowId !== null}
+        onClose={() => setCheckrScreeningRowId(null)}
+        onUpdated={handleScreeningUpdated}
+      />
+      {!authReady && rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <ListSkeleton rows={5} showLeading={false} />
+        </div>
+      ) : rowsForBucket.length === 0 ? (
+        <div className="px-3 py-2">
+          <PortalDataTableEmpty
+            icon="application"
+            message={
+              scopedRows.length === 0
+                ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
+                : searchQuery.trim()
+                  ? "No applications match your search."
+                  : propertyFilters.length > 0
+                    ? "No applications for this property yet."
+                    : bucket === "pending"
+                      ? "No pending applications. Submitted applications awaiting your review will appear here."
+                      : bucket === "incomplete"
+                        ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
+                        : "No applications in this tab yet."
+            }
+          />
+        </div>
+      ) : (
+        <div
+          className={`${PORTAL_LIST_PAGE_BODY} max-md:[&_.portal-inbox-row]:gap-3 max-md:[&_.portal-inbox-row]:px-3.5 max-md:[&_.portal-inbox-row]:py-3.5`}
+        >
+          {rowsForBucket.map((row) => {
+            const room = displayRoomForRow(row);
+            const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
+              .filter((part) => part && part !== "—")
+              .join(" · ");
+            const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+            const groupBadge = group ? describeGroupBadge(group) : null;
+            return (
+              <PortalPersonRecordRow
+                key={row.id}
+                name={row.name}
+                subtitle={subtitle || undefined}
+                preview={row.email}
+                badge={
+                  groupBadge ? (
+                    <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
+                  ) : undefined
+                }
+                onOpen={() => navigate(applicationDetailHref(basePath, bucket, row.id))}
+                dataAttr="application-list-row"
+              />
+            );
+          })}
+        </div>
+      )}
+      </div>
+    </ManagerPortalPageShell>
+      {applicationModals}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { E2E_ACCOUNTS } from "../fixtures";
+import { establishActivePortal, signIn } from "../helpers/auth";
 
 /**
  * Legacy nav/redirect sweep.
@@ -22,25 +23,18 @@ function shot(name: string) {
 }
 
 /**
- * Password sign-in, stopping as soon as the Supabase session cookie exists.
- *
- * The shared helper waits for /auth/continue to route onward, which needs
- * SUPABASE_SERVICE_ROLE_KEY (/api/auth/oauth-portal-access 500s without it).
- * This sweep only needs an authenticated session, so it skips that hop.
+ * Password sign-in, then pin the active portal so protected routes do not bounce
+ * through /auth/continue mid-navigation.
  */
-async function signInAndWaitForSession(page: Page, email: string, password: string) {
-  await page.goto("/auth/sign-in");
-  await page.getByPlaceholder("Email").fill(email);
-  await page.getByPlaceholder("Password").fill(password);
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await expect
-    .poll(
-      // Must not match `sb-<ref>-auth-token-code-verifier`, which exists before sign-in.
-      async () =>
-        (await page.context().cookies()).some((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name)),
-      { timeout: 30_000 },
-    )
-    .toBe(true);
+async function signInForNavSweep(
+  page: Page,
+  role: "manager" | "resident",
+  email: string,
+  password: string,
+  next: string,
+) {
+  await signIn(page, email, password, next);
+  await establishActivePortal(page, role, next);
 }
 
 type Landing = {
@@ -53,8 +47,8 @@ type Landing = {
 };
 
 async function land(page: Page, requested: string, screenshotName?: string): Promise<Landing> {
-  const response = await page.goto(requested, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle").catch(() => {});
+  const response = await page.goto(requested, { waitUntil: "domcontentloaded", timeout: 45_000 });
+  await page.getByRole("heading").first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
 
   const chain: string[] = [];
   for (let req = response?.request() ?? null; req; req = req.redirectedFrom()) {
@@ -68,13 +62,21 @@ async function land(page: Page, requested: string, screenshotName?: string): Pro
     .first()
     .isVisible()
     .catch(() => false);
-  if (screenshotName) await page.screenshot({ path: shot(screenshotName), fullPage: false });
+  if (screenshotName) {
+    await page.screenshot({ path: shot(screenshotName), fullPage: false, timeout: 10_000 }).catch(() => {});
+  }
   return { requested, status: response?.status() ?? null, chain, finalPath, isNotFound };
 }
 
 test.describe("legacy nav redirects land on a real page", () => {
   test("resident /home legacy redirect lands on the resident dashboard", async ({ page }) => {
-    await signInAndWaitForSession(page, E2E_ACCOUNTS.resident.email, E2E_ACCOUNTS.resident.password);
+    await signInForNavSweep(
+      page,
+      "resident",
+      E2E_ACCOUNTS.resident.email,
+      E2E_ACCOUNTS.resident.password,
+      "/resident/dashboard",
+    );
 
     const bare = await land(page, "/resident/home", "resident-home-redirect");
     const deep = await land(page, "/resident/home/anything", "resident-home-deep-redirect");
@@ -96,7 +98,13 @@ test.describe("legacy nav redirects land on a real page", () => {
   });
 
   test("manager legacy financials/documents tabs land on a real tab", async ({ page }) => {
-    await signInAndWaitForSession(page, E2E_ACCOUNTS.manager.email, E2E_ACCOUNTS.manager.password);
+    await signInForNavSweep(
+      page,
+      "manager",
+      E2E_ACCOUNTS.manager.email,
+      E2E_ACCOUNTS.manager.password,
+      "/portal/dashboard",
+    );
 
     const results: Landing[] = [];
     // Controls: legacy entries that already worked before this branch.

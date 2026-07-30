@@ -26,5 +26,13 @@ export function isListingDraftAssistantContext(hint: string): boolean {
 
 export function isLeaseAssistantContext(hint: string): boolean {
   const h = hint.toLowerCase();
-  return h.startsWith("lease modal") || h.includes("edit lease ·") || h.includes("lease —");
+  return (
+    h.startsWith("lease modal") ||
+    h.includes("edit lease ·") ||
+    h.includes("lease —")
+  );
+}
+
+export function isLeasePacketEditAssistantContext(hint: string): boolean {
+  return hint.toLowerCase().startsWith("lease packet edit");
 }

@@ -1,10 +1,12 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { useCommunicationSurfaceChrome } from "@/hooks/use-communication-surface-chrome";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
+import { SegmentedThree } from "@/components/ui/segmented-control";
+import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
 import {Input, Textarea, Select} from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -12,16 +14,18 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
+  ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
+  RESIDENT_DETAIL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
@@ -34,24 +38,44 @@ import {
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
+import {
+  ReminderSettingsModal,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import type { ManagerPaymentBucket } from "@/data/demo-portal";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalPageFooterActions, PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import {
+  RESIDENT_DETAIL_TAB_LABELS,
+  RESIDENT_DETAIL_TAB_SHORT_LABELS,
+  residentDetailHref,
+  residentPaymentDetailHref,
+  parseResidentDetailTab,
+  type ResidentDetailTabId,
+} from "@/lib/portal-detail-routes";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
-  chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
-  markHouseholdChargePaid,
-  markHouseholdChargePending,
+  compareDueDateMs,
+  householdChargeToLedgerRow,
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
-  updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
@@ -62,6 +86,7 @@ import {
   upsertApplicationRowToServer,
   upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
+  deleteManagerApplicationFromServer,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
@@ -73,7 +98,20 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
+import { resolveManualResidentPlacementValues } from "@/lib/rental-application/placement-values";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  isResidentMonthToMonthLease,
+  listingLeaseTermToResidentValue,
+  RESIDENT_LEASE_TERM_CUSTOM,
+  residentLeaseTermOptionsForProperty,
+  residentLeaseTermSelectValue,
+  residentLeaseTermToApplicationFields,
+  shouldUseResidentLeaseCustomMode,
+} from "@/lib/resident-manual-lease-terms";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
+
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
   buildMockPropertyFromDraft,
@@ -90,6 +128,7 @@ import {
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
+  regenerateEditableLeasesForResident,
   leaseGenerationSupportedForRow,
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
@@ -101,8 +140,7 @@ import {
   sendLeaseToResident,
   syncLeasePipelineFromApplications,
   syncLeasePipelineFromServer,
-  downloadLeaseFromRow,
-  printLeaseAsPdf,
+  runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
   updateLeasePipelineRow,
@@ -142,13 +180,19 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import { Badge } from "@/components/ui/badge";
-import { PillTabs } from "@/components/ui/tabs";
-import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
+import {
+  ApplicationReviewLauncherRow,
+  type ApplicationReviewView,
+} from "@/components/portal/application-review-launcher-row";
+import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
+import { runApplicationPdfDownload } from "@/components/portal/manager-applications";
+import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
-import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
+import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
@@ -160,50 +204,25 @@ import {
   type ManagerServiceRequestBucket,
 } from "@/components/portal/manager-service-request-detail";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
-import { compareChargesByDueDate, isHouseholdChargeOverdue } from "@/lib/household-charges";
+
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import {
   ManagerCreateServiceRequestModal,
   type ManagerServiceResidentOption,
 } from "@/components/portal/manager-create-service-request-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
-import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 
 /**
- * Expanded-resident section: collapsed to a one-line summary by default; clicking the
- * header opens the full content (PDF preview, document, action buttons) inline.
+ * Routed resident detail tab panel — flat content (no collapsible chevron stack).
  */
-function ResidentDetailSection({
-  title,
-  summary,
-  expanded,
-  onToggle,
-  headerAction,
-  children,
-}: {
-  title: string;
-  summary: ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}) {
+function ResidentDetailTabPanel({ children, fill }: { children: ReactNode; fill?: boolean }) {
   return (
-    <PortalCollapsibleSection
-      title={title}
-      titleVariant="resident"
-      subtitle={summary}
-      expanded={expanded}
-      onExpandedChange={(open) => {
-        if (open !== expanded) onToggle();
-      }}
-      headerActions={headerAction}
-      contentClassName="pb-6"
-      surfaceMuted={false}
-      toggleDataAttr="resident-section-toggle"
+    <div
+      className={`pt-2 max-md:pt-1.5 ${fill ? "flex min-h-0 flex-1 flex-col space-y-0" : "space-y-3 max-md:space-y-2"}`}
+      data-slot="resident-detail-tab-panel"
     >
       {children}
-    </PortalCollapsibleSection>
+    </div>
   );
 }
 
@@ -224,7 +243,9 @@ type ActiveResident = {
   isPrevious: boolean;
 };
 
-type ResidentsTabId = "current" | "previous";
+type ResidentsTabId = "current";
+
+const RESIDENTS_LIST_TAB: ResidentsTabId = "current";
 
 function shortDateLabel(iso: string): string {
   const parts = iso.trim().split("-").map(Number);
@@ -234,32 +255,44 @@ function shortDateLabel(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 }
 
-const AR_LEASE_TERM_CUSTOM = "__custom__";
-const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
-
-
 export function ManagerResidents({
-  tabId = "current",
+  tabId: _tabId = "current",
+  residentId: residentIdProp,
+  detailTab: detailTabProp,
+  paymentId: paymentIdProp,
   smsUiEnabled = false,
 }: {
   tabId?: ResidentsTabId;
+  residentId?: string;
+  detailTab?: ResidentDetailTabId;
+  paymentId?: string;
   smsUiEnabled?: boolean;
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  const {
+    messages: scheduledPaymentMessages,
+    settings: residentReminderSettings,
+    reload: reloadResidentPaymentSchedule,
+    setSettings: setResidentReminderSettings,
+  } = useScheduledPaymentMessages({ includeHidden: true });
+  const residentReminderScheduleSummary = useMemo(
+    () => (residentReminderSettings ? formatFriendlyReminderSchedule(residentReminderSettings) : undefined),
+    [residentReminderSettings],
+  );
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
   const [workOrderTick, setWorkOrderTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
-  const [prevTabId, setPrevTabId] = useState(tabId);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const residentsTab = RESIDENTS_LIST_TAB;
+  const [chargeBucket, setChargeBucket] = useState<ManagerPaymentBucket>("pending");
+  const [residentReminderSettingsOpen, setResidentReminderSettingsOpen] = useState(false);
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
@@ -293,6 +326,7 @@ export function ManagerResidents({
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [applicationReviewView, setApplicationReviewView] = useState<ApplicationReviewView>("application");
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
 
   // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
@@ -303,19 +337,20 @@ export function ManagerResidents({
 
   const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
 
-  // Expanded-resident detail: collapsed section summaries, opened one at a time on click
-  const [expandedResidentSection, setExpandedResidentSection] = useState<
-    "application" | "lease" | "payments" | "services" | "communication" | null
-  >(null);
+  const activeDetailTab = parseResidentDetailTab(detailTabProp);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
-  const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
-  const [editingChargeId, setEditingChargeId] = useState<string | null>(null);
-  const [editChargeTitleDraft, setEditChargeTitleDraft] = useState("");
-  const [editChargeAmountDraft, setEditChargeAmountDraft] = useState("");
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
   const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
   const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
   const [addResidentWorkOrderOpen, setAddResidentWorkOrderOpen] = useState(false);
+  const [embeddedPaymentFooterActions, setEmbeddedPaymentFooterActions] = useState<ReactNode>(null);
+  const [embeddedPaymentBulkActions, setEmbeddedPaymentBulkActions] = useState<ReactNode>(null);
+  const handleEmbeddedPaymentFooterActions = useCallback((actions: ReactNode | null) => {
+    setEmbeddedPaymentFooterActions(actions);
+  }, []);
+  const handleEmbeddedPaymentBulkActions = useCallback((actions: ReactNode | null) => {
+    setEmbeddedPaymentBulkActions(actions);
+  }, []);
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
@@ -334,6 +369,7 @@ export function ManagerResidents({
   const [arPropertyId, setArPropertyId] = useState("");
   const [arRoomId, setArRoomId] = useState("");
   const [arLeaseTerm, setArLeaseTerm] = useState("");
+  const [arLeaseTermCustomMode, setArLeaseTermCustomMode] = useState(false);
   const [arMoveInDate, setArMoveInDate] = useState("");
   const [arMoveOutDate, setArMoveOutDate] = useState("");
   const [arRent, setArRent] = useState("");
@@ -353,6 +389,7 @@ export function ManagerResidents({
   const [erPropertyId, setErPropertyId] = useState("");
   const [erRoomId, setErRoomId] = useState("");
   const [erLeaseTerm, setErLeaseTerm] = useState("");
+  const [erLeaseTermCustomMode, setErLeaseTermCustomMode] = useState(false);
   const [erMoveInDate, setErMoveInDate] = useState("");
   const [erMoveOutDate, setErMoveOutDate] = useState("");
   const [erRent, setErRent] = useState("");
@@ -360,11 +397,6 @@ export function ManagerResidents({
   const [erMoveInFee, setErMoveInFee] = useState("");
   const [erSecurityDeposit, setErSecurityDeposit] = useState("");
   const [erNotes, setErNotes] = useState("");
-
-  if (tabId !== prevTabId) {
-    setPrevTabId(tabId);
-    if (residentsTab !== tabId) setResidentsTab(tabId);
-  }
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -611,23 +643,67 @@ export function ManagerResidents({
     return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
   }, [erPropertyId, userId, propertyTick]);
 
-  const arLeaseTermSelectValue = useMemo(() => {
-    if (!arLeaseTerm.trim()) return "";
-    return AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
-      ? arLeaseTerm
-      : AR_LEASE_TERM_CUSTOM;
-  }, [arLeaseTerm]);
+  const arLeaseTermOptions = useMemo(
+    () => residentLeaseTermOptionsForProperty(arPropertyId),
+    [arPropertyId, propertyTick],
+  );
+  const arLeaseTermPresetValues = useMemo(
+    () => arLeaseTermOptions.map((o) => o.value),
+    [arLeaseTermOptions],
+  );
+  const erLeaseTermOptions = useMemo(
+    () => residentLeaseTermOptionsForProperty(erPropertyId),
+    [erPropertyId, propertyTick],
+  );
+  const erLeaseTermPresetValues = useMemo(
+    () => erLeaseTermOptions.map((o) => o.value),
+    [erLeaseTermOptions],
+  );
 
-  const isMonthToMonthLease = arLeaseTerm === "Month-to-month";
+  const arLeaseTermSelectValue = useMemo(
+    () => residentLeaseTermSelectValue(arLeaseTerm, arLeaseTermCustomMode, arLeaseTermPresetValues),
+    [arLeaseTerm, arLeaseTermCustomMode, arLeaseTermPresetValues],
+  );
 
-  const erLeaseTermSelectValue = useMemo(() => {
-    if (!erLeaseTerm.trim()) return "";
-    return AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])
-      ? erLeaseTerm
-      : AR_LEASE_TERM_CUSTOM;
-  }, [erLeaseTerm]);
+  const isMonthToMonthLease = isResidentMonthToMonthLease(arLeaseTerm);
 
-  const isEditMonthToMonthLease = erLeaseTerm === "Month-to-month";
+  const arManualLeaseFields = useMemo(
+    () => residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode),
+    [arLeaseTerm, arLeaseTermCustomMode],
+  );
+  const arIsShortTermStay = arManualLeaseFields.rentalType === "short_term";
+
+  useEffect(() => {
+    if (!addResidentOpen) return;
+    if (!arPropertyId.trim() || !arLeaseTerm.trim()) return;
+    const pricing = resolveManualResidentPlacementValues({
+      propertyId: arPropertyId,
+      roomId: arRoomId,
+      leaseTerm: arLeaseTerm,
+      leaseTermCustomMode: arLeaseTermCustomMode,
+    });
+    if (!pricing) return;
+    setArRent(pricing.rent);
+    setArUtilities(pricing.utilities);
+    setArMoveInFee(pricing.moveInFee);
+    setArSecurityDeposit(pricing.securityDeposit);
+  }, [addResidentOpen, arPropertyId, arRoomId, arLeaseTerm, arLeaseTermCustomMode, propertyTick]);
+
+  useEffect(() => {
+    if (!addResidentOpen) return;
+    if (arManualLeaseFields.rentalType === "short_term") return;
+    const term = arManualLeaseFields.leaseTerm;
+    if (!arMoveInDate.trim() || !shouldAutoComputeLeaseEnd(term, arManualLeaseFields.rentalType)) return;
+    const end = computeLeaseEndDate(arMoveInDate, term);
+    if (end) setArMoveOutDate(end);
+  }, [addResidentOpen, arMoveInDate, arLeaseTerm, arLeaseTermCustomMode, arManualLeaseFields.leaseTerm, arManualLeaseFields.rentalType]);
+
+  const erLeaseTermSelectValue = useMemo(
+    () => residentLeaseTermSelectValue(erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues),
+    [erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues],
+  );
+
+  const isEditMonthToMonthLease = isResidentMonthToMonthLease(erLeaseTerm);
 
   if (isMonthToMonthLease && arMoveOutDate) {
     setArMoveOutDate("");
@@ -638,13 +714,23 @@ export function ManagerResidents({
   }
 
   const filtered = useMemo(() => {
-    const inTab = residents.filter((resident) => (residentsTab === "current" ? !resident.isPrevious : resident.isPrevious));
-    const base = propertyFilter
-      ? inTab.filter((r) => r.propertyId === propertyFilter)
+    const inTab = residents.filter((resident) => !resident.isPrevious);
+    const base = propertyFilters.length > 0
+      ? inTab.filter((r) => propertyFilters.includes(r.propertyId))
       : inTab;
+    const q = searchQuery.trim().toLowerCase();
+    const searched = q
+      ? base.filter((r) =>
+          [r.name, r.email, r.roomLabel, r.propertyLabel, r.axisId]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        )
+      : base;
 
-    return [...base].sort((a, b) => {
-      if (!propertyFilter) {
+    return [...searched].sort((a, b) => {
+      if (propertyFilters.length === 0) {
         const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
         if (propCmp !== 0) return propCmp;
       }
@@ -656,28 +742,24 @@ export function ManagerResidents({
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, residentsTab, propertyFilter]);
+  }, [residents, propertyFilters, searchQuery]);
 
-  const currentResidentsCount = useMemo(() => residents.filter((resident) => !resident.isPrevious).length, [residents]);
-  const previousResidentsCount = useMemo(() => residents.filter((resident) => resident.isPrevious).length, [residents]);
+  const activeResidentId = residentIdProp ? decodeURIComponent(residentIdProp) : null;
+  const selected = useMemo(
+    () => (activeResidentId ? residents.find((r) => r.id === activeResidentId) ?? null : null),
+    [residents, activeResidentId],
+  );
 
-  const selected = useMemo(() => residents.find((r) => r.id === selectedId) ?? null, [residents, selectedId]);
-
-  if (selectedId !== prevSelectedId) {
-    setPrevSelectedId(selectedId);
-    if (selectedId) {
-      setChargeTab("pending");
+  if (activeResidentId !== prevSelectedId) {
+    setPrevSelectedId(activeResidentId);
+    if (activeResidentId) {
+      setChargeBucket("pending");
       setSvcSubTab("requests");
       setSvcReqBucket("pending");
       setSvcWoBucket("open");
       setSvcExpandedId(null);
-      setExpandedResidentSection(null);
-      setChargeExpandedId(null);
+      setApplicationReviewView("application");
     }
-  }
-
-  if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
-    setSelectedId(null);
   }
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
@@ -754,49 +836,29 @@ export function ManagerResidents({
     });
   }, [selected, srTick]);
 
-  const residentInboxThreads = useMemo<PersistedInboxThread[]>(() => {
-    void inboxTick;
-    if (!selected?.email) return [];
-    const email = selected.email.trim().toLowerCase();
-    return filterEmailInboxThreads(
-      loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
-        .filter((thread) => thread.email.trim().toLowerCase() === email)
-        .sort((a, b) => String(b.time).localeCompare(String(a.time))),
-    );
-  }, [selected, inboxTick]);
-
-  const chargeCounts = useMemo(
-    () => ({
-      pending: residentCharges.filter((c) => c.status === "pending").length,
-      paid: residentCharges.filter((c) => c.status === "paid").length,
-    }),
+  const residentLedgerRows = useMemo(
+    () => residentCharges.map((charge) => householdChargeToLedgerRow(charge)),
     [residentCharges],
   );
 
-  const visibleCharges = useMemo(
-    () =>
-      residentCharges
-        .filter((c) => c.status === chargeTab)
-        // Paid history most-recent-first; anything still owed soonest-due first.
-        .sort((a, b) => compareChargesByDueDate(a, b, chargeTab === "paid" ? "desc" : "asc")),
-    [residentCharges, chargeTab],
-  );
+  const residentChargeCounts = useMemo(() => {
+    const counts: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    for (const row of residentLedgerRows) counts[row.bucket] += 1;
+    return counts;
+  }, [residentLedgerRows]);
 
-  const residentChargeById = useMemo(() => new Map(residentCharges.map((c) => [c.id, c])), [residentCharges]);
+  useEffect(() => {
+    if (!paymentIdProp || !residentLedgerRows.length) return;
+    const decoded = decodeURIComponent(paymentIdProp);
+    const match = residentLedgerRows.find((row) => row.id === decoded);
+    if (match && match.bucket !== chargeBucket) setChargeBucket(match.bucket);
+  }, [paymentIdProp, residentLedgerRows, chargeBucket]);
 
-  const residentChargeTableRows = useMemo((): PortalPaymentTableRow[] => {
-    if (!selected) return [];
-    const payee = selected.name.trim() || "Resident";
-    const property = selected.propertyLabel || "—";
-    return visibleCharges.map((c) => ({
-      id: c.id,
-      charge: c.title,
-      property,
-      payee,
-      dueDate: chargeDueLabel(c),
-      amount: c.balanceLabel,
-    }));
-  }, [visibleCharges, selected]);
+  const residentLedgerRowsForBucket = useMemo(() => {
+    const filtered = residentLedgerRows.filter((row) => row.bucket === chargeBucket);
+    const direction = chargeBucket === "paid" ? "desc" : "asc";
+    return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
+  }, [residentLedgerRows, chargeBucket]);
 
   const selectedApplicationRow = useMemo<DemoApplicantRow | null>(() => {
     void hcTick;
@@ -813,6 +875,16 @@ export function ManagerResidents({
     if (!selectedApplicationRow) return null;
     return groupForRow(applicationGroups, { groupId: groupIdForRow(selectedApplicationRow) });
   }, [applicationGroups, selectedApplicationRow]);
+
+  useEffect(() => {
+    if (!paymentIdProp || activeDetailTab !== "payments") {
+      setEmbeddedPaymentFooterActions(null);
+    }
+  }, [paymentIdProp, activeDetailTab]);
+
+  const handleScreeningUpdated = useCallback(() => {
+    void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
+  }, [userId]);
 
   // The resident's Application section is hidden for a LINKED (co-managed)
   // property when the co-manager lacks the `applications` grant on it. Own
@@ -834,6 +906,23 @@ export function ManagerResidents({
     if (!collectLinkedPropertyIds(userId).has(pid)) return true;
     return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
   }, [selected, userId, hcTick]);
+
+  const residentDetailTabsAvailable = useMemo((): ResidentDetailTabId[] => {
+    const tabs: ResidentDetailTabId[] = [];
+    if (showResidentApplication) tabs.push("application");
+    if (showResidentLease) tabs.push("lease");
+    tabs.push("payments", "services", "communication");
+    return tabs;
+  }, [showResidentApplication, showResidentLease]);
+
+  const resolvedDetailTab = residentDetailTabsAvailable.includes(activeDetailTab)
+    ? activeDetailTab
+    : (residentDetailTabsAvailable[0] ?? "payments");
+
+  useCommunicationSurfaceChrome({
+    active: Boolean(residentIdProp && resolvedDetailTab === "communication"),
+    threadReading: false,
+  });
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
     if (!selected?.email?.trim()) return null;
@@ -874,14 +963,6 @@ export function ManagerResidents({
     for (const row of residentWorkOrders) c[row.bucket] += 1;
     return c;
   }, [residentWorkOrders]);
-
-  const residentCommSummary = useMemo(() => {
-    const live = residentInboxThreads.filter((t) => t.folder !== "trash");
-    const unread = live.filter((t) => t.folder === "inbox" && t.unread).length;
-    if (unread > 0) return `${unread} unread conversation${unread === 1 ? "" : "s"}`;
-    if (live.length > 0) return `${live.length} conversation${live.length === 1 ? "" : "s"}`;
-    return "No messages yet.";
-  }, [residentInboxThreads]);
 
   async function sendResidentMessage() {
     if (!selected || messageBusy) return;
@@ -1009,7 +1090,13 @@ export function ManagerResidents({
     }
   }
 
-  async function sendLeaseSigningReminder(res: ActiveResident, leaseId: string, subject: string, body: string) {
+  async function sendLeaseSigningReminder(
+    res: ActiveResident,
+    leaseId: string,
+    subject: string,
+    body: string,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+  ) {
     setLeaseReminderBusy(true);
     try {
       const response = await fetch("/api/portal/send-inbox-message", {
@@ -1022,6 +1109,8 @@ export function ManagerResidents({
           subject,
           text: body,
           deliverToPortalInbox: true,
+          deliverViaEmail: channels?.viaEmail !== false,
+          deliverViaSms: channels?.viaSms === true,
         }),
       });
 
@@ -1060,16 +1149,13 @@ export function ManagerResidents({
         : `Lease start date: ${leaseStart}`
       : "";
     const subject = `Reminder: sign your lease for ${unit}`;
-    const body = [
-      `Hi ${res.name.split(" ")[0] ?? res.name},`,
-      "",
-      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
+    const body = buildLeaseReadyForResidentMessage({
+      residentName: res.name.split(" ")[0] ?? res.name,
+      residentEmail: recipient,
+      unit,
+      variant: "reminder",
       dateLine,
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].filter(Boolean).join("\n");
+    });
 
     setLeaseReminderPreview({
       res,
@@ -1082,17 +1168,12 @@ export function ManagerResidents({
 
   function leaseSentToResidentBody(res: ActiveResident, lease: LeasePipelineRow): string {
     const unit = lease.unit.trim() || "your unit";
-    return [
-      `Hi ${lease.residentName || res.name || "there"},`,
-      "",
-      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
-      "",
-      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].join("\n");
+    return buildLeaseReadyForResidentMessage({
+      residentName: lease.residentName || res.name || "there",
+      residentEmail: res.email.trim(),
+      unit,
+      variant: "send",
+    });
   }
 
   function openLeaseSendPreview(res: ActiveResident, lease: LeasePipelineRow) {
@@ -1115,9 +1196,15 @@ export function ManagerResidents({
     });
   }
 
-  async function confirmSendLeaseToResident(skipMessage: boolean) {
+  async function confirmSendLeaseToResident(
+    skipMessage: boolean,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject: string; body: string },
+  ) {
     if (!leaseSentPreview || leaseSendBusy) return;
     const { res, lease, subject, body } = leaseSentPreview;
+    const messageSubject = draft?.subject ?? subject;
+    const messageBody = draft?.body ?? body;
     setLeaseSendBusy(true);
     try {
       const sendResult = await sendLeaseToResident(lease.id, userId);
@@ -1134,8 +1221,10 @@ export function ManagerResidents({
           eventCategory: "leases",
           fromName: managerEmail ?? "Property Manager",
           toEmails: [res.email],
-          subject,
-          text: body,
+          subject: messageSubject,
+          text: messageBody,
+          deliverViaEmail: channels?.viaEmail !== false,
+          deliverViaSms: channels?.viaSms === true,
         });
         if (notice.ok) {
           showToast(
@@ -1182,9 +1271,43 @@ export function ManagerResidents({
     showToast(msg);
   };
 
-  const handleScreeningUpdated = useCallback(() => {
-    void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
-  }, [userId]);
+  const deleteApplicationForRow = async (row: DemoApplicantRow) => {
+    if (!window.confirm(`Delete the application for ${row.name || row.email}? This cannot be undone.`)) return;
+    const email = row.email?.trim().toLowerCase();
+    const nextRows = readManagerApplicationRows().filter((candidate) => candidate.id !== row.id);
+    writeManagerApplicationRows(nextRows);
+    setHcTick((n) => n + 1);
+
+    let serverError: string | null = null;
+    if (email || row.id) {
+      try {
+        const res = await fetch("/api/portal/delete-resident-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, purgeData: true, applicationId: row.id }),
+        });
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) {
+          serverError = body?.error ?? "Could not delete application.";
+        }
+      } catch {
+        serverError = "Could not delete application.";
+      }
+    } else {
+      const result = await deleteManagerApplicationFromServer(row.id);
+      if (!result.ok) serverError = result.error ?? "Could not delete application.";
+    }
+
+    if (serverError) {
+      void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
+      showToast(serverError);
+      return;
+    }
+
+    showToast("Application deleted.");
+    navigate(`${portalBase}/residents/${residentsTab}`);
+  };
 
   function saveManualResident() {
     void (async () => {
@@ -1200,7 +1323,9 @@ export function ManagerResidents({
         ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
         : "—";
       const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
       const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
+      const hasUploadedLeasePdf = Boolean(arSignedLeaseDataUrl.trim());
       const nextRow: DemoApplicantRow = {
         id: axisId,
         name: arName.trim(),
@@ -1221,13 +1346,27 @@ export function ManagerResidents({
           moveInFee: moveInFee ?? undefined,
           securityDeposit: secDeposit ?? undefined,
           roomNumber: selectedRoomLabel || undefined,
-          leaseTerm: arLeaseTerm || undefined,
+          leaseTerm: arLeaseTerm.trim() || undefined,
           notes: arNotes.trim() || undefined,
           signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
           signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
           signedLeaseUploadedAt,
-          externallySignedLease: true,
+          ...(hasUploadedLeasePdf ? { externallySignedLease: true as const } : {}),
         },
+        application: arAppLeaseFields.leaseTerm
+          ? // Manual add-resident supplies only the lease-relevant fields; the rest of the
+            // wizard form state is not collected here (cast keeps this intentional partial).
+            ({
+              propertyId: arPropertyId || undefined,
+              roomChoice1: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+              leaseTerm: arAppLeaseFields.leaseTerm,
+              rentalType: arAppLeaseFields.rentalType,
+              leaseStart: arMoveInDate || undefined,
+              leaseEnd: arMoveOutDate || undefined,
+              fullLegalName: arName.trim(),
+              email: arEmail.trim(),
+            } as unknown as DemoApplicantRow["application"])
+          : undefined,
       };
       setArSaving(true);
       try {
@@ -1243,7 +1382,7 @@ export function ManagerResidents({
           showToast(persisted.error ?? "Could not complete resident onboarding.");
           return;
         }
-        recordApprovedApplicationCharges(nextRow, userId ?? null);
+        recordApprovedApplicationCharges(nextRow, userId ?? null, true);
         syncLeasePipelineFromApplications(userId ?? null);
 
         showToast(
@@ -1257,8 +1396,8 @@ export function ManagerResidents({
           syncLeasePipelineFromServer(userId ?? null, { force: true }),
           syncHouseholdChargesFromServer(true),
         ]);
-        setChargeTab("pending");
-        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
+        setChargeBucket("pending");
+        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
         setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
         setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
         setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
@@ -1289,7 +1428,12 @@ export function ManagerResidents({
     setErEmail(row.email?.trim() || app?.email?.trim() || "");
     setErPropertyId(assignedPropId);
     setErRoomId(assignedRoomId);
-    setErLeaseTerm(row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "");
+    const assignedPropIdForLease = assignedPropId;
+    const storedLeaseTerm = row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "";
+    const erDisplayLeaseTerm = listingLeaseTermToResidentValue(storedLeaseTerm) || storedLeaseTerm;
+    const erOpts = residentLeaseTermOptionsForProperty(assignedPropIdForLease).map((o) => o.value);
+    setErLeaseTerm(erDisplayLeaseTerm);
+    setErLeaseTermCustomMode(shouldUseResidentLeaseCustomMode(erDisplayLeaseTerm, erOpts));
     setErMoveInDate(row.manualResidentDetails?.moveInDate || app?.leaseStart || "");
     setErMoveOutDate(row.manualResidentDetails?.moveOutDate || app?.leaseEnd || "");
     const savedRent = Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "";
@@ -1324,6 +1468,7 @@ export function ManagerResidents({
     const propLabel = propId ? propertyOptions.find((p) => p.id === propId)?.label ?? rows[idx]!.property : rows[idx]!.property;
     const selectedRoomLabel = erRoomId ? erRoomOptions.find((room) => room.id === erRoomId)?.name?.trim() ?? "" : "";
 
+    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode);
     const existing = rows[idx]!;
     const newRoomChoice = propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined;
     const nextRow: DemoApplicantRow = {
@@ -1342,7 +1487,7 @@ export function ManagerResidents({
         moveInFee: moveInFee ?? undefined,
         securityDeposit: secDeposit ?? undefined,
         roomNumber: selectedRoomLabel || undefined,
-        leaseTerm: erLeaseTerm || undefined,
+        leaseTerm: erLeaseTerm.trim() || undefined,
         notes: erNotes.trim() || undefined,
       },
       // Mirror all edits back into the application so both views stay consistent.
@@ -1353,7 +1498,8 @@ export function ManagerResidents({
             email: erEmail.trim() || existing.application.email,
             propertyId: propId || existing.application.propertyId,
             roomChoice1: newRoomChoice ?? existing.application.roomChoice1,
-            leaseTerm: erLeaseTerm || existing.application.leaseTerm,
+            leaseTerm: appLeaseFields.leaseTerm || existing.application.leaseTerm,
+            rentalType: appLeaseFields.leaseTerm ? appLeaseFields.rentalType : existing.application.rentalType,
             leaseStart: erMoveInDate || existing.application.leaseStart,
             leaseEnd: erMoveOutDate || existing.application.leaseEnd,
             managerRentOverride: erRent.trim() || existing.application.managerRentOverride,
@@ -1375,21 +1521,11 @@ export function ManagerResidents({
     if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
       updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
     }
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
+    recordApprovedApplicationCharges(nextRow, userId ?? null, true);
 
     // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
     if (residentEmail && nextRow.application) {
-      const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
-        (lr) =>
-          lr.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          leaseAllowsManagerDocumentEdits(lr),
-      );
-      for (const lr of leasesToRegen) {
-        updateLeasePipelineRow(lr.id, {
-          application: { ...(lr.application ?? {}), ...nextRow.application },
-        }, userId);
-        generateLeaseHtmlForRow(lr.id, userId);
-      }
+      regenerateEditableLeasesForResident(residentEmail, userId, nextRow.application);
     }
 
     setEditResidentOpen(false);
@@ -1587,7 +1723,7 @@ export function ManagerResidents({
     }
 
     await syncManagerApplicationsFromServer({ force: true, managerUserId: userId });
-    setSelectedId(null);
+    navigate(`${portalBase}/residents/${residentsTab}`);
     setHcTick((n) => n + 1);
     setLeaseTick((n) => n + 1);
     setWorkOrderTick((n) => n + 1);
@@ -1655,613 +1791,440 @@ export function ManagerResidents({
     }
   }
 
-  const residentDetailPanel =
-    selectedId && selected ? (
-                          <div className="flex flex-col gap-4">
-                            <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
-                                  onClick={() => {
-                                    const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
-                                    const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
-                                    setWelcomePreviewContent(previewBody);
-                                    setWelcomePreviewFor(selected);
-                                  }}
-                                >
-                                  Email account setup
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full px-3 py-1 text-xs"
-                                  onClick={openEditResidentModal}
-                                >
-                                  Edit resident
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-                                  onClick={deleteSelectedResident}
-                                >
-                                  Delete resident
-                                </Button>
-                              </div>
-                            </div>
+  const residentProfileHeaderActions = selected ? (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="resident-email-setup"
+        onClick={() => {
+          const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
+          const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
+          setWelcomePreviewContent(previewBody);
+          setWelcomePreviewFor(selected);
+        }}
+      >
+        <span className="max-md:hidden">Email setup</span>
+        <span className="md:hidden">Email</span>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="resident-edit"
+        onClick={openEditResidentModal}
+      >
+        Edit
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="resident-delete"
+        onClick={deleteSelectedResident}
+      >
+        Delete
+      </Button>
+    </>
+  ) : null;
 
-                            {showResidentApplication ? (
-                            <ResidentDetailSection
-                              title="Application"
-                              summary={
-                                selectedApplicationRow
-                                  ? `Application: ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
-                                  : "No application on file for this resident."
-                              }
-                              expanded={expandedResidentSection === "application"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "application" ? null : "application"))
-                              }
-                              headerAction={
-                                selectedApplicationRow?.application ? (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-8 rounded-full px-3 text-xs"
-                                    data-attr="resident-application-edit"
-                                    onClick={() => setApplicationEditOpen(true)}
-                                  >
-                                    Edit
-                                  </Button>
-                                ) : undefined
-                              }
-                            >
+  const residentApplicationTabFooterActions = selectedApplicationRow ? (
+    applicationReviewView === "background-check" ? (
+      <>
+        {applicationShowsBackgroundCheck(selectedApplicationRow) &&
+        Boolean(selectedApplicationRow.application?.consentCredit) &&
+        selectedApplicationRow.backgroundCheck?.status !== "pending" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="run-background-check"
+            onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+          >
+            {isDemoModeActive()
+              ? "Test"
+              : selectedApplicationRow.backgroundCheck
+                ? "Re-run background check"
+                : "Run background check"}
+          </Button>
+        ) : null}
+        {selectedApplicationRow.backgroundCheck?.status === "complete" ||
+        (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow)) ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="screening-pdf-download"
+            onClick={() => downloadBackgroundCheckForApplication(selectedApplicationRow)}
+          >
+            Download
+          </Button>
+        ) : null}
+      </>
+    ) : (
+      <>
+        {selectedApplicationRow.bucket === "pending" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="resident-application-reject"
+              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+            >
+              Reject
+            </Button>
+            {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_DETAIL_BTN}
+                data-attr="resident-application-approve"
+                onClick={() => setApprovePreviewRow(selectedApplicationRow)}
+              >
+                Approve
+              </Button>
+            )}
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="resident-application-move-pending"
+            onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+          >
+            <span className="max-md:hidden">To pending</span>
+            <span className="md:hidden">Pending</span>
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="resident-application-download-footer"
+          onClick={() => {
+            runApplicationPdfDownload(selectedApplicationRow, showToast);
+          }}
+        >
+          Download
+        </Button>
+      </>
+    )
+  ) : null;
+
+  const residentLeaseTabFooterActions =
+    selected && residentLease ? (
+      <LeasePrimaryHeaderActions
+        embedded
+        flatFooter
+        btnClass={PORTAL_DETAIL_BTN}
+        row={residentLease}
+        downloadDataAttr="resident-lease-download"
+        signManagerDataAttr="resident-lease-sign-manager"
+        signingReminderDataAttr="resident-lease-signing-reminder"
+        onDownload={() => runLeaseDownload(residentLease, showToast)}
+        onSignManager={() => signLeaseAsManager(residentLease)}
+        onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
+        signingReminderBusy={leaseReminderBusy}
+        sendToResidentDataAttr="resident-lease-send"
+        moveToManagerReviewDataAttr="resident-lease-move-manager-review"
+        onSendToResident={() => openLeaseSendPreview(selected, residentLease)}
+        sendToResidentBusy={leaseSendBusy}
+        sendToResidentDisabled={
+          !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
+          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+        }
+        onMoveToManagerReview={() => {
+          const moveResult = sendLeaseBackToManager(residentLease.id, userId);
+          if (!moveResult.ok) {
+            showToast(moveResult.error);
+            return;
+          }
+          appendLeaseThreadMessage(
+            residentLease.id,
+            "manager",
+            "Moved lease back to manager review.",
+            userId,
+          );
+          setLeaseTick((n) => n + 1);
+          showToast("Lease moved to Manager Review.");
+        }}
+        canEditDocument={leaseAllowsManagerDocumentEdits(residentLease)}
+        generateLeaseDisabled={
+          generatingLeaseRowId === residentLease.id ||
+          !leaseGenerationSupportedForRow(residentLease).ok
+        }
+        generateLeaseBusy={generatingLeaseRowId === residentLease.id}
+        generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
+        onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
+        uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
+        onUploadPdf={async (file) => {
+          setUploadingLeaseRowId(residentLease.id);
+          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+          setUploadingLeaseRowId(null);
+          if (result.ok) {
+            setLeaseTick((n) => n + 1);
+            showToast("Lease PDF uploaded.");
+          } else {
+            showToast(result.error ?? "Upload failed.");
+          }
+        }}
+        deleteLabel="Delete lease"
+        deleteDataAttr="resident-lease-delete"
+        onDelete={() => {
+          if (
+            !window.confirm(
+              `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
+            )
+          ) {
+            return;
+          }
+          if (deleteLeasePipelineRow(residentLease.id, userId)) {
+            setLeaseTick((n) => n + 1);
+            showToast("Lease document deleted.");
+          } else {
+            showToast("Could not delete lease document.");
+          }
+        }}
+      />
+    ) : null;
+
+  const residentPaymentsListFooterActions = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        onClick={() => setResidentReminderSettingsOpen(true)}
+        data-attr="resident-payments-reminder-settings"
+      >
+        Reminders
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        onClick={openPaymentMethodEditor}
+        data-attr="resident-payment-method-open"
+      >
+        Pay method
+      </Button>
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_DETAIL_BTN}
+        onClick={() => setAddResidentPaymentOpen(true)}
+        data-attr="resident-add-payment"
+      >
+        Add payment
+      </Button>
+    </>
+  );
+
+  const residentServicesTabFooterActions = (
+    <Button
+      type="button"
+      variant="primary"
+      className={PORTAL_DETAIL_BTN}
+      data-attr={svcSubTab === "requests" ? "resident-add-service-request" : "resident-add-work-order"}
+      disabled={!canAddResidentServiceItem}
+      title={
+        canAddResidentServiceItem
+          ? undefined
+          : "Link this resident to a property before adding services."
+      }
+      onClick={() => {
+        if (svcSubTab === "requests") setAddResidentRequestOpen(true);
+        else setAddResidentWorkOrderOpen(true);
+      }}
+    >
+      {svcSubTab === "requests" ? "Add service" : "Add work order"}
+    </Button>
+  );
+
+  const residentDetailBottomBarActions = useMemo(() => {
+    if (resolvedDetailTab === "application" && showResidentApplication) {
+      return residentApplicationTabFooterActions;
+    }
+    if (resolvedDetailTab === "lease" && showResidentLease) {
+      return residentLeaseTabFooterActions;
+    }
+    if (resolvedDetailTab === "payments") {
+      if (paymentIdProp) return embeddedPaymentFooterActions;
+      if (embeddedPaymentBulkActions) return embeddedPaymentBulkActions;
+      return residentPaymentsListFooterActions;
+    }
+    if (resolvedDetailTab === "services") {
+      return residentServicesTabFooterActions;
+    }
+    return null;
+  }, [
+    resolvedDetailTab,
+    showResidentApplication,
+    showResidentLease,
+    residentApplicationTabFooterActions,
+    residentLeaseTabFooterActions,
+    paymentIdProp,
+    embeddedPaymentFooterActions,
+    embeddedPaymentBulkActions,
+    residentPaymentsListFooterActions,
+    residentServicesTabFooterActions,
+  ]);
+
+  useEffect(() => {
+    if (resolvedDetailTab !== "payments") {
+      setEmbeddedPaymentBulkActions(null);
+    }
+  }, [resolvedDetailTab]);
+
+  const residentPaymentsListHref = selected
+    ? residentDetailHref(portalBase, residentsTab, selected.id, "payments")
+    : undefined;
+
+  const residentDetailPanel =
+    selected ? (
+                          <div className="flex min-h-0 flex-1 flex-col gap-0">
+                            <PortalDetailDestinationNav
+                                items={(
+                                  [
+                                    showResidentApplication ? "application" : null,
+                                    showResidentLease ? "lease" : null,
+                                    "payments",
+                                    "services",
+                                    "communication",
+                                  ] as const
+                                )
+                                  .filter((tab): tab is ResidentDetailTabId => tab !== null)
+                                  .map((tab) => ({
+                                    id: tab,
+                                    label: RESIDENT_DETAIL_TAB_LABELS[tab],
+                                    shortLabel: RESIDENT_DETAIL_TAB_SHORT_LABELS[tab],
+                                    href: residentDetailHref(portalBase, residentsTab, selected.id, tab),
+                                    dataAttr: `resident-detail-tab-${tab}`,
+                                  }))}
+                                activeId={resolvedDetailTab}
+                                ariaLabel="Resident profile sections"
+                              />
+
+                            {showResidentApplication && resolvedDetailTab === "application" ? (
+                            <ResidentDetailTabPanel>
                               {selectedApplicationRow ? (
-                                <div className="space-y-8">
-                                  <PortalTableDetailActions placement="top">
-                                    {selectedApplicationRow.bucket === "pending" ? (
-                                      // A withdrawn application keeps `bucket === "pending"` but is
-                                      // not approvable (the shared transition refuses it), so Approve
-                                      // is hidden here too rather than rendering a silent no-op.
-                                      <>
-                                        {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
-                                          <Button
-                                            type="button"
-                                            variant="primary"
-                                            className={PORTAL_DETAIL_BTN}
-                                            onClick={() => setApprovePreviewRow(selectedApplicationRow)}
-                                          >
-                                            Approve
-                                          </Button>
-                                        )}
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
-                                        >
-                                          Reject
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
-                                      >
-                                        Move to pending
-                                      </Button>
-                                    )}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      data-attr="resident-application-delete"
-                                      onClick={() => void deleteSelectedResident()}
-                                    >
-                                      Delete
-                                    </Button>
-                                  </PortalTableDetailActions>
+                                <div className="space-y-0">
                                   {selectedApplicationGroup ? (
                                     <ApplicationGroupSection
                                       group={selectedApplicationGroup}
                                       currentRowId={selectedApplicationRow.id}
                                     />
                                   ) : null}
-                                  <ApplicationDocumentPreview row={selectedApplicationRow} />
-                                  <ApplicationScreeningPanel
+                                  <ApplicationReviewLauncherRow
                                     row={selectedApplicationRow}
-                                    onUpdated={handleScreeningUpdated}
+                                    bareCanvas
+                                    showDownload={false}
+                                    activeView={applicationReviewView}
+                                    onActiveViewChange={setApplicationReviewView}
+                                    onScreeningUpdated={handleScreeningUpdated}
                                     onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
                                   />
                                 </div>
                               ) : (
                                 <p className="text-sm text-muted">No application on file for this resident.</p>
                               )}
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
                             ) : null}
 
-                            {showResidentLease ? (
-                            <ResidentDetailSection
-                              title="Lease"
-                              summary={
-                                residentLease
-                                  ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
-                                  : "No lease created yet for this resident."
-                              }
-                              expanded={expandedResidentSection === "lease"}
-                              onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
-                            >
+                            {showResidentLease && resolvedDetailTab === "lease" ? (
+                            <ResidentDetailTabPanel fill>
                               {residentLease ? (
-                                <>
-                                  <PortalTableDetailActions placement="top">
-                                    {leaseAllowsManagerDocumentEdits(residentLease) ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={
-                                            generatingLeaseRowId === residentLease.id ||
-                                            !leaseGenerationSupportedForRow(residentLease).ok
-                                          }
-                                          title={leaseGenerationGateTitle(residentLease)}
-                                          onClick={() => openGenerateLeaseConfirm(residentLease.id)}
-                                        >
-                                          {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
-                                        </Button>
-                                        <label
-                                          className={`inline-flex cursor-pointer items-center ${PORTAL_DETAIL_BTN} hover:bg-accent/30`}
-                                        >
-                                          {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
-                                          <input
-                                            type="file"
-                                            accept="application/pdf"
-                                            className="sr-only"
-                                            onChange={async (e) => {
-                                              const file = e.target.files?.[0];
-                                              if (!file || !residentLease) return;
-                                              setUploadingLeaseRowId(residentLease.id);
-                                              const result = await managerUploadLeasePdf(residentLease.id, file, userId);
-                                              setUploadingLeaseRowId(null);
-                                              e.currentTarget.value = "";
-                                              if (result.ok) {
-                                                setLeaseTick((n) => n + 1);
-                                                showToast("Lease PDF uploaded.");
-                                              } else {
-                                                showToast(result.error ?? "Upload failed.");
-                                              }
-                                            }}
-                                          />
-                                        </label>
-                                      </>
-                                    ) : null}
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        disabled={
-                                          !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
-                                        }
-                                        onClick={() => signLeaseAsManager(residentLease)}
-                                      >
-                                        Sign as manager
-                                      </Button>
-                                    ) : null}
-                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        onClick={() => {
-                                          if (residentLease.managerUploadedPdf?.dataUrl) {
-                                            downloadLeaseFromRow(residentLease);
-                                          } else if (residentLease.generatedHtml) {
-                                            printLeaseAsPdf(residentLease);
-                                          }
-                                          showToast("Lease download started.");
-                                        }}
-                                      >
-                                        Download lease
-                                      </Button>
-                                    ) : null}
-                                    {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className={PORTAL_DETAIL_BTN}
-                                        disabled={leaseSendBusy}
-                                        onClick={() => openLeaseSendPreview(selected, residentLease)}
-                                      >
-                                        {leaseSendBusy ? "Sending…" : "Send to resident"}
-                                      </Button>
-                                    ) : residentLease.status === "Resident Signature Pending" ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={leaseReminderBusy}
-                                          onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
-                                        >
-                                          {leaseReminderBusy ? "Sending…" : "Send signing reminder"}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => {
-                                            const moveResult = sendLeaseBackToManager(residentLease.id, userId);
-                                            if (!moveResult.ok) {
-                                              showToast(moveResult.error);
-                                              return;
-                                            }
-                                            appendLeaseThreadMessage(
-                                              residentLease.id,
-                                              "manager",
-                                              "Moved lease back to manager review.",
-                                              userId,
-                                            );
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease moved to Manager Review.");
-                                          }}
-                                        >
-                                          Move to manager review
-                                        </Button>
-                                      </>
-                                    ) : null}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      onClick={() => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
-                                          )
-                                        ) {
-                                          return;
-                                        }
-                                        if (deleteLeasePipelineRow(residentLease.id, userId)) {
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease document deleted.");
-                                        } else {
-                                          showToast("Could not delete lease document.");
-                                        }
-                                      }}
-                                    >
-                                      Delete lease
-                                    </Button>
-                                  </PortalTableDetailActions>
-                                  <LeaseDocumentPreview
-                                    row={residentLease}
-                                    emptyHint="No lease document yet. Generate or upload one from Manager Review first."
-                                  />
-                                  {residentLease.thread.length ? (
-                                    <div className="mt-3 rounded-2xl border border-border bg-card p-4">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div>
-                                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease messages</p>
-                                          <p className="mt-1 text-sm text-muted">
-                                            Resident edit requests and lease-specific updates appear here.
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted">
-                                          {residentLease.status ?? residentLease.stageLabel}
-                                        </span>
-                                      </div>
-                                      <div className="mt-3 space-y-2">
-                                        {residentLease.thread.map((message) => (
-                                          <div key={message.id} className="rounded-xl border border-border bg-accent/30 px-3 py-2">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                                              {message.role}
-                                              <span className="normal-case tracking-normal text-muted">
-                                                {" "}
-                                                · {new Date(message.at).toLocaleString()}
-                                              </span>
-                                            </p>
-                                            <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{message.body}</p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </>
+                                <LeaseDocumentPreview
+                                  row={residentLease}
+                                  stretch
+                                  suppressApplicationDraft={Boolean(selected.manuallyAdded)}
+                                  emptyHint="No lease document yet. Generate or upload one from Manager Review first."
+                                  className="min-h-[calc(100dvh-14rem)] flex-1 max-lg:min-h-[calc(100dvh-17rem-var(--portal-native-bottom-nav-inset,0px))]"
+                                />
                               ) : (
                                 <p className="text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
                             ) : null}
 
-                            <ResidentDetailSection
-                              title="Payments"
-                              summary={
-                                residentCharges.length === 0
-                                  ? "No charges yet."
-                                  : chargeTab === "pending"
-                                    ? "Unpaid charges"
-                                    : "Paid charges"
-                              }
-                              expanded={expandedResidentSection === "payments"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
-                              }
-                              headerAction={
-                                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className={PORTAL_HEADER_ACTION_BTN}
-                                    onClick={openPaymentMethodEditor}
-                                    data-attr="resident-payment-method-open"
-                                  >
-                                    Payment method
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    className={PORTAL_HEADER_ACTION_BTN}
-                                    onClick={() => setAddResidentPaymentOpen(true)}
-                                    data-attr="resident-add-payment"
-                                  >
-                                    Add payment
-                                  </Button>
-                                </div>
-                              }
-                            >
-                              <div className="flex flex-wrap items-center gap-2">
-                                <ManagerPortalStatusPills
-                                  tabs={[
-                                    { id: "pending", label: "Unpaid", count: chargeCounts.pending },
-                                    { id: "paid", label: "Paid", count: chargeCounts.paid },
-                                  ]}
-                                  activeId={chargeTab}
-                                  onChange={(id) => setChargeTab(id as "pending" | "paid")}
+                            {resolvedDetailTab === "payments" ? (
+                            <ResidentDetailTabPanel>
+                              {paymentIdProp ? null : (
+                                <SegmentedThree
+                                  value={chargeBucket}
+                                  onChange={(id) => setChargeBucket(id as ManagerPaymentBucket)}
+                                  first={{ id: "pending", label: "Pending", count: residentChargeCounts.pending }}
+                                  second={{ id: "overdue", label: "Overdue", count: residentChargeCounts.overdue }}
+                                  third={{ id: "paid", label: "Paid", count: residentChargeCounts.paid }}
+                                  className="mb-3 w-full"
                                 />
-                              </div>
-                              {visibleCharges.length === 0 ? (
-                                <div className="mt-3">
-                                  <PortalDataTableEmpty
-                                    icon="payment"
-                                    message={
-                                      residentCharges.length === 0
-                                        ? "No charges yet."
-                                        : chargeTab === "pending"
-                                          ? "No unpaid charges yet."
-                                          : "No paid charges yet."
-                                    }
-                                  />
-                                </div>
-                              ) : (
-                                <div className="mt-3">
-                                  <PortalPaymentsTable
-                                    rows={residentChargeTableRows}
-                                    expandedId={chargeExpandedId}
-                                    onExpand={setChargeExpandedId}
-                                    renderChargeCell={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c) return tr.charge;
-                                      const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
-                                      return (
-                                        <span className="inline-flex flex-wrap items-center gap-2">
-                                          <span>{tr.charge}</span>
-                                          <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                            {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
-                                          </Badge>
-                                        </span>
-                                      );
-                                    }}
-                                    renderAmountCell={(tr) => (
-                                      <span className="tabular-nums font-semibold text-foreground">{tr.amount}</span>
-                                    )}
-                                    renderExpandedDetail={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c || !selected) return null;
-                                      return (
-                                        <div className="space-y-1 text-sm text-muted">
-                                          <p>
-                                            Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
-                                          </p>
-                                          <p>
-                                            Due: <span className="text-foreground">{chargeDueLabel(c)}</span>
-                                          </p>
-                                          <p>
-                                            Amount: <span className="tabular-nums text-foreground">{c.amountLabel}</span> · Balance:{" "}
-                                            <span className="tabular-nums font-semibold text-foreground">{c.balanceLabel}</span>
-                                          </p>
-                                        </div>
-                                      );
-                                    }}
-                                    renderExpandedActions={(tr) => {
-                                      const c = residentChargeById.get(tr.id);
-                                      if (!c) return null;
-                                      return c.status !== "paid" ? (
-                                        editingChargeId === c.id ? (
-                                          <div className="flex flex-wrap items-end gap-2">
-                                            <div className="min-w-[12rem] flex-1">
-                                              <p className="mb-1 text-[11px] font-medium text-muted">Charge title</p>
-                                              <Input
-                                                value={editChargeTitleDraft}
-                                                onChange={(e) => setEditChargeTitleDraft(e.target.value)}
-                                                className="h-8 rounded-lg text-sm"
-                                              />
-                                            </div>
-                                            <div className="w-28">
-                                              <p className="mb-1 text-[11px] font-medium text-muted">Amount</p>
-                                              <div className="flex items-center gap-1">
-                                                <span className="text-sm text-muted">$</span>
-                                                <Input
-                                                  value={editChargeAmountDraft}
-                                                  onChange={(e) => setEditChargeAmountDraft(e.target.value)}
-                                                  inputMode="decimal"
-                                                  className="h-8 rounded-lg px-2 text-sm"
-                                                />
-                                              </div>
-                                            </div>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                              onClick={() => {
-                                                const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
-                                                if (!editChargeTitleDraft.trim()) {
-                                                  showToast("Enter a charge title.");
-                                                  return;
-                                                }
-                                                if (!Number.isFinite(amt) || amt < 0) {
-                                                  showToast("Enter a valid amount.");
-                                                  return;
-                                                }
-                                                if (
-                                                  updateHouseholdChargeAmount(
-                                                    c.id,
-                                                    amt,
-                                                    userId,
-                                                    editChargeTitleDraft,
-                                                  )
-                                                ) {
-                                                  showToast("Payment updated.");
-                                                  setEditingChargeId(null);
-                                                } else {
-                                                  showToast("Could not update this charge.");
-                                                }
-                                              }}
-                                            >
-                                              Save
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN}
-                                              onClick={() => setEditingChargeId(null)}
-                                            >
-                                              Cancel
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN_PRIMARY}
-                                              onClick={() => {
-                                                if (markHouseholdChargePaid(c.id, userId)) {
-                                                  showToast("Marked as paid.");
-                                                  setChargeExpandedId(null);
-                                                } else {
-                                                  showToast("Could not update this charge.");
-                                                }
-                                              }}
-                                            >
-                                              Mark as paid
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className={PORTAL_DETAIL_BTN}
-                                              data-attr="resident-charge-edit"
-                                              onClick={() => {
-                                                setEditingChargeId(c.id);
-                                                setEditChargeTitleDraft(c.title);
-                                                setEditChargeAmountDraft(c.balanceLabel.replace(/[^\d.]/g, ""));
-                                              }}
-                                            >
-                                              Edit payment
-                                            </Button>
-                                          </>
-                                        )
-                                      ) : (
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          onClick={() => {
-                                            if (markHouseholdChargePending(c.id, userId)) {
-                                              showToast("Moved to unpaid.");
-                                              setChargeExpandedId(null);
-                                            } else {
-                                              showToast("Could not update this charge.");
-                                            }
-                                          }}
-                                        >
-                                          Move to unpaid
-                                        </Button>
-                                      );
-                                    }}
-                                  />
-                                </div>
                               )}
-                            </ResidentDetailSection>
+                              <ManagerPaymentsLedgerPanel
+                                rows={paymentIdProp ? residentLedgerRows : residentLedgerRowsForBucket}
+                                managerUserId={userId ?? null}
+                                activeBucket={chargeBucket}
+                                scheduledMessages={scheduledPaymentMessages}
+                                reminderScheduleSummary={residentReminderScheduleSummary}
+                                onOpenReminderSettings={() => setResidentReminderSettingsOpen(true)}
+                                onScheduleChanged={() => void reloadResidentPaymentSchedule()}
+                                onRowsChanged={() => setHcTick((n) => n + 1)}
+                                paymentId={paymentIdProp}
+                                listBasePath={residentPaymentsListHref}
+                                embeddedInResident
+                                buildPaymentDetailHref={
+                                  selected
+                                    ? (row) => residentPaymentDetailHref(portalBase, residentsTab, selected.id, row.id)
+                                    : undefined
+                                }
+                                onEmbeddedDetailActions={handleEmbeddedPaymentFooterActions}
+                                onEmbeddedBulkActions={handleEmbeddedPaymentBulkActions}
+                              />
+                            </ResidentDetailTabPanel>
+                            ) : null}
 
-                            <ResidentDetailSection
-                              title="Services"
-                              summary={
-                                residentServiceRequests.length + residentWorkOrders.length === 0
-                                  ? "No add-on services or work orders yet."
-                                  : `${residentServiceRequests.length} add-on service${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
-                              }
-                              expanded={expandedResidentSection === "services"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "services" ? null : "services"))
-                              }
-                              headerAction={
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  className={PORTAL_HEADER_ACTION_BTN}
-                                  data-attr={svcSubTab === "requests" ? "resident-add-service-request" : "resident-add-work-order"}
-                                  disabled={!canAddResidentServiceItem}
-                                  title={
-                                    canAddResidentServiceItem
-                                      ? undefined
-                                      : "Link this resident to a property before adding services."
-                                  }
-                                  onClick={() => {
-                                    if (svcSubTab === "requests") setAddResidentRequestOpen(true);
-                                    else setAddResidentWorkOrderOpen(true);
-                                  }}
-                                >
-                                  Add
-                                </Button>
-                              }
-                            >
-                              <div className="mb-4">
-                                <PillTabs
+                            {resolvedDetailTab === "services" ? (
+                            <ResidentDetailTabPanel>
+                              <div className="-mx-2.5 mb-3 bg-background sm:-mx-4 lg:mx-0">
+                                <LocalDestinationNav
                                   items={[
-                                    { id: "requests", label: "Add-on services" },
-                                    { id: "work-orders", label: "Work orders" },
+                                    { id: "requests", label: "Requests", dataAttr: "resident-services-tab-requests" },
+                                    { id: "work-orders", label: "Work orders", dataAttr: "resident-services-tab-work-orders" },
                                   ]}
                                   activeId={svcSubTab}
                                   onChange={(id) => {
                                     setSvcSubTab(id as "requests" | "work-orders");
                                     setSvcExpandedId(null);
                                   }}
+                                  ariaLabel="Resident services type"
+                                  className="rounded-none border-0 border-b border-border bg-transparent p-0 md:rounded-2xl md:border md:border-border md:bg-accent/30 md:p-1"
                                 />
                               </div>
 
                               {svcSubTab === "requests" ? (
                                 <div>
                                   <div className="mb-3">
-                                    <ManagerPortalStatusPills
-                                      tabs={(
+                                    <LocalDestinationNav
+                                      items={(
                                         ["pending", "approved", "denied"] as const
                                       ).map((id) => ({
                                         id,
                                         label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Denied",
                                         count: residentServiceRequestsCounts[id],
+                                        dataAttr: `resident-service-request-bucket-${id}`,
                                       }))}
                                       activeId={svcReqBucket}
                                       onChange={(id) => setSvcReqBucket(id as ManagerServiceRequestBucket)}
+                                      ariaLabel="Request status"
+                                      size="toolbar"
                                     />
                                   </div>
                                   {residentServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
+                                    <PortalDataTableEmpty message="No requests yet." icon="service" />
                                   ) : residentFilteredServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
+                                    <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
                                   ) : (
                                     <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
                                       <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>
@@ -2327,17 +2290,20 @@ export function ManagerResidents({
                                 </div>
                               ) : (
                                 <div>
-                                  <div className="mb-3 w-fit max-w-full">
-                                    <ManagerPortalStatusPills
-                                      tabs={(
+                                  <div className="mb-3">
+                                    <LocalDestinationNav
+                                      items={(
                                         ["open", "scheduled", "completed"] as const
                                       ).map((id) => ({
                                         id,
                                         label: id === "open" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
                                         count: residentWorkOrderCounts[id],
+                                        dataAttr: `resident-work-order-bucket-${id}`,
                                       }))}
                                       activeId={svcWoBucket}
                                       onChange={(id) => setSvcWoBucket(id as ManagerWorkOrderBucket)}
+                                      ariaLabel="Work order status"
+                                      size="toolbar"
                                     />
                                   </div>
                                   <ManagerWorkOrdersPanel
@@ -2347,35 +2313,74 @@ export function ManagerResidents({
                                   />
                                 </div>
                               )}
-                            </ResidentDetailSection>
+                            </ResidentDetailTabPanel>
+                            ) : null}
 
-                            <ResidentDetailSection
-                              title="Communication"
-                              summary={residentCommSummary}
-                              expanded={expandedResidentSection === "communication"}
-                              onToggle={() =>
-                                setExpandedResidentSection((cur) => (cur === "communication" ? null : "communication"))
-                              }
-                              headerAction={
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="rounded-full px-3 py-1 text-xs"
-                                  onClick={openResidentMessageModal}
-                                >
-                                  New message
-                                </Button>
-                              }
-                            >
-                              <ManagerResidentDetailInbox
-                                residentEmail={selected.email}
-                                portalBase={portalBase}
-                                smsUiEnabled={smsUiEnabled}
-                                smsRef={residentSmsPanelRef}
-                              />
-                            </ResidentDetailSection>
+                            {resolvedDetailTab === "communication" ? (
+                            <ResidentDetailTabPanel>
+                              <div className="flex flex-col gap-3">
+                                <ManagerResidentDetailInbox
+                                  residentEmail={selected.email}
+                                  residentName={selected.name}
+                                  portalBase={portalBase}
+                                  smsUiEnabled={smsUiEnabled}
+                                  smsRef={residentSmsPanelRef}
+                                />
+                                <ModalAssistantStrip
+                                  contextHint={`Resident communication · ${selected.name || selected.email}`}
+                                  storageScopeKey={`resident-communication-${selected.id}`}
+                                  conversationInstance={hcTick}
+                                  defaultExpanded={false}
+                                  className="shrink-0"
+                                />
+                              </div>
+                            </ResidentDetailTabPanel>
+                            ) : null}
+
+                            {residentDetailBottomBarActions ? (
+                              <PortalPageFooterActions pinned rowVariant="header">
+                                {residentDetailBottomBarActions}
+                              </PortalPageFooterActions>
+                            ) : null}
                           </div>
     ) : null;
+
+  const residentsAddButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+      onClick={() => setAddResidentOpen(true)}
+    >
+      + Add
+    </Button>
+  );
+
+  const residentsFilterSheet =
+    propertyOptions.length > 0 ? (
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilters])}
+        compactPanel
+        desktopPresentation="panel"
+        className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+        onReset={() => setPropertyFilters([])}
+        dataAttr="residents-filter-sheet-open"
+      >
+        <ApplicationFilterSortFields
+          propertyOptions={propertyOptions}
+          propertyFilters={propertyFilters}
+          onPropertyFiltersChange={setPropertyFilters}
+          dataAttr="residents-filter-property"
+        />
+      </PortalFilterSortSheet>
+    ) : null;
+
+  const residentsMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow
+      filter={residentsFilterSheet}
+      actions={residentsAddButton}
+    />
+  );
 
   return (
     <>
@@ -2399,125 +2404,103 @@ export function ManagerResidents({
           onClose={() => setSigningLease(null)}
         />
       ) : null}
+      {residentIdProp && selected ? (
+        <PortalRecordDetailPage
+          pageTitle="Residents"
+          title={selected.name || "Resident"}
+          subtitle={selected.email || undefined}
+          avatarName={selected.name || selected.email}
+          backHref={`${portalBase}/residents/${residentsTab}`}
+          backLabel="Back to residents"
+          hideBackText
+          bareHeader
+          dataAttrBack="resident-detail-back"
+          actions={residentProfileHeaderActions}
+          inlineActions
+        >
+          {residentDetailPanel}
+        </PortalRecordDetailPage>
+      ) : (
       <ManagerPortalPageShell
         title="Residents"
-        titleAside={
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-            + Add
-          </Button>
-        }
-        filterRow={
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills
-              tabs={[
-                { id: "current", label: "Current", count: currentResidentsCount },
-                { id: "previous", label: "Previous", count: previousResidentsCount },
-              ]}
-              activeId={residentsTab}
-              onChange={(id) => {
-                const next = id as ResidentsTabId;
-                setResidentsTab(next);
-                navigate(`${portalBase}/residents/${next}`);
-              }}
-            />
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-          </ManagerPortalFilterRow>
-        }
+        hideTitleOnMobileNav
+        titleInlineFilter={residentsFilterSheet}
+        titleAside={residentsAddButton}
+        compactFilterRow
       >
+      {residentsMobileActionsRow}
+      <PortalListControlStack
+        className="mb-2 max-lg:mb-1.5"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search residents",
+          dataAttr: "residents-search",
+        }}
+      />
       {filtered.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="residents"
-          message={
-            residents.length === 0
-              ? "No residents yet."
-              : residentsTab === "current"
-                ? "No current residents yet."
-                : "No previous residents yet."
-          }
-        />
+        <div className="space-y-3 px-3 py-2">
+          {residents.length > 0 ? (
+            <PortalDataTableEmpty
+              icon="residents"
+              message={
+                searchQuery.trim()
+                  ? "No residents match your search."
+                  : "No residents match this filter."
+              }
+            />
+          ) : null}
+          <PortalListAddRow
+            label="Add resident"
+            icon={PORTAL_LIST_ADD_ICONS.resident}
+            onClick={() => setAddResidentOpen(true)}
+            dataAttr="residents-list-add"
+          />
+        </div>
       ) : (
-      <>
-      <div className="space-y-2 lg:hidden">
-        {filtered.map((res) => {
-          const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null].filter(Boolean).join(" · ");
-          return (
-          <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-2 text-left"
-              onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-              aria-expanded={selectedId === res.id}
-            >
-              <div className="min-w-0 flex-1">
-                <PortalTableInlineExpand expanded={selectedId === res.id} className="truncate font-semibold text-foreground">
-                  {res.name || "—"}
-                </PortalTableInlineExpand>
-                {housingLabel ? (
-                  <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
-                ) : null}
-              </div>
-            </button>
-            {selectedId === res.id && selected ? (
-              <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
-            ) : null}
-          </div>
-          );
-        })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full table-fixed border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((res) => (
-                  <Fragment key={res.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
-                      )}
-                      aria-expanded={selectedId === res.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={selectedId === res.id}>
-                          {res.name || "—"}
-                        </PortalTableInlineExpand>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>{res.email}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
-                    </tr>
-                    {selectedId === res.id && selected ? (
-                      <tr>
-                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
-                          {residentDetailPanel}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+        <div className={PORTAL_LIST_PAGE_BODY}>
+          {filtered.map((res) => {
+            const housingLabel = [res.roomLabel, !propertyFilters.length ? res.propertyLabel : null]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <PortalPersonRecordRow
+                key={res.id}
+                name={res.name || "—"}
+                subtitle={housingLabel || undefined}
+                preview={res.email || housingLabel || " "}
+                meta={res.leaseStart ? shortDateLabel(res.leaseStart) : undefined}
+                onOpen={() =>
+                  navigate(residentDetailHref(portalBase, residentsTab, res.id, resolvedDetailTab))
+                }
+                dataAttr="resident-list-row"
+              />
+            );
+          })}
+          <div className="px-3 py-3 max-md:px-2.5">
+            <PortalListAddRow
+              label="Add resident"
+              icon={PORTAL_LIST_ADD_ICONS.resident}
+              onClick={() => setAddResidentOpen(true)}
+              dataAttr="residents-list-add"
+            />
           </div>
         </div>
-      </>
       )}
 
+      </ManagerPortalPageShell>
+      )}
+
+      <ReminderSettingsModal
+        open={residentReminderSettingsOpen}
+        onClose={() => setResidentReminderSettingsOpen(false)}
+        settings={residentReminderSettings}
+        onSaved={(next) => {
+          setResidentReminderSettings(next);
+          void reloadResidentPaymentSchedule();
+          setResidentReminderSettingsOpen(false);
+        }}
+      />
       <ManagerAddPaymentModal
         open={addResidentPaymentOpen}
         onClose={() => setAddResidentPaymentOpen(false)}
@@ -2527,6 +2510,9 @@ export function ManagerResidents({
         onSubmitted={() => {
           setAddResidentPaymentOpen(false);
           setHcTick((n) => n + 1);
+          if (selected?.email) {
+            regenerateEditableLeasesForResident(selected.email, userId);
+          }
         }}
       />
 
@@ -2690,15 +2676,7 @@ export function ManagerResidents({
               </div>
             </div>
           )}
-          <div className="flex flex-wrap justify-end gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setAddPaymentMethodOpen(false)}
-            >
-              Cancel
-            </Button>
+          <PortalSectionActionRow className="pt-1">
             <Button
               type="button"
               variant="primary"
@@ -2709,7 +2687,7 @@ export function ManagerResidents({
             >
               {pmSaving ? "Saving…" : "Save"}
             </Button>
-          </div>
+          </PortalSectionActionRow>
         </div>
       </Modal>
 
@@ -2719,9 +2697,6 @@ export function ManagerResidents({
         onClose={() => setAddResidentOpen(false)}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
               {arSaving ? "Adding…" : "Add resident"}
             </Button>
@@ -2730,8 +2705,7 @@ export function ManagerResidents({
       >
         <div className="space-y-3">
           <p className="text-xs text-muted">
-            Onboard an existing tenant: creates an active resident record, treats the lease as already signed,
-            sets up payments, and can email portal instructions (no application or screening).
+            Onboard an existing tenant: creates an active resident record, sets up payments, and can email portal instructions (no application or screening). Generate or upload a lease in Manager Review unless you attach an already-signed PDF below.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -2759,24 +2733,26 @@ export function ManagerResidents({
                 value={arLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
-                  if (selected === AR_LEASE_TERM_CUSTOM) {
-                    if (AR_LEASE_TERM_PRESETS.includes(arLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                  if (selected === RESIDENT_LEASE_TERM_CUSTOM) {
+                    setArLeaseTermCustomMode(true);
+                    if (arLeaseTermPresetValues.includes(arLeaseTerm)) {
                       setArLeaseTerm("");
                     }
                     return;
                   }
+                  setArLeaseTermCustomMode(false);
                   setArLeaseTerm(selected);
                 }}
-               
               >
                 <option value="">Select…</option>
-                <option value="Month-to-month">Month-to-month</option>
-                <option value="12 months">12 months</option>
-                <option value="6 months">6 months</option>
-                <option value="3 months">3 months</option>
-                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
+                {arLeaseTermOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </Select>
-              {arLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+              {arLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
                   value={arLeaseTerm}
@@ -2810,8 +2786,15 @@ export function ManagerResidents({
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Monthly rent ($)</span>
-              <Input type="number" min={0} step={0.01} value={arRent} onChange={(e) => setArRent(e.target.value)} placeholder="875.00" />
+              <span className="font-medium text-muted">{arIsShortTermStay ? "Daily rate ($)" : "Monthly rent ($)"}</span>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={arRent}
+                onChange={(e) => setArRent(e.target.value)}
+                placeholder={arIsShortTermStay ? "225.00" : "875.00"}
+              />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Monthly utilities ($)</span>
@@ -2894,9 +2877,6 @@ export function ManagerResidents({
         onClose={() => setEditResidentOpen(false)}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
               Save resident
             </Button>
@@ -2938,24 +2918,27 @@ export function ManagerResidents({
                 value={erLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
-                  if (selected === AR_LEASE_TERM_CUSTOM) {
-                    if (AR_LEASE_TERM_PRESETS.includes(erLeaseTerm as (typeof AR_LEASE_TERM_PRESETS)[number])) {
+                  if (selected === RESIDENT_LEASE_TERM_CUSTOM) {
+                    setErLeaseTermCustomMode(true);
+                    if (erLeaseTermPresetValues.includes(erLeaseTerm)) {
                       setErLeaseTerm("");
                     }
                     return;
                   }
+                  setErLeaseTermCustomMode(false);
                   setErLeaseTerm(selected);
                 }}
                
               >
                 <option value="">Select…</option>
-                <option value="Month-to-month">Month-to-month</option>
-                <option value="12 months">12 months</option>
-                <option value="6 months">6 months</option>
-                <option value="3 months">3 months</option>
-                <option value={AR_LEASE_TERM_CUSTOM}>Custom…</option>
+                {erLeaseTermOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </Select>
-              {erLeaseTermSelectValue === AR_LEASE_TERM_CUSTOM ? (
+              {erLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
                   value={erLeaseTerm}
@@ -3141,7 +3124,7 @@ export function ManagerResidents({
         confirmLabelWithoutMessage="Send lease only"
         confirmBusy={leaseSendBusy}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
+        onConfirm={(skipMessage, channels, draft) => void confirmSendLeaseToResident(skipMessage, channels, draft)}
       />
 
       <PortalNotificationPreviewModal
@@ -3151,11 +3134,12 @@ export function ManagerResidents({
         recipient={leaseReminderPreview?.recipient ?? ""}
         subject={leaseReminderPreview?.subject ?? ""}
         body={leaseReminderPreview?.body ?? ""}
+        showSkipMessage={false}
         confirmLabel="Send reminder"
         confirmLabelWithoutMessage="Close without sending"
         confirmBusy={leaseReminderBusy}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
+        onConfirm={(skipMessage, channels, draft) => {
           if (!leaseReminderPreview) return;
           if (skipMessage) {
             setLeaseReminderPreview(null);
@@ -3163,7 +3147,13 @@ export function ManagerResidents({
           }
           const preview = leaseReminderPreview;
           setLeaseReminderPreview(null);
-          void sendLeaseSigningReminder(preview.res, preview.leaseId, preview.subject, preview.body);
+          void sendLeaseSigningReminder(
+            preview.res,
+            preview.leaseId,
+            draft?.subject ?? preview.subject,
+            draft?.body ?? preview.body,
+            channels,
+          );
         }}
       />
 
@@ -3176,9 +3166,6 @@ export function ManagerResidents({
         }}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
               {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
             </Button>
@@ -3224,7 +3211,6 @@ export function ManagerResidents({
           ) : null}
         </div>
       </Modal>
-      </ManagerPortalPageShell>
     </>
   );
 }

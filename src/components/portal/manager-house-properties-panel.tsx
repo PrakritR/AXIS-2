@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
-import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
@@ -13,31 +13,34 @@ import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/ma
 import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-tour-panel";
+import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS } from "@/components/portal/portal-property-detail-section";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import {
-  PORTAL_DATA_TABLE,
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableColGroup,
-  PortalDataTableEmpty,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PORTAL_MOBILE_CARD_CLASS,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
-  portalTableColumnPercents,
-} from "@/components/portal/portal-data-table";
+  PROPERTY_DETAIL_SECTION_TABS,
+  PROPERTY_DETAIL_TAB_LABELS,
+  PROPERTY_DETAIL_TOP_TAB_LABELS,
+  propertyDetailHref,
+  parsePropertyDetailTab,
+  type PropertyDetailTabId,
+  type PropertyDetailSectionTabId,
+} from "@/lib/portal-detail-routes";
+import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   adminPropertyRentDisplayLabel,
   compareAdminPropertyRowsForDisplay,
-  deleteManagerLiveListing,
   deleteManagerPropertyDraft,
   deleteUnlistedManagerProperty,
   listAdminRow,
@@ -61,11 +64,6 @@ import {
   linkedPropertyOwnerId,
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
-
-const OWNERSHIP_BADGE_OWNED =
-  "inline-flex rounded-full border border-border bg-accent/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground";
-const OWNERSHIP_BADGE_LINKED =
-  "inline-flex rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted";
 
 function propertyIdIsLinked(pid: string, linkedIds: Set<string>): boolean {
   if (!pid) return false;
@@ -128,18 +126,12 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 const MANAGER_STAGES = [
+  { key: "drafts", label: "Drafts", buckets: [5] as AdminPropertyBucketIndex[] },
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
-  { key: "drafts", label: "Drafts", buckets: [5] as AdminPropertyBucketIndex[] },
 ] as const;
 
 export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
-
-export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
-  listed: "No listed properties.",
-  unlisted: "No unlisted properties.",
-  drafts: "No saved drafts. Start a new property — close the wizard any time and your progress is saved here to finish later.",
-};
 
 /** A draft can be saved before it has a name — never render an empty title cell. */
 function managerPropertyRowTitle(row: AdminPropertyRow, bucket: AdminPropertyBucketIndex): string {
@@ -162,6 +154,10 @@ function ManagerPropertyInlineDetails({
   skuLoaded,
   propCount,
   onSendToProspect,
+  propertiesBase,
+  stage,
+  detailTab: detailTabProp = "preview",
+  onDetailHeaderActions,
 }: {
   bucket: AdminPropertyBucketIndex;
   row: AdminPropertyRow | null;
@@ -172,6 +168,10 @@ function ManagerPropertyInlineDetails({
   skuLoaded: boolean;
   propCount: number;
   onSendToProspect?: (listingId: string) => void;
+  propertiesBase: string;
+  stage: ManagerStageKey;
+  detailTab?: PropertyDetailTabId;
+  onDetailHeaderActions?: (key: string, actions: ReactNode) => void;
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const contactSmsPhone = useListingContactSmsPhone({
@@ -185,7 +185,7 @@ function ManagerPropertyInlineDetails({
   );
   const rich = useMemo(() => (previewProperty ? getListingRichContent(previewProperty) : null), [previewProperty]);
   const hasPreview = Boolean(previewProperty && rich);
-  const [previewExpanded, setPreviewExpanded] = useState(true);
+  const detailTab = parsePropertyDetailTab(detailTabProp);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -266,6 +266,10 @@ function ManagerPropertyInlineDetails({
   const [listingEditorOpen, setListingEditorOpen] = useState(false);
   const [draftEditorOpen, setDraftEditorOpen] = useState(false);
   const [shareApplicationOpen, setShareApplicationOpen] = useState(false);
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<
+    "delete-queue" | "delete-draft" | "unlist" | null
+  >(null);
+  const [destructiveBusy, setDestructiveBusy] = useState(false);
 
   const managerSubmission = useMemo(
     () => (row ? displaySub ?? submissionForAdminRow(row) : null),
@@ -309,7 +313,7 @@ function ManagerPropertyInlineDetails({
   if (!row || !mock || !managerSubmission) return null;
 
   const actionBtnClass = "rounded-full";
-  const sectionHeaderBtn = "h-8 rounded-full px-3 text-xs";
+  const sectionHeaderBtn = PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS;
   const canEditListing = Boolean(displaySub && portalSub);
   // Show Edit only with write (`edit`) level and Delete only with `delete` level.
   // Own properties always qualify; a linked property is gated by the grant.
@@ -320,142 +324,247 @@ function ManagerPropertyInlineDetails({
 
   const openFullListingEditor = () => setListingEditorOpen(true);
 
-  const applicationHeaderExtra =
-    bucket === 2 && listingId ? (
-      <Button
-        type="button"
-        variant="outline"
-        className={`${actionBtnClass} h-8 px-3 text-xs`}
-        data-attr="listing-send-application"
-        onClick={(e) => {
-          e.stopPropagation();
-          setShareApplicationOpen(true);
-        }}
-      >
-        Send application
-      </Button>
-    ) : null;
+  const leaseAddHandlerRef = useRef<(() => void) | null>(null);
+  const registerLeaseAddHandler = useCallback((handler: (() => void) | null) => {
+    leaseAddHandlerRef.current = handler;
+  }, []);
 
-  const previewHeaderActions = (
-    <div className="flex flex-nowrap items-center gap-2 sm:flex-wrap sm:justify-end">
-      {bucket === 2 && listingId ? (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            className={sectionHeaderBtn}
-            data-attr="listing-send-listing"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSendToProspect?.(listingId);
-            }}
-          >
-            Send listing
-          </Button>
-          {canEditAction ? (
+  const tourSendHandlerRef = useRef<(() => void) | null>(null);
+  const registerTourSendHandler = useCallback((handler: (() => void) | null) => {
+    tourSendHandlerRef.current = handler;
+  }, []);
+
+  const promotionNewHandlerRef = useRef<(() => void) | null>(null);
+  const registerPromotionNewHandler = useCallback((handler: (() => void) | null) => {
+    promotionNewHandlerRef.current = handler;
+  }, []);
+
+  const applicationAddHandlerRef = useRef<(() => void) | null>(null);
+  const registerApplicationAddHandler = useCallback((handler: (() => void) | null) => {
+    applicationAddHandlerRef.current = handler;
+  }, []);
+
+  const applicationHeaderExtra = useMemo(
+    () =>
+      bucket !== 3 && bucket !== 5 ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
+          data-attr="property-application-add-header"
+          onClick={(e) => {
+            e.stopPropagation();
+            applicationAddHandlerRef.current?.();
+          }}
+        >
+          Add application
+        </Button>
+      ) : null,
+    [actionBtnClass, bucket],
+  );
+
+  const leaseHeaderExtra = useMemo(
+    () =>
+      bucket !== 3 && bucket !== 5 ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
+          data-attr="property-lease-add-header"
+          onClick={(e) => {
+            e.stopPropagation();
+            leaseAddHandlerRef.current?.();
+          }}
+        >
+          Add lease
+        </Button>
+      ) : null,
+    [actionBtnClass, bucket],
+  );
+
+  const tourHeaderExtra = useMemo(
+    () =>
+      bucket === 2 && listingId ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
+          data-attr="listing-send-tour-link"
+          onClick={(e) => {
+            e.stopPropagation();
+            tourSendHandlerRef.current?.();
+          }}
+        >
+          Send tour link
+        </Button>
+      ) : null,
+    [actionBtnClass, bucket, listingId],
+  );
+
+  const promotionHeaderExtra = useMemo(
+    () =>
+      bucket === 2 && listingId ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
+          data-attr="manager-property-new-promotion"
+          onClick={(e) => {
+            e.stopPropagation();
+            promotionNewHandlerRef.current?.();
+          }}
+        >
+          Add promotion
+        </Button>
+      ) : null,
+    [actionBtnClass, bucket, listingId],
+  );
+
+  const dangerBtnClass = `${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`;
+
+  const confirmDestructiveAction = () => {
+    if (!row || !pendingDestructiveAction) return;
+    const action = pendingDestructiveAction;
+    setDestructiveBusy(true);
+    deferCatalogMutation(() => {
+      if (action === "delete-queue") {
+        run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId));
+        setDestructiveBusy(false);
+        setPendingDestructiveAction(null);
+        return;
+      }
+      if (action === "delete-draft") {
+        void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) => {
+          run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again.");
+          setDestructiveBusy(false);
+          setPendingDestructiveAction(null);
+        });
+        return;
+      }
+      if (action === "unlist") {
+        if (!listingId) {
+          showToast("Could not unlist.");
+          setDestructiveBusy(false);
+          setPendingDestructiveAction(null);
+          return;
+        }
+        run("Listing unlisted.", unlistManagerListing(listingId, managerUserId));
+        setDestructiveBusy(false);
+        setPendingDestructiveAction(null);
+      }
+    });
+  };
+
+  const destructiveModalCopy =
+    pendingDestructiveAction === "delete-queue"
+      ? {
+          title: "Delete from queue",
+          description: `Remove ${propertyShareLabel} from your unlisted queue permanently?`,
+          confirmLabel: "Delete from queue",
+          dataAttr: "listing-delete-confirm",
+        }
+      : pendingDestructiveAction === "delete-draft"
+        ? {
+            title: "Delete draft",
+            description: `Delete the draft for ${propertyShareLabel}? Your saved progress will be removed.`,
+            confirmLabel: "Delete draft",
+            dataAttr: "draft-delete-confirm",
+          }
+        : pendingDestructiveAction === "unlist"
+          ? {
+              title: "Unlist property",
+              description: `Unlist ${propertyShareLabel}? It will be removed from the public listing and moved to your unlisted queue.`,
+              confirmLabel: "Unlist",
+              dataAttr: "listing-unlist-confirm",
+            }
+          : null;
+
+  const previewHeaderActions = useMemo(
+    () => (
+      <PortalSectionActionRow variant="header">
+        {bucket === 2 && listingId ? (
+          <>
             <Button
               type="button"
               variant="outline"
               className={sectionHeaderBtn}
-              data-attr="listing-edit-full"
+              data-attr="listing-send-listing"
               onClick={(e) => {
                 e.stopPropagation();
-                openFullListingEditor();
+                onSendToProspect?.(listingId);
               }}
             >
-              Edit listing
+              Send listing
             </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className={sectionHeaderBtn}
-            data-attr="listing-unlist"
-            onClick={(e) => {
-              e.stopPropagation();
-              deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)));
-            }}
-          >
-            Unlist
-          </Button>
-          {canDeleteAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="listing-delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-                deferCatalogMutation(() =>
-                  run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)),
-                );
-              }}
-            >
-              Delete listing
-            </Button>
-          ) : null}
-        </>
-      ) : null}
-
-      {bucket === 3 ? (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            className={sectionHeaderBtn}
-            data-attr="listing-relist"
-            onClick={(e) => {
-              e.stopPropagation();
-              deferCatalogMutation(() => {
-                const id = listAdminRow(row, managerUserId);
-                if (!id) {
-                  showToast("Could not relist.");
-                  return;
-                }
-                showToast("Listing is live again.");
-                onUpdated();
-              });
-            }}
-          >
-            Relist property
-          </Button>
-          {canEditListing && canEditAction ? (
+            {canEditAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={sectionHeaderBtn}
+                data-attr="listing-edit-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFullListingEditor();
+                }}
+              >
+                Edit
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
               className={sectionHeaderBtn}
-              data-attr="listing-edit-full"
+              data-attr="listing-unlist"
               onClick={(e) => {
                 e.stopPropagation();
-                openFullListingEditor();
+                setPendingDestructiveAction("unlist");
               }}
             >
-              Edit listing
+              Unlist
             </Button>
-          ) : null}
-          {canEditListing && canDeleteAction ? (
+          </>
+        ) : null}
+
+        {bucket === 3 ? (
+          <>
             <Button
               type="button"
               variant="outline"
-              className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="listing-delete"
+              className={sectionHeaderBtn}
+              data-attr="listing-relist"
               onClick={(e) => {
                 e.stopPropagation();
-                if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-                deferCatalogMutation(() =>
-                  run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
-                );
+                deferCatalogMutation(() => {
+                  const id = listAdminRow(row, managerUserId);
+                  if (!id) {
+                    showToast("Could not relist.");
+                    return;
+                  }
+                  showToast("Listing is live again.");
+                  onUpdated();
+                });
               }}
             >
-              Delete from queue
+              Relist property
             </Button>
-          ) : null}
-        </>
-      ) : null}
+            {canEditListing && canEditAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={sectionHeaderBtn}
+                data-attr="listing-edit-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFullListingEditor();
+                }}
+              >
+                Edit
+              </Button>
+            ) : null}
+          </>
+        ) : null}
 
-      {bucket === 5 ? (
-        <>
+        {bucket === 5 ? (
           <Button
             type="button"
             variant="primary"
@@ -472,27 +581,54 @@ function ManagerPropertyInlineDetails({
           >
             Continue editing
           </Button>
+        ) : null}
+        {bucket === 3 && canDeleteAction ? (
           <Button
             type="button"
             variant="outline"
-            className={`${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            className={dangerBtnClass}
+            data-attr="listing-delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPendingDestructiveAction("delete-queue");
+            }}
+          >
+            Delete from queue
+          </Button>
+        ) : bucket === 5 ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={dangerBtnClass}
             data-attr="draft-delete"
             onClick={(e) => {
               e.stopPropagation();
-              if (!window.confirm("Delete this draft? Your saved progress will be removed.")) return;
-              deferCatalogMutation(() => {
-                void deleteManagerPropertyDraft(row.adminRefId, managerUserId).then((ok) =>
-                  run("Draft deleted.", ok, "Could not delete the draft. Check your connection and try again."),
-                );
-              });
+              setPendingDestructiveAction("delete-draft");
             }}
           >
             Delete draft
           </Button>
-        </>
-      ) : null}
-    </div>
+        ) : null}
+      </PortalSectionActionRow>
+    ),
+    [
+      bucket,
+      listingId,
+      canEditAction,
+      canEditListing,
+      canDeleteAction,
+      sectionHeaderBtn,
+      dangerBtnClass,
+      onSendToProspect,
+      row.adminRefId,
+      managerUserId,
+      showToast,
+      onUpdated,
+      skuLoaded,
+    ],
   );
+
+  const previewHasToolbar = bucket === 2 || bucket === 3 || bucket === 5;
 
   const listingFormProps = portalSub
     ? {
@@ -538,83 +674,216 @@ function ManagerPropertyInlineDetails({
         }
       : null;
 
+  const propertyRouteKey = stablePropertyId || row.adminRefId;
+  const availableTabs: PropertyDetailTabId[] =
+    bucket === 3 || bucket === 5
+      ? ["preview"]
+      : bucket === 2 && listingId
+        ? ["preview", "house-details", "application", "lease", "calendar", "promotion"]
+        : ["preview", "house-details", "application", "lease"];
+  const activeDetailTab = availableTabs.includes(detailTab) ? detailTab : availableTabs[0]!;
+  const detailSectionTabs = useMemo(
+    () =>
+      availableTabs.filter((tab): tab is PropertyDetailSectionTabId =>
+        (PROPERTY_DETAIL_SECTION_TABS as readonly string[]).includes(tab),
+      ),
+    [availableTabs],
+  );
+  const topNavItems = useMemo(() => {
+    const items: Array<{ id: string; label: string; href: string; dataAttr: string }> = [];
+    if (detailSectionTabs.length > 0) {
+      items.push({
+        id: "details",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.details,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, detailSectionTabs[0]!),
+        dataAttr: "property-detail-tab-details",
+      });
+    }
+    if (availableTabs.includes("calendar")) {
+      items.push({
+        id: "calendar",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.calendar,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "calendar"),
+        dataAttr: "property-detail-tab-calendar",
+      });
+    }
+    if (availableTabs.includes("promotion")) {
+      items.push({
+        id: "promotion",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.promotion,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "promotion"),
+        dataAttr: "property-detail-tab-promotion",
+      });
+    }
+    return items;
+  }, [availableTabs, detailSectionTabs, propertiesBase, propertyRouteKey, stage]);
+  const activeTopNavId =
+    activeDetailTab === "calendar" ? "calendar" : activeDetailTab === "promotion" ? "promotion" : "details";
+  const showDetailSectionNav =
+    activeTopNavId === "details" && detailSectionTabs.length > 1;
+
+  const previewHeaderActionsRef = useRef(previewHeaderActions);
+  previewHeaderActionsRef.current = previewHeaderActions;
+  const applicationHeaderExtraRef = useRef(applicationHeaderExtra);
+  applicationHeaderExtraRef.current = applicationHeaderExtra;
+  const leaseHeaderExtraRef = useRef(leaseHeaderExtra);
+  leaseHeaderExtraRef.current = leaseHeaderExtra;
+  const tourHeaderExtraRef = useRef(tourHeaderExtra);
+  tourHeaderExtraRef.current = tourHeaderExtra;
+  const promotionHeaderExtraRef = useRef(promotionHeaderExtra);
+  promotionHeaderExtraRef.current = promotionHeaderExtra;
+
+  const detailHeaderKey = useMemo(() => {
+    if (activeDetailTab === "preview" && previewHasToolbar) {
+      return `preview:${bucket}:${listingId ?? ""}:${canEditAction}:${canEditListing}:${canDeleteAction}:${skuLoaded}`;
+    }
+    if (activeDetailTab === "application" && bucket !== 3 && bucket !== 5) {
+      return `application:${stablePropertyId ?? ""}`;
+    }
+    if (activeDetailTab === "lease" && bucket !== 3 && bucket !== 5) {
+      return `lease:${stablePropertyId ?? ""}`;
+    }
+    if (activeDetailTab === "calendar" && bucket === 2 && listingId) {
+      return `calendar:${listingId}`;
+    }
+    if (activeDetailTab === "promotion" && bucket === 2 && listingId) {
+      return `promotion:${listingId}`;
+    }
+    return "none";
+  }, [
+    activeDetailTab,
+    previewHasToolbar,
+    bucket,
+    listingId,
+    stablePropertyId,
+    canEditAction,
+    canEditListing,
+    canDeleteAction,
+    skuLoaded,
+  ]);
+
+  useEffect(() => {
+    if (!onDetailHeaderActions) return;
+    const actions =
+      activeDetailTab === "preview" && previewHasToolbar
+        ? previewHeaderActionsRef.current
+        : activeDetailTab === "application"
+          ? applicationHeaderExtraRef.current
+          : activeDetailTab === "lease"
+            ? leaseHeaderExtraRef.current
+            : activeDetailTab === "calendar"
+              ? tourHeaderExtraRef.current
+              : activeDetailTab === "promotion"
+                ? promotionHeaderExtraRef.current
+                : null;
+    onDetailHeaderActions(detailHeaderKey, actions);
+  }, [onDetailHeaderActions, detailHeaderKey, activeDetailTab, previewHasToolbar]);
+
+  useEffect(() => {
+    if (!onDetailHeaderActions) return;
+    return () => onDetailHeaderActions("none", null);
+  }, [onDetailHeaderActions]);
+
   return (
-    <div className="space-y-2">
-      <PortalCollapsibleSection
-        title="Preview"
-        titleVariant="label"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview || bucket === 3 || bucket === 5}
-        surfaceMuted={false}
-        headerActionsInline
-        toggleDataAttr="listing-preview-toggle"
-        headerActions={previewHeaderActions}
-        contentClassName="p-0"
-      >
-        {hasPreview ? (
-          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl">
-            <ListingDetailSections property={previewProperty!} rich={rich!} previewModal hidePreviewSubnav />
-          </ListingPreviewScrollShell>
-        ) : bucket === 3 || bucket === 5 ? (
-          <p className="px-4 py-3 text-sm text-muted">
-            {bucket === 5
-              ? "Finish the draft wizard to see a public preview."
-              : "Relist this property to restore the public preview."}
-          </p>
-        ) : null}
-      </PortalCollapsibleSection>
+    <div className="space-y-0">
+      <PortalDetailDestinationNav
+        items={topNavItems}
+        activeId={activeTopNavId}
+        ariaLabel="Property sections"
+      />
 
-      {bucket !== 3 && bucket !== 5 ? (
-        <>
-          <ManagerPropertyHouseDetailsPanel
-            noteKey={noteKey}
-            sub={managerSubmission}
-            saveTarget={houseSaveTarget}
-            managerUserId={managerUserId}
-            onUpdated={onUpdated}
-            showToast={showToast}
-          />
-
-          <ManagerPropertyApplicationQuestionsPanel
-            sub={managerSubmission}
-            saveTarget={houseSaveTarget}
-            managerUserId={managerUserId}
-            onUpdated={onUpdated}
-            showToast={showToast}
-            headerActionsExtra={applicationHeaderExtra}
-          />
-
-          <ManagerPropertyLeasePanel
-            sub={managerSubmission}
-            saveTarget={houseSaveTarget}
-            managerUserId={managerUserId}
-            propertyId={stablePropertyId}
-            propertyLabel={leasePropertyHint?.buildingName ?? row?.buildingName}
-            onUpdated={onUpdated}
-            showToast={showToast}
-            propertyHint={leasePropertyHint}
-            demoMode={isDemoModeActive()}
-          />
-
-          {bucket === 2 && listingId ? (
-            <ManagerPropertyTourPanel
-              listingId={listingId}
-              managerUserId={managerUserId}
-              propertyLabel={propertyShareLabel}
-              showToast={showToast}
-            />
-          ) : null}
-        </>
+      {showDetailSectionNav ? (
+        <PortalDetailDestinationNav
+          items={detailSectionTabs.map((tab) => ({
+            id: tab,
+            label: PROPERTY_DETAIL_TAB_LABELS[tab],
+            href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
+            dataAttr: `property-detail-tab-${tab}`,
+          }))}
+          activeId={activeDetailTab}
+          ariaLabel="Property detail sections"
+          className="border-t border-border/40 bg-background/80"
+        />
       ) : null}
 
-      {bucket === 2 && listingId ? (
+      <div className="pt-3">
+      {activeDetailTab === "preview" ? (
+        <div className="space-y-3">
+          {hasPreview ? (
+            <ListingDetailSections
+              property={previewProperty!}
+              rich={rich!}
+              portalEmbedded
+              expandSectionsOnMobile
+              managerPreviewChrome
+            />
+          ) : bucket === 3 || bucket === 5 ? (
+            <p className="text-sm text-muted">
+              {bucket === 5
+                ? "Finish the draft wizard to see a public preview."
+                : "Relist this property to restore the public preview."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {activeDetailTab === "house-details" && bucket !== 3 && bucket !== 5 ? (
+        <ManagerPropertyHouseDetailsPanel
+          noteKey={noteKey}
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+        />
+      ) : null}
+
+      {activeDetailTab === "application" && bucket !== 3 && bucket !== 5 ? (
+        <ManagerPropertyApplicationQuestionsPanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+          onRegisterAddApplication={registerApplicationAddHandler}
+        />
+      ) : null}
+
+      {activeDetailTab === "lease" && bucket !== 3 && bucket !== 5 ? (
+        <ManagerPropertyLeasePanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          propertyId={stablePropertyId}
+          propertyLabel={leasePropertyHint?.buildingName ?? row?.buildingName}
+          onUpdated={onUpdated}
+          showToast={showToast}
+          propertyHint={leasePropertyHint}
+          demoMode={isDemoModeActive()}
+          onRegisterAddLease={registerLeaseAddHandler}
+        />
+      ) : null}
+
+      {activeDetailTab === "calendar" && bucket === 2 && listingId ? (
+        <ManagerPropertyTourPanel
+          listingId={listingId}
+          managerUserId={managerUserId}
+          propertyLabel={propertyShareLabel}
+          showToast={showToast}
+          onRegisterSendTour={registerTourSendHandler}
+        />
+      ) : null}
+
+      {activeDetailTab === "promotion" && bucket === 2 && listingId ? (
         <ManagerPropertyPromotionPanel
           listingId={listingId}
           showToast={showToast}
           onUpdated={onUpdated}
+          onRegisterNewPromotion={registerPromotionNewHandler}
         />
       ) : null}
+
+      </div>
 
       {listingId ? (
         <ShareLeadLinkModal
@@ -633,6 +902,21 @@ function ManagerPropertyInlineDetails({
       {draftEditorOpen && draftFormProps ? (
         <ManagerAddListingForm {...draftFormProps} wizardScope="full" />
       ) : null}
+
+      {destructiveModalCopy ? (
+        <ConfirmDeleteModal
+          open={pendingDestructiveAction !== null}
+          title={destructiveModalCopy.title}
+          description={destructiveModalCopy.description}
+          confirmLabel={destructiveModalCopy.confirmLabel}
+          busy={destructiveBusy}
+          dataAttr={destructiveModalCopy.dataAttr}
+          onClose={() => {
+            if (!destructiveBusy) setPendingDestructiveAction(null);
+          }}
+          onConfirm={confirmDestructiveAction}
+        />
+      ) : null}
     </div>
   );
 }
@@ -643,20 +927,41 @@ export function ManagerHousePropertiesPanel({
   onSendToProspect,
   skuTier,
   skuLoaded,
+  propertiesBase,
+  propertyKey: propertyKeyProp,
+  detailTab: detailTabProp,
+  onAddProperty,
+  addPropertyDisabled = false,
 }: {
   showToast: (m: string) => void;
   activeStage: ManagerStageKey;
   onStageChange: (stage: ManagerStageKey) => void;
   onSendToProspect?: (listingId: string) => void;
-  /** Plan tier from the page-level subscription load — publishing a draft is gated on it. */
   skuTier: string | null;
-  /** False until that load settles; publishing must not proceed on an unknown plan. */
   skuLoaded: boolean;
+  propertiesBase: string;
+  propertyKey?: string;
+  detailTab?: PropertyDetailTabId;
+  onAddProperty?: () => void;
+  addPropertyDisabled?: boolean;
 }) {
+  const router = useRouter();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
-  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [detailHeaderActions, setDetailHeaderActions] = useState<ReactNode>(null);
+  const detailHeaderKeyRef = useRef<string | null>(null);
+  const handlePropertyUpdated = useCallback(() => setTick((t) => t + 1), []);
+  const handleDetailHeaderActions = useCallback((key: string, actions: ReactNode) => {
+    if (key === "none") {
+      detailHeaderKeyRef.current = null;
+      setDetailHeaderActions(null);
+      return;
+    }
+    if (detailHeaderKeyRef.current === key) return;
+    detailHeaderKeyRef.current = key;
+    setDetailHeaderActions(actions);
+  }, []);
 
   const propCount = useMemo(() => {
     void tick;
@@ -708,6 +1013,19 @@ export function ManagerHousePropertiesPanel({
     return [...mapped].sort((a, b) => compareAdminPropertyRowsForDisplay(a.row, b.row));
   }, [tick, scopeUserId, activeStage]);
 
+  const propertyKeyFromRow = (row: AdminPropertyRow) =>
+    row.listingId?.trim() || row.adminRefId.trim();
+
+  const routePropertyEntry = useMemo(() => {
+    if (!propertyKeyProp) return null;
+    const decoded = decodeURIComponent(propertyKeyProp);
+    return (
+      rows.find(
+        ({ row }) => propertyKeyFromRow(row) === decoded || row.adminRefId === decoded,
+      ) ?? null
+    );
+  }, [propertyKeyProp, rows]);
+
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
   }
@@ -720,123 +1038,104 @@ export function ManagerHousePropertiesPanel({
       key={rowKey}
       bucket={sourceBucket}
       row={row}
-      onUpdated={() => setTick((t) => t + 1)}
+      onUpdated={handlePropertyUpdated}
       showToast={showToast}
       managerUserId={managerUserId}
       skuTier={skuTier}
       skuLoaded={skuLoaded}
       propCount={propCount}
       onSendToProspect={onSendToProspect}
+      propertiesBase={propertiesBase}
+      stage={activeStage}
+      detailTab={detailTabProp}
+      onDetailHeaderActions={propertyKeyProp ? handleDetailHeaderActions : undefined}
     />
   );
+
+  if (propertyKeyProp) {
+    if (!routePropertyEntry) {
+      return (
+        <PortalDataTableEmpty
+          message="Property not found."
+          icon="default"
+        />
+      );
+    }
+    const { sourceBucket, row } = routePropertyEntry;
+    const rowKey = row.adminRefId + (row.listingId ?? "");
+    const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+    return (
+      <PortalRecordDetailPage
+        title={managerPropertyRowTitle(row, sourceBucket)}
+        subtitle={address}
+        backHref={`${propertiesBase}/properties/${activeStage}`}
+        backLabel="Back to properties"
+        hideBackText
+        bareHeader
+        dataAttrBack="property-detail-back"
+        actions={detailHeaderActions}
+        inlineActions
+        suppressMobileActions
+      >
+        {renderRowDetail(sourceBucket, row, rowKey)}
+      </PortalRecordDetailPage>
+    );
+  }
 
   return (
     <>
       {rows.length === 0 ? (
-        <PortalDataTableEmpty message={MANAGER_PROPERTY_EMPTY_COPY[activeStage]} icon="default" />
+        onAddProperty ? (
+          <div className={`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} pt-5 sm:pt-6`}>
+            <PortalListAddRow
+              label="Add property"
+              icon={PORTAL_LIST_ADD_ICONS.property}
+              onClick={onAddProperty}
+              disabled={addPropertyDisabled}
+              dataAttr="properties-list-add"
+            />
+          </div>
+        ) : null
       ) : (
-        <>
-          <div className="space-y-2 lg:hidden">
-            {rows.map(({ sourceBucket, row, linked }) => {
-              const rowKey = row.adminRefId + (row.listingId ?? "");
-              const expanded = expandedRowKey === rowKey;
-
-              return (
-                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button
-                    type="button"
-                    className="flex w-full gap-2 text-left"
-                    onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                    aria-expanded={expanded}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
-                        <span className="truncate">{managerPropertyRowTitle(row, sourceBucket)}</span>
-                      </PortalTableInlineExpand>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                        {row.address}
-                        {row.zip ? `, ${row.zip}` : ""}
-                      </p>
-                      <p className="mt-1.5 text-xs text-muted">
-                        <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
-                        ba · {row.neighborhood}
-                      </p>
-                      <p className="mt-1.5">
-                        <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
-                          {linked ? "Co-managed" : "Owned"}
-                        </span>
-                      </p>
-                    </div>
-                  </button>
-                  {expanded ? (
-                    <div className="mt-3 border-t border-border pt-3">
-                      {renderRowDetail(sourceBucket, row, rowKey)}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ sourceBucket, row, linked }) => {
-                    const rowKey = row.adminRefId + (row.listingId ?? "");
-                    const expanded = expandedRowKey === rowKey;
-
-                    return (
-                      <Fragment key={rowKey}>
-                        <tr
-                          className={PORTAL_TABLE_TR_EXPANDABLE}
-                          onClick={createPortalRowExpandClick(() =>
-                            setExpandedRowKey(expanded ? null : rowKey),
-                          )}
-                          aria-expanded={expanded}
-                        >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                            <PortalTableInlineExpand expanded={expanded}>
-                              {managerPropertyRowTitle(row, sourceBucket)}
-                            </PortalTableInlineExpand>
-                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                              {row.address}
-                              {row.zip ? `, ${row.zip}` : ""}
-                            </p>
-                            <p className="mt-1.5">
-                              <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
-                                {linked ? "Co-managed" : "Owned"}
-                              </span>
-                            </p>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <p className="text-xs text-muted">
-                              <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
-                              ba · {row.neighborhood}
-                            </p>
-                          </td>
-                        </tr>
-                        {expanded ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
-                              {renderRowDetail(sourceBucket, row, rowKey)}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <div className={PORTAL_LIST_PAGE_BODY}>
+          {rows.map(({ sourceBucket, row }) => {
+            const rowKey = row.adminRefId + (row.listingId ?? "");
+            const address = `${row.address}${row.zip ? `, ${row.zip}` : ""}`;
+            const summary = `${adminPropertyRentDisplayLabel(row)} · ${row.beds} bd / ${row.baths} ba · ${row.neighborhood}`;
+            return (
+              <PortalPropertyRecordRow
+                key={rowKey}
+                title={managerPropertyRowTitle(row, sourceBucket)}
+                address={address}
+                summary={summary}
+                onOpen={() => {
+                  const routeKey = propertyKeyFromRow(row);
+                  router.push(
+                    propertyDetailHref(
+                      propertiesBase,
+                      activeStage,
+                      routeKey,
+                      detailTabProp ?? "preview",
+                    ),
+                    { scroll: false },
+                  );
+                }}
+                dataAttr="property-list-row"
+              />
+            );
+          })}
+          {onAddProperty ? (
+            <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+              <PortalListAddRow
+                label="Add property"
+                icon={PORTAL_LIST_ADD_ICONS.property}
+                onClick={onAddProperty}
+                disabled={addPropertyDisabled}
+                dataAttr="properties-list-add"
+              />
             </div>
-          </div>
-        </>
+          ) : null}
+        </div>
       )}
     </>
   );

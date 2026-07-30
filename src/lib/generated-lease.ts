@@ -19,14 +19,17 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
+import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms";
 import { leaseCss } from "@/lib/lease-templates/types";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
 import { buildSeattleLeaseHtml } from "@/lib/lease-templates/seattle";
+import type { JointLeaseMember } from "@/lib/bundle-group/types";
 import { buildCaliforniaLeaseHtml } from "@/lib/lease-templates/california";
 import { buildWashingtonLeaseHtml } from "@/lib/lease-templates/washington";
+import type { LeaseBillingSnapshot } from "@/lib/lease-billing-snapshot";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
@@ -73,6 +76,11 @@ export type LeaseGenerationContext = {
   listingProperty: MockProperty | undefined;
   submission: ManagerListingSubmissionV1 | undefined;
   generatedAtIso: string;
+  /** Co-tenants on a joint bundle lease (when leaseKind is joint_bundle). */
+  jointLeaseMembers?: JointLeaseMember[];
+  leaseKind?: "individual" | "joint_bundle";
+  /** Amounts aligned with placement + pending household charges when generating from the manager portal. */
+  leaseBilling?: LeaseBillingSnapshot;
 };
 
 export function leaseContextFromApplication(
@@ -91,7 +99,7 @@ export function leaseContextFromApplication(
       email: application.email ?? "",
       application: application as RentalWizardFormState,
     }),
-    leaseTerm: dates.leaseTerm || application.leaseTerm,
+    leaseTerm: normalizeApplicationLeaseTerm(dates.leaseTerm || application.leaseTerm || ""),
     leaseStart: dates.leaseStart,
     leaseEnd: dates.leaseEnd,
   };

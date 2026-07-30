@@ -44,11 +44,11 @@ describe("manager-apple-purchase helpers", () => {
 
   describe("tierForAppleProductId", () => {
     it("maps launch product ids to tier + cadence", () => {
-      expect(tierForAppleProductId("com.axisseattlehousing.app.pro.monthly")).toEqual({
+      expect(tierForAppleProductId("space.proplane.app.pro.monthly")).toEqual({
         tier: "pro",
         billing: "monthly",
       });
-      expect(tierForAppleProductId("com.axisseattlehousing.app.business.monthly")).toEqual({
+      expect(tierForAppleProductId("space.proplane.app.business.monthly")).toEqual({
         tier: "business",
         billing: "monthly",
       });
@@ -63,8 +63,8 @@ describe("manager-apple-purchase helpers", () => {
     it("launch set is Pro + Business monthly only (annual is a fast-follow)", () => {
       expect([...APPLE_IAP_LAUNCH_PRODUCT_IDS].sort()).toEqual(
         [
-          "com.axisseattlehousing.app.business.monthly",
-          "com.axisseattlehousing.app.pro.monthly",
+          "space.proplane.app.business.monthly",
+          "space.proplane.app.pro.monthly",
         ].sort(),
       );
       for (const id of APPLE_IAP_LAUNCH_PRODUCT_IDS) {

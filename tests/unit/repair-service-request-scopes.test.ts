@@ -70,19 +70,19 @@ describe("repairServiceRequestScopesForManager", () => {
       return params.managerUserId === "mgr-demo";
     });
     const { client, upserts } = mockDb(
-      [{ resident_email: "resident@test.axis.local", property_id: "mgr-demo-pioneer", bucket: "approved" }],
+      [{ resident_email: "resident@test.proplane.local", property_id: "mgr-demo-pioneer", bucket: "approved" }],
       [
         {
           id: "SR-orphan",
           manager_user_id: "mgr-2",
-          resident_email: "resident@test.axis.local",
+          resident_email: "resident@test.proplane.local",
           property_id: "mgr-test-spruce",
           status: "pending",
           row_data: {
             id: "SR-orphan",
             offerName: "Reserved parking spot",
             offerId: "parking",
-            residentEmail: "resident@test.axis.local",
+            residentEmail: "resident@test.proplane.local",
             managerUserId: "mgr-2",
             propertyId: "mgr-test-spruce",
           },
@@ -96,19 +96,19 @@ describe("repairServiceRequestScopesForManager", () => {
       id: "SR-orphan",
       manager_user_id: "mgr-demo",
       property_id: "mgr-demo-pioneer",
-      resident_email: "resident@test.axis.local",
+      resident_email: "resident@test.proplane.local",
     });
   });
 
   it("does not steal a request that belongs to another approved residency", async () => {
     vi.mocked(residentHasApprovedResidency).mockResolvedValue(true);
     const { client, upserts } = mockDb(
-      [{ resident_email: "res@test.axis.local", property_id: "pioneer-1", bucket: "approved" }],
+      [{ resident_email: "res@test.proplane.local", property_id: "pioneer-1", bucket: "approved" }],
       [
         {
           id: "SR-other",
           manager_user_id: "mgr-other",
-          resident_email: "res@test.axis.local",
+          resident_email: "res@test.proplane.local",
           property_id: "other-prop",
           status: "pending",
           row_data: { id: "SR-other", managerUserId: "mgr-other", propertyId: "other-prop" },

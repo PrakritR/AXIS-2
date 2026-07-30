@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
+import { CommunicationFilterSortFields } from "@/components/portal/communication-filter-sort-fields";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
 import { type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
@@ -11,8 +14,9 @@ import {
 } from "@/components/portal/manager-communication-compose-modal";
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { PORTAL_HEADER_ACTION_BTN, PortalToolbarSortSelect } from "@/components/portal/portal-metrics";
-import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   axisAdminFilterContact,
   EMPTY_COMMUNICATION_THREAD_FILTERS,
@@ -43,10 +47,28 @@ const ROLE_OPTIONS: { value: CommunicationFilterRole; label: string }[] = [
   { value: "vendor", label: roleLabel("vendor") },
 ];
 
+function communicationFilterTouches(
+  filters: CommunicationThreadFilters,
+  listSort: CommunicationListSort,
+): number {
+  let n = 0;
+  if (filters.propertyIds.length > 0) n += 1;
+  if (filters.roles.length > 0) n += 1;
+  if (filters.contactIds.length > 0) n += 1;
+  if (listSort !== "recent") n += 1;
+  return n;
+}
+
 export function ManagerCommunication({
+  listSegment = "active",
+  threadId,
   inboxTabId = "unopened",
   smsUiEnabled = false,
 }: {
+  /** Routed conversation list segment (Active / Unread / Archived). */
+  listSegment?: "active" | "unread" | "archived";
+  /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
+  threadId?: string;
   /** @deprecated Channel is always unified; kept for route compatibility. */
   channel?: ManagerCommunicationChannel;
   /** @deprecated Folder tabs removed — kept so legacy routes still resolve. */
@@ -70,6 +92,13 @@ export function ManagerCommunication({
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
+  const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
+
+  useEffect(() => {
+    setThreadOpen(Boolean(threadId));
+  }, [threadId]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -138,73 +167,153 @@ export function ManagerCommunication({
     [loadSmsRecipients],
   );
 
-  const threadFilters = (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-      <CheckboxMultiSelect
-        variant="pill"
-        label="House"
-        emptyLabel="All houses"
-        options={propertyOptions}
-        selected={filters.propertyIds}
-        onChange={(propertyIds) => setFilters((f) => ({ ...f, propertyIds }))}
-        emptyMenuText="No houses yet"
-        dataAttr="communication-filter-property"
-      />
-      <CheckboxMultiSelect
-        variant="pill"
-        label="Role"
-        emptyLabel="All roles"
-        options={ROLE_OPTIONS}
-        selected={filters.roles}
-        onChange={(roles) =>
+  const filterTouchCount = communicationFilterTouches(filters, listSort);
+
+  const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    const chips: PortalActiveFilterChip[] = [];
+    for (const propertyId of filters.propertyIds) {
+      const label = propertyOptions.find((p) => p.value === propertyId)?.label ?? propertyId;
+      chips.push({
+        id: `house-${propertyId}`,
+        label: `House: ${label}`,
+        onRemove: () =>
           setFilters((f) => ({
             ...f,
-            roles: roles as CommunicationFilterRole[],
+            propertyIds: f.propertyIds.filter((id) => id !== propertyId),
+          })),
+      });
+    }
+    for (const role of filters.roles) {
+      const label = ROLE_OPTIONS.find((r) => r.value === role)?.label ?? roleLabel(role);
+      chips.push({
+        id: `role-${role}`,
+        label: `Role: ${label}`,
+        onRemove: () =>
+          setFilters((f) => ({
+            ...f,
+            roles: f.roles.filter((r) => r !== role),
             contactIds: [],
-          }))
-        }
-        dataAttr="communication-filter-role"
-      />
-      <CheckboxMultiSelect
-        variant="pill"
-        label="Resident"
-        emptyLabel="All residents"
-        options={residentOptions}
-        selected={filters.contactIds}
-        onChange={(contactIds) => setFilters((f) => ({ ...f, contactIds }))}
-        emptyMenuText="No residents yet"
-        dataAttr="communication-filter-resident"
-      />
-      <PortalToolbarSortSelect
-        label="Sort"
-        value={listSort}
-        onChange={setListSort}
-        ariaLabel="Sort conversations"
-        options={[
-          { value: "recent", label: "Most recent" },
-          { value: "resident", label: "Resident (A–Z)" },
-        ]}
-      />
-    </div>
+          })),
+      });
+    }
+    for (const contactId of filters.contactIds) {
+      const label = residentOptions.find((r) => r.value === contactId)?.label ?? contactId;
+      chips.push({
+        id: `resident-${contactId}`,
+        label: `Resident: ${label}`,
+        onRemove: () =>
+          setFilters((f) => ({
+            ...f,
+            contactIds: f.contactIds.filter((id) => id !== contactId),
+          })),
+      });
+    }
+    if (listSort !== "recent") {
+      const sortLabel = listSort === "resident" ? "Resident (A–Z)" : listSort;
+      chips.push({
+        id: "sort",
+        label: `Sort: ${sortLabel}`,
+        onRemove: () => setListSort("recent"),
+      });
+    }
+    return chips;
+  }, [filters, listSort, propertyOptions, residentOptions]);
+
+  const filterControls = (
+    <CommunicationFilterSortFields
+      propertyOptions={propertyOptions}
+      roleOptions={ROLE_OPTIONS}
+      filterContacts={filterContacts}
+      filters={filters}
+      onFiltersChange={setFilters}
+      listSort={listSort}
+      onListSortChange={setListSort}
+    />
   );
 
-  const titleAside = (
+  const communicationFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={filterTouchCount}
+      desktopPresentation="dropdown"
+      className="min-w-0 shrink-0"
+      onReset={() => {
+        setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
+        setListSort("recent");
+      }}
+      dataAttr="communication-filter-sheet-open"
+    >
+      {filterControls}
+    </PortalFilterSortSheet>
+  );
+
+  const communicationNewMessageButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      data-attr="communication-new-message"
+      onClick={() => openCompose("email")}
+    >
+      New message
+    </Button>
+  );
+
+  const communicationHeaderActions = (
     <>
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="communication-new-message"
-        onClick={() => openCompose("email")}
-      >
-        New message
-      </Button>
+      {communicationNewMessageButton}
     </>
   );
 
+  const communicationMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow
+      filter={communicationFilterSheet}
+      actions={communicationHeaderActions}
+    />
+  );
+
+  const controlStack = (
+    <PortalListControlStack
+      destinations={[
+        { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+        {
+          id: "unread",
+          label: "Unread",
+          href: `${commBase}/unread`,
+          count: folderCounts.unread,
+          dataAttr: "communication-segment-unread",
+        },
+        {
+          id: "archived",
+          label: "Archived",
+          href: `${commBase}/archived`,
+          count: folderCounts.archived,
+          dataAttr: "communication-segment-archived",
+        },
+      ]}
+      activeDestinationId={listSegment}
+      destinationAriaLabel="Conversation folders"
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: "Search residents or messages",
+        dataAttr: "unified-inbox-search",
+      }}
+      activeFilterChips={<PortalActiveFilterChips chips={activeFilterChips} />}
+    />
+  );
+
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside} threadFilters={threadFilters}>
+    <PortalCommunicationShell
+      title="Communication"
+      titleInlineFilter={communicationFilterSheet}
+      titleAside={communicationHeaderActions}
+      hideTitleOnMobileNav
+      controlStack={controlStack}
+      mobileActionsRow={communicationMobileActionsRow}
+      hideMobileFilterRow={threadOpen}
+      mobileThreadReading={threadOpen}
+    >
       <ManagerCommunicationComposeModal
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
@@ -218,12 +327,19 @@ export function ManagerCommunication({
       <ManagerUnifiedInbox
         tabId={inboxTabId}
         commBase={commBase}
+        listSegment={listSegment}
+        routeThreadId={threadId}
         threadFilters={filters}
         filterContacts={filterContacts}
         listSort={listSort}
         smsUiEnabled={smsUiEnabled}
         inboxRef={inboxRef}
         smsRef={smsRef}
+        onThreadOpenChange={setThreadOpen}
+        listChrome="external"
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onFolderCountsChange={setFolderCounts}
       />
     </PortalCommunicationShell>
   );

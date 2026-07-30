@@ -174,6 +174,7 @@ describe("POST /api/manager-applications — self-application by a non-resident 
     expect(persisted.manager_user_id).toBe(LISTING_OWNER);
     expect(persisted.row_data.managerUserId).toBe(LISTING_OWNER);
     expect(persisted.row_data.email).toBe(CALLER_EMAIL);
+    expect(persisted.row_data.residentUserId).toBe(CALLER);
   });
 
   it("keeps autosaving after the row exists (the wizard's per-keystroke sync)", async () => {
@@ -253,5 +254,59 @@ describe("GET /api/manager-applications?scope=self", () => {
     expect(body.rows).toHaveLength(1);
     expect(body.rows?.[0]?.id).toBe("PROPLANE-SELFAPP1");
     expect(body.rows?.[0]?.email).toBe(CALLER_EMAIL);
+  });
+
+  it("excludes rows linked to another resident user id even when resident_email matches", async () => {
+    STORED_ROWS = [
+      {
+        id: "PROPLANE-SELFAPP1",
+        row_data: inProgressRow({ residentUserId: CALLER }),
+        resident_email: CALLER_EMAIL,
+      },
+      {
+        id: "PROPLANE-OTHERUSER",
+        row_data: inProgressRow({
+          id: "PROPLANE-OTHERUSER",
+          residentUserId: "someone-else-user-id",
+        }),
+        resident_email: CALLER_EMAIL,
+      },
+    ];
+    const { GET } = await import("@/app/api/manager-applications/route");
+    const res = await GET(new Request("http://localhost/api/manager-applications?scope=self"));
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+
+    expect(res.status).toBe(200);
+    expect(body.rows).toHaveLength(1);
+    expect(body.rows?.[0]?.id).toBe("PROPLANE-SELFAPP1");
+    expect(body.rows?.[0]?.residentUserId).toBe(CALLER);
+  });
+});
+
+describe("GET /api/manager-applications resident email gate", () => {
+  it("returns no rows when a resident has no profile or auth email", async () => {
+    PROFILE = { role: "resident", email: "" };
+    getUser.mockResolvedValue({
+      data: { user: { id: "resident-no-email", user_metadata: {} } },
+      error: null,
+    });
+    STORED_ROWS = [
+      {
+        id: "ORPHAN-APP",
+        row_data: inProgressRow({ id: "ORPHAN-APP", email: "" }),
+        resident_email: null,
+      },
+      {
+        id: "OTHER-ORPHAN",
+        row_data: inProgressRow({ id: "OTHER-ORPHAN", email: OTHER_APPLICANT_EMAIL }),
+        resident_email: "",
+      },
+    ];
+    const { GET } = await import("@/app/api/manager-applications/route");
+    const res = await GET(new Request("http://localhost/api/manager-applications"));
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+
+    expect(res.status).toBe(200);
+    expect(body.rows).toEqual([]);
   });
 });

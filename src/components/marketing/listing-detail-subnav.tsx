@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getPortalScrollRoot, syncPortalDetailDestinationOffset, syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
+
+type ListingSubnavMode = "page" | "modal" | "portal";
 
 const NAVBAR_ID = "axis-public-navbar";
 const PREVIEW_SCROLL_SELECTOR = "[data-listing-preview-scroll]";
@@ -27,7 +30,12 @@ function getScrollRootFromSubnav(subnavEl: HTMLElement | null): HTMLElement | nu
   return shell?.querySelector<HTMLElement>(PREVIEW_SCROLL_SELECTOR) ?? null;
 }
 
-function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null): HTMLElement | null {
+/** Height of the sticky portal mobile top bar (back + profile) above the listing subnav. */
+function readPortalStickyTopInset(subnavEl: HTMLElement | null): number {
+  return syncPortalMobileTopChrome(subnavEl);
+}
+
+function getSectionElement(id: string, mode: ListingSubnavMode, subnavEl: HTMLElement | null): HTMLElement | null {
   if (mode === "modal") {
     const root = getScrollRootFromSubnav(subnavEl);
     return root?.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ?? null;
@@ -40,13 +48,28 @@ function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLEle
 }
 
 function syncListingScrollStack(
-  mode: "page" | "modal",
+  mode: ListingSubnavMode,
   subnavEl: HTMLElement | null,
   pinned = false,
 ): number {
   if (!subnavEl) return 128;
   const isNative =
     typeof document !== "undefined" && document.documentElement.hasAttribute("data-native");
+  if (mode === "portal") {
+    const chrome = readPortalStickyTopInset(subnavEl);
+    const destOffset =
+      typeof document !== "undefined"
+        ? Number.parseFloat(
+            getComputedStyle(getPortalScrollRoot(subnavEl) ?? document.documentElement).getPropertyValue(
+              "--portal-detail-destination-offset",
+            ),
+          ) || 0
+        : 0;
+    const stack = chrome + destOffset + subnavEl.offsetHeight + 12;
+    const listingRoot = getListingSectionsRoot(subnavEl);
+    listingRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
+    return stack;
+  }
   if (mode === "modal") {
     const scrollRoot = getScrollRootFromSubnav(subnavEl);
     const listingRoot = scrollRoot?.querySelector<HTMLElement>(LISTING_SECTIONS_ROOT_SELECTOR);
@@ -77,12 +100,27 @@ function syncListingScrollStack(
 
 function scrollToSection(
   id: string,
-  mode: "page" | "modal",
+  mode: ListingSubnavMode,
   subnavEl: HTMLElement | null,
   pinned = false,
 ) {
   const el = getSectionElement(id, mode, subnavEl);
   if (!el) return;
+
+  if (mode === "portal") {
+    const root = getPortalScrollRoot(subnavEl);
+    if (!root || !subnavEl) return;
+    syncListingScrollStack(mode, subnavEl, pinned);
+    const chromeH = readPortalStickyTopInset(subnavEl);
+    const destOffset =
+      Number.parseFloat(
+        getComputedStyle(root).getPropertyValue("--portal-detail-destination-offset"),
+      ) || 0;
+    const subnavH = subnavEl.getBoundingClientRect().height;
+    const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+    root.scrollTo({ top: Math.max(0, y - chromeH - destOffset - subnavH - 10), behavior: "smooth" });
+    return;
+  }
 
   if (mode === "modal") {
     const root = getScrollRootFromSubnav(subnavEl);
@@ -109,11 +147,14 @@ export function ListingStickySubnav({
   mode = "page",
   pinned = false,
   className = "",
+  appearance = "marketing",
 }: {
-  mode?: "page" | "modal";
+  mode?: ListingSubnavMode;
   /** When true (preview shell), subnav is fixed above the scroller — not sticky over content. */
   pinned?: boolean;
   className?: string;
+  /** Portal manager preview uses the same segmented tab chrome as property detail tabs. */
+  appearance?: "marketing" | "portal";
 }) {
   const rootRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -154,6 +195,10 @@ export function ListingStickySubnav({
       const scrollRoot = getScrollRootFromSubnav(subEl);
       syncListingScrollStack(mode, subEl, pinned);
       setPageScrolled(pinned ? false : scrollRoot ? scrollRoot.scrollTop > 8 : false);
+    } else if (mode === "portal") {
+      const scrollRoot = getPortalScrollRoot(subEl);
+      syncListingScrollStack(mode, subEl, pinned);
+      setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
     } else {
       syncListingScrollStack(mode, subEl);
       setPageScrolled(window.scrollY > 20);
@@ -161,7 +206,8 @@ export function ListingStickySubnav({
 
     // Slightly below where a clicked section lands (subnav + 10/12px offset),
     // so the spy agrees with the tab that was just clicked.
-    const scrollRoot = mode === "modal" ? getScrollRootFromSubnav(subEl) : null;
+    const scrollRoot =
+      mode === "modal" ? getScrollRootFromSubnav(subEl) : mode === "portal" ? getPortalScrollRoot(subEl) : null;
     const line =
       mode === "modal" && pinned && scrollRoot
         ? scrollRoot.getBoundingClientRect().top + 20
@@ -236,8 +282,39 @@ export function ListingStickySubnav({
       };
     };
 
+    const attachPortalListeners = () => {
+      const scrollRoot = getPortalScrollRoot(subEl);
+      const mobileChrome = scrollRoot?.querySelector<HTMLElement>(".portal-mobile-nav-bar") ?? null;
+      const destinationNav =
+        scrollRoot?.querySelector<HTMLElement>("[data-portal-detail-destination-nav]") ?? null;
+      const ro = new ResizeObserver(() => {
+        publishStackAndSpy();
+      });
+      ro.observe(subEl);
+      if (mobileChrome) ro.observe(mobileChrome);
+      if (destinationNav) ro.observe(destinationNav);
+
+      const onScroll = () => publishStackAndSpy();
+      scrollRoot?.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", publishStackAndSpy, { passive: true });
+      queueMicrotask(() => publishStackAndSpy());
+
+      return () => {
+        ro.disconnect();
+        scrollRoot?.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", publishStackAndSpy);
+        scrollRoot?.style.removeProperty("--portal-mobile-top-chrome");
+        scrollRoot?.style.removeProperty("--portal-detail-destination-offset");
+        getListingSectionsRoot(subEl)?.style.removeProperty("--listing-sticky-stack");
+      };
+    };
+
     const tryAttach = () => {
       if (cancelled) return;
+      if (mode === "portal") {
+        cleanup = attachPortalListeners();
+        return;
+      }
       if (mode === "modal") {
         cleanup = attachModalListeners();
         return;
@@ -288,18 +365,27 @@ export function ListingStickySubnav({
     };
   }, [mode, pinned]);
 
+  const portalTabs = appearance === "portal";
+
+  const portalSticky = mode === "portal" && !pinned;
+
   return (
     <nav
       ref={rootRef}
       data-listing-subnav
       data-listing-subnav-pinned={pinned ? "" : undefined}
-      className={`z-[45] border-b border-border px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
-        pinned
-          ? "bg-background"
-          : pageScrolled
-            ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
-            : "bg-background/90"
-      }`}
+      data-listing-subnav-portal={portalSticky ? "" : undefined}
+      className={`z-[45] px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
+        portalTabs
+          ? `border-b border-border ${portalSticky ? "sticky bg-background shadow-sm [top:var(--portal-mobile-top-chrome,0px)]" : "bg-accent/30"}`
+          : `border-b border-border ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
+              pinned
+                ? "bg-background"
+                : pageScrolled
+                  ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
+                  : "bg-background/90"
+            }`
+      } ${portalTabs ? className : ""}`}
       style={
         pinned
           ? { top: 0 }
@@ -311,17 +397,15 @@ export function ListingStickySubnav({
     >
       <ul
         ref={listRef}
-        // On mobile the strip scrolls horizontally (flex-nowrap + overflow-x-auto);
-        // a right-edge fade mask signals that more tabs exist beyond the viewport
-        // instead of the tabs looking truncated mid-word. Applied only while more
-        // tabs remain off-screen to the right (never fades the last tab at
-        // end-of-scroll), and removed at sm+ where the strip wraps and centers
-        // (no horizontal scroll).
-        className={`-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
-          fadeEnd
+        className={`-mx-1 flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
+          fadeEnd && !portalTabs
             ? "[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none]"
             : ""
-        } sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]`}
+        } ${
+          mode === "portal" || portalTabs
+            ? "justify-center sm:flex-wrap sm:justify-center sm:overflow-visible"
+            : "justify-start sm:flex-wrap sm:justify-center sm:overflow-visible"
+        } sm:px-0 sm:text-[13px]`}
       >
         {nav.map((item) => {
           const active = activeId === item.id;
@@ -334,10 +418,14 @@ export function ListingStickySubnav({
                 type="button"
                 data-attr="listing-section-tab"
                 aria-current={active ? "true" : undefined}
-                className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
-                  active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-muted hover:bg-accent/40 hover:text-foreground"
+                className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-xl border-0 px-3 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
+                  portalTabs
+                    ? active
+                      ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
+                      : "text-muted hover:bg-card/60 hover:text-foreground"
+                    : active
+                      ? "rounded-full bg-primary text-primary-foreground shadow-sm"
+                      : "rounded-full bg-transparent text-muted hover:bg-accent/40 hover:text-foreground"
                 }`}
                 onClick={() => {
                   clickLockRef.current = { id: item.id, until: Date.now() + 1500 };

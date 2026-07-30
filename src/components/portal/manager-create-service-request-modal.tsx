@@ -406,9 +406,6 @@ export function ManagerCreateServiceRequestModal({
       title="Add add-on service"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"
@@ -427,7 +424,7 @@ export function ManagerCreateServiceRequestModal({
       <div className="space-y-4">
         <p className="text-sm text-muted">
           {lockedResident
-            ? "Log an add-on service request for this resident. It appears in their portal under Services → Add-on services."
+            ? "Log a service request for this resident. It appears in their portal under Services → Requests."
             : "Log an add-on service request on behalf of a resident. Only offerings the property makes available appear below."}
         </p>
 

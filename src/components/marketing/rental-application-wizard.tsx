@@ -36,6 +36,7 @@ import {
   isRoomPendingConflict,
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import {
   clearRentalWizardDraft,
@@ -442,6 +443,7 @@ function RentalApplicationWizardInner({
       searchParams.get("listingRoomId") ?? "",
       searchParams.get("bundle") ?? "",
       searchParams.get("phone") ?? "",
+      searchParams.get("rentalType") ?? "",
     ].join("|");
   }, [searchParams]);
 
@@ -843,6 +845,8 @@ function RentalApplicationWizardInner({
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
     const bundleParam = (searchParams.get("bundle") ?? "").trim();
     const phoneParam = (searchParams.get("phone") ?? "").trim();
+    const rentalTypeParam = (searchParams.get("rentalType") ?? "").trim();
+    const shortTermFromLink = rentalTypeParam === "short_term";
 
     queueMicrotask(() => {
       setForm((prev) => {
@@ -872,11 +876,19 @@ function RentalApplicationWizardInner({
             ? maskPhoneInput("", phoneDigits)
             : prev.phone;
 
+        const rentalType = shortTermFromLink ? "short_term" : prev.rentalType;
+        const leaseTerm = shortTermFromLink
+          ? (prev.leaseTerm || SHORT_TERM_LEASE_TERM)
+          : prev.rentalType === "short_term" && !shortTermFromLink
+            ? ""
+            : prev.leaseTerm;
         return {
           ...prev,
           propertyId: pid,
           bundleId,
           phone,
+          rentalType,
+          leaseTerm,
           roomChoice1: bundleReplacesRooms ? "" : room1 || prev.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",
@@ -1229,11 +1241,16 @@ function RentalApplicationWizardInner({
         backgroundCheckStatus: "pending_review" as const,
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
+        residentUserId: residentUserId ?? undefined,
+        axisId,
         application: structuredClone(submittedForm),
       };
 
       replaceManagerApplicationRowInCache(applicationRow);
       const sync = await upsertApplicationRowToServerAwait(applicationRow);
+      if (sync.ok && sync.row) {
+        replaceManagerApplicationRowInCache(sync.row);
+      }
 
       let emailSent = false;
       let mailtoHref: string | undefined;
@@ -1293,7 +1310,9 @@ function RentalApplicationWizardInner({
           );
           return;
         }
-        router.replace("/resident/applications");
+        router.replace(
+          `/resident/applications/pending/${encodeURIComponent(sync.row?.id ?? axisId)}`,
+        );
         return;
       }
       setPostSubmit({

@@ -11,6 +11,10 @@ export type ResidentPortalAccessState = {
   hasCompletedApplicationSubmission: boolean;
   /** Resident with no submitted application yet — Applications-only portal. */
   isPreApplicationResident: boolean;
+  /** True when a tour inquiry is linked to this account by record id. */
+  hasTourLink: boolean;
+  /** Tour booked or application submitted, but lease access not yet unlocked. */
+  isPreLeaseResident: boolean;
   applicationApproved: boolean;
   applicationId: string | null;
   applicationStage: string | null;
@@ -26,6 +30,8 @@ function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): Res
     hasSubmittedApplication: false,
     hasCompletedApplicationSubmission: false,
     isPreApplicationResident: false,
+    hasTourLink: false,
+    isPreLeaseResident: false,
     applicationApproved: false,
     applicationId: null,
     applicationStage: null,
@@ -47,6 +53,7 @@ function isInProgressApplicationStage(stage: string | null | undefined): boolean
 function readLatestApplication(
   records: Array<{ row_data: unknown; updated_at?: string | null }>,
   email: string,
+  userId?: string | null,
 ): {
   id: string | null;
   bucket: string | null;
@@ -60,6 +67,8 @@ function readLatestApplication(
         : null;
       const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
       if (!row || residentEmail !== email) return null;
+      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
+      if (linkedUserId && userId && linkedUserId !== userId) return null;
       return {
         id: typeof row.id === "string" ? row.id.trim() || null : null,
         bucket: typeof row.bucket === "string" ? row.bucket.trim().toLowerCase() || null : null,
@@ -107,14 +116,25 @@ const loadResidentPortalAccessStateCached = cache(
       .eq("resident_email", email)
       .order("updated_at", { ascending: false });
 
-    let latestApplication = readLatestApplication(applicationRows ?? [], email);
-    let hasSubmittedApplication = (applicationRows ?? []).length > 0;
+    let latestApplication = readLatestApplication(applicationRows ?? [], email, userId);
+    let hasSubmittedApplication = (applicationRows ?? []).some((record) => {
+      const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
+        ? (record.row_data as Record<string, unknown>)
+        : null;
+      const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
+      if (!row || residentEmail !== email) return false;
+      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
+      if (linkedUserId && userId && linkedUserId !== userId) return false;
+      return true;
+    });
     let hasCompletedApplicationSubmission = (applicationRows ?? []).some((record) => {
       const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
         ? (record.row_data as Record<string, unknown>)
         : null;
       const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
       if (!row || residentEmail !== email) return false;
+      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
+      if (linkedUserId && userId && linkedUserId !== userId) return false;
       const stage = typeof row.stage === "string" ? row.stage : null;
       return !isInProgressApplicationStage(stage);
     });
@@ -160,13 +180,23 @@ const loadResidentPortalAccessStateCached = cache(
     }
 
     const leaseAccessUnlocked = applicationApproved;
-    const isPreApplicationResident = roleOk && !hasSubmittedApplication;
+    let hasTourLink = false;
+    if (userId) {
+      const { count: tourLinkCount } = await db
+        .from("resident_tour_links")
+        .select("id", { count: "exact", head: true })
+        .eq("resident_user_id", userId);
+      hasTourLink = (tourLinkCount ?? 0) > 0;
+    }
+    const isPreLeaseResident = roleOk && !leaseAccessUnlocked && (hasTourLink || hasSubmittedApplication);
 
     return {
       roleOk,
       hasSubmittedApplication,
       hasCompletedApplicationSubmission,
-      isPreApplicationResident,
+      isPreApplicationResident: roleOk && !hasSubmittedApplication && !hasTourLink,
+      hasTourLink,
+      isPreLeaseResident,
       applicationApproved,
       applicationId: latestApplication.id,
       applicationStage: latestApplication.stage,
@@ -225,9 +255,11 @@ export async function loadResidentLeaseSignedStatus(email: string): Promise<bool
 
 /** Default resident landing route after sign-in / account creation. */
 export function residentPortalHomePath(
-  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked">,
+  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked" | "isPreLeaseResident" | "hasTourLink">,
 ): string {
-  return access.leaseAccessUnlocked ? "/resident/dashboard" : "/resident/applications/apply";
+  if (access.leaseAccessUnlocked) return "/resident/dashboard";
+  if (access.isPreLeaseResident || access.hasTourLink) return "/resident/dashboard";
+  return "/resident/applications/apply";
 }
 
 export function residentHasFullPortalAccess(params: {

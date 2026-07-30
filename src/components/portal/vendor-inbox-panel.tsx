@@ -12,6 +12,7 @@ import {
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -110,6 +111,7 @@ export const VendorInboxPanel = forwardRef<
   const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
   const [vendorIdentity, setVendorIdentity] = useState({ name: "Vendor", email: "vendor@example.com" });
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (isDemoModeActive()) return;
@@ -210,9 +212,7 @@ export const VendorInboxPanel = forwardRef<
     if (embeddedInCommunication) onTabCountsChange?.(tabCountsForParent);
   }, [embeddedInCommunication, onTabCountsChange, tabCountsForParent]);
 
-  const rowsForTab = useMemo(() => {
-    // "all" = one unified list of every live conversation (inbox + sent),
-    // excluding trash, sorted newest-first. Trash stays reachable on its own tab.
+  const baseRowsForTab = useMemo(() => {
     if (tabId === "all")
       return emailThreads
         .filter((t) => t.folder !== "trash")
@@ -225,6 +225,14 @@ export const VendorInboxPanel = forwardRef<
     if (tabId === "trash") return emailThreads.filter((t) => t.folder === "trash");
     return [];
   }, [emailThreads, tabId, retainedIds]);
+
+  const rowsForTab = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return baseRowsForTab;
+    return baseRowsForTab.filter((t) =>
+      [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase().includes(q),
+    );
+  }, [baseRowsForTab, searchQuery]);
 
   // Returning to Unopened (or refreshing) shows the true unread set.
   useEffect(() => {
@@ -561,6 +569,15 @@ export const VendorInboxPanel = forwardRef<
         senderName={vendorIdentity.name}
         senderEmail={vendorIdentity.email}
         liveContacts={eligibleContacts}
+      />
+
+      <PortalListToolbar
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: "Search messages",
+          dataAttr: "vendor-inbox-search",
+        }}
       />
 
       {rowsForTab.length === 0 ? (

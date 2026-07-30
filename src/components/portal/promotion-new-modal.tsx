@@ -205,9 +205,6 @@ export function PromotionNewModal({
       footer={
         kind === "flyer" ? (
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               onClick={onGenerateFlyer}
@@ -219,9 +216,6 @@ export function PromotionNewModal({
           </ModalFooter>
         ) : kind === "upload" ? (
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               onClick={saveUpload}
@@ -233,9 +227,6 @@ export function PromotionNewModal({
           </ModalFooter>
         ) : (
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               disabled={textBusy}

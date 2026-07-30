@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronsRight } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import {
@@ -29,6 +29,8 @@ export type AssistantDockPanelProps = {
   className?: string;
   /** Tighter layout for modal footers. */
   compact?: boolean;
+  /** Keep the composer pinned at the bottom; only message history scrolls. */
+  pinnedComposer?: boolean;
   /** When set, shows a collapse control in the header (desktop rail). */
   onCollapse?: () => void;
   /** When set, shows a switch-to-popup control (desktop rail). */
@@ -46,6 +48,7 @@ export function AssistantDockPanel({
   contextHint = null,
   className,
   compact = false,
+  pinnedComposer = false,
   onCollapse,
   onUndockToPopup,
 }: AssistantDockPanelProps) {
@@ -53,6 +56,7 @@ export function AssistantDockPanel({
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [historyPortal, setHistoryPortal] = useState<HTMLElement | null>(null);
 
   const firstName = managerName?.trim().split(/\s+/)[0] || null;
   const hasConversation = messages.length > 0;
@@ -90,6 +94,26 @@ export function AssistantDockPanel({
       )}
       data-attr="assistant-dock-panel"
     >
+      {pinnedComposer && compact ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-primary">
+            <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
+            PropLane Assistant
+          </p>
+          {onCollapse ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
+              data-attr="lease-edit-assistant-collapse"
+              aria-expanded
+            >
+              Hide
+              <ChevronsRight className="h-3.5 w-3.5 rotate-90" aria-hidden />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {!compact ? (
         <div className="relative shrink-0 overflow-hidden border-b border-border/70 px-4 py-3">
           <div
@@ -154,7 +178,7 @@ export function AssistantDockPanel({
         </div>
       ) : null}
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={setHistoryPortal} className="relative flex min-h-0 flex-1 flex-col">
         {multiThread && !compact ? (
           <AssistantChatHistoryPanel
             open={historyOpen}
@@ -166,17 +190,28 @@ export function AssistantDockPanel({
               requestAnimationFrame(() => inputRef.current?.focus());
             }}
             onClose={closeHistory}
+            portalContainer={historyPortal}
           />
         ) : null}
       <div
         ref={scrollRef}
         className={cn(
-          "flex min-h-0 flex-col overflow-y-auto px-4",
-          compact ? "min-h-0 flex-1 py-2" : "flex-1 py-4",
+          "flex min-h-0 flex-col overflow-y-auto overscroll-contain px-3",
+          pinnedComposer && compact
+            ? hasConversation || loading
+              ? "min-h-0 flex-1 py-2"
+              : "shrink-0 py-1"
+            : compact
+              ? "min-h-0 flex-1 py-2"
+              : "flex-1 py-4",
           !hasConversation && !compact && "flex-1",
         )}
       >
-        {!hasConversation && !compact ? (
+        {!hasConversation && compact && pinnedComposer ? (
+          <p className="text-xs leading-relaxed text-muted">
+            Describe the lease change below — rent, dates, names, or other terms.
+          </p>
+        ) : !hasConversation && !compact ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
               <AxisAssistantSparkleIcon className="h-5 w-5" />
@@ -239,7 +274,11 @@ export function AssistantDockPanel({
           e.preventDefault();
           void sendWithContext();
         }}
-        className={cn("shrink-0 border-t border-border/60 bg-background/60 px-3 pb-3 pt-3", compact && "pb-2 pt-2")}
+        className={cn(
+          "shrink-0 border-t border-border/60 bg-card px-3 pb-3 pt-3",
+          compact && "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] pt-2",
+          pinnedComposer && "sticky bottom-0 z-10",
+        )}
       >
         {pendingAction ? (
           <AssistantPendingActionCard

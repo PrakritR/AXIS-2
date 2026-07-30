@@ -17,18 +17,30 @@ export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLI
 
 export function residentCreateAccountHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
-  opts?: { email?: string },
+  opts?: { email?: string; tourInquiryId?: string },
 ): string {
   const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
   const q = new URLSearchParams({ role: "resident", next });
   const email = opts?.email?.trim().toLowerCase();
   if (email) q.set("email", email);
+  const tourInquiryId = opts?.tourInquiryId?.trim();
+  if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
   return `/auth/create-account?${q.toString()}`;
 }
 
-export function residentSignInHref(nextPath = RESIDENT_APPLICATIONS_PATH): string {
-  const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
-  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(next)}`;
+export function residentSignInHref(
+  nextPath = RESIDENT_APPLICATIONS_PATH,
+  opts?: { tourInquiryId?: string },
+): string {
+  const baseNext = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
+  const tourInquiryId = opts?.tourInquiryId?.trim();
+  // Post-auth routing only forwards `next` through /auth/continue — embed link_tour
+  // there so ResidentTourLinkOnMount runs inside the resident layout.
+  const next = tourInquiryId
+    ? `/resident/tour?link_tour=${encodeURIComponent(tourInquiryId)}`
+    : baseNext;
+  const q = new URLSearchParams({ intent: "resident", next });
+  return `/auth/sign-in?${q.toString()}`;
 }
 
 /** Browse / portal CTA — signed-in residents land in portal; everyone else is routed to resident auth. */

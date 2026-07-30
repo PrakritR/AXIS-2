@@ -11,20 +11,24 @@ export function testRunId(): string {
 // tests/global-setup.ts and tests/helpers/seed-test-db.mjs resolve identically.
 export const E2E_ACCOUNTS = {
   admin: {
-    email: process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.axis.local",
+    email: process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.proplane.local",
     password: process.env.E2E_ADMIN_PASSWORD?.trim() || "TestAdmin123!",
   },
   manager: {
-    email: process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.axis.local",
+    email: process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.proplane.local",
     password: process.env.E2E_MANAGER_PASSWORD?.trim() || "TestManager123!",
   },
   resident: {
-    email: process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.axis.local",
+    email: process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.proplane.local",
     password: process.env.E2E_RESIDENT_PASSWORD?.trim() || "TestResident123!",
   },
   vendor: {
-    email: process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.axis.local",
+    email: process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.proplane.local",
     password: process.env.E2E_VENDOR_PASSWORD?.trim() || "TestVendor123!",
+  },
+  manager2: {
+    email: process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.proplane.local",
+    password: process.env.E2E_MANAGER2_PASSWORD?.trim() || "TestManager123!",
   },
 };
 

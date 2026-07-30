@@ -231,10 +231,10 @@ export function buildApplicationGroups(rows: GroupRowInput[]): Map<string, Appli
 }
 
 /** The group a specific row belongs to, or null when the row is not part of a group. */
-export function groupForRow(
-  groups: Map<string, ApplicationGroup>,
+export function groupForRow<T extends ApplicationGroup>(
+  groups: Map<string, T>,
   row: { groupId: string },
-): ApplicationGroup | null {
+): T | null {
   const gid = normalizeGroupId(row.groupId);
   if (!gid) return null;
   return groups.get(gid) ?? null;

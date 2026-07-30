@@ -9,13 +9,10 @@ type Props = {
 };
 
 /**
- * Subscription checkout helper — Apple Pay is available in the iOS/Android app
- * via Stripe Embedded Checkout (dynamic payment methods). Rent uses ACH only.
+ * Subscription checkout helper — Apple Pay is offered via Stripe Embedded Checkout
+ * (dynamic payment methods) on web and in the native app WebView when eligible.
  *
- * The web / native copy is toggled purely with CSS (`native-hide` / `native-only`,
- * driven by the synchronous `html[data-native]` marker). Both variants are in the
- * server HTML, so there is no hydration mismatch and no native flash — unlike
- * reading `detectNativePlatformSync()` during render.
+ * Web / native copy is toggled with CSS (`native-hide` / `native-only` on `html[data-native]`).
  */
 export function SubscriptionCheckoutHint({ className, upgrade }: Props) {
   const trialNote = upgrade

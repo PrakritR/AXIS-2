@@ -4,7 +4,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 import {
   RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS,
   RESIDENT_APPROVED_PORTAL_SECTIONS,
-  RESIDENT_LIMITED_PORTAL_SECTIONS,
+  RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
   RESIDENT_PORTAL_BASE_PATH,
 } from "@/lib/portals/resident-sections";
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
@@ -18,12 +18,12 @@ const residentPortalApplicationPhase: PortalDefinition = {
   sections: RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS,
 };
 
-const residentPortalLimited: PortalDefinition = {
+const residentPortalPreLease: PortalDefinition = {
   kind: "resident",
   basePath: RESIDENT_PORTAL_BASE_PATH,
   title: "Resident Portal",
   accent: "blue",
-  sections: RESIDENT_LIMITED_PORTAL_SECTIONS,
+  sections: RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
 };
 
 const residentPortalApproved: PortalDefinition = {
@@ -45,6 +45,7 @@ export const getResidentPortalDefinition = cache(async (): Promise<PortalDefinit
     email: profile?.email ?? user?.email ?? null,
     managerSubscriptionTier,
   });
-  if (!access.leaseAccessUnlocked) return residentPortalApplicationPhase;
-  return residentPortalApproved;
+  if (access.leaseAccessUnlocked) return residentPortalApproved;
+  if (access.isPreLeaseResident) return residentPortalPreLease;
+  return residentPortalApplicationPhase;
 });

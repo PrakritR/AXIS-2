@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildPortalInboxThreadUpsert } from "@/lib/portal-inbox-thread-upsert";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -11,6 +12,10 @@ function textField(value: unknown): string {
 
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`contact-message:${clientIpFrom(req)}`, 8, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
     const body = (await req.json()) as {
       name?: string;
       email?: string;

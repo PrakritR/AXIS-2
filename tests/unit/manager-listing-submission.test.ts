@@ -3,6 +3,7 @@ import {
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  createNewListingWizardSubmission,
   entireHomeMonthlyRentAmount,
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
@@ -124,6 +125,30 @@ describe("manager-listing-submission", () => {
     ).toEqual([]);
   });
 
+  it("re-tags a legacy untagged fee row from its label so the Fees table stops showing it twice", () => {
+    // An existing listing whose customFees mix a unified (tagged) row with a legacy row
+    // that was stripped to {id,label,amount} — the shape that caused a preset to render
+    // once as its standard row and again as a custom row on an existing listing.
+    const sub = normalizeManagerListingSubmissionV1({
+      ...createDefaultListingSubmission(),
+      customFees: [
+        { id: "fee-tagged", label: "Move-in fee", amount: "250", frequency: "one-time", presetId: "move_in_fee" },
+        // legacy: no presetId, label matches the security-deposit preset's default label
+        { id: "fee-legacy", label: "Security deposit", amount: "1100", frequency: "one-time" },
+        // a genuinely custom row must stay custom
+        { id: "fee-custom", label: "Pet rent", amount: "40", frequency: "monthly" },
+      ],
+    } as Parameters<typeof normalizeManagerListingSubmissionV1>[0]);
+
+    const byId = (id: string) => (sub.customFees ?? []).find((f) => f.id === id) as { presetId?: string } | undefined;
+    // The legacy row is recovered as the security_deposit preset → the Fees table's
+    // `!presetId || presetId === "custom"` filter excludes it, so no duplicate row.
+    expect(byId("fee-legacy")?.presetId).toBe("security_deposit");
+    expect(byId("fee-tagged")?.presetId).toBe("move_in_fee");
+    // A row that matches no preset label stays custom.
+    expect(byId("fee-custom")?.presetId).toBe("custom");
+  });
+
   it("normalizes shared space kind from name when missing", () => {
     const sub = normalizeManagerListingSubmissionV1({
       ...createDefaultListingSubmission(),
@@ -228,5 +253,14 @@ describe("disclosure trigger fields", () => {
     expect(norm({ certificateOfOccupancyDate: "1978-02-30" }).certificateOfOccupancyDate).toBeUndefined();
     expect(norm({ rrioRegistrationNumber: "  RRIO-123456 " }).rrioRegistrationNumber).toBe("RRIO-123456");
     expect(norm({ rrioRegistrationNumber: "   " }).rrioRegistrationNumber).toBeUndefined();
+  });
+});
+
+describe("createNewListingWizardSubmission — pre-filled new-listing defaults", () => {
+  it("pre-selects a 12-Month lease so the common case publishes with minimal typing", () => {
+    expect(createNewListingWizardSubmission().allowedLeaseTerms).toEqual(["12-Month"]);
+  });
+  it("does not change the blank base used by tests / back-compat", () => {
+    expect(createDefaultListingSubmission().allowedLeaseTerms).toEqual([]);
   });
 });

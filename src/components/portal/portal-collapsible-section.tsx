@@ -26,6 +26,10 @@ export type PortalCollapsibleSectionProps = {
   titleVariant?: "section" | "label" | "resident";
   /** Keep header actions on the title row (property section toolbars). */
   headerActionsInline?: boolean;
+  /** Flat row on the portal canvas — no outer card chrome. */
+  bareSurface?: boolean;
+  /** Hide the expand/collapse chevron beside the title. */
+  hideToggleIcon?: boolean;
 };
 
 /**
@@ -48,6 +52,8 @@ export function PortalCollapsibleSection({
   surfaceMuted = true,
   titleVariant = "section",
   headerActionsInline = false,
+  bareSurface = false,
+  hideToggleIcon = false,
 }: PortalCollapsibleSectionProps) {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
   const isControlled = controlledExpanded !== undefined;
@@ -78,16 +84,21 @@ export function PortalCollapsibleSection({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-border bg-card ${
-        surfaceMuted ? "[html[data-theme=dark]_&]:portal-surface-muted" : "shadow-[var(--shadow-sm)]"
-      } ${className}`.trim()}
+      className={cn(
+        bareSurface
+          ? "border-b border-border"
+          : "overflow-hidden rounded-2xl border border-border bg-card",
+        !bareSurface && surfaceMuted && "[html[data-theme=dark]_&]:portal-surface-muted",
+        !bareSurface && !surfaceMuted && "shadow-[var(--shadow-sm)]",
+        className,
+      )}
     >
       <div
         className={cn(
-          "gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2",
+          bareSurface ? "gap-2 px-0 py-3" : "gap-2 bg-accent/30 px-4 py-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2",
           headerActionsInline
             ? "flex flex-col items-stretch max-sm:gap-2.5 sm:flex-row sm:items-center sm:justify-between"
-            : "flex items-center justify-between",
+            : "flex flex-wrap items-center justify-between",
           canCollapse ? "cursor-pointer" : "",
         )}
         role={canCollapse ? "button" : undefined}
@@ -103,18 +114,28 @@ export function PortalCollapsibleSection({
           }
         }}
       >
-        <div className={cn("min-w-0", headerActionsInline ? "flex-none sm:flex-1" : "flex-1")}>
+        {/* flex-auto (basis: auto, not flex-1's basis: 0) so the title participates in wrap. */}
+        <div className={cn("min-w-0", headerActionsInline ? "flex-none sm:flex-1" : "flex-auto")}>
           <div className={titleClass}>
             <span className={headerActionsInline ? "whitespace-nowrap" : "min-w-0"}>{title}</span>
             {titleAddon ? <span className="shrink-0">{titleAddon}</span> : null}
-            {canCollapse ? (
+            {canCollapse && !hideToggleIcon ? (
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? "" : "-rotate-90"}`}
                 aria-hidden
               />
             ) : null}
           </div>
-          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+          {subtitle ? (
+            <p
+              className={cn(
+                "mt-1 text-sm text-muted",
+                headerActionsInline && titleVariant === "resident" && "mt-0.5 line-clamp-2 text-xs sm:line-clamp-none sm:text-sm",
+              )}
+            >
+              {subtitle}
+            </p>
+          ) : null}
         </div>
         {headerActions ? (
           <div
@@ -122,7 +143,7 @@ export function PortalCollapsibleSection({
               "flex min-w-0 items-center gap-2",
               headerActionsInline
                 ? "w-full max-w-full shrink-0 flex-nowrap justify-start overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:ml-2 sm:w-auto sm:max-w-[70%] sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0"
-                : "w-full shrink-0 flex-wrap justify-end lg:ml-auto lg:w-auto lg:max-w-[70%]",
+                : "flex-wrap justify-end w-full lg:ml-auto lg:w-auto lg:max-w-[70%]",
             )}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
@@ -134,8 +155,9 @@ export function PortalCollapsibleSection({
       {showBody ? (
         <div
           className={cn(
-            "px-4 pb-3 pt-3 [html[data-native]_&]:px-3 [html[data-native]_&]:pb-2.5 [html[data-native]_&]:pt-2.5",
-            contentClassName ?? "pb-4",
+            bareSurface ? "pb-4 pt-0" : "px-4 pb-3 pt-3 [html[data-native]_&]:px-3 [html[data-native]_&]:pb-2.5 [html[data-native]_&]:pt-2.5",
+            !bareSurface && (contentClassName ?? "pb-4"),
+            bareSurface && contentClassName,
           )}
         >
           {children}

@@ -200,7 +200,10 @@ async function ensureApplicationFeeChargeRow(
   const { managerUserId, propertyLabel, sub } = resolved;
 
   const managerSettings = await loadManagerApplicationSettings(db, managerUserId);
-  const listingFeeCents = Math.round(parseMoneyAmount(sub.applicationFee) * 100);
+  // Per-listing value wins ([app-fee-authority] option B); an empty string is "unset" and
+  // falls back to the account-wide default. A set "0" means free and is charged as-is.
+  const rawListingFee = String(sub.applicationFee ?? "").trim();
+  const listingFeeCents = rawListingFee === "" ? null : Math.round(parseMoneyAmount(rawListingFee) * 100);
   const applicationFeeCents = effectiveApplicationFeeCents({
     managerFeeCents: managerSettings.applicationFeeCents,
     listingFeeCents,

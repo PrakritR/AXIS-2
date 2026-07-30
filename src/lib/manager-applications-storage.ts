@@ -534,6 +534,7 @@ export async function upsertApplicationRowToServerAwait(
   welcomeEmailSent?: boolean;
   leaseId?: string;
   mailtoHref?: string;
+  row?: DemoApplicantRow;
 }> {
   if (typeof window === "undefined") return { ok: false, error: "Not in browser." };
   if (isDemoModeActive()) return { ok: true };
@@ -553,6 +554,7 @@ export async function upsertApplicationRowToServerAwait(
       setupHref?: string;
       setupToken?: string;
       mailtoHref?: string;
+      row?: DemoApplicantRow;
       existingResidentOnboarding?: {
         welcomeEmailSent?: boolean;
         leaseId?: string;
@@ -576,6 +578,9 @@ export async function upsertApplicationRowToServerAwait(
         : undefined;
     const setupToken = typeof body?.setupToken === "string" && body.setupToken ? body.setupToken : undefined;
     if (setupToken) rememberApplicationSetupToken(row.id, setupToken);
+    if (body?.row?.id) {
+      replaceManagerApplicationRowInCache(body.row);
+    }
     const onboarding = body?.existingResidentOnboarding;
     return {
       ok: true,
@@ -583,6 +588,7 @@ export async function upsertApplicationRowToServerAwait(
       setupToken,
       welcomeEmailSent: onboarding?.welcomeEmailSent,
       leaseId: onboarding?.leaseId,
+      row: body?.row,
     };
   } catch {
     return { ok: false, error: "Could not save application." };
@@ -610,6 +616,8 @@ export async function deleteManagerApplicationFromServer(id: string): Promise<{ 
 export async function syncManagerApplicationsFromServer(opts?: {
   force?: boolean;
   managerUserId?: string | null;
+  /** Resident portal: read only the caller's own applicant rows. */
+  selfScope?: boolean;
 }): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
   const managerUserId = opts?.managerUserId ?? undefined;
@@ -623,7 +631,8 @@ export async function syncManagerApplicationsFromServer(opts?: {
   }
   try {
     managerApplicationsSyncPromise = (async () => {
-      const res = await fetch("/api/manager-applications", { credentials: "include" });
+      const url = opts?.selfScope ? "/api/manager-applications?scope=self" : "/api/manager-applications";
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
       // Union with the CURRENT cache, not `[]` — a locally-created row whose

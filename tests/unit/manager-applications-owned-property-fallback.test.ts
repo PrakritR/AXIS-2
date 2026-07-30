@@ -132,9 +132,9 @@ function row(over: Partial<StoredRecord>): StoredRecord {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  PROFILE = { role: "manager", email: "owner@test.axis.local" };
+  PROFILE = { role: "manager", email: "owner@test.proplane.local" };
   getUser.mockResolvedValue({
-    data: { user: { id: NEW_OWNER, email: "owner@test.axis.local", user_metadata: {} } },
+    data: { user: { id: NEW_OWNER, email: "owner@test.proplane.local", user_metadata: {} } },
     error: null,
   });
   PROPERTIES = [];

@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signInAsManager } from "../helpers/auth";
+import { e2eToursContactUrl } from "../helpers/public-urls";
 
 const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 
@@ -7,22 +8,18 @@ test.describe("Tour scheduling", () => {
   test.skip(!portalTestsEnabled, "Set E2E_TESTS_ENABLED=1 after running npm run test:seed");
 
   test("tours-contact page loads with form fields", async ({ page }) => {
-    await page.goto("/rent/tours-contact");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
-    // Should have input fields for contact info
-    const inputs = page.getByRole("textbox");
-    await expect(inputs.first()).toBeVisible({ timeout: 10_000 });
-    // Submit button present
-    const submitBtn = page.getByRole("button", { name: /submit|send|request|schedule/i }).first();
-    await expect(submitBtn).toBeVisible({ timeout: 10_000 });
+    await page.goto(e2eToursContactUrl());
+    await expect(page.getByRole("heading", { name: /schedule tour/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("searchbox").first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("tours-contact page has message or topic input", async ({ page }) => {
-    await page.goto("/rent/tours-contact");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
-    // Message textarea or topic select
-    const textarea = page.getByRole("textbox").last();
-    await expect(textarea).toBeVisible({ timeout: 10_000 });
+    await page.goto(e2eToursContactUrl({ tab: "message" }));
+    await expect(page.getByRole("heading", { name: /message proplane/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/what do you need help with/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByPlaceholder("Tell us more so we can help…")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-attr="property-lead-message-send"]')).toBeVisible({ timeout: 10_000 });
   });
 
   test("manager calendar page shows calendar controls", async ({ page }) => {
@@ -47,7 +44,7 @@ test.describe("Tour scheduling", () => {
   });
 
   test("public tours page renders", async ({ page }) => {
-    await page.goto("/rent/tours-contact");
+    await page.goto(e2eToursContactUrl());
     // Should not crash
     const errorEl = page.getByText(/something went wrong|500/i);
     await expect(errorEl).not.toBeVisible({ timeout: 10_000 });

@@ -143,7 +143,7 @@ export function DemoSectionRenderer({
       case "applications":
         return <ManagerApplications />;
       case "residents":
-        return <ManagerResidents tabId={(tabId as "current" | "previous") ?? "current"} />;
+        return <ManagerResidents tabId="current" />;
       case "leases":
         return <ManagerLeases />;
       case "payments":
@@ -250,7 +250,7 @@ function ResidentMoveInDemo() {
     <ManagerPortalPageShell title="House details">
       <div className="space-y-6 text-sm leading-relaxed text-muted">
         {resolved ? (
-          <ResidentMoveInResolvedView resolved={resolved} />
+          <ResidentMoveInResolvedView resolved={resolved} activeTab="placement" />
         ) : (
           <PortalDataTableEmpty message="House details appear here once a placement is assigned." icon="default" />
         )}

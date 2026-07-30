@@ -322,10 +322,7 @@ export function ManagerServiceRequestDetail({
                 <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={saveCharges}>
                   Save
                 </Button>
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEditing}>
-                  Cancel
-                </Button>
-              </>
+                </>
             ) : (
               <Button
                 type="button"

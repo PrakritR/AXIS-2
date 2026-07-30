@@ -515,10 +515,7 @@ export function ScheduledMessageEditForm({
               Cancel send
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Close
-          </Button>
-        </div>
+          </div>
     </div>
   );
 }
@@ -1008,7 +1005,7 @@ function PaymentAutomationSettingsForm({
           disabled={busy}
         />
         <p className="mt-1 text-[11px] text-muted">
-          Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{propertyLine}"}, {"{managerName}"}
+          Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{propertyLine}"}, {"{managerName}"}, {"{residentPortalLogin}"}
         </p>
       </div>
       ) : null}

@@ -89,8 +89,20 @@ export function ListingBathroomMediaBrowser({
       testId="listing-bathroom-media-browser"
       itemNoun="bathroom"
       availabilityVariant="default"
-      resolvePrimaryCta={(_, index) => resolvePrimaryCta(index)}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(index)}
+      onEntryPress={
+        onOpenDetails
+          ? (_, index) => {
+              const row = rows.find((r) => r.id === entries[index]?.id);
+              if (row) onOpenDetails(row);
+            }
+          : undefined
+      }
+      resolvePrimaryCta={
+        onOpenDetails ? undefined : (_, index) => resolvePrimaryCta(index)
+      }
+      resolveSecondaryCta={
+        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
+      }
       className={className}
     />
   );
@@ -160,8 +172,18 @@ export function ListingSharedMediaBrowser({
       testId="listing-shared-media-browser"
       itemNoun="shared space"
       availabilityVariant="default"
-      resolvePrimaryCta={() => resolvePrimaryCta()}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(index)}
+      onEntryPress={
+        onOpenDetails
+          ? (_, index) => {
+              const row = rows.find((r) => r.id === entries[index]?.id);
+              if (row) onOpenDetails(row);
+            }
+          : undefined
+      }
+      resolvePrimaryCta={onOpenDetails ? undefined : () => resolvePrimaryCta()}
+      resolveSecondaryCta={
+        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
+      }
       className={className}
     />
   );

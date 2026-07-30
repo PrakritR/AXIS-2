@@ -1,9 +1,8 @@
-import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
-export const NATIVE_OAUTH_SCHEME = "com.axisseattlehousing.app";
+export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
 
 export const NATIVE_OAUTH_CALLBACK_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
 
@@ -20,29 +19,14 @@ export function isNativeOAuthShell(): boolean {
 }
 
 /**
- * Dev native shells load over http:// (LAN IP / localhost) and have no associated-domains
- * / Universal Links, so there is nothing to bounce an HTTPS callback through. Returning
- * straight to the app scheme keeps OAuth working without per-IP Supabase allowlisting.
- */
-function isDevNativeOrigin(origin: string): boolean {
-  return origin.trim().toLowerCase().startsWith("http://");
-}
-
-/**
  * Supabase OAuth redirectTo.
- * Native (prod): HTTPS callback with a bridge flag (allowlisted like web) → HTML bounce → custom scheme → app WebView.
- * Native (dev): custom scheme directly — Supabase 302s into the app, no LAN dev server in the return path.
+ * Native: custom scheme directly — Supabase 302s into the app. A JS bridge page in
+ * SFSafariViewController often fails on iOS ("invalid address") when opening the scheme.
  * Web: same-origin /auth/callback.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
   if (isNativeOAuthShell()) {
-    if (isDevNativeOrigin(origin)) {
-      return nativeOAuthCallbackUrl(fixedCallbackPath);
-    }
-    const base = fixedCallbackPath?.startsWith("/")
-      ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
-      : bareAuthCallbackUrl(origin);
-    return appendNativeOAuthBridgeParam(base);
+    return nativeOAuthCallbackUrl(fixedCallbackPath);
   }
   if (fixedCallbackPath?.startsWith("/")) {
     return `${origin.replace(/\/$/, "")}${fixedCallbackPath}`;

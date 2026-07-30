@@ -9,7 +9,7 @@
  * Beyond the primary E2E manager/resident/property/charge, this seeds a coherent
  * browse catalog: every home the public browse/apply flow lists is a live
  * `manager_property_records` row OWNED by a test manager (manager@ / manager2@
- * test.axis.local), carries a full listingSubmission (v:1), and has at least one
+ * test.proplane.local), carries a full listingSubmission (v:1), and has at least one
  * application (manager_application_records) and one lease
  * (portal_lease_pipeline_records) in its pipeline — no orphaned properties.
  * Superseded rows from older seeds (seedwf_ / mgr- prefixes, ANY status) owned
@@ -42,24 +42,24 @@ const testRunId = process.argv[2]?.trim() || `seed-${Date.now()}`;
 
 // `?.trim() ||` (never `??`): CI injects a missing secret as an empty string,
 // which must fall back to the same defaults tests/fixtures/index.ts resolves.
-const adminEmail = (process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.axis.local").toLowerCase();
+const adminEmail = (process.env.E2E_ADMIN_EMAIL?.trim() || "admin@test.proplane.local").toLowerCase();
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || "TestAdmin123!";
-const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.axis.local").toLowerCase();
+const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.proplane.local").toLowerCase();
 const managerPassword = process.env.E2E_MANAGER_PASSWORD?.trim() || "TestManager123!";
-const residentEmail = (process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.axis.local").toLowerCase();
+const residentEmail = (process.env.E2E_RESIDENT_EMAIL?.trim() || "resident@test.proplane.local").toLowerCase();
 const residentPassword = process.env.E2E_RESIDENT_PASSWORD?.trim() || "TestResident123!";
 // Must match E2E_RESIDENT_AXIS_ID in tests/fixtures/index.ts. The application
 // record id IS the resident's axis id (see normalizeApplicationAxisId), and the
 // resident's `profiles.manager_id` stores the same axis id — that is where the
 // app reads it (resident-portal-access.ts, resident-profile-panel.tsx).
 const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID?.trim() || "AXIS-TESTRSID";
-const vendorEmail = (process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.axis.local").toLowerCase();
+const vendorEmail = (process.env.E2E_VENDOR_EMAIL?.trim() || "vendor@test.proplane.local").toLowerCase();
 const vendorPassword = process.env.E2E_VENDOR_PASSWORD?.trim() || "TestVendor123!";
 // All-portals sandbox account for manual testing: one login that can open every
 // portal (admin + manager + resident + vendor) via the sign-in role picker.
 // Matches CANONICAL_DEMO_ADMIN_EMAIL / CANONICAL_DEMO_GUIDED_EMAIL in
 // src/lib/demo/demo-canonical-accounts.ts.
-const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL?.trim() || "testeverything@test.axis.local").toLowerCase();
+const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL?.trim() || "testeverything@test.proplane.local").toLowerCase();
 const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD?.trim() || "TestEverything123!";
 const EVERYTHING_NAME = "Test Everything";
 // Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
@@ -106,6 +106,228 @@ async function must(promise, label) {
 const NOW = new Date();
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const daysFromNow = (n) => new Date(NOW.getTime() + n * 86400000);
+
+function startOfWeekMonday(d = NOW) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+  const weekday = x.getDay();
+  x.setDate(x.getDate() + (weekday === 0 ? -6 : 1 - weekday));
+  return x;
+}
+
+function slotIsoFromDateStr(dateStr, slotIndex) {
+  const [y, m, day] = dateStr.split("-").map(Number);
+  const minutes = slotIndex * 30;
+  return new Date(y, m - 1, day, Math.floor(minutes / 60), minutes % 60, 0, 0).toISOString();
+}
+
+/** Half-hour slot keys (`YYYY-MM-DD:slotIndex`) for tour availability painting. */
+function buildTourAvailabilitySlotKeys(weekMonday, { weeks = 2, weekdays = [0, 1, 2, 3, 4, 5], startSlot = 18, endSlotExclusive = 34 } = {}) {
+  const keys = [];
+  for (let week = 0; week < weeks; week += 1) {
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      if (!weekdays.includes(dayIndex)) continue;
+      const d = new Date(weekMonday);
+      d.setDate(d.getDate() + week * 7 + dayIndex);
+      const ds = isoDate(d);
+      for (let slot = startSlot; slot < endSlotExclusive; slot += 1) {
+        keys.push(`${ds}:${slot}`);
+      }
+    }
+  }
+  return keys;
+}
+
+function managerPropertyAvailabilityRecordId(managerUserId, propertyId) {
+  const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return `axis_mgr_avail_slots_v2_${managerUserId}_prop_${safe}`;
+}
+
+async function upsertPropertyTourAvailability(managerUserId, propertyId, slotKeys) {
+  const id = managerPropertyAvailabilityRecordId(managerUserId, propertyId);
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id,
+        manager_user_id: managerUserId,
+        property_id: propertyId,
+        record_type: "manager_property_availability",
+        row_data: {
+          id,
+          recordType: "manager_property_availability",
+          managerUserId,
+          propertyId,
+          payload: slotKeys,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    `portal_schedule_records(avail:${propertyId})`,
+  );
+}
+
+async function mergeScheduleSingletonPayload(singletonId, recordType, ownerUserId, items) {
+  const { data: existing, error } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data, manager_user_id")
+    .eq("id", singletonId)
+    .maybeSingle();
+  if (error) throw new Error(`select ${singletonId}: ${error.message}`);
+  const current = Array.isArray(existing?.row_data?.payload) ? existing.row_data.payload : [];
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of items) byId.set(item.id, item);
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id: singletonId,
+        manager_user_id: existing?.manager_user_id ?? ownerUserId,
+        record_type: recordType,
+        row_data: {
+          id: singletonId,
+          recordType,
+          managerUserId: existing?.row_data?.managerUserId ?? ownerUserId,
+          payload: [...byId.values()],
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    `portal_schedule_records(${singletonId})`,
+  );
+}
+
+async function mergeTourHostRegistry(entries) {
+  const registryId = "axis_property_mgr_registry_v1";
+  const { data: existing, error } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data")
+    .eq("id", registryId)
+    .maybeSingle();
+  if (error) throw new Error(`select ${registryId}: ${error.message}`);
+  const current =
+    existing?.row_data?.payload && typeof existing.row_data.payload === "object" && !Array.isArray(existing.row_data.payload)
+      ? { ...existing.row_data.payload }
+      : {};
+  for (const { propertyId, userId, label } of entries) {
+    const hosts = Array.isArray(current[propertyId]) ? [...current[propertyId]] : [];
+    if (!hosts.some((host) => host.userId === userId)) {
+      hosts.push({ userId, label, propertyId });
+    }
+    current[propertyId] = hosts;
+  }
+  await must(
+    supabase.from("portal_schedule_records").upsert(
+      {
+        id: registryId,
+        manager_user_id: null,
+        record_type: "axis_property_mgr_registry_v1",
+        row_data: {
+          id: registryId,
+          recordType: "axis_property_mgr_registry_v1",
+          payload: current,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    registryId,
+  );
+}
+
+/**
+ * Paint tour availability, register tour hosts, and upsert confirmed + pending
+ * tour rows into the calendar singletons the portal sync reads.
+ */
+async function seedScheduleToursForManager({ managerUserId, hostLabel, properties }) {
+  if (!properties.length) return;
+  const weekMonday = startOfWeekMonday();
+  const availabilitySlotKeys = buildTourAvailabilitySlotKeys(weekMonday);
+  const createdAt = NOW.toISOString();
+
+  for (const property of properties) {
+    await upsertPropertyTourAvailability(managerUserId, property.id, availabilitySlotKeys);
+    await mergeTourHostRegistry([{ propertyId: property.id, userId: managerUserId, label: hostLabel }]);
+  }
+
+  const plannedEvents = [];
+  const partnerInquiries = [];
+  const tourSpecs = [
+    {
+      plannedId: `seed-planned-${managerUserId.slice(0, 8)}-a`,
+      inquiryId: `seed-pending-${managerUserId.slice(0, 8)}-a`,
+      property: properties[0],
+      daysOut: 2,
+      slot: 20,
+      guest: { name: "Jamie Rivera", email: "jamie.tour@axis.local", phone: "+12025550111" },
+      pendingGuest: { name: "Sam Ortiz", email: "sam.tour@axis.local", phone: "+12025550112" },
+    },
+    {
+      plannedId: `seed-planned-${managerUserId.slice(0, 8)}-b`,
+      inquiryId: `seed-pending-${managerUserId.slice(0, 8)}-b`,
+      property: properties[1] ?? properties[0],
+      daysOut: 4,
+      slot: 24,
+      guest: { name: "Alex Kim", email: "alex.tour@axis.local", phone: "+12025550113" },
+      pendingGuest: { name: "Jordan Lee", email: "jordan.tour@axis.local", phone: "+12025550114" },
+    },
+  ];
+
+  for (const spec of tourSpecs) {
+    const ds = isoDate(daysFromNow(spec.daysOut));
+    const slotKey = `${ds}:${spec.slot}`;
+    const start = slotIsoFromDateStr(ds, spec.slot);
+    const end = slotIsoFromDateStr(ds, spec.slot + 2);
+
+    plannedEvents.push({
+      id: spec.plannedId,
+      title: `Tour · ${spec.guest.name}`,
+      start,
+      end,
+      kind: "tour",
+      managerUserId,
+      propertyId: spec.property.id,
+      propertyTitle: spec.property.name,
+      attendeeName: spec.guest.name,
+      attendeeEmail: spec.guest.email,
+      attendeePhone: spec.guest.phone,
+      slotKey,
+    });
+
+    const pendingStart = slotIsoFromDateStr(ds, spec.slot + 4);
+    const pendingEnd = slotIsoFromDateStr(ds, spec.slot + 6);
+    const pendingSlotKey = `${ds}:${spec.slot + 4}`;
+    partnerInquiries.push({
+      id: spec.inquiryId,
+      name: spec.pendingGuest.name,
+      email: spec.pendingGuest.email,
+      phone: spec.pendingGuest.phone,
+      notes: "Interested in a furnished room with a desk setup.",
+      kind: "tour",
+      status: "pending",
+      managerUserId,
+      propertyId: spec.property.id,
+      propertyTitle: spec.property.name,
+      proposedStart: pendingStart,
+      proposedEnd: pendingEnd,
+      createdAt,
+      tourGroupId: `seed-grp-${spec.inquiryId}`,
+      requestedWindows: [{ start: pendingStart, end: pendingEnd, slotKey: pendingSlotKey, adminUserId: managerUserId }],
+    });
+  }
+
+  await mergeScheduleSingletonPayload(
+    "axis_admin_planned_events_v1",
+    "axis_admin_planned_events_v1",
+    managerUserId,
+    plannedEvents,
+  );
+  await mergeScheduleSingletonPayload(
+    "axis_admin_partner_inquiries_v1",
+    "axis_admin_partner_inquiries_v1",
+    managerUserId,
+    partnerInquiries,
+  );
+}
 
 async function ensureUser(
   email,
@@ -228,7 +450,7 @@ try {
   await ensureManagerStripeCustomer(stripe, supabase, { email: managerEmail, userId: managerUserId });
 
   // ── Second test manager (public browse catalog) ────────────────────────────
-  const manager2Email = (process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.axis.local").toLowerCase();
+  const manager2Email = (process.env.E2E_MANAGER2_EMAIL?.trim() || "manager2@test.proplane.local").toLowerCase();
   const manager2Password = process.env.E2E_MANAGER2_PASSWORD?.trim() || "TestManager123!";
   const existingManager2User = managerList?.users?.find((u) => u.email?.toLowerCase() === manager2Email);
   let manager2Id = "MGR-TESTE2E2";
@@ -408,7 +630,9 @@ try {
   await cleanLegacyDemoManagerPortfolio(managerUserId);
 
   const portfolioScript = path.join(__dirname, "seed-canonical-demo-portfolio.ts");
+  const projectRoot = path.join(__dirname, "..", "..");
   const portfolioResult = spawnSync("npx", ["--yes", "tsx", portfolioScript], {
+    cwd: projectRoot,
     env: {
       ...process.env,
       SEED_MANAGER_USER_ID: managerUserId,
@@ -426,7 +650,7 @@ try {
   // ══════════════════════════════════════════════════════════════════════════
   // Coherent browse catalog on manager2@: every home shown by the public
   // browse/apply flow is fully listed and has applications + leases.
-  // manager@test.axis.local carries the /demo idle portfolio only (see above).
+  // manager@test.proplane.local carries the /demo idle portfolio only (see above).
   // ══════════════════════════════════════════════════════════════════════════
 
   // ── Catalog properties (all Seattle — a supported lease jurisdiction) ─────
@@ -910,36 +1134,29 @@ try {
   });
   await must(supabase.from("manager_property_records").upsert(propertyRows, { onConflict: "id" }), "manager_property_records(catalog)");
 
-  // Calendar tours for catalog properties (idempotent: stable ids + upsert).
-  // Each references a canonical seeded property id so the SAME property shows
-  // in the Calendar and the Properties tab — never a dangling/foreign id.
-  const catalogTours = [
-    { id: "test-tour-fir", propId: "mgr-test-fir", managerUserId: manager2UserId, title: "Fir Lofts Tour", daysOut: 3 },
-    { id: "test-tour-cedar", propId: "mgr-test-cedar", managerUserId: manager2UserId, title: "Cedar Flat 2B Tour", daysOut: 5 },
-  ];
-  for (const tour of catalogTours) {
-    const startsAt = daysFromNow(tour.daysOut).toISOString();
-    await must(
-      supabase.from("portal_schedule_records").upsert(
-        {
-          id: tour.id,
-          manager_user_id: tour.managerUserId,
-          record_type: "event",
-          starts_at: startsAt,
-          ends_at: new Date(daysFromNow(tour.daysOut).getTime() + 60 * 60 * 1000).toISOString(),
-          row_data: {
-            id: tour.id,
-            title: tour.title,
-            type: "tour",
-            propertyId: tour.propId,
-            managerUserId: tour.managerUserId,
-            testRunId,
-          },
-        },
-        { onConflict: "id" },
-      ),
-      `portal_schedule_records(${tour.id})`,
-    );
+  // Tour calendar: open availability slots, confirmed tours, and pending requests
+  // for manager2's browse catalog and manager@test's demo portfolio.
+  const manager2TourProperties = catalog
+    .filter((p) => p.ownerUserId === manager2UserId)
+    .map((p) => ({ id: p.id, name: p.name }));
+  const managerTourProperties = catalog
+    .filter((p) => p.ownerUserId === managerUserId)
+    .map((p) => ({ id: p.id, name: p.name }));
+
+  await seedScheduleToursForManager({
+    managerUserId: manager2UserId,
+    hostLabel: "Test Manager 2",
+    properties: manager2TourProperties,
+  });
+  await seedScheduleToursForManager({
+    managerUserId,
+    hostLabel: CANONICAL_DEMO_MANAGER_NAME,
+    properties: managerTourProperties,
+  });
+
+  // Retire legacy `record_type: event` rows — the portal reads planned/inquiry singletons.
+  for (const legacyId of ["test-tour-fir", "test-tour-cedar"]) {
+    await supabase.from("portal_schedule_records").delete().eq("id", legacyId);
   }
 
   const propById = new Map(catalog.map((p) => [p.id, p]));
@@ -985,7 +1202,7 @@ try {
       ...p,
       index: i,
       name: `${p.first} ${p.last}`,
-      email: `${p.first}.${p.last}.${suffix}@test.axis.local`.toLowerCase(),
+      email: `${p.first}.${p.last}.${suffix}@test.proplane.local`.toLowerCase(),
       prop,
       room: roomDef,
       rent: roomDef.rent,
@@ -1315,6 +1532,50 @@ try {
     "portal_lease_pipeline_records(catalog)",
   );
 
+  // Canonical auth inboxes must never be auto-provisioned as residents — a stray
+  // application row keyed by a manager business id (e.g. PROPLANE-…) can list
+  // manager@test.proplane.local as resident_email and would otherwise reset the E2E
+  // manager password to AUTO_RESIDENT_PASSWORD during repair.
+  const canonicalAuthEmails = new Set([
+    adminEmail,
+    managerEmail,
+    manager2Email,
+    residentEmail,
+    vendorEmail,
+    everythingEmail,
+  ]);
+
+  async function relockCanonicalAuthAccounts() {
+    await ensureUser(adminEmail, adminPassword, "admin");
+    await ensureUser(managerEmail, managerPassword, "manager", {
+      managerId,
+      onlyRole: true,
+      fullName: CANONICAL_DEMO_MANAGER_NAME,
+    });
+    await ensureUser(manager2Email, manager2Password, "manager", { managerId: manager2Id, onlyRole: true });
+    await ensureUser(residentEmail, residentPassword, "resident", {
+      onlyRole: true,
+      metadata: { axis_id: residentAxisId },
+      fullName: PRIMARY_RESIDENT_NAME,
+    });
+    await ensureUser(vendorEmail, vendorPassword, "vendor", {
+      onlyRole: true,
+      fullName: CANONICAL_DEMO_VENDOR_NAME,
+    });
+    await ensureUser(everythingEmail, everythingPassword, "manager", {
+      managerId: everythingManagerId,
+      fullName: EVERYTHING_NAME,
+    });
+    for (const extraRole of ["admin", "resident", "vendor"]) {
+      await must(
+        supabase
+          .from("profile_roles")
+          .upsert({ user_id: everythingUserId, role: extraRole }, { onConflict: "user_id,role" }),
+        `profile_roles(relock ${everythingEmail}:${extraRole})`,
+      );
+    }
+  }
+
   // Repair: any lease/application on test managers whose resident email lacks a
   // resident profile gets provisioned (covers legacy rows or manual approvals).
   async function repairResidentAccountsForTestManagers() {
@@ -1369,6 +1630,7 @@ try {
 
     let repaired = 0;
     for (const [email, info] of byEmail) {
+      if (canonicalAuthEmails.has(email)) continue;
       const existing = profileByEmail.get(email);
       if (existing?.role === "resident") continue;
       const claimedAt = NOW.toISOString();
@@ -1432,6 +1694,7 @@ try {
   }
 
   await repairResidentAccountsForTestManagers();
+  await relockCanonicalAuthAccounts();
 
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
   const demoPortfolioPropertyIds = [
@@ -1572,6 +1835,17 @@ try {
     supabase.from("profiles").update({ application_approved: false }).in("manager_id", nonApprovedAxisIds),
     "reset non-approved resident profiles",
   );
+
+  // Stray application rows must not list canonical manager inboxes as residents.
+  for (const email of [managerEmail, manager2Email, everythingEmail]) {
+    await must(
+      supabase
+        .from("manager_application_records")
+        .delete()
+        .eq("resident_email", email),
+      `manager_application_records(cleanup canonical resident_email ${email})`,
+    );
+  }
 
   // 6. Account prune: the test DB contains ONLY canonical test accounts — the
   //    E2E accounts this seed creates plus the demo-workflow residents

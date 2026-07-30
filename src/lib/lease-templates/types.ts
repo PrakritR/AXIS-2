@@ -56,6 +56,10 @@ export function leaseCss(): string {
 
 export type LeaseJurisdictionTemplateConfig = {
   headerSubtitle: string;
+  /** Optional branded title above the agreement name (Seattle Axis generic leases). */
+  brandTitle?: string;
+  /** Default late fee when listing does not specify one. */
+  defaultLateFeeUsd?: number;
   governingLawParagraph: string;
   municipalComplianceParagraph?: string;
   shortTermPurposeParagraph: string;
@@ -110,6 +114,11 @@ export const WASHINGTON_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
 
 export const SEATTLE_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
   ...WASHINGTON_LEASE_CONFIG,
+  // Seattle-only branding and late-fee default. Deliberately NOT on the statewide config:
+  // a Spokane lease must not inherit a Seattle brand line, and no verified statewide figure
+  // exists, so the rest of Washington falls back to the builder's own default.
+  brandTitle: "PROPLANE SEATTLE HOUSING",
+  defaultLateFeeUsd: 75,
   headerSubtitle: "State of Washington · King County",
   municipalComplianceParagraph:
     "This Agreement shall be interpreted consistently with the Washington Residential Landlord-Tenant Act (RCW Chapter 59.18). If the Premises are located within the City of Seattle, applicable Seattle rental regulations (including notice, just-cause, relocation, or habitability rules) shall apply to the minimum extent required by law.",

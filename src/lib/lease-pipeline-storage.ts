@@ -24,13 +24,32 @@ import {
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
 import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import {
+  downloadDataUrl,
+  downloadTextContent,
+  leaseDownloadBaseName,
+  portalDownloadToastMessage,
+  type PortalDownloadResult,
+} from "@/lib/portal-document-download";
 import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
-import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow } from "@/lib/manager-applications-storage";
-import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { getPropertyById, getRoomChoiceLabel, getBundleChoiceLabel } from "@/lib/rental-application/data";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
+import {
+  buildBundleApplicationGroups,
+  bundleGroupKey,
+  bundleGroupReadyForJointLease,
+  bundleIdForApplication,
+  isBundleGroupApplication,
+  jointLeaseRowId,
+  type BundleGroupRowInput,
+} from "@/lib/bundle-group/bundle-group-application";
+import { applyLeaseBillingToContext } from "@/lib/lease-billing-snapshot";
+import { buildJointLeaseMembers, buildJointLeasePipelineRow } from "@/lib/bundle-group/joint-lease";
+import type { JointLeaseMember, LeaseKind } from "@/lib/bundle-group/types";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 const LEASE_PIPELINE_SESSION_KEY_PREFIX = "axis:lease-pipeline:v2";
@@ -346,6 +365,13 @@ export type LeasePipelineRow = {
     monthlyRent: number | null;
     requestedAtIso: string;
   } | null;
+  /** Individual resident lease vs one household joint bundle lease. */
+  leaseKind?: LeaseKind;
+  jointLeaseGroupId?: string | null;
+  jointLeaseBundleId?: string | null;
+  jointLeaseMembers?: JointLeaseMember[];
+  primaryApplicationId?: string | null;
+  bundleGroupKey?: string | null;
 };
 
 function workflowStatusForRow(
@@ -494,6 +520,12 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     // certificate print a fingerprint matching no document anyone signed.
     // No signature on the row means nothing has been executed, so null.
     documentSha256: residentSignature?.documentSha256 ?? managerSignature?.documentSha256 ?? null,
+    leaseKind: r.leaseKind === "joint_bundle" ? "joint_bundle" : "individual",
+    jointLeaseGroupId: typeof r.jointLeaseGroupId === "string" ? r.jointLeaseGroupId : null,
+    jointLeaseBundleId: typeof r.jointLeaseBundleId === "string" ? r.jointLeaseBundleId : null,
+    jointLeaseMembers: Array.isArray(r.jointLeaseMembers) ? r.jointLeaseMembers : undefined,
+    primaryApplicationId: typeof r.primaryApplicationId === "string" ? r.primaryApplicationId : null,
+    bundleGroupKey: typeof r.bundleGroupKey === "string" ? r.bundleGroupKey : null,
   };
 }
 
@@ -669,13 +701,98 @@ function approvedLeasePlacementLabel(input: {
   propertyId?: string;
   propertyLabel?: string;
   roomChoice?: string;
+  bundleId?: string;
 }): string {
   const propertyTitle =
     (input.propertyId ? getPropertyById(input.propertyId)?.title?.trim() : "") ||
     input.propertyLabel?.trim() ||
     "—";
+  if (input.bundleId?.trim() && input.propertyId?.trim()) {
+    const bundleLabel = getBundleChoiceLabel(input.propertyId, input.bundleId);
+    if (bundleLabel) return `${propertyTitle} · ${bundleLabel}`;
+  }
   const roomLabel = input.roomChoice?.trim() ? getRoomChoiceLabel(input.roomChoice).split(" · ")[0]?.trim() || "" : "";
+  if (roomLabel) {
+    const titleNorm = propertyTitle.toLowerCase();
+    const roomNorm = roomLabel.toLowerCase();
+    if (titleNorm === roomNorm || titleNorm.endsWith(` · ${roomNorm}`) || titleNorm.includes(` · ${roomNorm} ·`)) {
+      return propertyTitle;
+    }
+  }
   return [propertyTitle, roomLabel].filter(Boolean).join(" · ") || propertyTitle || "—";
+}
+
+function bundleGroupRowsFromApplications(
+  apps: ReturnType<typeof readManagerApplicationRows>,
+): BundleGroupRowInput[] {
+  return apps
+    .filter((a) => isBundleGroupApplication(a.application))
+    .map((a) => ({
+      id: a.id,
+      name: a.name || a.email || "Applicant",
+      email: a.email || "",
+      role: a.application?.groupRole ?? null,
+      groupId: a.application?.groupId ?? "",
+      groupSize: a.application?.groupSize ?? "",
+      status:
+        a.bucket === "approved"
+          ? "approved"
+          : a.bucket === "rejected"
+            ? "rejected"
+            : a.stage === "In progress"
+              ? "in_progress"
+              : "submitted",
+      bundleId: bundleIdForApplication(a.application),
+      propertyId: a.assignedPropertyId?.trim() || a.propertyId?.trim() || a.application?.propertyId?.trim() || "",
+    }));
+}
+
+function syncJointBundleLeases(
+  rows: LeasePipelineRow[],
+  managerUserId?: string | null,
+): { rows: LeasePipelineRow[]; jointMemberAppIds: Set<string> } {
+  const allApps = readManagerApplicationRows().filter(
+    (a) =>
+      a.email?.trim() &&
+      isBundleGroupApplication(a.application) &&
+      (!managerUserId || applicationVisibleToPortalUser(a, managerUserId)),
+  );
+  const approvedApps = allApps.filter((a) => a.bucket === "approved");
+  const bundleGroups = buildBundleApplicationGroups(bundleGroupRowsFromApplications(allApps));
+  const jointMemberAppIds = new Set<string>();
+  const next = [...rows];
+
+  for (const group of bundleGroups.values()) {
+    if (!bundleGroupReadyForJointLease(group) || !group.bundleId || !group.propertyId) continue;
+    // Capture the guarded non-null values into consts: TS loses property narrowing on
+    // `group.bundleId` across the function calls below, so read it once here.
+    const bundleId = group.bundleId;
+    const memberApps = approvedApps.filter((a) => group.members.some((m) => m.id === a.id));
+    const organizer = memberApps.find((a) => a.application?.groupRole === "first") ?? memberApps[0];
+    if (!organizer) continue;
+
+    for (const m of group.members) jointMemberAppIds.add(m.id);
+
+    const members = buildJointLeaseMembers(memberApps, group);
+    const propertyId = group.propertyId;
+    const effectiveManagerUserId = organizer.managerUserId ?? managerUserId ?? null;
+    const rowId = jointLeaseRowId(group.groupId, bundleId, propertyId);
+    const existingIdx = next.findIndex((r) => r.id === rowId || r.bundleGroupKey === bundleGroupKey(group.groupId, bundleId, propertyId));
+    const existing = existingIdx !== -1 ? next[existingIdx]! : null;
+    const seeded = buildJointLeasePipelineRow({
+      group,
+      members,
+      organizer,
+      propertyId,
+      managerUserId: effectiveManagerUserId,
+      existing,
+    });
+    const normalized = normalizeLeasePipelineRow(seeded);
+    if (existingIdx === -1) next.push(normalized);
+    else next[existingIdx] = normalized;
+  }
+
+  return { rows: next, jointMemberAppIds };
 }
 
 /** Demo seed: load lease-pipeline rows into the local store without server mirror. */
@@ -825,15 +942,19 @@ function findLeaseRowIndexForApprovedApp(
 }
 
 function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
+  const jointSync = syncJointBundleLeases(rows, managerUserId);
+  const next = jointSync.rows;
+  const jointMemberAppIds = jointSync.jointMemberAppIds;
+
   const apps = readManagerApplicationRows().filter(
     (a) =>
       a.bucket === "approved" &&
       a.email?.trim() &&
       (!managerUserId || applicationVisibleToPortalUser(a, managerUserId)),
   );
-  let changed = false;
-  const next = [...rows];
+  let changed = next.length !== rows.length;
   for (const app of apps) {
+    if (jointMemberAppIds.has(app.id)) continue;
     if (isLeasePipelineSuppressed(app.id, app.email, managerUserId)) continue;
     const email = app.email!.trim().toLowerCase();
     const propertyId = app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
@@ -843,13 +964,15 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       propertyId,
       propertyLabel: app.property,
       roomChoice,
+      bundleId: bundleIdForApplication(app.application),
     });
     const idx = findLeaseRowIndexForApprovedApp(next, app);
     const iso = new Date().toISOString();
 
     if (app.manuallyAdded) {
-      const existing = idx !== -1 ? next[idx]! : null;
       const manualPdf = manualResidentSignedLeasePdf(app);
+      if (manualPdf) {
+      const existing = idx !== -1 ? next[idx]! : null;
       const residentName = String(app.name ?? "").trim() || "Resident";
       const residentSignature =
         existing?.residentSignature ??
@@ -921,6 +1044,8 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       else next[idx] = seeded;
       changed = true;
       continue;
+      }
+      // No uploaded off-platform PDF — same manager-review workflow as approved applicants.
     }
 
     const seeded = normalizeLeasePipelineRow({
@@ -932,7 +1057,11 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       updated: formatUpdatedLabel(iso),
       bucket: idx === -1 ? "manager" : next[idx]!.bucket,
       pdfVersion: idx === -1 ? 1 : next[idx]!.pdfVersion,
-      notes: idx === -1 ? "Created from approved application." : next[idx]!.notes,
+      notes: idx === -1
+        ? app.manuallyAdded
+          ? "Manager-added resident — generate or upload a lease."
+          : "Created from approved application."
+        : next[idx]!.notes,
       updatedAtIso: idx === -1 ? iso : next[idx]!.updatedAtIso,
       axisId: app.id,
       propertyId: propertyId || undefined,
@@ -956,6 +1085,49 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
       continue;
     }
     const current = next[idx]!;
+    if (
+      app.manuallyAdded &&
+      !manualResidentSignedLeasePdf(app) &&
+      (current.externallySignedLease || hasBothLeaseSignatures(current)) &&
+      !current.generatedHtml &&
+      !current.managerUploadedPdf?.dataUrl
+    ) {
+      const repairedIso = new Date().toISOString();
+      next[idx] = normalizeLeasePipelineRow({
+        ...current,
+        residentName: seeded.residentName,
+        residentEmail: seeded.residentEmail,
+        unit: seeded.unit,
+        axisId: app.id,
+        propertyId: seeded.propertyId,
+        managerUserId: seeded.managerUserId ?? managerUserId ?? current.managerUserId ?? null,
+        roomChoice: seeded.roomChoice,
+        signedRentLabel: seeded.signedRentLabel,
+        application: enrichApplicationForLease(app, effectiveApplicationForRow(app), current.application),
+        bucket: "manager",
+        generatedHtml: null,
+        generatedAtIso: null,
+        managerUploadedPdf: null,
+        managerSignature: null,
+        residentSignature: null,
+        signatureName: null,
+        signedAtIso: null,
+        residentSignedAt: null,
+        managerSignedAt: null,
+        sentToResidentAt: null,
+        fullySignedAt: null,
+        adminReviewRequestedAt: null,
+        voidedAt: null,
+        externallySignedLease: false,
+        leaseDocumentRemovedAt: current.leaseDocumentRemovedAt ?? repairedIso,
+        status: "Manager Review",
+        currentActorRole: "manager",
+        updatedAtIso: repairedIso,
+        updated: formatUpdatedLabel(repairedIso),
+      });
+      changed = true;
+      continue;
+    }
     const merged = normalizeLeasePipelineRow({
       ...current,
       residentName: seeded.residentName,
@@ -1217,6 +1389,31 @@ function makeMsg(role: LeaseThreadRole, body: string): LeaseThreadMessage {
   };
 }
 
+/** Clears off-platform lease upload metadata on the application so sync cannot re-mark the lease signed. */
+export function clearManualResidentOffPlatformLeaseFromApplication(axisId: string): void {
+  const id = axisId.trim();
+  if (!id) return;
+  const rows = readManagerApplicationRows();
+  const idx = rows.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  const row = rows[idx]!;
+  if (!row.manuallyAdded) return;
+  const details = row.manualResidentDetails;
+  if (!details) return;
+  const hasOffPlatform =
+    details.externallySignedLease === true ||
+    Boolean(details.signedLeaseDataUrl?.trim());
+  if (!hasOffPlatform) return;
+  const nextDetails = { ...details };
+  delete nextDetails.externallySignedLease;
+  delete nextDetails.signedLeaseDataUrl;
+  delete nextDetails.signedLeaseFileName;
+  delete nextDetails.signedLeaseUploadedAt;
+  const next = [...rows];
+  next[idx] = { ...row, manualResidentDetails: nextDetails };
+  writeManagerApplicationRows(next);
+}
+
 /** Removes lease document content and resets workflow to manager review on the same row. */
 export function deleteLeasePipelineRow(id: string, managerUserId?: string | null): boolean {
   const rows = readLeasePipeline(managerUserId);
@@ -1229,6 +1426,9 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
   const rawIdx = findRawLeaseRowIndex(id, managerUserId);
   if (rawIdx === -1) return false;
   const iso = new Date().toISOString();
+  if (row.axisId?.trim()) {
+    clearManualResidentOffPlatformLeaseFromApplication(row.axisId);
+  }
   raw[rawIdx] = normalizeLeasePipelineRow({
     ...row,
     bucket: "manager",
@@ -1249,6 +1449,7 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
     versionNumber: 1,
     status: "Manager Review",
     currentActorRole: "manager",
+    externallySignedLease: false,
     leaseDocumentRemovedAt: iso,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
@@ -1363,10 +1564,17 @@ function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWi
   };
 }
 
-function leaseGenerationContextForRow(row: LeasePipelineRow) {
+function leaseGenerationContextForRow(row: LeasePipelineRow, managerUserId?: string | null) {
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) return null;
   let ctx = leaseContextFromApplication(app as RentalWizardFormState);
+  if (row.leaseKind === "joint_bundle") {
+    ctx = {
+      ...ctx,
+      leaseKind: "joint_bundle",
+      jointLeaseMembers: row.jointLeaseMembers ?? [],
+    };
+  }
   if (!ctx.listingProperty?.address?.trim() && row.propertyId?.trim()) {
     const prop = getPropertyById(row.propertyId.trim());
     if (prop) {
@@ -1380,11 +1588,11 @@ function leaseGenerationContextForRow(row: LeasePipelineRow) {
       };
     }
   }
-  return ctx;
+  return applyLeaseBillingToContext(ctx, row, managerUserId ?? row.managerUserId);
 }
 
 export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: true } | { ok: false; error: string } {
-  const ctx = leaseGenerationContextForRow(row);
+  const ctx = leaseGenerationContextForRow(row, row.managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file." };
   }
@@ -1430,7 +1638,7 @@ export function generateLeaseHtmlForRow(
   }
   const supported = leaseGenerationSupportedForRow(row);
   if (!supported.ok) return { ok: false, error: supported.error };
-  const ctx = leaseGenerationContextForRow(row);
+  const ctx = leaseGenerationContextForRow(row, managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
@@ -1460,22 +1668,62 @@ export function generateLeaseHtmlForRow(
   return ok ? { ok: true, version } : { ok: false, error: "Could not save generated lease." };
 }
 
-export function downloadLeaseFromRow(row: LeasePipelineRow): void {
-  if (typeof window === "undefined") return;
+/** Regenerate unsigned manager-review leases after resident or payment edits (never after sent to resident). */
+export function regenerateEditableLeasesForResident(
+  residentEmail: string,
+  managerUserId: string | null | undefined,
+  applicationPatch?: Partial<RentalWizardFormState>,
+): number {
+  const email = residentEmail.trim().toLowerCase();
+  if (!email) return 0;
+  let updated = 0;
+  for (const lr of readLeasePipeline(managerUserId)) {
+    if (lr.residentEmail.trim().toLowerCase() !== email) continue;
+    if (!leaseAllowsManagerDocumentEdits(lr)) continue;
+    if (!leaseGenerationSupportedForRow(lr).ok) continue;
+    if (applicationPatch) {
+      updateLeasePipelineRow(
+        lr.id,
+        { application: { ...(lr.application ?? {}), ...applicationPatch } },
+        managerUserId,
+      );
+    }
+    const res = generateLeaseHtmlForRow(lr.id, managerUserId);
+    if (res.ok) updated += 1;
+  }
+  return updated;
+}
+
+export async function downloadLeaseFromRow(row: LeasePipelineRow): Promise<PortalDownloadResult> {
+  if (typeof window === "undefined") return "failed";
   if (row.managerUploadedPdf?.dataUrl) {
-    const a = document.createElement("a");
-    a.href = row.managerUploadedPdf.dataUrl;
-    a.download = row.managerUploadedPdf.fileName || "lease.pdf";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
+    return downloadDataUrl(
+      row.managerUploadedPdf.dataUrl,
+      row.managerUploadedPdf.fileName || `PropLane-Lease-${leaseDownloadBaseName(row)}.pdf`,
+    );
   }
-  if (row.generatedHtml) {
-    printLeaseAsPdf(row);
-    return;
+  const html = getLeaseDocumentHtml(row);
+  if (html) {
+    return downloadTextContent(
+      html,
+      `PropLane-Lease-${leaseDownloadBaseName(row)}.html`,
+      "text/html;charset=utf-8",
+      "Lease",
+    );
   }
+  return "failed";
+}
+
+export function runLeaseDownload(row: LeasePipelineRow, showToast: (message: string) => void): void {
+  void downloadLeaseFromRow(row).then((result) => {
+    const message = portalDownloadToastMessage(result, "lease");
+    if (message) showToast(message);
+  });
+}
+
+/** @deprecated Use {@link downloadLeaseFromRow} — kept for callers that still name this “print”. */
+export async function printLeaseAsPdf(row: LeasePipelineRow): Promise<PortalDownloadResult> {
+  return downloadLeaseFromRow(row);
 }
 
 export function dedupeLeasePipelineRows(rows: LeasePipelineRow[]): LeasePipelineRow[] {
@@ -1725,31 +1973,6 @@ export async function managerSignLease(
   };
   write(raw, managerUserId);
   return true;
-}
-
-/** Open the lease in a print-ready popup — browser saves as PDF from the print dialog. */
-export function printLeaseAsPdf(row: LeasePipelineRow): void {
-  if (typeof window === "undefined") return;
-  if (row.managerUploadedPdf?.dataUrl) {
-    const a = document.createElement("a");
-    a.href = row.managerUploadedPdf.dataUrl;
-    a.download = row.managerUploadedPdf.fileName || "lease.pdf";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
-  }
-  const html = getLeaseDocumentHtml(row);
-  if (!html) return;
-  const printHtml = html.replace(
-    "</head>",
-    `<style>@media print{body{margin:0}}</style><script>window.onload=function(){window.print();}<\/script></head>`,
-  );
-  const win = window.open("", "_blank", "width=900,height=700");
-  if (!win) return;
-  win.document.write(printHtml);
-  win.document.close();
 }
 
 export function residentRequestEdits(email: string, message: string): boolean {

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
@@ -30,7 +32,21 @@ function downloadBackgroundCheckPdf(applicationId: string): void {
   anchor.remove();
 }
 
-function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo: boolean }) {
+/** Download the background-check report PDF for an application row. */
+export function downloadBackgroundCheckForApplication(row: DemoApplicantRow): void {
+  const demo = isDemoModeActive();
+  if (demo) {
+    void import("@/lib/demo/demo-document-files")
+      .then(({ downloadDemoBackgroundCheckPdf }) => downloadDemoBackgroundCheckPdf(row))
+      .catch(() => undefined);
+    return;
+  }
+  if (row.backgroundCheck?.status === "complete") {
+    downloadBackgroundCheckPdf(row.id);
+  }
+}
+
+export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { row: DemoApplicantRow; demo: boolean; bareCanvas?: boolean }) {
   const bg = row.backgroundCheck;
   const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
   const pdfSrc = useOfficialPdf
@@ -54,7 +70,7 @@ function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo
         src={pdfSrc}
         title="Background check report preview"
         loading="lazy"
-        className="h-[min(52vh,420px)] w-full border-0 bg-white"
+        className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
       />
     );
   }
@@ -65,7 +81,7 @@ function BackgroundCheckReportFrame({ row, demo }: { row: DemoApplicantRow; demo
       title="Background check report preview"
       sandbox="allow-same-origin"
       loading="lazy"
-      className="h-[min(52vh,420px)] w-full border-0 bg-white"
+      className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
     />
   );
 }
@@ -89,11 +105,23 @@ export function ApplicationScreeningPanel({
   row,
   onUpdated,
   onOpenScreeningModal,
+  collapsible = true,
+  bareCanvas = false,
+  headerActionsPlacement = "section",
+  onHeaderActionsChange,
+  presentation = "full",
 }: {
   row: DemoApplicantRow;
   onUpdated?: () => void;
   /** Opens the cost-confirmation modal (billed to the manager) to start/re-run the Checkr check. */
   onOpenScreeningModal?: () => void;
+  /** When false, renders flat content (e.g. inside a review modal). */
+  collapsible?: boolean;
+  bareCanvas?: boolean;
+  /** When `parent`, header buttons render via `onHeaderActionsChange` instead of the Screening sub-section. */
+  headerActionsPlacement?: "section" | "parent";
+  onHeaderActionsChange?: (actions: React.ReactNode) => void;
+  presentation?: "full" | "compact";
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
@@ -104,6 +132,7 @@ export function ApplicationScreeningPanel({
   const [bgConfigured, setBgConfigured] = useState(demo);
   const [bgOverride, setBgOverride] = useState<ApplicationBackgroundCheck | undefined>();
   const [bgBusy, setBgBusy] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   const bg = bgOverride ?? row.backgroundCheck;
 
   useEffect(() => {
@@ -199,10 +228,10 @@ export function ApplicationScreeningPanel({
     downloadBackgroundCheckPdf(row.id);
   }, [bg, demo, row, showToast]);
 
-  if (!applicationShowsBackgroundCheck(row)) return null;
-
+  const showsBackgroundCheck = applicationShowsBackgroundCheck(row);
   const screening = row.screening;
   const canOrder =
+    showsBackgroundCheck &&
     !demo &&
     screeningAllowed &&
     configured &&
@@ -213,6 +242,7 @@ export function ApplicationScreeningPanel({
     screening?.status !== "complete";
 
   const canRunBackgroundCheck =
+    showsBackgroundCheck &&
     screeningAllowed &&
     bgConfigured &&
     Boolean(row.application?.consentCredit) &&
@@ -220,53 +250,203 @@ export function ApplicationScreeningPanel({
     Boolean(onOpenScreeningModal);
 
   const testButtonLabel = demo ? "Test" : bg ? "Re-run background check" : "Run background check";
+  const canViewReport = bg?.status === "complete";
+  const statusSummary =
+    bg?.status === "complete"
+      ? bg.result === "clear"
+        ? "Clear — report ready to view."
+        : bg.result === "consider"
+          ? "Needs review — report ready to view."
+          : "Report ready to view."
+      : bg?.status === "pending"
+        ? demo
+          ? "Demo check in progress…"
+          : "Checkr is processing. This updates automatically."
+        : row.application?.consentCredit
+          ? "No report yet. Run a background check when you are ready."
+          : "Applicant must authorize a background check first.";
+  const headerActionBtnClass =
+    headerActionsPlacement === "parent" ? PORTAL_HEADER_ACTION_BTN : "h-8 rounded-full px-4 text-xs";
 
-  const headerActions = (
-    <>
-      {bg?.status === "complete" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full px-4 text-xs"
-          data-attr="screening-pdf-download"
-          onClick={handleDownload}
-        >
-          Download PDF
-        </Button>
-      ) : null}
-      {canRunBackgroundCheck ? (
-        <Button
-          type="button"
-          data-attr="run-background-check"
-          className="h-8 rounded-full px-4 text-xs"
-          onClick={onOpenScreeningModal}
-        >
-          {testButtonLabel}
-        </Button>
-      ) : null}
-      {canOrder ? (
-        <Button
-          type="button"
-          className="h-8 rounded-full px-4 text-xs"
-          disabled={busy}
-          onClick={() => void runScreening()}
-        >
-          {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
-        </Button>
-      ) : null}
-    </>
+  const headerActions = useMemo(
+    () => (
+      <>
+        {bg?.status === "complete" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={headerActionBtnClass}
+            data-attr="screening-pdf-download"
+            onClick={handleDownload}
+          >
+            {headerActionsPlacement === "parent" ? "Download screening" : "Download PDF"}
+          </Button>
+        ) : null}
+        {canRunBackgroundCheck ? (
+          <Button
+            type="button"
+            variant="outline"
+            data-attr="run-background-check"
+            className={headerActionBtnClass}
+            onClick={onOpenScreeningModal}
+          >
+            {testButtonLabel}
+          </Button>
+        ) : null}
+        {canOrder ? (
+          <Button
+            type="button"
+            variant="primary"
+            className={headerActionBtnClass}
+            disabled={busy}
+            onClick={() => void runScreening()}
+          >
+            {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
+          </Button>
+        ) : null}
+      </>
+    ),
+    [
+      bg?.status,
+      busy,
+      canOrder,
+      canRunBackgroundCheck,
+      handleDownload,
+      headerActionBtnClass,
+      onOpenScreeningModal,
+      runScreening,
+      screening?.status,
+      testButtonLabel,
+    ],
   );
 
-  return (
-    <PortalCollapsibleSection
-      title="Screening"
-      defaultExpanded={false}
-      surfaceMuted={false}
-      className="mt-4"
-      contentClassName="p-4 pt-0"
-      toggleDataAttr="application-screening-toggle"
-      headerActions={headerActions}
-    >
+  const headerActionsSignature = useMemo(
+    () =>
+      [
+        showsBackgroundCheck,
+        headerActionsPlacement,
+        bg?.status ?? "",
+        busy,
+        canOrder,
+        canRunBackgroundCheck,
+        screening?.status ?? "",
+        testButtonLabel,
+      ].join("|"),
+    [
+      bg?.status,
+      busy,
+      canOrder,
+      canRunBackgroundCheck,
+      headerActionsPlacement,
+      screening?.status,
+      showsBackgroundCheck,
+      testButtonLabel,
+    ],
+  );
+
+  const headerActionsRef = useRef(headerActions);
+  headerActionsRef.current = headerActions;
+  const publishedHeaderActionsSignatureRef = useRef<string | null>(null);
+  const onHeaderActionsChangeRef = useRef(onHeaderActionsChange);
+  onHeaderActionsChangeRef.current = onHeaderActionsChange;
+
+  useLayoutEffect(() => {
+    const notify = onHeaderActionsChangeRef.current;
+    if (headerActionsPlacement !== "parent" || !notify) return;
+
+    if (!showsBackgroundCheck) {
+      if (publishedHeaderActionsSignatureRef.current !== null) {
+        publishedHeaderActionsSignatureRef.current = null;
+        notify(null);
+      }
+      return;
+    }
+
+    if (publishedHeaderActionsSignatureRef.current === headerActionsSignature) return;
+    publishedHeaderActionsSignatureRef.current = headerActionsSignature;
+    notify(headerActionsRef.current);
+  }, [headerActionsPlacement, headerActionsSignature, showsBackgroundCheck]);
+
+  useEffect(() => {
+    if (headerActionsPlacement !== "parent") return;
+    return () => {
+      publishedHeaderActionsSignatureRef.current = null;
+      onHeaderActionsChangeRef.current?.(null);
+    };
+  }, [headerActionsPlacement]);
+
+  if (!showsBackgroundCheck) return null;
+
+  if (presentation === "compact") {
+    return (
+      <>
+        <div
+          className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm"
+          data-slot="application-background-check-compact"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-semibold text-foreground">Background check</p>
+              <p className="text-sm text-muted">{statusSummary}</p>
+              {bg?.status === "pending" && !demo ? (
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+                  disabled={bgBusy}
+                  onClick={() => void callBackgroundCheck("refresh")}
+                >
+                  Refresh now
+                </button>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {canViewReport ? (
+                <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setReportModalOpen(true)}>
+                  View report
+                </Button>
+              ) : null}
+              {canRunBackgroundCheck ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_HEADER_ACTION_BTN}
+                  data-attr="run-background-check"
+                  onClick={onOpenScreeningModal}
+                >
+                  {testButtonLabel}
+                </Button>
+              ) : null}
+              {bg?.status === "complete" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_HEADER_ACTION_BTN}
+                  data-attr="screening-pdf-download"
+                  onClick={handleDownload}
+                >
+                  Download
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <Modal
+          open={reportModalOpen}
+          onClose={() => setReportModalOpen(false)}
+          title="Background check report"
+          panelClassName="flex max-h-[min(92vh,52rem)] w-[min(56rem,calc(100vw-2rem))] flex-col overflow-hidden"
+          scrollableContent
+          dense
+          assistantStrip={false}
+        >
+          <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} bareCanvas />
+        </Modal>
+      </>
+    );
+  }
+
+  const panelBody = (
+    <>
       {!screeningAllowed && !demo ? (
         <>
           <p className="native-hide text-xs text-muted">
@@ -312,9 +492,7 @@ export function ApplicationScreeningPanel({
         <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-        <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} />
-      </div>
+      <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} bareCanvas={bareCanvas} />
 
       {screening?.adverseActionRequired ? (
         <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
@@ -322,12 +500,34 @@ export function ApplicationScreeningPanel({
         </p>
       ) : null}
 
-      {bg?.result === "consider" ? (
-        <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
-          Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before any
-          adverse action (FCRA).
-        </p>
-      ) : null}
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div className="space-y-3" data-slot="application-screening-inline">
+        {headerActionsPlacement === "section" && headerActions ? (
+          <div className="flex flex-nowrap items-center justify-start gap-2 overflow-x-auto">{headerActions}</div>
+        ) : null}
+        {panelBody}
+      </div>
+    );
+  }
+
+  return (
+    <PortalCollapsibleSection
+      title="Screening"
+      defaultExpanded={false}
+      surfaceMuted={false}
+      bareSurface
+      hideToggleIcon
+      className="mt-0"
+      contentClassName="pt-0"
+      toggleDataAttr="application-screening-toggle"
+      headerActions={headerActionsPlacement === "section" ? headerActions : undefined}
+      headerActionsInline={headerActionsPlacement === "section"}
+    >
+      {panelBody}
     </PortalCollapsibleSection>
   );
 }

@@ -13,12 +13,20 @@ import {
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
+import { cn } from "@/lib/utils";
+import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
+import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
-import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
+  ListingUnifiedFeesTable,
+  type FeeExpandableSection,
+} from "@/components/portal/listing-unified-fees-table";
+import { LISTING_FEE_PRESETS } from "@/lib/listing-fees";
+import {
   submitManagerPendingPropertyToServer,
+  syncPropertyPipelineFromServer,
   updateExtraListingFromSubmissionOnServer,
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
@@ -32,9 +40,9 @@ import {
   listingWizardHasUnsavedInput,
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
-import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
+import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
+import { sortRoomIndicesByFloor } from "@/lib/listing-floor-order";
 import {
-  propertyMediaReadinessLabel,
   scoreRoomMedia,
   shouldWarnOnPublish,
   summarizePropertyMediaReadiness,
@@ -54,15 +62,15 @@ import {
   applyListingBathroomSlots,
   listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
-  applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  createNewListingWizardSubmission,
   customApplicationFieldKeyFromLabel,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
-  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
+  syncShortTermLeaseTermInAllowed,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
@@ -83,8 +91,13 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import { applyListingFeeContextDefaults } from "@/lib/listing-fee-defaults";
+import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
-  UTILITIES_PAYMENT_MODEL_OPTIONS,
+  LONG_TERM_UTILITIES_PAYMENT_OPTIONS,
+  longTermUtilitiesEstimateRequired,
+  longTermUtilitiesPickerValue,
+  resolveRoomUtilitiesPaymentModel,
   type UtilitiesPaymentModel,
 } from "@/lib/listing-utilities-payment";
 import {
@@ -93,12 +106,11 @@ import {
   LISTING_BEDROOM_SLOT_OPTIONS,
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
-  LISTING_ROOM_FLOOR_LEVEL_OPTIONS,
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
   ROOM_AMENITY_PRESETS,
-  ROOM_FLOOR_LEVEL_CUSTOM,
   ROOM_FURNITURE_PRESETS,
+  floorLevelSelectOptions,
   ROOM_FURNISHING_OPTIONS,
   SHARED_SPACE_AMENITY_PRESETS,
   SHARED_SPACE_KIND_OPTIONS,
@@ -107,8 +119,8 @@ import {
   pruneSharedSpaceAmenitiesForKind,
   type SharedSpaceKind,
   mergeFurnitureToggle,
-  mergeToggleLine,
   parseFurnitureSet,
+  roomFurnishingIsFurnished,
   sanitizeRoomAmenityText,
   splitLineList,
 } from "@/data/manager-listing-presets";
@@ -118,31 +130,47 @@ import {
   parseSanitizedInteger,
   parseSanitizedMoneyNumber,
   sanitizeBuildingNameInput,
-  sanitizeFloorLabelInput,
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
-  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
 } from "@/lib/listing-form-inputs";
+import {
+  applyListingLtFeeAmount,
+  applyListingLtFeeAmountForRow,
+  applyListingLtFeeToggle,
+  applyListingStFeeAmount,
+  applyListingStFeeToggle,
+  deriveListingLtFeeToggles,
+  deriveListingStFeeToggles,
+  LISTING_STANDARD_FEE_ROWS,
+  type ListingFeeRowId,
+  type ListingLtFeeToggles,
+  type ListingStFeeToggles,
+} from "@/lib/listing-fee-term-toggles";
+import { bundleShortTermPriceLabel } from "@/lib/listing-bundle-short-term";
 import { canNavigateToWizardStep } from "@/lib/wizard-step-nav";
 import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
+  listingRoomDailyRentKey,
+  listingRoomHasRent,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
   validateListingWizardStep,
 } from "@/lib/listing-wizard-validation";
+import { roomHeadlinePriceLabel } from "@/lib/room-pricing";
 import {
   scrollToFirstWizardFieldError,
   wizardFieldErrorClass,
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
+import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
@@ -161,87 +189,6 @@ function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
     out.push(item);
   }
   return out;
-}
-
-function roomFloorOptionsFromStories(storiesId: string | undefined): { id: string; label: string }[] {
-  if (storiesId === "1") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "2") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "3") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "3", label: "3rd floor" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "4") {
-    return [
-      { id: "1", label: "1st floor" },
-      { id: "2", label: "2nd floor" },
-      { id: "3", label: "3rd floor" },
-      { id: "4plus", label: "4th floor or higher" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  if (storiesId === "split") {
-    return [
-      { id: "split-main", label: "Main split level" },
-      { id: "split-upper", label: "Upper split level" },
-      { id: "split-lower", label: "Lower split level" },
-      { id: "basement", label: "Basement / garden level" },
-      { id: "loft", label: "Loft / attic" },
-      { id: "outdoor", label: "Outdoor / detached area" },
-    ];
-  }
-  return LISTING_ROOM_FLOOR_LEVEL_OPTIONS.map((o) => ({ id: o.id, label: o.label }));
-}
-
-function roomFloorSelectValueFromOptions(floor: string, options: readonly { id: string; label: string }[]): string {
-  const hit = options.find((o) => o.label === floor);
-  if (hit) return hit.id;
-  if (!floor.trim()) return "";
-  return ROOM_FLOOR_LEVEL_CUSTOM;
-}
-
-function uniqueRoomFloorLabels(rooms: { floor: string }[]): string[] {
-  return sortUniqueFloorLabels(rooms.map((r) => r.floor));
-}
-
-const LOCATION_LEVEL_CUSTOM = "__location_custom__";
-
-function locationOptionsFromStories(storiesId: string | undefined): string[] {
-  if (storiesId === "1") return ["1st / main floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "2") return ["1st / main floor", "2nd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "3") return ["1st / main floor", "2nd floor", "3rd floor", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "4") return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  if (storiesId === "split") return ["Main split level", "Upper split level", "Lower split level", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-  // Default: all standard floors (stories not yet set)
-  return ["1st / main floor", "2nd floor", "3rd floor", "4th floor or higher", "Basement / garden level", "Loft / attic", "Outdoor / detached area"];
-}
-
-function locationSelectValue(location: string, options: readonly string[]): string {
-  const t = location.trim();
-  if (!t) return "";
-  return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
 }
 
 const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
@@ -296,6 +243,13 @@ function ListingWizardChevron({ open }: { open: boolean }) {
     </svg>
   );
 }
+
+/**
+ * In rent-by-bedroom mode the security deposit lives inside each Room (and Bundle)
+ * dropdown, so it is hidden from — and not re-addable in — the shared "Other fees"
+ * table. Entire-home listings have no per-room UI, so they keep it in Other fees.
+ */
+const RENT_BY_ROOM_HIDDEN_FEE_ROWS: ReadonlySet<ListingFeeRowId> = new Set(["securityDeposit"]);
 
 const LISTING_WIZARD_ACTION_BTN = "h-8 rounded-full px-3 text-xs";
 const LISTING_WIZARD_REMOVE_BTN = `${LISTING_WIZARD_ACTION_BTN} shrink-0 border-rose-200 text-rose-800 portal-danger-outline`;
@@ -378,15 +332,6 @@ function ListingWizardCollapsibleCard({
       {expanded ? <div className={bodyClassName}>{children}</div> : null}
     </div>
   );
-}
-
-const LISTING_CHOICE_CARD =
-  "rounded-2xl border px-3 py-3 text-left transition sm:px-4 sm:py-3.5";
-
-function listingChoiceCardClass(selected: boolean) {
-  return selected
-    ? `${LISTING_CHOICE_CARD} border-primary ring-2 ring-primary/25`
-    : `${LISTING_CHOICE_CARD} border-border hover:border-primary/30`;
 }
 
 function togglePaymentAtSigning(
@@ -476,70 +421,83 @@ function MediaPickTrigger({
   );
 }
 
-function PlaceCategoryPicker({
-  value,
-  onSelect,
-  hasError,
-  errorMsg,
-}: {
-  value: string | undefined;
-  onSelect: (id: string) => void;
-  hasError?: boolean;
-  errorMsg?: string;
-}) {
-  return (
-    <div
-      data-wizard-field="listingPlaceCategoryId"
-      className={wizardSectionErrorClass(Boolean(hasError))}
-    >
-      <FieldLabel hint="We’ll tailor rent, utilities, and proration fields below.">
-        How is this property rented?
-      </FieldLabel>
-      <Select
-        aria-label="Rental model"
-        className={wizardFieldErrorClass(Boolean(hasError), selectInputCls)}
-        value={value ?? ""}
-        onChange={(e) => onSelect(e.target.value)}
-      >
-        <option value="">Select</option>
-        {LISTING_PLACE_CATEGORY_OPTIONS.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </Select>
-      <StepFieldError msg={errorMsg} />
-    </div>
-  );
-}
 
-function UtilitiesPaymentModelPicker({
+function LongTermUtilitiesPaymentPicker({
   value,
   onSelect,
 }: {
   value: UtilitiesPaymentModel | undefined;
   onSelect: (model: UtilitiesPaymentModel) => void;
 }) {
-  const selected = value ?? "manager_billed";
+  const selected = longTermUtilitiesPickerValue(value);
   return (
-    <div className="space-y-2">
-      <FieldLabel hint="How residents pay for utilities on this listing.">Utilities payment</FieldLabel>
-      <div className="grid gap-2">
-        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => {
-          const on = selected === opt.id;
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => onSelect(opt.id)}
-              className={listingChoiceCardClass(on)}
-            >
-              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
-              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
-            </button>
-          );
-        })}
-      </div>
+    <div>
+      <FieldLabel>Utilities</FieldLabel>
+      <Select
+        aria-label="Utilities payment"
+        className={selectInputCls}
+        value={selected}
+        onChange={(e) => onSelect(e.target.value as UtilitiesPaymentModel)}
+      >
+        {LONG_TERM_UTILITIES_PAYMENT_OPTIONS.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
+/**
+ * The one segmented toggle used across the wizard (rounds 25–26). Two invariants make it a
+ * peer of the money inputs it sits beside, not a smaller afterthought:
+ *  - **Equal-width segments** — an inline grid with `auto-cols-fr` sizes every column to the
+ *    widest label, so Auto / Set per day is symmetrical instead of hugging each label.
+ *  - **Input height** — `min-h-[44px]` matches the shared field height (`fieldBase`), so a
+ *    row of [toggle][input][input] is one clean line with its labels on a shared baseline.
+ * Built once so it holds on the room, grouped-lease and whole-place panels alike.
+ */
+function SegmentedToggle<T extends string>({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  className,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (next: T) => void;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-grid min-h-[44px] grid-flow-col auto-cols-fr items-stretch rounded-2xl border border-border bg-card p-1",
+        className,
+      )}
+    >
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "flex items-center justify-center rounded-xl px-3 text-center text-xs font-medium transition-colors",
+              active ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -549,7 +507,6 @@ function ProrationMethodFields({
   monthlyRent,
   dailyRentRate,
   dailyUtilitiesRate,
-  utilitiesLabel,
   onMethod,
   onDailyRent,
   onDailyUtilities,
@@ -558,74 +515,149 @@ function ProrationMethodFields({
   monthlyRent: number;
   dailyRentRate?: number;
   dailyUtilitiesRate?: number;
-  utilitiesLabel?: string;
   onMethod: (m: "auto" | "daily_rate") => void;
   onDailyRent: (n: number | undefined) => void;
   onDailyUtilities: (n: number | undefined) => void;
 }) {
+  // Prorated rent: Auto = (rent + utilities) ÷ days in month; "Set per day" bills an
+  // explicit per-day rent AND per-day utilities separately.
   return (
-    <div className="space-y-3">
-      <FieldLabel hint="How first-month rent and utilities are prorated when someone moves in mid-month.">
-        Proration method
-      </FieldLabel>
-      <div className="flex gap-3">
-        {(["auto", "daily_rate"] as const).map((method) => {
-          const active = prorateMethod === method;
-          return (
-            <button
-              key={method}
-              type="button"
-              onClick={() => onMethod(method)}
-              className={`flex-1 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${active ? "border-primary bg-primary/5 font-medium text-primary" : "border-border bg-card text-muted hover:border-border hover:bg-accent/30"}`}
-            >
-              <span className="block font-semibold">
-                {method === "auto" ? "Auto (÷ days in month)" : "Manual daily rate"}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted">
-                {method === "auto"
-                  ? "Remaining days ÷ days in month × monthly rate"
-                  : "Remaining days × your set daily rate"}
-              </span>
-            </button>
-          );
-        })}
+    <div className="flex flex-wrap items-end gap-2">
+      <div>
+        <FieldLabel hint={prorateMethod === "auto" ? "Auto = (rent + utilities) ÷ days in the month." : undefined}>
+          Prorated rent
+        </FieldLabel>
+        <SegmentedToggle
+          ariaLabel="Prorated rent method"
+          value={prorateMethod}
+          onChange={onMethod}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "daily_rate", label: "Set per day" },
+          ]}
+        />
       </div>
-      {prorateMethod === "auto" && monthlyRent > 0 ? (
-        <p className="text-xs text-muted">
-          Example: move-in May 14 → 18/31 × ${monthlyRent} ={" "}
-          <span className="font-semibold text-muted">${((18 / 31) * monthlyRent).toFixed(2)}</span> prorated rent
-        </p>
-      ) : null}
       {prorateMethod === "daily_rate" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <GridField>
-            <FieldLabel>Daily rent rate</FieldLabel>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-              <Input
-                inputMode="decimal"
-                className="pl-8"
-                value={dailyRentRate ?? ""}
-                onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
-                placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
-              />
-            </div>
-          </GridField>
-          <GridField>
-            <FieldLabel>{utilitiesLabel ?? "Daily utilities rate"}</FieldLabel>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-              <Input
-                inputMode="decimal"
-                className="pl-8"
-                value={dailyUtilitiesRate ?? ""}
-                onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
-                placeholder="6"
-              />
-            </div>
-          </GridField>
-        </div>
+        <>
+          <div>
+            <FieldLabel>Rent / day</FieldLabel>
+            <MoneyInput
+              value={dailyRentRate ?? ""}
+              onChange={(e) => onDailyRent(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder={monthlyRent > 0 ? String(Math.ceil(monthlyRent / 30)) : "28"}
+            />
+          </div>
+          <div>
+            <FieldLabel>Utilities / day</FieldLabel>
+            <MoneyInput
+              value={dailyUtilitiesRate ?? ""}
+              onChange={(e) => onDailyUtilities(parseOptionalSanitizedMoneyNumber(e.target.value))}
+              placeholder="6"
+            />
+          </div>
+        </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The dedicated SHORT-TERM section on every rent row (round 20) — room, grouped lease, and
+ * whole-place. It appears only when the listing offers short-term stays and holds an ALL-IN
+ * nightly rent plus a short-term move-in fee and deposit. There is NO utilities control here
+ * by design: the short-term rate is all-in, so a short-term booking never bills a separate
+ * utilities line. Long-term values on the same row are untouched — these are a separate set.
+ */
+function ShortTermRentSection({
+  labelFor,
+  rent,
+  moveInFee,
+  deposit,
+  onRent,
+  onMoveIn,
+  onDeposit,
+  rentInvalid,
+}: {
+  labelFor?: string;
+  rent: string;
+  moveInFee: string;
+  deposit: string;
+  onRent: (sanitized: string) => void;
+  onMoveIn: (sanitized: string) => void;
+  onDeposit: (sanitized: string) => void;
+  rentInvalid?: boolean;
+}) {
+  const suffix = labelFor ? ` for ${labelFor}` : "";
+  return (
+    <div className="w-full rounded-lg border border-dashed border-border bg-accent/10 p-3">
+      <FieldLabel hint="All-in nightly rate — no separate utilities.">Short-term</FieldLabel>
+      <div className="mt-1 flex flex-wrap items-end gap-x-4 gap-y-2">
+        <GridField>
+          <FieldLabel>Rent / night</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term nightly rent${suffix}`}
+            invalid={rentInvalid}
+            value={rent}
+            onChange={(e) => onRent(sanitizeMoneyInput(e.target.value))}
+            placeholder="85"
+          />
+        </GridField>
+        <GridField>
+          <FieldLabel>Move-in fee</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term move-in fee${suffix}`}
+            value={moveInFee}
+            onChange={(e) => onMoveIn(sanitizeMoneyInput(e.target.value))}
+            placeholder="150"
+          />
+        </GridField>
+        <GridField>
+          <FieldLabel>Deposit</FieldLabel>
+          <MoneyInput
+            ariaLabel={`Short-term deposit${suffix}`}
+            value={deposit}
+            onChange={(e) => onDeposit(sanitizeMoneyInput(e.target.value))}
+            placeholder="300"
+          />
+        </GridField>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compact dollar-amount input — a short value should look like one. Fixed narrow
+ * width with an inline `$` affix, used across the Pricing step's amount fields.
+ */
+function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  invalid,
+  ariaLabel,
+  className,
+}: {
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  invalid?: boolean;
+  ariaLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`relative w-full max-w-[11rem] ${className ?? ""}`}>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+      <Input
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        disabled={disabled}
+        className={wizardFieldErrorClass(Boolean(invalid), "pl-7")}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -696,7 +728,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   rooms:       "Bedroom names, floor, furnishing, amenities, and room move-in notes when renting by room.",
   bathrooms:   "Bathroom name, location, and amenities for the public listing.",
   spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
-  lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
+  lease:       "Rent, utilities, lease lengths, deposits, and fees.",
   finish:      "Sidebar quick facts and final submit.",
 };
 
@@ -972,14 +1004,55 @@ async function uploadVideoFile(file: File): Promise<string> {
   return uploadToBucket(file);
 }
 
-function FieldLabel({ children, hint, required }: { children: React.ReactNode; hint?: string; required?: boolean }) {
+/**
+ * Desktop widths open the PropLane Assistant beside the form by default, so the
+ * manager sees it "to the left" without hunting for the collapsed strip; phones
+ * and tablets start collapsed so the fields keep the full width (a two-column
+ * split is worse than the original on a narrow screen). SSR-guarded — the wizard
+ * only mounts on the client, but a `useState` initializer still runs during any
+ * server render of the tree.
+ */
+function prefersAssistantOpenBeside(): boolean {
+  // `matchMedia` is missing under SSR and in jsdom; fall back to collapsed there
+  // (a safe default — the real browser opens it beside the form on desktop).
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
+/**
+ * One field's label. `required` marks a must-fill with a red asterisk;
+ * `optional` prints a muted "Optional" tag so the two are never the same visual
+ * weight (a plain optional input used to look identical to a required select).
+ * Pass at most one of the two.
+ */
+function FieldLabel({
+  children,
+  hint,
+  required,
+  optional,
+}: {
+  children: React.ReactNode;
+  hint?: string;
+  required?: boolean;
+  optional?: boolean;
+}) {
+  // The hint sits INLINE on the same line as the label (round 17) so every field header is
+  // one line tall — this keeps controls laid out in a row on a shared baseline instead of
+  // some being pushed down by a two-line header.
   return (
     <div className="mb-1.5">
-      <p className="text-xs font-semibold text-foreground">
-        {children}
-        {required ? <span className="text-red-600"> *</span> : null}
+      <p className="flex flex-wrap items-baseline gap-x-1.5 text-xs font-semibold text-foreground">
+        <span>
+          {children}
+          {required ? <span className="text-red-600"> *</span> : null}
+        </span>
+        {optional && !required ? (
+          <span className="rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+            Optional
+          </span>
+        ) : null}
+        {hint ? <span className="text-[11px] font-normal text-muted">{hint}</span> : null}
       </p>
-      {hint ? <p className="mt-0.5 text-[11px] text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -987,6 +1060,130 @@ function FieldLabel({ children, hint, required }: { children: React.ReactNode; h
 function StepFieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="mt-1 text-xs font-medium text-red-600">{msg}</p>;
+}
+
+/**
+ * The one checkbox-group used for every preset list (amenities, furniture, …). A
+ * "Select all" checkbox comes FIRST with a real indeterminate state; the presets follow
+ * in a compact borderless grid; "Other" comes LAST and reveals a SMALL input holding ONLY
+ * the custom (non-preset) values — no permanent notes box, nothing echoed. Value is the
+ * stored newline list; the component preserves custom lines when presets toggle and vice
+ * versa. Built once so the same pattern is solved the same way everywhere.
+ */
+function PresetCheckboxGroup({
+  presets,
+  value,
+  onChange,
+  otherForcedOpen,
+  onOtherForcedOpenChange,
+  columns = "sm:grid-cols-2 lg:grid-cols-3",
+  otherPlaceholder = "Other, comma-separated",
+}: {
+  presets: readonly { id: string; label: string }[];
+  value: string;
+  onChange: (nextValue: string) => void;
+  otherForcedOpen: boolean;
+  onOtherForcedOpenChange: (open: boolean) => void;
+  columns?: string;
+  otherPlaceholder?: string;
+}) {
+  const presetLabels = presets.map((p) => p.label);
+  const lines = splitLineList(value);
+  const checked = new Set(lines.filter((l) => presetLabels.includes(l)));
+  const custom = lines.filter((l) => !presetLabels.includes(l));
+  const allChecked = presets.length > 0 && checked.size === presets.length;
+  const someChecked = checked.size > 0 && !allChecked;
+  const otherOpen = otherForcedOpen || custom.length > 0;
+  const write = (nextChecked: Set<string>, nextCustom: string[]) =>
+    onChange([...presetLabels.filter((l) => nextChecked.has(l)), ...nextCustom].join("\n"));
+  return (
+    <>
+      <div className={`mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 ${columns}`}>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 rounded border-border"
+            checked={allChecked}
+            ref={(el) => {
+              if (el) el.indeterminate = someChecked;
+            }}
+            onChange={(e) => write(new Set(e.target.checked ? presetLabels : []), custom)}
+          />
+          <span className="font-medium text-muted">Select all</span>
+        </label>
+        {presets.map((p) => (
+          <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded border-border"
+              checked={checked.has(p.label)}
+              onChange={(e) => {
+                const next = new Set(checked);
+                if (e.target.checked) next.add(p.label);
+                else next.delete(p.label);
+                write(next, custom);
+              }}
+            />
+            <span className="font-medium text-foreground">{p.label}</span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 rounded border-border"
+            checked={otherOpen}
+            onChange={(e) => onOtherForcedOpenChange(e.target.checked)}
+          />
+          <span className="font-medium text-foreground">Other</span>
+        </label>
+      </div>
+      {otherOpen ? (
+        <Input
+          className="mt-2 h-9 text-sm"
+          value={custom.join(", ")}
+          onChange={(e) => write(checked, splitLineList(e.target.value))}
+          placeholder={otherPlaceholder}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The select-all row for a room/item SELECTION group (bundle rooms, shared-space room
+ * access). It is the FIRST checkbox in the grid with a genuine `indeterminate` state and
+ * replaces the old "All rooms" / "Clear rooms" header buttons (round 18): one control that
+ * checks everything, clears everything, and shows the partial state — keyboard and
+ * screen-reader correct, matching PresetCheckboxGroup's own select-all above.
+ */
+function SelectAllCheckbox({
+  allChecked,
+  someChecked,
+  onToggle,
+  label = "Select all",
+  disabled,
+}: {
+  allChecked: boolean;
+  someChecked: boolean;
+  onToggle: (checkAll: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={cn("flex items-center gap-2 text-sm", disabled ? "cursor-default" : "cursor-pointer")}>
+      <input
+        type="checkbox"
+        className="h-4 w-4 shrink-0 rounded border-border disabled:opacity-60"
+        checked={allChecked}
+        disabled={disabled}
+        ref={(el) => {
+          if (el) el.indeterminate = someChecked;
+        }}
+        onChange={(e) => onToggle(e.target.checked)}
+      />
+      <span className="font-medium text-muted">{label}</span>
+    </label>
+  );
 }
 
 /** In CSS grid rows, bottom-aligns the control with siblings when label/hint blocks differ in height. */
@@ -1015,10 +1212,10 @@ function ListingSubsection({
   children: React.ReactNode;
 }) {
   return (
-    <div id={id} className="space-y-4 border-t border-border pt-5">
-      <div>
-        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-        {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
+    <div id={id} className="space-y-5 border-t border-border pt-6 first:border-t-0 first:pt-0">
+      <div className="space-y-1.5">
+        <h4 className="text-[15px] font-semibold tracking-tight text-foreground">{title}</h4>
+        {description ? <p className="text-xs leading-relaxed text-muted">{description}</p> : null}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -1099,7 +1296,9 @@ export function ManagerAddListingForm({
   onSaved?: () => void;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
-    const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
+    const base = initialSubmission
+      ? normalizeManagerListingSubmissionV1(initialSubmission)
+      : createNewListingWizardSubmission();
     if (!noteKey || base.houseRulesText?.trim()) return base;
     const legacy = getPortalListingNote(noteKey);
     return {
@@ -1117,6 +1316,10 @@ export function ManagerAddListingForm({
    */
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
+  /** Mirrors the assistant strip's own open/closed state so the wizard body can
+   * lay out beside it (wide screens) instead of always stacking above it. Opens
+   * to the left by default on desktop; collapsed on narrow screens. */
+  const [assistantExpanded, setAssistantExpanded] = useState(prefersAssistantOpenBeside);
   const resumedStepIndex = clampWizardStep(initialStepIndex);
   const resumedMaxStepReached = Math.max(clampWizardStep(initialMaxStepReached), resumedStepIndex);
   const [stepIndex, setStepIndex] = useState(resumedStepIndex);
@@ -1135,6 +1338,107 @@ export function ManagerAddListingForm({
     return normalized.serviceRequestOptions ?? [];
   });
   const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
+  const [stFeeToggles, setStFeeToggles] = useState<ListingStFeeToggles>(() =>
+    deriveListingStFeeToggles(
+      normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()),
+    ),
+  );
+  const [ltFeeToggles, setLtFeeToggles] = useState<ListingLtFeeToggles>(() =>
+    deriveListingLtFeeToggles(
+      normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()),
+    ),
+  );
+  // Standard "Other fees" rows the manager deleted this session — hidden but re-addable
+  // from the + Add fee menu. Session-only: a removed row also has its amounts cleared, so
+  // on reload it simply reappears empty (an empty fee bills nothing), which is harmless.
+  const [removedFeeRows, setRemovedFeeRows] = useState<Set<ListingFeeRowId>>(() => new Set());
+  // Furnishing is a "Furnished" checkbox (default off = unfurnished). This holds rooms the
+  // manager just checked Furnished on that have no furniture ticked yet (an empty furnished
+  // state the `furnishing` string alone can't represent), plus the furniture we remember so
+  // unchecking + re-checking restores their picks instead of wiping them.
+  const [furnishedOpenRooms, setFurnishedOpenRooms] = useState<Set<string>>(() => new Set());
+  const rememberedFurnitureRef = useRef<Map<string, string>>(new Map());
+  // "Rent by room" is the explicit stored signal that replaced the rental-model dropdown:
+  // checked ⟺ shared-home (rent by bedroom), unchecked ⟺ entire-place (one rent for the
+  // whole unit). Switching to entire-place syncs/zeroes per-room rents, so we remember each
+  // room's pricing here and restore it when the manager switches back — unticking never
+  // destroys amounts already entered.
+  const rememberedRoomPricingRef = useRef<Map<string, Partial<ManagerRoomSubmission>>>(new Map());
+  const handleRentByRoomToggle = (on: boolean) => {
+    clearListingFieldError("listingPlaceCategoryId");
+    clearListingFieldError("monthlyRent");
+    setSub((s) => {
+      if (on) {
+        // → shared-home. Restore any remembered per-room pricing, then clear entire-home fields.
+        const rooms = s.rooms.map((r) => {
+          const remembered = rememberedRoomPricingRef.current.get(r.id);
+          return remembered ? { ...r, ...remembered } : r;
+        });
+        return {
+          ...s,
+          rooms,
+          listingPlaceCategoryId: "shared_home",
+          rentalModelStamp: "shared_home",
+          entireHomeMonthlyRent: undefined,
+          entireHomeUtilitiesEstimate: undefined,
+          entireHomeUtilitiesPaymentModel: undefined,
+          entireHomeProrateMethod: undefined,
+          entireHomeDailyRentRate: undefined,
+          entireHomeDailyUtilitiesRate: undefined,
+        };
+      }
+      // → entire-place. Remember current per-room pricing first (syncEntireHomeRoomPricing
+      // will overwrite it), then seed the whole-home rent from the rooms.
+      for (const r of s.rooms) {
+        rememberedRoomPricingRef.current.set(r.id, {
+          monthlyRent: r.monthlyRent,
+          securityDeposit: r.securityDeposit,
+          utilitiesEstimate: r.utilitiesEstimate,
+          utilitiesPaymentModel: r.utilitiesPaymentModel,
+          prorateMethod: r.prorateMethod,
+          dailyRentRate: r.dailyRentRate,
+          rentBasis: r.rentBasis,
+          dailyRentPrice: r.dailyRentPrice,
+        });
+      }
+      const sum = s.rooms.reduce((acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
+      const rent = (s.entireHomeMonthlyRent ?? 0) > 0 ? s.entireHomeMonthlyRent! : sum > 0 ? sum : s.rooms[0]?.monthlyRent ?? 0;
+      return applyEntireHomeListingPricing(
+        { ...s, listingPlaceCategoryId: "entire_home", rentalModelStamp: "entire_home" },
+        { entireHomeMonthlyRent: rent },
+      );
+    });
+  };
+  // Rooms where the "Other amenities" small text box is revealed even though it is still
+  // empty (the manager just ticked Other). Rooms that already have custom amenity text
+  // read as open without needing to be in this set.
+  const [otherAmenitiesOpenRooms, setOtherAmenitiesOpenRooms] = useState<Set<string>>(() => new Set());
+  const toggleOtherAmenitiesOpen = (roomId: string, on: boolean) =>
+    setOtherAmenitiesOpenRooms((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(roomId);
+      else next.delete(roomId);
+      return next;
+    });
+  const roomIsFurnished = (room: ManagerRoomSubmission): boolean =>
+    furnishedOpenRooms.has(room.id) || roomFurnishingIsFurnished(room.furnishing);
+  const setRoomFurnished = (index: number, room: ManagerRoomSubmission, on: boolean) => {
+    if (on) {
+      const remembered = rememberedFurnitureRef.current.get(room.id);
+      setFurnishedOpenRooms((prev) => new Set(prev).add(room.id));
+      setRoom(index, { furnishing: remembered && remembered.toLowerCase() !== "unfurnished" ? remembered : "" });
+    } else {
+      if (room.furnishing.trim() && room.furnishing.trim().toLowerCase() !== "unfurnished") {
+        rememberedFurnitureRef.current.set(room.id, room.furnishing);
+      }
+      setFurnishedOpenRooms((prev) => {
+        const next = new Set(prev);
+        next.delete(room.id);
+        return next;
+      });
+      setRoom(index, { furnishing: "Unfurnished" });
+    }
+  };
 
   const toggleListingItem = (key: string) => {
     setExpandedListingItems((prev) => {
@@ -1171,22 +1475,6 @@ export function ManagerAddListingForm({
     }),
     [listingPresets],
   );
-  const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
-  const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
-  // RRIO is a Seattle-only registration, so hide it once the address says this is
-  // somewhere else. Still shown while the address is blank (nothing to resolve yet)
-  // and whenever a value is already stored, so an entered number can never be
-  // orphaned behind a hidden input.
-  const showRrioField = useMemo(() => {
-    if (sub.rrioRegistrationNumber?.trim()) return true;
-    if (!sub.address.trim() && !sub.zip.trim()) return true;
-    return (
-      resolveLeaseJurisdiction({
-        submission: { address: sub.address, neighborhood: sub.neighborhood, zip: sub.zip },
-      }) === "seattle"
-    );
-  }, [sub.address, sub.neighborhood, sub.zip, sub.rrioRegistrationNumber]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
   // The draft record this wizard owns. It starts as the resumed draft's id (if
@@ -1219,6 +1507,41 @@ export function ManagerAddListingForm({
   const isFinalStep = stepIndex === lastStepIndex;
   const isPreviewWizard = wizardScope === "preview";
   const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
+  const [savedListingId, setSavedListingId] = useState<string | null>(
+    () => editDraftId?.trim() || editPendingId?.trim() || editListingId?.trim() || editRequestChangeId?.trim() || null,
+  );
+  const listingAssistantContext = useMemo(
+    () =>
+      buildListingModalAssistantContext({
+        wizardTitle: wizardTitlePrefix,
+        stepLabel: LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing",
+        // savedListingId mirrors draftIdRef at every render-observable point
+        // (both start from editDraftId; every ref assignment of a real id also
+        // sets it), and refs must not be read during render (react-hooks/refs).
+        propertyId: savedListingId,
+        submission: sub,
+      }),
+    [wizardTitlePrefix, stepIndex, savedListingId, sub],
+  );
+
+  useEffect(() => {
+    const propertyId = savedListingId ?? draftIdRef.current;
+    if (!propertyId?.trim() || !userId) return;
+    const onAssistantUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<ListingAssistantUpdatedDetail>).detail;
+      if (!detail || detail.propertyId !== propertyId) return;
+      void (async () => {
+        await syncPropertyPipelineFromServer({ userId, force: true });
+        const hit = resolveManagerListingSubmissionForPropertyId(userId, propertyId);
+        if (hit) {
+          setSub(normalizeManagerListingSubmissionV1(hit.sub));
+          showToast("Assistant added photos to your listing.");
+        }
+      })();
+    };
+    window.addEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
+    return () => window.removeEventListener(LISTING_ASSISTANT_UPDATED_EVENT, onAssistantUpdated);
+  }, [savedListingId, showToast, userId]);
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -1294,6 +1617,7 @@ export function ManagerAddListingForm({
   }, []);
 
   const isEntireHome = isEntireHomeListing(sub);
+  const rentByRoom = !isEntireHome;
   const entireHomeRent = entireHomeMonthlyRentAmount(sub);
 
   const clearListingFieldError = (key: string) => {
@@ -1305,8 +1629,95 @@ export function ManagerAddListingForm({
     });
   };
 
+  const longTermLeaseEnabled = useMemo(() => {
+    const longTermTerms = resolveAllowedLeaseTerms(sub).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+    return longTermTerms.length > 0;
+  }, [sub]);
+
+  const handleStFeeToggle = (feeId: ListingFeeRowId, enabled: boolean) => {
+    setStFeeToggles((prev) => ({ ...prev, [feeId]: enabled }));
+    setSub((s) => applyListingStFeeToggle(s, feeId, enabled, ltFeeToggles));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.stField) clearListingFieldError(String(row.stField));
+  };
+
+  const handleStFeeAmount = (feeId: ListingFeeRowId, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingStFeeAmount(s, feeId, sanitized));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.stField) clearListingFieldError(String(row.stField));
+    if (sanitized.trim()) {
+      setStFeeToggles((prev) => ({ ...prev, [feeId]: true }));
+    }
+  };
+
+  const handleLtFeeToggle = (feeId: ListingFeeRowId, enabled: boolean) => {
+    setLtFeeToggles((prev) => ({ ...prev, [feeId]: enabled }));
+    setSub((s) => applyListingLtFeeToggle(s, feeId, enabled, stFeeToggles));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.ltField) clearListingFieldError(String(row.ltField));
+    if (feeId === "rent") clearListingFieldError("monthlyRent");
+  };
+
+  // Delete a standard "Other fees" row entirely: turn both terms off (which clears the
+  // backing amounts via applyListingLtFeeToggle/applyListingStFeeToggle) and hide it. Never
+  // called for "rent" (the core price row is not removable).
+  const handleRemoveStandardRow = (feeId: ListingFeeRowId) => {
+    setSub((s) => {
+      let next = applyListingLtFeeToggle(s, feeId, false, stFeeToggles);
+      next = applyListingStFeeToggle(next, feeId, false, ltFeeToggles);
+      return next;
+    });
+    setLtFeeToggles((prev) => ({ ...prev, [feeId]: false }));
+    setStFeeToggles((prev) => ({ ...prev, [feeId]: false }));
+    setRemovedFeeRows((prev) => {
+      const next = new Set(prev);
+      next.add(feeId);
+      return next;
+    });
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.ltField) clearListingFieldError(String(row.ltField));
+    if (row?.stField) clearListingFieldError(String(row.stField));
+  };
+
+  const handleAddStandardRow = (feeId: ListingFeeRowId) => {
+    setRemovedFeeRows((prev) => {
+      if (!prev.has(feeId)) return prev;
+      const next = new Set(prev);
+      next.delete(feeId);
+      return next;
+    });
+  };
+
+  const handleLtFeeAmount = (field: keyof ManagerListingSubmissionV1, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingLtFeeAmount(s, field, sanitized));
+    clearListingFieldError(String(field));
+    if (field === "entireHomeMonthlyRent") {
+      clearListingFieldError("monthlyRent");
+      if (sanitized.trim() && sanitized !== ".") {
+        setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+      }
+    } else {
+      const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.ltField === field);
+      if (row && sanitized.trim()) {
+        setLtFeeToggles((prev) => ({ ...prev, [row.id]: true }));
+      }
+    }
+  };
+
+  const handleLtFeeAmountForRow = (feeId: ListingFeeRowId, amount: string) => {
+    const sanitized = sanitizeMoneyInput(amount);
+    setSub((s) => applyListingLtFeeAmountForRow(s, feeId, sanitized));
+    const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
+    if (row?.ltField) clearListingFieldError(String(row.ltField));
+    if (sanitized.trim()) {
+      setLtFeeToggles((prev) => ({ ...prev, [feeId]: true }));
+    }
+  };
+
   const validateListingStep = (i: number): Record<string, string> =>
-    validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+    validateListingWizardStep(i, sub, { isEditMode, entireHomeRent, stFeeToggles, ltFeeToggles });
 
   const goNext = () => {
     const errs = validateListingStep(stepIndex);
@@ -1601,35 +2012,11 @@ export function ManagerAddListingForm({
   };
 
   const addBundle = () => {
-    const next = emptyBundleRow();
+    // A custom bundle is a group offering — seed it with the group_bundle defaults
+    // (utilities model + estimate; deposit fills once a rent is entered).
+    const next = applyListingFeeContextDefaults(emptyBundleRow(), "group_bundle", 0);
     expandListingItem(listingItemKey("bundle", next.id));
     setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), next] }));
-  };
-
-  const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
-    setSub((s) => {
-      if (s.rooms.length === 0) return s;
-      const namedRooms = s.rooms.filter((room) => room.name.trim());
-      const includedRoomIds =
-        kind === "whole_house"
-          ? s.rooms.map((room) => room.id)
-          : namedRooms.slice(0, Math.min(2, namedRooms.length)).map((room) => room.id);
-      if (kind === "multi_room" && includedRoomIds.length < 2) return s;
-      const row: ManagerBundleRow = {
-        ...emptyBundleRow(),
-        label: kind === "whole_house" ? "Whole house lease" : "Group lease bundle",
-        price: bundleRentLabel(includedRoomIds, s.rooms, entireHomeMonthlyRentAmount(s)),
-        strikethrough: "",
-        promo:
-          kind === "whole_house"
-            ? "Rent the full home as one lease — all rooms included."
-            : "Select any rooms that can be rented together.",
-        roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
-        includedRoomIds,
-      };
-      expandListingItem(listingItemKey("bundle", row.id));
-      return { ...s, bundles: [...(s.bundles ?? []), row] };
-    });
   };
 
   const removeBundle = (i: number) => {
@@ -1644,7 +2031,6 @@ export function ManagerAddListingForm({
       const bundles = [...(s.bundles ?? [])];
       const cur = bundles[bundleIndex];
       if (!cur) return s;
-      const named = s.rooms.filter((r) => r.name.trim());
       const includedRoomIds = mode === "all_named" ? s.rooms.map((r) => r.id) : [];
       bundles[bundleIndex] = {
         ...cur,
@@ -1961,58 +2347,8 @@ export function ManagerAddListingForm({
     }));
   };
 
-  const onPickPropertyFloorPlan = async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("Images only for floor plans.");
-      return;
-    }
-    try {
-      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
-      if (!url) {
-        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
-        return;
-      }
-      setSub((s) => ({ ...s, propertyFloorPlanDataUrl: url }));
-    } catch {
-      showToast("Could not process image. Please try a different file.");
-    }
-  };
-
-  const clearPropertyFloorPlan = () => {
-    setSub((s) => ({ ...s, propertyFloorPlanDataUrl: null }));
-  };
-
-  const onPickFloorPlanForLabel = async (floorLabel: string, files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showToast("Images only for floor plans.");
-      return;
-    }
-    try {
-      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
-      if (!url) {
-        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
-        return;
-      }
-      setSub((s) => ({
-        ...s,
-        floorPlanByLabel: { ...(s.floorPlanByLabel ?? {}), [floorLabel]: url },
-      }));
-    } catch {
-      showToast("Could not process image. Please try a different file.");
-    }
-  };
-
-  const removeFloorPlanForLabel = (floorLabel: string) => {
-    setSub((s) => {
-      const next = { ...(s.floorPlanByLabel ?? {}) };
-      delete next[floorLabel];
-      return { ...s, floorPlanByLabel: Object.keys(next).length > 0 ? next : undefined };
-    });
-  };
+  // Floor-plan upload handlers removed with the Floor plans section (data intentionally
+  // kept on the submission: propertyFloorPlanDataUrl + floorPlanByLabel).
 
   const clearRoomVideo = (roomIndex: number) => {
     const roomId = sub.rooms[roomIndex]?.id;
@@ -2220,6 +2556,7 @@ export function ManagerAddListingForm({
       }
       setDraftSaveError(null);
       draftIdRef.current = savedId;
+      setSavedListingId(savedId);
       onSaved?.();
       const droppedAttachments = droppedAttachmentsRef.current;
       droppedAttachmentsRef.current = false;
@@ -2415,25 +2752,453 @@ export function ManagerAddListingForm({
 
   if (!mounted) return null;
 
+  // ── Unified Fees UI sections ──
+  // Rooms and Bundles are folded into the Pricing step's "Fees" subsection so the whole
+  // screen reads as one sectioned table (Rooms | Bundles + Other fees) instead of the old
+  // separate floating blocks. Each room and each bundle carries its own dropdown with rent
+  // (rooms) / price (bundles), security deposit, and utilities (fixed cost vs resident pays).
+  // Rent by room ON (shared-home) ALWAYS lists every room as its own rent row — the primary
+  // content of this view. (Previously gated on longTermLeaseEnabled, which hid the rows on a
+  // listing with no long-term term and left only the grouped-leases affordance showing.)
+  const roomsFeeSection: FeeExpandableSection | null =
+    rentByRoom
+      ? {
+          key: "rooms",
+          title: "Rooms",
+          hint: "Each room's rent, deposit, and utilities.",
+          rows: sub.rooms.map((room, i) => {
+            const roomRentKey = listingRoomRentKey(room.id);
+            const roomRentErr = stepFieldErrors[roomRentKey];
+            const roomDailyRentErr = stepFieldErrors[listingRoomDailyRentKey(room.id)];
+            const roomLabel = room.name.trim() || `Room ${i + 1}`;
+            const priced = listingRoomHasRent(room);
+            const utilModel = resolveRoomUtilitiesPaymentModel(room);
+            const utilShort = utilModel === "tenant_direct" ? "Paid by resident" : "Payment amount";
+            const priceKey = listingItemKey("roomPrice", room.id);
+            const expanded = priced
+              ? isListingItemExpanded(priceKey) || Boolean(roomRentErr || roomDailyRentErr)
+              : true;
+            return {
+              id: room.id,
+              title: roomLabel,
+              summary: `${priced ? roomHeadlinePriceLabel(room) : "Rent not set"} · ${utilShort}`,
+              shortTermSummary: (room.shortTermRent ?? "").replace(/^\$/, "").trim()
+                ? `$${(room.shortTermRent ?? "").replace(/^\$/, "").trim()}/night`
+                : undefined,
+              expanded,
+              onToggle: () => toggleListingItem(priceKey),
+              onRemove: sub.rooms.length > 1 ? () => removeRoom(i) : undefined,
+              hasError: Boolean(roomRentErr || roomDailyRentErr || stepFieldErrors.monthlyRent),
+              toggleDataAttr: `listing-room-price-toggle-${room.id}`,
+              detail: (
+                <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+                  <GridField>
+                    <FieldLabel>Monthly rent *</FieldLabel>
+                    <div data-wizard-field={roomRentKey}>
+                      <MoneyInput
+                        invalid={Boolean(roomRentErr || stepFieldErrors.monthlyRent)}
+                        ariaLabel={`Monthly rent for ${roomLabel}`}
+                        value={room.monthlyRent || ""}
+                        onChange={(e) => {
+                          clearListingFieldError("monthlyRent");
+                          clearListingFieldError(roomRentKey);
+                          expandListingItem(priceKey);
+                          setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
+                          if (parseSanitizedMoneyNumber(e.target.value) > 0) {
+                            setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+                          }
+                        }}
+                        placeholder="800"
+                      />
+                      <StepFieldError msg={roomRentErr} />
+                    </div>
+                  </GridField>
+                  <GridField>
+                    <FieldLabel>Security deposit</FieldLabel>
+                    <MoneyInput
+                      ariaLabel={`Security deposit for ${roomLabel}`}
+                      value={(room.securityDeposit ?? "").replace(/^\$/, "").trim()}
+                      onChange={(e) => setRoom(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="1000"
+                    />
+                  </GridField>
+                  <GridField>
+                    <FieldLabel>Move-in fee</FieldLabel>
+                    <MoneyInput
+                      ariaLabel={`Move-in fee for ${roomLabel}`}
+                      value={(room.moveInFee ?? "").replace(/^\$/, "").trim()}
+                      onChange={(e) => setRoom(i, { moveInFee: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="250"
+                    />
+                  </GridField>
+                  <GridField>
+                    {/* Picker + amount on one inline row (no inference: who-pays is set only
+                        by the picker, so no billing change). */}
+                    <div className="flex flex-wrap items-end gap-2">
+                      <LongTermUtilitiesPaymentPicker
+                        value={room.utilitiesPaymentModel}
+                        onSelect={(model) =>
+                          setRoom(i, {
+                            utilitiesPaymentModel: model,
+                            ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                          })
+                        }
+                      />
+                      {longTermUtilitiesEstimateRequired(room.utilitiesPaymentModel) ? (
+                        <MoneyInput
+                          ariaLabel={`Utilities amount for ${roomLabel}`}
+                          value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                          onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                          placeholder="175"
+                        />
+                      ) : null}
+                    </div>
+                  </GridField>
+                  <div className="w-full">
+                    <ProrationMethodFields
+                      prorateMethod={room.prorateMethod ?? "auto"}
+                      monthlyRent={room.monthlyRent}
+                      dailyRentRate={room.dailyRentRate}
+                      dailyUtilitiesRate={room.dailyUtilitiesRate}
+                      onMethod={(m) => setRoom(i, { prorateMethod: m })}
+                      onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
+                      onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
+                    />
+                  </div>
+                  {sub.shortTermRentalsAllowed ? (
+                    <ShortTermRentSection
+                      labelFor={roomLabel}
+                      rent={(room.shortTermRent ?? "").replace(/^\$/, "").trim()}
+                      moveInFee={(room.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                      deposit={(room.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                      onRent={(v) => setRoom(i, { shortTermRent: v })}
+                      onMoveIn={(v) => setRoom(i, { shortTermMoveInFee: v })}
+                      onDeposit={(v) => setRoom(i, { shortTermDeposit: v })}
+                    />
+                  ) : null}
+                </div>
+              ),
+            };
+          }),
+        }
+      : null;
+
+  // Grouped leases always render, regardless of Rent-by-room (round 18 #1): rent-by-room OFF
+  // shows this as the primary way to price the place, ON keeps it as the grouping affordance.
+  const bundlesFeeSection: FeeExpandableSection | null = true
+    ? {
+        key: "bundles",
+        title: "Grouped leases",
+        hint: "Optional — rent several rooms together on one lease.",
+        // No emptyHint: the header hint already says this; a second copy read as a duplicate.
+        emptyHint: undefined,
+        toolbar: (
+          <>
+            {/* Grouping is folded into the rent-by-room view as one small affordance instead
+                of the old Whole house / Group / Custom pill row. A group can cover any rooms —
+                pick all of them for a whole-house lease. */}
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-xs"
+              onClick={addBundle}
+              disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
+            >
+              + Group rooms
+            </Button>
+          </>
+        ),
+        rows: (sub.bundles ?? []).map((bundle) => {
+          const i = (sub.bundles ?? []).findIndex((b) => b.id === bundle.id);
+          const selectedIds = new Set(bundle.includedRoomIds ?? []);
+          const namedRooms = sub.rooms.filter((r) => r.name.trim());
+          const selectedRooms = namedRooms.filter((r) => selectedIds.has(r.id));
+          const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
+          const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
+          const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
+          const stNightlyKey = `bundle-${bundle.id}-shortTermNightlyRent`;
+          const stNightlyErr = stepFieldErrors[stNightlyKey];
+          const stPriceHint = bundleShortTermPriceLabel(bundle, sub);
+          return {
+            id: bundle.id,
+            title: bundle.label.trim() || `Package ${i + 1}`,
+            summary: [
+              `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
+              rentSum > 0 ? `$${rentSum}/mo base` : null,
+              hasManualPrice ? "Custom price" : null,
+              bundle.shortTermEnabled && stPriceHint ? stPriceHint : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            expanded: isListingItemExpanded(listingItemKey("bundle", bundle.id)),
+            onToggle: () => toggleListingItem(listingItemKey("bundle", bundle.id)),
+            onRemove: () => removeBundle(i),
+            toggleDataAttr: `listing-bundle-toggle-${bundle.id}`,
+            detail: (
+              <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+                <GridField>
+                  <FieldLabel>Bundle name</FieldLabel>
+                  <Input
+                    value={bundle.label}
+                    onChange={(e) => setBundle(i, { label: sanitizePlaceNameInput(e.target.value) })}
+                    placeholder="Whole house lease, Rooms A+B"
+                  />
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                    <Input
+                      inputMode="decimal"
+                      className="pl-8"
+                      value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                      onChange={(e) => setBundle(i, { price: sanitizeMoneyInput(e.target.value) })}
+                      placeholder={rentSum > 0 ? String(rentSum) : "4500"}
+                    />
+                  </div>
+                </GridField>
+                <GridField>
+                  <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                    <Input
+                      inputMode="decimal"
+                      className="pl-8"
+                      value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                      onChange={(e) => setBundle(i, { strikethrough: sanitizeMoneyInput(e.target.value) })}
+                      placeholder="4800"
+                    />
+                  </div>
+                </GridField>
+                <GridField>
+                  <FieldLabel>Security deposit</FieldLabel>
+                  <MoneyInput
+                    ariaLabel={`Security deposit for ${bundle.label.trim() || "bundle"}`}
+                    value={(bundle.securityDeposit ?? "").replace(/^\$/, "").trim()}
+                    onChange={(e) => setBundle(i, { securityDeposit: sanitizeMoneyInput(e.target.value) })}
+                    placeholder="1500"
+                  />
+                </GridField>
+                <GridField>
+                  <FieldLabel>Move-in fee</FieldLabel>
+                  <MoneyInput
+                    ariaLabel={`Move-in fee for ${bundle.label.trim() || "bundle"}`}
+                    value={(bundle.moveInFee ?? "").replace(/^\$/, "").trim()}
+                    onChange={(e) => setBundle(i, { moveInFee: sanitizeMoneyInput(e.target.value) })}
+                    placeholder="250"
+                  />
+                </GridField>
+                <GridField>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <LongTermUtilitiesPaymentPicker
+                      value={bundle.utilitiesPaymentModel}
+                      onSelect={(model) =>
+                        setBundle(i, {
+                          utilitiesPaymentModel: model,
+                          ...(model === "tenant_direct" ? { utilitiesEstimate: "" } : {}),
+                        })
+                      }
+                    />
+                    {longTermUtilitiesEstimateRequired(bundle.utilitiesPaymentModel) ? (
+                      <MoneyInput
+                        ariaLabel={`Utilities amount for ${bundle.label.trim() || "bundle"}`}
+                        value={(bundle.utilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                        onChange={(e) => setBundle(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                        placeholder="200"
+                      />
+                    ) : null}
+                  </div>
+                </GridField>
+                {sub.shortTermRentalsAllowed ? (
+                  <ShortTermRentSection
+                    labelFor={bundle.label.trim() || "bundle"}
+                    rentInvalid={Boolean(stNightlyErr)}
+                    rent={(bundle.shortTermNightlyRent ?? "").replace(/^\$/, "").trim()}
+                    moveInFee={(bundle.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                    deposit={(bundle.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                    onRent={(v) => {
+                      clearListingFieldError(stNightlyKey);
+                      setBundle(i, { shortTermNightlyRent: v, shortTermEnabled: v.trim() !== "" });
+                    }}
+                    onMoveIn={(v) => setBundle(i, { shortTermMoveInFee: v })}
+                    onDeposit={(v) => setBundle(i, { shortTermDeposit: v })}
+                  />
+                ) : null}
+                <div className="w-full">
+                  <FieldLabel>Rooms in this bundle</FieldLabel>
+                </div>
+                <div className="w-full">
+                  <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {sub.rooms.length > 0 ? (
+                      <SelectAllCheckbox
+                        allChecked={sub.rooms.every((r) => selectedIds.has(r.id))}
+                        someChecked={selectedIds.size > 0 && !sub.rooms.every((r) => selectedIds.has(r.id))}
+                        onToggle={(checkAll) => applyBundleRoomScope(i, checkAll ? "all_named" : "none")}
+                        label="All rooms"
+                      />
+                    ) : null}
+                    {sub.rooms.map((room) => (
+                      <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={selectedIds.has(room.id)}
+                          onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
+                        />
+                        <span className="min-w-0 font-medium text-foreground">
+                          <span className="truncate">{roomLabelForBundle(room)}</span>
+                          {room.monthlyRent > 0 ? (
+                            <span className="ml-1 tabular-nums text-xs font-normal text-muted">· ${room.monthlyRent}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ),
+          };
+        }),
+      }
+    : null;
+
+  // Entire-home rent now lives in the Rent section as its own "Whole place" row (round 27),
+  // not in Other fees. It carries the whole-place monthly rent plus utilities & proration
+  // (folded in from the old standalone block). Removing it routes through the SAME
+  // removedFeeRows("rent") flag the fees table used, and "+ Add rent" comes back here in the
+  // Rent section — never in Other fees — so a manager who removes rent is never stranded.
+  const wholePlaceRentRemoved = removedFeeRows.has("rent");
+  const wholePlaceKey = listingItemKey("wholeplace", "main");
+  const entireHomeUtilShort =
+    sub.entireHomeUtilitiesPaymentModel === "tenant_direct"
+      ? "Paid by resident"
+      : sub.entireHomeUtilitiesPaymentModel === "included_in_rent"
+        ? "Utilities included"
+        : "Payment amount";
+  const wholePlaceFeeSection: FeeExpandableSection | null = isEntireHome
+    ? {
+        key: "wholeplace",
+        title: "Whole place",
+        hint: "One lease for the entire place.",
+        toolbar: wholePlaceRentRemoved ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full text-xs"
+            onClick={() => handleAddStandardRow("rent")}
+          >
+            + Add rent
+          </Button>
+        ) : undefined,
+        emptyHint: wholePlaceRentRemoved ? "Rent removed — add it back to set a price and publish." : undefined,
+        rows: wholePlaceRentRemoved
+          ? []
+          : [
+              {
+                id: "whole-place",
+                title: "Whole place lease",
+                summary: `${entireHomeRent > 0 ? `$${entireHomeRent}/mo` : "Rent not set"} · ${entireHomeUtilShort}`,
+                expanded: isListingItemExpanded(wholePlaceKey) || Boolean(stepFieldErrors.monthlyRent),
+                onToggle: () => toggleListingItem(wholePlaceKey),
+                onRemove: () => handleRemoveStandardRow("rent"),
+                hasError: Boolean(stepFieldErrors.monthlyRent),
+                toggleDataAttr: "listing-wholeplace-toggle",
+                detail: (
+                  <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+                    <GridField>
+                      <FieldLabel>Monthly rent *</FieldLabel>
+                      <div data-wizard-field="monthlyRent">
+                        <MoneyInput
+                          invalid={Boolean(stepFieldErrors.monthlyRent)}
+                          ariaLabel="Monthly rent for the whole place"
+                          value={entireHomeRent || ""}
+                          onChange={(e) => {
+                            clearListingFieldError("monthlyRent");
+                            expandListingItem(wholePlaceKey);
+                            const n = parseSanitizedMoneyNumber(e.target.value);
+                            setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: n }));
+                            if (n > 0) setLtFeeToggles((prev) => ({ ...prev, rent: true }));
+                          }}
+                          placeholder="4500"
+                        />
+                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
+                      </div>
+                    </GridField>
+                    {longTermLeaseEnabled ? (
+                      <>
+                        <GridField>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <LongTermUtilitiesPaymentPicker
+                              value={sub.entireHomeUtilitiesPaymentModel}
+                              onSelect={(model) =>
+                                setSub((s) =>
+                                  applyEntireHomeListingPricing(s, {
+                                    entireHomeUtilitiesPaymentModel: model,
+                                    ...(model === "tenant_direct" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                                  }),
+                                )
+                              }
+                            />
+                            {longTermUtilitiesEstimateRequired(sub.entireHomeUtilitiesPaymentModel) ? (
+                              <MoneyInput
+                                ariaLabel="Utilities amount (whole home)"
+                                value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                onChange={(e) =>
+                                  setSub((s) =>
+                                    applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }),
+                                  )
+                                }
+                                placeholder="175"
+                              />
+                            ) : null}
+                          </div>
+                        </GridField>
+                        <div className="w-full">
+                          <ProrationMethodFields
+                            prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
+                            monthlyRent={entireHomeRent}
+                            dailyRentRate={sub.entireHomeDailyRentRate}
+                            dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
+                            onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
+                            onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
+                            onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ),
+              },
+            ],
+      }
+    : null;
+
+  const feeExpandableSections: FeeExpandableSection[] = [
+    wholePlaceFeeSection,
+    roomsFeeSection,
+    bundlesFeeSection,
+  ].filter((s): s is FeeExpandableSection => s !== null);
+
   return createPortal(
     <div
       className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
     >
-      <form
+      {/* A plain container, not a <form>: the PropLane Assistant embedded in the
+          body has its own <form> for the chat composer, and a form-in-form is
+          invalid HTML that throws a hydration error whenever the assistant is
+          open (now the default on desktop). Continue / Submit are onClick buttons,
+          so nothing here relied on form submission. */}
+      <div
         id="manager-add-listing-form"
-        onSubmit={(e) => e.preventDefault()}
         onClick={(e) => e.stopPropagation()}
-        className="modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
+        className="modal-panel @container relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
       >
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-                Step {visibleStepPosition + 1} of {visibleStepCount}
-              </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
                 {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
@@ -2448,52 +3213,55 @@ export function ManagerAddListingForm({
             </button>
           </div>
 
-          {/* Step pills — jump only to steps already reached via Continue */}
-          <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-            <div className="flex min-w-max gap-1.5">
+          {/* The single progress + navigation signal (replaces the old
+              "STEP X OF 6" line + duplicate progress bar). A completed step
+              shows a ✓ and stays clickable; the current step is filled; a step
+              not yet reached is visible but disabled, so the wizard never styles
+              a jump the manager cannot actually make. */}
+          <nav aria-label="Listing steps" className="mt-3 -mx-1 overflow-x-auto px-1 [-webkit-overflow-scrolling:touch]">
+            <ol className="flex min-w-max items-center gap-1">
               {wizardSteps.map((i, pillPos) => {
                 const step = LISTING_FORM_STEPS[i]!;
                 const reachable = canNavigateToWizardStep(i, maxStepReached);
+                const isCurrent = i === stepIndex;
                 const completed = pillPos < visibleStepPosition;
                 return (
-                <button
-                  key={step.id}
-                  type="button"
-                  disabled={!reachable}
-                  // The pills are the wizard's only step indicator, so the current
-                  // one must be exposed to assistive tech (and to anything reading
-                  // the resumed step of a saved draft), not signalled by colour alone.
-                  aria-current={i === stepIndex ? "step" : undefined}
-                  onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                    i === stepIndex
-                      ? "bg-primary/10 text-primary"
-                      : completed
-                        ? "text-muted hover:bg-accent/30"
-                        : reachable
-                          ? "text-muted hover:bg-accent/30"
-                          : "cursor-not-allowed text-slate-300"
-                  }`}
-                >
-                  <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
-                    completed ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-accent/30 text-muted" : "bg-accent/30 text-muted"
-                  }`}>
-                    {completed ? "✓" : pillPos + 1}
-                  </span>
-                  {step.label}
-                </button>
-              );
+                  <li key={step.id} className="flex items-center">
+                    <button
+                      type="button"
+                      disabled={!reachable}
+                      aria-current={isCurrent ? "step" : undefined}
+                      onClick={() => { if (reachable) { setStepFieldErrors({}); setStepIndex(i); } }}
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 rounded-full py-1.5 pl-1.5 pr-3 text-xs font-semibold transition",
+                        isCurrent
+                          ? "bg-primary/10 text-primary"
+                          : completed
+                            ? "text-foreground hover:bg-accent/40"
+                            : reachable
+                              ? "text-muted hover:bg-accent/40"
+                              : "cursor-default text-muted/45",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                          completed
+                            ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]"
+                            : isCurrent
+                              ? "bg-primary text-white"
+                              : "border border-border text-muted/60",
+                        )}
+                      >
+                        {completed ? "✓" : pillPos + 1}
+                      </span>
+                      {step.label}
+                    </button>
+                  </li>
+                );
               })}
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${((visibleStepPosition + 1) / visibleStepCount) * 100}%` }}
-            />
-          </div>
+            </ol>
+          </nav>
 
           {/* Step blurb */}
           <p className="mt-3 text-[12px] leading-relaxed text-muted">
@@ -2501,18 +3269,35 @@ export function ManagerAddListingForm({
           </p>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 sm:px-6">
+        {/* `@container` lives on the panel <div> above (a container cannot query
+            its own size for its own layout), so this row/column switch can react
+            to how much space the panel actually has. */}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1",
+            assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
+          )}
+        >
+        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-6 sm:px-6">
+          {/* Content FILLS the modal width (padding on the scroll container provides the
+              margins). A max-width column here centered wide children and clipped them on
+              both edges against the panel's overflow-hidden — do not reintroduce it. */}
+          <div className="w-full min-w-0">
           {/* ── Step 0: Home ── */}
           {stepIndex === 0 ? (
           <FormSection
             id="edit-building"
             title="Tell us about your place"
-            description="Type the address to autofill ZIP and neighborhood. Everything can be changed later."
+            description="The essentials for your listing, grouped into a few short sections. You can change anything here later."
             compact
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <ListingSubsection
+              title="Address & property type"
+              description="Where the place is and what kind of home it is. Choosing an address result fills in ZIP and neighborhood for you."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <div data-wizard-field="listingPropertyTypeId" className={wizardSectionErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId))}>
-                <FieldLabel>Property type *</FieldLabel>
+                <FieldLabel required>Property type</FieldLabel>
                 <Select
                   aria-label="Property type"
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.listingPropertyTypeId), selectInputCls)}
@@ -2533,7 +3318,7 @@ export function ManagerAddListingForm({
               </div>
 
               <div data-wizard-field="buildingName">
-                <FieldLabel>Building name</FieldLabel>
+                <FieldLabel optional>Building name</FieldLabel>
                 <Input
                   value={sub.buildingName}
                   onChange={(e) => {
@@ -2541,13 +3326,13 @@ export function ManagerAddListingForm({
                     setSub((s) => ({ ...s, buildingName: sanitizeBuildingNameInput(e.target.value) }));
                   }}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.buildingName), listingTextInputCls)}
-                  placeholder="Optional"
+                  placeholder="e.g. Maple Court"
                 />
                 <StepFieldError msg={stepFieldErrors.buildingName} />
               </div>
 
               <div className="relative z-20 sm:col-span-2" data-wizard-field="address">
-                <FieldLabel>Street address *</FieldLabel>
+                <FieldLabel required hint="Start typing to search. Choosing a result fills in ZIP and neighborhood below.">Street address</FieldLabel>
                 <ListingAddressAutocomplete
                   value={sub.address}
                   className={wizardFieldErrorClass(Boolean(stepFieldErrors.address), listingTextInputCls)}
@@ -2574,7 +3359,7 @@ export function ManagerAddListingForm({
               </div>
 
               <GridField>
-                <FieldLabel>ZIP *</FieldLabel>
+                <FieldLabel required hint="Fills in from the address. Edit if it is off.">ZIP</FieldLabel>
                 <div data-wizard-field="zip">
                   <Input
                     value={sub.zip}
@@ -2591,7 +3376,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Neighborhood</FieldLabel>
+                <FieldLabel optional hint="Fills in from the address. Edit if it is off.">Neighborhood</FieldLabel>
                 <div data-wizard-field="neighborhood">
                   <Input
                     value={sub.neighborhood}
@@ -2605,9 +3390,16 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.neighborhood} />
                 </div>
               </GridField>
+              </div>
+            </ListingSubsection>
 
+            <ListingSubsection
+              title="Size & layout"
+              description="How big the home is and how it is laid out."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <GridField>
-                <FieldLabel>Floors *</FieldLabel>
+                <FieldLabel required>Floors</FieldLabel>
                 <div data-wizard-field="listingStoriesId">
                   <Select
                     aria-label="Number of floors"
@@ -2629,7 +3421,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Bathrooms *</FieldLabel>
+                <FieldLabel required>Bathrooms</FieldLabel>
                 <div data-wizard-field="listingTotalBathroomsId">
                   <Select
                     aria-label="Total bathrooms"
@@ -2651,7 +3443,7 @@ export function ManagerAddListingForm({
                 </div>
               </GridField>
               <GridField>
-                <FieldLabel>Bedrooms *</FieldLabel>
+                <FieldLabel required>Bedrooms</FieldLabel>
                 <div data-wizard-field="listingBedroomSlots">
                   <Select
                     aria-label="Bedrooms for rent"
@@ -2671,7 +3463,7 @@ export function ManagerAddListingForm({
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
               </GridField>
-              <div className="flex items-end pb-1">
+              <div className="flex items-end pb-2.5">
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                   <input
                     type="checkbox"
@@ -2682,9 +3474,16 @@ export function ManagerAddListingForm({
                   Pet-friendly
                 </label>
               </div>
+              </div>
+            </ListingSubsection>
 
+            <ListingSubsection
+              title="Description & move-in"
+              description="What a renter reads on the listing, plus how they get in on move-in day."
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <FieldLabel>Listing tagline</FieldLabel>
+                <FieldLabel optional>Listing tagline</FieldLabel>
                 <Input
                   value={sub.tagline}
                   onChange={(e) => setSub((s) => ({ ...s, tagline: e.target.value }))}
@@ -2693,7 +3492,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel>House overview</FieldLabel>
+                <FieldLabel optional>House overview</FieldLabel>
                 <Textarea
                   rows={3}
                   value={sub.houseOverview}
@@ -2703,7 +3502,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Optional — only if the layout is unusual.">Extra layout note</FieldLabel>
+                <FieldLabel optional hint="Only if the layout is unusual.">Extra layout note</FieldLabel>
                 <Input
                   value={sub.homeStructureNote}
                   onChange={(e) => setSub((s) => ({ ...s, homeStructureNote: e.target.value }))}
@@ -2712,7 +3511,7 @@ export function ManagerAddListingForm({
                 />
               </div>
               <div className="sm:col-span-2">
-                <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                <FieldLabel optional hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
                 <Textarea
                   rows={4}
                   value={sub.houseMoveInInstructions ?? ""}
@@ -2721,70 +3520,6 @@ export function ManagerAddListingForm({
                   placeholder="Where to pick up keys, parking spot, gate codes, move-in window…"
                 />
               </div>
-            </div>
-
-            <div className="mt-4">
-            <ListingSubsection
-              title="Compliance details"
-              description="Building facts we use to decide which disclosures belong in this property's lease. Every field is optional, and leaving one blank never blocks publishing."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-              <GridField>
-                <FieldLabel hint="Optional — homes built before 1978 need a lead-based paint disclosure with the lease. Leave blank if you are not sure; we will not guess.">
-                  Year built
-                </FieldLabel>
-                <Input
-                  value={sub.yearBuilt === undefined ? "" : String(sub.yearBuilt)}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-                    setSub((s) => ({ ...s, yearBuilt: digits ? Number(digits) : undefined }));
-                  }}
-                  className={listingTextInputCls}
-                  inputMode="numeric"
-                  placeholder="e.g. 1962"
-                />
-              </GridField>
-              <GridField>
-                <FieldLabel hint="Optional — the date the building was first approved for occupancy, if you have it.">
-                  Certificate of occupancy date
-                </FieldLabel>
-                <DateField
-                  value={sub.certificateOfOccupancyDate ?? ""}
-                  onChange={(iso) => setSub((s) => ({ ...s, certificateOfOccupancyDate: iso || undefined }))}
-                  className={listingTextInputCls}
-                />
-              </GridField>
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={sub.sharedUtilityMetering === true}
-                  onChange={(e) => setSub((s) => ({ ...s, sharedUtilityMetering: e.target.checked || undefined }))}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                />
-                A resident&rsquo;s utility meter also serves areas outside their unit
-              </label>
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={sub.hasPeriodicPestService === true}
-                  onChange={(e) => setSub((s) => ({ ...s, hasPeriodicPestService: e.target.checked || undefined }))}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-                />
-                The property is on a contracted periodic pest control service
-              </label>
-              {showRrioField ? (
-                <div className="sm:col-span-2">
-                  <FieldLabel hint="Optional — Seattle properties only. The city's Rental Registration and Inspection Ordinance number.">
-                    Seattle RRIO registration number
-                  </FieldLabel>
-                  <Input
-                    value={sub.rrioRegistrationNumber ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, rrioRegistrationNumber: e.target.value }))}
-                    className={listingTextInputCls}
-                    placeholder="e.g. RRIO-123456"
-                  />
-                </div>
-              ) : null}
               </div>
             </ListingSubsection>
 
@@ -2847,255 +3582,76 @@ export function ManagerAddListingForm({
               description="What shows in the main amenities table on the listing. Kitchen gear, shared desks, and TV belong under Shared spaces; bathroom finishes under Bathrooms."
             >
               <div>
-                <FieldLabel hint="Tap all that apply.">Common amenities</FieldLabel>
-                <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {dedupedPresets.houseWide.map((p) => {
-                    const on = splitLineList(sub.amenitiesText).includes(p.label);
-                    return (
-                      <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={on}
-                          onChange={(e) =>
-                            setSub((s) => ({
-                              ...s,
-                              amenitiesText: mergeToggleLine(s.amenitiesText, p.label, e.target.checked),
-                            }))
-                          }
-                        />
-                        <span className="font-medium text-foreground">{p.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <Textarea
-                  className="mt-2"
-                  rows={2}
+                <FieldLabel>Common amenities</FieldLabel>
+                <PresetCheckboxGroup
+                  presets={dedupedPresets.houseWide}
                   value={sub.amenitiesText}
-                  onChange={(e) => setSub((s) => ({ ...s, amenitiesText: e.target.value }))}
-                  placeholder="Add custom amenities not listed above (one per line)."
+                  onChange={(v) => setSub((s) => ({ ...s, amenitiesText: v }))}
+                  otherForcedOpen={otherAmenitiesOpenRooms.has("house")}
+                  onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen("house", open)}
+                  otherPlaceholder="Other amenities, comma-separated"
                 />
               </div>
             </ListingSubsection>
-            </div>
           </FormSection>
           ) : null}
 
           {/* ── Step 4: Pricing ── */}
           {stepIndex === 4 ? (
-          <FormSection
-            id="edit-lease"
-            title="Pricing"
-            description={
-              <>Set how the home is rented, monthly amounts, and move-in fees. Every fee below needs an amount — enter 0 when you do not charge it, and it stays off the public listing.</>
-            }
-          >
+          <FormSection id="edit-lease" title="Pricing">
             <div className="space-y-5">
-              <PlaceCategoryPicker
-                hasError={Boolean(stepFieldErrors.listingPlaceCategoryId)}
-                errorMsg={stepFieldErrors.listingPlaceCategoryId}
-                value={sub.listingPlaceCategoryId}
-                onSelect={(id) => {
-                  clearListingFieldError("listingPlaceCategoryId");
-                  setSub((s) => {
-                    if (id === "entire_home") {
-                      const sum = s.rooms.reduce((acc, room) => acc + (room.monthlyRent > 0 ? room.monthlyRent : 0), 0);
-                      const rent =
-                        (s.entireHomeMonthlyRent ?? 0) > 0 ? s.entireHomeMonthlyRent! : sum > 0 ? sum : s.rooms[0]?.monthlyRent ?? 0;
-                      return applyEntireHomeListingPricing({ ...s, listingPlaceCategoryId: id }, { entireHomeMonthlyRent: rent });
-                    }
-                    return { ...s, listingPlaceCategoryId: id, entireHomeMonthlyRent: undefined, entireHomeUtilitiesEstimate: undefined, entireHomeProrateMethod: undefined, entireHomeDailyRentRate: undefined, entireHomeDailyUtilitiesRate: undefined };
-                  });
-                }}
-              />
-
-              <ListingSubsection
-                title={isEntireHome ? "Entire-home rent & utilities" : "Per-room rent & utilities"}
-                description={
-                  isEntireHome
-                    ? "One monthly lease for the full unit — utilities and proration apply to the whole home."
-                    : "Set rent, utilities estimate, and proration for each bedroom you are listing."
-                }
-              >
-                {isEntireHome ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <GridField>
-                      <div data-wizard-field="monthlyRent">
-                        <FieldLabel>Monthly rent for entire home *</FieldLabel>
-                      </div>
-                      <div>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            inputMode="decimal"
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
-                            value={
-                              typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
-                                ? String(sub.entireHomeMonthlyRent)
-                                : ""
-                            }
-                            onChange={(e) => {
-                              clearListingFieldError("monthlyRent");
-                              const raw = sanitizeMoneyInput(e.target.value);
-                              const nextRent = raw === "" || raw === "." ? 0 : parseSanitizedMoneyNumber(raw);
-                              setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: nextRent }));
-                            }}
-                            placeholder="4500"
-                          />
-                        </div>
-                        <StepFieldError msg={stepFieldErrors.monthlyRent} />
-                      </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <UtilitiesPaymentModelPicker
-                        value={sub.entireHomeUtilitiesPaymentModel}
-                        onSelect={(model) =>
-                          setSub((s) =>
-                            applyEntireHomeListingPricing(s, {
-                              entireHomeUtilitiesPaymentModel: model,
-                              ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
-                            }),
-                          )
-                        }
-                      />
-                    </div>
-                    <GridField>
-                      <FieldLabel
-                        hint={
-                          (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
-                            ? "Not billed separately when included in rent."
-                            : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                              ? "Optional — typical monthly cost shown on the listing."
-                              : "Monthly estimate used in signing totals."
-                        }
-                      >
-                        Utilities estimate (whole home)
-                      </FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          inputMode="decimal"
-                          className="pl-8"
-                          disabled={(sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                          value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                          onChange={(e) =>
-                            setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
-                          }
-                          placeholder="175"
-                        />
-                      </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <ProrationMethodFields
-                        prorateMethod={sub.entireHomeProrateMethod ?? "auto"}
-                        monthlyRent={entireHomeRent}
-                        dailyRentRate={sub.entireHomeDailyRentRate}
-                        dailyUtilitiesRate={sub.entireHomeDailyUtilitiesRate}
-                        utilitiesLabel="Daily utilities rate (whole home)"
-                        onMethod={(m) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeProrateMethod: m }))}
-                        onDailyRent={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyRentRate: n }))}
-                        onDailyUtilities={(n) => setSub((s) => applyEntireHomeListingPricing(s, { entireHomeDailyUtilitiesRate: n }))}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4" data-wizard-field="monthlyRent">
-                    {stepFieldErrors.monthlyRent ? (
-                      <p className="text-xs font-medium text-red-600">{stepFieldErrors.monthlyRent}</p>
-                    ) : null}
-                    {sub.rooms.map((room, i) => {
-                      const roomRentKey = listingRoomRentKey(room.id);
-                      const roomRentErr = stepFieldErrors[roomRentKey];
-                      return (
-                      <div
-                        key={room.id}
-                        className={`rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "border-border")}`}
-                      >
-                        <p className="text-sm font-semibold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <GridField>
-                            <FieldLabel>Monthly rent *</FieldLabel>
-                            <div className="relative" data-wizard-field={roomRentKey}>
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className={wizardFieldErrorClass(Boolean(roomRentErr || stepFieldErrors.monthlyRent), "pl-8")}
-                                value={room.monthlyRent || ""}
-                                onChange={(e) => {
-                                  clearListingFieldError("monthlyRent");
-                                  clearListingFieldError(roomRentKey);
-                                  setRoom(i, { monthlyRent: parseSanitizedMoneyNumber(e.target.value) });
-                                }}
-                                placeholder="800"
-                              />
-                              <StepFieldError msg={roomRentErr} />
-                            </div>
-                          </GridField>
-                          <GridField>
-                            <FieldLabel
-                              hint={
-                                (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
-                                  ? "Not billed separately when included in rent."
-                                  : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
-                                    ? "Optional — typical monthly cost shown on the listing."
-                                    : "Monthly estimate billed with rent through the portal."
-                              }
-                            >
-                              Utilities estimate
-                            </FieldLabel>
-                            <div className="relative">
-                              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                              <Input
-                                inputMode="decimal"
-                                className="pl-8"
-                                disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
-                                value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
-                                placeholder="175"
-                              />
-                            </div>
-                          </GridField>
-                          <div className="sm:col-span-2">
-                            <UtilitiesPaymentModelPicker
-                              value={room.utilitiesPaymentModel}
-                              onSelect={(model) =>
-                                setRoom(i, {
-                                  utilitiesPaymentModel: model,
-                                  ...(model === "included_in_rent" ? { utilitiesEstimate: "" } : {}),
-                                })
-                              }
+              <ListingSubsection title="Leasing">
+                <div className="space-y-3">
+                  <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
+                    <FieldLabel required>Lease lengths</FieldLabel>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {/* Standard lengths, then Short-term (a listing-wide toggle, not a lease
+                        term), then Custom last — Short-term sits with the other lease-length
+                        choices instead of a separate titled block. */}
+                    {[...LEASE_TERM_OPTIONS.filter((t) => t !== CUSTOM_LEASE_TERM), "__short_term__", CUSTOM_LEASE_TERM].map((term) => {
+                      if (term === "__short_term__") {
+                        const on = Boolean(sub.shortTermRentalsAllowed);
+                        return (
+                          <label
+                            key="__short_term__"
+                            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                              on ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border"
+                              checked={on}
+                              onChange={(e) => {
+                                clearListingFieldError("allowedLeaseTerms");
+                                const enabled = e.target.checked;
+                                setSub((s) => {
+                                  const standard = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                                  const next = syncShortTermLeaseTermInAllowed(standard, enabled);
+                                  const bundles = enabled
+                                    ? s.bundles
+                                    : (s.bundles ?? []).map((b) => ({ ...b, shortTermEnabled: false, shortTermNightlyRent: "" }));
+                                  return syncPropertyLeaseTemplatesFromListing({
+                                    ...s,
+                                    shortTermRentalsAllowed: enabled,
+                                    allowedLeaseTerms: next,
+                                    leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
+                                    bundles,
+                                  });
+                                });
+                              }}
                             />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <ProrationMethodFields
-                              prorateMethod={room.prorateMethod ?? "auto"}
-                              monthlyRent={room.monthlyRent}
-                              dailyRentRate={room.dailyRentRate}
-                              dailyUtilitiesRate={room.dailyUtilitiesRate}
-                              onMethod={(m) => setRoom(i, { prorateMethod: m })}
-                              onDailyRent={(n) => setRoom(i, { dailyRentRate: n })}
-                              onDailyUtilities={(n) => setRoom(i, { dailyUtilitiesRate: n })}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </ListingSubsection>
-
-              <ListingSubsection title="Lease terms">
-                <div data-wizard-field="allowedLeaseTerms" className={wizardSectionErrorClass(Boolean(stepFieldErrors.allowedLeaseTerms))}>
-                  <FieldLabel required>Lease terms offered</FieldLabel>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {LEASE_TERM_OPTIONS.map((term) => {
+                            <span className="font-medium text-foreground">Short-term</span>
+                          </label>
+                        );
+                      }
                       const selected = resolveAllowedLeaseTerms(sub).includes(term);
                       return (
                         <label
                           key={term}
-                          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-sm shadow-sm"
+                          className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm shadow-sm transition-colors ${
+                            selected ? "border-foreground/25 bg-accent/40" : "border-border bg-card"
+                          }`}
                         >
                           <input
                             type="checkbox"
@@ -3105,15 +3661,19 @@ export function ManagerAddListingForm({
                               clearListingFieldError("allowedLeaseTerms");
                               const on = e.target.checked;
                               setSub((s) => {
-                                const current = resolveAllowedLeaseTerms(s);
-                                const next = on
+                                const current = resolveAllowedLeaseTerms(s).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+                                const nextStandard = on
                                   ? [...new Set([...current, term])]
                                   : current.filter((t) => t !== term);
-                                return {
+                                const next = syncShortTermLeaseTermInAllowed(
+                                  nextStandard,
+                                  Boolean(s.shortTermRentalsAllowed),
+                                );
+                                return syncPropertyLeaseTemplatesFromListing({
                                   ...s,
                                   allowedLeaseTerms: next,
                                   leaseTermsBody: formatLeaseTermsBodyFromAllowed(next),
-                                };
+                                });
                               });
                             }}
                           />
@@ -3123,516 +3683,101 @@ export function ManagerAddListingForm({
                     })}
                   </div>
                   <StepFieldError msg={stepFieldErrors.allowedLeaseTerms} />
+                  </div>
                 </div>
               </ListingSubsection>
 
-              <ListingSubsection
-                title="Short-term stays"
-                description="Enable this only if this property may host temporary lodger / guest stays."
-              >
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-4">
+              <ListingSubsection title="Rent">
+                <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-border"
-                    checked={Boolean(sub.shortTermRentalsAllowed)}
-                    onChange={(e) => setSub((s) => ({ ...s, shortTermRentalsAllowed: e.target.checked }))}
+                    checked={rentByRoom}
+                    onChange={(e) => handleRentByRoomToggle(e.target.checked)}
                   />
-                  <span className="text-sm font-medium text-foreground">This property allows short-term room stays</span>
+                  Rent by room
+                  <span className="text-xs font-normal text-muted">— a rent row per room; off = one rent for the whole place</span>
                 </label>
-                {sub.shortTermRentalsAllowed ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <GridField>
-                      <FieldLabel>Daily cost</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDailyCost: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="40"
-                        />
-                      </div>
-                    </GridField>
-                    <GridField>
-                      <FieldLabel>Short-term deposit</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermDeposit: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="100"
-                        />
-                      </div>
-                    </GridField>
-                    <GridField>
-                      <FieldLabel hint="Move-in fee for short-term stays — used to calculate the balance owed when upgrading to long-term.">Short-term move-in fee</FieldLabel>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                        <Input
-                          className="pl-8"
-                          inputMode="decimal"
-                          value={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
-                          onChange={(e) => setSub((s) => ({ ...s, shortTermMoveInFee: sanitizeMoneyInput(e.target.value) }))}
-                          placeholder="50"
-                        />
-                      </div>
-                    </GridField>
-                    <div className="sm:col-span-2">
-                      <FieldLabel hint="Shown to applicants and included in the generated short-term agreement.">
-                        Requirements / house rules for short-term stays
-                      </FieldLabel>
-                      <Textarea
-                        className=""
-                        value={sub.shortTermRequirements ?? ""}
-                        onChange={(e) => setSub((s) => ({ ...s, shortTermRequirements: e.target.value }))}
-                        placeholder="Owner/host lives on property. No mail or residency claims. Guest must leave by checkout. Follow posted house rules."
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </ListingSubsection>
-
-              <ListingSubsection
-                title="Lease bundles"
-                description={
-                  isEntireHome
-                    ? "Optional — the public listing already shows one rent for the entire home. Add a bundle only if you want promo pricing or extra copy."
-                    : "Optional packages on the public listing — whole-house leases, roommate groups, or custom room combinations. If you add none, we show a smart default from your room list."
-                }
-              >
-                {!isEntireHome ? (
-                <div className="rounded-xl border border-border p-4 sm:p-5">
-                  <p className="text-sm font-semibold text-foreground">Build from your rooms</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    Bundle rent defaults to the sum of selected room rents — edit the price when you offer a discount. Use strikethrough + promo for limited-time offers.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-xs"
-                      onClick={() => addGeneratedBundle("whole_house")}
-                      disabled={sub.rooms.length === 0}
-                    >
-                      Whole house
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-xs"
-                      onClick={() => addGeneratedBundle("multi_room")}
-                      disabled={sub.rooms.filter((room) => room.name.trim()).length < 2}
-                    >
-                      Group
-                    </Button>
-                    <Button type="button" variant="primary" className="rounded-full text-xs" onClick={addBundle}>
-                      Custom (blank)
-                    </Button>
-                  </div>
-                </div>
-                ) : null}
-
-                {(sub.bundles ?? []).length === 0 ? (
-                  <p className="mt-3 rounded-xl border border-dashed border-border bg-accent/30 px-4 py-5 text-sm text-muted">
-                    {isEntireHome
-                      ? "No extra bundles — the listing uses your entire-home rent from Lease & pricing."
-                      : "No bundles yet — renters will still see per-room pricing from Lease & pricing. Add a bundle when you want to advertise a combined lease."}
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-4">
-                    {(sub.bundles ?? []).map((bundle, i) => {
-                      const selectedIds = new Set(bundle.includedRoomIds ?? []);
-                      const namedRooms = sub.rooms.filter((r) => r.name.trim());
-                      const selectedRooms = namedRooms.filter((r) => selectedIds.has(r.id));
-                      const rentSum = selectedRooms.reduce((sum, r) => sum + (Number.isFinite(r.monthlyRent) ? r.monthlyRent : 0), 0);
-                      const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
-                      const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
-                      return (
-                        <ListingWizardCollapsibleCard
-                          key={bundle.id}
-                          expanded={isListingItemExpanded(listingItemKey("bundle", bundle.id))}
-                          onToggle={() => toggleListingItem(listingItemKey("bundle", bundle.id))}
-                          title={bundle.label.trim() || `Package ${i + 1}`}
-                          subtitle={[
-                            `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
-                            rentSum > 0 ? `$${rentSum}/mo base` : null,
-                            hasManualPrice ? "Custom price" : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          bodyClassName="grid gap-3 sm:grid-cols-2"
-                          toggleDataAttr={`listing-bundle-toggle-${bundle.id}`}
-                          headerActions={
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={LISTING_WIZARD_ACTION_BTN}
-                                onClick={() => applyBundleRoomScope(i, "all_named")}
-                                disabled={namedRooms.length === 0}
-                                aria-label="Select all named rooms"
-                              >
-                                All rooms
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={LISTING_WIZARD_ACTION_BTN}
-                                onClick={() => applyBundleRoomScope(i, "none")}
-                              >
-                                Clear
-                              </Button>
-                              <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeBundle(i)}>
-                                Remove
-                              </Button>
-                            </>
-                          }
-                        >
-                            <GridField>
-                              <FieldLabel>Bundle name</FieldLabel>
-                              <Input
-                                value={bundle.label}
-                                onChange={(e) => setBundle(i, { label: sanitizePlaceNameInput(e.target.value) })}
-                                placeholder="Whole house lease, Rooms A+B"
-                              />
-                            </GridField>
-                            <GridField>
-                              <FieldLabel hint="Defaults to sum of room rents; edit for discounts.">Bundle rent / mo</FieldLabel>
-                              <div className="relative">
-                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                                <Input
-                                  inputMode="decimal"
-                                  className="pl-8"
-                                  value={bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                  onChange={(e) => setBundle(i, { price: sanitizeMoneyInput(e.target.value) })}
-                                  placeholder={rentSum > 0 ? String(rentSum) : "4500"}
-                                />
-                              </div>
-                            </GridField>
-                            <GridField>
-                              <FieldLabel hint="Optional — shows crossed out on the listing.">Original price</FieldLabel>
-                              <div className="relative">
-                                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                                <Input
-                                  inputMode="decimal"
-                                  className="pl-8"
-                                  value={bundle.strikethrough.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
-                                  onChange={(e) => setBundle(i, { strikethrough: sanitizeMoneyInput(e.target.value) })}
-                                  placeholder="4800"
-                                />
-                              </div>
-                            </GridField>
-                            <GridField>
-                              <FieldLabel>Promo line</FieldLabel>
-                              <Input
-                                value={bundle.promo}
-                                onChange={(e) => setBundle(i, { promo: e.target.value })}
-                                placeholder="Best for groups — limited availability"
-                              />
-                            </GridField>
-                            <div className="sm:col-span-2">
-                              <FieldLabel>Rooms in this bundle</FieldLabel>
-                              <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {sub.rooms.map((room) => (
-                                  <label key={`${bundle.id}-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-border"
-                                      checked={selectedIds.has(room.id)}
-                                      onChange={(e) => toggleBundleRoom(i, room.id, e.target.checked)}
-                                    />
-                                    <span className="min-w-0 font-medium text-foreground">
-                                      <span className="truncate">{roomLabelForBundle(room)}</span>
-                                      {room.monthlyRent > 0 ? (
-                                        <span className="ml-1 tabular-nums text-xs font-normal text-muted">· ${room.monthlyRent}</span>
-                                      ) : null}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                        </ListingWizardCollapsibleCard>
+                <div data-wizard-field="monthlyRent">
+                <ListingUnifiedFeesTable
+                  expandableSections={feeExpandableSections}
+                  showShortTerm={Boolean(sub.shortTermRentalsAllowed)}
+                  sub={sub}
+                  isEntireHome={isEntireHome}
+                  stFeeToggles={stFeeToggles}
+                  ltFeeToggles={ltFeeToggles}
+                  onStToggle={handleStFeeToggle}
+                  onLtToggle={handleLtFeeToggle}
+                  onStAmount={handleStFeeAmount}
+                  onLtAmount={handleLtFeeAmount}
+                  onLtAmountForRow={handleLtFeeAmountForRow}
+                  hiddenRowIds={isEntireHome ? undefined : RENT_BY_ROOM_HIDDEN_FEE_ROWS}
+                  removedRowIds={removedFeeRows}
+                  onRemoveStandardRow={handleRemoveStandardRow}
+                  onAddStandardRow={handleAddStandardRow}
+                  stepFieldErrors={stepFieldErrors}
+                  customFees={sub.customFees ?? []}
+                  onAddCustomFee={addCustomFee}
+                  onRemoveCustomFee={removeCustomFee}
+                  onCustomFeeChange={(i, patch) => {
+                    if (patch.label !== undefined) {
+                      setCustomFee(i, { label: sanitizePlaceNameInput(patch.label) });
+                      return;
+                    }
+                    setCustomFee(i, patch);
+                  }}
+                  onPresetCadenceChange={(presetId, next) => {
+                    // A new listing has no materialized fee rows yet, so the first
+                    // cadence change creates the preset's row rather than silently
+                    // doing nothing.
+                    setSub((s) => {
+                      const rows = [...(s.customFees ?? [])];
+                      const existing = rows.findIndex(
+                        (f) => (f as { presetId?: string }).presetId === presetId,
                       );
-                    })}
-                  </div>
-                )}
-              </ListingSubsection>
+                      if (existing >= 0) {
+                        rows[existing] = { ...rows[existing]!, frequency: next };
+                        return { ...s, customFees: rows };
+                      }
+                      const preset = LISTING_FEE_PRESETS.find((pr) => pr.presetId === presetId);
+                      rows.push({
+                        id: `fee-${presetId}`,
+                        label: preset?.defaultLabel ?? presetId,
+                        amount: "",
+                        frequency: next,
+                        presetId,
+                      } as (typeof rows)[number]);
+                      return { ...s, customFees: rows };
+                    });
+                  }}
+                />
+                </div>
 
-              <ListingSubsection title="Fees">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {(
-                    [
-                      ["applicationFee", "Application fee", sub.applicationFee.replace(/^\$/, "").trim()],
-                      ["holdingDeposit", "Holding deposit", (sub.holdingDeposit ?? "$100").replace(/^\$/, "").trim()],
-                      ["securityDeposit", "Security deposit", sub.securityDeposit.replace(/^\$/, "").trim()],
-                      ["moveInFee", "Move-in fee", sub.moveInFee.replace(/^\$/, "").trim()],
-                      ["parkingMonthly", "Parking (monthly)", sub.parkingMonthly.replace(/^\$/, "").trim()],
-                      ["hoaMonthly", "HOA / community", sub.hoaMonthly.replace(/^\$/, "").trim()],
-                      ["otherMonthlyFees", "Other monthly fees", sub.otherMonthlyFees.replace(/^\$/, "").trim()],
-                      ["monthToMonthSurcharge", "Month-to-month surcharge", (sub.monthToMonthSurcharge ?? "").replace(/^\$/, "").trim()],
-                    ] as const
-                  ).map(([key, label, value]) => (
-                    <GridField key={key}>
-                      <div data-wizard-field={key}>
-                        <FieldLabel required>{label}</FieldLabel>
-                      </div>
-                      <div>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                          <Input
-                            className={wizardFieldErrorClass(Boolean(stepFieldErrors[key]), "pl-8")}
-                            inputMode="decimal"
-                            value={value}
-                            onChange={(e) => {
-                              clearListingFieldError(key);
-                              setSub((s) => ({ ...s, [key]: sanitizeMoneyInput(e.target.value) }));
-                            }}
-                            placeholder="0"
-                          />
-                        </div>
-                        <StepFieldError msg={stepFieldErrors[key]} />
-                      </div>
-                    </GridField>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-muted">
-                  Holding deposit secures the application and is credited toward the security deposit when the resident is
-                  approved. Default is $100 when left blank on new listings.
-                </p>
-                <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                      checked={Boolean(sub.allowMultiplePropertyApplications)}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          allowMultiplePropertyApplications: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm text-foreground">
-                      <span className="font-medium">Allow multiple applications</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Residents can apply to more than one property or room on this listing.
-                      </span>
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                      checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          applicationFeeOnlyFirstApplication: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm text-foreground">
-                      <span className="font-medium">Application fee only for first application</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        Charge the application fee once per resident; skip payment on later applications.
-                      </span>
-                    </span>
-                  </label>
-                </div>
-                {(sub.customFees ?? []).length > 0 ? (
-                  <div className="mt-4 space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
-                    {(sub.customFees ?? []).map((fee, i) => (
-                      <ListingWizardCollapsibleCard
-                        key={fee.id}
-                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
-                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
-                        title={fee.label.trim() || `Fee ${i + 1}`}
-                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
-                        bodyClassName="grid gap-3 sm:grid-cols-2"
-                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
-                        headerActions={
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
-                        <div>
-                          <FieldLabel>Fee name</FieldLabel>
-                          <Input
-                            value={fee.label}
-                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
-                            placeholder="e.g. Pet fee, Cleaning fee"
-                          />
-                        </div>
-                        <div>
-                          <FieldLabel>Amount</FieldLabel>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                            <Input
-                              className="pl-8"
-                              inputMode="decimal"
-                              value={fee.amount.replace(/^\$/, "").trim()}
-                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel>Type</FieldLabel>
-                          <div className="relative">
-                            <Select
-                              aria-label={`Additional fee ${i + 1} type`}
-                              className={`${selectInputCls}`}
-                              value={fee.frequency ?? "monthly"}
-                              onChange={(e) =>
-                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
-                              }
-                            >
-                              <option value="monthly">Monthly</option>
-                              <option value="one-time">One-time</option>
-                            </Select>
-                          </div>
-                        </div>
-                        </div>
-                      </ListingWizardCollapsibleCard>
+                <div className="mt-4 space-y-3 border-t border-border pt-4">
+                  <FieldLabel optional>Payment at signing</FieldLabel>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
+                      <label key={opt.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border"
+                          checked={sub.paymentAtSigningIncludes.includes(opt.id)}
+                          onChange={(e) =>
+                            setSub((s) => ({
+                              ...s,
+                              paymentAtSigningIncludes: togglePaymentAtSigning(s.paymentAtSigningIncludes, opt.id, e.target.checked),
+                            }))
+                          }
+                        />
+                        {opt.label}
+                      </label>
                     ))}
                   </div>
-                ) : null}
-                <Button type="button" variant="outline" className={`mt-4 ${LISTING_WIZARD_ACTION_BTN}`} onClick={addCustomFee}>
-                  + Add fee
-                </Button>
-              </ListingSubsection>
-
-              <ListingSubsection
-                title="Payment at signing"
-                description="Select every charge collected when the lease is signed."
-              >
-                <div className="grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
-                  {PAYMENT_AT_SIGNING_OPTIONS.map((opt) => (
-                    <label key={opt.id} className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={sub.paymentAtSigningIncludes.includes(opt.id)}
-                        onChange={(e) =>
-                          setSub((s) => ({
-                            ...s,
-                            paymentAtSigningIncludes: togglePaymentAtSigning(s.paymentAtSigningIncludes, opt.id, e.target.checked),
-                          }))
-                        }
-                      />
-                      <span className="text-sm font-medium text-foreground">{opt.label}</span>
-                    </label>
-                  ))}
                 </div>
-              </ListingSubsection>
 
-              <ListingSubsection
-                id="edit-zelle"
-                title="Resident payment methods"
-                description="How residents and applicants pay rent, utilities, application fees, and other charges."
-              >
-                <div
-                  data-wizard-field="residentPaymentMethods"
-                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
-                >
-                  <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border"
-                      checked={sub.axisPaymentsEnabled !== false}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          axisPaymentsEnabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm font-medium text-foreground">
-                      Bank (ACH) with Stripe — no added fees, PropLane covers processing
-                    </span>
-                  </label>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.zellePaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            zellePaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Zelle</span>
-                    </label>
-                    {sub.zellePaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="zelleContact">
-                        <FieldLabel required>Zelle phone or email</FieldLabel>
-                        <Input
-                          value={sub.zelleContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("zelleContact");
-                            setSub((s) => ({ ...s, zelleContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.zelleContact))}
-                          placeholder="+1 555 010 8899 or name@email.com"
-                        />
-                        <StepFieldError msg={stepFieldErrors.zelleContact} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.venmoPaymentsEnabled)}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setSub((s) => ({
-                            ...s,
-                            venmoPaymentsEnabled: on,
-                          }));
-                        }}
-                      />
-                      <span className="text-sm font-medium text-foreground">Venmo</span>
-                    </label>
-                    {sub.venmoPaymentsEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="venmoContact">
-                        <FieldLabel required>Venmo username, phone, or email</FieldLabel>
-                        <Input
-                          value={sub.venmoContact ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("venmoContact");
-                            setSub((s) => ({ ...s, venmoContact: sanitizePaymentContactInput(e.target.value) }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.venmoContact))}
-                          placeholder="@username, +1 555 010 8899, or name@email.com"
-                        />
-                        <StepFieldError msg={stepFieldErrors.venmoContact} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </ListingSubsection>
-
-              <ListingSubsection
-                title="Rent due date & late fees"
-                description="First month rent is always due on move-in. Recurring rent follows the schedule below."
-              >
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
                   <GridField>
-                    <FieldLabel hint="When recurring rent and utilities are due each month.">Monthly due date</FieldLabel>
+                    <FieldLabel>Monthly due date</FieldLabel>
                     <Select
                       value={sub.rentDueDayMode ?? "first_of_month"}
                       onChange={(e) =>
@@ -3647,7 +3792,7 @@ export function ManagerAddListingForm({
                     </Select>
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Days after the due date before a late fee is added automatically.">Late fee grace period (days)</FieldLabel>
+                    <FieldLabel>Late fee grace (days)</FieldLabel>
                     <Input
                       inputMode="numeric"
                       min={0}
@@ -3662,31 +3807,32 @@ export function ManagerAddListingForm({
                     />
                   </GridField>
                   <GridField>
-                    <FieldLabel hint="Flat fee added once per overdue charge after the grace period.">Late fee amount</FieldLabel>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                      <Input
-                        className="pl-8"
-                        inputMode="decimal"
-                        value={(sub.lateFeeAmount ?? "50").replace(/^\$/, "").trim()}
-                        onChange={(e) => setSub((s) => ({ ...s, lateFeeAmount: sanitizeMoneyInput(e.target.value) }))}
-                        placeholder="50"
-                      />
-                    </div>
+                    <FieldLabel>Late fee amount</FieldLabel>
+                    <MoneyInput
+                      value={(sub.lateFeeAmount ?? "50").replace(/^\$/, "").trim()}
+                      onChange={(e) => setSub((s) => ({ ...s, lateFeeAmount: sanitizeMoneyInput(e.target.value) }))}
+                      placeholder="50"
+                      ariaLabel="Late fee amount"
+                    />
                   </GridField>
                   <GridField>
                     <FieldLabel>Automatic late fees</FieldLabel>
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-border"
                         checked={sub.lateFeeEnabled !== false}
                         onChange={(e) => setSub((s) => ({ ...s, lateFeeEnabled: e.target.checked }))}
                       />
-                      <span className="text-sm text-foreground">Create late fee charges & send messages</span>
+                      Auto-charge & notify
                     </label>
                   </GridField>
                 </div>
+
+                <p className="mt-4 border-t border-border pt-4 text-xs text-muted">
+                  Payment methods: configure in{" "}
+                  <span className="font-medium text-foreground">Payments → Payment setup</span>.
+                </p>
               </ListingSubsection>
             </div>
           </FormSection>
@@ -3720,17 +3866,13 @@ export function ManagerAddListingForm({
               ) : null}
               {sortRoomIndicesByFloor(sub.rooms).map((i) => {
                 const room = sub.rooms[i]!;
-                const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
+                const furnished = roomIsFurnished(room);
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
                 const roomNameKey = listingRoomNameKey(room.id);
                 const roomRentKey = listingRoomRentKey(room.id);
                 const roomNameErr = stepFieldErrors[roomNameKey];
                 const roomRentErr = stepFieldErrors[roomRentKey];
                 const roomHasErr = Boolean(roomNameErr || roomRentErr);
-                const roomPresetLabels = new Set(dedupedPresets.room.map((p) => p.label));
-                const customRoomAmenitiesText = splitLineList(room.roomAmenitiesText)
-                  .filter((line) => !roomPresetLabels.has(line))
-                  .join("\n");
                 const roomSubtitle = [
                   room.floor.trim() || null,
                   room.furnishing.trim() || null,
@@ -3793,117 +3935,79 @@ export function ManagerAddListingForm({
                         </div>
                       </GridField>
                       <GridField>
-                        <FieldLabel hint="Preset or custom wording.">Floor / level</FieldLabel>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Select
-                              aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
-                              className={`${selectInputCls}`}
-                              value={roomFloorSelectValueFromOptions(room.floor, roomFloorOptions)}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (v === ROOM_FLOOR_LEVEL_CUSTOM) {
-                                  if (roomFloorOptions.some((o) => o.label === room.floor)) {
-                                    setRoom(i, { floor: "" });
-                                  }
-                                  return;
-                                }
-                                const label = roomFloorOptions.find((o) => o.id === v)?.label ?? "";
-                                setRoom(i, { floor: label });
-                              }}
-                            >
-                              <option value="">Select floor</option>
-                              {roomFloorOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.label}
-                                </option>
-                              ))}
-                              <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
-                            </Select>
-                          </div>
-                          {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
-                            <Input
-                              value={room.floor}
-                              onChange={(e) => setRoom(i, { floor: sanitizeFloorLabelInput(e.target.value) })}
-                              placeholder="e.g. Garden level, half-basement"
-                              aria-label="Custom floor"
-                            />
-                          ) : null}
-                        </div>
+                        <FieldLabel>Floor</FieldLabel>
+                        <Select
+                          aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
+                          className={selectInputCls}
+                          value={room.floor}
+                          onChange={(e) => setRoom(i, { floor: e.target.value })}
+                        >
+                          <option value="">Select floor</option>
+                          {floorLevelSelectOptions(sub.listingStoriesId, room.floor).map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
                       </GridField>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Toggle items included, or add custom lines below.">Furnishing &amp; furniture</FieldLabel>
+                        <FieldLabel hint="Check Furnished to list included items.">Furnishing</FieldLabel>
                         <div className="mt-2 rounded-xl border border-border bg-card p-3">
-                          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b border-border pb-2 text-sm">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
                             <input
                               type="checkbox"
                               className="h-4 w-4 rounded border-border"
-                              checked={isUnfurnished}
-                              onChange={(e) => setRoom(i, { furnishing: e.target.checked ? "Unfurnished" : "" })}
+                              checked={furnished}
+                              onChange={(e) => setRoomFurnished(i, room, e.target.checked)}
                             />
-                            <span className="font-semibold text-muted">Unfurnished</span>
+                            <span className="font-semibold text-foreground">Furnished</span>
+                            <span className="text-xs text-muted">— default is unfurnished</span>
                           </label>
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                            {dedupedPresets.furniture.map((p) => {
-                              const on = checkedFurniture.has(p.label);
-                              return (
-                                <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card"} ${isUnfurnished ? "pointer-events-none opacity-40" : ""}`}>
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 rounded border-border"
-                                    checked={on}
-                                    disabled={isUnfurnished}
-                                    onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
-                                  />
-                                  <span className="font-medium text-foreground">{p.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <Textarea className="mt-2" rows={2} value={room.detail} onChange={(e) => setRoom(i, { detail: e.target.value })} placeholder="Other furnishing or layout notes (optional)" />
+                          {furnished ? (
+                            <>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                {dedupedPresets.furniture.map((p) => {
+                                  const on = checkedFurniture.has(p.label);
+                                  return (
+                                    <label key={p.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card"}`}>
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-border"
+                                        checked={on}
+                                        onChange={(e) => setRoom(i, { furnishing: mergeFurnitureToggle(room.furnishing, p.label, e.target.checked) })}
+                                      />
+                                      <span className="font-medium text-foreground">{p.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <Input
+                                className="mt-2 h-9 text-sm"
+                                value={room.detail}
+                                onChange={(e) => setRoom(i, { detail: e.target.value })}
+                                placeholder="Other furnishing notes (optional)"
+                              />
+                            </>
+                          ) : null}
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel hint="Check common room amenities — use the field below for anything not listed.">Room amenities</FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
-                          {dedupedPresets.room.map((p) => {
-                            const on = splitLineList(room.roomAmenitiesText).includes(p.label);
-                            return (
-                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-border"
-                                  checked={on}
-                                  onChange={(e) =>
-                                    setRoom(i, {
-                                      roomAmenitiesText: mergeToggleLine(room.roomAmenitiesText, p.label, e.target.checked),
-                                    })
-                                  }
-                                />
-                                <span className="font-medium text-foreground">{p.label}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                        <Textarea
-                          className="mt-2"
-                          rows={2}
-                          value={customRoomAmenitiesText}
-                          onChange={(e) => {
-                            const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
-                              roomPresetLabels.has(line),
-                            );
-                            const customLines = splitLineList(e.target.value);
-                            setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
-                          }}
-                          placeholder="Other amenities not listed above (one per line)."
+                        <FieldLabel>Room amenities</FieldLabel>
+                        <PresetCheckboxGroup
+                          presets={dedupedPresets.room}
+                          value={room.roomAmenitiesText}
+                          onChange={(v) => setRoom(i, { roomAmenitiesText: v })}
+                          otherForcedOpen={otherAmenitiesOpenRooms.has(room.id)}
+                          onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(room.id, open)}
+                          otherPlaceholder="Other amenities, comma-separated"
                         />
                       </div>
 
                       {!isEntireHome ? (
                       <>
-                      <div className="sm:col-span-2">
-                        <FieldLabel>Photos (optional)</FieldLabel>
+                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel hint="Up to 8 images, auto-compressed.">Photos</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-photos-${room.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `room-photos-${room.id}`)}
@@ -3918,7 +4022,7 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-muted">Drag and drop room photos here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                           {room.photoDataUrls.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {room.photoDataUrls.map((url, pi) => (
@@ -3936,14 +4040,12 @@ export function ManagerAddListingForm({
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="One short clip per room (~14 MB max).">Video tour</FieldLabel>
+                      <div>
+                        <FieldLabel hint="One short clip, ~14 MB max, MP4/MOV/WebM.">Video tour</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `room-video-${room.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `room-video-${room.id}`)}
@@ -3959,9 +4061,9 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`room-${room.id}`) ? "Uploading…" : room.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`room-${room.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-2 text-xs text-primary">Uploading…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-muted">Drag and drop one room video here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                           )}
                           {room.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -3979,10 +4081,9 @@ export function ManagerAddListingForm({
                                 Remove video
                               </button>
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">Optional — MP4, MOV, or WebM. Preview appears after you choose a file.</p>
-                          )}
+                          ) : null}
                         </div>
+                      </div>
                       </div>
                       </>
                       ) : null}
@@ -4006,103 +4107,15 @@ export function ManagerAddListingForm({
               })}
             </div>
 
-            {(() => {
-              const readiness = summarizePropertyMediaReadiness(sub.rooms);
-              const pct = Math.round(readiness.percentReady * 100);
-              return (
-                <div
-                  className="mt-4 rounded-xl border border-border bg-accent/25 p-4"
-                  data-testid="listing-media-readiness"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">Room media readiness</p>
-                    <p className="text-xs text-muted">{propertyMediaReadinessLabel(readiness)}</p>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/60">
-                    <div
-                      className={`h-full rounded-full transition-all ${pct >= 70 ? "bg-emerald-500" : "bg-amber-500"}`}
-                      style={{ width: `${readiness.listedCount ? Math.max(pct, 4) : 0}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                    Bronze = 1+ photo or video · Silver = 3+ photos · Gold = 3+ photos + video. Aim for 70%+ before
-                    publishing.
-                  </p>
-                </div>
-              );
-            })()}
+            {/* The "Room media readiness" panel was removed at the captain's request. The
+                underlying summarizePropertyMediaReadiness still backs the publish-time
+                warning (shouldWarnOnPublish) below, which is a separate safety gate. */}
 
-            <ListingSubsection
-              title="Floor plans"
-              description="Upload a layout image for each floor / level (or one property-wide plan). Residents open it from Details on the public listing."
-            >
-              <div className="mt-3 space-y-4">
-                <div className="rounded-xl border border-border bg-accent/20 p-4">
-                  <FieldLabel hint="Used when you do not upload separate plans per floor.">
-                    Property-wide floor plan
-                  </FieldLabel>
-                  <MediaPickTrigger accept="image/*" onFiles={(files) => { void onPickPropertyFloorPlan(files); }}>
-                    {sub.propertyFloorPlanDataUrl ? "Replace property floor plan" : "Upload property floor plan"}
-                  </MediaPickTrigger>
-                  {sub.propertyFloorPlanDataUrl ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sub.propertyFloorPlanDataUrl} alt="" className="max-h-56 w-full object-contain" />
-                      </div>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-rose-600 hover:underline"
-                        onClick={clearPropertyFloorPlan}
-                      >
-                        Remove property floor plan
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] text-muted">Optional — JPG or PNG, up to 10 MB.</p>
-                  )}
-                </div>
-
-                {roomFloorLabelsForPlans.length > 0 ? (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-foreground">Per-floor plans</p>
-                    {roomFloorLabelsForPlans.map((floorLabel) => {
-                      const planUrl = sub.floorPlanByLabel?.[floorLabel];
-                      return (
-                        <div key={floorLabel} className="rounded-xl border border-border bg-accent/20 p-4">
-                          <FieldLabel hint={`Floor plan for bedrooms on ${floorLabel}.`}>{floorLabel}</FieldLabel>
-                          <MediaPickTrigger
-                            accept="image/*"
-                            onFiles={(files) => { void onPickFloorPlanForLabel(floorLabel, files); }}
-                          >
-                            {planUrl ? "Replace floor plan" : "Upload floor plan"}
-                          </MediaPickTrigger>
-                          {planUrl ? (
-                            <div className="mt-3 space-y-2">
-                              <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={planUrl} alt="" className="max-h-56 w-full object-contain" />
-                              </div>
-                              <button
-                                type="button"
-                                className="text-xs font-semibold text-rose-600 hover:underline"
-                                onClick={() => removeFloorPlanForLabel(floorLabel)}
-                              >
-                                Remove floor plan
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-[11px] text-muted">Recommended before you go live.</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted">Set a floor / level on each room above to upload per-floor plans.</p>
-                )}
-              </div>
-            </ListingSubsection>
+            {/* Floor plans section removed from the wizard at the captain's request ("for
+                now" — may return). The stored images are intentionally KEPT: the submission
+                still carries propertyFloorPlanDataUrl + floorPlanByLabel, and the public
+                listing / resident detail continues to display them. Only this upload UI is
+                gone. Re-add this ListingSubsection to bring the editor back. */}
           </FormSection>
           ) : null}
 
@@ -4112,7 +4125,6 @@ export function ManagerAddListingForm({
             title="Bathrooms"
             description="Name, location, and amenities for each bathroom on the public listing."
           >
-              <p className="mb-4 text-sm text-muted">Shown in the Bathrooms section on the public listing.</p>
               <div
                 className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
                 data-wizard-field="bathrooms"
@@ -4170,156 +4182,129 @@ export function ManagerAddListingForm({
                         <StepFieldError msg={bathNameErr} />
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Location in building</FieldLabel>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Select
-                              aria-label={`Bathroom ${i + 1} location`}
-                              className={`${selectInputCls}`}
-                              value={locationSelectValue(b.location ?? "", locationLevelOptions)}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (!v) {
-                                  setBath(i, { location: "" });
-                                  return;
-                                }
-                                if (v === LOCATION_LEVEL_CUSTOM) {
-                                  if (locationLevelOptions.includes((b.location ?? "").trim())) setBath(i, { location: "" });
-                                  return;
-                                }
-                                setBath(i, { location: v });
-                              }}
-                            >
-                              <option value="">Select location</option>
-                              {locationLevelOptions.map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                              <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
-                            </Select>
-                          </div>
-                          {locationSelectValue(b.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
-                            <Input
-                              value={b.location ?? ""}
-                              onChange={(e) => setBath(i, { location: e.target.value })}
-                              placeholder="Custom location"
-                              aria-label={`Bathroom ${i + 1} custom location`}
-                            />
-                          ) : null}
+                        <FieldLabel>Floor</FieldLabel>
+                        <Select
+                          aria-label={`Bathroom ${i + 1} floor`}
+                          className={selectInputCls}
+                          value={b.location ?? ""}
+                          onChange={(e) => setBath(i, { location: e.target.value })}
+                        >
+                          <option value="">Select floor</option>
+                          {floorLevelSelectOptions(sub.listingStoriesId, b.location ?? "").map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FieldLabel>Fixtures</FieldLabel>
+                        <div className="mt-1 flex flex-wrap gap-x-6 gap-y-2">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
+                            Shower
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.toilet} onChange={(e) => setBath(i, { toilet: e.target.checked })} />
+                            Toilet
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" className="h-4 w-4 rounded border-border" checked={b.bathtub} onChange={(e) => setBath(i, { bathtub: e.target.checked })} />
+                            Bathtub
+                          </label>
                         </div>
                       </div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={b.shower} onChange={(e) => setBath(i, { shower: e.target.checked })} />
-                        Shower
+                      <label className="flex cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 rounded border-border"
+                          checked={Boolean(b.allResidents)}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setBath(i, {
+                              allResidents: on,
+                              assignedRoomIds: on ? [] : (b.assignedRoomIds ?? []),
+                              accessKindByRoomId: on ? undefined : b.accessKindByRoomId,
+                            });
+                          }}
+                        />
+                        <span className="font-medium text-foreground">Whole-house bathroom</span>
                       </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={b.toilet} onChange={(e) => setBath(i, { toilet: e.target.checked })} />
-                        Toilet
-                      </label>
-                      <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                        <input type="checkbox" checked={b.bathtub} onChange={(e) => setBath(i, { bathtub: e.target.checked })} />
-                        Bathtub
-                      </label>
-                      <div className="sm:col-span-2">
-                        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
-                          <input
-                            type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-border"
-                            checked={Boolean(b.allResidents)}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              setBath(i, {
-                                allResidents: on,
-                                assignedRoomIds: on ? [] : (b.assignedRoomIds ?? []),
-                                accessKindByRoomId: on ? undefined : b.accessKindByRoomId,
-                              });
-                            }}
-                          />
-                          <span className="text-sm font-medium text-foreground">
-                            Whole-house / hall bathroom — all listed bedrooms use it (no per-room checkboxes)
-                          </span>
-                        </label>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="For non–whole-house baths: checking a room here removes it from other bath rows (except whole-house). Use the situation menu for en suite vs shared wording on the listing.">
-                          Used by these rooms
-                        </FieldLabel>
-                        {b.allResidents ? (
-                          <p className="mt-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
-                            This bathroom applies to every named room on the listing. Add another bathroom row for suite or shared setups between specific rooms.
-                          </p>
-                        ) : (
-                          <div className="mt-2 space-y-3 rounded-xl border border-border bg-accent/30 p-3">
+                      {sub.rooms.length > 0 ? (
+                        <div className="sm:col-span-2">
+                          <FieldLabel>Used by rooms</FieldLabel>
+                          {/* Same pattern as Shared spaces "Room access" (round 29): "All rooms"
+                              select-all first, three columns, indeterminate. "Whole-house
+                              bathroom" ticks and LOCKS this list (all checked, disabled) so the
+                              two controls can never contradict; the data model still keeps
+                              allResidents' assignedRoomIds empty. */}
+                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                            <SelectAllCheckbox
+                              allChecked={
+                                Boolean(b.allResidents) ||
+                                sub.rooms.every((room) => (b.assignedRoomIds ?? []).includes(room.id))
+                              }
+                              someChecked={
+                                !b.allResidents &&
+                                (b.assignedRoomIds ?? []).length > 0 &&
+                                !sub.rooms.every((room) => (b.assignedRoomIds ?? []).includes(room.id))
+                              }
+                              onToggle={(checkAll) =>
+                                setBath(i, { assignedRoomIds: checkAll ? sub.rooms.map((room) => room.id) : [] })
+                              }
+                              disabled={Boolean(b.allResidents)}
+                              label="All rooms"
+                            />
                             {sub.rooms.map((room) => {
-                              const checked = (b.assignedRoomIds ?? []).includes(room.id);
+                              const checked = Boolean(b.allResidents) || (b.assignedRoomIds ?? []).includes(room.id);
                               return (
-                                <div key={`${b.id}-${room.id}`} className="rounded-lg border border-border bg-card p-2.5">
+                                <div key={`${b.id}-${room.id}`} className="min-w-0">
                                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                                     <input
                                       type="checkbox"
-                                      className="h-4 w-4 shrink-0 rounded border-border"
+                                      className="h-4 w-4 shrink-0 rounded border-border disabled:opacity-60"
                                       checked={checked}
+                                      disabled={Boolean(b.allResidents)}
                                       onChange={(e) => toggleBathroomRoom(i, room.id, e.target.checked)}
                                     />
-                                    <span className="font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
+                                    <span className="truncate font-medium text-foreground">{room.name.trim() || `Room (${room.id.slice(-6)})`}</span>
                                   </label>
-                                  {checked ? (
-                                    <div className="mt-2 pl-6">
-                                      <label className="block text-[11px] font-semibold text-muted">Bathroom situation for this room</label>
-                                      <Select
-                                        className={`${selectInputCls} mt-1 text-xs`}
-                                        value={b.accessKindByRoomId?.[room.id] ?? ""}
-                                        onChange={(e) =>
-                                          setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
-                                        }
-                                      >
-                                        <option value="">Optional — auto from shared vs private</option>
-                                        <option value="ensuite">En suite (private to this room)</option>
-                                        <option value="shared">Shared (other checked rooms use it too)</option>
-                                        <option value="hall">Hall / common (not private to this room)</option>
-                                      </Select>
-                                    </div>
+                                  {checked && !b.allResidents ? (
+                                    <Select
+                                      aria-label={`Bathroom situation for ${room.name.trim() || "room"}`}
+                                      className={`${selectInputCls} mt-1 h-8 text-xs`}
+                                      value={b.accessKindByRoomId?.[room.id] ?? ""}
+                                      onChange={(e) =>
+                                        setBathRoomAccessKind(i, room.id, e.target.value as "" | ManagerBathroomRoomAccessKind)
+                                      }
+                                    >
+                                      <option value="">Auto</option>
+                                      <option value="ensuite">En suite</option>
+                                      <option value="shared">Shared</option>
+                                      <option value="hall">Hall</option>
+                                    </Select>
                                   ) : null}
                                 </div>
                               );
                             })}
                           </div>
-                        )}
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Finishes and fixtures for this bathroom only (beyond shower / toilet / tub above).">
-                          Bathroom amenities
-                        </FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2">
-                          {dedupedPresets.bathroom.map((p) => {
-                            const on = splitLineList(b.amenitiesText ?? "").includes(p.label);
-                            return (
-                              <label key={p.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-border"
-                                  checked={on}
-                                  onChange={(e) =>
-                                    setBath(i, {
-                                      amenitiesText: mergeToggleLine(b.amenitiesText ?? "", p.label, e.target.checked),
-                                    })
-                                  }
-                                />
-                                <span className="font-medium text-foreground">{p.label}</span>
-                              </label>
-                            );
-                          })}
                         </div>
-                        <Textarea
-                          className="mt-2"
+                      ) : null}
+                      <div className="sm:col-span-2">
+                        <FieldLabel>Bathroom amenities</FieldLabel>
+                        <PresetCheckboxGroup
+                          presets={dedupedPresets.bathroom}
                           value={b.amenitiesText ?? ""}
-                          onChange={(e) => setBath(i, { amenitiesText: e.target.value })}
-                          placeholder="Add custom amenities not listed above (one per line)."
+                          onChange={(v) => setBath(i, { amenitiesText: v })}
+                          otherForcedOpen={otherAmenitiesOpenRooms.has(`bath-${b.id}`)}
+                          onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(`bath-${b.id}`, open)}
+                          columns="sm:grid-cols-2"
+                          otherPlaceholder="Other amenities, comma-separated"
                         />
                       </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Upload up to 8 bathroom photos.">Bathroom photos</FieldLabel>
+                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel hint="Up to 8 images, auto-compressed.">Photos</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-photos-${b.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `bath-photos-${b.id}`)}
@@ -4334,7 +4319,7 @@ export function ManagerAddListingForm({
                           >
                             Add photos
                           </MediaPickTrigger>
-                          <p className="mt-3 text-sm text-muted">Drag and drop bathroom photos here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                           {(b.photoDataUrls?.length ?? 0) > 0 ? (
                             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {b.photoDataUrls.map((src, pi) => (
@@ -4351,13 +4336,11 @@ export function ManagerAddListingForm({
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
-                      <div className="sm:col-span-2">
-                        <FieldLabel hint="Optional short clip (~14 MB max).">Bathroom video</FieldLabel>
+                      <div>
+                        <FieldLabel hint="One short clip, ~14 MB max.">Video</FieldLabel>
                         <div
                           className={`mt-2 ${mediaDropZoneClass(activeDropZone === `bath-video-${b.id}`)}`}
                           onDragOver={(e) => handleDragOver(e, `bath-video-${b.id}`)}
@@ -4373,9 +4356,9 @@ export function ManagerAddListingForm({
                             {videoUploadingKeys.has(`bath-${b.id}`) ? "Uploading…" : b.videoDataUrl ? "Replace video" : "Add video"}
                           </MediaPickTrigger>
                           {videoUploadingKeys.has(`bath-${b.id}`) ? (
-                            <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                            <p className="mt-2 text-xs text-primary">Uploading…</p>
                           ) : (
-                          <p className="mt-3 text-sm text-muted">Drag and drop one bathroom video here, or use the button above.</p>
+                          <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                           )}
                           {b.videoDataUrl ? (
                             <div className="mt-4 space-y-2">
@@ -4393,10 +4376,9 @@ export function ManagerAddListingForm({
                                 Remove video
                               </button>
                             </div>
-                          ) : (
-                            <p className="mt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
-                          )}
+                          ) : null}
                         </div>
+                      </div>
                       </div>
                   </ListingWizardCollapsibleCard>
                   );
@@ -4461,10 +4443,6 @@ export function ManagerAddListingForm({
                     const spaceNameErr = stepFieldErrors[spaceNameKey];
                     const spaceKind = normalizeSharedSpaceKind(sp.spaceKind, sp.name);
                     const kindPresets = sharedSpaceAmenityPresetsForKind(spaceKind, dedupedPresets.sharedSpace);
-                    const kindPresetLabels = new Set(kindPresets.map((p) => p.label));
-                    const customAmenitiesText = splitLineList(sp.amenitiesText ?? "")
-                      .filter((line) => !kindPresetLabels.has(line))
-                      .join("\n");
                     const spaceKindLabel =
                       SHARED_SPACE_KIND_OPTIONS.find((opt) => opt.id === spaceKind)?.label ?? "Shared space";
 
@@ -4480,12 +4458,6 @@ export function ManagerAddListingForm({
                       toggleDataAttr={`listing-shared-toggle-${sp.id}`}
                       headerActions={
                         <>
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "all")}>
-                            All rooms
-                          </Button>
-                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "none")}>
-                            Clear rooms
-                          </Button>
                           <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeSharedSpace(i)}>
                             Remove
                           </Button>
@@ -4530,85 +4502,35 @@ export function ManagerAddListingForm({
                           </div>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel>Location / level</FieldLabel>
-                          <div className="space-y-2">
-                            <div className="relative">
-                              <Select
-                                aria-label={`Shared space ${i + 1} location`}
-                                className={`${selectInputCls}`}
-                                value={locationSelectValue(sp.location ?? "", locationLevelOptions)}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  if (!v) {
-                                    setSharedSpace(i, { location: "" });
-                                    return;
-                                  }
-                                  if (v === LOCATION_LEVEL_CUSTOM) {
-                                    if (locationLevelOptions.includes((sp.location ?? "").trim())) setSharedSpace(i, { location: "" });
-                                    return;
-                                  }
-                                  setSharedSpace(i, { location: v });
-                                }}
-                              >
-                                <option value="">Select location</option>
-                                {locationLevelOptions.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
-                                <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
-                              </Select>
-                            </div>
-                            {locationSelectValue(sp.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
-                              <Input
-                                value={sp.location ?? ""}
-                                onChange={(e) => setSharedSpace(i, { location: e.target.value })}
-                                placeholder="Custom location"
-                                aria-label={`Shared space ${i + 1} custom location`}
-                              />
-                            ) : null}
-                          </div>
+                          <FieldLabel>Floor</FieldLabel>
+                          <Select
+                            aria-label={`Shared space ${i + 1} floor`}
+                            className={selectInputCls}
+                            value={sp.location ?? ""}
+                            onChange={(e) => setSharedSpace(i, { location: e.target.value })}
+                          >
+                            <option value="">Select floor</option>
+                            {floorLevelSelectOptions(sub.listingStoriesId, sp.location ?? "").map((label) => (
+                              <option key={label} value={label}>
+                                {label}
+                              </option>
+                            ))}
+                          </Select>
                         </div>
                         <div className="sm:col-span-2">
-                          <FieldLabel hint={`Common amenities for ${spaceKindLabel.toLowerCase()} — check all that apply.`}>
-                            Amenities
-                          </FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {kindPresets.map((p) => {
-                              const on = splitLineList(sp.amenitiesText ?? "").includes(p.label);
-                              return (
-                                <label key={p.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/30"
-                                    checked={on}
-                                    onChange={(e) =>
-                                      setSharedSpace(i, {
-                                        amenitiesText: mergeToggleLine(sp.amenitiesText ?? "", p.label, e.target.checked),
-                                      })
-                                    }
-                                  />
-                                  <span className="font-medium text-foreground">{p.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                          <Textarea
-                            className="mt-2"
-                            rows={2}
-                            value={customAmenitiesText}
-                            onChange={(e) => {
-                              const presetLines = splitLineList(sp.amenitiesText ?? "").filter((line) =>
-                                kindPresetLabels.has(line),
-                              );
-                              const customLines = splitLineList(e.target.value);
-                              setSharedSpace(i, { amenitiesText: [...presetLines, ...customLines].join("\n") });
-                            }}
-                            placeholder="Other amenities not listed above (one per line)."
+                          <FieldLabel>Amenities</FieldLabel>
+                          <PresetCheckboxGroup
+                            presets={kindPresets}
+                            value={sp.amenitiesText ?? ""}
+                            onChange={(v) => setSharedSpace(i, { amenitiesText: v })}
+                            otherForcedOpen={otherAmenitiesOpenRooms.has(`space-${sp.id}`)}
+                            onOtherForcedOpenChange={(open) => toggleOtherAmenitiesOpen(`space-${sp.id}`, open)}
+                            otherPlaceholder="Other amenities, comma-separated"
                           />
                         </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel hint="Upload up to 8 shared-space photos.">Photos</FieldLabel>
+                        <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <FieldLabel hint="Up to 8 images.">Photos</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-photos-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-photos-${sp.id}`)}
@@ -4623,7 +4545,7 @@ export function ManagerAddListingForm({
                             >
                               Add photos
                             </MediaPickTrigger>
-                            <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
+                            <p className="mt-2 text-xs text-muted">Drop photos here or use the button.</p>
                             {(sp.photoDataUrls?.length ?? 0) > 0 ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                                 {sp.photoDataUrls.map((src, pi) => (
@@ -4640,13 +4562,11 @@ export function ManagerAddListingForm({
                                   </div>
                                 ))}
                               </div>
-                            ) : (
-                              <p className="mt-3 text-[11px] text-muted">No photos yet — up to 8 images. Images are auto-compressed.</p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
-                        <div className="sm:col-span-2">
-                          <FieldLabel hint="One short clip per shared space (~14 MB max).">Video</FieldLabel>
+                        <div>
+                          <FieldLabel hint="One short clip, ~14 MB max.">Video</FieldLabel>
                           <div
                             className={`mt-2 ${mediaDropZoneClass(activeDropZone === `shared-video-${sp.id}`)}`}
                             onDragOver={(e) => handleDragOver(e, `shared-video-${sp.id}`)}
@@ -4662,9 +4582,9 @@ export function ManagerAddListingForm({
                               {videoUploadingKeys.has(`space-${sp.id}`) ? "Uploading…" : sp.videoDataUrl ? "Replace video" : "Add video"}
                             </MediaPickTrigger>
                             {videoUploadingKeys.has(`space-${sp.id}`) ? (
-                              <p className="mt-3 text-sm text-primary">Uploading video — this may take a moment…</p>
+                              <p className="mt-2 text-xs text-primary">Uploading…</p>
                             ) : (
-                              <p className="mt-3 text-sm text-muted">Drag and drop one video here, or use the button above.</p>
+                              <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
                             )}
                             {sp.videoDataUrl ? (
                               <div className="mt-4 space-y-2">
@@ -4685,11 +4605,23 @@ export function ManagerAddListingForm({
                             ) : null}
                           </div>
                         </div>
+                        </div>
                         <div className="sm:col-span-2">
                           <FieldLabel>Room access</FieldLabel>
-                          <div className="mt-2 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="mt-1 grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                            {sub.rooms.length > 0 ? (
+                              <SelectAllCheckbox
+                                allChecked={sub.rooms.every((room) => (sp.roomAccessIds ?? []).includes(room.id))}
+                                someChecked={
+                                  (sp.roomAccessIds ?? []).length > 0 &&
+                                  !sub.rooms.every((room) => (sp.roomAccessIds ?? []).includes(room.id))
+                                }
+                                onToggle={(checkAll) => setSharedSpaceRoomAccess(i, checkAll ? "all" : "none")}
+                                label="All rooms"
+                              />
+                            ) : null}
                             {sub.rooms.map((room) => (
-                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                              <label key={`${sp.id}-acc-${room.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
                                 <input
                                   type="checkbox"
                                   className="h-4 w-4 rounded border-border"
@@ -4766,9 +4698,24 @@ export function ManagerAddListingForm({
             </div>
           </FormSection>
           ) : null}
+          </div>
         </div>
 
-        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+          <ModalAssistantStrip
+            contextHint={listingAssistantContext}
+            storageScopeKey={wizardTitlePrefix}
+            onExpandedChange={setAssistantExpanded}
+            side="left"
+            defaultExpanded={prefersAssistantOpenBeside()}
+            // Content is first in the DOM so the collapsed strip (and the whole
+            // narrow-screen stack) sits below the fields; when expanded on a wide
+            // panel, `order-first` floats the chat to the left of the form.
+            className={cn("z-10 px-5 sm:px-6", assistantExpanded && "@2xl:order-first")}
+          />
+        </div>
+
+        <div className="modal-panel z-20 shrink-0 border-t border-border px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+          <div className="w-full min-w-0">
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}
@@ -4776,16 +4723,6 @@ export function ManagerAddListingForm({
           ) : null}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
-                data-attr="listing-wizard-close"
-                onClick={closeWizard}
-                disabled={busy || closingDraft}
-              >
-                {closingDraft ? "Saving progress…" : "Close"}
-              </Button>
               {visibleStepPosition > 0 ? (
                 <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
                   Back
@@ -4830,12 +4767,9 @@ export function ManagerAddListingForm({
               )}
             </div>
           </div>
-          <ModalAssistantStrip
-            contextHint={`${wizardTitlePrefix} · ${LISTING_FORM_STEPS[stepIndex]?.label ?? "Create listing"}`}
-            storageScopeKey={wizardTitlePrefix}
-          />
+          </div>
         </div>
-      </form>
+      </div>
 
     </div>,
     portalContainer ?? document.body,

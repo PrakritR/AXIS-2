@@ -1,7 +1,7 @@
 /**
  * The `/demo` sandbox has TWO data sources: the static snapshot in
  * `demo-guided-data.ts` (now empty) and the `/api/demo/portal-snapshot` mirror
- * of the canonical `@test.axis.local` accounts' real DB rows. Emptying only the
+ * of the canonical `@test.proplane.local` accounts' real DB rows. Emptying only the
  * first would still leave a deployed `/demo` showing whatever those accounts
  * hold, so `DEMO_PORTAL_MIRROR_ENABLED` turns the mirror off.
  *

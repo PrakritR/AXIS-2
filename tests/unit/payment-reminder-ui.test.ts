@@ -6,7 +6,7 @@ describe("paymentReminderRecipientLabel", () => {
     expect(
       paymentReminderRecipientLabel({
         residentName: "Maya Chen",
-        residentEmail: "maya.chen.workflow@test.axis.local",
+        residentEmail: "maya.chen.workflow@test.proplane.local",
       }),
     ).toBe("Maya Chen (Resident)");
   });

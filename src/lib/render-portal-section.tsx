@@ -16,11 +16,13 @@ import { AdminCommunication } from "@/components/portal/admin-communication";
 import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
+import { ResidentMoveInShell } from "@/components/portal/resident-move-in-view";
 import { ResidentCommunication } from "@/components/portal/resident-communication";
 import { VendorCommunication } from "@/components/portal/vendor-communication";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
 import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
+import { ResidentTourPanel } from "@/components/portal/resident-tour-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
@@ -31,7 +33,7 @@ import { VendorFinancesPanel } from "@/components/portal/vendor-finances-panel";
 import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
 import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
 import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_INLINE_UNLOCK_NOTICE_CLASS } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
@@ -60,6 +62,7 @@ import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
+import { legacyManagerPortalSectionPath, parseResidentMoveInTab } from "@/lib/portal-detail-routes";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
@@ -101,6 +104,10 @@ const LEGACY_FINANCIALS_TO_DOCUMENTS: Record<string, string> = {
   "lease-expiration": "income-documents",
 };
 
+function legacyTabMapLookup<T extends string>(map: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
 async function renderManagerFinancesSection(
   section: string,
   tabParts: string[] | undefined,
@@ -115,9 +122,9 @@ async function renderManagerFinancesSection(
   if (tabParts.length > 1) notFound();
   const finTab = tabParts[0]!;
   if (!FINANCIALS_TABS.includes(finTab as (typeof FINANCIALS_TABS)[number])) {
-    const docsRedirect = LEGACY_FINANCIALS_TO_DOCUMENTS[finTab];
+    const docsRedirect = legacyTabMapLookup(LEGACY_FINANCIALS_TO_DOCUMENTS, finTab);
     if (docsRedirect) redirect(`${basePath}/documents/${docsRedirect}`);
-    const mapped = LEGACY_FINANCIALS_TAB_MAP[finTab];
+    const mapped = legacyTabMapLookup(LEGACY_FINANCIALS_TAB_MAP, finTab);
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
   }
@@ -143,9 +150,9 @@ async function renderManagerDocumentsSection(
   }
   if (tabParts.length > 1) notFound();
   const docTab = tabParts[0]!;
-  const legacyDocTab = LEGACY_DOCUMENTS_TAB_MAP[docTab];
+  const legacyDocTab = legacyTabMapLookup(LEGACY_DOCUMENTS_TAB_MAP, docTab);
   if (legacyDocTab) redirect(`${basePath}/documents/${legacyDocTab}`);
-  const financesRedirect = LEGACY_DOCUMENTS_TO_FINANCIALS[docTab];
+  const financesRedirect = legacyTabMapLookup(LEGACY_DOCUMENTS_TO_FINANCIALS, docTab);
   if (financesRedirect) {
     redirect(`${basePath}/financials/${financesRedirect}`);
   }
@@ -187,19 +194,13 @@ function managerTierPaywall(
 
 function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
   return (
-    <div className="mx-auto max-w-2xl">
-      <ManagerPortalPageShell title={title}>
-        <div className="glass-card rounded-2xl px-5 py-6 sm:px-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Property plan</p>
-          <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-foreground">Awaiting your property manager</h2>
-          <p className="mt-3 text-sm leading-6 text-muted">
-            Access to <span className="font-semibold text-foreground">{title.toLowerCase()}</span> is not available while
-            the property team is on the Free plan. They can enable this feature by upgrading to Pro or Business — there is
-            nothing you need to do on your end.
-          </p>
-        </div>
-      </ManagerPortalPageShell>
-    </div>
+    <ManagerPortalPageShell title={title} hideTitleOnMobileNav>
+      <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+        <span className="font-semibold">Awaiting your property manager.</span> Access to {title.toLowerCase()} is not
+        available while the property team is on the Free plan. They can enable this feature by upgrading to Pro or
+        Business.
+      </p>
+    </ManagerPortalPageShell>
   );
 }
 
@@ -279,14 +280,46 @@ export async function renderPortalSection(
         })
       : false;
   if (kind === "resident" && section === "applications") {
-    if (tabParts?.length) notFound();
-    return <ResidentApplicationsPanel />;
+    const RESIDENT_APP_BUCKETS = ["pending", "approved", "rejected"] as const;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/applications/pending`);
+    }
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const applicationBucket = RESIDENT_APP_BUCKETS.includes(
+      tabRaw as (typeof RESIDENT_APP_BUCKETS)[number],
+    )
+      ? (tabRaw as (typeof RESIDENT_APP_BUCKETS)[number])
+      : "pending";
+    if (tabRaw !== applicationBucket) {
+      redirect(`${def.basePath}/applications/${applicationBucket}`);
+    }
+    const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+    return (
+      <ResidentApplicationsPanel
+        bucket={applicationBucket}
+        basePath={def.basePath}
+        applicationId={applicationId}
+      />
+    );
   }
   if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
-    const allowDashboard =
-      section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
-    if (!allowDashboard && section !== "applications" && section !== "profile") {
-      redirect(residentPortalHomePath(residentAccess));
+    if (residentAccess.isPreLeaseResident) {
+      const preLeaseAllowed =
+        section === "dashboard" ||
+        section === "tour" ||
+        section === "applications" ||
+        section === "communication" ||
+        section === "profile";
+      if (!preLeaseAllowed) {
+        redirect(residentPortalHomePath(residentAccess));
+      }
+    } else {
+      const allowDashboard =
+        section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
+      if (!allowDashboard && section !== "applications" && section !== "profile") {
+        redirect(residentPortalHomePath(residentAccess));
+      }
     }
   }
   // Legacy path support: work-orders moved under Services tabs.
@@ -451,8 +484,8 @@ export async function renderPortalSection(
 
     if (kind === "pro" && section === "relationships") {
       if (tabParts?.length) {
-        const legacyRelTab = tabParts[0]!;
-        if (legacyRelTab === "owner" || legacyRelTab === "manager") {
+        const teamTabRaw = tabParts[0]!;
+        if (teamTabRaw === "owner" || teamTabRaw === "manager" || teamTabRaw === "pending" || teamTabRaw === "linked") {
           redirect(`${def.basePath}/${section}`);
         }
         notFound();
@@ -466,16 +499,39 @@ export async function renderPortalSection(
       );
     }
 
+    if (kind === "pro") {
+      const legacyPath = legacyManagerPortalSectionPath(section);
+      if (legacyPath) {
+        redirect(`${def.basePath}/${legacyPath}`);
+      }
+    }
+
     if (section === "residents") {
       if (!tabParts?.length) {
         redirect(`${def.basePath}/${section}/current`);
       }
-      if (tabParts.length > 1) notFound();
       const residentsTab = tabParts[0]!;
-      if (!["current", "previous"].includes(residentsTab)) notFound();
+      if (residentsTab === "previous") {
+        const tail = tabParts.slice(1);
+        redirect(`${def.basePath}/residents/current${tail.length ? `/${tail.join("/")}` : ""}`);
+      }
+      if (residentsTab !== "current") notFound();
+      const residentId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      const residentDetailTab = tabParts.length >= 3 ? tabParts[2]! : undefined;
+      const residentPaymentId =
+        residentDetailTab === "payments" && tabParts.length >= 4
+          ? decodeURIComponent(tabParts[3]!)
+          : undefined;
+      if (tabParts.length > (residentPaymentId ? 4 : 3)) notFound();
       const ManagerResidents = await loadManagerResidents();
       return subscriptionGated(
-        <ManagerResidents tabId={residentsTab as "current" | "previous"} smsUiEnabled={isSmsCommUiEnabled()} />,
+        <ManagerResidents
+          tabId="current"
+          residentId={residentId}
+          detailTab={residentDetailTab as import("@/lib/portal-detail-routes").ResidentDetailTabId | undefined}
+          paymentId={residentPaymentId}
+          smsUiEnabled={isSmsCommUiEnabled()}
+        />,
         kind,
         "residents",
         managerOwnerSubscriptionTier,
@@ -483,55 +539,124 @@ export async function renderPortalSection(
     }
 
     if (section === "communication") {
+      const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+      type CommListSegment = (typeof COMM_SEGMENTS)[number];
+
       if (!tabParts?.length) {
-        redirect(`${def.basePath}/communication/inbox/unopened`);
+        redirect(`${def.basePath}/communication/active`);
       }
+
       const channel = tabParts[0]!;
       if (channel === "sms") {
-        const inboxTab = tabParts[1] ?? "unopened";
-        const mapped =
-          inboxTab === "all" || inboxTab === "unopened"
-            ? "unopened"
-            : inboxTab === "opened"
-              ? "opened"
-              : inboxTab === "sent"
-                ? "sent"
-                : inboxTab === "schedule"
-                  ? "schedule"
-                  : inboxTab === "trash"
-                    ? "trash"
-                    : null;
-        if (!mapped) notFound();
-        redirect(`${def.basePath}/communication/inbox/${mapped}`);
+        redirect(`${def.basePath}/communication/active`);
       }
+
       if (channel === "inbox") {
-        const inboxTab = tabParts[1] ?? "unopened";
-        if (!isManagerInboxTab(inboxTab)) notFound();
-        if (tabParts.length > 2) notFound();
-        const ManagerCommunication = await loadManagerCommunication();
-        return subscriptionGated(
-          <ManagerCommunication inboxTabId={inboxTab} smsUiEnabled={isSmsCommUiEnabled()} />,
-          kind,
-          "communication",
-          managerOwnerSubscriptionTier,
-        );
+        const legacyTab = tabParts[1] ?? "unopened";
+        if (legacyTab === "trash") {
+          redirect(`${def.basePath}/communication/archived`);
+        }
+        if (!isManagerInboxTab(legacyTab)) notFound();
+        redirect(`${def.basePath}/communication/active`);
       }
-      notFound();
+
+      let threadId: string | undefined;
+      if (tabParts.length === 2) {
+        threadId = decodeURIComponent(tabParts[1]!);
+      } else if (tabParts.length > 2) {
+        notFound();
+      }
+
+      const segmentRaw = channel;
+      const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
+        ? (segmentRaw as CommListSegment)
+        : "active";
+      if (segmentRaw !== listSegment) {
+        redirect(`${def.basePath}/communication/${listSegment}`);
+      }
+
+      const ManagerCommunication = await loadManagerCommunication();
+      return subscriptionGated(
+        <ManagerCommunication
+          listSegment={listSegment}
+          threadId={threadId}
+          smsUiEnabled={isSmsCommUiEnabled()}
+        />,
+        kind,
+        "communication",
+        managerOwnerSubscriptionTier,
+      );
     }
 
     if (section === "work-orders" || section === "services") {
+      const REQUEST_BUCKETS = ["pending", "approved", "denied"] as const;
+      const WO_BUCKETS = ["open", "scheduled", "completed"] as const;
+
       if (!tabParts?.length) {
-        redirect(`${def.basePath}/services/requests`);
+        redirect(`${def.basePath}/services/requests/pending`);
       }
-      if (tabParts.length > 1) notFound();
+
       const servicesTab = tabParts[0]!;
       if (servicesTab === "work-done") {
         redirect(`${def.basePath}/financials/expenses`);
       }
       if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
+
+      if (servicesTab === "vendors") {
+        if (tabParts.length > 1) notFound();
+      } else if (servicesTab === "requests") {
+        if (tabParts.length === 1) {
+          redirect(`${def.basePath}/services/requests/pending`);
+        }
+        if (tabParts.length > 3) notFound();
+        const bucketRaw = tabParts[1]!;
+        const requestBucket = REQUEST_BUCKETS.includes(bucketRaw as typeof REQUEST_BUCKETS[number])
+          ? (bucketRaw as typeof REQUEST_BUCKETS[number])
+          : "pending";
+        if (bucketRaw !== requestBucket) {
+          redirect(`${def.basePath}/services/requests/${requestBucket}`);
+        }
+      } else if (servicesTab === "work-orders") {
+        if (tabParts.length === 1) {
+          redirect(`${def.basePath}/services/work-orders/open`);
+        }
+        if (tabParts.length > 3) notFound();
+        const bucketRaw = tabParts[1]!;
+        const workOrderBucket = WO_BUCKETS.includes(bucketRaw as typeof WO_BUCKETS[number])
+          ? (bucketRaw as typeof WO_BUCKETS[number])
+          : "open";
+        if (bucketRaw !== workOrderBucket) {
+          redirect(`${def.basePath}/services/work-orders/${workOrderBucket}`);
+        }
+      }
+
+      const requestBucket =
+        servicesTab === "requests"
+          ? (tabParts[1] as typeof REQUEST_BUCKETS[number])
+          : undefined;
+      const workOrderBucket =
+        servicesTab === "work-orders"
+          ? (tabParts[1] as typeof WO_BUCKETS[number])
+          : undefined;
+      const serviceRequestId =
+        servicesTab === "requests" && tabParts.length >= 3
+          ? decodeURIComponent(tabParts[2]!)
+          : undefined;
+      const workOrderId =
+        servicesTab === "work-orders" && tabParts.length >= 3
+          ? decodeURIComponent(tabParts[2]!)
+          : undefined;
+
       const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
       return subscriptionGated(
-        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders" | "vendors"} basePath={def.basePath} />,
+        <ManagerAllServicesPanel
+          tabId={servicesTab as "requests" | "work-orders" | "vendors"}
+          basePath={def.basePath}
+          requestBucket={requestBucket}
+          workOrderBucket={workOrderBucket}
+          serviceRequestId={serviceRequestId}
+          workOrderId={workOrderId}
+        />,
         kind,
         "services",
         managerOwnerSubscriptionTier,
@@ -547,10 +672,51 @@ export async function renderPortalSection(
           managerOwnerSubscriptionTier,
         );
       }
-      if (tabParts?.length) {
-        redirect(`${def.basePath}/${section}`);
+
+      const PAYMENT_DIRECTIONS = ["incoming", "outgoing"] as const;
+      const PAYMENT_BUCKETS = ["pending", "overdue", "paid"] as const;
+
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/payments/incoming/pending`);
       }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
+
+      const directionRaw = tabParts[0];
+      if (!PAYMENT_DIRECTIONS.includes(directionRaw as typeof PAYMENT_DIRECTIONS[number])) {
+        redirect(`${def.basePath}/payments/incoming/pending`);
+      }
+      const direction = directionRaw as "incoming" | "outgoing";
+
+      if (tabParts.length === 1) {
+        redirect(`${def.basePath}/payments/${direction}/pending`);
+      }
+
+      if (tabParts.length > 3) {
+        redirect(`${def.basePath}/payments/${direction}/pending`);
+      }
+
+      const bucketRaw = tabParts[1];
+      const bucket = PAYMENT_BUCKETS.includes(bucketRaw as typeof PAYMENT_BUCKETS[number])
+        ? (bucketRaw as "pending" | "overdue" | "paid")
+        : "pending";
+
+      if (bucketRaw !== bucket) {
+        redirect(`${def.basePath}/payments/${direction}/${bucket}`);
+      }
+
+      const paymentId =
+        tabParts.length >= 3 ? decodeURIComponent(tabParts[2]!) : undefined;
+
+      return subscriptionGated(
+        <ManagerPayments
+          direction={direction}
+          bucket={bucket}
+          basePath={def.basePath}
+          paymentId={paymentId}
+        />,
+        kind,
+        "payments",
+        managerOwnerSubscriptionTier,
+      );
     }
 
     const financesView = await renderManagerFinancesSection(
@@ -571,10 +737,122 @@ export async function renderPortalSection(
     if (documentsView) return documentsView;
 
     if (section === "leases") {
-      if (tabParts?.length) {
-        redirect(`${def.basePath}/${section}`);
+      const LEASE_TABS = ["manager", "resident", "signed", "completed"] as const;
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/leases/manager`);
       }
-      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
+      if (tabParts.length > 2) notFound();
+      const tabRaw = tabParts[0]!;
+      const leaseTab = LEASE_TABS.includes(tabRaw as typeof LEASE_TABS[number])
+        ? (tabRaw as typeof LEASE_TABS[number])
+        : "manager";
+      if (tabRaw !== leaseTab) {
+        redirect(`${def.basePath}/leases/${leaseTab}`);
+      }
+      const leaseId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      return subscriptionGated(
+        <ManagerLeases tab={leaseTab} basePath={def.basePath} leaseId={leaseId} />,
+        kind,
+        "leases",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "applications") {
+      const APPLICATION_TABS = ["incomplete", "pending", "approved", "rejected"] as const;
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/applications/pending`);
+      }
+      if (tabParts.length > 2) notFound();
+      const tabRaw = tabParts[0]!;
+      const applicationTab = APPLICATION_TABS.includes(tabRaw as typeof APPLICATION_TABS[number])
+        ? (tabRaw as typeof APPLICATION_TABS[number])
+        : "pending";
+      if (tabRaw !== applicationTab) {
+        redirect(`${def.basePath}/applications/${applicationTab}`);
+      }
+      const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      const ManagerApplications = await loadManagerApplications();
+      return subscriptionGated(
+        <ManagerApplications
+          bucket={applicationTab}
+          basePath={def.basePath}
+          applicationId={applicationId}
+        />,
+        kind,
+        "applications",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "properties") {
+      const PROPERTY_STAGES = ["listed", "drafts", "unlisted"] as const;
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/properties/listed`);
+      }
+      const stageRaw = tabParts[0]!;
+      const stage = PROPERTY_STAGES.includes(stageRaw as typeof PROPERTY_STAGES[number])
+        ? (stageRaw as typeof PROPERTY_STAGES[number])
+        : "listed";
+      if (stageRaw !== stage) {
+        redirect(`${def.basePath}/properties/${stage}`);
+      }
+      if (tabParts.length > 3) notFound();
+      const propertyKey = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+      const propertyDetailTab = tabParts.length >= 3 ? tabParts[2]! : undefined;
+      const ManagerProperties = await loadManagerProperties();
+      return subscriptionGated(
+        <ManagerProperties
+          stage={stage}
+          basePath={def.basePath}
+          propertyKey={propertyKey}
+          detailTab={propertyDetailTab as import("@/lib/portal-detail-routes").PropertyDetailTabId | undefined}
+        />,
+        kind,
+        "properties",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "promotion") {
+      if (tabParts?.length) {
+        const legacyFilter = tabParts[0];
+        if (legacyFilter === "text" || legacyFilter === "image") {
+          redirect(`${def.basePath}/promotion`);
+        }
+        notFound();
+      }
+      return subscriptionGated(
+        <ManagerPromotion basePath={def.basePath} />,
+        kind,
+        "promotion",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "calendar") {
+      const CALENDAR_VIEWS = ["all", "tours", "services"] as const;
+      if (tabParts?.length) {
+        const viewRaw = tabParts[0]!;
+        if (!CALENDAR_VIEWS.includes(viewRaw as (typeof CALENDAR_VIEWS)[number])) notFound();
+        if (tabParts.length > 1) notFound();
+      } else if (kind === "pro") {
+        redirect(`${def.basePath}/calendar/all`);
+      }
+      const calendarView = tabParts?.length
+        ? (tabParts[0] as (typeof CALENDAR_VIEWS)[number])
+        : undefined;
+      const PortalCalendar = await loadPortalCalendar();
+      return subscriptionGated(
+        <PortalCalendar
+          portal="manager"
+          initialUserId={effectiveWorkspaceUserId}
+          calendarView={calendarView}
+        />,
+        kind,
+        "calendar",
+        managerOwnerSubscriptionTier,
+      );
     }
 
     if (tabParts?.length) notFound();
@@ -588,26 +866,6 @@ export async function renderPortalSection(
         "dashboard",
         managerOwnerSubscriptionTier,
       );
-    }
-    if (section === "properties") {
-      const ManagerProperties = await loadManagerProperties();
-      return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
-    }
-    if (section === "applications") {
-      const ManagerApplications = await loadManagerApplications();
-      return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
-    }
-    if (section === "calendar") {
-      const PortalCalendar = await loadPortalCalendar();
-      return subscriptionGated(
-        <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
-        kind,
-        "calendar",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "promotion") {
-      return subscriptionGated(<ManagerPromotion />, kind, "promotion", managerOwnerSubscriptionTier);
     }
     if (section === "bugs-feedback") {
       return subscriptionGated(
@@ -637,33 +895,40 @@ export async function renderPortalSection(
     );
   }
 
+  if (kind === "resident" && section === "tour") {
+    if (tabParts?.length) notFound();
+    return <ResidentTourPanel />;
+  }
+
   if (kind === "resident" && section === "profile") {
     if (tabParts?.length) notFound();
     return <ResidentProfilePanel />;
   }
 
   if (kind === "resident" && section === "payments") {
-    if (tabParts && tabParts.length > 1) notFound();
-    // Payments is Charges-only — the Summary/Statements tabs and the tab switcher
-    // were removed. Any legacy sub-path (charges/summary/statements or the old
-    // pending/overdue/paid/balance status tabs) redirects to the bare
-    // `/payments` URL, preserving a status pill where one existed so old deep
-    // links land on the right filter instead of 404ing.
-    const payTab = tabParts?.[0];
-    if (payTab) {
-      const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[payTab];
-      if (!legacy) notFound();
-      redirect(
-        `${def.basePath}/payments${searchSuffix(
-          searchParams,
-          legacy.status ? { status: legacy.status } : undefined,
-        )}`,
-      );
+    const PAY_BUCKETS = ["pending", "overdue", "paid"] as const;
+    if (!tabParts?.length) {
+      const legacyStatus = typeof searchParams?.status === "string" ? searchParams.status : undefined;
+      const bucket =
+        legacyStatus === "overdue" || legacyStatus === "paid" || legacyStatus === "pending"
+          ? legacyStatus
+          : "pending";
+      redirect(`${def.basePath}/payments/${bucket}`);
     }
-    const statusParam = searchParams?.status;
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const paymentBucket = PAY_BUCKETS.includes(tabRaw as (typeof PAY_BUCKETS)[number])
+      ? (tabRaw as (typeof PAY_BUCKETS)[number])
+      : "pending";
+    if (tabRaw !== paymentBucket) {
+      redirect(`${def.basePath}/payments/${paymentBucket}`);
+    }
+    const chargeId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
     return (
       <ResidentPaymentsPanel
-        initialStatus={typeof statusParam === "string" ? statusParam : undefined}
+        bucket={paymentBucket}
+        basePath={def.basePath}
+        chargeId={chargeId}
       />
     );
   }
@@ -691,17 +956,33 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "move-in") {
-    if (tabParts?.length) notFound();
     const moveInEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/move-in/placement`);
+    }
+    if (tabParts.length > 1) notFound();
+    const moveInTab = parseResidentMoveInTab(tabParts[0]);
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
-        <ManagerPortalPageShell title="House details">
-          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        <ManagerPortalPageShell title="House details" hideTitleOnMobileNav>
+          <ResidentMoveInShell
+            activeTab={moveInTab}
+            basePath={def.basePath}
+            resolved={null}
+            email={moveInEmail?.trim().toLowerCase() ?? ""}
+            locked
+          />
         </ManagerPortalPageShell>
       );
     }
-    return <ResidentMoveInPanel residentEmail={moveInEmail} />;
+    return (
+      <ResidentMoveInPanel
+        residentEmail={moveInEmail}
+        tab={tabParts[0]}
+        basePath={def.basePath}
+      />
+    );
   }
 
   if (kind === "resident" && section === "communication") {
@@ -711,8 +992,11 @@ export async function renderPortalSection(
     const inboxLeaseSigned = inboxEmail ? await loadResidentLeaseSignedStatus(inboxEmail) : false;
     if (!inboxLeaseSigned) {
       return (
-        <ManagerPortalPageShell title="Communication">
-          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        <ManagerPortalPageShell title="Communication" hideTitleOnMobileNav compactFilterRow>
+          <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+            <span className="font-semibold">Available once your lease is signed.</span>
+          </p>
+          <PortalDataTableEmpty message="Communication unlocks after both signatures are complete." icon="lease" />
         </ManagerPortalPageShell>
       );
     }

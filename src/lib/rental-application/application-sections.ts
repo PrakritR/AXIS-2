@@ -57,6 +57,8 @@ export const RENTAL_APPLICATION_SECTIONS: readonly RentalApplicationSection[] = 
       "Date of birth",
       "Social Security number",
       "Driver's license / ID",
+      "Driver's license / ID — front photo",
+      "Driver's license / ID — back photo",
     ],
   },
   {
@@ -90,6 +92,7 @@ export const RENTAL_APPLICATION_SECTIONS: readonly RentalApplicationSection[] = 
       "Supervisor name & phone",
       "Job title & employment start",
       "Monthly / annual income",
+      "Proof of income (pay stub, etc.)",
       "Other income",
     ],
   },

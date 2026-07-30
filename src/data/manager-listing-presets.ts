@@ -324,6 +324,19 @@ export function parseFurnitureSet(furnishing: string): Set<string> {
   return out;
 }
 
+/**
+ * A room is Furnished when its `furnishing` string holds real content that isn't the
+ * explicit "Unfurnished" marker. This preserves the stored meaning across the
+ * Unfurnished→Furnished checkbox inversion: an existing room whose furnishing lists
+ * furniture stays Furnished, one stored as "Unfurnished" stays unfurnished, and an
+ * empty/new room reads as unfurnished (the new default). The wizard layers session
+ * state on top only to keep the box checked for a just-furnished room with no items yet.
+ */
+export function roomFurnishingIsFurnished(furnishing: string | undefined): boolean {
+  const f = (furnishing ?? "").trim();
+  return f !== "" && f.toLowerCase() !== "unfurnished";
+}
+
 type FurnishingSelectValue = (typeof ROOM_FURNISHING_OPTIONS)[number]["value"];
 
 /** For select: known preset, custom text, or empty */
@@ -367,6 +380,64 @@ export const LISTING_STORIES_OPTIONS = [
   { id: "4", label: "4+ floors" },
   { id: "split", label: "Split level" },
 ] as const;
+
+/**
+ * The floor/level picker options are DERIVED from the Home step's Floors count — numbered
+ * floors only, no Basement/Loft/Outdoor/Custom. One shared source feeds every floor field
+ * (rooms, bathrooms, shared spaces). Split level → Lower/Upper level (chosen for a split
+ * home). Floors unset → at least "1st floor" so the dropdown is never empty.
+ */
+export function floorLevelLabelsFromStories(storiesId: string | undefined): string[] {
+  switch (storiesId) {
+    case "1":
+      return ["1st floor"];
+    case "2":
+      return ["1st floor", "2nd floor"];
+    case "3":
+      return ["1st floor", "2nd floor", "3rd floor"];
+    case "4":
+      return ["1st floor", "2nd floor", "3rd floor", "4th floor or higher"];
+    case "split":
+      return ["Lower level", "Upper level"];
+    default:
+      return ["1st floor"];
+  }
+}
+
+/**
+ * Options for a floor/level `<select>`: the derived list plus the current stored value when
+ * it is a legacy/out-of-range string (e.g. "Basement / garden level" on an old listing), so
+ * existing listings keep and display their value — the picker just stops OFFERING it.
+ */
+export function floorLevelSelectOptions(storiesId: string | undefined, current: string | undefined): string[] {
+  const derived = floorLevelLabelsFromStories(storiesId);
+  const cur = (current ?? "").trim();
+  return cur && !derived.includes(cur) ? [...derived, cur] : derived;
+}
+
+/** Ordinal rank of a numbered floor label ("3rd floor" → 3); null for non-numbered labels. */
+export function floorLabelRank(label: string): number | null {
+  const m = label.trim().match(/^(\d+)(?:st|nd|rd|th)\b/i);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Clamp a stored floor to the current floor count. A NUMBERED floor beyond the count clamps
+ * down to the highest available numbered floor and reports `changed: true` so the UI can
+ * show it moved rather than silently corrupting the record. A non-numbered/legacy value is
+ * preserved untouched.
+ */
+export function clampFloorLabelToStories(
+  floor: string,
+  storiesId: string | undefined,
+): { floor: string; changed: boolean } {
+  const derived = floorLevelLabelsFromStories(storiesId);
+  if (derived.includes(floor)) return { floor, changed: false };
+  const rank = floorLabelRank(floor);
+  if (rank == null) return { floor, changed: false };
+  const topNumbered = [...derived].reverse().find((l) => floorLabelRank(l) != null);
+  return topNumbered && topNumbered !== floor ? { floor: topNumbered, changed: true } : { floor, changed: false };
+}
 
 export const LISTING_TOTAL_BATH_OPTIONS = [
   { id: "1", label: "1 bathroom" },

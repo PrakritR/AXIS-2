@@ -1,14 +1,29 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
-  ManagerPortalFilterRow,
+  serviceRequestDetailHref,
+  serviceRequestListHref,
+} from "@/lib/portal-detail-routes";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import {
   ManagerPortalPageShell,
-  MANAGER_TABLE_TH,
-  ManagerPortalStatusPills,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import {
+  FilterCollapsibleSection,
+  FilterSingleSelectList,
+  filterSingleSelectSummary,
+} from "@/components/portal/filter-field-lists";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   buildManagerPropertyFilterOptions,
@@ -45,23 +60,9 @@ import {
 } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
-import { TabNav, useShallowTabId } from "@/components/ui/tabs";
-import {
-  PORTAL_DATA_TABLE,
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableColGroup,
-  PortalDataTableEmpty,
-  portalTableColumnPercents,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { useShallowTabId } from "@/components/ui/tabs";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
@@ -72,20 +73,40 @@ const SERVICES_TAB_IDS = ["requests", "work-orders", "vendors"] as const;
 export function ManagerAllServicesPanel({
   tabId: serverTabId,
   basePath,
+  requestBucket: requestBucketProp = "pending",
+  workOrderBucket: workOrderBucketProp = "open",
+  serviceRequestId: serviceRequestIdProp,
+  workOrderId: workOrderIdProp,
 }: {
   tabId: FilterType;
   basePath: string;
+  requestBucket?: RequestBucket;
+  workOrderBucket?: ManagerWorkOrderBucket;
+  serviceRequestId?: string;
+  workOrderId?: string;
 }) {
-  // Tab switches are shallow (client-only) — see TabNav `shallow` below.
   const tabId = useShallowTabId<FilterType>(serverTabId, SERVICES_TAB_IDS);
+  const router = useRouter();
+  const navigate = usePortalNavigate();
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
-  const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [residentFilter, setResidentFilter] = useState("");
+  const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
+  const [prevWoBucketProp, setPrevWoBucketProp] = useState(workOrderBucketProp);
+  if (workOrderBucketProp !== prevWoBucketProp) {
+    setPrevWoBucketProp(workOrderBucketProp);
+    if (woBucket !== workOrderBucketProp) setWoBucket(workOrderBucketProp);
+  }
+  const [reqBucket, setReqBucket] = useState<RequestBucket>(requestBucketProp);
+  const [prevReqBucketProp, setPrevReqBucketProp] = useState(requestBucketProp);
+  if (requestBucketProp !== prevReqBucketProp) {
+    setPrevReqBucketProp(requestBucketProp);
+    if (reqBucket !== requestBucketProp) setReqBucket(requestBucketProp);
+  }
   const [addRequestOpen, setAddRequestOpen] = useState(false);
   const [addWorkOrderOpen, setAddWorkOrderOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
@@ -153,21 +174,73 @@ export function ManagerAllServicesPanel({
     return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [propertyOptions, workOrders, serviceRequests]);
 
+  const residentOptions = useMemo(() => {
+    if (typeFilter === "vendors") return [];
+    const seen = new Map<string, string>();
+    const consider = (name: string | undefined) => {
+      const trimmed = name?.trim();
+      if (!trimmed || seen.has(trimmed)) return;
+      seen.set(trimmed, trimmed);
+    };
+    if (typeFilter === "requests") {
+      for (const row of serviceRequests) {
+        if (propertyFilters.length > 0 && !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) && row.propertyId?.trim()) continue;
+        consider(row.residentName);
+      }
+    } else if (typeFilter === "work-orders") {
+      for (const row of workOrders) {
+        if (
+          propertyFilters.length > 0 &&
+          !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) &&
+          !propertyFilters.some((id) => samePropertyId(row.assignedPropertyId, id))
+        ) {
+          continue;
+        }
+        consider(row.residentName);
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [typeFilter, serviceRequests, workOrders, propertyFilters]);
+
+  const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter)
+    ? residentFilter
+    : "";
+
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
-    if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
-    return rows;
-  }, [workOrders, propertyFilter]);
+    if (propertyFilters.length > 0) rows = rows.filter((r) => propertyFilters.some((id) => r.propertyId === id || r.assignedPropertyId === id));
+    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.title, r.propertyName, r.unit, r.residentName, r.priority, r.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [workOrders, propertyFilters, activeResidentFilter, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
-    if (propertyFilter) {
+    if (propertyFilters.length > 0) {
       rows = rows.filter(
-        (r) => samePropertyId(r.propertyId, propertyFilter) || !r.propertyId?.trim(),
+        (r) => propertyFilters.some((id) => samePropertyId(r.propertyId, id)) || !r.propertyId?.trim(),
       );
     }
-    return rows;
-  }, [serviceRequests, propertyFilter]);
+    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.offerName, r.residentName, r.notes, r.residentEmail]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [serviceRequests, propertyFilters, activeResidentFilter, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -204,6 +277,11 @@ export function ManagerAllServicesPanel({
     [filteredRequests, reqBucket],
   );
 
+  const detailRequest = useMemo(() => {
+    if (!serviceRequestIdProp) return null;
+    const decoded = decodeURIComponent(serviceRequestIdProp);
+    return bucketedRequests.find((r) => r.id === decoded) ?? null;
+  }, [serviceRequestIdProp, bucketedRequests]);
 
   const woCounts = useMemo(() => {
     const c: Record<ManagerWorkOrderBucket, number> = { open: 0, scheduled: 0, completed: 0 };
@@ -234,198 +312,321 @@ export function ManagerAllServicesPanel({
     [reqCounts],
   );
 
+  const propertyFilterLabel = useMemo(() => {
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return filterPropertyOptions.find((option) => samePropertyId(option.id, propertyFilters[0]))?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, filterPropertyOptions]);
+
+  const resetServicesFilters = () => {
+    setPropertyFilters([]);
+    setResidentFilter("");
+  };
+
+  const servicesFilterSheet =
+    typeFilter !== "vendors" ? (
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilter])}
+        compactPanel
+        desktopPresentation="panel"
+        className="min-w-0 shrink-0"
+        onReset={resetServicesFilters}
+        dataAttr="services-filter-sheet-open"
+      >
+        <div className="grid gap-4">
+          <ApplicationFilterSortFields
+            propertyOptions={filterPropertyOptions}
+            propertyFilters={propertyFilters}
+            onPropertyFiltersChange={(nextProperties) => {
+              setPropertyFilters(nextProperties);
+              setResidentFilter("");
+            }}
+            dataAttr="services-filter-property"
+          />
+          {residentOptions.length > 0 ? (
+            <ServicesResidentFilterDropdown
+              residentOptions={residentOptions}
+              value={activeResidentFilter}
+              onChange={setResidentFilter}
+            />
+          ) : null}
+        </div>
+      </PortalFilterSortSheet>
+    ) : null;
+
+  const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    if (typeFilter === "vendors") return [];
+    const chips: PortalActiveFilterChip[] = [];
+    if (propertyFilters.length > 0) {
+      chips.push({
+        id: "property",
+        label: `Property: ${propertyFilterLabel}`,
+        onRemove: () => {
+          setPropertyFilters([]);
+          setResidentFilter("");
+        },
+      });
+    }
+    if (activeResidentFilter) {
+      chips.push({
+        id: "resident",
+        label: `Resident: ${activeResidentFilter}`,
+        onRemove: () => setResidentFilter(""),
+      });
+    }
+    return chips;
+  }, [typeFilter, propertyFilters, propertyFilterLabel, activeResidentFilter]);
+
+  const servicesTypeNav = (
+    <DestinationNav
+      items={[
+        {
+          id: "requests",
+          label: "Requests",
+          href: `${basePath}/services/requests/pending`,
+          dataAttr: "manager-services-tab-requests",
+        },
+        {
+          id: "work-orders",
+          label: "Work orders",
+          href: `${basePath}/services/work-orders/open`,
+          dataAttr: "manager-services-tab-work-orders",
+        },
+        {
+          id: "vendors",
+          label: "Vendors",
+          href: `${basePath}/services/vendors`,
+          dataAttr: "manager-services-tab-vendors",
+        },
+      ]}
+      activeId={typeFilter}
+      ariaLabel="Services section"
+      size="toolbar"
+      className="max-w-none"
+    />
+  );
+
   const renderRequestDetail = (req: ServiceRequest) => {
     return (
       <ManagerServiceRequestDetail
         req={req}
         propertyLabel={resolveRequestPropertyLabel(req)}
         onUpdated={() => setDataTick((t) => t + 1)}
-        onApproved={() => setReqBucket("approved")}
-        onDenied={() => setReqBucket("denied")}
-        onCollapsed={() => setExpandedId(null)}
+        onApproved={() => router.push(`${basePath}/services/requests/approved`)}
+        onDenied={() => router.push(`${basePath}/services/requests/denied`)}
+        onCollapsed={() => navigate(serviceRequestListHref(basePath, reqBucket))}
       />
     );
   };
 
+  const servicesAddButton =
+    typeFilter === "vendors" ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        onClick={() => vendorsPanelRef.current?.openSettings()}
+        data-attr="manager-vendor-settings-open"
+      >
+        Vendor settings
+      </Button>
+    ) : typeFilter === "requests" ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        data-attr="manager-service-request-add"
+        onClick={() => setAddRequestOpen(true)}
+      >
+        Add request
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        data-attr="manager-work-order-add"
+        onClick={() => setAddWorkOrderOpen(true)}
+      >
+        Add work order
+      </Button>
+    );
+
+  const servicesMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow filter={servicesFilterSheet} actions={servicesAddButton} />
+  );
+
+  if (serviceRequestIdProp && detailRequest) {
+    return (
+      <>
+        <PortalRecordDetailPage
+          pageTitle="Services"
+          title={detailRequest.offerName}
+          subtitle={detailRequest.residentName}
+          avatarName={detailRequest.residentName}
+          backHref={serviceRequestListHref(basePath, reqBucket)}
+          backLabel="Back to services"
+          dataAttrBack="service-request-detail-back"
+        >
+          {renderRequestDetail(detailRequest)}
+        </PortalRecordDetailPage>
+        <ManagerCreateServiceRequestModal
+          open={addRequestOpen}
+          onClose={() => setAddRequestOpen(false)}
+          managerUserId={userId}
+          defaultPropertyId={propertyFilters[0] || undefined}
+          onSubmitted={() => {
+            setDataTick((t) => t + 1);
+            setReqBucket("pending");
+          }}
+        />
+        <ManagerCreateWorkOrderModal
+          open={addWorkOrderOpen}
+          onClose={() => setAddWorkOrderOpen(false)}
+          managerUserId={userId}
+          defaultPropertyId={propertyFilters[0] || undefined}
+          onSubmitted={(bucket) => {
+            setDataTick((t) => t + 1);
+            setWoBucket(bucket);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (workOrderIdProp && typeFilter === "work-orders") {
+    return (
+      <>
+        <ManagerWorkOrdersPanel
+          allRows={filteredWorkOrders}
+          bucket={woBucket}
+          workOrderId={workOrderIdProp}
+          listBasePath={basePath}
+          onAfterSchedule={() => router.push(`${basePath}/services/work-orders/scheduled`)}
+        />
+        <ManagerCreateWorkOrderModal
+          open={addWorkOrderOpen}
+          onClose={() => setAddWorkOrderOpen(false)}
+          managerUserId={userId}
+          defaultPropertyId={propertyFilters[0] || undefined}
+          onSubmitted={(bucket) => {
+            setDataTick((t) => t + 1);
+            setWoBucket(bucket);
+          }}
+        />
+      </>
+    );
+  }
+
+  const bucketDestinations = useMemo(() => {
+    if (typeFilter === "work-orders") {
+      return woTabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${basePath}/services/work-orders/${t.id}`,
+        count: t.count,
+      }));
+    }
+    if (typeFilter === "requests") {
+      return reqTabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${basePath}/services/requests/${t.id}`,
+        count: t.count,
+      }));
+    }
+    return undefined;
+  }, [typeFilter, woTabs, reqTabs, basePath]);
+
+  const activeBucketId =
+    typeFilter === "work-orders" ? woBucket : typeFilter === "requests" ? reqBucket : undefined;
+
+  const servicesListDestinations = (
+    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-1.5">
+      {servicesTypeNav}
+      {bucketDestinations ? (
+        <DestinationNav
+          items={bucketDestinations}
+          activeId={activeBucketId}
+          ariaLabel={typeFilter === "work-orders" ? "Work order status" : "Request status"}
+        />
+      ) : null}
+    </div>
+  );
+
   return (
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
-      titleAside={
-        <>
-          {typeFilter === "vendors" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => vendorsPanelRef.current?.openSettings()}
-              data-attr="manager-vendor-settings-open"
-            >
-              Vendor settings
-            </Button>
-          ) : null}
-          {typeFilter === "requests" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="manager-service-request-add"
-              onClick={() => setAddRequestOpen(true)}
-            >
-              Add add-on service
-            </Button>
-          ) : null}
-          {typeFilter === "work-orders" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr="manager-work-order-add"
-              onClick={() => setAddWorkOrderOpen(true)}
-            >
-              Add work order
-            </Button>
-          ) : null}
-        </>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav
-            shallow
-            activeId={typeFilter}
-            items={[
-              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },
-              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
-            ]}
-          />
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
-        </ManagerPortalFilterRow>
-      }
+      titleInlineFilter={typeFilter !== "vendors" ? servicesFilterSheet : null}
+      titleAside={servicesAddButton}
+      hideTitleOnMobileNav
+      compactFilterRow
     >
-      <div className="mt-1">
-        {typeFilter === "vendors" ? (
-          <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
-        ) : typeFilter === "work-orders" ? (
-          <>
-            <div className="mb-4">
-              <ManagerPortalStatusPills
-                tabs={woTabs}
-                activeId={woBucket}
-                onChange={(id) => setWoBucket(id as ManagerWorkOrderBucket)}
+      {servicesMobileActionsRow}
+      <PortalListControlStack
+        className="mb-2"
+        destinationRow={servicesListDestinations}
+        search={
+          typeFilter === "vendors"
+            ? undefined
+            : {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder:
+                  typeFilter === "work-orders" ? "Search maintenance requests" : "Search requests",
+                dataAttr:
+                  typeFilter === "work-orders" ? "services-work-orders-search" : "services-requests-search",
+              }
+        }
+        activeFilterChips={
+          typeFilter !== "vendors" ? <PortalActiveFilterChips chips={activeFilterChips} /> : null
+        }
+      />
+      {typeFilter === "vendors" ? (
+        <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
+      ) : typeFilter === "work-orders" ? (
+        <ManagerWorkOrdersPanel
+          allRows={filteredWorkOrders}
+          bucket={woBucket}
+          workOrderId={workOrderIdProp}
+          listBasePath={basePath}
+          onAfterSchedule={() => router.push(`${basePath}/services/work-orders/scheduled`)}
+        />
+      ) : bucketedRequests.length === 0 ? (
+        <PortalDataTableEmpty
+          message={filteredRequests.length === 0 ? "No requests yet." : "No requests in this status yet."}
+          icon="service"
+        />
+      ) : (
+        <div className={INBOX_LIST_SCROLL}>
+          {bucketedRequests.map((req) => {
+            const propertyLabel = resolveRequestPropertyLabel(req);
+            const unit = resolveRequestUnit(req);
+            const subtitle = [req.residentName, propertyLabel, unit].filter(Boolean).join(" · ");
+            return (
+              <PortalServiceRecordRow
+                key={req.id}
+                title={req.offerName}
+                subtitle={subtitle || undefined}
+                statusLabel={reqBucket === "pending" ? "Pending" : reqBucket === "approved" ? "Approved" : "Denied"}
+                statusTone={
+                  reqBucket === "approved" ? "success" : reqBucket === "denied" ? "danger" : "warning"
+                }
+                onOpen={() => navigate(serviceRequestDetailHref(basePath, reqBucket, req.id))}
+                dataAttr="service-request-list-row"
               />
-            </div>
-            <ManagerWorkOrdersPanel
-              allRows={filteredWorkOrders}
-              bucket={woBucket}
-              onAfterSchedule={() => setWoBucket("scheduled")}
-            />
-          </>
-        ) : (
-          <>
-            <div className="mb-4">
-              <ManagerPortalStatusPills
-                tabs={reqTabs}
-                activeId={reqBucket}
-                onChange={(id) => setReqBucket(id as RequestBucket)}
-              />
-            </div>
-            {bucketedRequests.length === 0 ? (
-              <PortalDataTableEmpty
-                message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}
-                icon="service"
-              />
-            ) : (
-          <>
-          <div className="space-y-2 lg:hidden">
-            {bucketedRequests.map((req) => {
-              const id = `request-${req.id}`;
-              const isExpanded = expandedId === id;
-              const propertyLabel = resolveRequestPropertyLabel(req);
-              const unit = resolveRequestUnit(req);
-              return (
-                <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button
-                    type="button"
-                    className="flex w-full gap-2 text-left"
-                    onClick={() => setExpandedId(isExpanded ? null : id)}
-                    aria-expanded={isExpanded}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
-                        <span className="truncate">{req.offerName}</span>
-                      </PortalTableInlineExpand>
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        {[propertyLabel, unit].filter(Boolean).join(" · ")}
-                      </p>
-                    </div>
-                  </button>
-                  {isExpanded ? (
-                    <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
-            {bucketedRequests.map((req) => {
-              const id = `request-${req.id}`;
-              const isExpanded = expandedId === id;
-              const propertyLabel = resolveRequestPropertyLabel(req);
-              const unit = resolveRequestUnit(req);
-              return (
-                  <Fragment key={`req-${req.id}`}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
-                      aria-expanded={isExpanded}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={isExpanded}>{req.offerName}</PortalTableInlineExpand>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <span className="text-foreground">{propertyLabel}</span>
-                        {unit ? <span className="text-muted"> · {unit}</span> : null}
-                      </td>
-                    </tr>
-                    {isExpanded ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderRequestDetail(req)}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-              );
-            })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          </>
-            )}
-          </>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <ManagerCreateServiceRequestModal
         open={addRequestOpen}
         onClose={() => setAddRequestOpen(false)}
         managerUserId={userId}
-        defaultPropertyId={propertyFilter || undefined}
+        defaultPropertyId={propertyFilters[0] || undefined}
         onSubmitted={() => {
           setDataTick((t) => t + 1);
           setReqBucket("pending");
@@ -436,12 +637,42 @@ export function ManagerAllServicesPanel({
         open={addWorkOrderOpen}
         onClose={() => setAddWorkOrderOpen(false)}
         managerUserId={userId}
-        defaultPropertyId={propertyFilter || undefined}
+        defaultPropertyId={propertyFilters[0] || undefined}
         onSubmitted={(bucket) => {
           setDataTick((t) => t + 1);
           setWoBucket(bucket);
         }}
       />
     </ManagerPortalPageShell>
+  );
+}
+
+function ServicesResidentFilterDropdown({
+  residentOptions,
+  value,
+  onChange,
+}: {
+  residentOptions: { id: string; label: string }[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const options = [
+    { value: "", label: "All residents" },
+    ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
+  ];
+
+  return (
+    <FilterCollapsibleSection
+      label="Resident"
+      summary={filterSingleSelectSummary(value, options, "All residents")}
+      dataAttr="services-filter-resident-trigger"
+    >
+      <FilterSingleSelectList
+        options={options}
+        value={value}
+        onChange={onChange}
+        dataAttr="services-filter-resident"
+      />
+    </FilterCollapsibleSection>
   );
 }

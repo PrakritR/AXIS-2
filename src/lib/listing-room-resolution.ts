@@ -15,7 +15,11 @@
  * implementation fed two different argument sets still returns two answers.
  */
 
-import type { ManagerListingSubmissionV1, ManagerRoomSubmission } from "@/lib/manager-listing-submission";
+import {
+  isEntireHomeListing,
+  type ManagerListingSubmissionV1,
+  type ManagerRoomSubmission,
+} from "@/lib/manager-listing-submission";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
 
@@ -35,6 +39,14 @@ export function resolveSubmissionRoom(
 ): ManagerRoomSubmission | undefined {
   const rooms = sub?.rooms;
   if (!rooms?.length) return undefined;
+
+  // An entire-home listing is let as one unit, so its named room IS the premises. This has to
+  // live here rather than only on the ledger side: when the two disagreed, an entire-home
+  // approval billed the whole-unit rent while its lease quoted whichever room matched first.
+  if (sub && isEntireHomeListing(sub)) {
+    const named = rooms.find((r) => r.name.trim());
+    if (named) return named;
+  }
 
   for (const choice of lookup.roomChoices ?? []) {
     const trimmed = choice?.trim();

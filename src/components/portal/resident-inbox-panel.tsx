@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxScheduledCard, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import {
+  buildInboxThreadAssistantContext,
+  InboxThreadAssistantStrip,
+} from "@/components/portal/inbox-thread-assistant-strip";
 import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
 import {
   PortalInboxSelectionToolbar,
@@ -13,6 +17,7 @@ import {
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
+import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
@@ -152,6 +157,7 @@ export const ResidentInboxPanel = forwardRef<
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const reloadScheduledMessages = useCallback(async () => {
     if (isDemoModeActive()) return;
@@ -279,9 +285,7 @@ export const ResidentInboxPanel = forwardRef<
     if (embeddedInCommunication) onTabCountsChange?.(tabCountsForParent);
   }, [embeddedInCommunication, onTabCountsChange, tabCountsForParent]);
 
-  const rowsForTab = useMemo(() => {
-    // "all" = the unified conversation list (inbox + sent, no trash) for the
-    // tabless Communication view.
+  const baseRowsForTab = useMemo(() => {
     if (tabId === "all") return emailThreads.filter((t) => t.folder !== "trash");
     if (tabId === "unopened")
       return emailThreads.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
@@ -290,6 +294,14 @@ export const ResidentInboxPanel = forwardRef<
     if (tabId === "trash") return emailThreads.filter((t) => t.folder === "trash");
     return [];
   }, [emailThreads, tabId, retainedIds]);
+
+  const rowsForTab = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return baseRowsForTab;
+    return baseRowsForTab.filter((t) =>
+      [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase().includes(q),
+    );
+  }, [baseRowsForTab, searchQuery]);
 
   // Returning to Unopened (or refreshing) shows the true unread set.
   useEffect(() => {
@@ -905,6 +917,17 @@ export const ResidentInboxPanel = forwardRef<
         liveContacts={eligibleContacts}
       />
 
+      {tabId !== "schedule" ? (
+        <PortalListToolbar
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search messages",
+            dataAttr: "resident-inbox-search",
+          }}
+        />
+      ) : null}
+
       {tabId === "schedule" ? (
         scheduledRows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
@@ -967,14 +990,24 @@ export const ResidentInboxPanel = forwardRef<
               emptyLabel="No messages in this conversation."
               composer={
                 activeThread.folder === "trash" || tabId === "trash" ? undefined : (
-                  <InboxComposer
-                    value={replyDraft}
-                    onChange={setReplyDraft}
-                    onSubmit={() => void sendActiveReply()}
-                    sending={replySending}
-                    placeholder="Write a reply…"
-                    dataAttr="resident-inbox-reply"
-                  />
+                  <>
+                    <InboxThreadAssistantStrip
+                      contextHint={buildInboxThreadAssistantContext({
+                        subject: activeThread.subject,
+                        email: activeThread.email,
+                        from: activeThread.from,
+                        sentSemantics: activeIsSent,
+                      })}
+                    />
+                    <InboxComposer
+                      value={replyDraft}
+                      onChange={setReplyDraft}
+                      onSubmit={() => void sendActiveReply()}
+                      sending={replySending}
+                      placeholder="Write a reply…"
+                      dataAttr="resident-inbox-reply"
+                    />
+                  </>
                 )
               }
             />
@@ -1090,14 +1123,24 @@ export const ResidentInboxPanel = forwardRef<
                 emptyLabel="No messages in this conversation."
                 composer={
                   activeThread.folder === "trash" || tabId === "trash" ? undefined : (
-                    <InboxComposer
-                      value={replyDraft}
-                      onChange={setReplyDraft}
-                      onSubmit={() => void sendActiveReply()}
-                      sending={replySending}
-                      placeholder="Write a reply…"
-                      dataAttr="resident-inbox-reply"
-                    />
+                    <>
+                      <InboxThreadAssistantStrip
+                        contextHint={buildInboxThreadAssistantContext({
+                          subject: activeThread.subject,
+                          email: activeThread.email,
+                          from: activeThread.from,
+                          sentSemantics: activeIsSent,
+                        })}
+                      />
+                      <InboxComposer
+                        value={replyDraft}
+                        onChange={setReplyDraft}
+                        onSubmit={() => void sendActiveReply()}
+                        sending={replySending}
+                        placeholder="Write a reply…"
+                        dataAttr="resident-inbox-reply"
+                      />
+                    </>
                   )
                 }
               />

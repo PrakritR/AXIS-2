@@ -22,13 +22,10 @@ test.describe("Manager FREE100 signup", () => {
       page.getByRole("button", { name: /choose pro/i }).first().click(),
     ]);
 
-    // The unified manager create form (NativeAuthHub) — placeholder-only inputs.
+    // The unified generic create form (PortalAuthForm hub variant).
     await expect(page.getByPlaceholder("Full name")).toBeVisible();
     await expect(page.getByPlaceholder("Email")).toBeVisible();
-    await expect(page.getByPlaceholder("Phone number")).toBeVisible();
     await expect(page.getByPlaceholder(/Password \(8\+/)).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /create property account|set up property manager/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /create account/i })).toBeVisible();
   });
 });

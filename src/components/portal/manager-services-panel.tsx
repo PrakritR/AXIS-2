@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
-import {Input, Select} from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   deleteAmenityOffer,
   readAmenityOffersForProperty,
@@ -116,20 +118,20 @@ export function ManagerServicesPanel() {
           </Button>
         }
         filterRow={
-          propertyOptions.length > 1 ? (
+          propertyOptions.length > 0 ? (
             <ManagerPortalFilterRow>
-              <label className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs">
-                <span className="font-semibold text-muted">Property</span>
-                <Select
-                  value={resolvedPropertyId}
-                  onChange={(e) => setSelectedPropertyId(e.target.value)}
-                  className="rounded-lg border-0 bg-transparent text-sm text-foreground outline-none"
-                >
-                  {propertyOptions.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </Select>
-              </label>
+              <PortalFilterSortSheet
+                activeCount={portalFilterActiveCount([resolvedPropertyId])}
+                onReset={() => setSelectedPropertyId("")}
+                dataAttr="services-catalog-filter-sheet-open"
+              >
+                <PortalPropertyFilterPill
+                  propertyOptions={propertyOptions}
+                  propertyValue={resolvedPropertyId}
+                  onPropertyChange={setSelectedPropertyId}
+                  propertyPlaceholder="Select a property"
+                />
+              </PortalFilterSortSheet>
             </ManagerPortalFilterRow>
           ) : null
         }
@@ -221,9 +223,6 @@ export function ManagerServicesPanel() {
         panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={handleSave}>
               {editingOffer ? "Save changes" : "Add request"}
             </Button>

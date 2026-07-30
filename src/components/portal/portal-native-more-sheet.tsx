@@ -2,16 +2,22 @@
 
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { isCrossPortalNavigation, portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import type { PortalKind } from "@/lib/portal-types";
+import {
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
+} from "@/lib/portal-layout-classes";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo } from "react";
+import { Drawer } from "vaul";
 
 export type PortalMoreNavItem = {
   section: string;
@@ -23,7 +29,7 @@ export type PortalMoreNavItem = {
 
 function MoreGridIcon() {
   return (
-    <svg className="h-[23px] w-[23px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="5" cy="5" r="1.75" />
       <circle cx="12" cy="5" r="1.75" />
       <circle cx="19" cy="5" r="1.75" />
@@ -72,7 +78,7 @@ function MoreNavRow({
         })(e);
         onNavigate();
       }}
-      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+      className={`portal-pressable flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition active:opacity-90 ${
         active
           ? "bg-primary/10 text-primary"
           : item.locked
@@ -83,7 +89,7 @@ function MoreNavRow({
     >
       {showNavIcons ? (
         <span className={`shrink-0 ${item.locked ? "opacity-60" : ""}`} aria-hidden>
-          <PortalNavIcon section={item.section} />
+          <PortalNavIcon section={item.section} active={active} />
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -103,56 +109,54 @@ export function PortalNativeMoreSheet({
 }: PortalNativeMoreSheetProps) {
   const closeSheet = () => onOpenChange(false);
 
-  // Bucket into the same headings/order as the web sidebar (PORTAL_NAV_GROUPS).
-  // The web sidebar excludes some sections (e.g. `profile`) because they live in
-  // the desktop-only account menu; on mobile this sheet is the only surface for
-  // them, so append anything grouping dropped as a trailing group.
   const navGroups = useMemo(() => {
     const grouped = groupNavItems(kind, items);
     const rendered = new Set(grouped.flatMap((g) => g.items.map((i) => i.section)));
-    const trailing = items.filter((i) => !rendered.has(i.section));
+    const trailing = items.filter((i) => !rendered.has(i.section) && i.section !== "profile");
     if (trailing.length) grouped.push({ id: "account-extra", label: null, items: trailing });
     return grouped;
   }, [kind, items]);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="portal-native-more-sheet flex max-h-[min(85dvh,720px)] flex-col rounded-t-[1.35rem] border-border px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0"
-      >
-        <div className="shrink-0 px-4 pb-1 pt-3">
-          <div className="mx-auto h-1 w-10 rounded-full bg-border" aria-hidden />
-          <SheetTitle className="sr-only">Portal sections</SheetTitle>
-        </div>
-        <nav
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-1"
-          aria-label="Portal sections"
+    <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
+      <Drawer.Portal>
+        <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
+        <Drawer.Content
+          className="portal-native-more-sheet fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(85dvh,720px)] flex-col gap-0 rounded-t-[1.35rem] border-t border-border bg-background px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0 outline-none motion-reduce:transition-none"
+          data-slot="vaul-bottom-sheet"
         >
-          {navGroups.map((group) => (
-            <div key={group.id} className="flex flex-col gap-1 pt-1 first:pt-0">
-              {group.label ? (
-                <p className="px-3 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
-                  {group.label}
-                </p>
-              ) : null}
-              <ul className="space-y-1">
-                {group.items.map((item) => (
-                  <li key={item.section}>
-                    <MoreNavRow
-                      item={item}
-                      active={activeSection === item.section}
-                      showNavIcons={showNavIcons}
-                      onNavigate={closeSheet}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-      </SheetContent>
-    </Sheet>
+          <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+          <Drawer.Title className="sr-only">Portal sections</Drawer.Title>
+          <div className="shrink-0 px-4 pb-1 pt-1 md:hidden" />
+          <nav
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-1"
+            aria-label="Portal sections"
+          >
+            {navGroups.map((group) => (
+              <div key={group.id} className="flex flex-col gap-1 pt-1 first:pt-0">
+                {group.label ? (
+                  <p className="px-3 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
+                    {group.label}
+                  </p>
+                ) : null}
+                <ul className="space-y-1">
+                  {group.items.map((item) => (
+                    <li key={item.section}>
+                      <MoreNavRow
+                        item={item}
+                        active={activeSection === item.section}
+                        showNavIcons={showNavIcons}
+                        onNavigate={closeSheet}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }
 
@@ -169,16 +173,22 @@ export function PortalNativeMoreNavButton({
       type="button"
       data-attr="bottom-nav-more"
       onClick={onClick}
-      className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
-        active ? "text-primary" : "text-foreground"
-      }`}
+      className={`${PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS} ${active ? "text-primary" : "text-muted"}`}
       aria-label="More portal sections"
     >
+      {active ? (
+        <span className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
       <span
-        className={`shrink-0 transition-opacity duration-200 ${active ? "opacity-100" : "opacity-60"}`}
+        className={`${PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS} transition-opacity duration-200 ${
+          active ? "opacity-100" : "opacity-60"
+        }`}
         aria-hidden
       >
         <MoreGridIcon />
+      </span>
+      <span className={`${PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS} ${active ? "text-primary" : "text-muted"}`}>
+        More
       </span>
     </button>
   );

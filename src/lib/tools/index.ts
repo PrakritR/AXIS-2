@@ -31,6 +31,8 @@ import {
   sendLeaseForSignatureTool,
   createLeaseDraftTool,
   updateLeaseDraftTool,
+  updateLeasePacketTool,
+  updateLeaseDocumentSectionsTool,
 } from "./domains/leases";
 import {
   listWorkOrdersTool,
@@ -202,6 +204,8 @@ export const agentRegistry = buildRegistry([
   orderBackgroundCheckTool,
   createLeaseDraftTool,
   updateLeaseDraftTool,
+  updateLeasePacketTool,
+  updateLeaseDocumentSectionsTool,
   amendLeaseTool,
   voidLeaseTool,
   sendLeaseForSignatureTool,

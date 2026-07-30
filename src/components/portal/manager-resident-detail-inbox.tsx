@@ -3,10 +3,15 @@
 import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
+import { InboxThreadAssistantStrip, buildInboxThreadAssistantContext } from "@/components/portal/inbox-thread-assistant-strip";
 import {
-  InboxThreadEmpty,
+  InboxComposer,
+  InboxReplyChannelPicker,
+  InboxThreadView,
   InboxTwoPane,
 } from "@/components/portal/portal-inbox-ui";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   MANAGER_INBOX_STORAGE_KEY,
@@ -78,18 +83,178 @@ function iosListTimestamp(iso: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
 }
 
+const RESIDENT_DETAIL_DIRECT_CHAT_KEY = "__resident_direct__";
+
+function ResidentDirectChatPane({
+  residentEmail,
+  residentName,
+  smsResident,
+  smsUiEnabled,
+  onSent,
+}: {
+  residentEmail: string;
+  residentName?: string;
+  smsResident?: ManagerSmsResidentConversation | null;
+  smsUiEnabled: boolean;
+  onSent: () => void;
+}) {
+  const { showToast } = useAppUi();
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const email = residentEmail.trim();
+  const displayName = residentName?.trim() || email || "Resident";
+  const subtitle = smsResident?.propertyLabel?.trim() || email;
+  const smsAvailable = smsUiEnabled && Boolean(smsResident?.phone?.trim());
+  const emailAvailable = Boolean(email);
+  const [replyViaEmail, setReplyViaEmail] = useState(!smsAvailable && emailAvailable);
+  const [replyViaSms, setReplyViaSms] = useState(smsAvailable);
+
+  useEffect(() => {
+    setReplyViaSms(smsAvailable);
+    setReplyViaEmail(!smsAvailable && emailAvailable);
+    setDraft("");
+  }, [email, smsAvailable, emailAvailable]);
+
+  const sendMessage = useCallback(async () => {
+    const text = draft.trim();
+    if (!text) return;
+    if (!replyViaEmail && !replyViaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    setSending(true);
+    try {
+      let smsOk = !replyViaSms;
+      let emailOk = !replyViaEmail;
+
+      if (replyViaSms) {
+        const phone = smsResident?.phone?.trim();
+        if (!phone) {
+          showToast("No phone on file for this resident.");
+          return;
+        }
+        const res = await fetch("/api/manager/sms-conversations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toPhone: phone,
+            text,
+            residentUserId: smsResident?.residentUserId ?? null,
+            conversationKey: smsResident?.conversationKey ?? null,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        smsOk = res.ok;
+        if (!smsOk && !replyViaEmail) {
+          showToast(body.error ?? "Could not send SMS.");
+          return;
+        }
+      }
+
+      if (replyViaEmail) {
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: "Property manager",
+            toEmails: [email],
+            subject: "Message from your property manager",
+            text,
+            deliverToPortalInbox: true,
+            eventCategory: "messages",
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        emailOk = res.ok && data.ok === true;
+        if (!emailOk && !smsOk) {
+          showToast(data.error ?? "Could not send email.");
+          return;
+        }
+      }
+
+      setDraft("");
+      if (replyViaEmail && replyViaSms) showToast("Sent via email and SMS.");
+      else if (replyViaEmail) showToast("Email sent.");
+      else showToast("SMS sent.");
+      onSent();
+    } catch {
+      showToast("Could not send.");
+    } finally {
+      setSending(false);
+    }
+  }, [
+    draft,
+    email,
+    onSent,
+    replyViaEmail,
+    replyViaSms,
+    showToast,
+    smsResident?.conversationKey,
+    smsResident?.phone,
+    smsResident?.residentUserId,
+  ]);
+
+  return (
+    <InboxThreadView
+      title={displayName}
+      avatarName={displayName}
+      subtitle={subtitle}
+      messages={[]}
+      emptyLabel="No messages yet. Send the first message below."
+      threadKey={`direct-${email}`}
+      scrollMode="page"
+      composer={
+        <>
+          <InboxThreadAssistantStrip
+            contextHint={buildInboxThreadAssistantContext({
+              subject: "Resident conversation",
+              from: displayName,
+              email: subtitle,
+            })}
+            storageScopeKey={`resident-direct-${email}`}
+          />
+          <InboxComposer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => void sendMessage()}
+            sending={sending}
+            disabled={!replyViaEmail && !replyViaSms}
+            placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a message…"}
+            maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
+            dataAttr="resident-direct-chat-compose"
+            channelBar={
+              smsAvailable && emailAvailable ? (
+                <InboxReplyChannelPicker
+                  viaEmail={replyViaEmail}
+                  viaSms={replyViaSms}
+                  onViaEmailChange={setReplyViaEmail}
+                  onViaSmsChange={setReplyViaSms}
+                />
+              ) : null
+            }
+          />
+        </>
+      }
+    />
+  );
+}
+
 /**
  * Unified conversation inbox for one resident inside the manager Residents detail
  * panel — direct chat with this resident (no conversation list sidebar).
  */
 export function ManagerResidentDetailInbox({
   residentEmail,
+  residentName,
   portalBase,
   smsUiEnabled = false,
   inboxRef,
   smsRef,
 }: {
   residentEmail: string;
+  residentName?: string;
   portalBase: string;
   smsUiEnabled?: boolean;
   inboxRef?: RefObject<ManagerInboxHandle | null>;
@@ -201,30 +366,71 @@ export function ManagerResidentDetailInbox({
     [filteredEmail],
   );
 
-  const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
+  const smsResidentForEmail = useMemo(
+    () => smsResidents.find((r) => r.residentEmail?.trim().toLowerCase() === emailNorm) ?? null,
+    [emailNorm, smsResidents],
+  );
+
+  const selection = useMemo(() => {
+    if (!selectedKey || selectedKey === RESIDENT_DETAIL_DIRECT_CHAT_KEY) return null;
+    return parseUnifiedInboxKey(selectedKey);
+  }, [selectedKey]);
+
+  const refreshConversations = useCallback(() => {
+    setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
+    void loadSms();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(PORTAL_INBOX_CHANGED_EVENT));
+    }
+  }, [loadSms]);
 
   useEffect(() => {
     setShowArchived(false);
   }, [emailNorm]);
 
   useEffect(() => {
-    if (mergedRows.length === 0) {
-      setSelectedKey(null);
+    if (showArchived) {
+      if (mergedRows.length === 0) {
+        setSelectedKey(null);
+      } else {
+        setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0]!.key));
+      }
       return;
     }
-    setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0].key));
+    if (mergedRows.length === 0) {
+      setSelectedKey(RESIDENT_DETAIL_DIRECT_CHAT_KEY);
+      return;
+    }
+    setSelectedKey((cur) => {
+      if (cur === RESIDENT_DETAIL_DIRECT_CHAT_KEY) return mergedRows[0]!.key;
+      return cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0]!.key;
+    });
   }, [mergedRows, showArchived, emailNorm]);
 
-  const threadPane =
-    selection?.channel === "email" ? (
+  const showDirectChat =
+    !showArchived &&
+    (selectedKey === RESIDENT_DETAIL_DIRECT_CHAT_KEY || (mergedRows.length === 0 && !selection));
+
+  const threadPane = showDirectChat ? (
+    <ResidentDirectChatPane
+      residentEmail={residentEmail}
+      residentName={residentName}
+      smsResident={smsResidentForEmail}
+      smsUiEnabled={smsUiEnabled}
+      onSent={refreshConversations}
+    />
+  ) : selection?.channel === "email" ? (
       <ManagerInbox
         ref={inboxRef}
         tabId={showArchived ? "trash" : "unopened"}
         embeddedInCommunication
         externalTitleActions
-        suppressCompose
+        suppressCompose={false}
         suppressListPane
+        pageScroll
         commBase={commBase}
+        smsUiEnabled={smsUiEnabled}
+        smsRecipients={smsResidents}
         controlledExpandedId={selection.threadId}
         onControlledExpandedIdChange={(id) => {
           if (!id) setSelectedKey(null);
@@ -236,6 +442,7 @@ export function ManagerResidentDetailInbox({
         filterResidentEmail={residentEmail}
         allowInlineCompose={false}
         suppressListPane
+        pageScroll
         controlledActiveId={selection.threadId}
         onControlledActiveIdChange={(id) => {
           if (!id) setSelectedKey(null);
@@ -243,16 +450,18 @@ export function ManagerResidentDetailInbox({
         onConversationOpened={handleSmsConversationOpened}
       />
     ) : (
-      <InboxThreadEmpty
-        title={showArchived ? "No archived messages" : "No messages yet"}
-        hint={showArchived ? "Archived conversations with this resident will appear here." : "Use New message above to start a conversation."}
-      />
+      <div className="flex min-h-[min(16rem,40vh)] flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+        <p className="text-sm font-semibold text-foreground">No archived messages</p>
+        <p className="mt-1 text-xs text-muted">Archived conversations with this resident will appear here.</p>
+      </div>
     );
 
+  const threadOpen = showDirectChat || Boolean(selection);
+
   return (
-    <div className="flex min-h-[min(52dvh,28rem)] flex-col">
+    <div className="portal-resident-detail-inbox flex flex-col">
       {archivedCount > 0 ? (
-        <div className="mb-2 flex justify-end">
+        <PortalSectionActionRow className="mb-2">
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -266,12 +475,14 @@ export function ManagerResidentDetailInbox({
           >
             {showArchived ? "← Back to messages" : `Archived (${archivedCount})`}
           </button>
-        </div>
+        </PortalSectionActionRow>
       ) : null}
       <InboxTwoPane
-        className="min-h-0 flex-1"
+        className="w-full"
+        heightMode="flow"
+        fillViewport={false}
         listHidden
-        threadOpen={Boolean(selection)}
+        threadOpen={threadOpen}
         list={null}
         thread={threadPane}
       />

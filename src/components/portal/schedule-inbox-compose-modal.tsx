@@ -227,13 +227,30 @@ export function ScheduleInboxComposeForm({
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-muted">Subject</label>
-          <Input className="mt-1" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={busy} />
+          <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-subject">
+            Subject
+          </label>
+          <Input
+            id="inbox-compose-subject"
+            className="mt-1"
+            placeholder="Subject"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            disabled={busy}
+          />
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-muted">Message</label>
-          <Textarea className="mt-1 min-h-[160px]" value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
+          <label className="text-xs font-semibold text-muted" htmlFor="inbox-compose-message">
+            Message
+          </label>
+          <Textarea
+            id="inbox-compose-message"
+            className="mt-1 min-h-[160px]"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            disabled={busy}
+          />
         </div>
 
         <div className="flex flex-wrap gap-2">

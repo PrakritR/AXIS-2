@@ -37,7 +37,7 @@ import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
 export const DEMO_VENDOR_USER_ID = "demo-vendor";
-/** Scoped user id for guided tour — maps to `testeverything@test.axis.local`. */
+/** Scoped user id for guided tour — maps to `testeverything@test.proplane.local`. */
 export const DEMO_GUIDED_USER_ID = "demo-everything";
 export const DEMO_MANAGER_EMAIL = CANONICAL_DEMO_MANAGER_EMAIL;
 export const DEMO_RESIDENT_EMAIL = CANONICAL_DEMO_RESIDENT_EMAIL;

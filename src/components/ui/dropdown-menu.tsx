@@ -50,7 +50,7 @@ export function DropdownMenuItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        "flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium outline-none transition focus:bg-accent/70 focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:h-[16px] [&>svg]:w-[16px] [&>svg]:shrink-0 [&>svg]:text-muted",
+        "flex min-h-11 cursor-pointer select-none items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13.5px] font-medium outline-none transition focus:bg-accent/70 focus:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:h-[16px] [&>svg]:w-[16px] [&>svg]:shrink-0 [&>svg]:text-muted",
         inset && "pl-8",
         className,
       )}

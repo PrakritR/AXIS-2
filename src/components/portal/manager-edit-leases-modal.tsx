@@ -7,7 +7,7 @@ import { ManagerLeaseEditorModal } from "@/components/portal/manager-lease-edito
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 
-/** Pick one or more properties, then edit lease settings in bulk. */
+/** Pick one property, then edit its lease settings. */
 export function ManagerEditLeasesModal({
   open,
   onClose,
@@ -23,101 +23,77 @@ export function ManagerEditLeasesModal({
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [editingPropertyIds, setEditingPropertyIds] = useState<string[]>([]);
-
-  const allSelected = propertyOptions.length > 0 && selectedIds.size === propertyOptions.length;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
-      setSelectedIds(new Set());
-      setEditingPropertyIds([]);
+      setSelectedId(null);
+      setEditingPropertyId(null);
     }
   }, [open]);
 
   const resolved = useMemo(() => {
-    const firstId = editingPropertyIds[0]?.trim();
-    if (!firstId || !managerUserId) return null;
-    return resolveManagerListingSubmissionForPropertyId(managerUserId, firstId);
-  }, [editingPropertyIds, managerUserId]);
+    const id = editingPropertyId?.trim();
+    if (!id || !managerUserId) return null;
+    return resolveManagerListingSubmissionForPropertyId(managerUserId, id);
+  }, [editingPropertyId, managerUserId]);
 
   const editorTitle = useMemo(() => {
-    if (editingPropertyIds.length === 1) {
-      const label = propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label ?? "Property";
-      return `Edit lease · ${label}`;
-    }
-    if (editingPropertyIds.length > 1) {
-      return `Edit lease · ${editingPropertyIds.length} properties`;
-    }
-    return "Edit lease";
-  }, [editingPropertyIds, propertyOptions]);
+    if (!editingPropertyId) return "Edit lease";
+    const label = propertyOptions.find((o) => o.id === editingPropertyId)?.label ?? "Property";
+    return `Edit lease · ${label}`;
+  }, [editingPropertyId, propertyOptions]);
 
   const closeAll = () => {
-    setSelectedIds(new Set());
-    setEditingPropertyIds([]);
+    setSelectedId(null);
+    setEditingPropertyId(null);
     onClose();
   };
 
-  const toggleAll = (checked: boolean) => {
-    setSelectedIds(checked ? new Set(propertyOptions.map((o) => o.id)) : new Set());
-  };
-
-  const toggleOne = (id: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-
   const continueFromSelect = () => {
-    if (selectedIds.size === 0) {
-      showToast("Select at least one property.");
+    if (!selectedId) {
+      showToast("Select a property.");
       return;
     }
     if (!managerUserId) {
       showToast("Sign in to edit lease settings.");
       return;
     }
-    const ids = [...selectedIds];
-    const firstHit = resolveManagerListingSubmissionForPropertyId(managerUserId, ids[0]!);
-    if (!firstHit) {
-      showToast("Could not load lease settings for the selected properties.");
+    const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, selectedId);
+    if (!hit) {
+      showToast("Could not load lease settings for that property.");
       return;
     }
-    setEditingPropertyIds(ids);
+    setEditingPropertyId(selectedId);
   };
 
   const onEditorClose = () => {
-    setEditingPropertyIds([]);
+    setEditingPropertyId(null);
   };
 
   const onEditorSaved = () => {
     onSaved();
-    setEditingPropertyIds([]);
+    setEditingPropertyId(null);
     closeAll();
   };
 
   return (
     <>
       <Modal
-        open={open && editingPropertyIds.length === 0}
+        open={open && !editingPropertyId}
         title="Edit lease settings"
-        description="Choose which properties' lease documents you want to edit. Bulk edits apply the same template to every selection."
+        description="Choose which property's lease document you want to edit."
         onClose={closeAll}
         panelClassName="max-w-md"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeAll}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"
               className="rounded-full"
               data-attr="leases-edit-continue"
-              disabled={selectedIds.size === 0 || propertyOptions.length === 0}
+              disabled={!selectedId || propertyOptions.length === 0}
               onClick={continueFromSelect}
             >
               Continue
@@ -125,53 +101,44 @@ export function ManagerEditLeasesModal({
           </ModalFooter>
         }
       >
-        <div className="space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-accent/20 px-3 py-2.5">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border text-primary"
-              data-attr="leases-edit-all-properties"
-              checked={allSelected}
-              disabled={propertyOptions.length === 0}
-              onChange={(e) => toggleAll(e.target.checked)}
-            />
-            <span className="text-sm font-semibold text-foreground">All properties</span>
-          </label>
-
-          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
-            {propertyOptions.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted">No properties in portfolio yet.</p>
-            ) : (
-              propertyOptions.map((o) => (
-                <label
-                  key={o.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent/30"
-                >
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 shrink-0 rounded border-border text-primary"
-                    data-attr={`leases-edit-property-${o.id}`}
-                    checked={selectedIds.has(o.id)}
-                    onChange={(e) => toggleOne(o.id, e.target.checked)}
-                  />
-                  <span className="min-w-0 text-sm text-foreground">{o.label}</span>
-                </label>
-              ))
-            )}
-          </div>
+        <div
+          className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2"
+          role="radiogroup"
+          aria-label="Property"
+        >
+          {propertyOptions.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted">No properties in portfolio yet.</p>
+          ) : (
+            propertyOptions.map((o) => (
+              <label
+                key={o.id}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent/30"
+              >
+                <input
+                  type="radio"
+                  name="leases-edit-property"
+                  className="h-4 w-4 shrink-0 border-border text-primary"
+                  data-attr={`leases-edit-property-${o.id}`}
+                  checked={selectedId === o.id}
+                  onChange={() => setSelectedId(o.id)}
+                />
+                <span className="min-w-0 text-sm text-foreground">{o.label}</span>
+              </label>
+            ))
+          )}
         </div>
       </Modal>
 
-      {resolved && managerUserId ? (
+      {resolved && managerUserId && editingPropertyId ? (
         <ManagerLeaseEditorModal
-          open={editingPropertyIds.length > 0}
+          open
           title={editorTitle}
           sub={resolved.sub}
-          propertyIds={editingPropertyIds}
-          propertyId={editingPropertyIds[0]}
-          propertyLabel={propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label}
+          saveTarget={resolved.saveTarget}
+          propertyId={editingPropertyId}
+          propertyLabel={propertyOptions.find((o) => o.id === editingPropertyId)?.label}
           propertyHint={{
-            buildingName: propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label,
+            buildingName: propertyOptions.find((o) => o.id === editingPropertyId)?.label,
           }}
           managerUserId={managerUserId}
           onClose={onEditorClose}

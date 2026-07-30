@@ -5,6 +5,7 @@ import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-do
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { PortalHorizontalScrollRoot } from "@/components/portal/portal-horizontal-scroll";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
@@ -55,14 +56,16 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
               email={profile?.email ?? null}
             />
             <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-              <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
-                <PortalMobileNavBar
-                  definition={nav.definition}
-                  name={profile?.full_name ?? null}
-                  email={profile?.email ?? null}
-                />
-                {children}
-              </div>
+              <PortalHorizontalScrollRoot>
+                <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+                  <PortalMobileNavBar
+                    definition={nav.definition}
+                    name={profile?.full_name ?? null}
+                    email={profile?.email ?? null}
+                  />
+                  {children}
+                </div>
+              </PortalHorizontalScrollRoot>
             </main>
           </div>
           {/* Opt-in, desktop-only assistant rail. Renders nothing on the `popup`

@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
+import { DestinationNav } from "@/components/ui/destination-nav";
 import {
   INBOX_LIST_SCROLL,
   InboxConversationRow,
-  InboxListSegmentTabs,
   InboxThreadEmpty,
   InboxTwoPane,
+  PORTAL_INBOX_LIST_TOOLBAR_CLASS,
   PortalInboxEmptyState,
   type InboxListSegment,
 } from "@/components/portal/portal-inbox-ui";
@@ -107,9 +109,18 @@ function iosListTimestamp(iso: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
 }
 
+/** Desktop shows list + thread together; phones use list-then-thread navigation. */
+function inboxUsesDesktopSplit(): boolean {
+  if (typeof window === "undefined") return true;
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
 export function ManagerUnifiedInbox({
   tabId,
   commBase,
+  listSegment: listSegmentProp = "active",
+  routeThreadId,
   threadFilters,
   filterContacts,
   listSort = "recent",
@@ -117,9 +128,17 @@ export function ManagerUnifiedInbox({
   onSmsUnreadCountChange,
   inboxRef,
   smsRef,
+  onThreadOpenChange,
+  searchQuery: searchQueryProp,
+  onSearchQueryChange,
+  listChrome = "internal",
+  onFolderCountsChange,
 }: {
   tabId: string;
   commBase: string;
+  listSegment?: InboxListSegment;
+  /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
+  routeThreadId?: string;
   threadFilters?: CommunicationThreadFilters;
   filterContacts?: InboxScopedContact[];
   /** Conversation list order — default is most recent activity. */
@@ -129,16 +148,37 @@ export function ManagerUnifiedInbox({
   onSmsUnreadCountChange?: (unread: number) => void;
   inboxRef?: React.RefObject<ManagerInboxHandle | null>;
   smsRef?: React.RefObject<ManagerSmsPanelHandle | null>;
+  onThreadOpenChange?: (open: boolean) => void;
+  /** Controlled search when list chrome is rendered by the parent control stack. */
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
+  /** `external` — segment tabs + search live in {@link PortalListControlStack}. */
+  listChrome?: "internal" | "external";
+  onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
 }) {
+  const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
   );
   const [smsResidents, setSmsResidents] = useState<ManagerSmsResidentConversation[]>([]);
   const [smsOpenedIds, setSmsOpenedIds] = useState<Set<string>>(() => loadSmsOpenedIds());
   const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
-  const [query, setQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const query = onSearchQueryChange ? (searchQueryProp ?? "") : internalQuery;
+  const setQuery = onSearchQueryChange ?? setInternalQuery;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [listSegment, setListSegment] = useState<InboxListSegment>("active");
+  const [mobileThreadOpen, setMobileThreadOpen] = useState(Boolean(routeThreadId));
+  const listSegment = listSegmentProp;
+
+  const threadListHref = useCallback(
+    () => `${commBase}/${listSegment}`,
+    [commBase, listSegment],
+  );
+
+  const threadDetailHref = useCallback(
+    (threadId: string) => `${commBase}/${listSegment}/${encodeURIComponent(threadId)}`,
+    [commBase, listSegment],
+  );
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
@@ -338,47 +378,105 @@ export function ManagerUnifiedInbox({
     return emailUnread + smsUnread;
   }, [filteredEmail, allSmsItems]);
 
+  useEffect(() => {
+    onFolderCountsChange?.({ unread: unreadCount, archived: archivedCount });
+  }, [archivedCount, onFolderCountsChange, unreadCount]);
+
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
-  // Toggling the segment is a different result set — clear search; keep selection when possible.
+  useEffect(() => {
+    onThreadOpenChange?.(mobileThreadOpen && Boolean(selection));
+  }, [onThreadOpenChange, mobileThreadOpen, selection]);
+
+  useEffect(() => {
+    setMobileThreadOpen(Boolean(routeThreadId));
+  }, [routeThreadId]);
+
+  useEffect(() => {
+    if (!routeThreadId) return;
+    const match = mergedRows.find((r) => r.threadId === routeThreadId);
+    if (match) {
+      setSelectedKey(match.key);
+      setMobileThreadOpen(true);
+    }
+  }, [routeThreadId, mergedRows]);
+
+  // Toggling the segment is a different result set — clear search; return to list on phones.
   useEffect(() => {
     setQuery("");
-  }, [listSegment]);
+    if (!routeThreadId) {
+      setMobileThreadOpen(false);
+      if (!inboxUsesDesktopSplit()) {
+        setSelectedKey(null);
+      }
+    }
+  }, [listSegment, routeThreadId]);
 
   useEffect(() => {
     if (mergedRows.length === 0) {
       setSelectedKey(null);
+      setMobileThreadOpen(false);
       return;
     }
-    setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0].key));
-  }, [mergedRows]);
+    setSelectedKey((cur) => {
+      if (cur && mergedRows.some((r) => r.key === cur)) return cur;
+      if (routeThreadId) {
+        const routed = mergedRows.find((r) => r.threadId === routeThreadId);
+        if (routed) return routed.key;
+      }
+      if (inboxUsesDesktopSplit()) return mergedRows[0]!.key;
+      return null;
+    });
+  }, [mergedRows, routeThreadId]);
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="portal-inbox-list-toolbar shrink-0 space-y-2.5 border-b border-border p-2.5">
-        <InboxListSegmentTabs
-          value={listSegment}
-          onChange={setListSegment}
-          unreadTotal={unreadCount}
-          archivedTotal={archivedCount}
-        />
-        <div className="relative min-w-0">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search residents or messages"
-            className="portal-inbox-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-            data-attr="unified-inbox-search"
+      {listChrome === "internal" ? (
+        <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
+          <DestinationNav
+            items={[
+              { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+              {
+                id: "unread",
+                label: "Unread",
+                href: `${commBase}/unread`,
+                count: unreadCount,
+                dataAttr: "communication-segment-unread",
+              },
+              {
+                id: "archived",
+                label: "Archived",
+                href: `${commBase}/archived`,
+                count: archivedCount,
+                dataAttr: "communication-segment-archived",
+              },
+            ]}
+            activeId={listSegment}
+            ariaLabel="Conversation folders"
+            className="mb-2"
           />
+          <div className="relative min-w-0">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search residents or messages"
+              className="portal-inbox-search h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+              data-attr="unified-inbox-search"
+            />
+          </div>
+          {mergedRows.length > 0 ? (
+            <p className="hidden px-1 text-[11px] text-muted sm:block">
+              {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
+              {query.trim() ? ` matching “${query.trim()}”` : ""}
+            </p>
+          ) : null}
         </div>
-        {mergedRows.length > 0 ? (
-          <p className="px-1 text-[11px] text-muted">
-            {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"}
-            {query.trim() ? ` matching “${query.trim()}”` : ""}
-          </p>
-        ) : null}
-      </div>
+      ) : mergedRows.length > 0 && query.trim() ? (
+        <p className="mb-2 hidden px-1 text-[11px] text-muted sm:block">
+          {mergedRows.length} conversation{mergedRows.length === 1 ? "" : "s"} matching “{query.trim()}”
+        </p>
+      ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {mergedRows.length === 0 ? (
           <div className="p-4">
@@ -407,7 +505,11 @@ export function ManagerUnifiedInbox({
               unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
-              onOpen={() => setSelectedKey(row.key)}
+              onOpen={() => {
+                setSelectedKey(row.key);
+                setMobileThreadOpen(true);
+                navigate(threadDetailHref(row.threadId));
+              }}
             />
           ))
         )}
@@ -427,9 +529,15 @@ export function ManagerUnifiedInbox({
         commBase={commBase}
         threadFilters={threadFilters}
         filterContacts={filterContacts}
+        smsUiEnabled={smsUiEnabled}
+        smsRecipients={smsResidents}
         controlledExpandedId={selection.threadId}
         onControlledExpandedIdChange={(id) => {
-          if (!id) setSelectedKey(null);
+          if (!id) {
+            setSelectedKey(null);
+            setMobileThreadOpen(false);
+            navigate(threadListHref());
+          }
         }}
       />
     ) : selection?.channel === "sms" ? (
@@ -441,7 +549,11 @@ export function ManagerUnifiedInbox({
         suppressListPane
         controlledActiveId={selection.threadId}
         onControlledActiveIdChange={(id) => {
-          if (!id) setSelectedKey(null);
+          if (!id) {
+            setSelectedKey(null);
+            setMobileThreadOpen(false);
+            navigate(threadListHref());
+          }
         }}
         onUnreadCountChange={onSmsUnreadCountChange}
         onConversationOpened={handleSmsConversationOpened}
@@ -453,7 +565,16 @@ export function ManagerUnifiedInbox({
       />
     );
 
+  const threadOpen = (mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection);
+
   return (
-    <InboxTwoPane threadOpen={Boolean(selection)} list={listPane} thread={threadPane} />
+    <InboxTwoPane
+      mobileCompact
+      fillViewport={threadOpen}
+      className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+      threadOpen={threadOpen}
+      list={listPane}
+      thread={threadPane}
+    />
   );
 }

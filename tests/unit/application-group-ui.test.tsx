@@ -10,7 +10,7 @@
 // Set GROUP_UI_HTML_DIR to also dump each rendered surface's HTML to that
 // directory so it can be screenshotted with the app's real stylesheet.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
 import type { DemoApplicantRow } from "@/data/demo-portal";
@@ -106,6 +106,13 @@ vi.mock("@/lib/demo-property-pipeline", () => ({
   PROPERTY_PIPELINE_EVENT: "property-pipeline-changed",
   syncPropertyPipelineFromServer: () => Promise.resolve(),
   hasCachedPropertyPipeline: () => true,
+  // The merged-in ApplicationGroupSection resolves its listing via getPropertyById,
+  // which reads these; the roster/badges under test don't depend on the listing, so
+  // empty lookups are fine — they just must exist on the mock.
+  readAllExtraListings: () => [],
+  readExtraListings: () => [],
+  readAllPendingManagerProperties: () => [],
+  cachePublicExtraListings: () => {},
 }));
 vi.mock("@/lib/cosigner-submissions-storage", () => ({
   fetchCosignerSubmissionsForSignerAppId: () => Promise.resolve([]),
@@ -169,7 +176,7 @@ describe("group application — applicant Group ID hand-off", () => {
 describe("group application — manager reconciliation", () => {
   it("badges each member row and rosters the household in the expanded application", async () => {
     ROWS = HOUSEHOLD_ROWS;
-    const { container } = render(<ManagerApplications />);
+    const { container, rerender } = render(<ManagerApplications bucket="pending" />);
 
     // Row badge on the default (Pending) tab: Priya has actually submitted, so
     // she is the only member visible there — Sam is still a draft and now
@@ -181,14 +188,13 @@ describe("group application — manager reconciliation", () => {
     dumpHtml("manager-rows", container.innerHTML);
 
     // Switching to the Incomplete tab surfaces Sam's own "Group 2/3" badge.
-    fireEvent.click(screen.getByText("Incomplete"));
-    expect(await screen.findByText("Sam Okafor")).toBeTruthy();
+    rerender(<ManagerApplications bucket="incomplete" />);
+    expect(screen.getAllByText("Sam Okafor").length).toBeGreaterThan(0);
     expect(screen.getByText("Group 2/3")).toBeTruthy();
-    fireEvent.click(screen.getByText("Pending"));
-    await screen.findByText("Priya Nair");
+    rerender(<ManagerApplications bucket="pending" />);
+    await waitFor(() => expect(screen.getAllByText("Priya Nair").length).toBeGreaterThan(0));
 
-    // Expand a joining member's application → roster of the whole household.
-    fireEvent.click(screen.getByText("Priya Nair").closest("button")!);
+    rerender(<ManagerApplications bucket="pending" applicationId="AXIS-1002" />);
     expect(await screen.findByText("Group application")).toBeTruthy();
     expect(screen.getByText(/2 of 3 applied · waiting on 1/)).toBeTruthy();
     expect(screen.getByText(GROUP_ID)).toBeTruthy();
@@ -241,12 +247,12 @@ describe("group application — manager reconciliation", () => {
       })),
     ];
 
-    const { container } = render(<ManagerApplications />);
+    const { container, rerender: rerenderEdge } = render(<ManagerApplications />);
     expect((await screen.findAllByText("Group 2 · organizer not shown")).length).toBe(2);
     expect(screen.getAllByText("Group 3 · 2 declared").length).toBe(3);
     dumpHtml("manager-edge-rows", container.innerHTML);
 
-    fireEvent.click(screen.getByText("Ada Vance").closest("button")!);
+    rerenderEdge(<ManagerApplications bucket="pending" applicationId="AXIS-300" />);
     expect(
       await screen.findByText(/3 applications carry this Group ID, more than the 2 the organizer declared/),
     ).toBeTruthy();

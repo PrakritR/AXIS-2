@@ -95,12 +95,9 @@ test.describe("Dark mode — auth surfaces", () => {
 
   test("auth create-account is readable in dark mode", async ({ page }) => {
     await page.goto("/auth/create-account");
-    // NativeAuthHub create surface: a Resident/Property/Vendor role toggle and
-    // placeholder-only inputs — no heading, no "Portal type" label, no
-    // `.portal-banner-neutral` callout (those only render on the legacy
-    // `?session_id=` checkout surface).
+    // Generic create surface: Google OAuth, placeholder inputs, and "Create account".
     await expect(page.getByPlaceholder("Email")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Property" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /create account/i })).toBeVisible();
     await assertDarkThemeActive(page);
     await assertMainContentNotLightThemed(page, 0);
   });

@@ -3,8 +3,6 @@ import {
   NATIVE_OAUTH_CALLBACK_URL,
   resolveOAuthCallbackRedirectUrl,
 } from "@/lib/auth/native-oauth-callback";
-import { NATIVE_OAUTH_BRIDGE_PARAM } from "@/lib/auth/native-oauth-bridge";
-
 /** Stub a native shell (no Capacitor global) tagged via the `data-native` attribute. */
 function stubNativeShell(): void {
   vi.stubGlobal("window", {});
@@ -34,14 +32,15 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     stubNativeShell();
     expect(
       resolveOAuthCallbackRedirectUrl("http://192.168.5.121:3000", "/auth/callback/partner-pricing"),
-    ).toBe("com.axisseattlehousing.app://auth/callback/partner-pricing");
+    ).toBe("space.proplane.app://auth/callback/partner-pricing");
   });
 
-  it("keeps the https bridge flow for production native (unchanged)", () => {
+  it("returns the app custom scheme for production native (https origin)", () => {
     stubNativeShell();
-    const url = resolveOAuthCallbackRedirectUrl("https://www.axis-seattle-housing.com");
-    expect(url.startsWith("https://www.axis-seattle-housing.com/auth/callback?")).toBe(true);
-    expect(url).toContain(`${NATIVE_OAUTH_BRIDGE_PARAM}=1`);
+    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
+    expect(resolveOAuthCallbackRedirectUrl("https://www.axis-seattle-housing.com")).toBe(
+      NATIVE_OAUTH_CALLBACK_URL,
+    );
   });
 
   it("uses the bare same-origin callback on the web (non-native)", () => {

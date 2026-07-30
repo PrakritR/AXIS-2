@@ -1,23 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import {
   ManagerHousePropertiesPanel,
   MANAGER_STAGES,
-  managerStageFromParam,
   type ManagerStageKey,
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { propertyListHref, type PropertyDetailTabId } from "@/lib/portal-detail-routes";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
@@ -44,12 +45,21 @@ import {
   normalizeManagerSkuTier,
   PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
+import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
 
-export function ManagerProperties() {
+export function ManagerProperties({
+  stage: stageProp = "listed",
+  basePath = "/portal",
+  propertyKey: propertyKeyProp,
+  detailTab: detailTabProp,
+}: {
+  stage?: ManagerStageKey;
+  basePath?: string;
+  propertyKey?: string;
+  detailTab?: PropertyDetailTabId;
+}) {
   const { showToast } = useAppUi();
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { userId } = useManagerUserId();
   const scopeUserId = resolveManagerScopeUserId(userId);
   const [skuLoaded, setSkuLoaded] = useState(false);
@@ -63,7 +73,7 @@ export function ManagerProperties() {
 
   const activeStage = isDemoModeActive()
     ? demoStage
-    : managerStageFromParam(searchParams.get("status"));
+    : stageProp;
 
   const setActiveStage = useCallback(
     (stage: ManagerStageKey) => {
@@ -71,12 +81,9 @@ export function ManagerProperties() {
         setDemoStage(stage);
         return;
       }
-      const next = new URLSearchParams(searchParams.toString());
-      next.set("status", stage);
-      const query = next.toString();
-      router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      router.push(propertyListHref(basePath, stage), { scroll: false });
     },
-    [pathname, router, searchParams],
+    [basePath, router],
   );
 
   const refreshPortfolio = useCallback(async () => {
@@ -103,11 +110,8 @@ export function ManagerProperties() {
       return;
     }
     try {
-      const res = await fetch("/api/manager/subscription", { credentials: "include" });
-      const body = (await res.json()) as { tier?: string | null };
-      if (res.ok) {
-        setSkuTier(body.tier ?? null);
-      }
+      const tier = await loadManagerSubscriptionTierClient();
+      setSkuTier(tier);
     } catch {
       /* ignore */
     } finally {
@@ -207,70 +211,104 @@ export function ManagerProperties() {
     setShareListingOpen(true);
   };
 
-  const propertiesHeaderActions = (
+  const propertiesShareButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+      disabled={shareableProperties.length === 0}
+      title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
+      data-attr="manager-properties-share"
+      onClick={() => openShareListing()}
+    >
+      Share
+    </Button>
+  );
+
+  const propertiesAddButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      data-attr="manager-properties-create"
+      onClick={tryOpenAdd}
+      disabled={!skuLoaded}
+      aria-busy={!skuLoaded}
+    >
+      {!skuLoaded ? "Loading…" : "+ Add property"}
+    </Button>
+  );
+
+  const propertiesDesktopHeaderActions = (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        disabled={shareableProperties.length === 0}
-        title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
-        data-attr="manager-properties-share"
-        onClick={() => openShareListing()}
-      >
-        Share
-      </Button>
-      <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
-        Create
-      </Button>
+      {propertiesShareButton}
+      {propertiesAddButton}
     </>
+  );
+
+  const propertiesMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {propertiesShareButton}
+          {propertiesAddButton}
+        </PortalSectionActionRow>
+      }
+    />
+  );
+
+  const isDetailView = Boolean(propertyKeyProp);
+
+  const listPanel = (
+    <ManagerHousePropertiesPanel
+      showToast={showToast}
+      activeStage={activeStage}
+      onStageChange={setActiveStage}
+      onSendToProspect={openShareListing}
+      skuTier={skuTier}
+      skuLoaded={skuLoaded}
+      propertiesBase={basePath}
+      propertyKey={propertyKeyProp}
+      detailTab={detailTabProp}
+      onAddProperty={tryOpenAdd}
+      addPropertyDisabled={!skuLoaded}
+    />
   );
 
   return (
     <>
-      <ManagerPortalPageShell
-        title="Properties"
-        titleAside={propertiesHeaderActions}
-        filterRow={
-          <ManagerPortalFilterRow>
-            <div className="min-w-0 w-full max-w-full">
-              <ManagerPortalStatusPills
-                compact
-                tabs={MANAGER_STAGES.map((stage) => ({
-                  id: stage.key,
-                  label: stage.label,
-                  count: stageCounts[stage.key],
-                  dataAttr: `manager-properties-tab-${stage.key}`,
-                }))}
-                activeId={activeStage}
-                onChange={(id) => setActiveStage(id as ManagerStageKey)}
-              />
-            </div>
-          </ManagerPortalFilterRow>
-        }
-      >
-        {atPropertyLimit && limitMax != null ? (
-          <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
-            You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
-            {/* The plan-upgrade CTA is a subscription surface — hidden on native (iOS). */}
-            <span className="native-hide">
-              {" "}
-              <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
-                View plans
-              </Link>{" "}
-              to add more.
-            </span>
-          </p>
-        ) : null}
-        <ManagerHousePropertiesPanel
-          showToast={showToast}
-          activeStage={activeStage}
-          onStageChange={setActiveStage}
-          onSendToProspect={openShareListing}
-          skuTier={skuTier}
-          skuLoaded={skuLoaded}
-        />
-      </ManagerPortalPageShell>
+      {isDetailView ? (
+        listPanel
+      ) : (
+        <ManagerPortalPageShell title="Properties" hideTitleOnMobileNav titleAside={propertiesDesktopHeaderActions} compactFilterRow>
+          {propertiesMobileActionsRow}
+          <PortalListControlStack
+            className="mb-2"
+            destinations={MANAGER_STAGES.map((stage) => ({
+              id: stage.key,
+              label: stage.label,
+              href: propertyListHref(basePath, stage.key),
+              count: stageCounts[stage.key],
+              dataAttr: `manager-properties-tab-${stage.key}`,
+            }))}
+            activeDestinationId={activeStage}
+            destinationAriaLabel="Property pipeline stage"
+          />
+          {atPropertyLimit && limitMax != null ? (
+            <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
+              You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
+              <span className="native-hide">
+                {" "}
+                <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
+                  View plans
+                </Link>{" "}
+                to add more.
+              </span>
+            </p>
+          ) : null}
+          {listPanel}
+        </ManagerPortalPageShell>
+      )}
       {wizardOpen ? (
         <ManagerAddListingForm
           onClose={() => setWizardOpen(false)}

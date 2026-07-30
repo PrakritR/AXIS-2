@@ -9,6 +9,9 @@ export const FIELD_SELECT_TRIGGER_INLINE_CLASS =
   "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 text-left text-[16px] text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm";
 
 /** Compact width for toolbar/filter rows — same visual tokens as the form field trigger. */
+export const FIELD_SELECT_TRIGGER_PILL_CLASS =
+  "inline-flex min-h-[44px] w-auto max-w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
+
 export const FIELD_SELECT_TRIGGER_COMPACT_CLASS =
   "flex min-h-[44px] min-w-[9.5rem] max-w-full w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus:border-primary/40 focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
 

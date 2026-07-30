@@ -1,25 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
+import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+} from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   findWorkOrderCharge,
@@ -50,6 +41,11 @@ import { notifyResidentOfWorkOrderUpdate } from "@/lib/work-order-resident-notif
 import { buildWorkOrderCompletedNotice } from "@/lib/resident-service-notices";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { track } from "@/lib/analytics/track-client";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { workOrderDetailHref, workOrderListHref } from "@/lib/portal-detail-routes";
+import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -122,15 +118,19 @@ export function ManagerWorkOrdersPanel({
   allRows,
   bucket,
   onAfterSchedule,
+  workOrderId: workOrderIdProp,
+  listBasePath,
 }: {
   allRows: DemoManagerWorkOrderRow[];
   bucket: ManagerWorkOrderBucket;
   /** After moving a row from Open → Scheduled, switch the parent tab so the row is still visible. */
   onAfterSchedule?: () => void;
+  workOrderId?: string;
+  listBasePath?: string;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [billDraftById, setBillDraftById] = useState<Record<string, BillDraft>>({});
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
@@ -184,7 +184,6 @@ export function ManagerWorkOrdersPanel({
 
   const openExpand = useCallback(
     (row: DemoManagerWorkOrderRow) => {
-      setExpandedId(row.id);
       setVisitAtById((prev) => ({
         ...prev,
         [row.id]: row.scheduledAtIso ? toDatetimeLocalValue(row.scheduledAtIso) : prev[row.id] ?? "",
@@ -197,6 +196,27 @@ export function ManagerWorkOrdersPanel({
     },
     [loadBids],
   );
+
+  const routeWorkOrderId = workOrderIdProp ? decodeURIComponent(workOrderIdProp) : null;
+  const routeWorkOrder = useMemo(() => {
+    if (!routeWorkOrderId) return null;
+    return rows.find((r) => r.id === routeWorkOrderId) ?? allRows.find((r) => r.id === routeWorkOrderId) ?? null;
+  }, [routeWorkOrderId, rows, allRows]);
+
+  useEffect(() => {
+    if (routeWorkOrder) openExpand(routeWorkOrder);
+  }, [routeWorkOrder, openExpand]);
+
+  const openWorkOrderDetail = useCallback(
+    (row: DemoManagerWorkOrderRow) => {
+      if (listBasePath) navigate(workOrderDetailHref(listBasePath, bucket, row.id));
+    },
+    [bucket, listBasePath, navigate],
+  );
+
+  const navigateToList = useCallback(() => {
+    if (listBasePath) navigate(workOrderListHref(listBasePath, bucket));
+  }, [bucket, listBasePath, navigate]);
 
   const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
 
@@ -326,7 +346,7 @@ export function ManagerWorkOrdersPanel({
           : " Pending payment created."
         : "";
       showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
       onAfterSchedule?.();
     },
     [billDraftById, effectiveManagerId, onAfterSchedule, sendVendorVisitEmail, showToast],
@@ -472,7 +492,7 @@ export function ManagerWorkOrdersPanel({
         }));
         showToast("Work order marked complete.");
         setCompleteRow(null);
-        setExpandedId(null);
+        if (workOrderIdProp) navigateToList();
         return;
       }
       const res = await fetch("/api/portal/work-orders/complete", {
@@ -525,7 +545,7 @@ export function ManagerWorkOrdersPanel({
         );
       }
       setCompleteRow(null);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not complete work order.");
     } finally {
@@ -548,7 +568,7 @@ export function ManagerWorkOrdersPanel({
         approveDemoWorkOrderPay(row.id);
         showToast("Approved and paid.");
         setApprovePayRow(null);
-        setExpandedId(null);
+        if (workOrderIdProp) navigateToList();
         return;
       }
       const res = await fetch("/api/portal/work-orders/approve-pay", {
@@ -563,7 +583,7 @@ export function ManagerWorkOrdersPanel({
       void syncManagerWorkOrdersFromServer();
       showToast("Approved and paid.");
       setApprovePayRow(null);
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not approve payment.");
     } finally {
@@ -637,7 +657,7 @@ export function ManagerWorkOrdersPanel({
     if (!row) return;
     if (deleteManagerWorkOrderRow(row.id)) {
       showToast("Work order removed.");
-      setExpandedId(null);
+      if (workOrderIdProp) navigateToList();
       setHcTick((n) => n + 1);
     } else showToast("Could not delete work order.");
     setDeleteRow(null);
@@ -1103,6 +1123,24 @@ export function ManagerWorkOrdersPanel({
     );
   };
 
+  if (routeWorkOrderId) {
+    if (!routeWorkOrder) {
+      return <PortalDataTableEmpty icon="work-order" message="Work order not found." />;
+    }
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Work orders"
+        title={routeWorkOrder.title}
+        subtitle={[routeWorkOrder.propertyName, routeWorkOrder.unit].filter(Boolean).join(" · ") || undefined}
+        backHref={listBasePath ? workOrderListHref(listBasePath, bucket) : "#"}
+        backLabel="Back to work orders"
+        dataAttrBack="work-order-detail-back"
+      >
+        {renderRowDetail(routeWorkOrder)}
+      </PortalRecordDetailPage>
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <PortalDataTableEmpty
@@ -1114,131 +1152,25 @@ export function ManagerWorkOrdersPanel({
 
   return (
     <div>
-      <div className="space-y-2 lg:hidden">
+      <div className={INBOX_LIST_SCROLL}>
         {rows.map((row) => {
-          const linkedCharge = chargeByWoId.get(row.id);
-          const isExpanded = expandedId === row.id;
-          const dispatch = (row as WorkOrderRowWithDispatch).dispatch;
+          const subtitle = [row.propertyName, row.unit].filter(Boolean).join(" · ");
+          const statusLabel =
+            bucket === "open" ? "Open" : bucket === "scheduled" ? "Scheduled" : "Completed";
+          const statusTone =
+            bucket === "completed" ? "success" : bucket === "scheduled" ? "warning" : "neutral";
           return (
-            <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-              <button
-                type="button"
-                className="flex w-full gap-2 text-left"
-                onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
-                aria-expanded={isExpanded}
-              >
-                <div className="min-w-0 flex-1">
-                  <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
-                    <span className="truncate">{row.title}</span>
-                  </PortalTableInlineExpand>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
-                      {row.priority}
-                    </span>
-                    {dispatch?.status === "proposed" ? (
-                      <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
-                        PropLane pick
-                      </span>
-                    ) : null}
-                    <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
-                    {linkedCharge?.status === "paid" ? (
-                      <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                        Paid
-                      </span>
-                    ) : linkedCharge?.status === "pending" ? (
-                      <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                        Pending
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </button>
-              {isExpanded ? (
-                <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div>
-              ) : null}
-            </div>
+            <PortalServiceRecordRow
+              key={row.id}
+              title={row.title}
+              subtitle={subtitle || undefined}
+              statusLabel={statusLabel}
+              statusTone={statusTone}
+              onOpen={() => openWorkOrderDetail(row)}
+              dataAttr="work-order-list-row"
+            />
           );
         })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className={PORTAL_DATA_TABLE}>
-            <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const linkedCharge = chargeByWoId.get(row.id);
-                const isExpanded = expandedId === row.id;
-                const dispatch = (row as WorkOrderRowWithDispatch).dispatch;
-
-                return (
-                  <Fragment key={row.id}>
-                    <tr
-                      id={`portal-work-order-${row.id}`}
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        isExpanded ? setExpandedId(null) : openExpand(row),
-                      )}
-                      aria-expanded={isExpanded}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
-                          {dispatch?.status === "proposed" ? (
-                            <span className="inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-info">
-                              PropLane pick
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <span className="text-foreground">{row.propertyName}</span>
-                        {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
-                          {row.priority}
-                        </span>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <div className="flex flex-col gap-1">
-                          <span>{displayWorkOrderCost(row.cost)}</span>
-                          {linkedCharge?.status === "paid" ? (
-                            <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                              Paid
-                            </span>
-                          ) : linkedCharge?.status === "pending" ? (
-                            <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                              Pending
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                    {isExpanded ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderRowDetail(row)}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       <Modal
@@ -1251,9 +1183,6 @@ export function ManagerWorkOrdersPanel({
         footer={
           completeRow ? (
             <ModalFooter>
-              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
-                Cancel
-              </Button>
               <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
                 {completeBusy
                   ? "Completing…"
@@ -1394,9 +1323,6 @@ export function ManagerWorkOrdersPanel({
         footer={
           approvePayRow ? (
             <ModalFooter>
-              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
-                Cancel
-              </Button>
               <Button
                 type="button"
                 variant="primary"

@@ -268,9 +268,6 @@ export function ManagerOutgoingPaymentDetail({
         title="Confirm vendor payment"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setPayConfirmOpen(false)} disabled={busy}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

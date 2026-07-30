@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { track } from "@/lib/analytics/posthog";
+import { recordResidentProspectInboxMessage } from "@/lib/tour-notification-delivery.server";
 import {
   buildLeadInviteEmailBody,
   buildLeadInviteEmailHtml,
@@ -165,6 +166,14 @@ export async function sendLeadInvite(
       propertyTitle,
     };
   }
+
+  await recordResidentProspectInboxMessage(db, {
+    participantEmail: input.to,
+    subject,
+    body: text,
+    fromName: "PropLane",
+    fromEmail: "invites@axis.local",
+  });
 
   track("lead_invite_sent", actor.userId, { kind: input.kind, property_id: input.propertyId });
   return { ok: true, emailId: payload.id ?? null, linkUrl, propertyTitle };

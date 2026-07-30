@@ -2,11 +2,11 @@
 
 import type { ReactNode } from "react";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -15,48 +15,14 @@ export type ShellAction = {
   disabled?: boolean;
 };
 
-function PortalFilterSelect({
-  "aria-label": ariaLabel,
-  value,
-  onChange,
-  placeholder,
-  options,
-}: {
-  "aria-label": string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  options: ManagerPropertyFilterOption[];
-}) {
-  const selectOptions = useMemo(
-    () => [{ value: "", label: placeholder }, ...options.map((o) => ({ value: o.id, label: o.label }))],
-    [options, placeholder],
-  );
-
-  return (
-    <div className="w-full min-w-0 max-w-full sm:w-fit">
-      <FieldSingleSelect
-        hideLabel
-        label={ariaLabel}
-        variant="pill"
-        wrapperClassName="w-full min-w-0 max-w-full sm:w-fit"
-        value={value}
-        placeholder={placeholder}
-        options={selectOptions}
-        dataAttr={`portal-filter-${ariaLabel.toLowerCase().replace(/\s+/g, "-")}`}
-        onChange={onChange}
-      />
-    </div>
-  );
-}
-
-/** Property / resident / application filter selects — each control is its own pill (matches Finances/Documents). */
+/** Property / resident / application filter chips — visible options, no dropdowns (Appendix E1). */
 export function PortalPropertyFilterPill({
   applications,
   residents,
   propertyOptions,
   propertyValue,
   onPropertyChange,
+  propertyPlaceholder,
   residentOptions,
   residentValue,
   onResidentChange,
@@ -75,16 +41,12 @@ export function PortalPropertyFilterPill({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    queueMicrotask(() => setMounted(true));
-  }, []);
-
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
-  if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
+  if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
     <PortalPropertyFilter
       applications={applications}
@@ -98,6 +60,7 @@ export function PortalPropertyFilterPill({
       applicationOptions={applicationOptions}
       applicationValue={applicationValue}
       onApplicationChange={onApplicationChange}
+      propertyPlaceholder={propertyPlaceholder}
     />
   );
 }
@@ -115,6 +78,7 @@ export function PortalPropertyFilter({
   applicationOptions,
   applicationValue = "",
   onApplicationChange,
+  propertyPlaceholder,
 }: {
   applications?: boolean;
   residents?: boolean;
@@ -127,38 +91,39 @@ export function PortalPropertyFilter({
   applicationOptions?: ManagerPropertyFilterOption[];
   applicationValue?: string;
   onApplicationChange?: (axisId: string) => void;
+  propertyPlaceholder?: string;
 }) {
   const hasPropertyPick = Boolean(propertyOptions && propertyOptions.length > 0 && onPropertyChange);
   const hasResidentPick = Boolean(residents && residentOptions && residentOptions.length > 0 && onResidentChange);
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex w-full max-w-full flex-col gap-3">
       {hasPropertyPick ? (
-        <PortalFilterSelect
-          aria-label="Properties"
+        <PortalFilterChipRow
+          ariaLabel="Properties"
           value={propertyValue}
           onChange={(next) => onPropertyChange?.(next)}
-          placeholder="All your properties"
-          options={propertyOptions ?? []}
+          allLabel={propertyPlaceholder ?? "All properties"}
+          options={(propertyOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
       {hasResidentPick ? (
-        <PortalFilterSelect
-          aria-label="Residents"
+        <PortalFilterChipRow
+          ariaLabel="Residents"
           value={residentValue}
           onChange={(next) => onResidentChange?.(next)}
-          placeholder="All residents"
-          options={residentOptions ?? []}
+          allLabel="All residents"
+          options={(residentOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
       {hasApplicationPick ? (
-        <PortalFilterSelect
-          aria-label="Applications"
+        <PortalFilterChipRow
+          ariaLabel="Applications"
           value={applicationValue}
           onChange={(next) => onApplicationChange?.(next)}
-          placeholder="All applications"
-          options={applicationOptions ?? []}
+          allLabel="All applications"
+          options={(applicationOptions ?? []).map((o) => ({ id: o.id, label: o.label }))}
         />
       ) : null}
     </div>
@@ -192,7 +157,7 @@ export function ManagerSectionShell({
   const [activeKpi, setActiveKpi] = useState(activeKpiIndexProp);
 
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} flex min-h-0 w-full max-w-full flex-1 flex-col max-lg:flex-none`}>
+    <div className="relative z-0 flex min-h-0 w-full max-w-full flex-1 flex-col max-lg:flex-none">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <h1 className={PORTAL_PAGE_TITLE}>{title}</h1>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">

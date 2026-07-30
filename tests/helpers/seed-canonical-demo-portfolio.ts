@@ -44,7 +44,7 @@ const ctx = {
   residentEmail: CANONICAL_DEMO_RESIDENT_EMAIL,
   vendorEmail: CANONICAL_DEMO_VENDOR_EMAIL,
   residentAxisId,
-  managerEmail: process.env.SEED_MANAGER_EMAIL?.toLowerCase() ?? "manager@test.axis.local",
+  managerEmail: process.env.SEED_MANAGER_EMAIL?.toLowerCase() ?? "manager@test.proplane.local",
 };
 
 assertCanonicalDemoPortfolioContext(ctx);

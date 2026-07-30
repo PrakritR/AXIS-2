@@ -134,10 +134,9 @@ afterEach(() => {
 
 describe("manager Applications — delete incomplete draft", () => {
   it("drops the row from the session cache when Delete is pressed so sync cannot resurrect it", async () => {
-    render(<ManagerApplications />);
+    render(<ManagerApplications bucket="incomplete" />);
 
-    fireEvent.click(await screen.findByText("Incomplete"));
-    fireEvent.click(await screen.findByText("ambika Mago"));
+    fireEvent.click((await screen.findAllByText("ambika Mago"))[0]!.closest("button")!);
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
 
     await waitFor(() => {

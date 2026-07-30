@@ -1,7 +1,7 @@
 # Seed: end-to-end manager workflow (`seed-demo-manager-workflow.mjs`)
 
 Populates ONE coherent, relationship-consistent dev dataset for the canonical
-test manager **`manager@test.axis.local`** so every stage of the manager
+test manager **`manager@test.proplane.local`** so every stage of the manager
 pipeline is exercisable for intensive testing. The same axis-test Supabase DB
 backs the website and the iOS/Android (Capacitor) apps, so this populates both.
 
@@ -24,7 +24,7 @@ managers' data is left alone.
 
 Optional overrides: `SEED_MANAGER_EMAIL`, `SEED_MANAGER_PASSWORD`.
 
-## What it creates (all scoped to `manager@test.axis.local`)
+## What it creates (all scoped to `manager@test.proplane.local`)
 
 | Area | Rows | Notes |
 |------|------|-------|

@@ -8,7 +8,7 @@ strictly one-way: signed-in portal edits → DB → `/demo`. Never the reverse.*
 `/demo` renders from browser-local stores re-seeded on every mount, so demo edits
 live in sessionStorage and are wiped by refresh. The seed comes from
 `GET /api/demo/portal-snapshot` (service-role read of `manager@`/`resident@`/
-`vendor@test.axis.local`, ids remapped to synthetic `demo-*` scopes, per-empty-
+`vendor@test.proplane.local`, ids remapped to synthetic `demo-*` scopes, per-empty-
 collection static fallback) **only while the mirror is enabled — it is currently
 off**, so today every mount seeds the static snapshot instead; see the two
 sources below. Every server-mirror write path is `isDemoModeActive()`-gated; the
@@ -21,7 +21,7 @@ panel action that fetches an authed route.
 data sources.** A visitor sees whichever of these wins:
 
 1. **The DB mirror** — `GET /api/demo/portal-snapshot`, the canonical
-   `@test.axis.local` accounts' real portal rows. Wins whenever those accounts
+   `@test.proplane.local` accounts' real portal rows. Wins whenever those accounts
    hold data, in whatever environment the deploy points at — while it is
    enabled, which it currently is not (see below).
 2. **The static snapshot** — `buildDemoIdleSnapshot()` in
@@ -82,9 +82,9 @@ accounts` (accounts + roles + pro tier + portfolio; `{"seedPortfolio":false}`
 for accounts only; idempotent, never deletes). Dev/test: `npm run test:seed`
 (also PRUNES non-canonical accounts — including any personal Gmail — by
 design). Production: run the route once as the production admin after deploy;
-credentials never leave the environment. `admin@test.axis.local` is deliberately
+credentials never leave the environment. `admin@test.proplane.local` is deliberately
 NOT provisioned by the route — never auto-create an admin-role account with a
 well-known password in production. Signups always land in whatever DB the
 deployment's env points at (`assertNonProdDatabase` guards the cross-wiring).
 In-app account deletion (`POST /api/account/delete`, all portals) refuses
-`@test.axis.local` accounts — deleting one would brick `/demo` and the tour.
+`@test.proplane.local` accounts — deleting one would brick `/demo` and the tour.

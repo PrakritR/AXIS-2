@@ -10,6 +10,10 @@ import {
   leaseSourceFromDraft,
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
+import {
+  PROPERTY_LEASE_TYPE_OPTIONS,
+  type PropertyLeaseTemplateKind,
+} from "@/lib/property-lease-templates";
 
 export { LEASE_TEMPLATE_MAX_BYTES };
 
@@ -108,6 +112,65 @@ type LeaseConfigFormProps = {
 };
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
+
+/** Lease document source (left) and agreement type (right) — shared by lease modals. */
+export function LeaseDocumentAndTypeFields({
+  source,
+  onSourceChange,
+  kind,
+  onKindChange,
+  dataAttrPrefix = "property",
+}: {
+  source: PropertyLeaseSource;
+  onSourceChange: (source: PropertyLeaseSource) => void;
+  kind: PropertyLeaseTemplateKind;
+  onKindChange: (kind: PropertyLeaseTemplateKind) => void;
+  dataAttrPrefix?: "listing" | "property";
+}) {
+  const documentMeta = PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === source);
+  const typeMeta = PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === kind);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-document`}>
+          Lease document
+        </label>
+        <Select
+          id={`${dataAttrPrefix}-lease-document`}
+          value={source}
+          onChange={(e) => onSourceChange(e.target.value as PropertyLeaseSource)}
+          data-attr={`${dataAttrPrefix}-lease-document`}
+        >
+          {PROPERTY_LEASE_SOURCE_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        {documentMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{documentMeta.detail}</p> : null}
+      </div>
+      <div>
+        <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-type`}>
+          Lease type
+        </label>
+        <Select
+          id={`${dataAttrPrefix}-lease-type`}
+          value={kind}
+          onChange={(e) => onKindChange(e.target.value as PropertyLeaseTemplateKind)}
+          data-attr={`${dataAttrPrefix}-lease-type`}
+        >
+          {PROPERTY_LEASE_TYPE_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        {typeMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{typeMeta.description}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 function customTermsTextareaClass(hasError: boolean): string {
   return `w-full rounded-xl border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20 ${

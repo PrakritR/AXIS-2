@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalCollapsibleEditRow } from "@/components/portal/portal-collapsible-edit-row";
 import { PortalEditRow } from "@/components/portal/portal-edit-row";
 import {
@@ -31,6 +31,10 @@ import {
   type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
+
+function allApplicationSectionIds(): Set<string> {
+  return new Set(RENTAL_APPLICATION_SECTIONS.map((section) => section.id));
+}
 
 const APPLICATION_FORM_VARIANTS: ReadonlyArray<{ id: ApplicationFormVariant; label: string; hint: string }> = [
   { id: "standard", label: "Long-term lease", hint: "The full application for standard leases." },
@@ -114,6 +118,8 @@ export function ManagerApplicationQuestionsEditorModal({
   saveTarget,
   propertyIds,
   managerUserId,
+  initialVariant = "standard",
+  lockVariant = false,
   onClose,
   onSaved,
   showToast,
@@ -125,27 +131,37 @@ export function ManagerApplicationQuestionsEditorModal({
   /** When set, each save applies the same application config to every id (bulk edit). */
   propertyIds?: string[];
   managerUserId: string;
+  /** Which stay-type form opens first (long-term vs short-term). */
+  initialVariant?: ApplicationFormVariant;
+  /** Property detail row edit — one stay type only; hide the long-term / short-term switcher. */
+  lockVariant?: boolean;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
   const [localSub, setLocalSub] = useState(sub);
   const [variant, setVariant] = useState<ApplicationFormVariant>("standard");
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(() => allApplicationSectionIds());
   const [editOpen, setEditOpen] = useState(false);
   const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
   const [isNewField, setIsNewField] = useState(false);
   const [newFieldSectionId, setNewFieldSectionId] = useState("additional");
+  // Round 31: every edit stays local until an explicit Save. `dirty` gates the Save button
+  // and drives the discard confirmation so a stray click can never overwrite properties.
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setLocalSub(sub);
-    setVariant("standard");
-    setExpandedSectionId(null);
+    setVariant(initialVariant);
+    setExpandedSectionIds(allApplicationSectionIds());
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
-  }, [open, sub]);
+    setDirty(false);
+    setSaving(false);
+  }, [open, sub, initialVariant]);
 
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
@@ -162,25 +178,10 @@ export function ManagerApplicationQuestionsEditorModal({
   );
   const disabledFields = useMemo(() => resolveDisabledStandardApplicationFields(configSlice), [configSlice]);
 
-  const persistSlice = (nextSlice: ApplicationConfigSlice, singleSuccessMessage: string): boolean => {
-    const next: ManagerListingSubmissionV1 = {
-      ...localSub,
-      ...mergeApplicationConfigForVariant(variant, nextSlice),
-    };
-    if (
-      !persistApplicationConfig({
-        next,
-        saveTarget,
-        propertyIds: isBulkSave ? bulkIds : undefined,
-        managerUserId,
-        showToast,
-        singleSuccessMessage,
-      })
-    ) {
-      return false;
-    }
-    setLocalSub(next);
-    return true;
+  // Apply an edit to LOCAL state only — nothing is persisted until Save.
+  const applySlice = (nextSlice: ApplicationConfigSlice): void => {
+    setLocalSub((prev) => ({ ...prev, ...mergeApplicationConfigForVariant(variant, nextSlice) }));
+    setDirty(true);
   };
 
   // An EDIT to the short-term form must STICK even when it leaves the slice
@@ -188,13 +189,40 @@ export function ManagerApplicationQuestionsEditorModal({
   // custom question after doing so. `applicationConfigForVariant` treats a
   // non-"custom" short-term slice as the curated DEFAULT, so a mode that
   // collapsed to "standard" would silently revert the manager's choices. Pin
-  // "custom" on edits; only "Restore PropLane defaults" (plain `persistSlice`
+  // "custom" on edits; only "Restore PropLane defaults" (plain `applySlice`
   // with a fresh default) intentionally returns short-term to the curated set.
-  const persistEditedSlice = (nextSlice: ApplicationConfigSlice, singleSuccessMessage: string): boolean =>
-    persistSlice(
-      variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice,
-      singleSuccessMessage,
-    );
+  const applyEditedSlice = (nextSlice: ApplicationConfigSlice): void =>
+    applySlice(variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice);
+
+  const commitSave = () => {
+    if (isBulkSave) {
+      // Overwriting every selected property is destructive — name the count at the moment
+      // of saving (round 31), not only in a subtitle above.
+      const ok = window.confirm(
+        `Apply these application settings to ${bulkIds.length} properties? Existing per-property differences will be replaced.`,
+      );
+      if (!ok) return;
+    }
+    setSaving(true);
+    const okSaved = persistApplicationConfig({
+      next: localSub,
+      saveTarget,
+      propertyIds: isBulkSave ? bulkIds : undefined,
+      managerUserId,
+      showToast,
+      singleSuccessMessage: "Application settings saved.",
+    });
+    setSaving(false);
+    if (!okSaved) return;
+    setDirty(false);
+    onSaved();
+    onClose();
+  };
+
+  const requestClose = () => {
+    if (dirty && !window.confirm("Discard unsaved changes to this application?")) return;
+    onClose();
+  };
 
   const openEdit = (field: ResolvedApplicationField) => {
     setEditingField(field);
@@ -207,7 +235,7 @@ export function ManagerApplicationQuestionsEditorModal({
     setIsNewField(true);
     setNewFieldSectionId(sectionId);
     setEditOpen(true);
-    setExpandedSectionId(sectionId);
+    setExpandedSectionIds((prev) => new Set(prev).add(sectionId));
   };
 
   const closeEdit = () => {
@@ -217,47 +245,57 @@ export function ManagerApplicationQuestionsEditorModal({
   };
 
   const removeField = (field: ResolvedApplicationField) => {
-    if (!persistEditedSlice(removeListingApplicationField(configSlice, field), "Question removed.")) return;
-    onSaved();
+    applyEditedSlice(removeListingApplicationField(configSlice, field));
   };
 
   const reenableField = (field: ResolvedApplicationField) => {
     if (!field.standardKey) return;
-    if (!persistEditedSlice(reenableListingApplicationField(configSlice, field.standardKey), "Question added back.")) return;
-    onSaved();
+    applyEditedSlice(reenableListingApplicationField(configSlice, field.standardKey));
   };
 
   const removeSection = (sectionId: string) => {
     const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
     if (sectionQuestions.length === 0) return;
-    if (!persistEditedSlice(applyFieldRemovals(configSlice, sectionQuestions), "Section questions removed.")) return;
-    if (expandedSectionId === sectionId) setExpandedSectionId(null);
-    onSaved();
+    applyEditedSlice(applyFieldRemovals(configSlice, sectionQuestions));
+    setExpandedSectionIds((prev) => {
+      const next = new Set(prev);
+      next.delete(sectionId);
+      return next;
+    });
   };
 
   const restoreDefaults = () => {
-    if (
-      !persistSlice(
-        restoreDefaultApplicationConfig(),
-        variant === "short_term"
-          ? "Short-term application restored to PropLane defaults."
-          : "Application restored to PropLane defaults.",
-      )
-    ) {
-      return;
-    }
-    setExpandedSectionId(null);
-    onSaved();
+    applySlice(restoreDefaultApplicationConfig());
+    setExpandedSectionIds(allApplicationSectionIds());
   };
 
   const onQuestionSaved = (next: ManagerListingSubmissionV1) => {
     setLocalSub(next);
-    onSaved();
+    setDirty(true);
   };
 
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
+      <Modal
+        open={open}
+        title={title}
+        onClose={requestClose}
+        panelClassName="max-w-2xl"
+        footer={
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              data-attr="application-questions-save"
+              disabled={!dirty || saving}
+              onClick={commitSave}
+            >
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </ModalFooter>
+        }
+      >
         {isBulkSave ? (
           <p className="mb-4 text-sm text-muted">
             These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
@@ -270,6 +308,7 @@ export function ManagerApplicationQuestionsEditorModal({
             one these controls configure; turning a question off in one never
             affects the other (they persist to different submission fields).
           */}
+          {lockVariant ? null : (
           <div
             className="flex gap-1 rounded-full border border-border bg-accent/30 p-1"
             role="tablist"
@@ -287,7 +326,7 @@ export function ManagerApplicationQuestionsEditorModal({
                   data-attr={`application-variant-tab-${v.id}`}
                   onClick={() => {
                     setVariant(v.id);
-                    setExpandedSectionId(null);
+                    setExpandedSectionIds(allApplicationSectionIds());
                   }}
                   className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     active
@@ -300,6 +339,7 @@ export function ManagerApplicationQuestionsEditorModal({
               );
             })}
           </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted">
@@ -314,7 +354,7 @@ export function ManagerApplicationQuestionsEditorModal({
           {RENTAL_APPLICATION_SECTIONS.map((section) => {
             const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
             const sectionDisabled = disabledFields.filter((f) => (f.section ?? "additional") === section.id);
-            const sectionExpanded = expandedSectionId === section.id;
+            const sectionExpanded = expandedSectionIds.has(section.id);
             return (
               <PortalCollapsibleEditRow
                 key={section.id}
@@ -330,7 +370,14 @@ export function ManagerApplicationQuestionsEditorModal({
                       }`
                 }
                 expanded={sectionExpanded}
-                onExpandedChange={(next) => setExpandedSectionId(next ? section.id : null)}
+                onExpandedChange={(next) => {
+                  setExpandedSectionIds((prev) => {
+                    const ids = new Set(prev);
+                    if (next) ids.add(section.id);
+                    else ids.delete(section.id);
+                    return ids;
+                  });
+                }}
                 toggleDataAttr={`application-section-toggle-${section.id}`}
                 onRemove={sectionQuestions.length > 0 ? () => removeSection(section.id) : undefined}
                 removeTitle={`Remove all questions in ${section.title}`}
@@ -406,6 +453,7 @@ export function ManagerApplicationQuestionsEditorModal({
         onClose={closeEdit}
         onSaved={onQuestionSaved}
         showToast={showToast}
+        deferPersist
       />
     </>
   );

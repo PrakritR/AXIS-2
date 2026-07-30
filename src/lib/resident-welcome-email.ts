@@ -46,7 +46,7 @@ export function buildResidentWelcomeEmailBody(params: {
     "• Services — submit requests and work orders, and follow updates.",
     "• Move-in — your earliest move-in date, access instructions, parking, and other details for your room (once your listing includes them).",
     "",
-    "Use the same email address you used on your rental application when you create your account.",
+    "Use the same email address you used on your rental application when you sign in. Continue with Google usually works when that email is a Gmail account.",
     "",
     "— PropLane",
   ].join("\n");

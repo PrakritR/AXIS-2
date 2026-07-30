@@ -88,16 +88,16 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "properties",
   "residents",
-  "calendar",
-  "services",
+  "dashboard",
+  "communication",
 ] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
   "lease",
-  "services",
   "payments",
+  "dashboard",
   "communication",
 ] as const;
 
@@ -106,9 +106,8 @@ export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis
 export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "communication", "payments"] as const;
 
 /**
- * Every role gets the fixed native bottom bar — Dashboard and Settings are
- * reached via the shared `PortalMobileNavBar` (back arrow + profile menu)
- * instead of a bar slot.
+ * Every role gets the fixed native bottom bar. Settings stays in the profile
+ * menu; Dashboard is on the manager/resident primary bar when curated above.
  */
 export function nativeBottomBarEnabledForKind(_kind?: PortalDefinition["kind"]): boolean {
   return true;

@@ -22,6 +22,7 @@ const seattleRoomSub = () =>
     address: "12 Pike St, Seattle, WA",
     zip: "98101",
     neighborhood: "Pioneer Square",
+    tagline: "Please message with a short bio and preferred move in date to be considered.",
     securityDeposit: "$500.00",
     moveInFee: "$150.00",
     houseRulesText: "Quiet hours 10pm–8am · No smoking",
@@ -96,7 +97,7 @@ describe("property lease preview", () => {
   it("uses full generated lease with listing data for axis default in Seattle", () => {
     const preview = buildPropertyLeasePreview(seattleRoomSub(), { demo: true });
     expect(preview.source).toBe("axis_default");
-    expect(preview.html).toContain("RESIDENTIAL ROOM RENTAL AGREEMENT");
+    expect(preview.html).toContain("RESIDENTIAL LEASE AGREEMENT");
     expect(preview.html).toContain("The Pioneer");
     expect(preview.html).toContain("[Resident name]");
     expect(preview.html).toContain("$2400.00 / month");
@@ -105,6 +106,16 @@ describe("property lease preview", () => {
     expect(preview.html).toContain("Electronic Signature");
     expect(preview.html).not.toMatch(/Seattle, WA.*Seattle, WA/);
     expect(preview.jurisdictionLabel).toBe("Seattle, WA");
+  });
+
+  it("does not embed listing marketing copy in section 2 Premises", () => {
+    const preview = buildPropertyLeasePreview(seattleRoomSub(), { demo: true });
+    expect(preview.html).toContain("<h2>2. Premises</h2>");
+    expect(preview.html).toContain("The Pioneer");
+    expect(preview.html).toContain("$2400.00 / month");
+    expect(preview.html).not.toContain("Light-filled Pioneer Square home");
+    expect(preview.html).not.toContain("Please message with a short bio");
+    expect(preview.html).not.toContain("preferred move in date");
   });
 
   it("renders custom comments as full lease with numbered addendum when supported", () => {
@@ -117,7 +128,7 @@ describe("property lease preview", () => {
       }),
     );
     expect(preview.source).toBe("custom_comments");
-    expect(preview.html).toContain("RESIDENTIAL ROOM RENTAL AGREEMENT");
+    expect(preview.html).toContain("RESIDENTIAL LEASE AGREEMENT");
     expect(preview.html).toContain("Additional Provisions from Property Manager");
     expect(preview.html).toContain("No smoking on balconies.");
     expect(preview.html).toContain("Parking spot #4 only.");

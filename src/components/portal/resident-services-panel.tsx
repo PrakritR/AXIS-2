@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { formatPacificDate } from "@/lib/pacific-time";
@@ -11,10 +11,13 @@ import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_INLINE_UNLOCK_NOTICE_CLASS,
 } from "@/components/portal/portal-metrics";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -33,7 +36,6 @@ import {
   createPortalRowExpandClick,
   portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
-import { PillTabs, TabNav } from "@/components/ui/tabs";
 import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
 import { formatPreferredArrival, parsePreferredArrival } from "@/lib/preferred-arrival";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
@@ -161,8 +163,20 @@ export function formatDate(iso: string) {
   return formatPacificDate(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
+export function ServiceStatusBadge({
+  status,
+  neutral = false,
+}: {
+  status: ServiceRequest["status"];
+  neutral?: boolean;
+}) {
   if (status === "pending") return null;
+  const label =
+    status === "approved" ? "Approved" : status === "denied" ? "Denied" : status === "returned" ? "Return submitted" : null;
+  if (!label) return null;
+  if (neutral) {
+    return <span className="text-xs font-medium text-muted">{label}</span>;
+  }
   if (status === "approved")
     return (
       <span className="rounded-full portal-badge-info px-2.5 py-0.5 text-[10px] font-semibold">
@@ -190,7 +204,11 @@ const WORK_ORDER_BUCKET_LABEL: Record<ResidentWorkBucket, string> = {
   completed: "Completed",
 };
 
-export function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket }) {
+export function WorkOrderStatusBadge({ bucket, neutral = false }: { bucket: ResidentWorkBucket; neutral?: boolean }) {
+  const label = WORK_ORDER_BUCKET_LABEL[bucket];
+  if (neutral) {
+    return <span className="text-xs font-medium text-muted">{label}</span>;
+  }
   const cls =
     bucket === "completed"
       ? "portal-badge-success"
@@ -229,7 +247,7 @@ export function ServiceRequestCard({
     deleteServiceRequest(req.id);
     setDeleteOpen(false);
     onDelete();
-    showToast("Add-on service deleted.");
+    showToast("Request deleted.");
   }
 
   const feePaid = isServiceRequestFeePaid(req);
@@ -314,7 +332,7 @@ export function ServiceRequestCard({
             data-attr="resident-service-request-edit"
             onClick={onEdit}
           >
-            Edit add-on service
+            Edit request
           </Button>
         ) : null}
         <Button
@@ -323,15 +341,15 @@ export function ServiceRequestCard({
           className={PORTAL_DETAIL_BTN}
           onClick={() => setDeleteOpen(true)}
         >
-          Delete add-on service
+          Delete request
         </Button>
       </PortalTableDetailActions>
 
       <ConfirmDeleteModal
         open={deleteOpen}
-        title="Delete add-on service"
+        title="Delete request"
         description={`Delete “${req.offerName}”?`}
-        confirmLabel="Delete add-on service"
+        confirmLabel="Delete request"
         dataAttr="resident-service-request-delete-confirm"
         onClose={() => setDeleteOpen(false)}
         onConfirm={removeRequest}
@@ -471,12 +489,34 @@ export function ResidentServicesPanel({
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
-  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const openMaintenancePhotoPicker = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0;width:0;height:0;";
+    input.setAttribute("tabindex", "-1");
+    input.setAttribute("aria-hidden", "true");
+    const onChange = () => {
+      void onPickPhotos(input.files);
+      input.removeEventListener("change", onChange);
+      input.remove();
+    };
+    input.addEventListener("change", onChange);
+    document.body.appendChild(input);
+    input.click();
+  };
 
   const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const activeTab = tabId;
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [activeTab]);
 
   // modal state
   const [modalMode, setModalMode] = useState<"none" | "maintenance" | "service">("none");
@@ -716,9 +756,29 @@ export function ResidentServicesPanel({
   }, [sortedRequests]);
 
   const filteredRequests = useMemo(
-    () => sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter),
-    [sortedRequests, requestsFilter],
+    () => {
+      const bucketed = sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter);
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return bucketed;
+      return bucketed.filter((req) => {
+        const haystack = [req.offerName, req.notes, req.status].filter(Boolean).join(" ").toLowerCase();
+        return haystack.includes(q);
+      });
+    },
+    [sortedRequests, requestsFilter, searchQuery],
   );
+
+  const searchedWorkOrderRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const haystack = [row.title, row.description, row.propertyName, row.unit, row.priority]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, searchQuery]);
 
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
@@ -732,7 +792,7 @@ export function ResidentServicesPanel({
     });
     setEditingRequest(null);
     reloadServiceRequests();
-    showToast("Add-on service updated.");
+    showToast("Request updated.");
   }
 
   function openWorkOrderEdit(row: DemoManagerWorkOrderRow) {
@@ -847,7 +907,6 @@ export function ResidentServicesPanel({
     setMEntryPermission("call_first");
     setMEntryNotes("");
     setMPhotos([]);
-    if (photoInputRef.current) photoInputRef.current.value = "";
   };
   const resetService = () => {
     setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
@@ -1111,82 +1170,135 @@ export function ResidentServicesPanel({
     !requestTypeId ||
     (serviceRequestIsCustom ? !customTitle.trim() || !customPriceLimit.trim() : !serviceRequestCatalogSelected);
 
+  const servicesHeaderAction =
+    activeTab === "work-orders" ? (
+      <Button
+        type="button"
+        className={PORTAL_HEADER_ACTION_BTN}
+        data-attr="resident-report-maintenance"
+        disabled={!servicesUnlocked}
+        onClick={() => {
+          if (!servicesUnlocked) {
+            showToast("Services unlock after your lease is fully signed.");
+            return;
+          }
+          setModalMode("maintenance");
+        }}
+      >
+        Report
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        className={PORTAL_HEADER_ACTION_BTN}
+        disabled={!servicesUnlocked}
+        onClick={() => {
+          if (!servicesUnlocked) {
+            showToast("Services unlock after your lease is fully signed.");
+            return;
+          }
+          setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
+          setModalMode("service");
+        }}
+      >
+        Request service
+      </Button>
+    );
+
+  const servicesListChrome = (
+    <PortalListControlStack
+      destinationInset
+      destinations={[
+        {
+          id: "requests",
+          label: "Requests",
+          href: `${basePath}/services/requests`,
+          count: sortedRequests.length,
+          dataAttr: "resident-services-tab-requests",
+        },
+        {
+          id: "work-orders",
+          label: "Work orders",
+          href: `${basePath}/services/work-orders`,
+          count: myRows.length,
+          dataAttr: "resident-services-tab-work-orders",
+        },
+      ]}
+      activeDestinationId={activeTab}
+      destinationAriaLabel="Services"
+      filterRow={
+        activeTab === "requests" ? (
+          <LocalDestinationNav
+            items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+              id,
+              label,
+              count: requestsCounts[id],
+              dataAttr: `resident-services-request-status-${id}`,
+            }))}
+            activeId={requestsFilter}
+            onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
+            ariaLabel="Request status"
+            className="w-full"
+          />
+        ) : (
+          <LocalDestinationNav
+            items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
+              id,
+              label,
+              count: workOrderFilterCounts[id],
+              dataAttr: `resident-services-work-order-status-${id}`,
+            }))}
+            activeId={workOrderFilter}
+            onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
+            ariaLabel="Work order status"
+            className="w-full"
+          />
+        )
+      }
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: activeTab === "requests" ? "Search requests" : "Search work orders",
+        dataAttr: "resident-services-search",
+      }}
+    />
+  );
+
   return (
     <ManagerPortalPageShell
       title="Services"
+      hideTitleOnMobileNav
       titleAside={
-        activeTab === "work-orders" ? (
-          <Button
-            type="button"
-            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="resident-report-maintenance"
-            disabled={!servicesUnlocked}
-            onClick={() => {
-              if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
-                return;
-              }
-              setModalMode("maintenance");
-            }}
-          >
-            Report
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
-            disabled={!servicesUnlocked}
-            onClick={() => {
-              if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
-                return;
-              }
-              setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
-              setModalMode("service");
-            }}
-          >
-            Request add-on service
-          </Button>
-        )
+        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+          {servicesHeaderAction}
+        </PortalSectionActionRow>
       }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav
-            activeId={activeTab}
-            items={[
-              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests` },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-            ]}
-          />
-        </ManagerPortalFilterRow>
-      }
+      compactFilterRow
+      filterRow={servicesListChrome}
     >
-      <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
-
+      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-services-mobile-actions">
+        {servicesHeaderAction}
+      </div>
       {!servicesUnlocked ? (
-        <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
-          <p className="font-medium text-foreground">Services unlock after your lease is fully signed</p>
-          <p className="mt-1">Maintenance and add-on service requests become available once you and your manager have both signed.</p>
-        </div>
+        <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+          <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
+          Maintenance and service requests become available once you and your manager have both signed.
+        </p>
       ) : null}
 
       {activeTab === "requests" ? (
         <div>
-          <div className="mb-3 w-fit max-w-full">
-            <PillTabs
-              items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
-                id,
-                label: pillLabelWithCount(label, requestsCounts[id]),
-              }))}
-              activeId={requestsFilter}
-              onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
-            />
-          </div>
-
           {sortedRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
+            <PortalDataTableEmpty message="No requests yet." icon="service" />
           ) : filteredRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
+            <PortalDataTableEmpty
+              message={
+                searchQuery.trim()
+                  ? "No requests match your search."
+                  : "No requests in this status yet."
+              }
+              icon="service"
+            />
           ) : (
         <>
         <div className="space-y-2 lg:hidden">
@@ -1263,28 +1375,21 @@ export function ResidentServicesPanel({
         </div>
       ) : (
         <div>
-          <div className="mb-3 w-fit max-w-full">
-            <PillTabs
-              items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
-                id,
-                label: pillLabelWithCount(label, workOrderFilterCounts[id]),
-              }))}
-              activeId={workOrderFilter}
-              onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
-            />
-          </div>
-
-          {rows.length === 0 ? (
+          {myRows.length === 0 ? (
+            <PortalDataTableEmpty icon="work-order" message="No work orders yet." />
+          ) : searchedWorkOrderRows.length === 0 ? (
             <PortalDataTableEmpty
               icon="work-order"
               message={
-                myRows.length === 0 ? "No work orders yet." : "No work orders in this status yet."
+                searchQuery.trim()
+                  ? "No work orders match your search."
+                  : "No work orders in this status yet."
               }
             />
           ) : (
             <>
             <div className="space-y-2 lg:hidden">
-              {rows.map((row) => {
+              {searchedWorkOrderRows.map((row) => {
                 const expanded = expandedId === row.id;
                 return (
                   <PortalMobileSummaryCard
@@ -1325,7 +1430,7 @@ export function ResidentServicesPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => {
+                    {searchedWorkOrderRows.map((row) => {
                       const isExpanded = expandedId === row.id;
                       return (
                       <Fragment key={row.id}>
@@ -1372,9 +1477,10 @@ export function ResidentServicesPanel({
         </div>
       )}
 
-      {/* Maintenance modal */}
+      {/* Maintenance modal — mount only while open so no file input leaks to the list page */}
+      {modalMode === "maintenance" ? (
       <Modal
-        open={modalMode === "maintenance"}
+        open
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="max-w-lg"
@@ -1462,7 +1568,7 @@ export function ResidentServicesPanel({
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
-            <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
+            <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={openMaintenancePhotoPicker}>
               Attach photos
             </Button>
           </div>
@@ -1482,11 +1588,12 @@ export function ResidentServicesPanel({
           ) : null}
         </div>
       </Modal>
+      ) : null}
 
       {/* Request modal */}
       <Modal
         open={modalMode === "service"}
-        title="Request add-on service"
+        title="Request service"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
         footer={
@@ -1525,7 +1632,7 @@ export function ResidentServicesPanel({
               <div className="mt-4 space-y-3">
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted">
-                    Add-on service type <span className="text-rose-500">*</span>
+                    Service type <span className="text-rose-500">*</span>
                   </p>
                   <Select
                     value={
@@ -1545,7 +1652,7 @@ export function ResidentServicesPanel({
                     disabled={serviceSubmitting}
                   >
                     {availableOffers.length > 0 ? (
-                      <option value="">Select an add-on service</option>
+                      <option value="">Select a service</option>
                     ) : null}
                     {availableOffers.map((offer) => (
                       <option key={offer.id} value={offer.id}>
@@ -1638,7 +1745,7 @@ export function ResidentServicesPanel({
       {/* Edit add-on service request modal */}
       <Modal
         open={editingRequest !== null}
-        title="Edit add-on service"
+        title="Edit request"
         onClose={() => setEditingRequest(null)}
         panelClassName="max-w-lg"
         footer={

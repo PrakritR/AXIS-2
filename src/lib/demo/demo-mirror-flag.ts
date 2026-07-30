@@ -1,6 +1,6 @@
 /**
  * The one switch that decides whether `/demo` may read the canonical
- * `@test.axis.local` accounts' real portal rows (`GET /api/demo/portal-snapshot`)
+ * `@test.proplane.local` accounts' real portal rows (`GET /api/demo/portal-snapshot`)
  * or must serve the empty static snapshot from `demo-guided-data.ts`.
  *
  * **Currently OFF, deliberately and temporarily.** The fictional portfolio the

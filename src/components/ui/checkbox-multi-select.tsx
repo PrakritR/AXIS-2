@@ -11,9 +11,59 @@ import {
   FIELD_SELECT_MENU_OPTION_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
   FIELD_SELECT_TRIGGER_COMPACT_CLASS,
+  FIELD_SELECT_TRIGGER_PILL_CLASS,
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
   partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
+import {
+  FIELD_SELECT_MENU_DATA_ATTR,
+  handlePortaledFieldSelectOptionPointerDown,
+} from "@/components/ui/field-select-portal-interaction";
+
+
+export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
+const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
+
+/** Always portal to body — viewport `fixed` coords break inside transformed Vaul/Radix shells. */
+function resolveFieldSelectMenuPortal(): HTMLElement {
+  return document.body;
+}
+
+const FIELD_SELECT_MENU_Z_INDEX = 10000;
+
+type FieldSelectMenuRect = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+function computeFieldSelectMenuRect(button: HTMLButtonElement, optionCount: number): FieldSelectMenuRect {
+  const rect = button.getBoundingClientRect();
+  const viewportH = window.innerHeight;
+  const viewportPadding = 12;
+  const fiveItemCap =
+    FIELD_SELECT_MENU_VISIBLE_ITEMS * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12;
+  const contentHeight = Math.min(
+    Math.max(optionCount, 1) * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
+    fiveItemCap,
+  );
+  const spaceBelow = viewportH - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const openUp = spaceBelow < contentHeight && spaceAbove > spaceBelow;
+  const viewportCap = Math.max(
+    FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
+    openUp ? spaceAbove - 8 : spaceBelow - 8,
+  );
+  const maxHeight = Math.min(contentHeight, viewportCap);
+  const top = openUp ? Math.max(viewportPadding, rect.top - maxHeight - 4) : rect.bottom + 4;
+  return {
+    top,
+    left: rect.left,
+    width: rect.width,
+    maxHeight,
+  };
+}
 
 export type CheckboxMultiSelectOption = { value: string; label: string };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
@@ -39,7 +89,7 @@ function summarizeSelection(
 function triggerClassForVariant(variant: "field" | "pill", hideLabel: boolean, extra?: string) {
   const base =
     variant === "pill"
-      ? FIELD_SELECT_TRIGGER_COMPACT_CLASS
+      ? FIELD_SELECT_TRIGGER_PILL_CLASS
       : hideLabel
         ? FIELD_SELECT_TRIGGER_INLINE_CLASS
         : FIELD_SELECT_TRIGGER_CLASS;
@@ -87,7 +137,7 @@ export function CheckboxMultiSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
   const pill = variant === "pill";
   const { wrapperClassName, triggerClassName } = partitionFieldSelectClasses(className);
 
@@ -99,12 +149,7 @@ export function CheckboxMultiSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    setMenuRect({
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-    });
+    setMenuRect(computeFieldSelectMenuRect(button, flatOptions.length));
   };
 
   useLayoutEffect(() => {
@@ -123,7 +168,7 @@ export function CheckboxMultiSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
+    const onPointerDownOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (wrapRef.current?.contains(target)) return;
       if (document.getElementById(listId)?.contains(target)) return;
@@ -132,16 +177,39 @@ export function CheckboxMultiSelect({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDownOutside, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDownOutside, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [listId, open]);
 
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  };
+
+  const renderCheckboxOption = (opt: CheckboxMultiSelectOption) => {
+    const checked = selected.includes(opt.value);
+    return (
+      <label
+        key={opt.value}
+        role="option"
+        aria-selected={checked}
+        className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
+        onPointerDown={(event) => handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value))}
+      >
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+          checked={checked}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+        />
+        <span className="leading-snug text-foreground">{opt.label}</span>
+      </label>
+    );
   };
 
   const buttonLabel =
@@ -155,13 +223,18 @@ export function CheckboxMultiSelect({
         id={listId}
         role="listbox"
         aria-multiselectable="true"
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
+        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          overflowY: "auto",
           backgroundColor: "#ffffff",
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {flatOptions.length === 0 ? (
           <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -171,53 +244,19 @@ export function CheckboxMultiSelect({
               <p className="field-dropdown-menu-option sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
                 {group.label}
               </p>
-              {group.options.map((opt) => {
-                const checked = selected.includes(opt.value);
-                return (
-                  <label
-                    key={opt.value}
-                    role="option"
-                    aria-selected={checked}
-                    className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                      checked={checked}
-                      onChange={() => toggle(opt.value)}
-                    />
-                    <span className="leading-snug text-foreground">{opt.label}</span>
-                  </label>
-                );
-              })}
+              {group.options.map((opt) => renderCheckboxOption(opt))}
             </div>
           ))
         ) : (
-          (options ?? []).map((opt) => {
-            const checked = selected.includes(opt.value);
-            return (
-              <label
-                key={opt.value}
-                role="option"
-                aria-selected={checked}
-                className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                  checked={checked}
-                  onChange={() => toggle(opt.value)}
-                />
-                <span className="leading-snug text-foreground">{opt.label}</span>
-              </label>
-            );
-          })
+          (options ?? []).map((opt) => renderCheckboxOption(opt))
         )}
         {menuFooter ? (
           <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
         ) : null}
       </div>
     ) : null;
+
+  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
@@ -240,7 +279,7 @@ export function CheckboxMultiSelect({
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
-      {menu ? createPortal(menu, document.body) : null}
+      {menu && portalHost ? createPortal(menu, portalHost) : null}
     </div>
   );
 }
@@ -281,7 +320,7 @@ export function FieldSingleSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
   const pill = variant === "pill";
   const partitioned = partitionFieldSelectClasses(className);
   const wrapperClassName = wrapperClassNameProp ?? partitioned.wrapperClassName;
@@ -292,12 +331,7 @@ export function FieldSingleSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    setMenuRect({
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-    });
+    setMenuRect(computeFieldSelectMenuRect(button, options.length));
   };
 
   useLayoutEffect(() => {
@@ -316,7 +350,7 @@ export function FieldSingleSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
+    const onPointerDownOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (wrapRef.current?.contains(target)) return;
       if (document.getElementById(listId)?.contains(target)) return;
@@ -325,10 +359,10 @@ export function FieldSingleSelect({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDownOutside, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDownOutside, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [listId, open]);
@@ -338,17 +372,21 @@ export function FieldSingleSelect({
       <div
         id={listId}
         role="listbox"
-        // z-index must clear modal overlays (the listing wizard's is z-[9999]); this
-        // menu is portaled to document.body as a sibling of the modal, so a lower
-        // value renders it *behind* the modal and every option click lands on the
-        // modal instead — the dropdowns then silently refuse selections.
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
+        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${
+          pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
+        }`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
+          minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          overflowY: "auto",
           backgroundColor: "#ffffff",
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {options.map((opt) => {
           const active = opt.value === value;
@@ -361,9 +399,11 @@ export function FieldSingleSelect({
               className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} ${
                 active ? "text-foreground" : "text-foreground"
               }`}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
+              onPointerDown={(event) => {
+                handlePortaledFieldSelectOptionPointerDown(event, () => {
+                  onChange(opt.value);
+                  setOpen(false);
+                });
               }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
@@ -375,6 +415,8 @@ export function FieldSingleSelect({
         })}
       </div>
     ) : null;
+
+  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
@@ -393,11 +435,11 @@ export function FieldSingleSelect({
         className={triggerClassForVariant(variant, hideLabel || pill, triggerClassName)}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={`min-w-0 truncate ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
+        <span className={`min-w-0 ${pill ? "whitespace-nowrap" : "truncate"} ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
-      {menu ? createPortal(menu, document.body) : null}
+      {menu && portalHost ? createPortal(menu, portalHost) : null}
     </div>
   );
 }

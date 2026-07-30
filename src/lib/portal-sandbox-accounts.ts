@@ -2,7 +2,7 @@
 export function isPortalSandboxEmail(email: string | null | undefined): boolean {
   const normalized = email?.trim().toLowerCase() ?? "";
   if (!normalized.includes("@")) return false;
-  return normalized.endsWith("@axis.local") || normalized.endsWith("@test.axis.local");
+  return normalized.endsWith("@axis.local") || normalized.endsWith("@test.proplane.local");
 }
 
 /** Skip Resend / external SMTP for sandbox seed accounts (same rule as isPortalSandboxEmail). */

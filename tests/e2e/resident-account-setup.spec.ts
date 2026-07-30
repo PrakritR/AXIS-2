@@ -24,7 +24,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const PROPERTY_ID = process.env.RESIDENT_SETUP_E2E_PROPERTY_ID ?? "mgr-test-willow-group";
 // A fresh guest each run so account creation is exercised, not a re-link.
-const GUEST_EMAIL = process.env.RESIDENT_SETUP_E2E_EMAIL ?? "resident.setup.e2e@test.axis.local";
+const GUEST_EMAIL = process.env.RESIDENT_SETUP_E2E_EMAIL ?? "resident.setup.e2e@test.proplane.local";
 const GUEST = { email: GUEST_EMAIL, name: "Riley Setup", phone: "2065550142", password: "ResidentSetup123!" };
 
 const DESKTOP = { width: 1440, height: 1000 };

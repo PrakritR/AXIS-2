@@ -138,10 +138,10 @@ describe("Manager dashboard — top notification banners removed", () => {
     expect(screen.queryByText(/waiting for a decision/i)).toBeNull();
   });
 
-  it("still surfaces the overdue charge in the Pending & overdue payments table", () => {
+  it("still surfaces the overdue charge in the payments attention group", () => {
     render(<ManagerDashboard />);
-    // The overdue info lives in the table now, not the top banner.
-    expect(screen.getByText("Pending & overdue payments")).toBeTruthy();
+    expect(screen.getByText("Payments")).toBeTruthy();
+    expect(screen.getAllByText(/1 overdue/).length).toBeGreaterThan(0);
     const overdueBadges = screen.getAllByText(/^Overdue$/i);
     expect(overdueBadges.length).toBeGreaterThan(0);
     // The overdue charge's resident + charge title appear in the payments table.

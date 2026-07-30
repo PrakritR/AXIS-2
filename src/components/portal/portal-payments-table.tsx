@@ -2,6 +2,7 @@
 
 import { Fragment, type ReactNode } from "react";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { cn } from "@/lib/utils";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -40,6 +41,61 @@ export type PortalPaymentsTableSelection = {
   selectLabel?: (row: PortalPaymentTableRow) => string;
 };
 
+/** Bank of America–style two-line payment row: payee, then date · category; amount right. */
+function PaymentTransactionSummary({
+  row,
+  expanded,
+  settled,
+  renderChargeCell,
+  renderDueDateCell,
+  renderAmountCell,
+  expandControl,
+}: {
+  row: PortalPaymentTableRow;
+  expanded: boolean;
+  settled?: boolean;
+  renderChargeCell?: (row: PortalPaymentTableRow, expanded: boolean) => ReactNode;
+  renderDueDateCell?: (row: PortalPaymentTableRow) => ReactNode;
+  renderAmountCell?: (row: PortalPaymentTableRow) => ReactNode;
+  expandControl?: ReactNode;
+}) {
+  const chargeLabel = renderChargeCell ? renderChargeCell(row, expanded) : row.charge;
+  const dueLabel = renderDueDateCell ? renderDueDateCell(row) : row.dueDate;
+
+  return (
+    <div className={cn("flex min-w-0 items-center gap-3", settled && "opacity-90")}>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="min-w-0 truncate text-[15px] font-semibold leading-tight text-foreground">
+            {row.payee}
+          </p>
+          {expandControl}
+        </div>
+        <p className="mt-0.5 truncate text-xs text-muted">
+          <span>{dueLabel}</span>
+          <span className="mx-1.5 text-muted/50" aria-hidden>·</span>
+          <span className="truncate">{chargeLabel}</span>
+        </p>
+        {settled ? (
+          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--status-confirmed-fg)]">
+            Posted
+          </p>
+        ) : null}
+      </div>
+      <div className="shrink-0 self-center text-right">
+        <div
+          className={cn(
+            "text-base font-bold tabular-nums leading-none",
+            settled ? "text-[var(--status-confirmed-fg)]" : "text-foreground",
+          )}
+        >
+          {renderAmountCell ? renderAmountCell(row) : row.amount}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PortalPaymentsTable({
   rows,
   expandedId,
@@ -51,6 +107,7 @@ export function PortalPaymentsTable({
   renderDueDateCell,
   renderAmountCell,
   expandOnRowClick = false,
+  settledAppearance = false,
 }: {
   rows: PortalPaymentTableRow[];
   expandedId: string | null;
@@ -63,6 +120,8 @@ export function PortalPaymentsTable({
   renderAmountCell?: (row: PortalPaymentTableRow) => ReactNode;
   /** When true, clicking the summary row/card toggles expand (checkbox and buttons are excluded). */
   expandOnRowClick?: boolean;
+  /** Visual treatment for posted/settled rows (paid bucket). */
+  settledAppearance?: boolean;
 }) {
   const showSelection = Boolean(selection && rows.length > 0);
   const colSpan = 5 + (showSelection ? 1 : 0);
@@ -74,41 +133,43 @@ export function PortalPaymentsTable({
       <div className="space-y-2 lg:hidden">
         {rows.map((row) => {
           const expanded = expandedId === row.id;
+          const expandControl = expandOnRowClick
+            ? (
+              <span className="shrink-0 rounded p-0.5 text-muted" aria-hidden>
+                <PortalTableExpandChevron expanded={expanded} />
+              </span>
+            )
+            : (
+              <button
+                type="button"
+                className="shrink-0 rounded p-0.5 text-muted hover:bg-accent/50 hover:text-foreground"
+                onClick={() => toggleExpand(row.id, expanded)}
+                aria-expanded={expanded}
+                aria-label={expanded ? `Collapse ${row.charge}` : `Expand ${row.charge}`}
+                data-portal-row-ignore
+              >
+                <PortalTableExpandChevron expanded={expanded} />
+              </button>
+            );
           const summaryContent = (
-            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-start gap-1.5">
-                  <div className="min-w-0 truncate font-semibold text-foreground">
-                    {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
-                  </div>
-                  <span
-                    className="mt-0.5 shrink-0 rounded p-0.5 text-muted"
-                    aria-hidden={expandOnRowClick ? true : undefined}
-                  >
-                    <PortalTableExpandChevron expanded={expanded} />
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-xs text-muted">{row.property}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">{row.payee}</p>
-                <div className="mt-0.5 text-xs text-muted">
-                  {renderDueDateCell ? renderDueDateCell(row) : row.dueDate}
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-base font-bold tabular-nums text-foreground">
-                  {renderAmountCell ? renderAmountCell(row) : row.amount}
-                </div>
-              </div>
-            </div>
+            <PaymentTransactionSummary
+              row={row}
+              expanded={expanded}
+              settled={settledAppearance}
+              renderChargeCell={renderChargeCell}
+              renderDueDateCell={renderDueDateCell}
+              renderAmountCell={renderAmountCell}
+              expandControl={expandControl}
+            />
           );
 
           return (
             <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-              <div className="flex items-start gap-3">
+              <div className="flex items-center gap-3">
                 {showSelection ? (
                   <input
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 rounded border-border"
+                    className="size-4 shrink-0 rounded border-border"
                     checked={selection!.selectedIds.has(row.id)}
                     onChange={() => selection!.onToggle(row.id)}
                     onClick={(event) => event.stopPropagation()}
@@ -121,7 +182,7 @@ export function PortalPaymentsTable({
                     tabIndex={0}
                     aria-expanded={expanded}
                     aria-label={expanded ? `Collapse ${row.charge}` : `Expand ${row.charge}`}
-                    className="min-w-0 flex-1 cursor-pointer text-left"
+                    className="portal-pressable min-w-0 flex-1 cursor-pointer text-left"
                     onClick={() => toggleExpand(row.id, expanded)}
                     onKeyDown={(event) => {
                       if (isPortalRowClickIgnored(event.target)) return;
@@ -134,38 +195,12 @@ export function PortalPaymentsTable({
                     {summaryContent}
                   </div>
                 ) : (
-                  <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-start gap-1.5">
-                        <div className="min-w-0 truncate font-semibold text-foreground">
-                          {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
-                        </div>
-                        <button
-                          type="button"
-                          className="mt-0.5 shrink-0 rounded p-0.5 text-muted hover:bg-accent/50 hover:text-foreground"
-                          onClick={() => toggleExpand(row.id, expanded)}
-                          aria-expanded={expanded}
-                          aria-label={expanded ? `Collapse ${row.charge}` : `Expand ${row.charge}`}
-                        >
-                          <PortalTableExpandChevron expanded={expanded} />
-                        </button>
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-muted">{row.property}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted">{row.payee}</p>
-                      <div className="mt-0.5 text-xs text-muted">
-                        {renderDueDateCell ? renderDueDateCell(row) : row.dueDate}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-base font-bold tabular-nums text-foreground">
-                        {renderAmountCell ? renderAmountCell(row) : row.amount}
-                      </div>
-                    </div>
-                  </div>
+                  <div className="min-w-0 flex-1">{summaryContent}</div>
                 )}
               </div>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">
+                  <p className="mb-2 text-xs text-muted lg:hidden">{row.property}</p>
                   {renderExpandedActions(row)}
                   {renderExpandedDetail ? <div className="mt-3">{renderExpandedDetail(row)}</div> : null}
                 </div>

@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import { Modal, ModalFooter } from "@/components/ui/modal";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import {
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PortalPropertyDetailSection,
+} from "@/components/portal/portal-property-detail-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -23,24 +25,28 @@ type HouseSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
-function HouseDetailRow({
+function FieldBlock({
   label,
-  value,
   badge,
+  value,
+  onChange,
+  placeholder,
+  rows = 4,
 }: {
   label: string;
-  value: string | null | undefined;
   badge?: string | null;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  rows?: number;
 }) {
-  const text = value?.trim();
-  if (!text) return null;
   return (
-    <div className="flex gap-4 border-t border-border px-4 py-3 first:border-t-0">
-      <div className="w-28 shrink-0">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</p>
+    <div className="border-t border-border px-4 py-4 first:border-t-0">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
         {badge ? (
           <span
-            className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
               badge === "Manager only" ? "portal-badge-notice" : "portal-badge-info"
             }`}
           >
@@ -48,7 +54,13 @@ function HouseDetailRow({
           </span>
         ) : null}
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{text}</p>
+      <Textarea
+        rows={rows}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="text-sm"
+      />
     </div>
   );
 }
@@ -69,32 +81,29 @@ export function ManagerPropertyHouseDetailsPanel({
   showToast: (m: string) => void;
 }) {
   const [notesTick, setNotesTick] = useState(0);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [draft, setDraft] = useState<PortalListingNote>({});
+  const [dirty, setDirty] = useState(false);
 
   const portalNote = useMemo(
     () => (noteKey ? getPortalListingNote(noteKey) : ({} as PortalListingNote)),
     [noteKey, notesTick],
   );
 
-  const houseDescription = sub.houseDescription?.trim() || portalNote.houseDescription?.trim() || "";
-  const houseRulesText = sub.houseRulesText?.trim() || portalNote.houseRulesText?.trim() || "";
-  const generalHouseInfo = sub.generalHouseInfo?.trim() || portalNote.generalHouseInfo?.trim() || "";
-  const hasAny = Boolean(houseDescription || houseRulesText || generalHouseInfo);
+  const baseline = useMemo(
+    () => ({
+      houseDescription: sub.houseDescription?.trim() || portalNote.houseDescription?.trim() || "",
+      houseRulesText: sub.houseRulesText?.trim() || portalNote.houseRulesText?.trim() || "",
+      generalHouseInfo: sub.generalHouseInfo?.trim() || portalNote.generalHouseInfo?.trim() || "",
+    }),
+    [sub, portalNote],
+  );
+
+  const [draft, setDraft] = useState(baseline);
+
+  useEffect(() => {
+    if (!dirty) setDraft(baseline);
+  }, [baseline, dirty]);
 
   if (!noteKey) return null;
-
-  const startEdit = () => {
-    setDraft({
-      houseDescription: sub.houseDescription ?? portalNote.houseDescription ?? "",
-      houseRulesText: sub.houseRulesText ?? portalNote.houseRulesText ?? "",
-      generalHouseInfo: sub.generalHouseInfo ?? portalNote.generalHouseInfo ?? "",
-    });
-    setModalOpen(true);
-  };
-
-  const closeModal = () => setModalOpen(false);
 
   const save = () => {
     if (!noteKey || !managerUserId) return;
@@ -124,105 +133,53 @@ export function ManagerPropertyHouseDetailsPanel({
       generalHouseInfo: draft.generalHouseInfo,
     });
     showToast("House details saved.");
-    setModalOpen(false);
+    setDirty(false);
     setNotesTick((t) => t + 1);
     onUpdated();
   };
 
-  const editForm = (
-    <div className="space-y-4">
-      <div>
-        <div className="mb-0.5 flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">House description</p>
-          <span className="portal-badge-notice rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Manager only</span>
-        </div>
-        <Textarea
-          rows={4}
-          value={draft.houseDescription ?? ""}
-          onChange={(e) => setDraft((d) => ({ ...d, houseDescription: e.target.value }))}
-          placeholder="Internal notes about the house…"
-          className="mt-1"
-        />
-      </div>
-      <div>
-        <div className="mb-0.5 flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">House rules</p>
-          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-        </div>
-        <Textarea
-          rows={3}
-          value={draft.houseRulesText ?? ""}
-          onChange={(e) => setDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
-          placeholder="Quiet hours, guests, smoking, pets…"
-          className="mt-1"
-        />
-      </div>
-      <div>
-        <div className="mb-0.5 flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">General house info</p>
-          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-        </div>
-        <Textarea
-          rows={4}
-          value={draft.generalHouseInfo ?? ""}
-          onChange={(e) => setDraft((d) => ({ ...d, generalHouseInfo: e.target.value }))}
-          placeholder="Gate/door codes, laundry tips, trash schedule…"
-          className="mt-1"
-        />
-      </div>
-    </div>
-  );
-
-  const editFooter = (
-    <ModalFooter>
-      <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
-        Cancel
-      </Button>
-      <Button type="button" variant="primary" className="rounded-full" onClick={save}>
-        Save house details
-      </Button>
-    </ModalFooter>
-  );
+  const updateField = (key: keyof typeof draft, value: string) => {
+    setDirty(true);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
 
   return (
-    <>
-      <PortalCollapsibleSection
-        title="House details"
-        titleAddon={
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
-        }
-        expanded={expanded}
-        onExpandedChange={setExpanded}
-        headerActionsInline
-        headerActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            data-attr="house-details-edit"
-            onClick={(e) => {
-              e.stopPropagation();
-              startEdit();
-            }}
-          >
-            Edit
-          </Button>
-        }
-        toggleDataAttr="house-details-section-toggle"
-      >
-        <div>
-          <HouseDetailRow label="Description" value={houseDescription} badge="Manager only" />
-          <HouseDetailRow label="House rules" value={houseRulesText} />
-          <HouseDetailRow label="General info" value={generalHouseInfo} badge="Residents only" />
-          {!hasAny ? (
-            <p className="px-4 py-3 text-sm text-muted">No house details yet. Click Edit to add.</p>
-          ) : null}
-        </div>
-      </PortalCollapsibleSection>
-
-      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl" footer={editFooter}>
-        {editForm}
-      </Modal>
-    </>
+    <PortalPropertyDetailSection
+      actions={
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+          data-attr="house-details-save"
+          disabled={!dirty}
+          onClick={save}
+        >
+          Save
+        </Button>
+      }
+    >
+      <FieldBlock
+        label="House description"
+        badge="Manager only"
+        value={draft.houseDescription}
+        onChange={(v) => updateField("houseDescription", v)}
+        placeholder="Internal notes about the house…"
+      />
+      <FieldBlock
+        label="House rules"
+        badge="Residents only"
+        value={draft.houseRulesText}
+        onChange={(v) => updateField("houseRulesText", v)}
+        placeholder="Quiet hours, guests, smoking, pets…"
+        rows={3}
+      />
+      <FieldBlock
+        label="General house info"
+        badge="Residents only"
+        value={draft.generalHouseInfo}
+        onChange={(v) => updateField("generalHouseInfo", v)}
+        placeholder="Gate/door codes, laundry tips, trash schedule…"
+      />
+    </PortalPropertyDetailSection>
   );
 }

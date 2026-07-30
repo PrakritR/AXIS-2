@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ManagerPortalPageShell,
-  ManagerPortalFilterRow,
-  ManagerPortalStatusPills,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
@@ -23,6 +23,13 @@ import {
   DEMO_PROMOTION_GENERATED_EVENT,
 } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
@@ -47,7 +54,6 @@ import {
   nextPromotionAssetDefaultTitle,
   sortPromotionAssets,
   type PromotionAsset,
-  type PromotionAssetKind,
 } from "@/lib/promotion-assets";
 import {
   buildManagerPromotionPropertyOptions,
@@ -94,12 +100,6 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
-/** Content-type filter pills at the top of the Promotion page. `image` maps to
- *  flyer assets (`kind: "flyer"`), `text` to text assets. The pills are mutually
- *  exclusive (no "All") — like the Applications/Services status pills, which
- *  default to their first bucket rather than an aggregate. */
-export type PromotionContentFilter = "text" | "image";
-
 function flyerEntryToDraft(
   row: ManagerPromotionRow,
   entry: FlyerEntry,
@@ -132,7 +132,11 @@ function flyerEntryToDraft(
 }
 
 
-export function ManagerPromotion() {
+export function ManagerPromotion({
+  basePath: _basePath = "/portal",
+}: {
+  basePath?: string;
+} = {}) {
   const { showToast } = useAppUi();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const searchParams = useSearchParams();
@@ -156,8 +160,7 @@ export function ManagerPromotion() {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
-  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>("text");
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -194,32 +197,9 @@ export function ManagerPromotion() {
   // Property filter drives both the visible list and the content-type counts,
   // mirroring the Services page (counts reflect the current property scope).
   const propertyScopedAssets = useMemo(() => {
-    if (!propertyFilter) return assets;
-    return assets.filter((a) => samePropertyId(a.row.propertyId, propertyFilter));
-  }, [assets, propertyFilter]);
-
-  const contentCounts = useMemo(() => {
-    let text = 0;
-    let image = 0;
-    for (const a of propertyScopedAssets) {
-      if (a.kind === "text") text += 1;
-      else image += 1;
-    }
-    return { text, image };
-  }, [propertyScopedAssets]);
-
-  const contentTabs = useMemo(
-    () => [
-      { id: "text", label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
-      { id: "image", label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
-    ],
-    [contentCounts],
-  );
-
-  const filteredAssets = useMemo(() => {
-    const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
-    return propertyScopedAssets.filter((a) => a.kind === wantedKind);
-  }, [propertyScopedAssets, contentFilter]);
+    if (propertyFilters.length === 0) return assets;
+    return assets.filter((a) => propertyFilters.some((id) => samePropertyId(a.row.propertyId, id)));
+  }, [assets, propertyFilters]);
 
   const listings = useMemo<ManagerPromotionPropertyOption[]>(() => {
     void propertyTick;
@@ -310,19 +290,15 @@ export function ManagerPromotion() {
     setDraft(EMPTY_DRAFT);
   }, []);
 
-  // Both filters are mutually exclusive selections, so a saved asset can sit
-  // outside either of them. Move both to whatever renders the saved row before
-  // expanding it — otherwise the success toast points at nothing.
-  const revealAsset = useCallback(
-    (assetId: string, kind: PromotionContentFilter, rowPropertyId: string | null | undefined) => {
-      setContentFilter(kind);
-      setPropertyFilter((cur) =>
-        !cur || samePropertyId(rowPropertyId, cur) ? cur : rowPropertyId?.trim() || "",
+  const revealAsset = useCallback((assetId: string, rowPropertyId: string | null | undefined) => {
+    const pid = rowPropertyId?.trim();
+    if (pid) {
+      setPropertyFilters((cur) =>
+        cur.length === 0 || cur.some((id) => samePropertyId(id, pid)) ? cur : [pid],
       );
-      setExpandedId(assetId);
-    },
-    [],
-  );
+    }
+    setExpandedId(assetId);
+  }, []);
 
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
@@ -422,7 +398,7 @@ export function ManagerPromotion() {
       upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
       const assetId = makePromotionAssetId(savedRow.id, "flyer", entryId);
-      revealAsset(assetId, "image", savedRow.propertyId);
+      revealAsset(assetId, savedRow.propertyId);
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_PROMOTION_GENERATED_EVENT, { detail: { assetId } }));
       }
@@ -534,7 +510,7 @@ export function ManagerPromotion() {
       });
       upsertManagerPromotion(row);
       closeForm();
-      revealAsset(makePromotionAssetId(row.id, "text", entry.id), "text", row.propertyId);
+      revealAsset(makePromotionAssetId(row.id, "text", entry.id), row.propertyId);
       showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
     } catch {
       showToast("Could not generate promotion text.");
@@ -588,7 +564,7 @@ export function ManagerPromotion() {
         });
       upsertManagerPromotion(appendUploadEntryToRow(row, entry));
       closeForm();
-      revealAsset(makePromotionAssetId(row.id, "upload", entry.id), "image", propertyId);
+      revealAsset(makePromotionAssetId(row.id, "upload", entry.id), propertyId);
       showToast("Promotion uploaded.");
     } finally {
       setUploadBusy(false);
@@ -680,49 +656,78 @@ export function ManagerPromotion() {
     );
   };
 
+  const promotionFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([propertyFilters])}
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0"
+      onReset={() => setPropertyFilters([])}
+      dataAttr="promotion-filter-sheet-open"
+    >
+      <ApplicationFilterSortFields
+        propertyOptions={filterPropertyOptions}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
+        dataAttr="promotion-filter-property"
+      />
+    </PortalFilterSortSheet>
+  );
+
+  const promotionNewButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      onClick={() => openNewPromotion()}
+      data-attr="promotion-new"
+    >
+      + New promotion
+    </Button>
+  );
+
+  const promotionListAddRow = (
+    <PortalListAddRow
+      label="Add promotion"
+      icon={PORTAL_LIST_ADD_ICONS.promotion}
+      onClick={() => openNewPromotion()}
+      dataAttr="promotion-list-add"
+    />
+  );
+
+  const promotionMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow filter={promotionFilterSheet} actions={promotionNewButton} />
+  );
+
   return (
     <ManagerPortalPageShell
       title="Promotion"
-      titleAside={
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => openNewPromotion()}
-          data-attr="promotion-new"
-        >
-          New promotion
-        </Button>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={contentTabs}
-            activeId={contentFilter}
-            onChange={(id) => setContentFilter(id as PromotionContentFilter)}
-          />
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
-        </ManagerPortalFilterRow>
-      }
+      titleInlineFilter={promotionFilterSheet}
+      titleAside={promotionNewButton}
+      hideTitleOnMobileNav
+      compactFilterRow
     >
+      {promotionMobileActionsRow}
       <div data-attr="promotion-content-direct">
-        <PromotionAssetStack
-          assets={filteredAssets}
-          emptyMessage={
-            assets.length === 0
-              ? "No promotions yet."
-              : "No promotions match these filters."
-          }
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          onSaveTitle={saveAssetTitle}
-          renderHeaderActions={renderHeaderActions}
-          renderExpanded={renderExpanded}
-        />
+        {propertyScopedAssets.length === 0 ? (
+          <div className="space-y-3">
+            {assets.length > 0 ? (
+              <PortalDataTableEmpty icon="data" message="No promotions match these filters." />
+            ) : null}
+            <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
+          </div>
+        ) : (
+          <div className={PORTAL_LIST_PAGE_BODY}>
+            <PromotionAssetStack
+              assets={propertyScopedAssets}
+              expandedId={expandedId}
+              onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+              onSaveTitle={saveAssetTitle}
+              renderHeaderActions={renderHeaderActions}
+              renderExpanded={renderExpanded}
+            />
+            <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
+          </div>
+        )}
       </div>
 
       <PromotionNewModal
@@ -748,9 +753,6 @@ export function ManagerPromotion() {
         panelClassName="max-w-2xl"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" onClick={closeForm}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>

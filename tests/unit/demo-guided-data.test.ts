@@ -21,11 +21,11 @@ import {
 } from "@/lib/demo/demo-session";
 
 describe("demo-canonical-accounts", () => {
-  it("uses @test.axis.local sandbox emails", () => {
-    expect(CANONICAL_DEMO_MANAGER_EMAIL).toBe("manager@test.axis.local");
-    expect(CANONICAL_DEMO_RESIDENT_EMAIL).toBe("resident@test.axis.local");
-    expect(CANONICAL_DEMO_VENDOR_EMAIL).toBe("vendor@test.axis.local");
-    expect(CANONICAL_DEMO_ADMIN_EMAIL).toBe("testeverything@test.axis.local");
+  it("uses @test.proplane.local sandbox emails", () => {
+    expect(CANONICAL_DEMO_MANAGER_EMAIL).toBe("manager@test.proplane.local");
+    expect(CANONICAL_DEMO_RESIDENT_EMAIL).toBe("resident@test.proplane.local");
+    expect(CANONICAL_DEMO_VENDOR_EMAIL).toBe("vendor@test.proplane.local");
+    expect(CANONICAL_DEMO_ADMIN_EMAIL).toBe("testeverything@test.proplane.local");
     expect(CANONICAL_DEMO_GUIDED_EMAIL).toBe(CANONICAL_DEMO_ADMIN_EMAIL);
   });
 

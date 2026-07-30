@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -10,10 +10,14 @@ import { GroupShareCallout } from "@/components/marketing/rental-application-fin
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
-  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { DataList } from "@/components/ui/data-list";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -73,8 +77,15 @@ import {
   sortResidentApplicationRows,
 } from "@/lib/rental-application/resident-application-list";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
+import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
+import {
+  residentApplicationDetailHref,
+  residentApplicationListHref,
+  type ResidentApplicationBucketId,
+} from "@/lib/portal-detail-routes";
+import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   return rows.reduce(
@@ -120,12 +131,19 @@ function continueApplicationPath(row: DemoApplicantRow): string {
 export function ResidentApplicationsPanel({
   embedded = false,
   applyMode: applyModeProp = false,
+  bucket: bucketProp = "pending",
+  applicationId: applicationIdProp,
+  basePath = RESIDENT_PORTAL_BASE_PATH,
 }: {
   embedded?: boolean;
   applyMode?: boolean;
+  bucket?: ManagerApplicationBucket;
+  applicationId?: string;
+  basePath?: string;
 } = {}) {
   const pathname = usePathname();
-  const { email: sessionEmail, ready: sessionReady } = usePortalSession();
+  const router = useRouter();
+  const { email: sessionEmail, userId: sessionUserId, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
   const portalNavigate = usePortalNavigate();
   const { showToast } = useAppUi();
@@ -138,7 +156,13 @@ export function ResidentApplicationsPanel({
     pathname.startsWith(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`) ||
     (demoMode && demoApplyOpen);
   const [tick, setTick] = useState(0);
-  const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
+  const [bucket, setBucket] = useState<ManagerApplicationBucket>(bucketProp);
+  const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
+  if (bucketProp !== prevBucketProp) {
+    setPrevBucketProp(bucketProp);
+    setBucket(bucketProp);
+  }
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // The ONE row this apply session's inline wizard is bound to — the row the
   // auto-expand effect resolved for the URL target (or the sole bare-/apply
@@ -150,6 +174,8 @@ export function ResidentApplicationsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [fetchedDetailRow, setFetchedDetailRow] = useState<DemoApplicantRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   // Inline "Apply to a property" picker: choosing which property to apply for
   // happens in place (a searchable modal), then the wizard opens INLINE under
   // its own row in this same list — no round-trip out to the browse page.
@@ -166,10 +192,24 @@ export function ResidentApplicationsPanel({
   useEffect(() => {
     if (!sessionReady) return;
     const on = () => setTick((t) => t + 1);
-    void syncManagerApplicationsFromServer({ force: true }).then(on);
+    void syncManagerApplicationsFromServer({ force: true, selfScope: true }).then(on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
   }, [sessionReady]);
+
+  useEffect(() => {
+    if (!applicationIdProp) return;
+    const refresh = () => {
+      void syncManagerApplicationsFromServer({ force: true, selfScope: true }).then(() => setTick((t) => t + 1));
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [applicationIdProp]);
 
   useEffect(() => {
     if (!demoMode) return;
@@ -212,10 +252,12 @@ export function ResidentApplicationsPanel({
     // A withdrawn application leaves the resident's active list (the manager keeps it).
     return sortResidentApplicationRows(
       readManagerApplicationRows().filter(
-        (row) => (row.email ?? "").trim().toLowerCase() === residentEmail && !isWithdrawnApplicationRow(row),
+        (row) =>
+          residentOwnsApplicationRow(row, { email: residentEmail, userId: sessionUserId }) &&
+          !isWithdrawnApplicationRow(row),
       ),
     );
-  }, [residentEmail, tick]);
+  }, [residentEmail, sessionUserId, tick]);
 
   // What this /apply request is actually asking for, so an in-progress
   // application for a DIFFERENT property (or a different room in the same
@@ -268,6 +310,76 @@ export function ResidentApplicationsPanel({
   );
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
+
+  const filteredRowsForBucket = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rowsForBucket;
+    return rowsForBucket.filter((row) => {
+      const hay = [
+        row.name,
+        row.property,
+        row.id,
+        displayRoomForRow(row),
+        rowStatusLabel(row),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rowsForBucket, searchQuery]);
+
+  const detailRow = applicationIdProp
+    ? rows.find(
+        (row) =>
+          normalizeApplicationAxisId(row.id).toUpperCase() ===
+          normalizeApplicationAxisId(applicationIdProp).toUpperCase(),
+      ) ?? fetchedDetailRow
+    : undefined;
+
+  useEffect(() => {
+    if (!applicationIdProp || !sessionReady) return;
+    const normalizedTarget = normalizeApplicationAxisId(applicationIdProp).toUpperCase();
+    const cached = rows.find(
+      (row) => normalizeApplicationAxisId(row.id).toUpperCase() === normalizedTarget,
+    );
+    if (cached) {
+      setFetchedDetailRow(null);
+      setDetailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager-applications?scope=self", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json().catch(() => null)) as { rows?: DemoApplicantRow[] } | null;
+        const hit = (body?.rows ?? []).find(
+          (row) => normalizeApplicationAxisId(row.id).toUpperCase() === normalizedTarget,
+        );
+        if (!hit || cancelled) return;
+        replaceManagerApplicationRowInCache(hit);
+        setFetchedDetailRow(hit);
+        setTick((t) => t + 1);
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationIdProp, rows, sessionReady]);
+
+  useEffect(() => {
+    if (!detailRow || !applicationIdProp) return;
+    const actualBucket = detailRow.bucket;
+    if (
+      actualBucket !== bucket &&
+      (actualBucket === "pending" || actualBucket === "approved" || actualBucket === "rejected")
+    ) {
+      router.replace(residentApplicationDetailHref(basePath, actualBucket as ResidentApplicationBucketId, detailRow.id));
+    }
+  }, [applicationIdProp, basePath, bucket, detailRow, router]);
 
   // Active public listings the resident can apply for — the same catalog the
   // wizard's own property picker reads, surfaced up here so property choice can
@@ -369,7 +481,11 @@ export function ResidentApplicationsPanel({
     openHandled.current = true;
     queueMicrotask(() => {
       setBucket(hit.bucket);
-      setExpandedId(hit.id);
+      if (applyMode || embedded) {
+        setExpandedId(hit.id);
+      } else {
+        portalNavigate(residentApplicationDetailHref(basePath, hit.bucket, hit.id));
+      }
     });
   }, [rows, searchParams]);
 
@@ -520,6 +636,41 @@ export function ResidentApplicationsPanel({
     />
   );
 
+  const renderDetailActions = (row: DemoApplicantRow) => (
+    <PortalSectionActionRow variant="header">
+      {isInProgressApplicationRow(row) ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => portalNavigate(continueApplicationPath(row))}
+        >
+          Continue application
+        </Button>
+      ) : row.bucket === "pending" && row.application ? (
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => setEditingId(row.id)}
+        >
+          Edit application
+        </Button>
+      ) : null}
+      {canResidentWithdrawApplication(row) ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="resident-application-withdraw"
+          onClick={() => setWithdrawTarget(row)}
+        >
+          Withdraw application
+        </Button>
+      ) : null}
+    </PortalSectionActionRow>
+  );
+
   const renderRowDetail = (row: DemoApplicantRow) => {
     // The embedded wizard / inline editor stay in a centered, readable column;
     // everything else (row actions + the document summary) is LEFT-ALIGNED and
@@ -559,6 +710,7 @@ export function ResidentApplicationsPanel({
             shareable={row.bucket !== "rejected"}
           />
         ) : null}
+        {!applicationIdProp ? (
         <PortalTableDetailActions placement="top">
           {isInProgressApplicationRow(row) ? (
             <Button
@@ -591,6 +743,7 @@ export function ResidentApplicationsPanel({
             </Button>
           ) : null}
         </PortalTableDetailActions>
+        ) : null}
         {isInProgressApplicationRow(row) ? null : row.application ? (
           <ApplicationDocumentPreview row={row} collapsible={false} showDownload={false} />
         ) : (
@@ -601,35 +754,73 @@ export function ResidentApplicationsPanel({
   };
 
   const filterRow = (
-    <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-    </ManagerPortalFilterRow>
+    <LocalDestinationNav
+      items={tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count: t.count,
+        dataAttr: `resident-applications-bucket-${t.id}`,
+      }))}
+      activeId={bucket}
+      onChange={(id) => setBucket(id as ManagerApplicationBucket)}
+      ariaLabel="Application status"
+    />
   );
 
   const newApplicationButton =
     sessionReady ? (
-      // Always visible — including while an application is open inline — because
-      // mid-application is exactly when someone decides to apply somewhere else
-      // too. It is the page's primary action, so it renders blue.
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="resident-applications-apply"
-          onClick={() => {
-            // Pick the property IN PLACE (searchable modal), then open the
-            // wizard inline under a new row here — no round-trip to browse.
-            setPickedPropertyId(null);
-            setPickerOpen(true);
-          }}
-        >
-          Apply to a property
-        </Button>
-      </div>
+      <Button
+        type="button"
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="resident-applications-apply"
+        onClick={() => {
+          setPickedPropertyId(null);
+          setPickerOpen(true);
+        }}
+      >
+        Apply to a property
+      </Button>
     ) : null;
 
-  const titleAside = newApplicationButton;
+  const applicationsMobileActionsRow = newApplicationButton ? (
+    <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-applications-mobile-actions">
+      {newApplicationButton}
+    </div>
+  ) : null;
+
+  const renderRoutedList = () => (
+    <DataList
+      rows={filteredRowsForBucket.map((row) => {
+        const room = displayRoomForRow(row);
+        const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room !== "—" ? `Room ${room}` : ""]
+          .filter(Boolean)
+          .join(" · ");
+        return {
+          id: row.id,
+          data: row,
+          primary: row.name || "Applicant",
+          meta: subtitle || rowStatusLabel(row),
+          trailing: <span className="text-xs font-semibold text-muted">{rowStatusLabel(row)}</span>,
+          onClick: () => portalNavigate(residentApplicationDetailHref(basePath, bucket, row.id)),
+        };
+      })}
+      columns={[
+        { id: "name", header: "Application", cell: (row) => row.name || "Applicant" },
+        { id: "property", header: "Property", cell: (row) => row.property || "—" },
+        { id: "room", header: "Room", cell: (row) => displayRoomForRow(row) },
+        { id: "status", header: "Status", cell: (row) => rowStatusLabel(row) },
+      ]}
+      emptyState={
+        <PortalDataTableEmpty
+          icon="application"
+          message={
+            searchQuery.trim() ? "No applications match your search." : "No applications in this tab yet."
+          }
+        />
+      }
+    />
+  );
 
   const renderApplicationsTable = () => (
     <>
@@ -728,9 +919,20 @@ export function ResidentApplicationsPanel({
         <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
       ) : rowsForBucket.length === 0 && !(applyMode && !activeInProgressRow) ? (
         <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
-      ) : rowsForBucket.length > 0 ? (
-        renderApplicationsTable()
-      ) : null}
+      ) : applyMode || embedded ? (
+        rowsForBucket.length > 0 ? renderApplicationsTable() : null
+      ) : filteredRowsForBucket.length === 0 ? (
+        <PortalDataTableEmpty
+          icon="application"
+          message={
+            searchQuery.trim()
+              ? "No applications match your search."
+              : "No applications in this tab yet."
+          }
+        />
+      ) : (
+        renderRoutedList()
+      )}
       {withdrawModal}
       {propertyPickerModal}
     </>
@@ -738,8 +940,94 @@ export function ResidentApplicationsPanel({
 
   if (embedded) return tableBody;
 
+  if (applicationIdProp) {
+    if (!sessionReady) {
+      return (
+        <ManagerPortalPageShell title="Applications" hideTitleOnMobileNav>
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">
+              Loading application…
+            </div>
+          </div>
+        </ManagerPortalPageShell>
+      );
+    }
+    if (!detailRow) {
+      if (detailLoading) {
+        return (
+          <ManagerPortalPageShell title="Applications" hideTitleOnMobileNav>
+            <div className={PORTAL_DATA_TABLE_WRAP}>
+              <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">
+                Loading application…
+              </div>
+            </div>
+          </ManagerPortalPageShell>
+        );
+      }
+      return (
+        <ManagerPortalPageShell title="Applications" hideTitleOnMobileNav>
+          <PortalDataTableEmpty icon="application" message="Application not found." />
+        </ManagerPortalPageShell>
+      );
+    }
+    return (
+      <>
+        {withdrawModal}
+        {propertyPickerModal}
+        <PortalRecordDetailPage
+          pageTitle="Applications"
+          title={detailRow.name || "Application"}
+          subtitle={detailRow.property || undefined}
+          backHref={residentApplicationListHref(basePath, bucket)}
+          hideBackText
+          bareHeader
+          dataAttrBack="resident-application-detail-back"
+          inlineActions
+          actions={renderDetailActions(detailRow)}
+        >
+          {renderRowDetail(detailRow)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
   return (
-    <ManagerPortalPageShell title="Applications" titleAside={titleAside} filterRow={filterRow}>
+    <ManagerPortalPageShell
+      title="Applications"
+      hideTitleOnMobileNav
+      titleAside={
+        newApplicationButton ? (
+          <PortalSectionActionRow variant="header" className="hidden md:flex">
+            {newApplicationButton}
+          </PortalSectionActionRow>
+        ) : undefined
+      }
+      compactFilterRow
+    >
+      {applicationsMobileActionsRow}
+      {!applyMode ? (
+        <PortalListControlStack
+          className="mb-3 max-lg:mb-4"
+          destinationInset
+          destinations={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: residentApplicationListHref(basePath, t.id),
+            count: t.count,
+            dataAttr: `resident-applications-bucket-${t.id}`,
+          }))}
+          activeDestinationId={bucket}
+          destinationAriaLabel="Application status"
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search applications",
+            dataAttr: "resident-applications-search",
+          }}
+        />
+      ) : (
+        filterRow
+      )}
       {tableBody}
     </ManagerPortalPageShell>
   );

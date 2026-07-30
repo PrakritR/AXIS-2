@@ -19,12 +19,12 @@ describe("communication-inbox-filters", () => {
   it("detects phone-like contacts", () => {
     expect(isPhoneLikeContact("+15105794001")).toBe(true);
     expect(isPhoneLikeContact("Test Resident")).toBe(false);
-    expect(isPhoneLikeContact("resident@test.axis.local")).toBe(false);
+    expect(isPhoneLikeContact("resident@test.proplane.local")).toBe(false);
   });
 
   it("filters sms-like threads out of email channel", () => {
     const rows = [
-      thread({ id: "email-1", from: "Test Resident", email: "resident@test.axis.local" }),
+      thread({ id: "email-1", from: "Test Resident", email: "resident@test.proplane.local" }),
       thread({ id: "sms-1", from: "+15105794001" }),
     ];
     expect(filterEmailInboxThreads(rows).map((r) => r.id)).toEqual(["email-1"]);
@@ -36,7 +36,7 @@ describe("communication-inbox-filters", () => {
     // text must fall through into the unified conversation list rather than be
     // filtered into nowhere and silently disappear.
     const rows = [
-      thread({ id: "email-1", from: "Test Resident", email: "resident@test.axis.local" }),
+      thread({ id: "email-1", from: "Test Resident", email: "resident@test.proplane.local" }),
       thread({ id: "sms-notice", from: "+15105794001", subject: "New SMS in your inbox" }),
     ];
     expect(filterEmailInboxThreads(rows, { keepSmsLike: true }).map((r) => r.id)).toEqual([

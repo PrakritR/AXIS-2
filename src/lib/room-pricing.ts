@@ -25,6 +25,13 @@ export type RoomPricingLike = {
   monthlyRent?: number | null;
   rentBasis?: "monthly" | "daily";
   dailyRentPrice?: number | null;
+  /**
+   * The room's OWN short-term nightly rate (the per-rent-row short-term set). Distinct from
+   * {@link dailyRentPrice}, which is the room's headline daily BASIS for an ordinary tenancy.
+   * On an explicit short-term application this is the most specific signal there is, so it
+   * outranks both the daily basis and the listing-level `shortTermDailyCost`.
+   */
+  shortTermRent?: string | null;
 };
 
 /**
@@ -234,15 +241,20 @@ export function resolveStayPricing(input: StayPricingInput): StayPricing {
     (isShortTermApplication ? positiveMoney(sub?.shortTermDeposit) : positiveMoney(sub?.securityDeposit));
 
   if (isShortTermApplication) {
+    // Precedence, most specific first: the booked room's own short-term rate, then the room's
+    // daily basis, then the listing-level nightly cost. The room's short-term rate leads
+    // because it is the rate the manager set FOR a short stay on that exact room.
+    const roomShortTerm = shortTermNightlyRate(room?.shortTermRent) || undefined;
     const listingDaily = shortTermNightlyRate(sub?.shortTermDailyCost) || undefined;
-    const dailyRate = roomDaily ?? listingDaily;
+    const roomRate = roomShortTerm ?? roomDaily;
+    const dailyRate = roomRate ?? listingDaily;
     return {
       stayKind: "short",
       basis: "daily",
       dailyRate,
       monthlyRate: undefined,
       deposit,
-      source: roomDaily !== undefined ? "room" : "listing",
+      source: roomRate !== undefined ? "room" : "listing",
     };
   }
 

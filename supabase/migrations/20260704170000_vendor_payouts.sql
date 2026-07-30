@@ -20,8 +20,10 @@ create index if not exists vendor_payouts_manager_user_id_idx on public.vendor_p
 alter table public.vendor_payouts enable row level security;
 
 -- Defense-in-depth only — all writes go through the service-role approve-pay route.
+drop policy if exists vendor_payouts_vendor_read on public.vendor_payouts;
 create policy vendor_payouts_vendor_read on public.vendor_payouts
   for select using (vendor_user_id = auth.uid());
 
+drop policy if exists vendor_payouts_manager_read on public.vendor_payouts;
 create policy vendor_payouts_manager_read on public.vendor_payouts
   for select using (manager_user_id = auth.uid());

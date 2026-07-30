@@ -11,6 +11,7 @@ import {
   type RentReminderPreview,
 } from "./payments-logic";
 import { deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
+import { appendResidentPortalLoginInstructions } from "@/lib/resident-portal-login-copy";
 
 /** Server-side read of the landlord's charges, scoped by manager_user_id. */
 async function loadManagerCharges(ctx: AgentContext): Promise<HouseholdCharge[]> {
@@ -83,8 +84,11 @@ function buildReminderBody(p: RentReminderPreview): string {
   const lines = [`Hi ${p.residentName},`, "", `This is a reminder that your ${p.chargeTitle} payment is outstanding.`];
   if (p.balanceDue) lines.push(`Amount due: ${p.balanceDue}`);
   if (p.propertyLabel) lines.push(`Property: ${p.propertyLabel}`);
-  lines.push("", "Please log in to your PropLane resident portal to make your payment.", "", "PropLane");
-  return lines.join("\n");
+  lines.push("", "PropLane");
+  return appendResidentPortalLoginInstructions(lines.join("\n"), {
+    residentEmail: p.residentEmail,
+    afterLoginHint: "payments",
+  });
 }
 
 export type ReminderDelivery = "emailed" | "portal_only" | "email_failed" | "already_sent";

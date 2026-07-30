@@ -208,7 +208,7 @@ export function buildApplicationHtml(row: DemoApplicantRow, options: Application
     .join("  ");
 
   const body = `
-<h1>PROPLANE RENTAL APPLICATION</h1>
+<h1>PROPLANE ${app.rentalType === "short_term" ? "SHORT-TERM STAY APPLICATION" : "RENTAL APPLICATION"}</h1>
 <p class="sub">PropLane · Official application record</p>
 <p class="generated">PropLane ID ${escapeHtml(axisId)} · ${escapeHtml(statusLabel(row))} · Generated ${escapeHtml(generatedLabel)}</p>
 
@@ -330,6 +330,10 @@ ${section("Disclosures", [
 
 ${section("Consent & signature", [
   { label: "Credit/background consent", value: app.consentCredit ? "Authorized" : "" },
+  {
+    label: "House rules acknowledged",
+    value: app.rentalType === "short_term" && app.shortTermRulesAck ? "Acknowledged" : "",
+  },
   { label: "Attestation of truth", value: app.consentTruth ? "Acknowledged" : "" },
   { label: "Application fee acknowledged", value: app.applicationFeeAcknowledged ? "Yes" : "" },
   { label: "Application fee payment method", value: feeChannelLabel(app.applicationFeePayChannel) },

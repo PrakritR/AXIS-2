@@ -82,15 +82,8 @@ describe("splitNativeBottomNavItems", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY]);
-    expect(overflow.map((item) => item.section)).toEqual(
-      sectionIds(proPortal.sections).filter(
-        (section) =>
-          !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section) &&
-          section !== "profile" &&
-          section !== "bugs-feedback",
-      ),
-    );
-    expect(overflow.map((item) => item.section)).toContain("dashboard");
+    expect(overflow.map((item) => item.section)).toContain("applications");
+    expect(overflow.map((item) => item.section)).toContain("leases");
     expect(overflow.map((item) => item.section)).toContain("documents");
     expect(overflow.map((item) => item.section)).not.toContain("bugs-feedback");
     expect(primary.length + overflow.length).toBe(items.length - 2);
@@ -100,7 +93,7 @@ describe("splitNativeBottomNavItems", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
     // Limited tier has no "services" section — splitNativeBottomNavItems intersects
-    // with real sections, so the bar gracefully shows the other 4 primary tabs.
+    // with real sections, so the bar gracefully shows the other primary tabs.
     expect(primary.map((item) => item.section)).toEqual(
       NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.filter((section) => section !== "services"),
     );

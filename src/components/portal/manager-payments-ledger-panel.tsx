@@ -1,19 +1,35 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
-import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
+
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
+import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
+import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
-import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
+import { deleteHouseholdCharge, legacyChargeIdAliases, markHouseholdChargePaid, markHouseholdChargePending, publicChargeIdForUrl, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
-import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import {
+  PortalBulkPaymentReminderPreviewModal,
+  PortalNotificationPreviewModal,
+  type BulkPaymentReminderPreviewItem,
+} from "@/components/portal/portal-notification-preview-modal";
 import {
   ChargeRemindersModal,
   cancelFutureRemindersForPaidCharge,
@@ -26,6 +42,10 @@ import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 import { paymentReminderRecipientLabel } from "@/lib/payment-reminder-ui";
 import { buildManualPaymentInstructionLines, buildPaymentReminderBody } from "@/lib/manual-payment-instructions";
 
+/** Compact outline buttons for the fixed bulk-selection bar (single row on mobile). */
+const PAYMENTS_BULK_BAR_BTN =
+  "h-8 min-h-0 shrink-0 whitespace-nowrap rounded-full border-border px-2.5 text-[10px] font-semibold sm:px-3 sm:text-[11px] !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
+
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
 }
@@ -36,6 +56,27 @@ function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
 
 function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
   return !isPaidRow(row) && Boolean(row.householdChargeId || row.id);
+}
+
+function paymentReminderLabel(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string | null {
+  if (!row.householdChargeId || isPaidRow(row)) return null;
+  const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
+  if (!reminders.length) return null;
+  return summarizeChargeReminders(reminders);
+}
+
+function paymentListPreview(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string {
+  const parts = [row.propertyName];
+  if (row.dueDate?.trim()) parts.push(`Due ${row.dueDate}`);
+  const reminder = paymentReminderLabel(row, scheduledMessages);
+  if (reminder) parts.push(reminder);
+  return parts.filter(Boolean).join(" · ");
 }
 
 function dueDateDisplayToInputValue(display: string): string {
@@ -63,6 +104,13 @@ export function ManagerPaymentsLedgerPanel({
   onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
+  paymentId: paymentIdProp,
+  listBasePath,
+  direction = "incoming",
+  embeddedInResident = false,
+  buildPaymentDetailHref,
+  onEmbeddedDetailActions,
+  onEmbeddedBulkActions,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
@@ -72,14 +120,23 @@ export function ManagerPaymentsLedgerPanel({
   onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
+  paymentId?: string;
+  listBasePath?: string;
+  direction?: ManagerPaymentDirection;
+  /** When true, detail stays inside a parent shell (resident profile) instead of a full-page header. */
+  embeddedInResident?: boolean;
+  buildPaymentDetailHref?: (row: DemoManagerPaymentLedgerRow) => string;
+  onEmbeddedDetailActions?: (actions: ReactNode | null) => void;
+  onEmbeddedBulkActions?: (actions: ReactNode | null) => void;
 }) {
   const { showToast } = useAppUi();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigate = usePortalNavigate();
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [editDueDateDraft, setEditDueDateDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
+  const [bulkReminderPreview, setBulkReminderPreview] = useState<BulkPaymentReminderPreviewItem[] | null>(null);
   const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -95,6 +152,28 @@ export function ManagerPaymentsLedgerPanel({
   const showSelection = rows.length > 0;
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
+  const detailRow = useMemo(() => {
+    if (!paymentIdProp) return null;
+    const decoded = decodeURIComponent(paymentIdProp);
+    const aliases = new Set(legacyChargeIdAliases(decoded));
+    return rows.find((row) => aliases.has(row.id)) ?? null;
+  }, [paymentIdProp, rows]);
+
+  const navigateToList = useCallback(() => {
+    if (listBasePath) navigate(paymentListHref(listBasePath, direction, activeBucket));
+  }, [activeBucket, direction, listBasePath, navigate]);
+
+  const openPaymentDetail = useCallback(
+    (row: DemoManagerPaymentLedgerRow) => {
+      const paymentKey = publicChargeIdForUrl(row.id);
+      if (buildPaymentDetailHref) {
+        navigate(buildPaymentDetailHref({ ...row, id: paymentKey }));
+        return;
+      }
+      if (listBasePath) navigate(paymentDetailHref(listBasePath, direction, activeBucket, paymentKey));
+    },
+    [activeBucket, buildPaymentDetailHref, direction, listBasePath, navigate],
+  );
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -136,7 +215,6 @@ export function ManagerPaymentsLedgerPanel({
       }
     }
     setSelectedIds(new Set());
-    setExpandedId(null);
     onRowsChanged?.();
     onScheduleChanged?.();
     showToast(ok === 1 ? "Marked as paid." : `Marked ${ok} payments as paid.`);
@@ -162,7 +240,6 @@ export function ManagerPaymentsLedgerPanel({
     }
     onScheduleChanged?.();
     setSelectedIds(new Set());
-    setExpandedId(null);
     showToast(ok === 1 ? "Moved to pending." : `Moved ${ok} payments to pending.`);
   };
 
@@ -179,7 +256,6 @@ export function ManagerPaymentsLedgerPanel({
       }
     }
     setSelectedIds(new Set());
-    setExpandedId(null);
     onRowsChanged?.();
     showToast(ok === 1 ? "Payment removed." : `Removed ${ok} payments.`);
   };
@@ -188,7 +264,6 @@ export function ManagerPaymentsLedgerPanel({
     setEditingRowId(row.id);
     setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
     setEditDueDateDraft(dueDateDisplayToInputValue(row.dueDate));
-    setExpandedId(row.id);
   };
 
   const cancelEdit = () => {
@@ -257,42 +332,12 @@ export function ManagerPaymentsLedgerPanel({
         />
       );
     }
-    return (
-      <>
-        <span className="block">{row.dueDate}</span>
-        {row.householdChargeId && !isPaidRow(row) ? (() => {
-          const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
-          if (!reminders.length) return null;
-          return (
-            <span
-              role="button"
-              tabIndex={0}
-              className="mt-1 inline-block cursor-pointer text-[11px] font-semibold text-primary hover:underline"
-              onClick={(e) => {
-                e.stopPropagation();
-                setChargeRemindersRow(row);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                e.stopPropagation();
-                setChargeRemindersRow(row);
-              }}
-            >
-              {summarizeChargeReminders(reminders)}
-            </span>
-          );
-        })() : null}
-      </>
-    );
+    return <span className="block">{row.dueDate}</span>;
   };
 
-  const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
+  const buildReminderPreviewForRow = (row: DemoManagerPaymentLedgerRow): BulkPaymentReminderPreviewItem | null => {
     const chargeId = row.householdChargeId?.trim() || row.id?.trim();
-    if (!chargeId) {
-      showToast("This payment is missing a charge id. Sync payments and try again.");
-      return;
-    }
+    if (!chargeId) return null;
     const residentName = row.residentName || "Resident";
     const chargeTitle = row.chargeTitle || "outstanding charge";
     const subject = `Payment reminder: ${chargeTitle}`;
@@ -306,6 +351,7 @@ export function ManagerPaymentsLedgerPanel({
     });
     const body = buildPaymentReminderBody({
       residentName,
+      residentEmail: row.residentEmail?.trim(),
       chargeTitle,
       balanceDue: row.balanceDue,
       dueDate: row.dueDate,
@@ -313,7 +359,41 @@ export function ManagerPaymentsLedgerPanel({
       managerName: "Your property manager",
       manualPaymentLines: manualLines.length ? manualLines : undefined,
     });
-    setReminderPreview({ row, subject, body });
+    const chargeLabel = [chargeTitle, row.propertyName].filter(Boolean).join(" · ");
+    return {
+      id: row.id,
+      recipient: paymentReminderRecipientLabel(row),
+      chargeLabel,
+      subject,
+      body,
+    };
+  };
+
+  const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
+    const preview = buildReminderPreviewForRow(row);
+    if (!preview) {
+      showToast("This payment is missing a charge id. Sync payments and try again.");
+      return;
+    }
+    setReminderPreview({ row, subject: preview.subject, body: preview.body });
+  };
+
+  const openBulkReminderPreview = () => {
+    const targets = remindableSelectedRows;
+    if (targets.length === 0) {
+      showToast("Select unpaid charges to remind.");
+      return;
+    }
+    const items: BulkPaymentReminderPreviewItem[] = [];
+    for (const row of targets) {
+      const preview = buildReminderPreviewForRow(row);
+      if (preview) items.push(preview);
+    }
+    if (items.length === 0) {
+      showToast("Selected payments are missing charge ids. Sync payments and try again.");
+      return;
+    }
+    setBulkReminderPreview(items);
   };
 
   const sendReminderForRow = async (
@@ -361,8 +441,7 @@ export function ManagerPaymentsLedgerPanel({
     }
   };
 
-  const sendBulkReminders = async () => {
-    const targets = remindableSelectedRows;
+  const sendBulkReminders = async (targets = remindableSelectedRows) => {
     if (targets.length === 0) {
       showToast("Select unpaid charges to remind.");
       return;
@@ -443,45 +522,58 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-  const tableRows = useMemo<PortalPaymentTableRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.id,
-        charge:
-          row.manualPaymentReportedAt && row.manualPaymentChannel
-            ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-            : row.chargeTitle,
-        property: row.propertyName,
-        payee: row.residentName,
-        dueDate: row.dueDate,
-        amount: row.lineAmount,
-      })),
-    [rows],
-  );
 
-  if (!hasAnySource) {
-    return <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />;
-  }
+  const renderPaymentDetailPanel = (row: DemoManagerPaymentLedgerRow) => {
+    return (
+      <div className="space-y-4 px-3 py-2 text-sm sm:px-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium text-muted">Property</p>
+            <p className="text-foreground">{row.propertyName}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Status</p>
+            <p className="font-medium text-foreground">{row.statusLabel}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium text-muted">Charge</p>
+            <p className="text-foreground">{row.chargeTitle}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Due date</p>
+            <div className="text-foreground">{renderDueDateCell(row)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Amount</p>
+            <div className="text-foreground">{renderAmountOwedCell(row)}</div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted">Balance due</p>
+            <p className="font-semibold tabular-nums text-foreground">{row.balanceDue}</p>
+          </div>
+          {row.residentEmail ? (
+            <div>
+              <p className="text-xs font-medium text-muted">Resident email</p>
+              <p className="text-foreground">{row.residentEmail}</p>
+            </div>
+          ) : null}
+        </div>
+        {row.notes ? (
+          <div>
+            <p className="text-xs font-medium text-muted">Details</p>
+            <p className="leading-relaxed text-foreground/90">{row.notes}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
-  const removePayment = (row: DemoManagerPaymentLedgerRow) => {
-    if (row.householdChargeId) {
-      if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
-        showToast("Payment removed.");
-        setExpandedId(null);
-        onRowsChanged?.();
-        return;
-      }
-      showToast("Could not remove this line.");
-      return;
-    }
-    if (deleteManagerPaymentLedgerEntry(row.id)) {
-      showToast("Payment removed.");
-      setExpandedId(null);
-      onRowsChanged?.();
-      return;
-    }
-    showToast("Could not remove this line.");
+  const doSendBulkReminders = async () => {
+    if (!bulkReminderPreview?.length) return;
+    const targetIds = new Set(bulkReminderPreview.map((item) => item.id));
+    const targets = remindableSelectedRows.filter((row) => targetIds.has(row.id));
+    setBulkReminderPreview(null);
+    await sendBulkReminders(targets);
   };
 
   const recordPaid = async (row: DemoManagerPaymentLedgerRow, toastMessage: string) => {
@@ -489,7 +581,7 @@ export function ManagerPaymentsLedgerPanel({
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
         await cancelFutureRemindersForPaidCharge(row.householdChargeId, scheduledMessages).catch(() => undefined);
         showToast(toastMessage);
-        setExpandedId(null);
+        navigateToList();
         onRowsChanged?.();
         onScheduleChanged?.();
         return;
@@ -499,8 +591,29 @@ export function ManagerPaymentsLedgerPanel({
     }
     markManagerPaymentLedgerPaid(row.id);
     showToast(toastMessage);
-    setExpandedId(null);
+    navigateToList();
     onRowsChanged?.();
+  };
+
+  const removePayment = (row: DemoManagerPaymentLedgerRow) => {
+    if (!window.confirm(`Delete "${row.chargeTitle}" for ${row.residentName}?`)) return;
+    if (row.householdChargeId) {
+      if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) {
+        showToast("Payment removed.");
+        navigateToList();
+        onRowsChanged?.();
+        return;
+      }
+      showToast("Could not remove this line.");
+      return;
+    }
+    if (deleteManagerPaymentLedgerEntry(row.id)) {
+      showToast("Payment removed.");
+      navigateToList();
+      onRowsChanged?.();
+      return;
+    }
+    showToast("Could not remove this line.");
   };
 
   const moveToPending = async (row: DemoManagerPaymentLedgerRow) => {
@@ -511,7 +624,7 @@ export function ManagerPaymentsLedgerPanel({
         await restoreFutureRemindersForPendingCharge(row.householdChargeId).catch(() => undefined);
         onScheduleChanged?.();
         showToast("Moved to pending.");
-        setExpandedId(null);
+        navigateToList();
         return;
       }
       showToast("Could not update this line.");
@@ -519,63 +632,307 @@ export function ManagerPaymentsLedgerPanel({
     }
     markManagerPaymentLedgerPending(row.id);
     showToast("Moved to pending.");
-    setExpandedId(null);
+    navigateToList();
     onRowsChanged?.();
   };
 
-  const renderDetailActions = (row: DemoManagerPaymentLedgerRow) => (
-    <PortalTableDetailActions>
-      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+  const renderDetailActions = (row: DemoManagerPaymentLedgerRow) => {
+    const canEdit = Boolean(row.householdChargeId && !isPaidRow(row));
+    const editing = canEdit && editingRowId === row.id;
+    const showSendReminder = !isPaidRow(row);
+    const showScheduleReminders = !isPaidRow(row) && Boolean(row.householdChargeId);
+    const showMoveToPending = activeBucket === "paid";
+    const btnClass = RESIDENT_DETAIL_HEADER_ACTION_BTN;
+
+    const markPaidButton =
+      !editing && row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+        <Button type="button" variant="outline" className={btnClass} onClick={() => recordPaid(row, "Marked as paid.")}>
+          Mark as paid
+        </Button>
+      ) : null;
+
+    const editButtons = canEdit ? (
+      editing ? (
         <>
-          <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Marked as paid.")}>
-            Mark as paid
+          <Button type="button" variant="outline" className={btnClass} onClick={() => saveEdit(row)}>
+            Save
+          </Button>
+          <Button type="button" variant="outline" className={btnClass} onClick={() => cancelEdit()}>
+            Cancel
           </Button>
         </>
-      ) : null}
-      {!isPaidRow(row) ? (
-        <>
+      ) : (
+        <Button type="button" variant="outline" className={btnClass} onClick={() => startEdit(row)}>
+          Edit
+        </Button>
+      )
+    ) : null;
+
+    const sendReminderButton = showSendReminder ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={btnClass}
+        disabled={sendingReminderId === row.id}
+        data-attr="payments-send-reminder"
+        onClick={() => openReminderPreview(row)}
+      >
+        {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+      </Button>
+    ) : null;
+
+    const scheduleRemindersButton = showScheduleReminders ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={btnClass}
+        data-attr="payments-schedule-reminders"
+        onClick={() => setChargeRemindersRow(row)}
+      >
+        Schedule reminders
+      </Button>
+    ) : null;
+
+    const moveToPendingButton = showMoveToPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={btnClass}
+        data-attr="payments-move-pending"
+        onClick={() => void moveToPending(row)}
+      >
+        Move to pending
+      </Button>
+    ) : null;
+
+    const deleteButton = (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="payments-delete"
+        onClick={() => removePayment(row)}
+      >
+        Delete
+      </Button>
+    );
+
+    const mobileOverflowMenu =
+      !editing ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${btnClass} max-md:px-2.5 max-md:text-base`}
+              data-attr="payment-more-actions"
+              aria-label="More payment actions"
+            >
+              …
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" backdrop>
+            {showSendReminder ? (
+              <DropdownMenuItem
+                data-attr="payments-send-reminder"
+                disabled={sendingReminderId === row.id}
+                onSelect={() => openReminderPreview(row)}
+              >
+                {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+              </DropdownMenuItem>
+            ) : null}
+            {showScheduleReminders ? (
+              <DropdownMenuItem
+                data-attr="payments-schedule-reminders"
+                onSelect={() => setChargeRemindersRow(row)}
+              >
+                Schedule reminders
+              </DropdownMenuItem>
+            ) : null}
+            {showMoveToPending ? (
+              <DropdownMenuItem data-attr="payments-move-pending" onSelect={() => void moveToPending(row)}>
+                Move to pending
+              </DropdownMenuItem>
+            ) : null}
+            {showSendReminder || showScheduleReminders || showMoveToPending ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              data-attr="payments-delete"
+              className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+              onSelect={() => removePayment(row)}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null;
+
+    return (
+      <>
+        <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+          {markPaidButton}
+          {editButtons}
+          {mobileOverflowMenu}
+        </div>
+        <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+          {markPaidButton}
+          {editButtons}
+          {sendReminderButton}
+          {scheduleRemindersButton}
+          {moveToPendingButton}
+          {deleteButton}
+        </div>
+      </>
+    );
+  };
+
+  useEffect(() => {
+    if (!embeddedInResident || !onEmbeddedDetailActions) return;
+    if (!paymentIdProp || !detailRow) {
+      onEmbeddedDetailActions(null);
+      return;
+    }
+    onEmbeddedDetailActions(renderDetailActions(detailRow));
+  }, [
+    embeddedInResident,
+    onEmbeddedDetailActions,
+    paymentIdProp,
+    detailRow,
+    editingRowId,
+    sendingReminderId,
+    activeBucket,
+  ]);
+
+  const bulkActionsSignature = useMemo(() => {
+    if (selectedIds.size === 0) return "";
+    const selectedIdList = [...selectedIds].sort().join(",");
+    const meta = [
+      activeBucket,
+      editingRowId ?? "",
+      sendingReminderId ?? "",
+      singleSelectedRow?.id ?? "",
+      singleSelectedRow?.householdChargeId ?? "",
+      remindableSelectedRows.length,
+      selectedRows.some(isMarkableAsPaid) ? "1" : "0",
+      selectedRows.some((row) => !isPaidRow(row)) ? "1" : "0",
+      activeBucket === "paid" && selectedRows.length > 0 ? "1" : "0",
+      singleSelectedRow && !isPaidRow(singleSelectedRow) ? "1" : "0",
+      editingRowId === singleSelectedRow?.id ? "1" : "0",
+    ].join("|");
+    return `${selectedIdList}|${meta}`;
+  }, [
+    selectedIds,
+    activeBucket,
+    editingRowId,
+    sendingReminderId,
+    singleSelectedRow,
+    remindableSelectedRows.length,
+    selectedRows,
+  ]);
+
+  const bulkSelectionActions =
+    selectedIds.size > 0 ? (
+      <>
+        {selectedRows.some(isMarkableAsPaid) ? (
           <Button
             type="button"
             variant="outline"
-            className={PORTAL_DETAIL_BTN}
-            disabled={sendingReminderId === row.id}
-            onClick={() => openReminderPreview(row)}
+            className={PAYMENTS_BULK_BAR_BTN}
+            data-attr="payments-mark-selected-paid"
+            onClick={markSelectedAsPaid}
           >
-            {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+            Mark as paid
           </Button>
-          {row.householdChargeId ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-              Edit reminder
-            </Button>
-          ) : null}
-        </>
-      ) : null}
-      {activeBucket === "paid" ? (
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
-          Move to pending
-        </Button>
-      ) : null}
-      {row.householdChargeId && !isPaidRow(row) ? (
-        editingRowId === row.id ? (
-          <>
-            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => saveEdit(row)}>
+        ) : null}
+        {selectedRows.some((row) => !isPaidRow(row)) ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PAYMENTS_BULK_BAR_BTN}
+            disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
+            data-attr="payments-send-reminder"
+            title={
+              remindableSelectedRows.length === 0
+                ? "Select at least one unpaid charge."
+                : undefined
+            }
+            onClick={() => {
+              if (remindableSelectedRows.length === 1) {
+                openReminderPreview(remindableSelectedRows[0]!);
+                return;
+              }
+              openBulkReminderPreview();
+            }}
+          >
+            {sendingReminderId ? "Sending…" : "Send reminder"}
+          </Button>
+        ) : null}
+        {activeBucket === "paid" && selectedRows.length > 0 ? (
+          <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={moveSelectedToPending}>
+            Move to pending
+          </Button>
+        ) : null}
+        {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
+          editingRowId === singleSelectedRow.id ? (
+            <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={saveBulkEditAmount}>
               Save
             </Button>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => startEdit(row)}>
-            Edit
-          </Button>
-        )
-      ) : null}
-      <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
-        Delete
-      </Button>
-    </PortalTableDetailActions>
-  );
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => {
+                  startEdit(singleSelectedRow);
+                  openPaymentDetail(singleSelectedRow);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={PAYMENTS_BULK_BAR_BTN}
+                onClick={() => setChargeRemindersRow(singleSelectedRow)}
+              >
+                Schedule reminders
+              </Button>
+            </>
+          )
+        ) : null}
+        <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={deleteSelected}>
+          Delete
+        </Button>
+      </>
+    ) : null;
+
+  const bulkSelectionActionsRef = useRef<ReactNode>(null);
+  bulkSelectionActionsRef.current = bulkSelectionActions;
+  const publishedBulkSignatureRef = useRef<string | null>(null);
+  const onEmbeddedBulkActionsRef = useRef(onEmbeddedBulkActions);
+  onEmbeddedBulkActionsRef.current = onEmbeddedBulkActions;
+
+  useLayoutEffect(() => {
+    const notify = onEmbeddedBulkActionsRef.current;
+    if (!embeddedInResident || !notify) return;
+
+    const signature = bulkActionsSignature || "__empty__";
+    if (publishedBulkSignatureRef.current === signature) return;
+    publishedBulkSignatureRef.current = signature;
+
+    notify(bulkActionsSignature ? bulkSelectionActionsRef.current : null);
+  }, [bulkActionsSignature, embeddedInResident]);
+
+  useEffect(() => {
+    if (!embeddedInResident) {
+      publishedBulkSignatureRef.current = null;
+      onEmbeddedBulkActionsRef.current?.(null);
+    }
+    return () => {
+      publishedBulkSignatureRef.current = null;
+      onEmbeddedBulkActionsRef.current?.(null);
+    };
+  }, [embeddedInResident]);
 
   return (
     <>
@@ -599,6 +956,15 @@ export function ManagerPaymentsLedgerPanel({
         onConfirm={(skipMessage, channels, draft) => void doSendReminder(skipMessage, channels, draft)}
       />
     )}
+    {bulkReminderPreview && bulkReminderPreview.length > 0 ? (
+      <PortalBulkPaymentReminderPreviewModal
+        open
+        items={bulkReminderPreview}
+        onClose={() => setBulkReminderPreview(null)}
+        confirmBusy={sendingReminderId === "bulk"}
+        onConfirm={() => void doSendBulkReminders()}
+      />
+    ) : null}
     {chargeRemindersRow?.householdChargeId ? (
       <ChargeRemindersModal
         open
@@ -616,100 +982,133 @@ export function ManagerPaymentsLedgerPanel({
         onOpenSettings={onOpenReminderSettings}
       />
     ) : null}
-    {selectedIds.size > 0 ? (
-      <div className="mb-3">
-        <PortalTableDetailActions>
-          {selectedRows.some(isMarkableAsPaid) ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="payments-mark-selected-paid"
-              onClick={markSelectedAsPaid}
-            >
-              Mark as paid
-            </Button>
-          ) : null}
-          {selectedRows.some((row) => !isPaidRow(row)) ? (
-            <Button
-              type="button"
-              variant={remindableSelectedRows.length > 0 ? "primary" : "outline"}
-              className={PORTAL_DETAIL_BTN}
-              disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
-              data-attr="payments-send-reminder"
-              title={
-                remindableSelectedRows.length === 0
-                  ? "Select at least one unpaid charge."
-                  : undefined
-              }
-              onClick={() => {
-                if (remindableSelectedRows.length === 1) {
-                  openReminderPreview(remindableSelectedRows[0]!);
-                  return;
-                }
-                void sendBulkReminders();
-              }}
-            >
-              {sendingReminderId ? "Sending…" : "Send reminder"}
-            </Button>
-          ) : null}
-          {activeBucket === "paid" && selectedRows.length > 0 ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={moveSelectedToPending}>
-              Move to pending
-            </Button>
-          ) : null}
-          {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
-            editingRowId === singleSelectedRow.id ? (
-              <>
-                <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={saveBulkEditAmount}>
-                  Save
-                </Button>
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => startEdit(singleSelectedRow)}
-              >
-                Edit
-              </Button>
-            )
-          ) : null}
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={deleteSelected}>
-            Delete
-          </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setSelectedIds(new Set())}>
-            Clear selection
-          </Button>
-        </PortalTableDetailActions>
-      </div>
+    {selectedIds.size > 0 && !(embeddedInResident && onEmbeddedBulkActions) ? (
+      <BulkActionBar count={selectedIds.size} variant="payments">
+        {bulkSelectionActions}
+      </BulkActionBar>
     ) : null}
-    <PortalPaymentsTable
-      rows={tableRows}
-      expandedId={expandedId}
-      onExpand={setExpandedId}
-      selection={
-        showSelection
-          ? {
-              selectedIds,
-              allSelected,
-              onToggle: toggleSelected,
-              onToggleAll: toggleSelectAll,
-              selectLabel: (tr) => {
-                const row = rowById.get(tr.id);
-                return row ? `Select ${row.chargeTitle} for ${row.residentName}` : `Select ${tr.charge}`;
-              },
-            }
-          : undefined
-      }
-      renderDueDateCell={(tr) => renderDueDateCell(rowById.get(tr.id)!)}
-      renderAmountCell={(tr) => renderAmountOwedCell(rowById.get(tr.id)!)}
-      renderExpandedActions={(tr) => renderDetailActions(rowById.get(tr.id)!)}
-    />
+    {paymentIdProp && detailRow ? (
+      embeddedInResident ? (
+        <div className="space-y-3">
+          <button
+            type="button"
+            className="text-sm font-medium text-primary hover:underline"
+            data-attr="resident-payment-detail-back"
+            onClick={navigateToList}
+          >
+            Back to payments
+          </button>
+          {renderPaymentDetailPanel(detailRow)}
+        </div>
+      ) : (
+      <PortalRecordDetailPage
+        pageTitle="Payments"
+        title={detailRow.residentName}
+        subtitle={detailRow.chargeTitle}
+        avatarName={detailRow.residentName}
+        backHref={listBasePath ? paymentListHref(listBasePath, direction, activeBucket) : "#"}
+        backLabel="Back to payments"
+        hideBackText
+        bareHeader
+        dataAttrBack="payment-detail-back"
+        inlineActions
+        actions={renderDetailActions(detailRow)}
+      >
+        {renderPaymentDetailPanel(detailRow)}
+      </PortalRecordDetailPage>
+      )
+    ) : !hasAnySource ? (
+      <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
+    ) : (
+      <div className={PORTAL_LIST_PAGE_BODY}>
+        {showSelection ? (
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 rounded border-border"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              aria-label="Select all payments"
+            />
+            <span className="text-xs text-muted">Select all</span>
+          </div>
+        ) : null}
+        {rows.map((row) => {
+          const isSelected = selectedIds.has(row.id);
+          const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
+          return (
+            <div key={row.id} className="flex items-stretch gap-2">
+              {showSelection ? (
+                <div className="flex items-center pl-3 max-md:pl-2.5">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0 rounded border-border"
+                    checked={isSelected}
+                    onChange={() => toggleSelected(row.id)}
+                    aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                  />
+                </div>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                {isEditing ? (
+                  <div
+                    className="border-b border-border/50 bg-accent/15 px-3 py-3 max-md:px-2.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-sm font-semibold text-foreground">{row.residentName}</p>
+                    <p className="text-xs text-muted">{row.chargeTitle}</p>
+                    <p className="mt-0.5 text-xs text-muted">{row.propertyName}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          Amount
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted">$</span>
+                          <Input
+                            className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
+                            inputMode="decimal"
+                            value={editAmountDraft}
+                            onChange={(e) => setEditAmountDraft(e.target.value)}
+                            aria-label="Amount owed"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                          Due date
+                        </label>
+                        <Input
+                          type="date"
+                          className="h-9 w-full rounded-lg px-2 py-1 text-sm"
+                          value={editDueDateDraft}
+                          onChange={(e) => setEditDueDateDraft(e.target.value)}
+                          aria-label="Due date"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <PortalPersonRecordRow
+                    name={row.residentName}
+                    subtitle={
+                      row.manualPaymentReportedAt && row.manualPaymentChannel
+                        ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+                        : row.chargeTitle
+                    }
+                    preview={paymentListPreview(row, scheduledMessages)}
+                    meta={row.lineAmount}
+                    selected={isSelected}
+                    onOpen={() => openPaymentDetail(row)}
+                    dataAttr="payment-list-row"
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
     </>
   );
 }

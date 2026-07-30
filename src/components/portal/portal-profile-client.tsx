@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_PAGE_TITLE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
@@ -118,9 +118,6 @@ export function PortalProfileClient({
 
   const editAction = editing ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={cancel}>
-        Cancel
-      </Button>
       <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={saving} onClick={() => void save()}>
         {saving ? "Saving…" : "Save"}
       </Button>
@@ -201,7 +198,9 @@ export function PortalProfileClient({
       {variant === "manager" ? <AssistantDisplaySetting /> : null}
       <NotificationsToggle />
       <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-      <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      {variant === "manager" ? (
+        <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
+      ) : null}
       <PortalSettingsExtras currentKind={portalKind} />
     </PortalSettingsSections>
   );
@@ -218,7 +217,7 @@ export function PortalProfileClient({
   }
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
+    <div className="relative z-0 w-full min-w-0">
       <div className="mb-8">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <p className="mt-1 text-sm text-muted">Manage your account settings and preferences.</p>

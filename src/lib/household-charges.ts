@@ -4,14 +4,18 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { getPropertyById } from "@/lib/rental-application/data";
+import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
+  entireHomeMonthlyRentAmount,
+  isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
+  type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
+import { listingPresetFeeAmount } from "@/lib/listing-fees";
 import { formatRoomPriceAmount, resolveStayPricing, roomDailyRentPrice } from "@/lib/room-pricing";
 import { resolveSubmissionRoom } from "@/lib/listing-room-resolution";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
@@ -31,10 +35,27 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
 import {
   intraMonthStaySpan,
+  shortTermNightlyRate,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
 } from "@/lib/short-term-stay-pricing";
+import {
+  normalizeGroupId,
+} from "@/lib/rental-application/application-groups";
+import {
+  buildBundleApplicationGroups,
+  bundleIdForApplication,
+  isBundleGroupApplication,
+  memberIndexInBundleGroup,
+  type BundleGroupRowInput,
+} from "@/lib/bundle-group/bundle-group-application";
+import {
+  resolveBundleFinancialTotals,
+  splitMoneyEvenly,
+  splitShareLabel,
+  moneyLabel,
+} from "@/lib/bundle-group/bundle-cost-split";
 
 export const HOUSEHOLD_CHARGES_EVENT = "axis:household-charges";
 
@@ -134,6 +155,10 @@ export type HouseholdCharge = {
   workOrderId?: string;
   recurringRentProfileId?: string;
   rentMonth?: string;
+  /** Set on charges generated from a listing custom fee (`ManagerCustomFeeRow.id`). It gives
+   *  each custom fee its own charge identity so several custom fees — and a monthly custom
+   *  fee across months — never collapse onto the single `other_cost|applicationId` key. */
+  customFeeId?: string;
   dueDay?: number;
   /** When set, dueDay is computed per month (1st vs last day). */
   dueDayMode?: RentDueDayMode;
@@ -141,6 +166,12 @@ export type HouseholdCharge = {
   cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
   /** Late fee assessed against this original charge id. */
   sourceChargeId?: string;
+  /** Bundle group cost split metadata (equal shares of household totals). */
+  bundleGroupId?: string;
+  bundleId?: string;
+  splitMemberIndex?: number;
+  splitMemberCount?: number;
+  splitTotalAmountLabel?: string;
 };
 
 export type RecurringRentProfile = {
@@ -162,6 +193,9 @@ export type RecurringRentProfile = {
   dailyRentPrice?: number;
   /** Full monthly utilities/RUBS from listing or manager override — billed each month with rent. */
   monthlyUtilities?: number;
+  /** Monthly custom fees (parking, storage, …) billed each recurring month alongside rent.
+   *  Each fee's `id` is stable so its charges dedupe across syncs and can be purged on removal. */
+  monthlyFees?: { id: string; label: string; amount: number }[];
   dueDay: number;
   dueDayMode?: RentDueDayMode;
   startMonth: string;
@@ -422,8 +456,41 @@ function currentRentMonth() {
 }
 
 function chargeKeyPart(raw: string): string {
-  const cleaned = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const trimmed = raw.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper.startsWith("AXIS-")) {
+    const suffix = upper
+      .slice(5)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return suffix ? `pl_${suffix}` : "unknown";
+  }
+  if (upper.startsWith("PROPLANE-")) {
+    const suffix = upper
+      .slice(9)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return suffix ? `pl_${suffix}` : "unknown";
+  }
+  const cleaned = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return cleaned || "unknown";
+}
+
+/** Legacy charge URLs used `axis_` slug segments; new ones use `pl_`. */
+export function legacyChargeIdAliases(id: string): string[] {
+  const trimmed = id.trim();
+  if (!trimmed) return [];
+  const variants = new Set<string>([trimmed]);
+  if (trimmed.includes("_axis_")) variants.add(trimmed.replace(/_axis_/g, "_pl_"));
+  if (trimmed.includes("_pl_")) variants.add(trimmed.replace(/_pl_/g, "_axis_"));
+  return [...variants];
+}
+
+/** PropLane-branded charge id for payment detail URLs (no legacy `axis_` segment). */
+export function publicChargeIdForUrl(id: string): string {
+  return id.replace(/_axis_/g, "_pl_");
 }
 
 function applicationFeeChargeIdForApplication(applicationId: string): string {
@@ -515,6 +582,12 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
   }
   if (charge.kind === "holding_deposit") {
     return `holding_deposit|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}`;
+  }
+  // Custom fees each get their own key, per fee AND per month (recurring), so multiple
+  // custom fees never collide on `other_cost|applicationId` and a monthly fee emits exactly
+  // once per month across repeated syncs.
+  if (charge.customFeeId) {
+    return `custom_fee|${charge.residentEmail.trim().toLowerCase()}|${charge.propertyId}|${charge.customFeeId}|${charge.rentMonth ?? ""}`;
   }
   if (charge.applicationId && (
     charge.kind === "first_month_rent" ||
@@ -742,7 +815,13 @@ export function isStaleRecurringHouseholdCharge(
   allCharges: HouseholdCharge[],
 ): boolean {
   if (charge.status === "paid" || !charge.recurringRentProfileId || !charge.rentMonth) return false;
-  if (charge.kind !== "rent" && charge.kind !== "utilities") return false;
+  // Recurring rent/utilities AND monthly custom-fee rows are all bounds-checked below. A
+  // custom row is purged only when its month falls outside the lease (before start / after
+  // end) — NOT when its fee is removed or its amount changes: an already-emitted unpaid month
+  // is a charge the resident may owe, so removal just stops FUTURE emission and an amount
+  // change applies only to months not yet emitted.
+  const isCustomRecurring = Boolean(charge.customFeeId);
+  if (charge.kind !== "rent" && charge.kind !== "utilities" && !isCustomRecurring) return false;
   const prof = profileById.get(charge.recurringRentProfileId);
   if (!prof) return false;
 
@@ -760,7 +839,9 @@ export function isStaleRecurringHouseholdCharge(
 
     const daysInEndMonth = new Date(leaseEndYear, leaseEndMonthNum, 0).getDate();
     const partialLastMonth = leaseEndDay != null && leaseEndDay > 0 && leaseEndDay < daysInEndMonth;
-    if (partialLastMonth && charge.rentMonth === leaseEndMonth) {
+    // Only rent/utilities have an upfront prorated-last-month charge that would duplicate the
+    // recurring row; custom fees are flat (full each month), so this dedup does not apply.
+    if (!isCustomRecurring && partialLastMonth && charge.rentMonth === leaseEndMonth) {
       const hasUpfront =
         charge.kind === "rent"
           ? hasUpfrontProratedLastMonthCharge(allCharges, prof.residentEmail, prof.propertyId, "prorated_last_month_rent")
@@ -1161,6 +1242,14 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   if (row.manuallyAdded) return { raw: "", amount: 0 };
   const { sub, room } = resolveRowSubmissionRoom(row);
   if (!sub) return { raw: "", amount: 0 };
+  // A bundle prices the whole group, so its total outranks any single room's estimate.
+  const bundleId = bundleIdForApplication(row.application);
+  if (bundleId) {
+    const totals = resolveBundleFinancialTotals(sub, bundleId);
+    if (totals && totals.monthlyUtilities > 0) {
+      return { raw: String(totals.monthlyUtilities), amount: totals.monthlyUtilities };
+    }
+  }
   const amount = utilitiesBillableMonthlyAmount(sub, room);
   const raw = amount > 0 ? String(amount) : room?.utilitiesEstimate?.trim() || "";
   return { raw, amount };
@@ -1192,8 +1281,89 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;
   if (row.manuallyAdded) return 0;
-  const { room } = resolveRowSubmissionRoom(row);
+  // One shared room lookup, so the rent this bills and the room the lease quotes cannot
+  // resolve differently. Bundle and entire-home pricing still outrank a single room.
+  const { sub, room } = resolveRowSubmissionRoom(row);
+  if (!sub) return 0;
+  const bundleId = bundleIdForApplication(row.application);
+  if (bundleId) {
+    const totals = resolveBundleFinancialTotals(sub, bundleId);
+    if (totals && totals.monthlyRent > 0) return totals.monthlyRent;
+  }
+  if (isEntireHomeListing(sub)) {
+    const entireHomeRent = entireHomeMonthlyRentAmount(sub);
+    if (entireHomeRent > 0) return entireHomeRent;
+  }
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
+}
+
+type BundleGroupChargeContext = {
+  groupId: string;
+  bundleId: string;
+  memberIndex: number;
+  memberCount: number;
+};
+
+function resolveBundleGroupChargeContext(row: DemoApplicantRow): BundleGroupChargeContext | null {
+  if (!isBundleGroupApplication(row.application)) return null;
+  const groupId = normalizeGroupId(row.application?.groupId);
+  const bundleId = bundleIdForApplication(row.application);
+  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  if (!groupId || !bundleId || !propertyId) return null;
+
+  const inputs: BundleGroupRowInput[] = readManagerApplicationRows()
+    .filter((a) => {
+      const pid = a.assignedPropertyId?.trim() || a.propertyId?.trim() || a.application?.propertyId?.trim() || "";
+      return (
+        normalizeGroupId(a.application?.groupId) === groupId &&
+        bundleIdForApplication(a.application) === bundleId &&
+        pid === propertyId
+      );
+    })
+    .map((a) => ({
+      id: a.id,
+      name: a.name || a.email || "Applicant",
+      email: a.email || "",
+      role: a.application?.groupRole ?? null,
+      groupId,
+      groupSize: a.application?.groupSize ?? "",
+      status: a.bucket === "approved" ? "approved" : "submitted",
+      bundleId,
+      propertyId,
+    }));
+
+  const groups = buildBundleApplicationGroups(inputs);
+  const group = groups.get(groupId);
+  if (!group) return null;
+  const memberCount = group.expectedSize ?? group.totalCount;
+  if (!(memberCount > 1)) return null;
+  return {
+    groupId,
+    bundleId,
+    memberIndex: memberIndexInBundleGroup(group, row.id),
+    memberCount,
+  };
+}
+
+function applyBundleGroupSplit(
+  amount: number,
+  title: string,
+  ctx: BundleGroupChargeContext | null,
+): { amount: number; title: string; split?: Pick<HouseholdCharge, "bundleGroupId" | "bundleId" | "splitMemberIndex" | "splitMemberCount" | "splitTotalAmountLabel"> } {
+  if (!ctx || !(amount > 0)) return { amount, title };
+  const memberAmount = splitMoneyEvenly(amount, ctx.memberCount, ctx.memberIndex);
+  const share = splitShareLabel(ctx.memberIndex, ctx.memberCount, moneyLabel(amount));
+  return {
+    amount: memberAmount,
+    title: `${title} (${share})`,
+    split: {
+      bundleGroupId: ctx.groupId,
+      bundleId: ctx.bundleId,
+      splitMemberIndex: ctx.memberIndex,
+      splitMemberCount: ctx.memberCount,
+      splitTotalAmountLabel: moneyLabel(amount),
+    },
+  };
 }
 
 export function findWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
@@ -1733,6 +1903,43 @@ function syncAllRecurringRentCharges(): boolean {
           });
         }
       }
+
+      // Monthly custom fees (parking, storage, …) bill their FULL amount each recurring
+      // month — a flat monthly service, not prorated. Each fee's own business key
+      // (custom_fee|…|feeId|month) makes emission exactly-once per month across repeated
+      // syncs; an amount change only affects months not yet emitted.
+      for (const fee of profile.monthlyFees ?? []) {
+        if (!(fee.amount > 0)) continue;
+        const feeKey = `custom_fee|${emailLower}|${profile.propertyId}|${fee.id}|${rentMonth}`;
+        const alreadyFee =
+          existing.some((c) => chargeBusinessKey(c) === feeKey) ||
+          newCharges.some((c) => chargeBusinessKey(c) === feeKey);
+        if (alreadyFee) continue;
+        newCharges.push({
+          id: `hc_cf_${chargeKeyPart(fee.id)}_${chargeKeyPart(profile.residentEmail)}_${chargeKeyPart(profile.propertyId)}_${rentMonth}`,
+          createdAt: new Date().toISOString(),
+          residentEmail: profile.residentEmail,
+          residentName: profile.residentName,
+          residentUserId: profile.residentUserId,
+          propertyId: profile.propertyId,
+          propertyLabel: profile.propertyLabel,
+          managerUserId: profile.managerUserId,
+          kind: "other_cost",
+          customFeeId: fee.id,
+          title: `${fee.label} — ${monthLabel}`,
+          amountLabel: moneyAmountLabel(fee.amount),
+          balanceLabel: moneyAmountLabel(fee.amount),
+          status: "pending",
+          recurringRentProfileId: profile.id,
+          rentMonth,
+          dueDay,
+          dueDayMode,
+          dueDateLabel: dueLabel,
+          blocksLeaseUntilPaid: false,
+          zelleContactSnapshot: profile.zelleContact,
+          venmoContactSnapshot: profile.venmoContact,
+        });
+      }
     }
   }
 
@@ -1828,6 +2035,9 @@ export function upsertRecurringRentProfile(input: {
    */
   dailyRentPrice?: number;
   monthlyUtilities?: number;
+  /** Monthly custom fees to bill each recurring month. An explicit array (even []) is
+   *  authoritative — [] clears prior fees; omitting the field inherits the existing set. */
+  monthlyFees?: { id: string; label: string; amount: number }[];
   dueDay?: number;
   dueDayMode?: RentDueDayMode;
   startMonth?: string;
@@ -1843,6 +2053,9 @@ export function upsertRecurringRentProfile(input: {
     input.monthlyUtilities !== undefined && Number.isFinite(input.monthlyUtilities)
       ? Math.max(0, Number(input.monthlyUtilities))
       : (existing?.monthlyUtilities ?? 0);
+  const monthlyFees = (input.monthlyFees ?? existing?.monthlyFees ?? [])
+    .map((f) => ({ id: f.id, label: f.label, amount: Math.max(0, Number(f.amount) || 0) }))
+    .filter((f) => f.amount > 0);
   const profile: RecurringRentProfile = {
     id: existing?.id ?? `rrp_${chargeKeyPart(input.residentEmail)}_${chargeKeyPart(input.propertyId)}`,
     residentEmail: input.residentEmail,
@@ -1861,6 +2074,7 @@ export function upsertRecurringRentProfile(input: {
         ? (input.dailyRentPrice > 0 ? Number(input.dailyRentPrice) : undefined)
         : existing?.dailyRentPrice,
     monthlyUtilities,
+    monthlyFees,
     dueDay: Math.min(28, Math.max(1, input.dueDay ?? 1)),
     dueDayMode: input.dueDayMode ?? existing?.dueDayMode ?? "first_of_month",
     startMonth: input.startMonth ?? currentRentMonth(),
@@ -2266,6 +2480,332 @@ export function recordSubmittedApplicationFeeCharge(row: DemoApplicantRow, manag
   return Boolean(charge && !beforeIds.has(charge.id));
 }
 
+/** Genuinely-custom fee rows (the "+ Add custom fee" rows) — preset-backed rows bill through
+ *  their own legacy fields and are excluded here. */
+function genuinelyCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): ManagerCustomFeeRow[] {
+  return (sub?.customFees ?? []).filter((fee) => {
+    const presetId = (fee as { presetId?: string }).presetId;
+    return !presetId || presetId === "custom";
+  });
+}
+
+/** Custom fees the manager set to bill once (frequency "one-time"). */
+function oneTimeCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): ManagerCustomFeeRow[] {
+  return genuinelyCustomFees(sub).filter((fee) => fee.frequency === "one-time");
+}
+
+type ApprovedChargeDraft = {
+  kind: HouseholdChargeKind;
+  amount: number;
+  title: string;
+  dueDateLabel: string;
+};
+
+function patchPendingApprovedChargeAmount(applicationId: string, draft: ApprovedChargeDraft): boolean {
+  if (!(draft.amount > 0)) return false;
+  const id = approvedChargeId(applicationId, draft.kind);
+  const rows = readAll();
+  const idx = rows.findIndex((charge) => charge.id === id && charge.status === "pending");
+  if (idx === -1) return false;
+  const label = moneyAmountLabel(Number(draft.amount.toFixed(2)));
+  const current = rows[idx]!;
+  if (current.amountLabel === label && current.title === draft.title && current.dueDateLabel === draft.dueDateLabel) {
+    return false;
+  }
+  const next = [...rows];
+  next[idx] = {
+    ...current,
+    amountLabel: label,
+    balanceLabel: label,
+    title: draft.title,
+    dueDateLabel: draft.dueDateLabel,
+  };
+  writeAll(next);
+  return true;
+}
+
+function resolveApprovedLeaseRoom(
+  row: DemoApplicantRow,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+) {
+  if (isEntireHomeListing(sub)) {
+    const named = sub.rooms.find((room) => room.name.trim());
+    if (named) return named;
+  }
+  for (const choice of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+    const trimmed = choice?.trim();
+    if (!trimmed) continue;
+    const { listingRoomId } = parseRoomChoiceValue(trimmed);
+    if (listingRoomId) {
+      const byId = sub.rooms.find((room) => room.id === listingRoomId);
+      if (byId) return byId;
+    }
+  }
+  const signedRent = Number(row.signedMonthlyRent ?? 0);
+  if (signedRent > 0) {
+    const byRent = sub.rooms.filter((room) => room.monthlyRent === signedRent);
+    if (byRent.length === 1) return byRent[0] ?? null;
+  }
+  if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
+  const dailyRooms = sub.rooms.filter(
+    (room) => room.prorateMethod === "daily_rate" && room.dailyRentRate && room.dailyRentRate > 0,
+  );
+  if (dailyRooms.length === 1) return dailyRooms[0] ?? null;
+  return null;
+}
+
+function buildApprovedStandardChargeDrafts(
+  row: DemoApplicantRow,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+  opts: {
+    allowListingDefaults: boolean;
+    applicationId: string;
+    leaseStart?: string;
+    leaseEnd?: string;
+    moveInDue: string;
+  },
+): ApprovedChargeDraft[] {
+  const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
+    const value = raw?.trim();
+    if (value != null && value !== "") return parseMoneyAmount(value);
+    return parseMoneyAmount(fallback ?? "");
+  };
+  const drafts: ApprovedChargeDraft[] = [];
+  const pushDraft = (kind: HouseholdChargeKind, amount: number, title: string, dueDateLabel = opts.moveInDue) => {
+    if (!(amount > 0)) return;
+    const split = applyBundleGroupSplit(amount, title, resolveBundleGroupChargeContext(row));
+    if (!(split.amount > 0)) return;
+    drafts.push({
+      kind,
+      amount: Number(split.amount.toFixed(2)),
+      title: split.title,
+      dueDateLabel,
+    });
+  };
+
+  const room = resolveApprovedLeaseRoom(row, sub);
+  const entireHome = isEntireHomeListing(sub);
+  const prorateMethod =
+    entireHome && sub.entireHomeProrateMethod === "daily_rate"
+      ? "daily_rate"
+      : room?.prorateMethod === "daily_rate"
+        ? "daily_rate"
+        : "auto";
+  const dailyRentRate = entireHome ? sub.entireHomeDailyRentRate : room?.dailyRentRate;
+  const dailyUtilitiesRate = entireHome ? sub.entireHomeDailyUtilitiesRate : room?.dailyUtilitiesRate;
+  const dailyBasisRate =
+    residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
+  const endsInsideFirstMonth =
+    (dailyBasisRate ?? 0) > 0 && intraMonthStaySpan(opts.leaseStart, opts.leaseEnd) !== null;
+
+  const rentAmount = selectedRoomRentAmount(row);
+  if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {
+    const rentCharge = firstMonthRentChargeForLeaseStart(
+      rentAmount,
+      opts.leaseStart,
+      prorateMethod,
+      dailyRentRate,
+      dailyBasisRate,
+      opts.leaseEnd,
+    );
+    if (rentCharge) pushDraft(rentCharge.kind, rentCharge.amount, rentCharge.title);
+  }
+
+  const utilities = selectedRoomUtilities(row);
+  if (utilities.amount > 0) {
+    const proration = leaseFirstPeriodProration(opts.leaseStart, opts.leaseEnd, endsInsideFirstMonth);
+    let utilAmount: number;
+    let utilTitle: string;
+    if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
+      utilAmount = Number((proration.billableDays * dailyUtilitiesRate).toFixed(2));
+      utilTitle = `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`;
+    } else {
+      utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
+      utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+    }
+    pushDraft(
+      proration.prorated ? "prorated_utilities" : "utilities",
+      utilAmount,
+      utilTitle,
+    );
+  }
+
+  const lastMonthRentCharge =
+    !endsInsideFirstMonth && (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0))
+      ? lastMonthChargeForLeaseEnd(rentAmount, opts.leaseEnd, "rent", prorateMethod, dailyRentRate, dailyBasisRate)
+      : null;
+  if (lastMonthRentCharge) {
+    pushDraft(
+      lastMonthRentCharge.kind,
+      lastMonthRentCharge.amount,
+      lastMonthRentCharge.title,
+      lastMonthRentCharge.dueDateLabel ?? opts.moveInDue,
+    );
+  }
+
+  const lastMonthUtilitiesCharge =
+    !endsInsideFirstMonth && utilities.amount > 0
+      ? lastMonthChargeForLeaseEnd(utilities.amount, opts.leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
+      : null;
+  if (lastMonthUtilitiesCharge) {
+    pushDraft(
+      lastMonthUtilitiesCharge.kind,
+      lastMonthUtilitiesCharge.amount,
+      lastMonthUtilitiesCharge.title,
+      lastMonthUtilitiesCharge.dueDateLabel ?? opts.moveInDue,
+    );
+  }
+
+  // Room-first precedence, identical to recordApprovedApplicationCharges: a room's own
+  // deposit wins over the shared listing amount, so a live re-sync never patches a per-room
+  // deposit charge back down to the listing value. The two layers must not disagree.
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
+  const securityDeposit = savedAmount(
+    row.application?.managerSecurityDepositOverride,
+    row.manualResidentDetails?.securityDeposit != null
+      ? String(row.manualResidentDetails.securityDeposit)
+      : opts.allowListingDefaults
+        ? (roomSecurityDeposit ??
+          String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")))
+        : undefined,
+  );
+  const holdingCredit = paidHoldingDepositCreditCents(opts.applicationId) / 100;
+  const netSecurityDeposit = Math.max(0, securityDeposit - holdingCredit);
+  const securityTitle =
+    holdingCredit > 0 && netSecurityDeposit > 0
+      ? `${chargeTitle("security_deposit")} ($${holdingCredit.toFixed(2)} holding deposit credited)`
+      : holdingCredit > 0 && netSecurityDeposit <= 0
+        ? `${chargeTitle("security_deposit")} (fully covered by holding deposit)`
+        : chargeTitle("security_deposit");
+  if (netSecurityDeposit > 0) {
+    pushDraft(
+      "security_deposit",
+      netSecurityDeposit,
+      securityTitle,
+      row.manuallyAdded ? opts.moveInDue : "Before lease signing",
+    );
+  }
+
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
+  const moveInFee = savedAmount(
+    row.application?.managerMoveInFeeOverride,
+    row.manualResidentDetails?.moveInFee != null
+      ? String(row.manualResidentDetails.moveInFee)
+      : opts.allowListingDefaults
+        ? (roomMoveInFee ??
+          String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")))
+        : undefined,
+  );
+  pushDraft("move_in_fee", moveInFee, chargeTitle("move_in_fee"));
+
+  const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+  if (otherCostAmount > 0) {
+    const otherCostTitle = row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost");
+    pushDraft("other_cost", otherCostAmount, otherCostTitle);
+  }
+
+  return drafts;
+}
+
+function syncPendingApprovedChargesFromListing(
+  row: DemoApplicantRow,
+  applicationId: string,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+  allowListingDefaults: boolean,
+  leaseStart: string | undefined,
+  leaseEnd: string | undefined,
+  moveInDue: string,
+): boolean {
+  const drafts =
+    row.application?.rentalType === "short_term"
+      ? (() => {
+          const savedAmount = (raw: string | undefined, fallback: string | undefined): number => {
+            const value = raw?.trim();
+            if (value != null && value !== "") return parseMoneyAmount(value);
+            return parseMoneyAmount(fallback ?? "");
+          };
+          const out: ApprovedChargeDraft[] = [];
+          const nightlyRate = shortTermNightlyRate(sub.shortTermDailyCost);
+          const nights = shortTermStayNightCount(leaseStart, leaseEnd);
+          if (nightlyRate > 0 && nights) {
+            out.push({
+              kind: "stay_total",
+              amount: shortTermStayTotalAmount(nightlyRate, nights),
+              title: shortTermStayChargeTitle(nights, nightlyRate),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const shortDeposit = savedAmount(
+            row.application?.managerSecurityDepositOverride,
+            row.manualResidentDetails?.securityDeposit != null
+              ? String(row.manualResidentDetails.securityDeposit)
+              : allowListingDefaults
+                ? String(
+                    listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? ""),
+                  )
+                : undefined,
+          );
+          if (shortDeposit > 0) {
+            out.push({
+              kind: "security_deposit",
+              amount: shortDeposit,
+              title: chargeTitle("security_deposit"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const shortMoveIn = savedAmount(
+            row.application?.managerMoveInFeeOverride,
+            row.manualResidentDetails?.moveInFee != null
+              ? String(row.manualResidentDetails.moveInFee)
+              : allowListingDefaults
+                ? String(
+                    listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? ""),
+                  )
+                : undefined,
+          );
+          if (shortMoveIn > 0) {
+            out.push({
+              kind: "move_in_fee",
+              amount: shortMoveIn,
+              title: chargeTitle("move_in_fee"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          const otherCostAmount = parseMoneyAmount(row.application?.managerOtherCostAmount ?? "");
+          if (otherCostAmount > 0) {
+            out.push({
+              kind: "other_cost",
+              amount: otherCostAmount,
+              title: row.application?.managerOtherCostLabel?.trim() || chargeTitle("other_cost"),
+              dueDateLabel: "Before check-in",
+            });
+          }
+          return out;
+        })()
+      : buildApprovedStandardChargeDrafts(row, sub, {
+          allowListingDefaults,
+          applicationId,
+          leaseStart,
+          leaseEnd,
+          moveInDue,
+        });
+
+  let changed = false;
+  for (const draft of drafts) {
+    if (patchPendingApprovedChargeAmount(applicationId, draft)) changed = true;
+  }
+  return changed;
+}
+
+/** Monthly custom fees (default cadence) resolved to a stable {id,label,amount} for the
+ *  recurring rent profile — only positive amounts bill. */
+function monthlyCustomFees(sub: ManagerListingSubmissionV1 | null | undefined): { id: string; label: string; amount: number }[] {
+  return genuinelyCustomFees(sub)
+    .filter((fee) => fee.frequency !== "one-time")
+    .map((fee) => ({ id: fee.id, label: fee.label?.trim() || "Custom fee", amount: parseMoneyAmount(fee.amount ?? "") }))
+    .filter((fee) => fee.amount > 0);
+}
+
 export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerUserId: string | null, force = false): boolean {
   if (!isBrowser()) return false;
   const residentEmail = row.email?.trim();
@@ -2276,7 +2816,10 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   if (!propertyId) return false;
 
   const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const sub =
+    prop?.listingSubmission?.v === 1
+      ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
+      : null;
 
   // The resident's browser doesn't have the manager's listing catalog, so getPropertyById()
   // returns null there. Without the listing we can't determine proration method or daily rates,
@@ -2308,6 +2851,18 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // Pass force=true (via the "Regenerate" button) to refresh from current listing terms.
   const emailLowerForFilter = residentEmail.trim().toLowerCase();
   if (!force) {
+    let synced = false;
+    if (sub) {
+      synced = syncPendingApprovedChargesFromListing(
+        row,
+        applicationId,
+        sub,
+        allowListingDefaults,
+        leaseStart,
+        leaseEnd,
+        moveInDue,
+      );
+    }
     const hasExisting = readAll().some(
       (c) =>
         (c.applicationId === applicationId && c.kind !== "application_fee" && c.status === "pending") ||
@@ -2316,7 +2871,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
           c.residentEmail.trim().toLowerCase() === emailLowerForFilter &&
           c.propertyId === propertyId),
     );
-    if (hasExisting) return false;
+    if (hasExisting) return synced;
   }
   // Preserve paid charges — only wipe pending ones so they can be regenerated with correct amounts.
   // Also wipe pending recurring rent/utilities for this resident+property so updated amounts are used.
@@ -2332,6 +2887,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   });
   const existingKeys = new Set(rows.map((charge) => chargeBusinessKey(charge)));
   const created: HouseholdCharge[] = [];
+  const bundleGroupCtx = resolveBundleGroupChargeContext(row);
 
   const pushCharge = (
     kind: HouseholdChargeKind,
@@ -2339,11 +2895,17 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     title: string,
     blocksLeaseUntilPaid: boolean,
     dueDateLabel = moveInDue,
+    customFeeId?: string,
   ) => {
     if (!(amount > 0)) return;
-    const label = moneyAmountLabel(Number(amount.toFixed(2)));
+    const split = applyBundleGroupSplit(amount, title, bundleGroupCtx);
+    const finalAmount = split.amount;
+    if (!(finalAmount > 0)) return;
+    const label = moneyAmountLabel(Number(finalAmount.toFixed(2)));
     const charge: HouseholdCharge = withPaymentReference({
-      id: approvedChargeId(applicationId, kind),
+      // A custom fee needs its OWN id per fee — approvedChargeId keys only on (app, kind),
+      // so several custom fees would otherwise share one id and collapse to one row.
+      id: customFeeId ? `${approvedChargeId(applicationId, kind)}_cf_${chargeKeyPart(customFeeId)}` : approvedChargeId(applicationId, kind),
       createdAt: new Date().toISOString(),
       applicationId,
       residentEmail,
@@ -2353,7 +2915,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       propertyLabel,
       managerUserId: effectiveManagerUserId,
       kind,
-      title,
+      title: split.title,
       amountLabel: label,
       balanceLabel: label,
       status: "pending",
@@ -2361,6 +2923,8 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       venmoContactSnapshot: venmoSnap,
       blocksLeaseUntilPaid,
       dueDateLabel,
+      ...(customFeeId ? { customFeeId } : {}),
+      ...split.split,
     });
     const key = chargeBusinessKey(charge);
     if (existingKeys.has(key)) return;
@@ -2379,9 +2943,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const isShortTermStay = row.application?.rentalType === "short_term";
 
   if (isShortTermStay) {
-    // The room the applicant selected is the authority for the nightly rate; the listing's
-    // shortTermDailyCost is the fallback. Same resolver the lease document reads, so the
-    // stay total charged here always matches the figure the agreement states.
+    // The room the applicant selected is the authority for the nightly rate: its own
+    // short-term rate first (the per-rent-row short-term set), then its daily basis, then the
+    // listing's shortTermDailyCost. That precedence lives in resolveStayPricing, the same
+    // resolver the lease document reads, so the stay total charged here always matches the
+    // figure the agreement states. A stay is still ALL-IN: this branch bills no utilities line.
     const nightlyRate =
       resolveStayPricing({
         room,
@@ -2411,7 +2977,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.securityDeposit != null
         ? String(row.manualResidentDetails.securityDeposit)
         : allowListingDefaults
-          ? sub?.shortTermDeposit
+          ? // per-room short-term deposit wins; else the listing's short-term deposit (unified fee → legacy)
+            (room?.shortTermDeposit ?? "").trim() ||
+            (sub ? String(listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? "")) : "")
           : undefined,
     );
     if (shortDeposit > 0) {
@@ -2423,7 +2991,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       row.manualResidentDetails?.moveInFee != null
         ? String(row.manualResidentDetails.moveInFee)
         : allowListingDefaults
-          ? sub?.shortTermMoveInFee
+          ? // per-room short-term move-in wins; else the listing's short-term move-in
+            (room?.shortTermMoveInFee ?? "").trim() ||
+            (sub ? String(listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? "")) : "")
           : undefined,
     );
     pushCharge("move_in_fee", shortMoveIn, chargeTitle("move_in_fee"), false, "Before check-in");
@@ -2434,15 +3004,37 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before check-in");
     }
 
+    // Custom fees with a short-term amount bill ONCE before check-in, on top of the all-in
+    // stay total (they are explicit manager-added charges, unlike utilities which fold into
+    // the rate). A fee set only on the long-term side (no shortTermAmount) never bills here.
+    if (allowListingDefaults) {
+      for (const fee of genuinelyCustomFees(sub)) {
+        const amt = parseMoneyAmount(fee.shortTermAmount ?? "");
+        if (amt > 0)
+          pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before check-in", fee.id);
+      }
+    }
+
     const next = dedupeCharges([...rows, ...created]);
     const changed = chargesChanged(before, next);
     if (changed) writeAll(next);
     return changed;
   }
 
-  const prorateMethod = room?.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
-  const dailyRentRate = room?.dailyRentRate;
-  const dailyUtilitiesRate = room?.dailyUtilitiesRate;
+  // `room` is already resolved once above, through the shared chain the lease document uses.
+  // Entire-home listings still take their whole-unit proration settings here.
+  // A MISSING per-day utilities rate stays undefined and reads as zero on purpose — a
+  // listing briefly folded (rent baked-in, no util rate) bills the same total, never a
+  // double-charge; do NOT derive a utilities figure from the rate.
+  const entireHome = Boolean(sub && isEntireHomeListing(sub));
+  const prorateMethod =
+    entireHome && sub?.entireHomeProrateMethod === "daily_rate"
+      ? "daily_rate"
+      : room?.prorateMethod === "daily_rate"
+        ? "daily_rate"
+        : "auto";
+  const dailyRentRate = entireHome ? sub?.entireHomeDailyRentRate : room?.dailyRentRate;
+  const dailyUtilitiesRate = entireHome ? sub?.entireHomeDailyUtilitiesRate : room?.dailyUtilitiesRate;
   // When the room is priced by the day, rent (not utilities) bills per-day every period —
   // unless this resident has their own negotiated monthly rent, which wins exactly as it
   // does over the room's listing monthly rent.
@@ -2464,22 +3056,25 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   const utilities = selectedRoomUtilities(row);
   if (utilities.amount > 0) {
     const proration = leaseFirstPeriodProration(leaseStart, leaseEnd, endsInsideFirstMonth);
-    let utilAmount: number;
-    let utilTitle: string;
-    if (proration.prorated && prorateMethod === "daily_rate" && dailyUtilitiesRate && dailyUtilitiesRate > 0) {
-      utilAmount = Number((proration.billableDays * dailyUtilitiesRate).toFixed(2));
-      utilTitle = `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`;
+    if (proration.prorated && prorateMethod === "daily_rate") {
+      // A daily-rate month bills utilities ONLY from the explicit per-day utilities rate.
+      // A missing rate reads as ZERO (do NOT fall back to the monthly estimate): a folded
+      // listing has utilities baked into its daily rent, so billing the estimate here would
+      // double-charge. dev has no daily-rate listings, so this affects nothing today.
+      if (dailyUtilitiesRate && dailyUtilitiesRate > 0) {
+        pushCharge(
+          "prorated_utilities",
+          Number((proration.billableDays * dailyUtilitiesRate).toFixed(2)),
+          `Prorated utilities (${proration.billableDays} days × ${formatRoomPriceAmount(dailyUtilitiesRate)}/day)`,
+          false,
+          moveInDue,
+        );
+      }
     } else {
-      utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
-      utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+      const utilAmount = proration.prorated ? utilities.amount * proration.factor : utilities.amount;
+      const utilTitle = proration.prorated ? `Prorated utilities (${proration.label})` : "Utilities";
+      pushCharge(proration.prorated ? "prorated_utilities" : "utilities", utilAmount, utilTitle, false, moveInDue);
     }
-    pushCharge(
-      proration.prorated ? "prorated_utilities" : "utilities",
-      utilAmount,
-      utilTitle,
-      false,
-      moveInDue,
-    );
   }
 
   const lastMonthRentCharge = !endsInsideFirstMonth && (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0))
@@ -2494,7 +3089,12 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       lastMonthRentCharge.dueDateLabel,
     );
   }
-  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0
+  // Last-month utilities: a daily-rate month bills per-day utilities ONLY when an explicit
+  // per-day rate is set; a missing rate reads as zero (folded-listing case — no monthly
+  // fallback, or a folded listing would double-charge). Auto proration bills the monthly
+  // estimate as before.
+  const dailyUtilInRange = prorateMethod !== "daily_rate" || Boolean(dailyUtilitiesRate && dailyUtilitiesRate > 0);
+  const lastMonthUtilitiesCharge = !endsInsideFirstMonth && utilities.amount > 0 && dailyUtilInRange
     ? lastMonthChargeForLeaseEnd(utilities.amount, leaseEnd, "utilities", prorateMethod, dailyUtilitiesRate)
     : null;
   if (lastMonthUtilitiesCharge) {
@@ -2507,12 +3107,19 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
+  // Per-room deposit override: when the resolved room carries its own securityDeposit it
+  // wins over the listing-level shared deposit — the same room-first precedence rent uses.
+  // A room with no per-room deposit falls back to sub.securityDeposit, so listings that
+  // never set one bill exactly as before. Manager override / manual detail still win above.
+  const roomSecurityDeposit = room?.securityDeposit?.trim() ? room.securityDeposit : undefined;
   const securityDeposit = savedAmount(
     row.application?.managerSecurityDepositOverride,
     row.manualResidentDetails?.securityDeposit != null
       ? String(row.manualResidentDetails.securityDeposit)
-      : allowListingDefaults
-        ? sub?.securityDeposit
+      : allowListingDefaults && sub
+        ? // per-room deposit wins; else the listing's deposit (unified fee row → legacy field)
+          (roomSecurityDeposit ??
+            String(listingPresetFeeAmount(sub, "security_deposit") || parseMoneyAmount(sub.securityDeposit ?? "")))
         : undefined,
   );
   const holdingCredit = paidHoldingDepositCreditCents(applicationId) / 100;
@@ -2533,12 +3140,18 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     );
   }
 
+  // Per-room move-in fee wins over the shared listing move-in fee (same room-first
+  // precedence as the deposit), so a room with its own move-in and a property with a
+  // shared one never both bill for the same move-in.
+  const roomMoveInFee = room?.moveInFee?.trim() ? room.moveInFee : undefined;
   const moveInFee = savedAmount(
     row.application?.managerMoveInFeeOverride,
     row.manualResidentDetails?.moveInFee != null
       ? String(row.manualResidentDetails.moveInFee)
-      : allowListingDefaults
-        ? sub?.moveInFee
+      : allowListingDefaults && sub
+        ? // per-room move-in wins; else the listing's move-in (unified fee row → legacy field)
+          (roomMoveInFee ??
+            String(listingPresetFeeAmount(sub, "move_in_fee") || parseMoneyAmount(sub.moveInFee ?? "")))
         : undefined,
   );
   pushCharge("move_in_fee", moveInFee, chargeTitle("move_in_fee"), false, "Before move-in");
@@ -2549,14 +3162,28 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     pushCharge("other_cost", otherCostAmount, otherCostTitle, false, "Before move-in");
   }
 
+  // One-time custom fees bill ONCE at move-in. Only genuinely-custom rows are billed here
+  // (preset-backed rows bill through their own legacy fields); monthly custom fees bill
+  // through the recurring profile below, not here.
+  if (allowListingDefaults) {
+    for (const fee of oneTimeCustomFees(sub)) {
+      const amt = parseMoneyAmount(fee.amount ?? "");
+      if (amt > 0)
+        pushCharge("other_cost", amt, fee.label?.trim() || chargeTitle("other_cost"), false, "Before move-in", fee.id);
+    }
+  }
+
   const next = dedupeCharges([...rows, ...created]);
   const changed = chargesChanged(before, next);
   if (changed) writeAll(next);
 
-  // Set up recurring monthly rent (+ utilities) starting the month after move-in.
-  // The move-in month itself is always covered by the upfront first-month/prorated charges above.
+  // Set up recurring monthly rent (+ utilities + monthly custom fees) starting the month
+  // after move-in. The move-in month itself is covered by the upfront first-month/prorated
+  // charges above; monthly custom fees begin with the first full recurring month (they are a
+  // flat monthly service, not prorated, and are not charged for the partial move-in month).
+  const monthlyFeeSet = monthlyCustomFees(sub);
   let computedStartMonth: string | undefined;
-  if (leaseStart && (rentAmount > 0 || utilities.amount > 0 || (dailyBasisRate && dailyBasisRate > 0))) {
+  if (leaseStart && (rentAmount > 0 || utilities.amount > 0 || (dailyBasisRate && dailyBasisRate > 0) || monthlyFeeSet.length > 0)) {
     const [leaseYearRaw, leaseMonthRaw] = leaseStart.split("-").map(Number);
     if (leaseYearRaw && leaseMonthRaw) {
       computedStartMonth = firstRecurringMonthAfterLeaseStart(leaseStart);
@@ -2578,6 +3205,9 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         // switched daily -> monthly clears the old daily rate instead of inheriting it.
         dailyRentPrice: dailyBasisRate && dailyBasisRate > 0 ? dailyBasisRate : 0,
         monthlyUtilities: utilities.amount > 0 ? Number(utilities.amount.toFixed(2)) : 0,
+        // Always explicit (even []) so removing every monthly fee clears the stored set on
+        // re-approval rather than inheriting stale fees.
+        monthlyFees: monthlyFeeSet,
         dueDay: resolveRentDueDayForMonth(dueDayMode, computedStartMonth),
         dueDayMode,
         startMonth: computedStartMonth,

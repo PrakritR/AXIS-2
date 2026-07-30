@@ -11,14 +11,14 @@ test.describe("Manual payment verification UI", () => {
     await page.goto("/portal/payments");
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
 
-    await page.getByRole("button", { name: /link payment|payment setup|connect payment/i }).first().click();
-    await expect(page.getByRole("heading", { name: /link payment/i })).toBeVisible();
+    await page.locator('[data-attr="payments-setup"]').click();
+    await expect(page.getByRole("heading", { name: /payment setup/i })).toBeVisible();
     await page.getByRole("button", { name: /link zelle/i }).click();
 
     await expect(page.getByRole("heading", { name: /link zelle/i })).toBeVisible();
     await expect(page.getByText(/step 2 — turn on zelle email notifications/i)).toBeVisible();
     await expect(page.getByText(/step 3 — link gmail/i)).toBeVisible();
-    await expect(page.getByText(/step 4 — gmail filter/i)).toBeVisible();
+    await expect(page.getByText(/step 4 — forward zelle receipts/i)).toBeVisible();
     await expect(page.getByText(/forward it to/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /^copy$/i }).first()).toBeVisible();
   });

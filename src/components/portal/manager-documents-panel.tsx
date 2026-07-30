@@ -2,15 +2,17 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TabNav, useShallowTabId } from "@/components/ui/tabs";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
@@ -49,8 +51,13 @@ import {
   ManagerApplicationDocumentsTab,
   ManagerLeaseDocumentsTab,
 } from "@/components/portal/manager-documents-leasing-tabs";
-import { ManagerDocumentLibrary, type ManagerDocumentLibraryHandle } from "@/components/portal/manager-document-library";
+import {
+  DocumentLibraryFilterFields,
+  ManagerDocumentLibrary,
+  type ManagerDocumentLibraryHandle,
+} from "@/components/portal/manager-document-library";
 import { ManagerDocumentTemplatesPanel } from "@/components/portal/manager-document-templates-panel";
+import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABELS } from "@/lib/documents/manager-documents";
 
 export const DOCUMENT_TABS = [
   { id: "library", label: "Library" },
@@ -121,6 +128,11 @@ export function ManagerDocumentsPanel({
   const [expanded1099Id, setExpanded1099Id] = useState<string | null>(null);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const libraryRef = useRef<ManagerDocumentLibraryHandle>(null);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryCategoryFilter, setLibraryCategoryFilter] = useState("");
+  const [libraryScopeFilter, setLibraryScopeFilter] = useState("");
+  const [libraryPropertyFilter, setLibraryPropertyFilter] = useState("");
+  const [libraryExpiryFilter, setLibraryExpiryFilter] = useState("");
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -263,6 +275,69 @@ export function ManagerDocumentsPanel({
   const isTemplatesTab = tabId === "templates";
   const activeTabLabel = DOCUMENT_TABS.find((tab) => tab.id === tabId)?.label ?? "Documents";
 
+  const libraryCategoryOptions = useMemo(
+    () => DOCUMENT_CATEGORIES.map((c) => ({ id: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
+    [],
+  );
+
+  const libraryScopeOptions = useMemo(
+    () => [
+      { id: "", label: "All scopes" },
+      { id: "manager", label: "Manager-level" },
+      { id: "property", label: "Property" },
+      { id: "lease", label: "Lease" },
+      { id: "resident", label: "Resident" },
+      { id: "vendor", label: "Vendor" },
+      { id: "work_order", label: "Work order" },
+    ],
+    [],
+  );
+
+  const libraryPropertyOptions = useMemo(
+    () => propertyOptions.map((p) => ({ id: p.id, label: p.label })),
+    [propertyOptions],
+  );
+
+  const resetLibraryFilters = useCallback(() => {
+    setLibrarySearch("");
+    setLibraryCategoryFilter("");
+    setLibraryScopeFilter("");
+    setLibraryPropertyFilter("");
+    setLibraryExpiryFilter("");
+  }, []);
+
+  const libraryFilterActiveChips = useMemo((): PortalActiveFilterChip[] => {
+    if (!isLibraryTab) return [];
+    const chips: PortalActiveFilterChip[] = [];
+    if (librarySearch.trim()) {
+      chips.push({ id: "search", label: `Search: ${librarySearch.trim()}`, onRemove: () => setLibrarySearch("") });
+    }
+    if (libraryCategoryFilter) {
+      chips.push({ id: "category", label: `Category: ${libraryCategoryFilter}`, onRemove: () => setLibraryCategoryFilter("") });
+    }
+    if (libraryScopeFilter) {
+      const scopeLabel = libraryScopeOptions.find((s) => s.id === libraryScopeFilter)?.label ?? libraryScopeFilter;
+      chips.push({ id: "scope", label: `Scope: ${scopeLabel}`, onRemove: () => setLibraryScopeFilter("") });
+    }
+    if (libraryPropertyFilter) {
+      const propLabel = libraryPropertyOptions.find((p) => p.id === libraryPropertyFilter)?.label ?? libraryPropertyFilter;
+      chips.push({ id: "property", label: `Property: ${propLabel}`, onRemove: () => setLibraryPropertyFilter("") });
+    }
+    if (libraryExpiryFilter) {
+      chips.push({ id: "expiry", label: `Expiry: ${libraryExpiryFilter}`, onRemove: () => setLibraryExpiryFilter("") });
+    }
+    return chips;
+  }, [
+    isLibraryTab,
+    librarySearch,
+    libraryCategoryFilter,
+    libraryScopeFilter,
+    libraryPropertyFilter,
+    libraryExpiryFilter,
+    libraryScopeOptions,
+    libraryPropertyOptions,
+  ]);
+
   const handleGenerateReport = useCallback(() => {
     setGenerateModalOpen(false);
     void runReport();
@@ -304,50 +379,129 @@ export function ManagerDocumentsPanel({
       (tabId === "expense-documents" && generated) ||
       Boolean(incomeReceiptExportHref && generated));
 
+  const documentsFilterSheet = isLibraryTab ? (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([
+        librarySearch,
+        libraryCategoryFilter,
+        libraryScopeFilter,
+        libraryPropertyFilter,
+        libraryExpiryFilter,
+      ])}
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      onReset={resetLibraryFilters}
+      dataAttr="documents-filter-sheet-open"
+    >
+      <DocumentLibraryFilterFields
+        search={librarySearch}
+        onSearchChange={setLibrarySearch}
+        categoryFilter={libraryCategoryFilter}
+        onCategoryFilterChange={setLibraryCategoryFilter}
+        scopeFilter={libraryScopeFilter}
+        onScopeFilterChange={setLibraryScopeFilter}
+        propertyFilter={libraryPropertyFilter}
+        onPropertyFilterChange={setLibraryPropertyFilter}
+        expiryFilter={libraryExpiryFilter}
+        onExpiryFilterChange={setLibraryExpiryFilter}
+        expiryPills={[
+          { id: "", label: "All", count: 0 },
+          { id: "expired", label: "Expired", count: 0 },
+          { id: "expiring30", label: "Expiring ≤30d", count: 0 },
+          { id: "expiring90", label: "Expiring ≤90d", count: 0 },
+        ]}
+        categoryFilterOptions={libraryCategoryOptions}
+        scopeFilterOptions={libraryScopeOptions}
+        propertyFilterOptions={libraryPropertyOptions}
+        propertyOptions={libraryPropertyOptions}
+      />
+    </PortalFilterSortSheet>
+  ) : null;
+
+  const documentsUploadButton = isLibraryTab ? (
+    <Button
+      type="button"
+      variant="primary"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => libraryRef.current?.openUpload()}
+      disabled={isDemoModeActive()}
+      data-attr="document-upload-open"
+    >
+      Upload
+    </Button>
+  ) : null;
+
+  const documentsGenerateButton =
+    !isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => setGenerateModalOpen(true)}
+        disabled={loading}
+        data-attr="documents-generate-report"
+      >
+        {loading ? "Generating…" : "Generate report"}
+      </Button>
+    ) : null;
+
+  const documentsPrimaryButton = documentsUploadButton ?? documentsGenerateButton;
+
+  const documentsDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
+      {documentsFilterSheet}
+      {hasExportActions ? exportActions : null}
+      {documentsPrimaryButton}
+    </PortalSectionActionRow>
+  );
+
+  const documentsMobileActionsRow =
+    isLibraryTab || documentsPrimaryButton ? (
+      <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="documents-mobile-actions">
+        {isLibraryTab ? <div className="min-w-0">{documentsFilterSheet}</div> : null}
+        <div className={isLibraryTab ? "min-w-0" : "col-span-2 min-w-0"}>
+          {hasExportActions ? exportActions : null}
+          {documentsPrimaryButton}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <ManagerPortalPageShell
       title="Documents"
-      titleAside={
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {hasExportActions ? (
-            <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
-          ) : null}
-          {isLibraryTab ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              onClick={() => libraryRef.current?.openUpload()}
-              disabled={isDemoModeActive()}
-              data-attr="document-upload-open"
-            >
-              Upload
-            </Button>
-          ) : null}
-          {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
-          <Button
-            type="button"
-            variant="primary"
-            className={PORTAL_HEADER_ACTION_BTN}
-            onClick={() => setGenerateModalOpen(true)}
-            disabled={loading}
-            data-attr="documents-generate-report"
-          >
-            {loading ? "Generating…" : "Generate report"}
-          </Button>
-          ) : null}
-        </div>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav shallow activeId={tabId} items={documentTabItems} />
-          {hasExportActions ? <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>{exportActions}</div> : null}
-        </ManagerPortalFilterRow>
-      }
+      titleAside={documentsDesktopHeaderActions}
+      hideTitleOnMobileNav
+      compactFilterRow
     >
+      {documentsMobileActionsRow}
+      <PortalListControlStack
+        className="mb-3"
+        destinations={documentTabItems}
+        activeDestinationId={tabId}
+        destinationAriaLabel="Document views"
+        activeFilterChips={
+          libraryFilterActiveChips.length > 0 ? (
+            <PortalActiveFilterChips chips={libraryFilterActiveChips} />
+          ) : null
+        }
+      />
       <div className="space-y-4">
         {tabId === "library" ? (
-          <ManagerDocumentLibrary ref={libraryRef} userId={userId ?? null} />
+          <ManagerDocumentLibrary
+            ref={libraryRef}
+            userId={userId ?? null}
+            hideFilterChrome
+            search={librarySearch}
+            onSearchChange={setLibrarySearch}
+            categoryFilter={libraryCategoryFilter}
+            onCategoryFilterChange={setLibraryCategoryFilter}
+            scopeFilter={libraryScopeFilter}
+            onScopeFilterChange={setLibraryScopeFilter}
+            propertyFilter={libraryPropertyFilter}
+            onPropertyFilterChange={setLibraryPropertyFilter}
+            expiryFilter={libraryExpiryFilter}
+            onExpiryFilterChange={setLibraryExpiryFilter}
+          />
         ) : tabId === "templates" ? (
           <ManagerDocumentTemplatesPanel />
         ) : tabId === "applications" ? (

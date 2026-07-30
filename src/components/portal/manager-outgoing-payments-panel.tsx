@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerOutgoingPaymentDetail } from "@/components/portal/manager-outgoing-payment-detail";
@@ -9,26 +9,34 @@ import {
   PortalDataTableEmpty,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { deleteManagerOutgoingExpense } from "@/lib/manager-outgoing-payments";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
+import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 export function ManagerOutgoingPaymentsPanel({
   rows,
-  activeBucket: _activeBucket,
+  activeBucket,
   vendorById,
   onRowsChanged,
+  paymentId: paymentIdProp,
+  listBasePath,
 }: {
   rows: DemoManagerOutgoingPaymentRow[];
   activeBucket: ManagerPaymentBucket;
   vendorById?: Map<string, ManagerVendorRow>;
   onRowsChanged?: () => void;
+  paymentId?: string;
+  listBasePath?: string;
 }) {
   const { showToast } = useAppUi();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigate = usePortalNavigate();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [payModalRowId, setPayModalRowId] = useState<string | null>(null);
 
@@ -38,19 +46,24 @@ export function ManagerOutgoingPaymentsPanel({
     return map;
   }, [rows]);
 
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const detailRow = useMemo(() => {
+    if (!paymentIdProp) return null;
+    const decoded = decodeURIComponent(paymentIdProp);
+    return rows.find((row) => row.id === decoded) ?? null;
+  }, [paymentIdProp, rows]);
 
-  const tableRows = useMemo<PortalPaymentTableRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.id,
-        charge: row.chargeTitle,
-        property: row.propertyName,
-        payee: row.payeeLabel,
-        dueDate: row.dueDate,
-        amount: row.amountLabel,
-      })),
-    [rows],
+  const navigateToList = useCallback(() => {
+    if (!listBasePath) return;
+    navigate(paymentListHref(listBasePath, "outgoing", activeBucket));
+  }, [activeBucket, listBasePath, navigate]);
+
+  const openPaymentDetail = useCallback(
+    (row: DemoManagerOutgoingPaymentRow) => {
+      if (listBasePath) {
+        navigate(paymentDetailHref(listBasePath, "outgoing", activeBucket, row.id));
+      }
+    },
+    [activeBucket, listBasePath, navigate],
   );
 
   const deleteExpense = async (row: DemoManagerOutgoingPaymentRow) => {
@@ -70,7 +83,7 @@ export function ManagerOutgoingPaymentsPanel({
         showToast("Could not delete expense.");
         return;
       }
-      setExpandedId(null);
+      navigateToList();
       showToast("Expense removed.");
       onRowsChanged?.();
       return;
@@ -85,7 +98,7 @@ export function ManagerOutgoingPaymentsPanel({
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not delete expense.");
       deleteManagerOutgoingExpense(row.expenseEntryId);
-      setExpandedId(null);
+      navigateToList();
       showToast("Expense removed.");
       onRowsChanged?.();
     } catch (e) {
@@ -101,8 +114,7 @@ export function ManagerOutgoingPaymentsPanel({
   const isPayableWorkOrder = (row: DemoManagerOutgoingPaymentRow) =>
     Boolean(row.workOrderId && row.bucket !== "paid");
 
-  const renderExpandedActions = (tr: PortalPaymentTableRow) => {
-    const row = rowById.get(tr.id)!;
+  const renderHeaderActions = (row: DemoManagerOutgoingPaymentRow) => {
     const payable = isPayableWorkOrder(row);
     return (
       <PortalTableDetailActions>
@@ -112,10 +124,7 @@ export function ManagerOutgoingPaymentsPanel({
             variant="primary"
             className={PORTAL_DETAIL_BTN}
             data-attr="manager-outgoing-payment-mark-paid"
-            onClick={(event) => {
-              event.stopPropagation();
-              setPayModalRowId(row.id);
-            }}
+            onClick={() => setPayModalRowId(row.id)}
           >
             Mark as paid
           </Button>
@@ -127,10 +136,7 @@ export function ManagerOutgoingPaymentsPanel({
             className={PORTAL_DETAIL_BTN}
             disabled={deletingId === row.id}
             data-attr="outgoing-payment-delete"
-            onClick={(event) => {
-              event.stopPropagation();
-              void deleteExpense(row);
-            }}
+            onClick={() => void deleteExpense(row)}
           >
             {deletingId === row.id ? "Deleting…" : "Delete"}
           </Button>
@@ -139,8 +145,7 @@ export function ManagerOutgoingPaymentsPanel({
     );
   };
 
-  const renderExpandedDetail = (tr: PortalPaymentTableRow) => {
-    const row = rowById.get(tr.id)!;
+  const renderDetailBody = (row: DemoManagerOutgoingPaymentRow) => {
     const workOrder = row.workOrderId ? workOrderById.get(row.workOrderId) : undefined;
     const vendor = row.vendorId ? vendorById?.get(row.vendorId) : undefined;
     if (row.workOrderId) {
@@ -156,7 +161,7 @@ export function ManagerOutgoingPaymentsPanel({
           }}
           onPaid={() => {
             setPayModalRowId(null);
-            setExpandedId(null);
+            navigateToList();
             onRowsChanged?.();
           }}
           onDelete={canDeleteExpense(row) ? () => void deleteExpense(row) : undefined}
@@ -177,13 +182,38 @@ export function ManagerOutgoingPaymentsPanel({
     return <PortalDataTableEmpty message="No outgoing payments in this bucket yet." icon="payment" />;
   }
 
+  if (paymentIdProp && detailRow) {
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Payments"
+        title={detailRow.chargeTitle}
+        subtitle={detailRow.payeeLabel}
+        backHref={listBasePath ? paymentListHref(listBasePath, "outgoing", activeBucket) : "#"}
+        backLabel="Back to payments"
+        hideBackText
+        bareHeader
+        dataAttrBack="outgoing-payment-detail-back"
+        inlineActions
+        actions={renderHeaderActions(detailRow)}
+      >
+        {renderDetailBody(detailRow)}
+      </PortalRecordDetailPage>
+    );
+  }
+
   return (
-    <PortalPaymentsTable
-      rows={tableRows}
-      expandedId={expandedId}
-      onExpand={setExpandedId}
-      renderExpandedActions={renderExpandedActions}
-      renderExpandedDetail={renderExpandedDetail}
-    />
+    <div className={PORTAL_LIST_PAGE_BODY}>
+      {rows.map((row) => (
+        <PortalPersonRecordRow
+          key={row.id}
+          name={row.chargeTitle}
+          subtitle={row.propertyName}
+          preview={row.payeeLabel}
+          meta={row.amountLabel}
+          onOpen={() => openPaymentDetail(row)}
+          dataAttr="outgoing-payment-list-row"
+        />
+      ))}
+    </div>
   );
 }

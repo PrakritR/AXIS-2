@@ -1,44 +1,69 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ManagerPortalFilterRow, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { useCommunicationSurfaceChrome } from "@/hooks/use-communication-surface-chrome";
+import { cn } from "@/lib/utils";
 
 /**
- * Communication page chrome — same pattern as Services:
- * compact TabNav + filter pills in the filter row, status pills below the divider.
+ * Communication page chrome — Appendix C1 control stack above the inbox body.
  */
 export function PortalCommunicationShell({
   title,
+  controlStack,
+  /** @deprecated Prefer `controlStack`. Kept for resident/vendor/admin shells. */
   titleAside,
-  channelNav,
+  titleInlineFilter,
+  /** @deprecated Prefer `controlStack`. */
   threadFilters,
-  statusPills,
   children,
+  hideMobileFilterRow = false,
+  compactFilterRow = true,
+  mobileThreadReading = false,
+  hideTitleOnMobileNav = true,
+  mobileActionsRow,
 }: {
   title: string;
+  controlStack?: ReactNode;
   titleAside?: ReactNode;
-  /** Email/SMS channel tabs removed — unified inbox uses folder pills only. */
-  channelNav?: ReactNode;
+  titleInlineFilter?: ReactNode;
   threadFilters?: ReactNode;
-  /** Legacy folder tabs; omitted in the unified conversation inbox. */
-  statusPills?: ReactNode;
   children: ReactNode;
+  hideMobileFilterRow?: boolean;
+  compactFilterRow?: boolean;
+  mobileThreadReading?: boolean;
+  hideTitleOnMobileNav?: boolean;
+  /** Full-width mobile action row (Filter | primary) above list chrome. */
+  mobileActionsRow?: ReactNode;
 }) {
+  const resolvedStack =
+    controlStack ??
+    (threadFilters ? <PortalListControlStack filterRow={threadFilters} /> : null);
+
+  useCommunicationSurfaceChrome({ active: true, threadReading: mobileThreadReading });
+
   return (
     <ManagerPortalPageShell
       title={title}
       titleAside={titleAside}
-      filterRow={
-        threadFilters || channelNav ? (
-          <ManagerPortalFilterRow>
-            {channelNav ? <div className="w-fit shrink-0">{channelNav}</div> : null}
-            {threadFilters}
-          </ManagerPortalFilterRow>
-        ) : undefined
-      }
+      titleInlineFilter={titleInlineFilter}
+      hideTitleOnMobileNav={hideTitleOnMobileNav}
+      compactFilterRow={compactFilterRow}
+      mobileHideFilterRow={hideMobileFilterRow}
+      mobileFlush={mobileThreadReading}
+      mobileThreadFill={mobileThreadReading}
     >
-      <div className="portal-communication-inbox mt-1">
-        {statusPills ? <div className="mb-4">{statusPills}</div> : null}
+      {mobileActionsRow && !hideMobileFilterRow ? mobileActionsRow : null}
+      {resolvedStack ? (
+        <div className={hideMobileFilterRow ? "mb-2 max-md:hidden" : "mb-2"}>{resolvedStack}</div>
+      ) : null}
+      <div
+        className={cn(
+          "portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1",
+          mobileThreadReading && "max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+        )}
+      >
         {children}
       </div>
     </ManagerPortalPageShell>

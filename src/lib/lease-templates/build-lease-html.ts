@@ -19,6 +19,8 @@ import {
 } from "@/lib/lease-utilities";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
+import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
+import { roomDailyRentPrice } from "@/lib/room-pricing";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 import { resolveStayPricing } from "@/lib/room-pricing";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
@@ -165,7 +167,10 @@ function overrideFeeLabel(overrideRaw: string | undefined | null, fallbackLabel:
     const amount = parseAmount(override);
     return amount != null ? fmtUsd(amount) : override;
   }
-  return fallbackLabel;
+  // Format the listing fallback as currency too — the listing-fee normalization stores
+  // amounts without a "$" (e.g. "500.00"), and a lease must show "$500.00", not "500.00".
+  const fallbackAmount = parseAmount(fallbackLabel);
+  return fallbackAmount != null ? fmtUsd(fallbackAmount) : fallbackLabel;
 }
 
 function isMonthToMonthOtherCost(label: string | undefined | null): boolean {
@@ -273,7 +278,16 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
   // ── Identity ──────────────────────────────────────────────────────────────
   const tenantRaw = (a.fullLegalName ?? "").trim() || "Resident";
-  const tenantName = escapeHtml(tenantRaw);
+  const jointTenants =
+    ctx.leaseKind === "joint_bundle" && ctx.jointLeaseMembers?.length
+      ? ctx.jointLeaseMembers.map((m) => m.residentName).filter(Boolean)
+      : [];
+  const tenantName =
+    jointTenants.length > 0 ? escapeHtml(jointTenants.join(", ")) : escapeHtml(tenantRaw);
+  const jointPartiesNote =
+    jointTenants.length > 0 && ctx.jointLeaseMembers
+      ? jointLeasePartiesParagraph(ctx.jointLeaseMembers)
+      : "";
   const tenantPhone = dash(a.phone);
   const tenantEmail = dash(a.email);
   const tenantDob = dash(a.dateOfBirth);
@@ -419,8 +433,46 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const otherCostAmount = escapeHtml(overrideFeeLabel(a.managerOtherCostAmount, "—"));
   const otherCostNum = otherCostIsMonthToMonth ? 0 : parseAmount(a.managerOtherCostAmount);
   const showOtherSigningCost = !otherCostIsMonthToMonth && Boolean(otherCostNum && otherCostNum > 0);
+
+  // One-time custom fees the manager added DO bill (once at move-in, via
+  // recordApprovedApplicationCharges), so they must appear in the lease and count toward the
+  // total due at signing — a lease that omits a billed charge is a legal problem. Only
+  // genuinely-custom rows are listed here (preset-backed rows render through their own lines);
+  // monthly custom fees are intentionally NOT listed because they do not yet bill.
+  const billableOneTimeCustomFees = (sub?.customFees ?? []).filter((fee) => {
+    const presetId = (fee as { presetId?: string }).presetId;
+    if (presetId && presetId !== "custom") return false;
+    if (fee.frequency !== "one-time") return false;
+    const n = parseAmount(fee.amount);
+    return n != null && n > 0;
+  });
+  const customFeesTotalNum = billableOneTimeCustomFees.reduce((s, f) => s + (parseAmount(f.amount) ?? 0), 0);
+  const customFeeSigningRows = billableOneTimeCustomFees
+    .map((f) => `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.amount) ?? 0))}</td></tr>`)
+    .join("\n");
+  // Monthly custom fees now bill (recurring, alongside rent), so they too must appear in the
+  // lease — as Monthly line items in Exhibit A (not in the due-at-signing total).
+  const billableMonthlyCustomFees = (sub?.customFees ?? []).filter((fee) => {
+    const presetId = (fee as { presetId?: string }).presetId;
+    if (presetId && presetId !== "custom") return false;
+    if (fee.frequency === "one-time") return false;
+    const n = parseAmount(fee.amount);
+    return n != null && n > 0;
+  });
+  const customFeeExhibitRows = [...billableOneTimeCustomFees, ...billableMonthlyCustomFees]
+    .map(
+      (f) =>
+        `  <tr><td>${escapeHtml(f.label?.trim() || "Custom fee")}</td><td>${escapeHtml(fmtUsd(parseAmount(f.amount) ?? 0))}</td><td>${
+          f.frequency === "one-time" ? "One-time" : "Monthly"
+        }</td></tr>`,
+    )
+    .join("\n");
+
   const paySigningBase = sub ? paymentAtSigningPriceLabel(sub) : "—";
-  const paySigningNum = (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0);
+  const paySigningFromCharges = ctx.leaseBilling && ctx.leaseBilling.dueAtSigning > 0 ? ctx.leaseBilling.dueAtSigning : null;
+  const paySigningNum =
+    paySigningFromCharges ??
+    (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0) + customFeesTotalNum;
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
 
   // ── Dates ─────────────────────────────────────────────────────────────────
@@ -431,7 +483,6 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
   // ── Content blocks ────────────────────────────────────────────────────────
   const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
-  const houseOverview = escapeHtml(sub?.houseOverview?.trim() || list?.tagline || "Shared co-living housing as described on the listing.");
   const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
   const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
   const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
@@ -511,6 +562,21 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
           ? Number((stayUtilitiesSpan.billableDays * stayDailyUtilitiesRate).toFixed(2))
           : Number((stayUtilitiesBase * (stayUtilitiesSpan.billableDays / stayUtilitiesSpan.daysInMonth)).toFixed(2))
         : 0;
+    // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
+    // they must appear in the stay's Payment table and count toward the total due.
+    const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
+      const presetId = (fee as { presetId?: string }).presetId;
+      if (presetId && presetId !== "custom") return false;
+      const n = parseAmount(fee.shortTermAmount);
+      return n != null && n > 0;
+    });
+    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(f.shortTermAmount) ?? 0), 0);
+    const stCustomFeeRows = stCustomFees
+      .map(
+        (f) =>
+          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.shortTermAmount) ?? 0))}</td></tr>`,
+      )
+      .join("\n");
     const totalDue =
       dailyCost && durationDays
         ? fmtUsd(
@@ -518,7 +584,8 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
               (depositAmount ?? 0) +
               stayMoveInNum +
               stayOtherNum +
-              stayUtilitiesNum,
+              stayUtilitiesNum +
+              stCustomFeesTotal,
           )
         : "—";
     const requirements = escapeHtml(
@@ -529,7 +596,11 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
-<h1>SHORT-TERM ROOM STAY AGREEMENT${durationDays ? ` (${durationDays}-Day Stay)` : ""}</h1>
+${
+  config.brandTitle
+    ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" style="font-weight:700;margin-bottom:0.15rem">SHORT-TERM ROOM STAY AGREEMENT${durationDays ? ` (${durationDays}-Day Stay)` : ""}</p>`
+    : `<h1>SHORT-TERM ROOM STAY AGREEMENT${durationDays ? ` (${durationDays}-Day Stay)` : ""}</h1>`
+}
 <p class="sub">Owner-Occupied Residence · ${config.headerSubtitle}</p>
 <p class="generated">Generated ${generatedDate} via PropLane</p>
 
@@ -561,6 +632,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   ${stayUtilitiesNum > 0 && stayUtilitiesSpan ? `<tr><th>Utilities estimate (${stayUtilitiesSpan.billableDays}/${stayUtilitiesSpan.daysInMonth} days)</th><td>${fmtUsd(stayUtilitiesNum)}</td></tr>` : ""}
   ${stayMoveInNum > 0 ? `<tr><th>Move-in fee</th><td>${fmtUsd(stayMoveInNum)}</td></tr>` : ""}
   ${stayOtherNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${fmtUsd(stayOtherNum)}</td></tr>` : ""}
+${stCustomFeeRows}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
 ${holdingCreditApplies ? `<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>` : ""}
@@ -598,16 +670,54 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
   }
 
+  const lateFeeUsd = config.defaultLateFeeUsd ?? 50;
+  const billing = ctx.leaseBilling;
+  const leaseSummaryHtml =
+    config.brandTitle && billing
+      ? `<div style="border:1px solid #999;padding:12px 14px;margin:0 0 1.25rem;background:#fafafa">
+  <p style="margin:0 0 0.5rem;font-weight:700;text-align:center">Lease Summary</p>
+  <table>
+    <tr><th width="40%">Resident</th><td>${tenantName}</td></tr>
+    <tr><th>Premises</th><td>${roomLabel}, ${address}</td></tr>
+    <tr><th>Lease term</th><td>${leaseStart} – ${leaseEnd} (${leaseTerm})</td></tr>
+    <tr><th>Monthly rent</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
+    <tr><th>Monthly utilities</th><td><strong>${utilitiesStr}</strong></td></tr>
+    ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
+    ${
+      billing.proratedRent != null && billing.proratedRent > 0
+        ? `<tr><th>First partial month (rent)</th><td>${fmtUsd(billing.proratedRent)}</td></tr>`
+        : ""
+    }
+    ${
+      billing.proratedUtilities != null && billing.proratedUtilities > 0
+        ? `<tr><th>First partial month (utilities)</th><td>${fmtUsd(billing.proratedUtilities)}</td></tr>`
+        : ""
+    }
+    <tr><th>Security deposit</th><td>${secDep}</td></tr>
+    <tr><th>Move-in fee</th><td>${moveInFee}</td></tr>
+    <tr class="total-row"><th>Payment due at signing</th><td><strong>${paySigning}</strong></td></tr>
+  </table>
+</div>`
+      : "";
+
+  const longTermTitleHtml = config.brandTitle
+    ? `<h1>${escapeHtml(config.brandTitle)}</h1>
+<p class="sub" style="font-size:1.05rem;font-weight:700;margin-bottom:0.25rem">RESIDENTIAL LEASE AGREEMENT</p>
+<p class="sub">${escapeHtml(config.headerSubtitle)}</p>`
+    : `<h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
+<p class="sub">${escapeHtml(config.headerSubtitle)}</p>`;
+
   const body = `
-<h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
-<p class="sub">${config.headerSubtitle}</p>
+${longTermTitleHtml}
 <p class="generated">Generated ${generatedDate} via PropLane</p>
+${leaseSummaryHtml}
 
 <h2>1. Parties</h2>
 <table>
   <tr><th width="35%">Landlord / Operator</th><td><strong>${landlordEntity}</strong><br/>Mailing address: ${landlordMailing}<br/>For notices, use PropLane portal messaging or the address above.</td></tr>
   <tr><th>Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${tenantPhone} &nbsp;·&nbsp; Email: ${tenantEmail}<br/>Date of birth: ${tenantDob}</td></tr>
 </table>
+${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
 
 <h2>2. Premises</h2>
 <p>Landlord leases to Resident the following private room and appurtenant shared-area rights:</p>
@@ -618,7 +728,6 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
   <tr><th>Room / unit</th><td><strong>${roomLabel}</strong></td></tr>
   <tr><th>Full description</th><td>${fullPremises}</td></tr>
 </table>
-<p>${houseOverview}</p>
 ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplianceParagraph)}</p>` : ""}
 
 <h2>3. Lease Term</h2>
@@ -634,7 +743,7 @@ ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplia
 </table>
 ${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</strong>. Each month's rent is the actual number of days of the term falling in that month multiplied by the daily base rent above. No fixed monthly rent total applies. The utilities estimate is billed monthly and is prorated for any partial month.</p>` : ""}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
-<p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of $50.00 shall be assessed and is immediately due. Additional late fees of $10.00 per day may accrue after the 10th of the month, not to exceed amounts permitted under ${config.lateFeeStatuteRef}.</p>
+<p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of <strong>${fmtUsd(lateFeeUsd)}</strong> (non-refundable) may be assessed. Acceptance of late payment does not waive Landlord&apos;s right to enforce late fees or pursue other remedies under this Agreement or applicable law.</p>
 
 ${proratedSection || ""}
 
@@ -644,6 +753,7 @@ ${proratedSection || ""}
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
   <tr><th>Move-in fee (non-refundable)</th><td>${moveInFee}</td></tr>
   ${showOtherSigningCost ? `<tr><th>${otherCostLabel}</th><td>${otherCostAmount}</td></tr>` : ""}
+${customFeeSigningRows}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
 <p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
@@ -781,6 +891,7 @@ ${houseRules
   <tr><td>Security deposit</td><td>${secDep}</td><td>One-time (refundable)</td></tr>
   <tr><td>Move-in fee</td><td>${moveInFee}</td><td>One-time (non-refundable)</td></tr>
   ${showOtherSigningCost ? `<tr><td>${otherCostLabel}</td><td>${otherCostAmount}</td><td>One-time</td></tr>` : ""}
+${customFeeExhibitRows}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 

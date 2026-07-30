@@ -10,12 +10,18 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { ArrowUp, ChevronLeft, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, Search, Trash2 } from "lucide-react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerSmsComposeModal } from "@/components/portal/manager-sms-compose-modal";
 import {
+  buildInboxThreadAssistantContext,
+  InboxThreadAssistantStrip,
+} from "@/components/portal/inbox-thread-assistant-strip";
+import {
   INBOX_LIST_SCROLL,
   InboxAvatar,
+  InboxComposer,
+  InboxReplyChannelPicker,
   InboxThreadEmpty,
   InboxTwoPane,
   PortalInboxEmptyState,
@@ -166,6 +172,8 @@ export const ManagerSmsPanel = forwardRef<
     controlledActiveId?: string | null;
     onControlledActiveIdChange?: (id: string | null) => void;
     onConversationOpened?: () => void;
+    /** Let the portal page scroll the thread instead of a nested pane (resident profile). */
+    pageScroll?: boolean;
   }
 >(function ManagerSmsPanel(
   {
@@ -182,6 +190,7 @@ export const ManagerSmsPanel = forwardRef<
     controlledActiveId,
     onControlledActiveIdChange,
     onConversationOpened,
+    pageScroll = false,
   },
   ref,
 ) {
@@ -213,6 +222,8 @@ export const ManagerSmsPanel = forwardRef<
     [controlledActiveId, onControlledActiveIdChange],
   );
   const [draft, setDraft] = useState("");
+  const [replyViaEmail, setReplyViaEmail] = useState(false);
+  const [replyViaSms, setReplyViaSms] = useState(true);
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
@@ -498,38 +509,89 @@ export const ManagerSmsPanel = forwardRef<
     [load, messagesDeleteEndpoint, showToast],
   );
 
+  useEffect(() => {
+    setDraft("");
+    setReplyViaEmail(false);
+    setReplyViaSms(true);
+  }, [activeId]);
+
   async function sendReply() {
-    if (!active?.resident.phone) return;
+    if (!active?.resident.phone && !replyViaEmail) return;
     const text = draft.trim();
     if (!text) return;
+    if (!replyViaEmail && !replyViaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
     setSending(true);
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          toPhone: active.resident.phone,
-          text,
-          residentUserId: active.resident.residentUserId,
-          // Which of this phone's threads the reply belongs to.
-          conversationKey: active.resident.conversationKey ?? null,
-        }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        showToast(body.error ?? "Could not send.");
-        return;
+      let smsOk = !replyViaSms;
+      let emailOk = !replyViaEmail;
+
+      if (replyViaSms) {
+        if (!active?.resident.phone) {
+          showToast("No phone on this conversation.");
+          return;
+        }
+        const res = await fetch(endpoint, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toPhone: active.resident.phone,
+            text,
+            residentUserId: active.resident.residentUserId,
+            conversationKey: active.resident.conversationKey ?? null,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        smsOk = res.ok;
+        if (!smsOk && !replyViaEmail) {
+          showToast(body.error ?? "Could not send.");
+          return;
+        }
       }
+
+      if (replyViaEmail) {
+        const email = active?.resident.residentEmail?.trim();
+        if (!email) {
+          showToast("No email on file for this resident.");
+          return;
+        }
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: "Property manager",
+            toEmails: [email],
+            subject: `Message from your property manager`,
+            text,
+            deliverToPortalInbox: true,
+            eventCategory: "messages",
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        emailOk = res.ok && data.ok === true;
+        if (!emailOk && !smsOk) {
+          showToast(data.error ?? "Could not send email.");
+          return;
+        }
+      }
+
       setDraft("");
-      // Un-hide if previously deleted locally and a new text was sent.
-      setHiddenConversationIds((prev) => {
-        if (!prev.has(active.rowId)) return prev;
-        const next = new Set(prev);
-        next.delete(active.rowId);
-        persistHiddenConversationIds(next);
-        return next;
-      });
+      if (replyViaSms) {
+        setHiddenConversationIds((prev) => {
+          if (!active || !prev.has(active.rowId)) return prev;
+          const next = new Set(prev);
+          next.delete(active.rowId);
+          persistHiddenConversationIds(next);
+          return next;
+        });
+      }
+      if (replyViaEmail && replyViaSms) showToast("Sent via email and SMS.");
+      else if (replyViaEmail) showToast("Email sent.");
+      else showToast("SMS sent.");
       await load();
     } catch {
       showToast("Could not send.");
@@ -537,6 +599,8 @@ export const ManagerSmsPanel = forwardRef<
       setSending(false);
     }
   }
+
+  const activeEmailAvailable = Boolean(active?.resident.residentEmail?.trim());
 
   const showThread = Boolean(activeId && active);
 
@@ -621,7 +685,7 @@ export const ManagerSmsPanel = forwardRef<
   const threadPane = !active ? (
     <InboxThreadEmpty hint="Choose a conversation on the left, or use New message above." />
   ) : (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
       <header
         className="portal-inbox-thread-header flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
@@ -660,9 +724,15 @@ export const ManagerSmsPanel = forwardRef<
         )}
       </header>
 
-      <div className="portal-inbox-thread-body min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]">
+      <div
+        className={
+          pageScroll
+            ? "portal-inbox-thread-body space-y-2 bg-background/40 px-3 py-4"
+            : "portal-inbox-thread-body min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
+        }
+      >
         {active.messages.length === 0 ? (
-          <div className="flex min-h-full items-center justify-center py-6">
+          <div className={`flex items-center justify-center py-6 ${pageScroll ? "" : "min-h-full"}`}>
             <PortalInboxEmptyState title="No messages in this conversation." />
           </div>
         ) : (
@@ -678,45 +748,35 @@ export const ManagerSmsPanel = forwardRef<
         <div ref={threadEndRef} />
       </div>
 
-      <form
-        className="portal-inbox-composer flex shrink-0 items-end gap-2 border-t border-border bg-card px-3 pt-2.5"
-        style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom, 0px))" }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void sendReply();
-        }}
-      >
-        <textarea
-          rows={1}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Text message"
-          maxLength={1600}
-          enterKeyHint="send"
-          className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-          data-attr="sms-messages-reply"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void sendReply();
-            }
-          }}
-        />
-        <button
-          type="submit"
-          disabled={sending || !draft.trim()}
-          className="mb-0.5 flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-full text-primary-foreground transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
-          style={{ background: BUBBLE_OUT_BG }}
-          aria-label="Send"
-          data-attr="sms-messages-send"
-        >
-          {sending ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          ) : (
-            <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
-          )}
-        </button>
-      </form>
+      <InboxThreadAssistantStrip
+        contextHint={buildInboxThreadAssistantContext({
+          subject: "SMS conversation",
+          from: smsConversationDisplayName(active.resident),
+          email: smsConversationSubtitle(active.resident) || active.resident.phone || undefined,
+        })}
+        storageScopeKey="Communication SMS thread"
+      />
+
+      <InboxComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => void sendReply()}
+        sending={sending}
+        disabled={!replyViaEmail && !replyViaSms}
+        placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
+        maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
+        dataAttr="sms-messages-reply"
+        channelBar={
+          activeEmailAvailable ? (
+            <InboxReplyChannelPicker
+              viaEmail={replyViaEmail}
+              viaSms={replyViaSms}
+              onViaEmailChange={setReplyViaEmail}
+              onViaSmsChange={setReplyViaSms}
+            />
+          ) : null
+        }
+      />
     </div>
   );
 
@@ -733,7 +793,7 @@ export const ManagerSmsPanel = forwardRef<
       ) : null}
 
       {suppressListPane ? (
-        <div className="flex min-h-0 flex-1 flex-col">{threadPane}</div>
+        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={showThread} list={listPane} thread={threadPane} />
       )}

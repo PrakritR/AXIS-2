@@ -4,7 +4,7 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -90,28 +90,86 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
-/** Toolbar select that shrinks to the current option label (not a fixed width). */
-function DocumentLibraryFilterSelect({
-  "aria-label": ariaLabel,
-  value,
-  onChange,
-  options,
-}: {
-  "aria-label": string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
+export type DocumentLibraryFilterFieldsProps = {
+  search: string;
+  onSearchChange: (value: string) => void;
+  categoryFilter: string;
+  onCategoryFilterChange: (value: string) => void;
+  scopeFilter: string;
+  onScopeFilterChange: (value: string) => void;
+  propertyFilter: string;
+  onPropertyFilterChange: (value: string) => void;
+  expiryFilter: string;
+  onExpiryFilterChange: (value: string) => void;
+  expiryPills: { id: string; label: string; count: number; alert?: boolean }[];
+  categoryFilterOptions: { id: string; label: string }[];
+  scopeFilterOptions: { id: string; label: string }[];
+  propertyFilterOptions: { id: string; label: string }[];
+  propertyOptions: { id: string; label: string }[];
+};
+
+export function DocumentLibraryFilterFields({
+  search,
+  onSearchChange,
+  categoryFilter,
+  onCategoryFilterChange,
+  scopeFilter,
+  onScopeFilterChange,
+  propertyFilter,
+  onPropertyFilterChange,
+  expiryFilter,
+  onExpiryFilterChange,
+  expiryPills,
+  categoryFilterOptions,
+  scopeFilterOptions,
+  propertyFilterOptions,
+  propertyOptions,
+}: DocumentLibraryFilterFieldsProps) {
   return (
-    <FieldSingleSelect
-      hideLabel
-      label={ariaLabel}
-      variant="pill"
-      wrapperClassName="w-fit max-w-full shrink-0"
-      value={value}
-      options={options}
-      onChange={onChange}
-    />
+    <div className="flex flex-col gap-3">
+      <ManagerPortalStatusPills
+        tabs={expiryPills}
+        activeId={expiryFilter}
+        onChange={onExpiryFilterChange}
+        activeTone="primary"
+        compact
+      />
+      <Input
+        type="search"
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        placeholder="Search by name…"
+        className="h-10 w-full text-sm"
+        aria-label="Search documents"
+        data-attr="document-search"
+      />
+      <PortalFilterChipRow
+        ariaLabel="Filter by category"
+        value={categoryFilter}
+        onChange={onCategoryFilterChange}
+        allLabel="All categories"
+        options={categoryFilterOptions}
+        className="w-full"
+      />
+      <PortalFilterChipRow
+        ariaLabel="Filter by scope"
+        value={scopeFilter}
+        onChange={onScopeFilterChange}
+        allowAll={false}
+        options={scopeFilterOptions}
+        className="w-full"
+      />
+      {propertyOptions.length > 0 ? (
+        <PortalFilterChipRow
+          ariaLabel="Filter by property"
+          value={propertyFilter}
+          onChange={onPropertyFilterChange}
+          allLabel="All properties"
+          options={propertyFilterOptions}
+          className="w-full"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -119,19 +177,60 @@ export type ManagerDocumentLibraryHandle = {
   openUpload: () => void;
 };
 
-export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, { userId: string | null }>(
-  function ManagerDocumentLibrary({ userId }, ref) {
+type ManagerDocumentLibraryProps = {
+  userId: string | null;
+  hideFilterChrome?: boolean;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  categoryFilter?: string;
+  onCategoryFilterChange?: (value: string) => void;
+  scopeFilter?: string;
+  onScopeFilterChange?: (value: string) => void;
+  propertyFilter?: string;
+  onPropertyFilterChange?: (value: string) => void;
+  expiryFilter?: string;
+  onExpiryFilterChange?: (value: string) => void;
+};
+
+export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, ManagerDocumentLibraryProps>(
+  function ManagerDocumentLibrary(
+    {
+      userId,
+      hideFilterChrome = false,
+      search: searchProp,
+      onSearchChange,
+      categoryFilter: categoryFilterProp,
+      onCategoryFilterChange,
+      scopeFilter: scopeFilterProp,
+      onScopeFilterChange,
+      propertyFilter: propertyFilterProp,
+      onPropertyFilterChange,
+      expiryFilter: expiryFilterProp,
+      onExpiryFilterChange,
+    },
+    ref,
+  ) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
   const searchParams = useSearchParams();
 
   const [documents, setDocuments] = useState<ManagerDocumentDTO[]>([]);
   const [loading, setLoading] = useState(!demo);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
-  const [scopeFilter, setScopeFilter] = useState<string>("");
-  const [propertyFilter, setPropertyFilter] = useState<string>("");
-  const [expiryFilter, setExpiryFilter] = useState("");
+  const [searchState, setSearchState] = useState("");
+  const [categoryFilterState, setCategoryFilterState] = useState<string>("");
+  const [scopeFilterState, setScopeFilterState] = useState<string>("");
+  const [propertyFilterState, setPropertyFilterState] = useState<string>("");
+  const [expiryFilterState, setExpiryFilterState] = useState("");
+  const search = searchProp ?? searchState;
+  const setSearch = onSearchChange ?? setSearchState;
+  const categoryFilter = categoryFilterProp ?? categoryFilterState;
+  const setCategoryFilter = onCategoryFilterChange ?? setCategoryFilterState;
+  const scopeFilter = scopeFilterProp ?? scopeFilterState;
+  const setScopeFilter = onScopeFilterChange ?? setScopeFilterState;
+  const propertyFilter = propertyFilterProp ?? propertyFilterState;
+  const setPropertyFilter = onPropertyFilterChange ?? setPropertyFilterState;
+  const expiryFilter = expiryFilterProp ?? expiryFilterState;
+  const setExpiryFilter = onExpiryFilterChange ?? setExpiryFilterState;
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -144,23 +243,17 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, {
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
 
   const categoryFilterOptions = useMemo(
-    () => [
-      { value: "", label: "All categories" },
-      ...DOCUMENT_CATEGORIES.map((c) => ({ value: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
-    ],
+    () => DOCUMENT_CATEGORIES.map((c) => ({ id: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
     [],
   );
 
   const scopeFilterOptions = useMemo(
-    () => SCOPE_FILTERS.map((s) => ({ value: s.id, label: s.label })),
+    () => SCOPE_FILTERS.map((s) => ({ id: s.id, label: s.label })),
     [],
   );
 
   const propertyFilterOptions = useMemo(
-    () => [
-      { value: "", label: "All properties" },
-      ...propertyOptions.map((p) => ({ value: p.id, label: p.label })),
-    ],
+    () => propertyOptions.map((p) => ({ id: p.id, label: p.label })),
     [propertyOptions],
   );
 
@@ -472,44 +565,25 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, {
   return (
     <div className="space-y-3">
       {complianceBanner}
-      <div className="flex flex-wrap items-center gap-2">
-        <ManagerPortalStatusPills
-          tabs={expiryPills}
-          activeId={expiryFilter}
-          onChange={setExpiryFilter}
-          activeTone="primary"
-          compact
+      {hideFilterChrome ? null : (
+        <DocumentLibraryFilterFields
+          search={search}
+          onSearchChange={setSearch}
+          categoryFilter={categoryFilter}
+          onCategoryFilterChange={setCategoryFilter}
+          scopeFilter={scopeFilter}
+          onScopeFilterChange={setScopeFilter}
+          propertyFilter={propertyFilter}
+          onPropertyFilterChange={setPropertyFilter}
+          expiryFilter={expiryFilter}
+          onExpiryFilterChange={setExpiryFilter}
+          expiryPills={expiryPills}
+          categoryFilterOptions={categoryFilterOptions}
+          scopeFilterOptions={scopeFilterOptions}
+          propertyFilterOptions={propertyFilterOptions}
+          propertyOptions={propertyOptions}
         />
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          className="h-8 min-w-[7.5rem] max-w-[10rem] flex-1 text-sm"
-          aria-label="Search documents"
-          data-attr="document-search"
-        />
-        <DocumentLibraryFilterSelect
-          aria-label="Filter by category"
-          value={categoryFilter}
-          onChange={setCategoryFilter}
-          options={categoryFilterOptions}
-        />
-        <DocumentLibraryFilterSelect
-          aria-label="Filter by scope"
-          value={scopeFilter}
-          onChange={setScopeFilter}
-          options={scopeFilterOptions}
-        />
-        {propertyOptions.length > 0 ? (
-          <DocumentLibraryFilterSelect
-            aria-label="Filter by property"
-            value={propertyFilter}
-            onChange={setPropertyFilter}
-            options={propertyFilterOptions}
-          />
-        ) : null}
-      </div>
+      )}
 
       {demo ? (
         <PortalDataTableEmpty
@@ -777,9 +851,6 @@ function UploadModal({
       title={title}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
@@ -1001,9 +1072,6 @@ function EditDocumentModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>

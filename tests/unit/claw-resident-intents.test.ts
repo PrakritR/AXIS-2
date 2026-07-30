@@ -65,7 +65,7 @@ describe("buildManagerResidentBrief", () => {
   it("leads with Property, Resident, Said, and Reply; link only when auto-filed", () => {
     const brief = buildManagerResidentBrief({
       residentName: "Test Resident",
-      residentEmail: "resident@test.axis.local",
+      residentEmail: "resident@test.proplane.local",
       residentPhone: "+15105794001",
       said: "my toilet is broken",
       wants: "file a maintenance work order",

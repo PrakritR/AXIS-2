@@ -80,18 +80,18 @@ npm run test:seed
 npm run test:cleanup -- <testRunId>
 ```
 
-### Canonical demo portal accounts (`@test.axis.local`)
+### Canonical demo portal accounts (`@test.proplane.local`)
 
 `npm run test:seed` provisions the sandbox accounts below. It seeds them with **no portfolio rows**: the shared portfolio seed sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose — there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch.
 
 | Role | Email | Password (default) |
 |------|-------|---------------------|
-| Admin | `admin@test.axis.local` | `TestAdmin123!` |
-| Manager (demo portfolio) | `manager@test.axis.local` | `TestManager123!` |
-| Manager (browse catalog) | `manager2@test.axis.local` | `TestManager123!` |
-| Resident | `resident@test.axis.local` | `TestResident123!` |
-| Vendor | `vendor@test.axis.local` | `TestVendor123!` |
-| All portals | `testeverything@test.axis.local` | `TestEverything123!` |
+| Admin | `admin@test.proplane.local` | `TestAdmin123!` |
+| Manager (demo portfolio) | `manager@test.proplane.local` | `TestManager123!` |
+| Manager (browse catalog) | `manager2@test.proplane.local` | `TestManager123!` |
+| Resident | `resident@test.proplane.local` | `TestResident123!` |
+| Vendor | `vendor@test.proplane.local` | `TestVendor123!` |
+| All portals | `testeverything@test.proplane.local` | `TestEverything123!` |
 
 - **Signed-in portal** (`/portal`, `/resident`, `/vendor`) reads and writes these rows in the test Supabase project.
 - **`/demo`** loads the same data read-only via `/api/demo/portal-snapshot` (changes in demo stay in the browser; a refresh re-seeds from the mirror; portal edits persist to the DB and show up in demo — never the reverse). That mirror is currently switched OFF at `DEMO_PORTAL_MIRROR_ENABLED` (`src/lib/demo/demo-mirror-flag.ts`), so `/demo` renders empty states regardless of what these accounts hold.
@@ -100,4 +100,4 @@ npm run test:cleanup -- <testRunId>
 - Re-run `npm run test:seed` after schema changes or when demo portfolio data drifts.
 - Production gets the same accounts (minus `admin@` and `manager2@`) via the admin-gated `POST /api/admin/provision-sandbox-accounts` — same shared implementation (`src/lib/demo/canonical-demo-portfolio-db.ts`), run once per environment.
 
-Browse-catalog E2E properties live on `manager2@test.axis.local` so they do not collide with the demo manager portfolio.
+Browse-catalog E2E properties live on `manager2@test.proplane.local` so they do not collide with the demo manager portfolio.

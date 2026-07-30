@@ -106,10 +106,19 @@ export function validateManagerApplicationFeeCents(raw: unknown): ManagerApplica
  */
 export function effectiveApplicationFeeCents(input: {
   managerFeeCents: number | null;
-  listingFeeCents: number;
+  /**
+   * The listing's OWN application fee in cents, or `null` when the listing sets no value.
+   *
+   * Per-listing is AUTHORITATIVE (captain decision, [app-fee-authority] option B): a value
+   * here — INCLUDING 0, which means "free" — wins and is charged. The account-wide
+   * `managerFeeCents` is only a DEFAULT for listings that set nothing; it never overrides a
+   * listing's own value. Passing 0 vs `null` is load-bearing: a deliberate per-listing $0
+   * must never fall through to a non-zero account-wide value.
+   */
+  listingFeeCents: number | null;
 }): number {
+  if (input.listingFeeCents !== null) return input.listingFeeCents;
   if (input.managerFeeCents !== null) return input.managerFeeCents;
-  if (input.listingFeeCents > 0) return input.listingFeeCents;
   return LEGACY_DEFAULT_APPLICATION_FEE_CENTS;
 }
 

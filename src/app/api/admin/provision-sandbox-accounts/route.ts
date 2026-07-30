@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 /**
  * Admin-gated, run-once-per-environment: provisions the canonical sandbox
- * accounts (manager@ / resident@ / vendor@ / testeverything@test.axis.local)
+ * accounts (manager@ / resident@ / vendor@ / testeverything@test.proplane.local)
  * with their roles, pro tier, and (by default) the idle demo portfolio into
  * THIS deployment's database — currently an EMPTY portfolio, so it provisions
  * logins only; see `provision-sandbox-accounts.server.ts` for why. On production

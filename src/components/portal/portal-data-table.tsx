@@ -4,8 +4,11 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalListPreviewLimit, sliceForPortalPreview } from "@/lib/portal-mobile-preview";
 
-/** Outer frame for tabbed portal tables — solid card surface (not glass). */
-export const PORTAL_DATA_TABLE_WRAP =
+/** Outer frame for tabbed portal tables — flat on the page canvas by default. */
+export const PORTAL_DATA_TABLE_WRAP = "relative z-0 max-w-full overflow-hidden";
+
+/** Optional card frame when a table needs explicit elevation. */
+export const PORTAL_DATA_TABLE_WRAP_CARD =
   "relative z-0 max-w-full overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-sm)]";
 
 export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 min-w-0 max-w-full overflow-hidden";
@@ -145,7 +148,7 @@ export const PORTAL_TABLE_TD = "max-w-0 break-words px-4 py-4 align-middle text-
 
 /** Compact card shell for mobile portal lists (pair with {@link PortalResponsiveDataView}). */
 export const PORTAL_MOBILE_CARD_CLASS =
-  "rounded-2xl border border-border bg-card p-3.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3";
+  "rounded-2xl border border-border bg-card p-3.5 max-lg:rounded-xl max-lg:p-3 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-2.5";
 
 /** Expanded detail block below a mobile summary card row. */
 export const PORTAL_MOBILE_DETAIL_EXPAND =

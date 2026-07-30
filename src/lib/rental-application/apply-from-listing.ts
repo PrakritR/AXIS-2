@@ -15,6 +15,8 @@ export type RentalApplyFromListingParams = {
    * when opened from a leasing SMS apply link.
    */
   phone?: string;
+  /** Pre-select long-term vs short-term application form (`standard` | `short_term`). */
+  rentalType?: "standard" | "short_term";
 };
 
 export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
@@ -26,5 +28,6 @@ export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
   if (p.roomPrice) q.set("roomPrice", p.roomPrice);
   if (p.bundleId) q.set("bundle", p.bundleId);
   if (p.phone?.trim()) q.set("phone", p.phone.trim());
+  if (p.rentalType === "short_term") q.set("rentalType", "short_term");
   return `/rent/apply?${q.toString()}`;
 }

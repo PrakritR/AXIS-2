@@ -12,6 +12,7 @@ export type ManagerApplyLinkParams = {
   bundleId?: string;
   /** Prospect phone for SMS apply-link prefill. */
   phone?: string;
+  rentalType?: "standard" | "short_term";
 };
 
 export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkParams): string {
@@ -22,6 +23,7 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
     listingRoomName: params.roomName?.trim() || undefined,
     bundleId: params.bundleId?.trim() || undefined,
     phone: params.phone?.trim() || undefined,
+    rentalType: params.rentalType,
   });
   return `${base}${path}`;
 }
@@ -48,10 +50,51 @@ export function buildManagerTourUrl(origin: string, propertyId: string): string 
   return `${base}${buildTourContactHref(propertyId)}`;
 }
 
+/**
+ * Portfolio tour link — prospect picks a property before scheduling. Uses the same
+ * `ids` param as browse so managers can share one link for all linked homes.
+ */
+export function buildPortfolioTourContactHref(propertyIds: string[]): string {
+  const ids = parseBrowseIdsParam(propertyIds.join(","));
+  if (ids.length === 0) return "/rent/tours-contact";
+  const q = new URLSearchParams({ [BROWSE_IDS_PARAM]: ids.join(",") });
+  return `/rent/tours-contact?${q.toString()}`;
+}
+
+export function buildManagerPortfolioTourUrl(origin: string, propertyIds: string[]): string {
+  const base = origin.replace(/\/$/, "");
+  return `${base}${buildPortfolioTourContactHref(propertyIds)}`;
+}
+
 export function buildManagerListingUrl(origin: string, propertyId: string): string {
   const base = origin.replace(/\/$/, "");
   const id = propertyId.trim();
   return `${base}/rent/listings/${encodeURIComponent(id)}`;
+}
+
+
+/**
+ * Portfolio application link — prospect picks a home from the manager's selection,
+ * then continues into the rental application wizard for that property.
+ */
+export function buildPortfolioApplyHref(
+  propertyIds: string[],
+  opts?: { rentalType?: "standard" | "short_term" },
+): string {
+  const ids = parseBrowseIdsParam(propertyIds.join(","));
+  if (ids.length === 0) return "/rent/apply";
+  const q = new URLSearchParams({ [BROWSE_IDS_PARAM]: ids.join(",") });
+  if (opts?.rentalType === "short_term") q.set("rentalType", "short_term");
+  return `/rent/apply?${q.toString()}`;
+}
+
+export function buildManagerPortfolioApplyUrl(
+  origin: string,
+  propertyIds: string[],
+  opts?: { rentalType?: "standard" | "short_term" },
+): string {
+  const base = origin.replace(/\/$/, "");
+  return `${base}${buildPortfolioApplyHref(propertyIds, opts)}`;
 }
 
 /** Query param on `/rent/browse` that pre-filters the grid to a set of listings. */

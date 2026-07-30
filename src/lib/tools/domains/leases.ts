@@ -9,15 +9,21 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import {
   applyLeaseDraftUpdate,
+  applicationPatchFromLeasePacketInput,
   buildLeaseDraft,
   buildLeaseDraftPreview,
+  buildLeasePacketPreview,
+  buildLeaseDocumentSectionsPreview,
   type CreateLeaseDraftInput,
   type UpdateLeaseDraftInput,
+  type UpdateLeasePacketInput,
 } from "./leases-logic";
 import { loadManagerApplications } from "./residents";
 import { findOwnedResident } from "./residents-logic";
 import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease } from "@/lib/lease-amendment.server";
+import { patchLeasePacketForManagerReview, patchLeaseDocumentSectionsForManagerReview } from "@/lib/lease-packet-edit.server";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { loadAllManagerRows } from "./load-manager-rows";
 import { writeAuditLog, updateAuditResult, auditDayBucket } from "../audit";
 
@@ -411,7 +417,12 @@ export const sendLeaseForSignatureTool = defineWriteTool({
         senderEmail: ctx.email,
         fromName,
         subject: "Your lease is ready to sign",
-        text: `Your lease${row.unit && row.unit !== "—" ? ` for ${row.unit}` : ""} is ready for your electronic signature. Log in to your PropLane resident portal to review and sign it.`,
+        text: buildLeaseReadyForResidentMessage({
+          residentName: row.residentName || "there",
+          residentEmail,
+          unit: row.unit && row.unit !== "—" ? row.unit : "your unit",
+          variant: "send",
+        }),
         toEmails: [residentEmail],
         deliverToPortalInbox: true,
         deliverViaEmail: true,
@@ -562,3 +573,102 @@ export const updateLeaseDraftTool = defineWriteTool<UpdateLeaseDraftInput, { rep
     return { reply: `Updated the lease draft for ${updated.residentName}.` };
   },
 });
+
+export const updateLeasePacketTool = defineWriteTool<UpdateLeasePacketInput, { reply: string }>({
+  name: "update_lease_packet",
+  description:
+    "Update an in-review lease packet on the Leases page: change rent, utilities, deposit, move-in fee, lease dates, term, room, stay type (standard vs short-term), unit label, or notes. Regenerates the lease HTML and keeps the packet in manager review. Use only when context is Lease packet edit with leaseId=, or after list_leases resolves the id.",
+  inputSchema: z
+    .object({
+      leaseId: z.string().min(1).describe("Lease id from list_leases or the Lease packet edit context line."),
+      unit: z.string().max(120).optional().describe("Unit / room label shown on the lease."),
+      notes: z.string().max(2000).optional().describe("Internal notes on the lease row."),
+      monthlyRent: z.number().nonnegative().optional().describe("Monthly rent in USD."),
+      monthlyUtilities: z.number().nonnegative().optional().describe("Monthly utilities in USD."),
+      securityDeposit: z.number().nonnegative().optional().describe("Security deposit in USD."),
+      moveInFee: z.number().nonnegative().optional().describe("Move-in fee in USD."),
+      leaseStart: z.string().regex(DATE_RE, "Use YYYY-MM-DD.").optional().describe("Lease start date (YYYY-MM-DD)."),
+      leaseEnd: z
+        .union([z.string().regex(DATE_RE, "Use YYYY-MM-DD."), z.literal("")])
+        .optional()
+        .describe("Lease end date (YYYY-MM-DD). Pass empty string for month-to-month."),
+      leaseTerm: z.string().max(80).optional().describe("Lease term label (e.g. 12 months, Month-to-month)."),
+      roomChoice: z.string().max(200).optional().describe("Room label for the lease."),
+      rentalType: z.enum(["standard", "short_term"]).optional().describe("Long-term (standard) or short-term stay."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    }
+    const hasScalar =
+      input.unit !== undefined ||
+      input.notes !== undefined ||
+      input.monthlyRent !== undefined ||
+      input.monthlyUtilities !== undefined ||
+      input.securityDeposit !== undefined ||
+      input.moveInFee !== undefined ||
+      input.leaseStart !== undefined ||
+      input.leaseEnd !== undefined ||
+      input.leaseTerm !== undefined ||
+      input.roomChoice !== undefined ||
+      input.rentalType !== undefined;
+    if (!hasScalar) throw new Error("Nothing to update — provide at least one field to change.");
+    return buildLeasePacketPreview(row, input);
+  },
+  handler: async (ctx, input) => {
+    const appPatch = applicationPatchFromLeasePacketInput(input);
+    const result = await patchLeasePacketForManagerReview(ctx.db, ctx.landlordId, {
+      leaseId: input.leaseId,
+      ...(input.unit !== undefined ? { unit: input.unit } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      ...(appPatch ? { application: appPatch } : {}),
+    });
+    if (!result.ok) throw new Error(result.error);
+    await writeLeaseAudit(ctx, "update_lease_packet", result.row.id, null);
+    return {
+      reply: `Updated the lease for ${result.row.residentName}${appPatch ? " and regenerated the lease document" : ""}. It remains in manager review.`,
+    };
+  },
+});
+
+export const updateLeaseDocumentSectionsTool = defineWriteTool<
+  { leaseId: string; sectionBodies: Record<string, string> },
+  { reply: string }
+>({
+  name: "update_lease_document_sections",
+  description:
+    "Edit one or more HTML section bodies inside a generated lease document (clause wording, summary table rows, addenda) without regenerating from application data. Section ids appear in Lease packet edit context as documentSections= (slug from each h2 title, or lease-document-header for the preamble). Use update_lease_packet for rent, dates, fees, unit, or notes instead.",
+  inputSchema: z
+    .object({
+      leaseId: z.string().min(1).describe("Lease id from list_leases or Lease packet edit context."),
+      sectionBodies: z
+        .record(z.string(), z.string())
+        .describe("Map of section id → new section body HTML (not including the h2 heading)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    }
+    const ids = Object.keys(input.sectionBodies).filter((id) => id.trim());
+    if (!ids.length) throw new Error("Provide at least one section id and body HTML.");
+    return buildLeaseDocumentSectionsPreview(row, input.sectionBodies);
+  },
+  handler: async (ctx, input) => {
+    const result = await patchLeaseDocumentSectionsForManagerReview(ctx.db, ctx.landlordId, {
+      leaseId: input.leaseId,
+      sectionBodies: input.sectionBodies,
+    });
+    if (!result.ok) throw new Error(result.error);
+    await writeLeaseAudit(ctx, "update_lease_document_sections", result.row.id, null);
+    return {
+      reply: `Updated ${Object.keys(input.sectionBodies).length} section(s) on the lease for ${result.row.residentName}. The preview reflects the new wording.`,
+    };
+  },
+});
+

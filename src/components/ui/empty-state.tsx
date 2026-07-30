@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "./button";
 
 export function EmptyState({
@@ -6,40 +7,45 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  icon,
   variant = "default",
 }: {
   title: string;
-  description: string;
+  description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  icon?: ReactNode;
   variant?: "default" | "panel";
 }) {
-  if (variant === "panel") {
-    return (
-      <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-border bg-accent/30 px-6 py-14 text-center">
-        <p className="text-sm font-medium text-muted">{title}</p>
-        {description ? <p className="mt-2 max-w-md text-xs text-muted">{description}</p> : null}
-        {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            className="mt-5 min-h-10 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent/40"
-          >
-            {actionLabel}
-          </button>
-        ) : null}
-      </div>
-    );
-  }
+  const iconNode = icon ?? (
+    <svg
+      className="h-[26px] w-[26px]"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+      <path d="M3 12a9 3 0 0 0 18 0" />
+    </svg>
+  );
+
+  const shellClass =
+    variant === "panel"
+      ? "flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-border bg-accent/25 px-6 py-12 text-center sm:py-16"
+      : "flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/25 px-6 py-10 text-center";
 
   return (
-    <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-border bg-accent/30 px-6 py-10">
-      <div>
-        <p className="text-base font-semibold text-foreground">{title}</p>
-        <p className="mt-1 max-w-prose text-sm text-muted">{description}</p>
-      </div>
+    <div className={shellClass} data-slot="empty-state">
+      <AxisHeaderMarkTile>{iconNode}</AxisHeaderMarkTile>
+      <p className="mt-4 text-sm font-medium text-foreground">{title}</p>
+      {description ? <p className="mt-1 max-w-md text-xs text-muted">{description}</p> : null}
       {actionLabel && onAction ? (
-        <Button type="button" variant="outline" onClick={onAction}>
+        <Button type="button" variant="primary" className="mt-4 min-h-11" onClick={onAction}>
           {actionLabel}
         </Button>
       ) : null}

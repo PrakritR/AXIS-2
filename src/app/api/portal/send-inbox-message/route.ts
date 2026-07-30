@@ -362,7 +362,7 @@ export async function POST(req: Request) {
       : deliverViaSms;
 
     // All non-sandbox recipient emails — sandbox accounts skip Resend.
-    // NOTE: endsWith("@axis.local") alone is wrong for "@test.axis.local".
+    // NOTE: endsWith("@axis.local") alone is wrong for "@test.proplane.local".
     const toEmails = recipients
       .map((recipient) => recipient.email)
       .filter((email) => !isPortalSandboxEmail(email));

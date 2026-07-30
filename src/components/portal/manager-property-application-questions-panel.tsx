@@ -1,25 +1,38 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { PortalEditRow } from "@/components/portal/portal-edit-row";
+import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
+import { PropertyApplicationFormModal } from "@/components/portal/property-application-form-modal";
 import {
-  ManagerApplicationQuestionsEditorModal,
-  applicationQuestionTypeLabel,
-} from "@/components/portal/manager-application-questions-editor-modal";
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
+import {
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS,
+  PortalPropertyDetailSection,
+} from "@/components/portal/portal-property-detail-section";
 import {
   normalizeCustomApplicationFields,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import {
-  removeListingApplicationField,
+  propertyApplicationTypeLabel,
+  readPropertyApplicationTemplates,
+  removePropertyApplicationTemplate,
+  syncLegacyApplicationFieldsFromTemplates,
+  type PropertyApplicationTemplate,
+} from "@/lib/property-application-templates";
+import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
+import { formatApplicationLeaseTermsLabel } from "@/lib/property-lease-template-sync";
+import {
+  applicationConfigForVariant,
   resolveListingApplicationFields,
-  type ResolvedApplicationField,
+  type ApplicationFormVariant,
 } from "@/lib/rental-application/application-field-catalog";
-import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
 type QuestionsSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -27,27 +40,18 @@ type QuestionsSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
-function shortenOptions(options: string[], max = 3): string {
-  if (options.length === 0) return "";
-  if (options.length <= max) return options.join(" / ");
-  return `${options.slice(0, max).join(" / ")} +${options.length - max} more`;
-}
-
-function questionSubtitle(field: ResolvedApplicationField): string {
-  return [
-    applicationQuestionTypeLabel(field.type),
-    field.required ? "Required" : "Optional",
-    field.type === "select" && field.options.length > 0 ? shortenOptions(field.options) : null,
-    field.isStandard ? "Built-in" : "Custom",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+function applicationQuestionsSummary(
+  sub: ManagerListingSubmissionV1,
+  template: PropertyApplicationTemplate,
+): string {
+  const slice = applicationConfigForVariant(sub, template.formVariant);
+  const mode = slice.applicationConfigMode === "custom" ? "Custom questions" : "PropLane default";
+  const count = resolveListingApplicationFields(slice, normalizeCustomApplicationFields).length;
+  return `${count} question${count === 1 ? "" : "s"} · ${mode}`;
 }
 
 /**
- * Per-property application editor — custom questions applicants answer in the
- * rental application (Additional details step). Stored on the listing submission
- * (`customApplicationFields`) so they persist with the property record.
+ * Per-property application templates — same list chrome as the lease tab.
  */
 export function ManagerPropertyApplicationQuestionsPanel({
   sub,
@@ -55,126 +59,148 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId,
   onUpdated,
   showToast,
-  headerActionsExtra,
+  onRegisterAddApplication,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: QuestionsSaveTarget;
   managerUserId: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
-  /** Share / link actions shown in the section header (visible when collapsed). */
-  headerActionsExtra?: ReactNode;
+  onRegisterAddApplication?: (openAdd: (() => void) | null) => void;
 }) {
-  const [listModalOpen, setListModalOpen] = useState(false);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"add" | "edit">("add");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [questionsModalOpen, setQuestionsModalOpen] = useState(false);
+  const [questionsVariant, setQuestionsVariant] = useState<ApplicationFormVariant>("standard");
 
-  const applicationFields = useMemo(
-    () => resolveListingApplicationFields(sub, normalizeCustomApplicationFields),
-    [sub],
-  );
-  const hasPreview = applicationFields.length > 0;
+  const syncedSub = useMemo(() => syncPropertyApplicationTemplatesFromListing(sub), [sub]);
+  const templates = useMemo(() => readPropertyApplicationTemplates(syncedSub), [syncedSub]);
+
+  const persistTemplates = (nextTemplates: PropertyApplicationTemplate[]) => {
+    if (!saveTarget || !managerUserId) return false;
+    const next = syncLegacyApplicationFieldsFromTemplates(syncedSub, nextTemplates);
+    return persistManagerListingSubmission(saveTarget, managerUserId, next);
+  };
+
+  const openAdd = useCallback(() => {
+    setFormMode("add");
+    setEditingTemplateId(null);
+    setFormOpen(true);
+  }, []);
+
+  useEffect(() => {
+    onRegisterAddApplication?.(openAdd);
+    return () => onRegisterAddApplication?.(null);
+  }, [onRegisterAddApplication, openAdd]);
+
+  const openEditQuestions = (template: PropertyApplicationTemplate) => {
+    setQuestionsVariant(template.formVariant);
+    setQuestionsModalOpen(true);
+  };
+
+  const handleRemove = (templateId: string) => {
+    if (templates.length <= 1) {
+      showToast("Keep at least one application on this property.");
+      return;
+    }
+    if (!window.confirm("Remove this application?")) return;
+    const next = removePropertyApplicationTemplate(templates, templateId);
+    const persisted = persistManagerListingSubmission(
+      saveTarget!,
+      managerUserId!,
+      submissionAfterRemovingApplicationTemplate(syncedSub, next),
+    );
+    if (!persisted) {
+      showToast("Could not remove application.");
+      return;
+    }
+    onUpdated();
+    showToast("Application removed.");
+  };
 
   if (!saveTarget || !managerUserId) return null;
 
-  const openEdit = (field: ResolvedApplicationField) => {
-    setEditingField(field);
-    setEditOpen(true);
-  };
-
-  const closeEdit = () => {
-    setEditOpen(false);
-    setEditingField(null);
-  };
-
-  const removeField = (field: ResolvedApplicationField) => {
-    const patch = removeListingApplicationField(sub, field);
-    const next: ManagerListingSubmissionV1 = { ...sub, ...patch };
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not remove question.");
-      return;
-    }
-    showToast("Question removed.");
-    onUpdated();
-  };
+  const editingTemplate = templates.find((t) => t.id === editingTemplateId) ?? null;
 
   return (
     <>
-      <PortalCollapsibleSection
-        title="Application"
-        expanded={previewExpanded}
-        onExpandedChange={setPreviewExpanded}
-        collapsible={hasPreview}
-        headerActionsInline
-        toggleDataAttr="application-section-toggle"
-        headerActions={
-          <>
-            {headerActionsExtra}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="application-questions-add"
-              onClick={(e) => {
-                e.stopPropagation();
-                setListModalOpen(true);
-              }}
-            >
-              Edit
-            </Button>
-          </>
-        }
-        contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
-      >
-        {hasPreview ? (
-          <div className="space-y-2">
-            {RENTAL_APPLICATION_SECTIONS.map((section) => {
-              const sectionQuestions = applicationFields.filter(
-                (f) => (f.section ?? "additional") === section.id,
-              );
-              if (sectionQuestions.length === 0) return null;
-              return (
-                <div key={section.id} className="space-y-2">
-                  <p className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
-                    {section.title}
-                  </p>
-                  {sectionQuestions.map((field) => (
-                    <PortalEditRow
-                      key={field.id}
-                      title={field.label}
-                      subtitle={questionSubtitle(field)}
-                      clickDataAttr={`application-preview-edit-${field.id}`}
-                      onClick={() => openEdit(field)}
-                      onRemove={() => removeField(field)}
-                      removeTitle={`Remove ${field.label}`}
-                      removeDataAttr="application-question-remove-one"
-                    />
-                  ))}
-                </div>
-              );
-            })}
+      <PortalPropertyDetailSection contentClassName="space-y-0">
+        {templates.map((template) => (
+          <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{template.label}</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {propertyApplicationTypeLabel(template.kind)} · {applicationQuestionsSummary(syncedSub, template)}
+              </p>
+              {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
+                <p className="mt-0.5 text-xs text-muted">
+                  Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                data-attr={`application-stay-open-${template.formVariant}`}
+                onClick={() => openEditQuestions(template)}
+              >
+                Edit
+              </Button>
+              {templates.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                  data-attr={`application-remove-${template.id}`}
+                  onClick={() => handleRemove(template.id)}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
           </div>
-        ) : null}
-      </PortalCollapsibleSection>
+        ))}
+      </PortalPropertyDetailSection>
 
-      <ManagerApplicationQuestionsEditorModal
-        open={listModalOpen}
-        sub={sub}
-        saveTarget={saveTarget}
-        managerUserId={managerUserId}
-        onClose={() => setListModalOpen(false)}
-        onSaved={onUpdated}
-        showToast={showToast}
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label="Add application"
+          icon={PORTAL_LIST_ADD_ICONS.application}
+          onClick={openAdd}
+          dataAttr="property-application-add"
+        />
+      </div>
+
+      <PropertyApplicationFormModal
+        open={formOpen}
+        mode={formMode}
+        template={editingTemplate}
+        templates={templates}
+        onClose={() => {
+          setFormOpen(false);
+          setEditingTemplateId(null);
+        }}
+        onSave={(nextTemplates) => {
+          if (!persistTemplates(nextTemplates)) {
+            showToast("Could not save application.");
+            return false;
+          }
+          onUpdated();
+          return true;
+        }}
       />
 
-      <ApplicationQuestionEditModal
-        open={editOpen}
-        field={editingField}
-        sub={sub}
+      <ManagerApplicationQuestionsEditorModal
+        open={questionsModalOpen}
+        initialVariant={questionsVariant}
+        lockVariant
+        sub={syncedSub}
         saveTarget={saveTarget}
         managerUserId={managerUserId}
-        onClose={closeEdit}
+        onClose={() => setQuestionsModalOpen(false)}
         onSaved={onUpdated}
         showToast={showToast}
       />

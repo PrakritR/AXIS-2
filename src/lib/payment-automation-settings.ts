@@ -29,10 +29,16 @@ export type ManagerAutomationSettings = {
    * approval flows through the same preview/confirm gate as every other write.
    */
   proposeTourConfirmations: boolean;
+  /** Confirmed tour reminders sent before the tour start time. */
+  tourReminderEnabled: boolean;
+  tourReminderMinutesBefore: number;
+  tourReminderDeliverViaEmail: boolean;
+  tourReminderDeliverViaSms: boolean;
   templates: {
     preDue: ReminderTemplate;
     overdue: ReminderTemplate;
     lateFee: ReminderTemplate;
+    tourReminder: ReminderTemplate;
   };
 };
 
@@ -40,6 +46,26 @@ export const DEFAULT_PRE_DUE_REMINDER_DAYS = [3, 2, 1] as const;
 export const DEFAULT_POST_DUE_REMINDER_DAYS = [] as const;
 
 export const PAYMENT_AUTOMATION_SETTINGS_EVENT = "axis:payment-automation-settings";
+
+export const DEFAULT_TOUR_REMINDER_MINUTES_BEFORE = 30;
+
+export const DEFAULT_TOUR_REMINDER_TEMPLATE: ReminderTemplate = {
+  subject: "Reminder: your tour at {propertyTitle}",
+  body: [
+    "Hi {guestName},",
+    "",
+    "This is a friendly reminder about your upcoming property tour.",
+    "",
+    "When: {tourTime}",
+    "{propertyLine}",
+    "{instructionsLine}",
+    "",
+    "We look forward to seeing you!",
+    "",
+    "{managerName}",
+    "PropLane",
+  ].join("\n"),
+};
 
 export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   preDueReminderDays: [...DEFAULT_PRE_DUE_REMINDER_DAYS],
@@ -53,6 +79,10 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   lateFeeNoticeDaysAfterDue: 5,
   sameDayReminderEnabled: true,
   proposeTourConfirmations: false,
+  tourReminderEnabled: true,
+  tourReminderMinutesBefore: DEFAULT_TOUR_REMINDER_MINUTES_BEFORE,
+  tourReminderDeliverViaEmail: true,
+  tourReminderDeliverViaSms: false,
   templates: {
     preDue: {
       subject: "Payment due in {daysUntilDue}: {chargeTitle}",
@@ -64,7 +94,7 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
         "Amount due: {balanceDue}",
         "{propertyLine}",
         "",
-        "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
+        "{residentPortalLogin}",
         "",
         "If you have any questions, please don't hesitate to reach out.",
         "",
@@ -84,6 +114,8 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
         "",
         "Please submit payment as soon as possible to avoid additional late fees.",
         "",
+        "{residentPortalLogin}",
+        "",
         "{managerName}",
         "PropLane Portal",
       ].join("\n"),
@@ -96,12 +128,13 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
         "A late payment fee of {lateFeeAmount} has been added because {chargeTitle} is more than {graceDays} day(s) past due.",
         "{propertyLine}",
         "",
-        "Please log in to your PropLane resident portal to review and pay the updated balance.",
+        "{residentPortalLogin}",
         "",
         "{managerName}",
         "PropLane Portal",
       ].join("\n"),
     },
+    tourReminder: DEFAULT_TOUR_REMINDER_TEMPLATE,
   },
 };
 
@@ -234,10 +267,21 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
     // Opt-in: OFF unless the manager explicitly saved `true`. Same idiom as
     // overdueDailyEnabled — no saved value must never auto-enable a proposal.
     proposeTourConfirmations: row.proposeTourConfirmations === true,
+    tourReminderEnabled: row.tourReminderEnabled !== false,
+    tourReminderMinutesBefore: Math.max(
+      5,
+      Math.min(
+        24 * 60,
+        Math.round(Number(row.tourReminderMinutesBefore ?? base.tourReminderMinutesBefore) || base.tourReminderMinutesBefore),
+      ),
+    ),
+    tourReminderDeliverViaEmail: row.tourReminderDeliverViaEmail !== false,
+    tourReminderDeliverViaSms: row.tourReminderDeliverViaSms === true,
     templates: {
       preDue: normalizeTemplate(templatesRaw.preDue, base.templates.preDue),
       overdue: normalizeTemplate(templatesRaw.overdue, base.templates.overdue),
       lateFee: normalizeTemplate(templatesRaw.lateFee, base.templates.lateFee),
+      tourReminder: normalizeTemplate(templatesRaw.tourReminder, base.templates.tourReminder),
     },
   };
 }

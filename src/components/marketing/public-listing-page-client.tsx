@@ -94,5 +94,5 @@ export function PublicListingPageClient() {
     );
   }
 
-  return <ListingDetailSections property={property} rich={rich} />;
+  return <ListingDetailSections property={property} rich={rich} expandSectionsOnMobile />;
 }

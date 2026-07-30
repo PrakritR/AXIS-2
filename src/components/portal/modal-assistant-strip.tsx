@@ -42,6 +42,10 @@ export type ModalAssistantStripProps = {
    * `true` (e.g. on desktop widths) to open the assistant beside the form.
    */
   defaultExpanded?: boolean;
+  /** When true, the assistant stays open with no hide/expand toggle. */
+  alwaysExpanded?: boolean;
+  /** Let the chat panel grow to fill the modal body (lease edit full-screen mobile). */
+  fillHeight?: boolean;
 };
 
 /**
@@ -62,9 +66,12 @@ export function ModalAssistantStrip({
   onExpandedChange,
   side = "right",
   defaultExpanded = false,
+  alwaysExpanded = false,
+  fillHeight = false,
 }: ModalAssistantStripProps) {
   const config = usePortalAssistantConfig();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(alwaysExpanded || defaultExpanded);
+  const showExpanded = alwaysExpanded || expanded;
 
   const toggle = (next: boolean) => {
     setExpanded(next);
@@ -72,8 +79,8 @@ export function ModalAssistantStrip({
   };
 
   useEffect(() => {
-    setExpanded(defaultExpanded);
-    onExpandedChange?.(defaultExpanded);
+    setExpanded(alwaysExpanded || defaultExpanded);
+    onExpandedChange?.(alwaysExpanded || defaultExpanded);
     // onExpandedChange + defaultExpanded intentionally excluded: callers commonly
     // pass a fresh inline setter each render, and this reset should only fire when
     // a new conversation instance starts (a fresh modal open), not on every parent
@@ -90,15 +97,16 @@ export function ModalAssistantStrip({
     <AssistantConversationProvider endpoint={config.endpoint} storageScope={storageScope}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 flex-col border-t border-border bg-card",
-          expanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-t-0",
-          expanded && (side === "left" ? "@2xl:border-r" : "@2xl:border-l"),
+          "flex min-w-0 flex-col border-t border-border bg-card",
+          fillHeight ? "min-h-0 flex-1" : "shrink-0",
+          showExpanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-t-0",
+          showExpanded && (side === "left" ? "@2xl:border-r" : "@2xl:border-l"),
           className,
         )}
         data-attr="modal-assistant-strip"
-        data-expanded={expanded ? "true" : "false"}
+        data-expanded={showExpanded ? "true" : "false"}
       >
-        {expanded ? (
+        {showExpanded ? (
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col px-0 pt-3 @2xl:pt-4",
@@ -110,26 +118,32 @@ export function ModalAssistantStrip({
                 <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
                 PropLane Assistant
               </p>
-              <button
-                type="button"
-                onClick={() => toggle(false)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
-                data-attr="modal-assistant-collapse"
-                aria-expanded
-              >
-                Hide
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-              </button>
+              {alwaysExpanded ? null : (
+                <button
+                  type="button"
+                  onClick={() => toggle(false)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
+                  data-attr="modal-assistant-collapse"
+                  aria-expanded
+                >
+                  Hide
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
             </div>
             <AssistantDockPanel
               managerName={config.managerName}
               endpoint={config.endpoint}
               contextHint={contextHint}
               compact
-              className="max-h-[min(36vh,17rem)] @2xl:min-h-0 @2xl:max-h-none @2xl:flex-1"
+              className={
+                fillHeight
+                  ? "min-h-0 flex-1 max-h-none"
+                  : "max-h-[min(36vh,17rem)] @2xl:min-h-0 @2xl:max-h-none @2xl:flex-1"
+              }
             />
           </div>
-        ) : (
+        ) : alwaysExpanded ? null : (
           <button
             type="button"
             onClick={() => toggle(true)}

@@ -6,6 +6,7 @@ import {
   PortalDataTableEmpty,
   PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PromotionEntryEditableTitle } from "@/components/portal/promotion-entry-title";
 import {
   promotionAssetKindIndices,
@@ -75,12 +76,13 @@ export function PromotionAssetStack({
               </button>
               {renderHeaderActions ? (
                 <div
-                  className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
                   data-portal-row-ignore
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
                 >
-                  {renderHeaderActions(asset, indexWithinKind)}
+                  <PortalSectionActionRow className="shrink-0 sm:w-auto">
+                    {renderHeaderActions(asset, indexWithinKind)}
+                  </PortalSectionActionRow>
                 </div>
               ) : null}
             </div>

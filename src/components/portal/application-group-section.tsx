@@ -10,6 +10,10 @@ import {
   type ApplicationGroupMemberStatus,
   type GroupRowInput,
 } from "@/lib/rental-application/application-groups";
+import { getBundleChoiceLabel, getPropertyById } from "@/lib/rental-application/data";
+import { buildMemberSplitLines, resolveBundleFinancialTotals, moneyLabel } from "@/lib/bundle-group/bundle-cost-split";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { memberIndexInBundleGroup, type BundleApplicationGroup } from "@/lib/bundle-group/bundle-group-application";
 import { isInProgressApplicationRow, INCOMPLETE_APPLICATION_LABEL } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 
@@ -55,7 +59,7 @@ export function groupIdForRow(row: DemoApplicantRow): string {
 }
 
 /** Reduce an application row to the fields group reconciliation needs. */
-export function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
+export function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput & { bundleId: string; propertyId: string } {
   return {
     id: row.id,
     name: row.name || row.email || "Applicant",
@@ -64,6 +68,8 @@ export function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
     groupId: groupIdForRow(row),
     groupSize: row.application?.groupSize ?? "",
     status: applicationStatusForRow(row),
+    bundleId: row.application?.bundleId?.trim() ?? "",
+    propertyId: row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "",
   };
 }
 
@@ -71,11 +77,29 @@ export function groupRowInputForRow(row: DemoApplicantRow): GroupRowInput {
  * Group-application roster shown inside an expanded application. Presents the household
  * as a single group covering the bundle while each member keeps an independent account.
  */
-export function ApplicationGroupSection({ group, currentRowId }: { group: ApplicationGroup; currentRowId: string }) {
+export function ApplicationGroupSection({
+  group,
+  bundleGroup,
+  currentRowId,
+}: {
+  group: ApplicationGroup;
+  bundleGroup?: BundleApplicationGroup | null;
+  currentRowId: string;
+}) {
   const progress = summarizeGroupProgress(group);
+  const propertyId = bundleGroup?.propertyId ?? "";
+  const bundleId = bundleGroup?.bundleId ?? "";
+  const bundleLabel = propertyId && bundleId ? getBundleChoiceLabel(propertyId, bundleId) : "";
+  const memberCount = group.expectedSize ?? group.totalCount;
+  const memberIndex = memberIndexInBundleGroup(group, currentRowId);
+  const prop = propertyId ? getPropertyById(propertyId) : undefined;
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const totals = sub && bundleId ? resolveBundleFinancialTotals(sub, bundleId) : null;
+  const splitLines = totals && memberCount > 1 ? buildMemberSplitLines(totals, memberCount, memberIndex) : [];
+
   return (
     <PortalCollapsibleSection
-      title="Group application"
+      title={bundleLabel ? "Bundle group application" : "Group application"}
       defaultExpanded
       surfaceMuted={false}
       className="mt-4"
@@ -83,6 +107,29 @@ export function ApplicationGroupSection({ group, currentRowId }: { group: Applic
       toggleDataAttr="application-group-toggle"
       headerActions={<Badge tone={progress.tone}>{progress.label}</Badge>}
     >
+      {bundleLabel ? (
+        <p className="mb-3 text-xs text-muted">
+          Lease bundle <span className="font-medium text-foreground">{bundleLabel}</span>
+          {bundleGroup?.bundleMismatch ? " · members selected different bundles" : ""}
+        </p>
+      ) : null}
+      {splitLines.length > 0 ? (
+        <div className="mb-3 rounded-xl border border-border bg-accent/20 p-3">
+          <p className="mb-2 text-xs font-medium text-foreground">Your equal cost share (upon approval)</p>
+          <ul className="space-y-1 text-xs text-muted">
+            {splitLines.map((line) => (
+              <li key={line.kind}>
+                {line.kind.replace(/_/g, " ")}: <span className="font-medium text-foreground">{moneyLabel(line.memberAmount)}</span>
+                <span className="text-muted"> ({line.shareLabel})</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-muted">
+            Household costs split equally across {memberCount} applicants. One joint bundle lease is created when all
+            members are approved.
+          </p>
+        </div>
+      ) : null}
       <p className="mb-3 text-xs text-muted">
         PropLane Group ID <span className="font-mono text-foreground">{group.groupId}</span>
         {group.missingCount != null && group.missingCount > 0

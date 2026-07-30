@@ -65,22 +65,22 @@ export function LeaseSigningModal({
       <button type="button" aria-label="Close" className="modal-overlay fixed inset-0" onClick={onClose} />
       <div className="modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border shadow-2xl">
         <div className="shrink-0 border-b border-border px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">Sign lease agreement</h2>
-              <p className="mt-0.5 truncate text-sm text-muted">
-                {row.unit} · {row.residentName}
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-tight text-foreground">
+              Sign lease agreement
+            </h2>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/30 text-lg text-muted hover:bg-accent/40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/30 text-lg leading-none text-muted hover:bg-accent/40"
               aria-label="Close"
             >
               ×
             </button>
           </div>
+          <p className="mt-1 truncate text-sm text-muted">
+            {row.unit} · {row.residentName}
+          </p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -162,9 +162,6 @@ export function LeaseSigningModal({
         {!signed ? (
           <div className="shrink-0 border-t border-border px-5 py-3">
             <div className="flex flex-wrap justify-start gap-3">
-              <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-                Cancel
-              </Button>
               <Button
                 type="button"
                 className="rounded-full"

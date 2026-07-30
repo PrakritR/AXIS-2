@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { portalDashboardMobileHeaderLabel, resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  portalDashboardMobileHeaderLabel,
+  portalMobileActiveSectionLabel,
+  resolvePortalMobileBackTarget,
+} from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { vendorPortal } from "@/lib/portals/vendor";
 
@@ -11,6 +16,7 @@ const residentPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
+    { section: "payments", label: "Payments", tabs: [] },
     {
       section: "communication",
       label: "Communication",
@@ -39,11 +45,8 @@ describe("resolvePortalMobileBackTarget", () => {
     expect(resolvePortalMobileBackTarget("/resident/dashboard", residentPortal)).toBeNull();
   });
 
-  it("returns dashboard from a top-level section", () => {
-    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toEqual({
-      href: "/resident/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from a top-level section (section title in the mobile bar)", () => {
+    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toBeNull();
   });
 
   it("hides dashboard back on early rental-application wizard steps", () => {
@@ -66,11 +69,8 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-  it("returns dashboard from the default communication email tab", () => {
-    expect(resolvePortalMobileBackTarget("/resident/communication/email/unopened", residentPortal)).toEqual({
-      href: "/resident/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from the default communication email tab", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/unopened", residentPortal)).toBeNull();
   });
 
   it("returns sms all view from deeper resident sms bucket", () => {
@@ -87,18 +87,42 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
-  it("returns dashboard from communication sms all view", () => {
-    expect(resolvePortalMobileBackTarget("/portal/communication/sms/all", managerPortal)).toEqual({
-      href: "/portal/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from communication sms all view", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/all", managerPortal)).toBeNull();
   });
 
-  it("returns dashboard from legacy communication sms unopened bucket", () => {
-    expect(resolvePortalMobileBackTarget("/portal/communication/sms/unopened", managerPortal)).toEqual({
-      href: "/portal/dashboard",
-      label: "Dashboard",
-    });
+  it("returns null from legacy communication sms unopened bucket", () => {
+    expect(resolvePortalMobileBackTarget("/portal/communication/sms/unopened", managerPortal)).toBeNull();
+  });
+
+  it("returns null for an alternate section tab (tab pills handle navigation)", () => {
+    const portalWithResidents: PortalDefinition = {
+      ...managerPortal,
+      sections: [
+        ...managerPortal.sections,
+        {
+          section: "residents",
+          label: "Residents",
+          tabs: [{ id: "current", label: "Current" }],
+        },
+      ],
+    };
+    expect(resolvePortalMobileBackTarget("/portal/residents/previous", portalWithResidents)).toBeNull();
+  });
+
+  it("returns null for the primary residents tab", () => {
+    const portalWithResidents: PortalDefinition = {
+      ...managerPortal,
+      sections: [
+        ...managerPortal.sections,
+        {
+          section: "residents",
+          label: "Residents",
+          tabs: [{ id: "current", label: "Current" }],
+        },
+      ],
+    };
+    expect(resolvePortalMobileBackTarget("/portal/residents/current", portalWithResidents)).toBeNull();
   });
 });
 describe("portalDashboardMobileHeaderLabel", () => {
@@ -116,5 +140,36 @@ describe("portalDashboardMobileHeaderLabel", () => {
 
   it("returns Dashboard for vendor portal dashboard route", () => {
     expect(portalDashboardMobileHeaderLabel("/vendor/dashboard", vendorPortal)).toBe("Dashboard");
+  });
+});
+
+
+describe("resolvePortalMobileBackTarget on native shell", () => {
+  beforeEach(() => {
+    document.documentElement.setAttribute("data-native", "ios");
+  });
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-native");
+  });
+
+  it("suppresses dashboard back from a top-level section", () => {
+    expect(resolvePortalMobileBackTarget("/resident/applications", residentPortal)).toBeNull();
+  });
+
+  it("still returns communication folder back targets", () => {
+    expect(resolvePortalMobileBackTarget("/resident/communication/email/sent", residentPortal)).toEqual({
+      href: "/resident/communication/email/unopened",
+      label: "Communication",
+    });
+  });
+});
+
+describe("portalMobileActiveSectionLabel", () => {
+  it("returns the section label off dashboard", () => {
+    expect(portalMobileActiveSectionLabel("/resident/applications", residentPortal)).toBe("Applications");
+  });
+
+  it("returns null on dashboard", () => {
+    expect(portalMobileActiveSectionLabel("/resident/dashboard", residentPortal)).toBeNull();
   });
 });

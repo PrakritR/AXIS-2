@@ -1,6 +1,7 @@
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { generatePaymentReference, generateWorkOrderPaymentReference } from "@/lib/payment-reference";
+import { appendResidentPortalLoginInstructions } from "@/lib/resident-portal-login-copy";
 
 export function chargePaymentReference(charge: Pick<HouseholdCharge, "id" | "paymentReference">): string {
   return charge.paymentReference?.trim() || generatePaymentReference(charge.id);
@@ -74,6 +75,7 @@ export function buildManualPaymentInstructionLines(
 
 export function buildPaymentReminderBody(opts: {
   residentName: string;
+  residentEmail?: string;
   chargeTitle: string;
   balanceDue: string;
   dueDate: string;
@@ -92,11 +94,6 @@ export function buildPaymentReminderBody(opts: {
 
   if (opts.manualPaymentLines?.length) {
     lines.push(...opts.manualPaymentLines);
-  } else {
-    lines.push(
-      "",
-      "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
-    );
   }
 
   lines.push(
@@ -106,7 +103,10 @@ export function buildPaymentReminderBody(opts: {
     opts.managerName,
     "PropLane Portal",
   );
-  return lines.join("\n");
+  return appendResidentPortalLoginInstructions(lines.join("\n"), {
+    residentEmail: opts.residentEmail,
+    afterLoginHint: "payments",
+  });
 }
 
 /** Append Zelle/Venmo pay-to lines when a charge has manual payment contacts. */

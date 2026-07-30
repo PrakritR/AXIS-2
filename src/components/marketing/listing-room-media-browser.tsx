@@ -110,8 +110,24 @@ export function ListingRoomMediaBrowser({
       testId="listing-room-media-browser"
       itemNoun="room"
       availabilityVariant="room"
-      resolvePrimaryCta={(_, index) => resolvePrimaryCta(entries[index]?.room.id ?? "", index)}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(entries[index]?.room.id ?? "", index)}
+      onEntryPress={
+        onOpenDetails
+          ? (_, index) => {
+              const entry = entries[index];
+              if (entry) onOpenDetails(entry);
+            }
+          : undefined
+      }
+      resolvePrimaryCta={
+        onOpenDetails
+          ? undefined
+          : (_, index) => resolvePrimaryCta(entries[index]?.room.id ?? "", index)
+      }
+      resolveSecondaryCta={
+        onOpenDetails
+          ? undefined
+          : (_, index) => resolveSecondaryCta(entries[index]?.room.id ?? "", index)
+      }
       className={className}
     />
   );

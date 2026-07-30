@@ -317,6 +317,7 @@ export function ManagerAddPaymentModal({
         draft?.body?.trim() ||
         buildNewChargeNoticeBody({
           residentName: noticePreview.residentName,
+          residentEmail: noticePreview.residentEmail,
           chargeTitle: noticePreview.chargeTitle,
           amountLabel,
           dueDateLabel: noticePreview.dueDateLabel,
@@ -350,6 +351,7 @@ export function ManagerAddPaymentModal({
     noticePreview &&
     buildNewChargeNoticeBody({
       residentName: noticePreview.residentName,
+      residentEmail: noticePreview.residentEmail,
       chargeTitle: noticePreview.chargeTitle,
       amountLabel: `$${noticePreview.amount.toFixed(2)}`,
       dueDateLabel: noticePreview.dueDateLabel,
@@ -369,9 +371,6 @@ export function ManagerAddPaymentModal({
         panelClassName="max-w-xl p-3 sm:p-4"
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-sm" onClick={handleClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

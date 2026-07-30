@@ -137,6 +137,34 @@ async function upsertInboxThread(
   );
 }
 
+/** Prospect/resident inbox row for tour acks, lead invites, etc. — backfilled on account creation. */
+export async function recordResidentProspectInboxMessage(
+  db: Db,
+  input: {
+    participantEmail: string;
+    subject: string;
+    body: string;
+    fromName?: string;
+    fromEmail?: string;
+    threadType?: string;
+  },
+): Promise<void> {
+  const guestEmail = input.participantEmail.trim().toLowerCase();
+  if (!guestEmail.includes("@")) return;
+  const { data: guestProfile } = await db.from("profiles").select("id").eq("email", guestEmail).maybeSingle();
+  await upsertInboxThread(db, {
+    scope: RESIDENT_INBOX_SCOPE,
+    ownerUserId: (guestProfile?.id as string | null) ?? null,
+    participantEmail: guestEmail,
+    folder: "inbox",
+    fromName: input.fromName ?? "PropLane",
+    fromEmail: input.fromEmail ?? "tours@axis.local",
+    toLine: guestEmail,
+    subject: input.subject,
+    body: input.body,
+  });
+}
+
 export type TourInquiryPayload = {
   name?: unknown;
   email?: unknown;
@@ -285,6 +313,13 @@ export async function notifyTenantTourRequestReceived(
   const subject = TOUR_REQUEST_TENANT_SUBJECT;
   const text = buildTourRequestTenantBody(ctx);
   const email = await deliverEmail([guestEmail], subject, text);
+
+  await recordResidentProspectInboxMessage(db, {
+    participantEmail: guestEmail,
+    subject,
+    body: text,
+    fromName: "PropLane Tours",
+  });
 
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;

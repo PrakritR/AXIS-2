@@ -3,6 +3,7 @@
 import { type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { isPortalRowClickIgnored, PortalTableExpandChevron } from "@/components/portal/portal-data-table";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { cn } from "@/lib/utils";
 
 export const PORTAL_EDIT_ROW_REMOVE_BUTTON_CLASS =
@@ -100,26 +101,34 @@ export function PortalCollapsibleEditRow({
           </div>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
         </div>
-        <div
-          className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
-          data-portal-row-ignore
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          {headerActions}
-          {onRemove ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_EDIT_ROW_REMOVE_BUTTON_CLASS}
-              title={removeTitle ?? removeLabel}
-              data-attr={removeDataAttr}
-              onClick={onRemove}
+        {(headerActions || onRemove) ? (
+          <PortalSectionActionRow
+            className="shrink-0 sm:w-auto"
+            destructive={
+              onRemove ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_EDIT_ROW_REMOVE_BUTTON_CLASS}
+                  title={removeTitle ?? removeLabel}
+                  data-attr={removeDataAttr}
+                  onClick={onRemove}
+                >
+                  {removeLabel}
+                </Button>
+              ) : undefined
+            }
+          >
+            <div
+              data-portal-row-ignore
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="contents"
             >
-              {removeLabel}
-            </Button>
-          ) : null}
-        </div>
+              {headerActions}
+            </div>
+          </PortalSectionActionRow>
+        ) : null}
       </div>
       {canExpand && expanded ? (
         <div className={cn("space-y-3 border-t border-border px-3 py-3 sm:px-3.5", contentClassName)}>

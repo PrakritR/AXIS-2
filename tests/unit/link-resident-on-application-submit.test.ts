@@ -70,6 +70,8 @@ describe("linkResidentOnApplicationSubmit", () => {
     expect(linked?.id).toBe("AXIS-ABC123");
     expect(linked?.managerUserId).toBe("manager-1");
     expect(linked?.propertyId).toBe("prop-1");
+    expect(linked?.residentUserId).toBe("user-1");
+    expect(linked?.axisId).toBe("AXIS-ABC123");
     expect(db.profileUpdate).toHaveBeenCalledWith({ manager_id: "AXIS-ABC123" });
     expect(db.profileUpdateEq).toHaveBeenCalledWith("id", "user-1");
   });
@@ -149,5 +151,30 @@ describe("linkResidentOnApplicationSubmit", () => {
 
     expect(result.ok).toBe(true);
     expect(result.ok ? result.row.managerUserId : null).toBe("manager-1");
+  });
+
+  it("skips profile.manager_id when linkProfile is false", async () => {
+    const db = makeDbMock({ propertyRecord: { manager_user_id: "manager-1" }, profile: { manager_id: null } });
+    const row: DemoApplicantRow = {
+      id: "AXIS-ABC123",
+      name: "Manager applicant",
+      property: "Test House",
+      propertyId: "prop-1",
+      stage: "Submitted",
+      bucket: "pending",
+      detail: "",
+      email: "manager@example.com",
+    };
+
+    const result = await linkResidentOnApplicationSubmit(db as never, {
+      userId: "mgr-user",
+      row,
+      isNewSubmit: true,
+      linkProfile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.row.residentUserId : null).toBe("mgr-user");
+    expect(db.profileUpdate).not.toHaveBeenCalled();
   });
 });

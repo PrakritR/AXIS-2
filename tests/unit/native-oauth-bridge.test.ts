@@ -29,7 +29,7 @@ describe("native OAuth bridge", () => {
       "https://www.axis-seattle-housing.com/auth/callback/partner-pricing?native_bridge=1&code=abc",
     );
     expect(httpsCallbackToNativeSchemeUrl(https)).toBe(
-      "com.axisseattlehousing.app://auth/callback/partner-pricing?code=abc",
+      "space.proplane.app://auth/callback/partner-pricing?code=abc",
     );
   });
 

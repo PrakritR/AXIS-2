@@ -1,25 +1,34 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import {
+  MANAGER_TABLE_TH,
+  RESIDENT_DETAIL_HEADER_ACTION_BTN,
+  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
+} from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
+import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
 import { applySignedLeaseRenewal } from "@/lib/lease-renewal-payments";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
@@ -27,14 +36,13 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
-  downloadLeaseFromRow,
   generateLeaseHtmlForRow,
   getLeaseDocumentHtml,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   managerSignLease,
   managerUploadLeasePdf,
-  printLeaseAsPdf,
+  runLeaseDownload,
   sendLeaseBackToManager,
   sendLeaseToResident,
   hasBothLeaseSignatures,
@@ -51,6 +59,10 @@ export function ManagerLeasesPipelinePanel({
   managerUserId,
   residentAccountEmails,
   onEmailAccountSetup,
+  leaseId: leaseIdProp,
+  listBasePath,
+  onDetailOpenChange,
+  onAddLease,
 }: {
   rows: LeasePipelineRow[];
   tab: ManagerLeaseTab;
@@ -58,9 +70,13 @@ export function ManagerLeasesPipelinePanel({
   managerUserId?: string | null;
   residentAccountEmails: Set<string>;
   onEmailAccountSetup?: (email: string, name: string, axisId?: string) => void;
+  leaseId?: string;
+  listBasePath?: string;
+  onDetailOpenChange?: (open: boolean) => void;
+  onAddLease?: () => void;
 }) {
   const { showToast } = useAppUi();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigate = usePortalNavigate();
   const uploadRef = useRef<HTMLInputElement>(null);
   const uploadTargetRowIdRef = useRef<string | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
@@ -83,6 +99,7 @@ export function ManagerLeasesPipelinePanel({
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [editLeaseRowId, setEditLeaseRowId] = useState<string | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -91,28 +108,28 @@ export function ManagerLeasesPipelinePanel({
 
   function leaseSentToResidentBody(row: LeasePipelineRow): string {
     const unit = row.unit.trim() || "your unit";
-    const lines = [
-      `Hi ${row.residentName || "there"},`,
-      "",
-      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
-      "",
-      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ];
-    return lines.join("\n");
+    return buildLeaseReadyForResidentMessage({
+      residentName: row.residentName || "there",
+      residentEmail: row.residentEmail.trim(),
+      unit,
+      variant: "send",
+    });
   }
 
-  async function notifyResidentLeaseReady(row: LeasePipelineRow): Promise<{ ok: boolean; skipped?: boolean }> {
+  async function notifyResidentLeaseReady(
+    row: LeasePipelineRow,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject: string; text: string },
+  ): Promise<{ ok: boolean; skipped?: boolean }> {
     const unit = row.unit.trim() || "your unit";
     const result = await deliverPortalInboxMessage({
       eventCategory: "leases",
       fromName: "Property Manager",
       toEmails: [row.residentEmail.trim()],
-      subject: `Your lease for ${unit} is ready to sign`,
-      text: leaseSentToResidentBody(row),
+      subject: draft?.subject ?? `Your lease for ${unit} is ready to sign`,
+      text: draft?.text ?? leaseSentToResidentBody(row),
+      deliverViaEmail: channels?.viaEmail !== false,
+      deliverViaSms: channels?.viaSms === true,
     });
     return { ok: result.ok, skipped: result.skipped };
   }
@@ -126,17 +143,13 @@ export function ManagerLeasesPipelinePanel({
         ? `Lease dates: ${leaseStart} to ${leaseEnd}`
         : `Lease start date: ${leaseStart}`
       : "";
-    const lines = [
-      `Hi ${row.residentName || "there"},`,
-      "",
-      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
+    return buildLeaseReadyForResidentMessage({
+      residentName: row.residentName || "there",
+      residentEmail: row.residentEmail.trim(),
+      unit,
+      variant: "reminder",
       dateLine,
-      "",
-      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
-      "",
-      "PropLane",
-    ].filter(Boolean);
-    return lines.join("\n");
+    });
   }
 
   async function sendAccountEmail(row: LeasePipelineRow) {
@@ -224,6 +237,27 @@ export function ManagerLeasesPipelinePanel({
   const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
+  const detailRow = useMemo(() => {
+    if (!leaseIdProp) return null;
+    const decoded = decodeURIComponent(leaseIdProp);
+    return rows.find((r) => r.id === decoded) ?? null;
+  }, [leaseIdProp, rows]);
+
+  const navigateToList = useCallback(() => {
+    if (listBasePath) navigate(leaseListHref(listBasePath, tab));
+  }, [listBasePath, navigate, tab]);
+
+  const openLeaseDetail = useCallback(
+    (row: LeasePipelineRow) => {
+      onDetailOpenChange?.(true);
+      if (listBasePath) navigate(leaseDetailHref(listBasePath, tab, row.id));
+    },
+    [listBasePath, navigate, onDetailOpenChange, tab],
+  );
+
+  useEffect(() => {
+    onDetailOpenChange?.(Boolean(leaseIdProp && detailRow));
+  }, [detailRow, leaseIdProp, onDetailOpenChange]);
 
   const runGenerateLease = (row: LeasePipelineRow) => {
     if (generatingRowId) return;
@@ -241,17 +275,7 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onDownload = (row: LeasePipelineRow) => {
-    if (row.managerUploadedPdf?.dataUrl) {
-      downloadLeaseFromRow(row);
-      showToast("PDF download started.");
-      return;
-    }
-    if (row.generatedHtml) {
-      printLeaseAsPdf(row);
-      showToast("Print dialog opened. Choose 'Save as PDF' to download.");
-      return;
-    }
-    showToast("Generate a lease or upload a PDF first.");
+    runLeaseDownload(row, showToast);
   };
 
   const openSendLeasePreview = (row: LeasePipelineRow) => {
@@ -273,7 +297,11 @@ export function ManagerLeasesPipelinePanel({
     });
   };
 
-  const confirmSendLeaseToResident = async (skipMessage: boolean) => {
+  const confirmSendLeaseToResident = async (
+    skipMessage: boolean,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject: string; body: string },
+  ) => {
     if (!leaseSentPreview || sendingToResidentRowId) return;
     const { row } = leaseSentPreview;
     setSendingToResidentRowId(row.id);
@@ -288,7 +316,10 @@ export function ManagerLeasesPipelinePanel({
       if (skipMessage) {
         showToast("Lease sent to resident portal (no notification sent).");
       } else {
-        const notice = await notifyResidentLeaseReady(row);
+        const notice = await notifyResidentLeaseReady(row, channels, {
+          subject: draft?.subject ?? leaseSentPreview.subject,
+          text: draft?.body ?? leaseSentPreview.body,
+        });
         if (notice.ok) {
           showToast(
             notice.skipped
@@ -323,7 +354,7 @@ export function ManagerLeasesPipelinePanel({
     }
     appendLeaseThreadMessage(row.id, "manager", "Moved lease back to manager review.", managerUserId);
     showToast("Lease moved to Manager Review.");
-    setExpandedId(null);
+    if (!leaseIdProp) navigateToList();
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
@@ -355,7 +386,7 @@ export function ManagerLeasesPipelinePanel({
             ? "Lease fully signed."
             : "Manager signature saved.",
       );
-      setExpandedId(null);
+      if (!leaseIdProp) navigateToList();
       setSigningRow(null);
       return true;
     } else {
@@ -376,185 +407,293 @@ export function ManagerLeasesPipelinePanel({
     } else showToast(res.error ?? "Upload failed.");
   };
 
-  const renderLeaseRowDetail = (row: LeasePipelineRow) => {
+  const renderLeaseHeaderActions = (row: LeasePipelineRow) => {
     const generation = generationGate(row);
     const canEditDocument = leaseAllowsManagerDocumentEdits(row);
     const showGenerate = !hasLeaseDocument(row) && canEditDocument;
+    const needsAccountEmail =
+      (row.status === "Manager Review" || row.status === "Draft") &&
+      !residentAccountEmails.has(row.residentEmail.trim().toLowerCase());
+
+    const hasDocument = hasLeaseDocument(row);
+    const sendToResidentDisabled =
+      !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+      (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl);
+    const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
+    const showDelete = row.status !== "Fully Signed";
+    const showMoveToReview = row.status === "Resident Signature Pending";
+    const showManagerSign = !row.managerSignature && residentHasSignedLease(row);
+    const showSigningReminder = row.status === "Resident Signature Pending";
+    const showRenewals = hasBothLeaseSignatures(row) && row.status === "Fully Signed";
+
+    const uploadLabel = pendingRowId === row.id ? "Uploading…" : hasDocument ? "Upload" : "Upload PDF";
+
+    const triggerUpload = () => {
+      uploadTargetRowIdRef.current = row.id;
+      uploadRef.current?.click();
+    };
+
+    const signButton = showManagerSign ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-manager-sign"
+        onClick={() => onManagerSign(row)}
+      >
+        Sign
+      </Button>
+    ) : showSigningReminder ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-signing-reminder"
+        disabled={reminderBusyForRow === row.id}
+        title="Send signing reminder"
+        onClick={() => openLeaseSigningReminderPreview(row)}
+      >
+        {reminderBusyForRow === row.id ? "Sending…" : "Send reminder"}
+      </Button>
+    ) : null;
+
+    const sendToResidentButton = showSendToResident ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-send-resident"
+        disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
+        onClick={() => openSendLeasePreview(row)}
+      >
+        {sendingToResidentRowId === row.id ? "Sending…" : (
+          <>
+            <span className="max-md:hidden">Send to resident</span>
+            <span className="md:hidden">Send</span>
+          </>
+        )}
+      </Button>
+    ) : null;
+
+    const editButton = canEditDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-edit"
+        onClick={() => setEditLeaseRowId(row.id)}
+      >
+        Edit
+      </Button>
+    ) : null;
+
+    const downloadButton = hasDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-download"
+        onClick={() => onDownload(row)}
+      >
+        Download
+      </Button>
+    ) : null;
+
+    const generateButton = showGenerate ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-generate"
+        disabled={generatingRowId === row.id || !generation.ok}
+        title={generation.ok ? undefined : generation.error}
+        onClick={() => runGenerateLease(row)}
+      >
+        {generatingRowId === row.id ? "Generating…" : "Generate lease"}
+      </Button>
+    ) : null;
+
+    const uploadButton = canEditDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        onClick={triggerUpload}
+        disabled={pendingRowId === row.id}
+      >
+        {uploadLabel}
+      </Button>
+    ) : null;
+
+    const deleteButton = showDelete ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="lease-delete"
+        onClick={() => onDeleteLease(row)}
+      >
+        Delete
+      </Button>
+    ) : null;
+
+    const moveToReviewButton = showMoveToReview ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-move-manager-review"
+        onClick={() => onMoveToManagerReview(row)}
+      >
+        Move to review
+      </Button>
+    ) : null;
+
+    const renewButton = showRenewals ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-renew"
+        onClick={() => setRenewLeaseRow(row)}
+      >
+        Renew lease
+      </Button>
+    ) : null;
+
+    const extendButton = showRenewals ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        onClick={() => setAmendLeaseRow(row)}
+      >
+        Extend move-out
+      </Button>
+    ) : null;
+
+    const emailSetupButton = needsAccountEmail ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
+        disabled={emailBusyForRow === row.id}
+        onClick={() => void sendAccountEmail(row)}
+      >
+        {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
+      </Button>
+    ) : null;
+
+    const hasMobileOverflow =
+      hasDocument ||
+      canEditDocument ||
+      showDelete ||
+      showGenerate ||
+      showMoveToReview ||
+      showRenewals ||
+      needsAccountEmail;
+
+    const mobileOverflowMenu = hasMobileOverflow ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} max-md:px-2.5 max-md:text-base`}
+            data-attr="lease-more-actions"
+            aria-label="More lease actions"
+          >
+            …
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" backdrop>
+          {hasDocument ? (
+            <DropdownMenuItem data-attr="lease-download" onSelect={() => onDownload(row)}>
+              Download
+            </DropdownMenuItem>
+          ) : null}
+          {canEditDocument ? (
+            <DropdownMenuItem
+              data-attr="lease-upload"
+              disabled={pendingRowId === row.id}
+              onSelect={triggerUpload}
+            >
+              {uploadLabel}
+            </DropdownMenuItem>
+          ) : null}
+          {showDelete ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-attr="lease-delete"
+                className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+                onSelect={() => onDeleteLease(row)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {showGenerate ? (
+            <DropdownMenuItem
+              data-attr="lease-generate"
+              disabled={generatingRowId === row.id || !generation.ok}
+              onSelect={() => runGenerateLease(row)}
+            >
+              {generatingRowId === row.id ? "Generating…" : "Generate lease"}
+            </DropdownMenuItem>
+          ) : null}
+          {showMoveToReview ? (
+            <DropdownMenuItem data-attr="lease-move-manager-review" onSelect={() => onMoveToManagerReview(row)}>
+              Move to review
+            </DropdownMenuItem>
+          ) : null}
+          {showRenewals ? (
+            <>
+              <DropdownMenuItem data-attr="lease-renew" onSelect={() => setRenewLeaseRow(row)}>
+                Renew lease
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAmendLeaseRow(row)}>Extend move-out</DropdownMenuItem>
+            </>
+          ) : null}
+          {needsAccountEmail ? (
+            <DropdownMenuItem disabled={emailBusyForRow === row.id} onSelect={() => void sendAccountEmail(row)}>
+              {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
 
     return (
-    <>
-      <PortalTableDetailActions placement="top">
-            {showGenerate ? (
-              <>
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="lease-generate"
-                disabled={generatingRowId === row.id || !generation.ok}
-                title={generation.ok ? undefined : generation.error}
-                onClick={() => runGenerateLease(row)}
-              >
-                {generatingRowId === row.id ? "Generating..." : "Generate lease"}
-              </Button>
-              {!generation.ok ? (
-                <p className="max-w-xl text-xs leading-relaxed text-amber-800">{generation.error}</p>
-              ) : null}
-              </>
-            ) : null}
-            {hasLeaseDocument(row) ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => onDownload(row)}
-            >
-              Download lease
-            </Button>
-            ) : null}
-            {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  data-attr="lease-renew"
-                  onClick={() => setRenewLeaseRow(row)}
-                >
-                  Renew lease
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => setAmendLeaseRow(row)}
-                >
-                  Extend move-out date
-                </Button>
-              </>
-            ) : null}
-            {!row.managerSignature && residentHasSignedLease(row) ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="lease-manager-sign"
-                onClick={() => onManagerSign(row)}
-                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
-              >
-                Sign as manager
-              </Button>
-            ) : null}
-            {canEditDocument ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => {
-                uploadTargetRowIdRef.current = row.id;
-                uploadRef.current?.click();
-              }}
-              disabled={pendingRowId === row.id}
-            >
-              {pendingRowId === row.id ? "Uploading…" : hasLeaseDocument(row) ? "Upload replacement" : "Upload PDF"}
-            </Button>
-            ) : null}
-
-            {row.status === "Manager Review" || row.status === "Draft" ? (
-              <>
-                {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
-                  <div className="flex flex-wrap items-start gap-2">
-                    <p className="max-w-xl text-xs leading-relaxed text-amber-800">
-                      This lease cannot be sent yet. The resident must first create their PropLane resident account using their
-                      application ID and matching email.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
-                      disabled={emailBusyForRow === row.id}
-                      onClick={() => void sendAccountEmail(row)}
-                    >
-                      {emailBusyForRow === row.id ? "Sending…" : "Email account setup"}
-                    </Button>
-                  </div>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  data-attr="lease-send-resident"
-                  onClick={() => openSendLeasePreview(row)}
-                  disabled={
-                    sendingToResidentRowId === row.id ||
-                    !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-                    (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
-                  }
-                >
-                  {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
-                </Button>
-              </>
-            ) : null}
-            {row.status === "Manager Signature Pending" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                data-attr="lease-manager-sign"
-                onClick={() => onManagerSign(row)}
-                disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
-              >
-                Manager sign lease
-              </Button>
-            ) : null}
-            {row.status === "Resident Signature Pending" ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  disabled={reminderBusyForRow === row.id}
-                  onClick={() => openLeaseSigningReminderPreview(row)}
-                >
-                  {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => onMoveToManagerReview(row)}
-                >
-                  Move to manager review
-                </Button>
-              </>
-            ) : null}
-            {row.status !== "Fully Signed" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-              onClick={() => onDeleteLease(row)}
-            >
-              Delete lease
-            </Button>
-            ) : null}
-      </PortalTableDetailActions>
-
-      <LeaseDocumentPreview row={row} />
-    </>
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+        <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+          <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+            {sendToResidentButton}
+            {signButton}
+            {editButton}
+            {mobileOverflowMenu}
+          </div>
+          <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+            {sendToResidentButton}
+            {signButton}
+            {editButton}
+            {downloadButton}
+            {generateButton}
+            {uploadButton}
+            {moveToReviewButton}
+            {renewButton}
+            {extendButton}
+            {emailSetupButton}
+            {deleteButton}
+          </div>
+        </PortalSectionActionRow>
+      </div>
     );
   };
 
-  if (bucketRows.length === 0) {
-    return (
-      <PortalDataTableEmpty
-        icon="lease"
-        message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
-      />
-    );
-  }
+  const renderLeaseRowDetail = (row: LeasePipelineRow) => <LeaseDocumentPreview row={row} />;
 
-  return (
+  const leaseModals = (
     <>
       {signingRow ? (
         <LeaseSigningModal
@@ -577,7 +716,7 @@ export function ManagerLeasesPipelinePanel({
         confirmLabelWithoutMessage="Send lease only"
         confirmBusy={Boolean(leaseSentPreview && sendingToResidentRowId === leaseSentPreview.row.id)}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
+        onConfirm={(skipMessage, channels, draft) => void confirmSendLeaseToResident(skipMessage, channels, draft)}
       />
       <PortalNotificationPreviewModal
         open={leaseReminderPreview !== null}
@@ -593,7 +732,7 @@ export function ManagerLeasesPipelinePanel({
         confirmLabel="Send reminder"
         confirmBusy={Boolean(leaseReminderPreview?.row && reminderBusyForRow === leaseReminderPreview.row.id)}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage, channels) => {
+        onConfirm={(skipMessage, channels, draft) => {
           if (!leaseReminderPreview) return;
           if (skipMessage) {
             setLeaseReminderPreview(null);
@@ -604,8 +743,8 @@ export function ManagerLeasesPipelinePanel({
           void sendLeaseSigningReminder(
             preview.row,
             preview.recipient,
-            preview.subject,
-            preview.body,
+            draft?.subject ?? preview.subject,
+            draft?.body ?? preview.body,
             channels,
           );
         }}
@@ -622,72 +761,6 @@ export function ManagerLeasesPipelinePanel({
           if (id) void onPickUpload(id, e.target.files);
         }}
       />
-      <div className="space-y-2 lg:hidden">
-        {bucketRows.map((row) => (
-          <div key={row.id} id={`portal-lease-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="flex w-full gap-2 text-left"
-              onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-              aria-expanded={expandedId === row.id}
-            >
-              <div className="min-w-0 flex-1">
-                <PortalTableInlineExpand expanded={expandedId === row.id} className="font-semibold text-foreground">
-                  <span className="truncate">{row.residentName}</span>
-                </PortalTableInlineExpand>
-                <p className="mt-0.5 truncate text-xs text-muted">{row.unit}</p>
-                <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
-              </div>
-            </button>
-            {expandedId === row.id ? (
-              <div className="mt-3 border-t border-border pt-3">{renderLeaseRowDetail(row)}</div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className={PORTAL_DATA_TABLE}>
-            <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bucketRows.map((row) => (
-                <Fragment key={row.id}>
-                  {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
-                  <tr
-                    id={`portal-lease-${row.id}`}
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    onClick={createPortalRowExpandClick(() =>
-                      setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                    )}
-                    aria-expanded={expandedId === row.id}
-                  >
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                      <PortalTableInlineExpand expanded={expandedId === row.id}>{row.residentName}</PortalTableInlineExpand>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                    <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
-                  </tr>
-                  {expandedId === row.id ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                        {renderLeaseRowDetail(row)}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {amendLeaseRow ? (
         <LeaseAmendMoveOutModal
@@ -702,6 +775,15 @@ export function ManagerLeasesPipelinePanel({
         />
       ) : null}
 
+      {editLeaseRowId && detailRow && editLeaseRowId === detailRow.id ? (
+        <ManagerPipelineLeaseEditModal
+          open
+          row={detailRow}
+          onClose={() => setEditLeaseRowId(null)}
+          onDone={() => void syncLeasePipelineFromServer(managerUserId, { force: true })}
+        />
+      ) : null}
+
       {renewLeaseRow ? (
         <LeaseRenewModal
           open
@@ -713,6 +795,84 @@ export function ManagerLeasesPipelinePanel({
           onSuccess={() => void handleAmendLeaseSuccess()}
         />
       ) : null}
+    </>
+  );
+
+  if (leaseIdProp && detailRow) {
+    return (
+      <>
+        {leaseModals}
+        <PortalRecordDetailPage
+          pageTitle="Leases"
+          title={detailRow.residentName}
+          subtitle={detailRow.unit}
+          avatarName={detailRow.residentName}
+          backHref={listBasePath ? leaseListHref(listBasePath, tab) : undefined}
+          hideBackText
+          bareHeader
+          dataAttrBack="lease-detail-back"
+          inlineActions
+          actions={renderLeaseHeaderActions(detailRow)}
+        >
+          {renderLeaseRowDetail(detailRow)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  if (bucketRows.length === 0) {
+    return (
+      <>
+        {leaseModals}
+        <div className="space-y-3 px-3 py-2">
+          <PortalDataTableEmpty
+            icon="lease"
+            message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
+          />
+          {onAddLease ? (
+            <PortalListAddRow
+              label="Add lease"
+              icon={PORTAL_LIST_ADD_ICONS.lease}
+              onClick={onAddLease}
+              dataAttr="leases-list-add"
+            />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {leaseModals}
+      <div className={INBOX_LIST_SCROLL}>
+        {bucketRows.map((row) => (
+          <PortalPersonRecordRow
+            key={row.id}
+            name={row.residentName}
+            subtitle={row.unit}
+            preview={row.status}
+            meta={row.updated}
+            badge={
+              row.leaseKind === "joint_bundle" ? (
+                <Badge tone="neutral">Joint bundle</Badge>
+              ) : undefined
+            }
+            onOpen={() => openLeaseDetail(row)}
+            dataAttr="lease-list-row"
+          />
+        ))}
+        {onAddLease ? (
+          <div className="px-3 py-3 max-md:px-2.5">
+            <PortalListAddRow
+              label="Add lease"
+              icon={PORTAL_LIST_ADD_ICONS.lease}
+              onClick={onAddLease}
+              dataAttr="leases-list-add"
+            />
+          </div>
+        ) : null}
+      </div>
     </>
   );
 }

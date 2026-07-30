@@ -10,6 +10,8 @@ import {
   portalDashboardWelcomeSubtitle,
   PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
+  PortalDashboardKpiRow,
+  PortalDashboardKpiTile,
   PORTAL_DASHBOARD_SECTION_CARD,
 } from "@/components/portal/portal-metrics";
 import {
@@ -49,40 +51,6 @@ function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode })
     >
       {children}
     </span>
-  );
-}
-
-/** Restrained KPI tile: big tabular number + small uppercase muted label. */
-function KpiTile({
-  label,
-  value,
-  href,
-  accent,
-  dataAttr,
-}: {
-  label: string;
-  value: string | number;
-  href: string;
-  accent?: boolean;
-  dataAttr?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex min-w-[8.75rem] flex-1 flex-col rounded-lg border border-border bg-card px-4 py-3.5 transition-colors duration-150 hover:border-primary/40 [html[data-native]_&]:min-w-[7.25rem] [html[data-native]_&]:rounded-lg [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3"
-    >
-      <span
-        className={`text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] [html[data-native]_&]:text-[1.4rem] ${
-          accent ? "text-[var(--status-pending-fg)]" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted [html[data-native]_&]:mt-1.5 [html[data-native]_&]:text-[9px]">
-        {label}
-      </span>
-    </Link>
   );
 }
 
@@ -332,6 +300,8 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
+      hideTitleOnMobileNav
+      welcomeSubtitle
     >
       <div className={PORTAL_DASHBOARD_STACK}>
         {signupNotice ? (
@@ -384,42 +354,48 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
             </div>
           </div>
         ) : null}
-        {/* Command center — restrained KPI stat row (scrolls horizontally on narrow screens). */}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex gap-2.5 [html[data-native]_&]:gap-2">
-            <KpiTile
+        <PortalDashboardKpiRow>
+            <PortalDashboardKpiTile
               label="Open work orders"
               value={openWorkOrders.length}
+              tone={openWorkOrders.length > 0 ? "warning" : "neutral"}
+              emphasis={openWorkOrders.length > 0}
               href={`${BASE}/work-orders`}
               dataAttr="vendor-dashboard-kpi-work-orders"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Awaiting quote"
               value={quotesPending.length}
-              accent={quotesPending.length > 0}
+              tone="brand"
+              emphasis={quotesPending.length > 0}
               href={`${BASE}/work-orders`}
               dataAttr="vendor-dashboard-kpi-quotes"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Scheduled visits"
               value={upcomingVisits.length}
+              tone={upcomingVisits.length > 0 ? "success" : "neutral"}
+              emphasis={upcomingVisits.length > 0}
               href={`${BASE}/calendar`}
               dataAttr="vendor-dashboard-kpi-visits"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Pending payouts"
               value={payoutItems.length}
+              tone={payoutItems.length > 0 ? "warning" : "success"}
+              emphasis={payoutItems.length > 0}
               href={`${BASE}/payments`}
               dataAttr="vendor-dashboard-kpi-payouts"
             />
-            <KpiTile
+            <PortalDashboardKpiTile
               label="Unread messages"
               value={inboxThreads.length}
+              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
+              emphasis={inboxThreads.length > 0}
               href={`${BASE}/inbox/unopened`}
               dataAttr="vendor-dashboard-kpi-inbox"
             />
-          </div>
-        </div>
+        </PortalDashboardKpiRow>
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">

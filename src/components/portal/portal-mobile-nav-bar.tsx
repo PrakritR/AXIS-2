@@ -3,7 +3,8 @@
 import { User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
@@ -16,8 +17,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   portalDashboardMobileHeaderLabel,
+  portalMobileActiveSectionLabel,
   resolvePortalMobileBackTarget,
 } from "@/lib/portal-mobile-back";
+import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function ChevronLeftIcon() {
@@ -65,38 +68,64 @@ export function PortalMobileNavBar({
     () => resolvePortalMobileBackTarget(pathname, definition, searchParams),
     [pathname, definition, searchParams],
   );
-  const dashboardLabel = useMemo(
-    () => portalDashboardMobileHeaderLabel(pathname, definition),
-    [pathname, definition],
-  );
+  const isDashboardBack =
+    back != null && (back.label === "Dashboard" || /\/dashboard$/.test(back.href));
+  const showBack = back != null && !isDashboardBack;
+  const sectionLabel = useMemo(() => {
+    if (showBack) return null;
+    const dashboardLabel = portalDashboardMobileHeaderLabel(pathname, definition);
+    if (dashboardLabel) return dashboardLabel;
+    return portalMobileActiveSectionLabel(pathname, definition);
+  }, [showBack, pathname, definition]);
+  const nativeChrome = useNativeChrome();
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const sync = () => syncPortalMobileTopChrome(el);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
 
   return (
-    <div className="portal-mobile-nav-bar relative mb-3 flex w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
-      {/* Brand mark, centered in the bar for every portal; links home. */}
+    <div
+      ref={barRef}
+      className="portal-mobile-nav-bar relative mb-0 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0"
+    >
+      {/* Brand mark on tablet-only. */}
       <Link
         href={`${definition.basePath}/dashboard`}
         aria-label="Dashboard"
         data-attr="portal-mobile-brand-mark"
-        className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80"
+        className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80 md:inline-flex"
       >
         <AxisLogoMark size="compact" />
       </Link>
-      {back ? (
+      {showBack ? (
         <button
           type="button"
           data-attr="portal-mobile-back"
-          onClick={() => router.push(back.href)}
-          className="-ml-2 inline-flex min-h-11 max-w-[38%] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
+          onClick={() => router.push(back!.href)}
+          className="-ml-2 inline-flex min-h-11 max-w-[55%] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
         >
           <ChevronLeftIcon />
-          <span className="truncate">{back.label}</span>
+          <span className="truncate">{back!.label}</span>
         </button>
-      ) : dashboardLabel ? (
-        <h1 className="min-w-0 max-w-[38%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
-          {dashboardLabel}
+      ) : sectionLabel ? (
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-[-0.02em] text-foreground">
+          {sectionLabel}
         </h1>
-      ) : null}
+      ) : (
+        <div className="min-w-0 flex-1" aria-hidden />
+      )}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <DropdownMenu>

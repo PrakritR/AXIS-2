@@ -42,7 +42,7 @@ describe("userHoldsAdminRole", () => {
   it("accepts an account with the admin role in profile_roles (any email)", async () => {
     const db = makeDb({
       profile_roles: [{ user_id: "u1", role: "admin" }],
-      profiles: [{ id: "u1", email: "admin@test.axis.local", role: "resident" }],
+      profiles: [{ id: "u1", email: "admin@test.proplane.local", role: "resident" }],
     });
     expect(await userHoldsAdminRole(db, "u1")).toBe(true);
   });
@@ -50,7 +50,7 @@ describe("userHoldsAdminRole", () => {
   it("accepts a legacy profiles.role = 'admin' account without a profile_roles row", async () => {
     const db = makeDb({
       profile_roles: [],
-      profiles: [{ id: "u2", email: "legacy-admin@test.axis.local", role: "admin" }],
+      profiles: [{ id: "u2", email: "legacy-admin@test.proplane.local", role: "admin" }],
     });
     expect(await userHoldsAdminRole(db, "u2")).toBe(true);
   });
@@ -66,7 +66,7 @@ describe("userHoldsAdminRole", () => {
   it("rejects non-admin accounts", async () => {
     const db = makeDb({
       profile_roles: [{ user_id: "u4", role: "manager" }],
-      profiles: [{ id: "u4", email: "manager@test.axis.local", role: "manager" }],
+      profiles: [{ id: "u4", email: "manager@test.proplane.local", role: "manager" }],
     });
     expect(await userHoldsAdminRole(db, "u4")).toBe(false);
   });
@@ -86,10 +86,10 @@ describe("filterAdminUserIds", () => {
         { user_id: "mgr", role: "manager" },
       ],
       profiles: [
-        { id: "role-admin", email: "admin@test.axis.local", role: "resident" },
-        { id: "legacy-admin", email: "old@test.axis.local", role: "admin" },
+        { id: "role-admin", email: "admin@test.proplane.local", role: "resident" },
+        { id: "legacy-admin", email: "old@test.proplane.local", role: "admin" },
         { id: "primary", email: PRIMARY_ADMIN_EMAIL, role: "manager" },
-        { id: "mgr", email: "manager@test.axis.local", role: "manager" },
+        { id: "mgr", email: "manager@test.proplane.local", role: "manager" },
       ],
     });
     const admins = await filterAdminUserIds(db, ["role-admin", "legacy-admin", "primary", "mgr", "ghost"]);

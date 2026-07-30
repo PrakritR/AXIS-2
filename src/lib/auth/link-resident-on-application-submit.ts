@@ -28,6 +28,8 @@ export async function linkResidentOnApplicationSubmit(
     row: DemoApplicantRow;
     isNewSubmit: boolean;
     existingManagerUserId?: string | null;
+    /** When false, only stamps the application row — never overwrites profiles.manager_id. */
+    linkProfile?: boolean;
   },
 ): Promise<ResidentApplicationSubmitResult> {
   const propertyId = readPropertyId(params.row);
@@ -43,6 +45,8 @@ export async function linkResidentOnApplicationSubmit(
     id: normalizeApplicationAxisId(params.row.id),
     propertyId: propertyId || params.row.propertyId,
     managerUserId,
+    residentUserId: params.userId,
+    axisId: normalizeApplicationAxisId(params.row.id),
   };
 
   const axisId = normalizeApplicationAxisId(normalizedRow.id);
@@ -53,7 +57,8 @@ export async function linkResidentOnApplicationSubmit(
     .maybeSingle();
 
   const existingAxisId = typeof existingProfile?.manager_id === "string" ? existingProfile.manager_id.trim() : "";
-  if (params.isNewSubmit || !existingAxisId) {
+  const linkProfile = params.linkProfile !== false;
+  if (linkProfile && (params.isNewSubmit || !existingAxisId)) {
     await db.from("profiles").update({ manager_id: axisId }).eq("id", params.userId);
   }
 

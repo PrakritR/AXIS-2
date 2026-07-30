@@ -32,9 +32,9 @@ Each project has its own callback URL: `https://<project-ref>.supabase.co/auth/v
 
 | Step | Where | What |
 |------|--------|------|
-| 1 | Supabase → Authentication → Providers → **Apple** | Enable, set **Client IDs** to `com.axisseattlehousing.app` |
+| 1 | Supabase → Authentication → Providers → **Apple** | Enable, set **Client IDs** to `space.proplane.app` |
 | 2 | Supabase → Authentication → URL configuration → **Redirect URLs** | Add native scheme callbacks (see below) |
-| 3 | Apple Developer → App ID | Enable **Sign in with Apple** on `com.axisseattlehousing.app` |
+| 3 | Apple Developer → App ID | Enable **Sign in with Apple** on `space.proplane.app` |
 | 4 | iOS project | Rebuild native shell after plugin changes (`npm run cap:ios:run`) |
 
 **Supabase Apple provider (native):**
@@ -42,21 +42,21 @@ Each project has its own callback URL: `https://<project-ref>.supabase.co/auth/v
 | Field | Value |
 |-------|--------|
 | **Enable** | ON |
-| **Client IDs** | `com.axisseattlehousing.app` only (bundle ID — **not** an APNs Key ID) |
+| **Client IDs** | `space.proplane.app` only (bundle ID — **not** an APNs Key ID) |
 | **Secret Key (for OAuth)** | Leave **blank** — native uses `signInWithIdToken`, not web OAuth |
 | **Callback URL** | `https://<project-ref>.supabase.co/auth/v1/callback` (set by Supabase) |
 
 **Native redirect URLs** (Supabase → URL configuration):
 
 ```
-com.axisseattlehousing.app://auth/callback
-com.axisseattlehousing.app://auth/callback/partner-pricing
-com.axisseattlehousing.app://auth/callback/resident-signup
-com.axisseattlehousing.app://auth/callback/vendor-signup
-com.axisseattlehousing.app://auth/callback/**
+space.proplane.app://auth/callback
+space.proplane.app://auth/callback/partner-pricing
+space.proplane.app://auth/callback/resident-signup
+space.proplane.app://auth/callback/vendor-signup
+space.proplane.app://auth/callback/**
 ```
 
-**Apple Developer:** [Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `com.axisseattlehousing.app` → enable Sign in with Apple. No Services ID or `.p8` secret needed for native.
+**Apple Developer:** [Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `space.proplane.app` → enable Sign in with Apple. No Services ID or `.p8` secret needed for native.
 
 **Already in repo:** `ios/App/App/App.entitlements` (`com.apple.developer.applesignin`), `@capacitor-community/apple-sign-in`.
 
@@ -81,7 +81,7 @@ Use this when **Continue with Apple** on `/auth/sign-in` shows a toast about web
 | Field | Value |
 |-------|--------|
 | **Enable** | ON |
-| **Client IDs** | `com.axisseattlehousing.app,com.axisseattlehousing.app.web` (bundle ID + Services ID, comma-separated) |
+| **Client IDs** | `space.proplane.app,com.axisseattlehousing.app.web` (bundle ID + Services ID, comma-separated) |
 | **Secret Key** | Generate in Supabase from Apple `.p8` key (rotating JWT secret for web OAuth) — **cannot be blank** |
 | **Callback URL** | `https://<project-ref>.supabase.co/auth/v1/callback` |
 
@@ -125,7 +125,7 @@ Use a **Services ID** — not a Website Push ID, not the iOS App ID alone.
 1. **Identifiers** → filter **Services IDs** (not App IDs, not Website Push IDs).
 2. If `com.axisseattlehousing.app.web` is missing → **+** → **Services IDs** → Description e.g. "Axis web OAuth" → Identifier `com.axisseattlehousing.app.web` → Register.
 3. Open the Services ID → enable **Sign in with Apple** → **Configure**.
-4. **Primary App ID:** `com.axisseattlehousing.app`.
+4. **Primary App ID:** `space.proplane.app`.
 5. **Domains and Subdomains:** `emstjswhotsnyksqhqyf.supabase.co` (use `<project-ref>.supabase.co` for the project in `NEXT_PUBLIC_SUPABASE_URL`).
 6. **Return URLs:** `https://emstjswhotsnyksqhqyf.supabase.co/auth/v1/callback` — exact match, HTTPS, no trailing slash.
 7. **Keys** ([Keys list](https://developer.apple.com/account/resources/authkeys/list)): confirm key `9872GVCALV` exists with **Sign in with Apple** enabled (Team `8FH3GVHCZ9`). Download `.p8` once; filename is `AuthKey_9872GVCALV.p8`.
@@ -226,7 +226,7 @@ Expected output for dev/test:
 | `client_id` | `com.axisseattlehousing.app.web` |
 | `redirect_uri` | `https://emstjswhotsnyksqhqyf.supabase.co/auth/v1/callback` |
 
-**Root cause (most common):** The Services ID `com.axisseattlehousing.app.web` was **assumed in repo docs/scripts but never created** in Apple Developer — or a **Website Push ID** was created instead (wrong type). The iOS app only registers the **bundle ID** `com.axisseattlehousing.app` (App ID) — that alone does not satisfy web OAuth.
+**Root cause (most common):** The Services ID `com.axisseattlehousing.app.web` was **assumed in repo docs/scripts but never created** in Apple Developer — or a **Website Push ID** was created instead (wrong type). The iOS app only registers the **bundle ID** `space.proplane.app` (App ID) — that alone does not satisfy web OAuth.
 
 **Fix — Apple Developer checklist** ([Identifiers](https://developer.apple.com/account/resources/identifiers/list)):
 
@@ -235,7 +235,7 @@ Expected output for dev/test:
 | 0 | Confirm you are on **Services IDs**, not Website Push IDs or App IDs |
 | 1 | **Identifiers** → **+** → **Services IDs** → Register identifier `com.axisseattlehousing.app.web` (or pick another ID and update Supabase + `scripts/configure-apple-web-oauth.mjs` + `APPLE_WEB_SERVICES_ID` in `apple-sign-in-config.ts` to match) |
 | 2 | Open the Services ID → enable **Sign in with Apple** → **Configure** |
-| 3 | **Primary App ID:** select `com.axisseattlehousing.app` |
+| 3 | **Primary App ID:** select `space.proplane.app` |
 | 4 | **Domains and Subdomains:** `emstjswhotsnyksqhqyf.supabase.co` (dev/test) — use `<project-ref>.supabase.co` for the project in `NEXT_PUBLIC_SUPABASE_URL` |
 | 5 | **Return URLs:** `https://emstjswhotsnyksqhqyf.supabase.co/auth/v1/callback` (must match Supabase callback exactly; no `localhost` here) |
 | 6 | **Keys:** confirm Sign in with Apple key **`9872GVCALV`** (Team `8FH3GVHCZ9`) — not `9872GVHCV`; download `AuthKey_9872GVCALV.p8` |
@@ -245,7 +245,7 @@ Expected output for dev/test:
 | Field | Value |
 |-------|--------|
 | **Client ID** (primary) | `com.axisseattlehousing.app.web` |
-| **Additional client IDs** | `com.axisseattlehousing.app` |
+| **Additional client IDs** | `space.proplane.app` |
 | **Secret Key** | JWT from `.p8` with `sub` = **Services ID** (`com.axisseattlehousing.app.web`), not the bundle ID |
 
 Re-apply with the configure script (does not commit secrets):

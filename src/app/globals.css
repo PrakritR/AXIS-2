@@ -1313,6 +1313,76 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
    higher specificity and wins in the native app, so this only ever governs web. */
 :root {
   --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
+  /* FAB (h-11) + gap above the fixed bottom bar — used for main-column scroll clearance. */
+  --portal-assistant-fab-clearance: 3.5rem;
+  --portal-mobile-scroll-bottom-inset: calc(
+    var(--portal-native-bottom-nav-inset) + var(--portal-assistant-fab-clearance)
+  );
+  --portal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --portal-duration-fast: 120ms;
+  --portal-duration: 220ms;
+}
+
+.portal-pressable {
+  transition:
+    opacity var(--portal-duration-fast) var(--portal-ease),
+    transform var(--portal-duration-fast) var(--portal-ease),
+    background-color var(--portal-duration) var(--portal-ease);
+}
+
+.portal-pressable:active {
+  opacity: 0.88;
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-pressable:active {
+    opacity: 0.92;
+    transform: none;
+  }
+}
+
+/* Appendix D6 — mobile-web list/detail polish (responsive portal at phone widths). */
+@media (max-width: 1023px) {
+  .portal-list-detail {
+    min-height: min(70vh, calc(100dvh - var(--portal-native-bottom-nav-inset) - 9rem));
+  }
+
+  .portal-detail-header {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .portal-list-search {
+    min-height: 2.75rem;
+    font-size: 16px;
+  }
+
+  [data-slot="destination-nav"] a,
+  [data-slot="portal-tabs-mobile"] button {
+    min-height: 2.75rem;
+  }
+
+  html:has(.portal-shell) {
+    height: 100%;
+    overflow: hidden;
+    overflow-x: clip;
+    max-width: 100%;
+    touch-action: manipulation;
+  }
+
+  html:has(.portal-shell) body {
+    height: 100%;
+    overflow: hidden;
+    overflow-x: clip;
+    max-width: 100%;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  html:has(.portal-shell) #portal-main-content {
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* App Store compliance (Guideline 2.1(b) / 3.1.1): the iOS app must not present
@@ -1364,6 +1434,8 @@ html[data-native] #portal-main-content {
 html[data-native]:has(.portal-shell) {
   height: 100%;
   overflow: hidden;
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 html[data-native]:has(.portal-shell) body {
@@ -1975,9 +2047,7 @@ html[data-native] .portal-native-bottom-nav {
   right: 0;
   bottom: 0;
   z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: block;
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
@@ -1996,32 +2066,23 @@ html[data-native] .portal-native-bottom-nav-pull-handle {
   background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
-/* Instagram-style: evenly-spaced icon-only tabs, no horizontal scroll — every
-   curated primary set is small enough (4-5 items) to fit at once.
-   `.portal-native-bottom-nav`'s flex-direction is `column`, so `flex: 1 1 0`
-   here sizes this row's HEIGHT (main axis) — it must NOT also carry `width: 0`
-   (that's a cross-axis override that collapsed the whole icon row to ~0px
-   wide, rendering an icon-less empty bar). Width comes from the parent's
-   `align-items: stretch` instead. */
+/* Instagram-style: evenly-spaced icon tabs in a single grid row — no horizontal scroll. */
 html[data-native] .portal-native-bottom-nav-scroll {
-  display: flex;
-  flex: 1 1 0;
+  display: grid;
+  width: 100%;
   min-width: 0;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  justify-content: space-evenly;
+  align-items: end;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll > a,
 html[data-native] .portal-native-bottom-nav-scroll > button {
-  flex: 1 1 0;
   min-width: 0;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll a svg,
 html[data-native] .portal-native-bottom-nav-scroll button svg {
-  height: 1.4375rem;
-  width: 1.4375rem;
+  height: 1.375rem;
+  width: 1.375rem;
 }
 
 html[data-native] .portal-shell,
@@ -2033,11 +2094,11 @@ html[data-native] .portal-main-inner {
 
 html[data-native] #portal-main-content {
   padding-top: max(0.25rem, var(--native-safe-top));
-  padding-bottom: var(--portal-native-bottom-nav-inset);
+  padding-bottom: var(--portal-mobile-scroll-bottom-inset);
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
   scroll-padding-top: max(0.25rem, var(--native-safe-top));
-  scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+  scroll-padding-bottom: var(--portal-mobile-scroll-bottom-inset);
 }
 
 /* Resident/manager/vendor: back + profile sit in the status-bar band beside the notch. */
@@ -2055,11 +2116,9 @@ html[data-native] .portal-mobile-nav-bar {
   padding-left: max(0.75rem, var(--native-safe-left));
   padding-right: max(0.75rem, var(--native-safe-right));
   padding-bottom: 0.125rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   align-items: flex-end;
-  background: color-mix(in srgb, var(--background) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--background);
 }
 
 /* Mobile web (<1024px, matches the shared `lg:hidden`/`max-lg:` breakpoint):
@@ -2080,9 +2139,7 @@ html[data-native] .portal-mobile-nav-bar {
     right: 0;
     bottom: 0;
     z-index: 50;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    display: block;
     overflow: hidden;
     -webkit-user-select: none;
     user-select: none;
@@ -2101,24 +2158,40 @@ html[data-native] .portal-mobile-nav-bar {
     background: color-mix(in srgb, var(--muted) 45%, transparent);
   }
 
-  /* Same load-bearing height-distribution rule as the native block above —
-     do not add `width: 0` here (see comment there). */
+  /* Same grid row as the native block above. */
   .portal-native-bottom-nav-scroll {
-    display: flex;
-    flex: 1 1 0;
+    display: grid;
+    width: 100%;
     min-width: 0;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    justify-content: space-evenly;
+    align-items: end;
+  }
+
+  .portal-native-bottom-nav-scroll > a,
+  .portal-native-bottom-nav-scroll > button {
+    min-width: 0;
   }
 
   #portal-main-content {
-    padding-bottom: var(--portal-native-bottom-nav-inset);
-    scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+    padding-bottom: var(--portal-mobile-scroll-bottom-inset);
+    scroll-padding-bottom: var(--portal-mobile-scroll-bottom-inset);
+  }
+
+  .portal-mobile-nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--background);
   }
 
   .axis-assistant-panel {
     bottom: calc(var(--portal-native-bottom-nav-inset) + 0.75rem);
+  }
+}
+
+/* Desktop: extra scroll room so list tails clear the assistant FAB. */
+@media (min-width: 1024px) {
+  #portal-main-content {
+    scroll-padding-bottom: calc(var(--portal-assistant-fab-clearance, 3.5rem) + 1.5rem);
   }
 }
 
@@ -2156,7 +2229,124 @@ html[data-native] .portal-preview-list {
 
 html[data-native] .portal-section-surface,
 html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
-  --portal-shell-gap: 1rem;
+  --portal-shell-gap: 0.75rem;
+}
+
+@media (max-width: 1023px) {
+  .portal-main-inner .portal-inbox-search {
+    height: 2.125rem;
+    font-size: 0.8125rem;
+  }
+
+  .portal-communication-inbox .portal-inbox-two-pane {
+    border-radius: 0.75rem;
+  }
+
+  /* G3 — keep the assistant FAB bottom-right without overlapping the send button. */
+  .portal-communication-inbox .portal-inbox-composer-row {
+    padding-right: 3.25rem;
+  }
+
+  /* Float above the fixed bottom tab bar (not inside it) on phone-width web + native. */
+  .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    z-index: 45;
+  }
+
+  html[data-bulk-action-bar] #portal-main-content {
+    padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
+    scroll-padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
+  }
+
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.5rem) !important;
+  }
+
+  /* Record detail footer actions — float FAB above the centered action row. */
+  html:has([data-slot="portal-page-footer-actions"]) .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.75rem) !important;
+  }
+
+  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 6.25rem) !important;
+  }
+}
+
+/* Lift assistant FAB when bulk selection bar is open (desktop). */
+@media (min-width: 1024px) {
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: 5.5rem !important;
+  }
+
+  /* Pinned record-detail footer (resident profile sections) — sit above the action row. */
+  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
+    bottom: 5.75rem !important;
+  }
+
+  html[data-portal-sidebar-collapsed] [data-slot="bulk-action-bar"][data-variant="payments"] {
+    left: 58px;
+  }
+}
+
+html[data-hide-assistant-fab] .axis-assistant-fab,
+html[data-communication-surface] .axis-assistant-fab {
+  display: none !important;
+}
+
+html[data-hide-assistant-fab],
+html[data-communication-surface] {
+  --portal-assistant-fab-clearance: 0px;
+  --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);
+}
+
+html[data-hide-assistant-fab] .portal-communication-inbox .portal-inbox-composer-row,
+html[data-communication-surface] .portal-inbox-composer-row {
+  padding-right: 0;
+}
+
+@media (max-width: 1023px) {
+  html[data-communication-surface] #portal-main-content {
+    padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+    scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+  }
+
+  html[data-communication-thread-reading] #portal-main-content {
+    overflow: hidden;
+    padding-bottom: 0;
+    scroll-padding-bottom: 0;
+  }
+
+  html[data-communication-thread-reading] .portal-main-inner {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
+    max-height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
+  }
+
+  html[data-communication-thread-reading] .portal-communication-inbox .portal-inbox-two-pane {
+    border-radius: 0;
+    border-bottom-width: 0;
+    margin-bottom: 0;
+    box-shadow: none;
+  }
+
+  html[data-communication-thread-reading] .portal-inbox-thread-pane {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  html[data-communication-thread-reading] .portal-inbox-composer {
+    padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-communication-surface] .portal-resident-detail-inbox .portal-inbox-two-pane {
+    border-radius: 0.75rem;
+  }
 }
 
 html[data-native] h1.text-\[1\.35rem\] {
@@ -2198,6 +2388,28 @@ html[data-native] [data-listing-sections-root] {
 /* Manager/admin listing preview: tabs sit flush at the top of the preview shell. */
 [data-listing-subnav-pinned] {
   top: 0 !important;
+}
+
+/* Manager property preview: section tabs stick flush under the mobile top bar. */
+#portal-main-content [data-listing-subnav-portal] {
+  top: var(--portal-mobile-top-chrome, 0px);
+  z-index: 39;
+}
+
+#portal-main-content:has([data-listing-subnav-portal]) .portal-mobile-nav-bar {
+  margin-bottom: 0;
+}
+
+/* Property / resident record detail: destination tabs scroll with content (not sticky). */
+
+/* Manager list sections: pipeline tabs stick flush under the mobile top bar. */
+#portal-main-content [data-portal-list-destination-nav] {
+  top: var(--portal-mobile-top-chrome, 0px);
+  z-index: 39;
+}
+
+#portal-main-content:has([data-portal-list-destination-nav]) .portal-mobile-nav-bar {
+  margin-bottom: 0;
 }
 
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */
@@ -2543,7 +2755,8 @@ html[data-native] [data-listing-subnav] {
   max-width: 100vw;
 }
 
-/* ── Portal Communication inbox (dark) — align with homepage lp-ibx surfaces ── */
+/* ── Portal Communication inbox — flat on page canvas (light + dark) ── */
+html[data-theme="light"] .portal-communication-inbox .portal-inbox-two-pane,
 html[data-theme="dark"] .portal-communication-inbox .portal-inbox-two-pane {
   background: transparent;
   border: none;
@@ -2621,4 +2834,10 @@ html[data-theme="dark"] .portal-inbox-ai-draft-text {
   background: color-mix(in srgb, var(--primary) 5%, var(--pl-surface-raised));
   border-style: dashed;
   border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+}
+
+.portal-inbox-ai-assist-bar .portal-inbox-ai-draft {
+  border-top-width: 0;
+  border-radius: 0;
+  background: transparent;
 }

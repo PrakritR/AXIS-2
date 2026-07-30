@@ -83,7 +83,7 @@ describe("GET /api/webhooks/claw-messenger/manager-phones", () => {
         }),
         profileRow({
           id: "mgr-sandbox",
-          email: "manager@test.axis.local", // sandbox → excluded from roster
+          email: "manager@test.proplane.local", // sandbox → excluded from roster
           phone: "3605550333",
         }),
       ],

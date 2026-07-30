@@ -129,18 +129,22 @@ describe("PATCH /api/portal/manager-application-settings — invalid fees 400, n
   });
 });
 
-describe("effectiveApplicationFeeCents — source-of-truth priority", () => {
-  it("a configured manager-level fee wins over the listing's stored fee", () => {
-    expect(effectiveApplicationFeeCents({ managerFeeCents: 7500, listingFeeCents: 3000 })).toBe(7500);
+describe("effectiveApplicationFeeCents — per-listing authoritative (option B)", () => {
+  it("the listing's own fee WINS over a configured account-wide fee", () => {
+    expect(effectiveApplicationFeeCents({ managerFeeCents: 7500, listingFeeCents: 3000 })).toBe(3000);
   });
-  it("a configured 0 manager-level fee means free (wins over listing)", () => {
-    expect(effectiveApplicationFeeCents({ managerFeeCents: 0, listingFeeCents: 3000 })).toBe(0);
+  it("a per-listing 0 means FREE and does NOT fall through to a non-zero account-wide fee", () => {
+    // The load-bearing case: a deliberate per-listing $0 must never reintroduce a charge.
+    expect(effectiveApplicationFeeCents({ managerFeeCents: 7500, listingFeeCents: 0 })).toBe(0);
   });
-  it("falls back to the listing's grandfathered fee when manager-level is unset", () => {
-    expect(effectiveApplicationFeeCents({ managerFeeCents: null, listingFeeCents: 3000 })).toBe(3000);
+  it("falls back to the account-wide fee (a default) when the listing sets nothing", () => {
+    expect(effectiveApplicationFeeCents({ managerFeeCents: 7500, listingFeeCents: null })).toBe(7500);
+  });
+  it("an account-wide 0 default applies only when the listing is unset", () => {
+    expect(effectiveApplicationFeeCents({ managerFeeCents: 0, listingFeeCents: null })).toBe(0);
   });
   it("falls back to the legacy default when neither is set", () => {
-    expect(effectiveApplicationFeeCents({ managerFeeCents: null, listingFeeCents: 0 })).toBe(
+    expect(effectiveApplicationFeeCents({ managerFeeCents: null, listingFeeCents: null })).toBe(
       LEGACY_DEFAULT_APPLICATION_FEE_CENTS,
     );
   });
@@ -179,23 +183,23 @@ function makeDb(opts: { listingFee: string; managerFeeCents: number | null }): S
   return { from } as unknown as SupabaseClient;
 }
 
-describe("resolveApplicationFeeProperty — manager-level fee is authoritative", () => {
-  it("charges the manager-level fee, NOT the listing's stored fee, once configured", async () => {
+describe("resolveApplicationFeeProperty — the listing's own fee is authoritative (option B)", () => {
+  it("charges the LISTING's fee, not the account-wide fee, when the listing sets one", async () => {
     const db = makeDb({ listingFee: "$30", managerFeeCents: 7500 });
-    const res = await resolveApplicationFeeProperty(db, { propertyId: "prop_1", managerUserId: "mgr_A" });
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.value.applicationFeeCents).toBe(7500);
-  });
-
-  it("grandfathers the listing's stored fee when the manager has set no account-level fee", async () => {
-    const db = makeDb({ listingFee: "$30", managerFeeCents: null });
     const res = await resolveApplicationFeeProperty(db, { propertyId: "prop_1", managerUserId: "mgr_A" });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.applicationFeeCents).toBe(3000);
   });
 
-  it("rejects with NO_APPLICATION_FEE when the manager has set the fee to 0 (free)", async () => {
-    const db = makeDb({ listingFee: "$30", managerFeeCents: 0 });
+  it("uses the account-wide fee as a default only when the listing sets nothing", async () => {
+    const db = makeDb({ listingFee: "", managerFeeCents: 7500 });
+    const res = await resolveApplicationFeeProperty(db, { propertyId: "prop_1", managerUserId: "mgr_A" });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.applicationFeeCents).toBe(7500);
+  });
+
+  it("a per-listing $0 is FREE — it rejects rather than falling through to the account-wide fee", async () => {
+    const db = makeDb({ listingFee: "$0", managerFeeCents: 7500 });
     const res = await resolveApplicationFeeProperty(db, { propertyId: "prop_1", managerUserId: "mgr_A" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("NO_APPLICATION_FEE");

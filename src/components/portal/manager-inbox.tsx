@@ -5,7 +5,12 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import {
+  buildInboxThreadAssistantContext,
+  InboxThreadAssistantStrip,
+} from "@/components/portal/inbox-thread-assistant-strip";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -25,18 +30,21 @@ import {
   appendReplyToInboxThread,
   collapsePersonInboxThreads,
   resolveCollapsedInboxThread,
-  type InboxThreadMessage,
   type InboxAiDraft,
+  type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
   AiDraftReplyCard,
   InboxComposer,
+  InboxReplyChannelPicker,
   InboxConversationRow,
   InboxScheduledCard,
+  InboxScheduledThreadList,
   InboxThreadEmpty,
   InboxThreadView,
+  PORTAL_INBOX_LIST_TOOLBAR_CLASS,
   InboxTwoPane,
   PortalInboxEmptyState,
   inboxTabEmptyCopy,
@@ -63,6 +71,7 @@ import {
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
+import type { ManagerSmsResidentConversation } from "@/lib/manager-sms-messages";
 import {
   threadPassesCommunicationFilters,
   type CommunicationThreadFilters,
@@ -81,9 +90,15 @@ type InboxThread = {
   time: string;
   unread: boolean;
   messages?: InboxThreadMessage[];
-  /** Manager-only pending AI reply draft (never present on resident rows). */
   aiDraft?: InboxAiDraft;
 };
+
+function threadEligibleForAiDraft(thread: InboxThread): boolean {
+  if (thread.folder !== "inbox") return false;
+  // `messages` holds manager replies only — draft when the resident message is unanswered.
+  if ((thread.messages ?? []).length > 0) return false;
+  return Boolean(thread.body?.trim());
+}
 
 /** Search deliberately skips the trash folder; say so rather than letting a
  *  manager conclude a trashed message no longer exists. Re-clicking the pill of
@@ -135,6 +150,10 @@ export const ManagerInbox = forwardRef<
     /** Controlled selection for unified Communication. */
     controlledExpandedId?: string | null;
     onControlledExpandedIdChange?: (id: string | null) => void;
+    smsUiEnabled?: boolean;
+    smsRecipients?: ManagerSmsResidentConversation[];
+    /** Let the portal page scroll the thread instead of a nested pane (resident profile). */
+    pageScroll?: boolean;
   }
 >(function ManagerInbox(
   {
@@ -149,6 +168,9 @@ export const ManagerInbox = forwardRef<
     suppressListPane = false,
     controlledExpandedId,
     onControlledExpandedIdChange,
+    smsUiEnabled = false,
+    pageScroll = false,
+    smsRecipients = [],
   },
   ref,
 ) {
@@ -491,46 +513,98 @@ export const ManagerInbox = forwardRef<
   );
 
   const handleReply = useCallback(
-    async (rowId: string, text: string) => {
+    async (
+      rowId: string,
+      text: string,
+      channels: { email: boolean; sms: boolean },
+    ) => {
       const thread = local.find((t) => t.id === rowId);
       if (!thread) return;
-      const reply: InboxThreadMessage = {
-        id: `reply-${Date.now().toString(36)}`,
-        from: "Property manager",
-        body: text,
-        at: new Date().toLocaleString(),
-      };
-      // Sending a reply supersedes any pending AI draft — clear it so it never
-      // lingers (and never leaks) once a real reply has gone out.
-      const updated = { ...appendReplyToInboxThread(thread, reply), aiDraft: undefined };
-      const next = local.map((t) => (t.id === thread.id ? updated : t));
-      persistInboxRef.current = false;
-      setLocal(next);
-      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-      persistInboxRef.current = true;
-      if (!ok) {
-        setLocal(local);
-        throw new Error("persist failed");
+      if (!channels.email && !channels.sms) {
+        throw new Error("no channel");
       }
-      const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-      await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          threadId: thread.id,
-          // Name the sender so the reply reads as the manager on the resident's
-          // side (matches the reply bubble above), not the generic default.
-          fromName: "Property manager",
-          subject,
-          text,
-          toEmails: [thread.email],
-          deliverToPortalInbox: true,
-        }),
-      });
+
+      let emailOk = !channels.email;
+      let smsOk = !channels.sms;
+
+      if (channels.email) {
+        const reply: InboxThreadMessage = {
+          id: `reply-${Date.now().toString(36)}`,
+          from: "Property manager",
+          body: text,
+          at: new Date().toLocaleString(),
+        };
+        const updated = { ...appendReplyToInboxThread(thread, reply), aiDraft: undefined };
+        const next = local.map((t) => (t.id === thread.id ? updated : t));
+        persistInboxRef.current = false;
+        setLocal(next);
+
+        const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            threadId: thread.id,
+            fromName: "Property manager",
+            subject,
+            text,
+            toEmails: [thread.email],
+            deliverToPortalInbox: true,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        emailOk = res.ok && data.ok === true;
+        if (emailOk) {
+          const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+          persistInboxRef.current = true;
+          if (!ok) {
+            setLocal(local);
+            throw new Error("persist failed");
+          }
+        } else {
+          persistInboxRef.current = true;
+          setLocal(local);
+          throw new Error("email failed");
+        }
+      }
+
+      if (channels.sms) {
+        const norm = thread.email.trim().toLowerCase();
+        const smsTarget = smsRecipients.find(
+          (r) => r.residentEmail?.trim().toLowerCase() === norm && r.phone?.trim(),
+        );
+        if (!smsTarget?.phone?.trim()) {
+          throw new Error("no phone");
+        }
+        const res = await fetch("/api/manager/sms-conversations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toPhone: smsTarget.phone.trim(),
+            text,
+            residentUserId: smsTarget.residentUserId ?? undefined,
+            conversationKey: smsTarget.conversationKey ?? null,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        smsOk = res.ok;
+        if (!smsOk) {
+          if (!channels.email) {
+            setLocal(local);
+            throw new Error(data.error ?? "sms failed");
+          }
+        }
+      }
+
+      if (!emailOk && !smsOk) {
+        throw new Error("send failed");
+      }
+
       void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
     },
-    [local],
+    [local, smsRecipients],
   );
 
   const handleComposeSend = useCallback(
@@ -591,6 +665,13 @@ export const ManagerInbox = forwardRef<
   // ---- Open conversation (right pane) ----------------------------------
   const [replyDraft, setReplyDraft] = useState("");
   const [replySending, setReplySending] = useState(false);
+  const [replyViaEmail, setReplyViaEmail] = useState(true);
+  const [replyViaSms, setReplyViaSms] = useState(false);
+  const [approvingDraft, setApprovingDraft] = useState(false);
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [discardedDraftIds, setDiscardedDraftIds] = useState<Set<string>>(() => new Set());
+  const [draftingIds, setDraftingIds] = useState<Set<string>>(() => new Set());
+  const draftAttemptedRef = useRef<Set<string>>(new Set());
 
   const activeThread = useMemo(
     () => resolveCollapsedInboxThread(expandedId, emailThreads, local),
@@ -600,7 +681,8 @@ export const ManagerInbox = forwardRef<
   // A fresh draft per conversation.
   useEffect(() => {
     setReplyDraft("");
-    setEditingDraft(false);
+    setReplyViaEmail(true);
+    setReplyViaSms(false);
   }, [expandedId]);
 
   const activeIsSent = activeThread?.folder === "sent";
@@ -745,133 +827,125 @@ export const ManagerInbox = forwardRef<
     if (!activeThread) return;
     const text = replyDraft.trim();
     if (!text) return;
+    if (!replyViaEmail && !replyViaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
     setReplySending(true);
     try {
-      await handleReply(activeThread.id, text);
+      await handleReply(activeThread.id, text, { email: replyViaEmail, sms: replyViaSms });
       setReplyDraft("");
-      setEditingDraft(false);
-      showToast("Reply sent.");
+      if (replyViaEmail && replyViaSms) showToast("Reply sent via email and SMS.");
+      else if (replyViaSms) showToast("SMS sent.");
+      else showToast("Reply sent.");
     } catch {
       showToast("Could not send reply.");
     } finally {
       setReplySending(false);
     }
-  }, [activeThread, replyDraft, handleReply, showToast]);
+  }, [activeThread, replyDraft, replyViaEmail, replyViaSms, handleReply, showToast]);
 
-  // ---- Approval-first AI drafts ----------------------------------------
-  // PropLane AI drafts a reply to each incoming resident message. The draft is
-  // stored only on the manager's own thread row (invisible to the resident) and
-  // NEVER sends without the manager's explicit Approve/Edit action.
-  const [editingDraft, setEditingDraft] = useState(false);
-  const [approvingDraft, setApprovingDraft] = useState(false);
-  const [draftingIds, setDraftingIds] = useState<Set<string>>(() => new Set());
-  const [draftErrorIds, setDraftErrorIds] = useState<Set<string>>(() => new Set());
-  // Threads we've already asked the server to draft (success, skip, or error).
-  // Prevents auto-regenerating a draft the manager discarded or the server
-  // declined (e.g. a non-resident sender).
-  const draftAttemptedRef = useRef<Set<string>>(new Set());
-  // Threads the server declined to draft (non-resident sender, empty, no AI) —
-  // no manual "generate" affordance is offered for these.
-  const draftSkippedRef = useRef<Set<string>>(new Set());
-
-  const generateDraft = useCallback(async (rowId: string) => {
-    draftAttemptedRef.current.add(rowId);
-    draftSkippedRef.current.delete(rowId);
-    setDraftErrorIds((s) => {
-      if (!s.has(rowId)) return s;
-      const n = new Set(s);
-      n.delete(rowId);
-      return n;
+  const requestInboxAiDraft = useCallback(async (threadId: string, force = false) => {
+    if (isDemoModeActive()) return;
+    setDraftingIds((prev) => {
+      if (prev.has(threadId)) return prev;
+      const next = new Set(prev);
+      next.add(threadId);
+      return next;
     });
-    setDraftingIds((s) => new Set(s).add(rowId));
     try {
       const res = await fetch("/api/portal/inbox-draft-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ threadId: rowId }),
+        body: JSON.stringify({ threadId, force }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
-        draft?: InboxAiDraft;
         skip?: boolean;
+        draft?: InboxAiDraft;
+        error?: string;
       };
-      if (data.ok && data.draft?.text) {
-        // Reflect the server-persisted draft in local state (the row already
-        // carries it server-side; this just re-renders the open conversation).
-        setLocal((prev) => prev.map((t) => (t.id === rowId ? { ...t, aiDraft: data.draft } : t)));
-      } else if (data.skip) {
-        draftSkippedRef.current.add(rowId);
-      } else {
-        setDraftErrorIds((s) => new Set(s).add(rowId));
+      if (data.ok && data.draft) {
+        setLocal((prev) => {
+          const next = prev.map((t) => (t.id === threadId ? { ...t, aiDraft: data.draft } : t));
+          persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+          return next;
+        });
+        setDraftErrors((prev) => {
+          const next = { ...prev };
+          delete next[threadId];
+          return next;
+        });
+      } else if (!data.ok && data.error) {
+        setDraftErrors((prev) => ({ ...prev, [threadId]: data.error ?? "Could not draft reply." }));
       }
     } catch {
-      setDraftErrorIds((s) => new Set(s).add(rowId));
+      setDraftErrors((prev) => ({ ...prev, [threadId]: "Could not draft reply." }));
     } finally {
-      setDraftingIds((s) => {
-        const n = new Set(s);
-        n.delete(rowId);
-        return n;
+      setDraftingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(threadId);
+        return next;
       });
     }
   }, []);
 
-  // Auto-draft eligible incoming resident messages once the inbox has synced.
+  // Auto-draft every incoming resident thread that still needs a manager reply.
   useEffect(() => {
     if (!inboxSynced || isDemoModeActive()) return;
-    const eligible = local.filter(
-      (t) =>
-        t.folder === "inbox" &&
-        !t.aiDraft &&
-        inboxThreadMessages(t).length <= 1 && // no manager reply yet
-        !draftAttemptedRef.current.has(t.id),
-    );
-    // Cap the burst so a large inbox doesn't fan out dozens of requests at once.
-    for (const t of eligible.slice(0, 8)) void generateDraft(t.id);
-  }, [local, inboxSynced, generateDraft]);
+    for (const thread of local) {
+      if (!threadEligibleForAiDraft(thread)) continue;
+      if (thread.aiDraft?.status === "pending_approval") continue;
+      if (discardedDraftIds.has(thread.id)) continue;
+      if (draftAttemptedRef.current.has(thread.id)) continue;
+      draftAttemptedRef.current.add(thread.id);
+      void requestInboxAiDraft(thread.id);
+    }
+  }, [discardedDraftIds, inboxSynced, local, requestInboxAiDraft]);
 
-  const approveDraft = useCallback(
-    async (rowId: string) => {
-      const thread = local.find((t) => t.id === rowId);
-      const text = thread?.aiDraft?.text?.trim();
-      if (!thread || !text) return;
-      setApprovingDraft(true);
-      try {
-        // handleReply sends through the normal path AND strips the draft.
-        await handleReply(rowId, text);
-        showToast("Reply approved and sent.");
-      } catch {
-        showToast("Could not send reply.");
-      } finally {
-        setApprovingDraft(false);
-      }
-    },
-    [local, handleReply, showToast],
-  );
+  const activeSmsAvailable = useMemo(() => {
+    if (!smsUiEnabled || !activeThread?.email) return false;
+    const norm = activeThread.email.trim().toLowerCase();
+    return smsRecipients.some((r) => r.residentEmail?.trim().toLowerCase() === norm && r.phone?.trim());
+  }, [activeThread, smsRecipients, smsUiEnabled]);
 
-  const startEditDraft = useCallback(
-    (rowId: string) => {
-      const thread = local.find((t) => t.id === rowId);
-      setReplyDraft(thread?.aiDraft?.text ?? "");
-      setEditingDraft(true);
-    },
-    [local],
-  );
+  const discardActiveDraft = useCallback(async () => {
+    if (!activeThread?.aiDraft) return;
+    const updated: InboxThread = { ...activeThread, aiDraft: undefined };
+    const next = local.map((t) => (t.id === activeThread.id ? updated : t));
+    setDiscardedDraftIds((prev) => new Set(prev).add(activeThread.id));
+    persistInboxRef.current = false;
+    setLocal(next);
+    await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+    persistInboxRef.current = true;
+  }, [activeThread, local]);
 
-  const discardDraft = useCallback(
-    async (rowId: string) => {
-      // Keep it discarded: block auto-regeneration for the rest of the session.
-      draftAttemptedRef.current.add(rowId);
-      const thread = local.find((t) => t.id === rowId);
-      if (!thread) return;
-      const updated: InboxThread = { ...thread, aiDraft: undefined };
-      const next = local.map((t) => (t.id === rowId ? updated : t));
-      persistInboxRef.current = false;
-      setLocal(next);
-      await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-      persistInboxRef.current = true;
-    },
-    [local],
+  const approveActiveDraft = useCallback(async () => {
+    if (!activeThread?.aiDraft?.text?.trim()) return;
+    const viaEmail = replyViaEmail || !activeSmsAvailable;
+    const viaSms = replyViaSms && activeSmsAvailable;
+    if (!viaEmail && !viaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    setApprovingDraft(true);
+    try {
+      await handleReply(activeThread.id, activeThread.aiDraft.text.trim(), { email: viaEmail, sms: viaSms });
+    } finally {
+      setApprovingDraft(false);
+    }
+  }, [activeSmsAvailable, activeThread, handleReply, replyViaEmail, replyViaSms, showToast]);
+
+  const editActiveDraft = useCallback(() => {
+    if (!activeThread?.aiDraft?.text) return;
+    setReplyDraft(activeThread.aiDraft.text);
+  }, [activeThread]);
+
+  const showAiDraftUi = Boolean(
+    activeThread &&
+      activeThread.folder === "inbox" &&
+      ((activeThread.messages ?? []).length > 0 || Boolean(activeThread.body?.trim())),
   );
 
   const emptyCopy = inboxTabEmptyCopy(tabId);
@@ -995,7 +1069,7 @@ export const ManagerInbox = forwardRef<
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="portal-inbox-list-toolbar shrink-0 space-y-2 border-b border-border p-2.5">
+      <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
         {searchBox}
         {searchActive ? (
           <p className="px-1 text-[11px] leading-snug text-muted">
@@ -1093,7 +1167,11 @@ export const ManagerInbox = forwardRef<
 
   const scheduledCards =
     activeThread && activeThread.folder !== "trash" && threadScheduledItems.length > 0 ? (
-      <div className="space-y-1.5 pt-1">
+      <InboxScheduledThreadList
+        count={threadScheduledItems.length}
+        nextSendLabel={threadScheduledItems[0]?.sendLabel}
+        defaultCollapsed={embeddedInCommunication && threadScheduledItems.length > 2}
+      >
         {threadScheduledItems.map((item) => (
           <InboxScheduledCard
             key={item.id}
@@ -1112,7 +1190,7 @@ export const ManagerInbox = forwardRef<
             onSaveEdit={item.editable ? (next) => saveScheduledEdit(item, next) : undefined}
           />
         ))}
-      </div>
+      </InboxScheduledThreadList>
     ) : null;
 
   const threadPane = activeThread ? (
@@ -1134,35 +1212,57 @@ export const ManagerInbox = forwardRef<
       onBack={() => setExpandedId(null)}
       headerActions={threadHeaderActions}
       emptyLabel="No messages in this conversation."
+      scrollMode={pageScroll ? "page" : "pane"}
       composer={
         activeThread.folder === "trash" ? undefined : (
           <>
-            {activeThread.folder === "inbox" && !editingDraft ? (
+            {showAiDraftUi ? (
               <AiDraftReplyCard
-                drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft}
-                draft={activeThread.aiDraft?.text}
-                error={draftErrorIds.has(activeThread.id) ? "error" : undefined}
+                drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft?.text}
+                draft={
+                  activeThread.aiDraft?.status === "pending_approval" ? activeThread.aiDraft.text : undefined
+                }
+                error={draftErrors[activeThread.id]}
                 approving={approvingDraft}
-                onApprove={() => void approveDraft(activeThread.id)}
-                onEdit={() => startEditDraft(activeThread.id)}
-                onDiscard={() => void discardDraft(activeThread.id)}
+                onApprove={() => void approveActiveDraft()}
+                onEdit={editActiveDraft}
+                onDiscard={() => void discardActiveDraft()}
                 onGenerate={
-                  !activeThread.aiDraft &&
-                  !draftingIds.has(activeThread.id) &&
-                  !draftSkippedRef.current.has(activeThread.id) &&
-                  draftAttemptedRef.current.has(activeThread.id)
-                    ? () => void generateDraft(activeThread.id)
+                  discardedDraftIds.has(activeThread.id) || draftErrors[activeThread.id]
+                    ? () => {
+                        draftAttemptedRef.current.delete(activeThread.id);
+                        void requestInboxAiDraft(activeThread.id, true);
+                      }
                     : undefined
                 }
               />
             ) : null}
+            <InboxThreadAssistantStrip
+              contextHint={buildInboxThreadAssistantContext({
+                subject: activeThread.subject,
+                email: activeThread.email,
+                from: activeThread.from,
+                sentSemantics: activeIsSent,
+              })}
+            />
             <InboxComposer
               value={replyDraft}
               onChange={setReplyDraft}
               onSubmit={() => void sendActiveReply()}
               sending={replySending}
-              placeholder={editingDraft ? "Edit the AI draft, then send…" : "Write a reply…"}
+              placeholder="Write a reply…"
+              maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
               dataAttr="inbox-reply"
+              channelBar={
+                activeSmsAvailable ? (
+                  <InboxReplyChannelPicker
+                    viaEmail={replyViaEmail}
+                    viaSms={replyViaSms}
+                    onViaEmailChange={setReplyViaEmail}
+                    onViaSmsChange={setReplyViaSms}
+                  />
+                ) : null
+              }
             />
           </>
         )
@@ -1175,7 +1275,7 @@ export const ManagerInbox = forwardRef<
   const inboxBody = (
     <>
       {embeddedInCommunication && !externalTitleActions ? (
-        <div className="mb-4 flex flex-wrap justify-end gap-2">
+        <PortalSectionActionRow className="mb-4">
           {tabId === "trash" ? (
             <Button
               type="button"
@@ -1195,7 +1295,7 @@ export const ManagerInbox = forwardRef<
           >
             New message
           </Button>
-        </div>
+        </PortalSectionActionRow>
       ) : null}
 
       {!suppressCompose ? (
@@ -1213,7 +1313,7 @@ export const ManagerInbox = forwardRef<
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : suppressListPane ? (
-        <div className="flex min-h-0 flex-1 flex-col">{threadPane}</div>
+        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}

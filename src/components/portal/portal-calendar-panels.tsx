@@ -3,13 +3,20 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { X } from "lucide-react";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -44,6 +51,7 @@ import {
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
 import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
+import { cn } from "@/lib/utils";
 import {
   plannedTourVisibleToViewer,
   tourInquiryVisibleToViewer,
@@ -77,7 +85,7 @@ const WEEKDAY_OPTIONS = [
 const CALENDAR_HEADER_CELL =
   "bg-accent/30 font-bold uppercase tracking-[0.12em] text-muted [html[data-theme=dark]_&]:portal-calendar-header-cell";
 const CALENDAR_TIME_CELL =
-  "font-semibold text-muted [html[data-theme=dark]_&]:portal-calendar-time-cell";
+  "whitespace-nowrap text-[10px] font-semibold tabular-nums text-muted sm:text-[11px] [html[data-theme=dark]_&]:portal-calendar-time-cell";
 const CALENDAR_GRID_GAP = "gap-px bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";
 const CALENDAR_OPEN_SLOT =
   "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300 [html[data-theme=dark]_&]:portal-calendar-open-slot";
@@ -97,9 +105,9 @@ const CALENDAR_INACTIVE_SLOT =
 const CALENDAR_CO_MANAGER_SLOT =
   "border-violet-300 bg-violet-100 text-violet-950 ring-1 ring-inset ring-violet-300/80 [html[data-theme=dark]_&]:border-violet-400/40 [html[data-theme=dark]_&]:bg-violet-500/15 [html[data-theme=dark]_&]:text-violet-100";
 const COMPACT_CALENDAR_ACTION_BTN =
-  "h-7 shrink-0 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-foreground hover:bg-accent/70";
+  "h-7 shrink-0 whitespace-nowrap rounded-full border-border px-2.5 text-xs font-semibold max-lg:h-8 max-lg:px-3";
 const COMPACT_TIME_SELECT_TRIGGER =
-  "h-7 min-h-0 w-full rounded-none border-0 bg-transparent px-2 text-xs font-semibold text-foreground shadow-none ring-0 hover:bg-accent/40 focus:border-transparent focus:ring-0";
+  "h-7 min-h-0 w-full rounded-none border-0 bg-transparent px-1.5 text-[11px] font-semibold whitespace-nowrap text-foreground shadow-none ring-0 hover:bg-accent/40 focus:border-transparent focus:ring-0";
 export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PEER_COLOR =
@@ -186,11 +194,7 @@ type CalendarBlockSelection =
 const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
 function formatSlotEndLabel(slotIndexExclusive: number): string {
-  const mins = (slotIndexExclusive % SLOTS_PER_DAY) * 30;
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const d = new Date(2000, 0, 1, h24, m);
-  return formatPacificDateTime(d).replace(/^\w{3} \d{1,2}, /, "");
+  return formatAvailabilitySlotLabel(slotIndexExclusive);
 }
 
 function localIsoForSlot(dateStr: string, slotIndex: number): string {
@@ -225,6 +229,9 @@ export function PortalCalendarPanels({
   eventSummaryLabel,
   vendorDayFlexibility,
   vendorCalendarActions,
+  preferEventCountsInDayHeader = false,
+  /** Flat portal canvas — no outer card or input-style chrome (property calendar tab). */
+  bareSurface = false,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -233,8 +240,9 @@ export function PortalCalendarPanels({
   tourScopeLabel?: string;
   unavailableMessage?: string;
   compactAvailability?: boolean;
+  bareSurface?: boolean;
   otherProperties?: { id: string; name: string }[];
-  onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
+  onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[], scope: "week" | "entire") => void;
   scheduledTourFilter?: ScheduledTourFilter;
   coManagerAvailabilityOverlays?: CoManagerAvailabilityOverlay[];
   scheduleOwnerLabel?: string | null;
@@ -245,7 +253,7 @@ export function PortalCalendarPanels({
   /** Hides availability-editing affordances (create/copy/clear block, slot painting) so this
    * component can display a schedule for a caller that manages availability elsewhere. */
   readOnly?: boolean;
-  eventSummaryLabel?: "meeting" | "tour" | "visit";
+  eventSummaryLabel?: "meeting" | "tour" | "visit" | "event";
   /** Vendor calendar: per-weekday flexible toggles + link to timing preferences. */
   vendorDayFlexibility?: {
     flexibleWeekdays: Set<number>;
@@ -253,6 +261,7 @@ export function PortalCalendarPanels({
     onOpenFlexibleSettings: () => void;
   };
   /** Vendor calendar: click empty slots to add personal work blocks; edit vendor-owned meetings. */
+  preferEventCountsInDayHeader?: boolean;
   vendorCalendarActions?: {
     onAddFromSlot: (dateStr: string, slotIdx: number) => void;
     canEditMeeting: (meeting: DemoMeeting) => boolean;
@@ -282,6 +291,7 @@ export function PortalCalendarPanels({
   const [blockCadence, setBlockCadence] = useState<RecurrenceCadence>("weekly");
   const [blockOccurrences, setBlockOccurrences] = useState(4);
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
+  const [copyToHousesScope, setCopyToHousesScope] = useState<"week" | "entire">("week");
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
   const [durationChoice, setDurationChoice] = useState<number | "custom">(DEFAULT_EVENT_DURATION_MINUTES);
@@ -723,25 +733,37 @@ export function PortalCalendarPanels({
 
     if (compact) {
       return (
-        <div className="inline-flex shrink-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm">
+        <div
+          className={
+            bareSurface
+              ? "inline-flex shrink-0 items-center gap-1 whitespace-nowrap"
+              : "inline-flex shrink-0 items-stretch overflow-hidden rounded-full border border-border/70 bg-card shadow-sm"
+          }
+        >
           <FieldSingleSelect
             hideLabel
             label="Start time"
             variant="pill"
-            wrapperClassName="w-[5.25rem] shrink-0"
+            wrapperClassName="min-w-[3.75rem] shrink-0"
             triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
             value={String(visibleStartSlot)}
             onChange={onStartChange}
             options={startTimeOptions}
           />
-          <span className="flex items-center border-x border-border/50 bg-accent/25 px-1.5 text-[10px] font-medium text-muted">
+          <span
+            className={
+              bareSurface
+                ? "px-0.5 text-[10px] font-medium text-muted"
+                : "flex items-center border-x border-border/50 bg-accent/25 px-1 text-[10px] font-medium text-muted"
+            }
+          >
             –
           </span>
           <FieldSingleSelect
             hideLabel
             label="End time"
             variant="pill"
-            wrapperClassName="w-[5.25rem] shrink-0"
+            wrapperClassName="min-w-[3.75rem] shrink-0"
             triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
             value={String(visibleEndSlotExclusive)}
             onChange={onEndChange}
@@ -971,16 +993,17 @@ export function PortalCalendarPanels({
       <div
         className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
-      <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
+      <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
           {selectedBlock.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
         </h3>
         <button
           type="button"
           onClick={closeSelectedBlock}
-          className="shrink-0 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted hover:bg-accent/30"
+          aria-label="Close"
+          className={MODAL_HEADER_CLOSE_CLASS}
         >
-          Close
+          <X className="h-5 w-5" aria-hidden />
         </button>
       </div>
       {selectedBlock?.kind === "meeting" ? (
@@ -1104,27 +1127,35 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
-              Close
-            </Button>
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
             {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
               <>
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               onClick={deleteSelectedMeeting}
             >
               {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
             </Button>
             {selectedBlock.meeting.source === "inquiry" ? (
               selectedBlock.meeting.kind === "tour" ? (
-                <Button type="button" variant="primary" className="rounded-full" onClick={openTourConfirmPreview}>
-                  Review & confirm tour
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-9 min-w-0 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                  onClick={openTourConfirmPreview}
+                >
+                  <span className="sm:hidden">Confirm tour</span>
+                  <span className="hidden sm:inline">Review & confirm tour</span>
                 </Button>
               ) : (
-                <Button type="button" variant="primary" className="rounded-full" onClick={() => void approveSelectedInquiry()}>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                  onClick={() => void approveSelectedInquiry()}
+                >
                   Approve
                 </Button>
               )
@@ -1145,14 +1176,11 @@ export function PortalCalendarPanels({
             </p>
           </div>
           <p className="text-sm text-muted">Delete this slot if you no longer want applicants to book it.</p>
-          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-            <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
-              Close
-            </Button>
+          <div className="flex flex-nowrap items-center gap-1.5 border-t border-border pt-4 sm:gap-2">
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               onClick={deleteAvailabilitySlot}
             >
               Delete slot
@@ -1188,7 +1216,9 @@ export function PortalCalendarPanels({
   );
 
   if (!storageKey && !readOnly) {
-    return (
+    return bareSurface ? (
+      <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
+    ) : (
       <Card className="p-5">
         <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
       </Card>
@@ -1197,27 +1227,42 @@ export function PortalCalendarPanels({
 
   if (compactAvailability) {
     const vendorMode = Boolean(vendorDayFlexibility);
+    const compactShellClass = bareSurface
+      ? ""
+      : "overflow-hidden rounded-2xl border border-border bg-card shadow-sm";
     return (
       <>
-        <Card className="overflow-hidden p-0 shadow-sm">
-          <div className="flex items-center gap-2 overflow-x-auto border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 px-2 py-2 sm:gap-2.5 sm:px-3 [html[data-theme=dark]_&]:portal-calendar-week-banner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="inline-flex shrink-0 items-center rounded-full border border-border/70 bg-card p-0.5 shadow-sm">
+        <div className={compactShellClass}>
+          <div
+            className={cn(
+              "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
+              bareSurface
+                ? "border-b border-border/50"
+                : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
+            )}
+          >
+            <div className="flex w-full min-w-0 items-center gap-1 sm:gap-2">
               <Button
                 type="button"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                variant={bareSurface ? "ghost" : "outline"}
+                className="h-8 w-8 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
                 onClick={() => shiftAvailabilityWeek(-1)}
                 aria-label="Previous week"
               >
                 ←
               </Button>
-              <p className="whitespace-nowrap px-2 text-xs font-semibold text-foreground sm:text-sm">
-                {formatWeekRangeMonSun(weekMonday)}
-              </p>
+
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-2 gap-y-1">
+                <p className="whitespace-nowrap text-center text-xs font-semibold text-foreground sm:text-sm">
+                  {formatWeekRangeMonSun(weekMonday)}
+                </p>
+                {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
+              </div>
+
               <Button
                 type="button"
-                variant="ghost"
-                className="h-7 w-7 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
+                variant={bareSurface ? "ghost" : "outline"}
+                className="h-8 w-8 shrink-0 rounded-full p-0 text-muted hover:text-foreground"
                 onClick={() => shiftAvailabilityWeek(1)}
                 aria-label="Next week"
               >
@@ -1225,46 +1270,10 @@ export function PortalCalendarPanels({
               </Button>
             </div>
 
-            {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
-
-            {!vendorMode ? (
-              <div className="flex shrink-0 items-center gap-0.5">
-                {!readOnly ? (
-                  <>
-                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
-                      Copy week
-                    </Button>
-                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
-                      Block
-                    </Button>
-                    <Button type="button" variant="ghost" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
-                      Clear
-                    </Button>
-                  </>
-                ) : null}
-                {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    onClick={() => {
-                      setSelectedHouseIds(new Set());
-                      setUpdateToHousesOpen(true);
-                    }}
-                  >
-                    Update houses
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5 sm:justify-start sm:gap-2">
               {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
               {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
               {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
-              {!readOnly ? (
-                <div className={`px-2 py-0.5 text-[11px] font-semibold sm:text-xs ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
-              ) : null}
               {vendorMode ? (
                 <Button
                   type="button"
@@ -1279,7 +1288,7 @@ export function PortalCalendarPanels({
               {vendorMode && vendorCalendarActions?.onAddWork ? (
                 <Button
                   type="button"
-                  variant="primary"
+                  variant="outline"
                   className="h-7 shrink-0 rounded-full px-2.5 text-xs"
                   data-attr="vendor-add-work-open"
                   onClick={vendorCalendarActions.onAddWork}
@@ -1287,10 +1296,37 @@ export function PortalCalendarPanels({
                   Add work
                 </Button>
               ) : null}
+              {!vendorMode && !readOnly ? (
+                <>
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
+                    Copy previous week
+                  </Button>
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
+                    Block
+                  </Button>
+                  <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
+                    Clear
+                  </Button>
+                  {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={COMPACT_CALENDAR_ACTION_BTN}
+                      onClick={() => {
+                        setSelectedHouseIds(new Set());
+                        setCopyToHousesScope("week");
+                        setUpdateToHousesOpen(true);
+                      }}
+                    >
+                      Copy to houses
+                    </Button>
+                  ) : null}
+                </>
+              ) : null}
             </div>
           </div>
 
-          <div className="p-3 sm:p-4">
+          <div className={bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5"}>
           {upcomingMeetingSummary.total > 0 ? (
             <div className="mt-2 rounded-2xl border px-4 py-3 portal-banner-info">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1418,9 +1454,9 @@ export function PortalCalendarPanels({
 
             return (
               <>
-                {/* Mobile: one day at a time — the multi-column grid never fits a phone width. */}
-                <div className="mt-2 lg:hidden">
-                  <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {/* Mobile: week strip — seven equal columns across full width. */}
+                <div className="mt-2 max-lg:mt-4 lg:hidden">
+                  <div className="grid w-full grid-cols-7 gap-1 pb-1 sm:gap-1.5">
                     {activeBlockDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
                       const count = readOnly
@@ -1435,15 +1471,15 @@ export function PortalCalendarPanels({
                           key={ds}
                           type="button"
                           onClick={() => setMobileDayIndex(idx)}
-                          className={`flex shrink-0 flex-col items-center rounded-xl px-2.5 py-1.5 text-center transition sm:px-3 ${
+                          className={`flex min-w-0 w-full flex-col items-center justify-center rounded-xl px-1 py-1.5 text-center transition max-lg:py-2 ${
                             isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}
                         >
-                          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.08em]">
                             {d.toLocaleDateString(undefined, { weekday: "short" })}
                           </span>
                           <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
-                          <span className="text-[9px] font-medium opacity-80">{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</span>
+                          <span className="text-[9px] font-medium opacity-80">{readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}</span>
                         </button>
                       );
                     })}
@@ -1451,8 +1487,8 @@ export function PortalCalendarPanels({
                   {vendorDayFlexibility ? (
                     <div className="mt-2 flex justify-center">{renderFlexibleToggle(mobileDate.getDay())}</div>
                   ) : null}
-                  <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
-                    <div className={`grid grid-cols-[64px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
+                  <div className={bareSurface ? "mt-2" : "mt-2 overflow-hidden rounded-2xl border border-border bg-card"}>
+                    <div className={`grid grid-cols-[72px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       <div className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
                         {mobileDate.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
@@ -1471,13 +1507,13 @@ export function PortalCalendarPanels({
 
                 {/* Desktop: full-week grid with horizontal scroll on narrower viewports. */}
                 <div className="mt-2 hidden lg:block">
-                  <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                  <div className={bareSurface ? "" : "overflow-hidden rounded-2xl border border-border bg-card"}>
                     <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                      <div className={`grid min-w-[760px] grid-cols-[52px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`grid min-w-[760px] grid-cols-[56px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
                         <div className={`px-1.5 py-2 sm:px-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                         {activeBlockDates.map((d) => {
                           const ds = toLocalDateStr(d);
-                          const count = readOnly
+                          const count = readOnly || preferEventCountsInDayHeader
                             ? meetings.filter((meeting) => meeting.dateStr === ds).length
                             : visibleSlotIndices.reduce(
                                 (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
@@ -1492,7 +1528,7 @@ export function PortalCalendarPanels({
                                 {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                               </p>
                               <p className={`mt-0.5 text-[10px] font-medium sm:text-[11px] ${CALENDAR_OPEN_COUNT}`}>
-                                {readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}
+                                {readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}
                               </p>
                               {renderFlexibleToggle(d.getDay())}
                             </div>
@@ -1515,7 +1551,7 @@ export function PortalCalendarPanels({
             );
           })()}
           </div>
-        </Card>
+        </div>
 
         <Modal
           open={blockModalOpen}
@@ -1526,9 +1562,6 @@ export function PortalCalendarPanels({
           }}
           footer={
             <ModalFooter>
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-                Cancel
-              </Button>
               <Button
                 type="button"
                 variant="primary"
@@ -1640,31 +1673,30 @@ export function PortalCalendarPanels({
         {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
           <Modal
             open={updateToHousesOpen}
-            title="Update week schedule to other houses"
+            title="Copy availability to other houses"
             onClose={() => setUpdateToHousesOpen(false)}
             footer={
               <ModalFooter>
-                <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
-                  Cancel
-                </Button>
                 <Button
                   type="button"
                   variant="primary"
                   className="rounded-full"
                   disabled={selectedHouseIds.size === 0}
                   onClick={() => {
-                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
+                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs, copyToHousesScope);
                     setUpdateToHousesOpen(false);
                   }}
                 >
-                  Update {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
+                  Copy to {selectedHouseIds.size > 0 ? `${selectedHouseIds.size} house${selectedHouseIds.size > 1 ? "s" : ""}` : "houses"}
                 </Button>
               </ModalFooter>
             }
           >
             <div className="space-y-5">
               <p className="text-sm text-muted">
-                Copy this week&apos;s availability to the selected houses. Slots are added on top of existing ones — nothing is removed.
+                {copyToHousesScope === "week"
+                  ? "Copy this week's open slots to the selected houses. New slots are added on top of existing ones — nothing is removed."
+                  : "Copy every open slot from this house to the selected houses. New slots are added on top of existing ones — nothing is removed."}
               </p>
               <div className="space-y-2">
                 {otherProperties.map((p) => (
@@ -1692,6 +1724,38 @@ export function PortalCalendarPanels({
                     <span className="text-sm font-medium text-foreground">{p.name}</span>
                   </label>
                 ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    copyToHousesScope === "week"
+                      ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
+                      : "border-border bg-card hover:border-border"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={copyToHousesScope === "week"}
+                    onChange={() => setCopyToHousesScope("week")}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm font-medium text-foreground">This week only</span>
+                </label>
+                <label
+                  className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 transition ${
+                    copyToHousesScope === "entire"
+                      ? "border-primary bg-primary/[0.06] ring-1 ring-primary/30"
+                      : "border-border bg-card hover:border-border"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={copyToHousesScope === "entire"}
+                    onChange={() => setCopyToHousesScope("entire")}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm font-medium text-foreground">Entire schedule</span>
+                </label>
               </div>
             </div>
           </Modal>
@@ -1799,7 +1863,7 @@ export function PortalCalendarPanels({
                     <p className="text-sm font-semibold text-foreground">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
                     <p className="text-xs text-muted">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                   </div>
-                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-accent/30">
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-px bg-accent/30">
                     {visibleSlotIndices.map((slotIdx) => {
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
@@ -1832,7 +1896,7 @@ export function PortalCalendarPanels({
 
       {viewMode === "day" ? (
         <div className={PORTAL_CALENDAR_FRAME}>
-          <div className={`grid grid-cols-[68px_minmax(0,1fr)] ${CALENDAR_GRID_GAP}`}>
+          <div className={`grid grid-cols-[72px_minmax(0,1fr)] ${CALENDAR_GRID_GAP}`}>
             <div className={`col-span-2 px-3 py-3 text-center ${CALENDAR_HEADER_CELL}`}>
               <p className="text-sm font-semibold text-foreground">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
               <p className="text-xs text-muted">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
@@ -1991,9 +2055,6 @@ export function PortalCalendarPanels({
         }}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

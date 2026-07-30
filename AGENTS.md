@@ -422,6 +422,16 @@ with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
 it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
 that prefer it, so editing only the SVG leaves the old mark visible.
 
+# Landing rule (keeper-branch ladder)
+
+**Any time there is a change, land it on `claude-2` first — fast-forward only, no
+PR.** `claude-2` is the captain's review lane: it is reviewed on localhost before
+anything moves onward. Land with `git push origin <your-branch>:claude-2`; never
+force. If that push is not a fast-forward, STOP (the branch diverged) rather than
+rebasing or forcing past it. **Never land straight to `prakrit`, `main`, or
+`production`** — those advance only when the captain asks. Open a PR only on
+explicit request.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
@@ -760,7 +770,7 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Lease generation & execution evidence | `docs/agents/lease-generation.md` | Every signature records the SHA-256 of the document THAT party was shown: per-signature, at signature time, over the base document, and never the copy carrying the certificate page. A row with any signature can never have its document body replaced: `preserveSignedLeaseDocuments` guards `write()`. Provenance fields (`documentSha256` / `templateVersion` / `executedJurisdiction`) absent means unknown; never backfill a guess. |
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Lease templates + the anonymous listing payload | `docs/agents/lease-generation.md` | The public listing payload is an explicit ALLOWLIST (`publicListingProjection`) — a submission field reaches a prospect ONLY by being named there, and BOTH anonymous readers (`getPublicListings()` and `/api/public/property-lead`) must run through it. Lease templates live in the PRIVATE `lease-templates` bucket behind a stable `/api/portal/lease-template?path=…` URL that re-authorizes every request; never a public storage URL, never a persisted base64 `data:` URL. |
-| Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.axis.local` accounts via the mirror, never a fictional fixture in code. |
+| Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.proplane.local` accounts via the mirror, never a fictional fixture in code. |
 | Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
@@ -934,14 +944,20 @@ portal, and identity while the household reads as one unit.
   per-application "Group application" roster (`ApplicationGroupSection`).
 - **No silent deadlock.** A group never *blocks* — approvals stay per-member.
   An unfinished member surfaces as "waiting on N", it does not gate the others.
-- **Money-adjacent surfaces are untouched.** Screening stays per-person (each
-  member fills the full wizard), and deposits / rent / charges are still
-  generated per approved application — there is **no** bundle-level split,
-  proration, or shared-signature lease document. Add those deliberately if ever
-  needed; do not infer them from group membership.
+- **Money-adjacent surfaces for bundle+group households.** When applicants apply as a
+  group **and** select the same `bundleId`, move-in charges split equally across the
+  declared household size (`src/lib/bundle-group/bundle-cost-split.ts` →
+  `household-charges.ts`). Each member still has their own charge rows with split
+  metadata; amounts are equal shares of bundle totals (deposit, utilities, rent,
+  move-in fee).
+- **Joint bundle lease.** When every member of a complete bundle group is approved,
+  `lease-pipeline-storage.ts` creates one `leaseKind: "joint_bundle"` row (not one
+  lease per person). All co-tenants appear on the lease document; the manager reviews
+  and sends a single household lease. Per-member lease rows are suppressed for joint
+  members.
 - The listing-side `ManagerBundleRow` (grouped rooms at one price, applicant's
-  `bundleId`) is a **separate** concept from group *applications* — a bundle is a
-  room offering, a group is a set of applicants. Do not conflate them.
+  `bundleId`) and group applications (`groupId`) are linked when both are present —
+  use `src/lib/bundle-group/` for reconciliation, split math, and joint lease helpers.
 
 # Financials UI cleanup (Blue Steel consolidation)
 

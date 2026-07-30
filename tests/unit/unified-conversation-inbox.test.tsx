@@ -9,7 +9,7 @@
 //     A2P not cleared) the SMS endpoint is never fetched and no SMS row shows;
 //     when on, SMS rows join the same list. Transport is unaffected either way.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 
 const EMAIL_INBOX = {
   id: "thr-2000000001",
@@ -74,6 +74,7 @@ const SMS_PAYLOAD = {
   ],
 };
 
+vi.mock("@/lib/portal-nav-client", () => ({ usePortalNavigate: () => () => {} }));
 vi.mock("@/lib/portal-inbox-storage", () => ({
   collapsePersonInboxThreads: (threads: unknown[]) => threads,
   resolveCollapsedInboxThread: (id: string | null, collapsed: Array<{ id: string }>) => collapsed.find((t) => t.id === id) ?? null,
@@ -132,10 +133,12 @@ describe("unified conversation inbox (no folder tabs)", () => {
     // Trashed conversation is NOT in the default view.
     expect(screen.queryByText("Old Flyer")).toBeNull();
 
-    // Archive is reachable from the list itself — a segment control inside the
-    // unified list, not a top-level folder tab.
-    const toggle = screen.getByRole("tab", { name: /Archived/ });
-    fireEvent.click(toggle);
+    // Archive segment — routed links in the list chrome (internal mode).
+    const archivedLink = screen.getByRole("link", { name: /Archived/ });
+    expect(archivedLink.getAttribute("href")).toContain("/archived");
+
+    cleanup();
+    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" listSegment="archived" />);
     expect(screen.getByText("Old Flyer")).toBeTruthy();
     expect(screen.queryByText("Dana Ramirez")).toBeNull();
   });
@@ -157,5 +160,29 @@ describe("unified conversation inbox (no folder tabs)", () => {
 
     await waitFor(() => expect(screen.getByText("Jordan Lee")).toBeTruthy());
     expect(screen.getByText("Dana Ramirez")).toBeTruthy();
+  });
+
+  it("does not open a thread on mobile when re-tapping the Active segment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })),
+    );
+    render(<ManagerUnifiedInbox tabId="unopened" commBase="/portal/communication" />);
+    await waitFor(() => expect(screen.getByText("Dana Ramirez")).toBeTruthy());
+    expect(screen.queryByTestId("embedded-email-thread")).toBeNull();
+
+    const activeLink = screen.getByRole("link", { name: /^Active/ });
+    expect(activeLink.getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByTestId("embedded-email-thread")).toBeNull();
   });
 });

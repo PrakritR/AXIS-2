@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
-  ManagerPortalFilterRow,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -24,26 +26,44 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import { MANAGER_APPLICATIONS_EVENT, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
+import { leaseListHref } from "@/lib/portal-detail-routes";
+import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
   { id: "manager", label: "Manager review", dataAttr: "leases-tab-manager" },
-  { id: "resident", label: "Resident signature pending", dataAttr: "leases-tab-resident" },
-  { id: "signed", label: "Manager signature pending", dataAttr: "leases-tab-signed" },
+  { id: "resident", label: "Resident signature", dataAttr: "leases-tab-resident" },
+  { id: "signed", label: "Manager signature", dataAttr: "leases-tab-signed" },
   { id: "completed", label: "Signed", dataAttr: "leases-tab-completed" },
 ];
 
-export function ManagerLeases() {
+export function ManagerLeases({
+  tab: tabProp = "manager",
+  basePath = "/portal",
+  leaseId: leaseIdProp,
+}: {
+  tab?: ManagerLeaseTab;
+  basePath?: string;
+  leaseId?: string;
+}) {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
-  const [tab, setTab] = useState<ManagerLeaseTab>("manager");
+  const [tab, setTab] = useState<ManagerLeaseTab>(tabProp);
+  const [prevTabProp, setPrevTabProp] = useState(tabProp);
+  if (tabProp !== prevTabProp) {
+    setPrevTabProp(tabProp);
+    if (tab !== tabProp) setTab(tabProp);
+  }
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
   const [editLeasesOpen, setEditLeasesOpen] = useState(false);
+  const [shareLeasesOpen, setShareLeasesOpen] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setClientReady(true));
@@ -56,11 +76,16 @@ export function ManagerLeases() {
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
     ]).then(on);
+    const onAgentActions = () => {
+      void syncLeasePipelineFromServer(userId, { force: true }).then(on);
+    };
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    window.addEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, on);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+      window.removeEventListener(AGENT_PENDING_ACTIONS_EVENT, onAgentActions);
     };
   }, [authReady, userId]);
 
@@ -85,16 +110,24 @@ export function ManagerLeases() {
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [clientReady, userId, tick, propertyTick]);
 
+  const propertyFilterLabel = useMemo(() => {
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return propertyOptions.find((option) => option.id === propertyFilters[0])?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, propertyOptions]);
+
   const rows = useMemo(() => {
     if (!clientReady) return [];
     void tick;
     const allRows = readLeasePipeline(userId);
-    const filtered = !propertyFilter.trim()
+    const filtered = propertyFilters.length === 0
       ? allRows
-      : allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
+      : allRows.filter((row) => propertyFilters.includes(row.application?.propertyId?.trim() ?? ""));
 
     return [...filtered].sort((a, b) => {
-      if (propertyFilter) {
+      if (propertyFilters.length === 0) {
         const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
         if (byResident !== 0) return byResident;
       }
@@ -109,10 +142,20 @@ export function ManagerLeases() {
       const bTs = Date.parse(b.updatedAtIso || "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-  }, [clientReady, tick, propertyFilter, userId]);
+  }, [clientReady, tick, propertyFilters, userId]);
+
+  const searchedRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const hay = [row.residentName, row.unit, row.residentEmail, row.status].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, searchQuery]);
+
 
   useEffect(() => {
-    const emails = [...new Set(rows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
+    const emails = [...new Set(searchedRows.map((row) => row.residentEmail.trim().toLowerCase()).filter(Boolean))];
     let cancelled = false;
     void Promise.resolve().then(() => {
       if (cancelled) return;
@@ -120,8 +163,6 @@ export function ManagerLeases() {
         setResidentAccountEmails(new Set());
         return;
       }
-      // Demo sandbox: every demo resident already has an Axis account, so
-      // leases are sendable/signable instead of blocked on account creation.
       if (isDemoModeActive()) {
         setResidentAccountEmails(new Set(emails));
         return;
@@ -144,9 +185,9 @@ export function ManagerLeases() {
     return () => {
       cancelled = true;
     };
-  }, [rows]);
+  }, [searchedRows]);
 
-  const counts = useMemo(() => countManagerLeaseTabs(rows), [rows]);
+  const counts = useMemo(() => countManagerLeaseTabs(searchedRows), [searchedRows]);
   const tabs = useMemo(
     () => LEASE_LABELS.map(({ id, label, dataAttr }) => ({ id, label, count: counts[id], dataAttr })),
     [counts],
@@ -157,59 +198,170 @@ export function ManagerLeases() {
     return buildManagerPropertyFilterOptions(userId);
   }, [userId, propertyTick]);
 
+  const shareableProperties = useMemo(() => {
+    void propertyTick;
+    return buildManagerShareablePropertyOptions(userId);
+  }, [userId, propertyTick]);
+
+  const leasesFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([propertyFilters])}
+      desktopPresentation="panel"
+      className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+      onReset={() => setPropertyFilters([])}
+      dataAttr="leases-filter-sheet-open"
+    >
+      <ApplicationFilterSortFields
+        propertyOptions={propertyOptions}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
+        dataAttr="leases-filter-property"
+      />
+    </PortalFilterSortSheet>
+  );
+
+  const leasesShareButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="leases-share"
+      disabled={shareableProperties.length === 0}
+      title={shareableProperties.length === 0 ? "List a property as active before sharing" : "Share listing links"}
+      onClick={() => setShareLeasesOpen(true)}
+    >
+      Share
+    </Button>
+  );
+
+  const leasesEditButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="leases-edit-properties"
+      disabled={editablePropertyOptions.length === 0}
+      title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
+      onClick={() => setEditLeasesOpen(true)}
+    >
+      Edit
+    </Button>
+  );
+
+  const leasesHeaderActions = (
+    <>
+      {leasesShareButton}
+      {leasesEditButton}
+    </>
+  );
+
+  const leasesMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow
+      filter={leasesFilterSheet}
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {leasesHeaderActions}
+        </PortalSectionActionRow>
+      }
+    />
+  );
+
+  const modals = (
+    <>
+      <ManagerEditLeasesModal
+        open={editLeasesOpen}
+        onClose={() => setEditLeasesOpen(false)}
+        propertyOptions={editablePropertyOptions}
+        managerUserId={userId}
+        onSaved={() => setPropertyTick((n) => n + 1)}
+        showToast={showToast}
+      />
+      <ShareLeadLinkModal
+        open={shareLeasesOpen}
+        onClose={() => setShareLeasesOpen(false)}
+        kind="listing"
+        properties={shareableProperties}
+      />
+    </>
+  );
+
+  if (leaseIdProp) {
+    return (
+      <>
+        <ManagerLeasesPipelinePanel
+          rows={rows}
+          tab={tab}
+          refreshKey={tick}
+          managerUserId={userId}
+          residentAccountEmails={residentAccountEmails}
+          leaseId={leaseIdProp}
+          listBasePath={basePath}
+          onEmailAccountSetup={(email) => {
+            setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+          }}
+        />
+        {modals}
+      </>
+    );
+  }
+
   return (
     <>
-    <ManagerPortalPageShell
-      title="Leases"
-      titleAside={
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="leases-edit-properties"
-          disabled={editablePropertyOptions.length === 0}
-          title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
-          onClick={() => setEditLeasesOpen(true)}
-        >
-          Edit
-          <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
-        </Button>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            compact
-            tabs={tabs}
-            activeId={tab}
-            onChange={(id) => setTab(id as ManagerLeaseTab)}
+      <ManagerPortalPageShell
+        title="Leases"
+        titleInlineFilter={leasesFilterSheet}
+        titleAside={leasesHeaderActions}
+        hideTitleOnMobileNav
+        compactFilterRow
+      >
+        {leasesMobileActionsRow}
+        <PortalListControlStack
+          className="mb-2"
+          destinations={tabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: leaseListHref(basePath, t.id),
+            count: t.count,
+            dataAttr: t.dataAttr,
+          }))}
+          activeDestinationId={tab}
+          destinationAriaLabel="Lease pipeline stage"
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search residents or units",
+            dataAttr: "leases-search",
+          }}
+          activeFilterChips={
+            propertyFilters.length > 0 ? (
+              <PortalActiveFilterChips
+                chips={[
+                  {
+                    id: "property",
+                    label: `Property: ${propertyFilterLabel}`,
+                    onRemove: () => setPropertyFilters([]),
+                  },
+                ]}
+              />
+            ) : null
+          }
+        />
+        <div className="portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1">
+          <ManagerLeasesPipelinePanel
+            rows={searchedRows}
+            tab={tab}
+            refreshKey={tick}
+            managerUserId={userId}
+            residentAccountEmails={residentAccountEmails}
+            leaseId={leaseIdProp}
+            listBasePath={basePath}
+            onEmailAccountSetup={(email) => {
+              setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+            }}
           />
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
-        </ManagerPortalFilterRow>
-      }
-    >
-      <ManagerLeasesPipelinePanel
-        rows={rows}
-        tab={tab}
-        refreshKey={tick}
-        managerUserId={userId}
-        residentAccountEmails={residentAccountEmails}
-        onEmailAccountSetup={(email) => {
-          setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
-        }}
-      />
-    </ManagerPortalPageShell>
-    <ManagerEditLeasesModal
-      open={editLeasesOpen}
-      onClose={() => setEditLeasesOpen(false)}
-      propertyOptions={editablePropertyOptions}
-      managerUserId={userId}
-      onSaved={() => setPropertyTick((n) => n + 1)}
-      showToast={showToast}
-    />
+        </div>
+      </ManagerPortalPageShell>
+      {modals}
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { MockProperty } from "@/data/types";
 import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -27,7 +27,11 @@ import {
   residentSignInHref,
 } from "@/lib/resident-public-nav";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { buildTourContactHref } from "@/lib/manager-property-links";
+import {
+  BROWSE_IDS_PARAM,
+  buildTourContactHref,
+  parseBrowseIdsParam,
+} from "@/lib/manager-property-links";
 import {
   PropertySearchPicker,
   type PropertySearchOption,
@@ -124,15 +128,27 @@ function openSlotIndicesForDateStr(availability: Set<string>, dateStr: string): 
 
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get("tab")?.trim().toLowerCase();
   const initialTab: Tab = tabFromUrl === "message" ? "message" : "tour";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [extrasTick, setExtrasTick] = useState(0);
   const linkedPropertyId = searchParams.get("propertyId")?.trim() ?? "";
+  const portfolioPropertyIds = useMemo(() => {
+    if (linkedPropertyId) return [];
+    return parseBrowseIdsParam(searchParams.get(BROWSE_IDS_PARAM));
+  }, [linkedPropertyId, searchParams]);
   const nextPath = searchParams.get("next")?.trim() ?? "";
   const tourReturnPath = linkedPropertyId ? buildTourContactHref(linkedPropertyId) : "/rent/tours-contact";
   const returnAfterAuth = nextPath.startsWith("/") ? nextPath : tourReturnPath;
+
+  useEffect(() => {
+    if (!portfolioPropertyIds.length) return;
+    void Promise.all(portfolioPropertyIds.map((id) => loadPublicPropertyLeadFromServer(id))).then(() => {
+      setExtrasTick((n) => n + 1);
+    });
+  }, [portfolioPropertyIds]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -153,6 +169,14 @@ export default function ToursContactPage() {
     return getPropertyForPublicLink(linkedPropertyId);
   }, [extrasTick, linkedPropertyId]);
 
+  const portfolioProperties = useMemo(() => {
+    void extrasTick;
+    if (!portfolioPropertyIds.length) return [];
+    return portfolioPropertyIds
+      .map((id) => getPropertyForPublicLink(id))
+      .filter((property): property is MockProperty => Boolean(property));
+  }, [extrasTick, portfolioPropertyIds]);
+
   return (
     <div className="min-h-screen px-4 py-12 sm:py-16">
       <div className="mx-auto max-w-2xl">
@@ -171,7 +195,21 @@ export default function ToursContactPage() {
 
         <div key={tab} className="animate-fade-in">
           {tab === "tour" ? (
-            !linkedPropertyId || !linkedProperty ? (
+            portfolioPropertyIds.length > 0 && portfolioProperties.length === 0 ? (
+              <div className="mt-8">
+                <ManagerLinkGate
+                  title="Open your manager’s tour link"
+                  body="This tour link is invalid or no longer active. Ask your property manager for a new tour link."
+                />
+              </div>
+            ) : portfolioProperties.length > 0 ? (
+              <TourPropertyPicker
+                properties={portfolioProperties}
+                onSelectProperty={(propertyId) => {
+                  router.push(buildTourContactHref(propertyId));
+                }}
+              />
+            ) : !linkedPropertyId || !linkedProperty ? (
               <div className="mt-8">
                 <ManagerLinkGate
                   title="Open your manager’s tour link"
@@ -214,6 +252,48 @@ export default function ToursContactPage() {
   );
 }
 
+function TourPropertyPicker({
+  properties,
+  onSelectProperty,
+}: {
+  properties: MockProperty[];
+  onSelectProperty: (propertyId: string) => void;
+}) {
+  const options: PropertySearchOption[] = useMemo(
+    () =>
+      properties.map((property) => ({
+        id: property.id,
+        title: property.title,
+        subtitle: property.address || property.neighborhood,
+        tags: [property.neighborhood, property.rentLabel, property.available ? `Available ${property.available}` : ""].filter(Boolean),
+        searchText: `${property.title} ${property.address} ${property.neighborhood} ${property.buildingName} ${property.unitLabel}`,
+      })),
+    [properties],
+  );
+
+  return (
+    <div className="mt-8 rounded-3xl border border-border bg-card p-7 shadow-sm">
+      <p className="text-sm font-semibold text-foreground">Choose a property to tour</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted">
+        Your property manager shared several homes. Pick the one you would like to visit and we will show available tour times.
+      </p>
+      <div className="mt-5">
+        <PropertySearchPicker
+          options={options}
+          value={null}
+          onChange={(propertyId) => {
+            if (propertyId) onSelectProperty(propertyId);
+          }}
+          placeholder="Search by address, neighborhood, or property name…"
+          emptyMessage="No properties match your search."
+          listEmptyMessage="No properties are available from this link."
+          ariaLabel="Search properties to tour"
+        />
+      </div>
+    </div>
+  );
+}
+
 function TourFlow({
   property,
   returnAfterAuth,
@@ -227,7 +307,7 @@ function TourFlow({
   const [step, setStep] = useState<TourStep>(1);
   const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
-  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string } | null>(null);
+  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string; inquiryId: string } | null>(null);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -309,9 +389,14 @@ function TourFlow({
 
   if (submitted) {
     const createAccountHref = submittedContact?.email
-      ? residentCreateAccountHref(returnAfterAuth, { email: submittedContact.email })
+      ? residentCreateAccountHref(returnAfterAuth, {
+          email: submittedContact.email,
+          tourInquiryId: submittedContact.inquiryId,
+        })
       : residentCreateAccountHref(returnAfterAuth);
-    const signInHref = residentSignInHref(returnAfterAuth);
+    const signInHref = residentSignInHref(returnAfterAuth, {
+      tourInquiryId: submittedContact?.inquiryId,
+    });
 
     return (
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
@@ -589,7 +674,8 @@ function TourFlow({
                 return;
               }
               setSubmitted(true);
-              setSubmittedContact({ name: name.trim(), email: email.trim() });
+              const firstInquiryId = results.find((item) => item.row?.id)?.row?.id ?? "";
+              setSubmittedContact({ name: name.trim(), email: email.trim(), inquiryId: firstInquiryId });
               onSuccess();
             }}
           />
@@ -928,6 +1014,14 @@ function Step3({
       </Field>
 
       <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="tour-sms-consent" />
+
+      <div className="rounded-2xl border border-border bg-accent/25 px-4 py-3 text-sm text-muted">
+        <p className="font-semibold text-foreground">Tour updates by email and inbox</p>
+        <p className="mt-1 leading-relaxed">
+          We email tour confirmations and reminders. Create a free resident account to track this tour, read manager
+          messages in Communication, and apply when you are ready.
+        </p>
+      </div>
 
       <button
         type="button"

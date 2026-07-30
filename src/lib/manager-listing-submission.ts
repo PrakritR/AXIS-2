@@ -1,8 +1,5 @@
 /** Full manager “add listing” payload — drives generated listing detail page (localStorage-backed). */
 
-// listing-fees.ts imports only TYPES from this module, so this runtime import
-// back into it is not a cycle.
-import { resolveListingFees, submissionUsesUnifiedListingFees } from "@/lib/listing-fees";
 import {
   LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
@@ -25,6 +22,13 @@ import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
+import {
+  ensureSubmissionListingFees,
+  normalizeListingFeeRow,
+  resolveListingFees,
+  submissionUsesUnifiedListingFees,
+  type ListingFeeRow,
+} from "@/lib/listing-fees";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -66,6 +70,34 @@ export type ManagerRoomSubmission = {
   roomAmenitiesText: string;
   photoDataUrls: string[];
   videoDataUrl: string | null;
+  /**
+   * Per-room security deposit (money string, e.g. "1200"). Optional override: when set,
+   * an approved application on this room bills THIS deposit; when absent/empty the charge
+   * falls back to the listing-level shared {@link ManagerListingSubmissionV1.securityDeposit},
+   * so existing listings with no per-room deposit bill exactly as before. Threaded through
+   * `recordApprovedApplicationCharges` alongside per-room rent.
+   */
+  securityDeposit?: string;
+  /**
+   * Per-room move-in / cleaning fee (money string). Optional override with the same
+   * room-first precedence as {@link securityDeposit}: set → this room's approval bills
+   * THIS move-in fee; absent → falls back to the shared
+   * {@link ManagerListingSubmissionV1.moveInFee}. Room-level wins so the two never both
+   * bill for the same move-in.
+   */
+  moveInFee?: string;
+  /**
+   * Per-room SHORT-TERM set (money strings) — the dedicated short-term section on each
+   * rent row (round 20). A short-term stay booked on this room bills the ALL-IN nightly
+   * {@link shortTermRent} × nights plus {@link shortTermMoveInFee} and
+   * {@link shortTermDeposit}, and NEVER a separate utilities line — the short-term rate
+   * is all-in by design. Separate from the long-term set on the same room; toggling
+   * short-term off does not erase them. When unset, the short-term branch falls back to
+   * the listing-level short-term fields (whole-place / entire-home stays).
+   */
+  shortTermRent?: string;
+  shortTermMoveInFee?: string;
+  shortTermDeposit?: string;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
   /** Who pays utilities — defaults to manager-billed estimate through the portal. */
@@ -110,6 +142,14 @@ export type ManagerCustomFeeRow = {
   amount: string;
   /** Default monthly when unset. */
   frequency?: "one-time" | "monthly";
+  /**
+   * Optional SHORT-TERM amount (money string). A custom fee can apply to long-term only
+   * ({@link amount} set), short-term only (this set), or both with different amounts. On a
+   * short-term stay this bills ONCE before check-in, on top of the all-in stay total (it is
+   * an explicit manager-added charge, unlike utilities which fold into the rate). Empty/absent
+   * means the fee does not apply to short-term stays.
+   */
+  shortTermAmount?: string;
 };
 
 /** Rows for the public “Bundles & leasing” table (optional — defaults are generated from rooms). */
@@ -129,6 +169,29 @@ export type ManagerBundleRow = {
   shortTermEnabled?: boolean;
   /** Nightly rate for short-term stays on this bundle (stay total = rate × nights). */
   shortTermNightlyRent?: string;
+  /** Per-bundle short-term move-in fee and deposit (round 20 dedicated short-term section).
+   *  Advertised default for a grouped short-term stay; no separate utilities (all-in rate). */
+  shortTermMoveInFee?: string;
+  shortTermDeposit?: string;
+  /**
+   * Per-bundle security deposit (money string) shown in the bundle's Fees dropdown.
+   * Presentation/default only — bundles have never been read by charge generation
+   * (`recordApprovedApplicationCharges` resolves rent/deposit per room or via the
+   * manager's negotiated override), so this is the bundle's advertised deposit, not
+   * an auto-billed one. Reuses the same money representation as the listing deposit.
+   */
+  securityDeposit?: string;
+  /** Per-bundle move-in / cleaning fee (money string) — advertised default, same as the
+   *  bundle deposit (bundles aren't read by charge generation). */
+  moveInFee?: string;
+  /**
+   * Who pays utilities for this bundle — reuses {@link UtilitiesPaymentModel}
+   * (manager_billed = "fixed cost" with {@link utilitiesEstimate}; tenant_direct =
+   * resident pays directly). Presentation for the bundle offering; no parallel model.
+   */
+  utilitiesPaymentModel?: UtilitiesPaymentModel;
+  /** Estimated monthly utilities for this bundle when manager-billed (money string). */
+  utilitiesEstimate?: string;
 };
 
 /** How a room uses a specific bathroom row (optional; improves listing copy). */
@@ -192,6 +255,15 @@ export type ManagerListingSubmissionV1 = {
   /** Structured basics (create-listing wizard). Fills quick facts when `homeStructureNote` is empty. */
   listingPropertyTypeId?: string;
   listingPlaceCategoryId?: string;
+  /**
+   * Durable STAMP of the listing's rental model, migration-first for the removal of the
+   * "Rental model" dropdown. Normalization records the listing's CURRENT model here (from
+   * {@link listingPlaceCategoryId}) so today's behavior is captured as data BEFORE anything
+   * derives it. `listingPlaceCategoryId` is kept as the rollback source and is still what
+   * `isEntireHomeListing` reads for now — the stamp is dormant until the derivation switch
+   * lands. Never silently defaulted: {@link stampRentalModel} reports missing/malformed.
+   */
+  rentalModelStamp?: "shared_home" | "entire_home";
   /** When listingPlaceCategoryId is entire_home — one monthly lease for the full unit (USD). */
   entireHomeMonthlyRent?: number;
   /** Entire-home monthly utilities estimate (synced to first bedroom for signing math). */
@@ -410,6 +482,8 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocName?: string;
   /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
   propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
+  /** Multiple application templates per property (long-term, short-term, custom). */
+  propertyApplicationTemplates?: import("@/lib/property-application-templates").PropertyApplicationTemplate[];
 
   // ---------------------------------------------------------------------------
   // Disclosure trigger fields (building-level compliance inputs)
@@ -519,7 +593,14 @@ export type ManagerListingServiceOption = {
   createdAt: string;
 };
 
-export type ManagerCustomApplicationFieldType = "text" | "number" | "select" | "checkbox" | "date";
+export type ManagerCustomApplicationFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "checkbox"
+  | "date"
+  | "photos"
+  | "file";
 
 export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   id: ManagerCustomApplicationFieldType;
@@ -530,6 +611,8 @@ export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
   { id: "select", label: "Dropdown" },
   { id: "checkbox", label: "Checkbox" },
   { id: "date", label: "Date" },
+  { id: "photos", label: "Photos" },
+  { id: "file", label: "File" },
 ];
 
 /** Manager-defined application question asked during the rental application for this listing. */
@@ -708,6 +791,38 @@ export function isEntireHomeListing(sub: Pick<ManagerListingSubmissionV1, "listi
   return sub.listingPlaceCategoryId === "entire_home";
 }
 
+export type RentalModel = "shared_home" | "entire_home";
+
+export type RentalModelStampResult = {
+  model: RentalModel;
+  /** True when the model had to be INFERRED because listingPlaceCategoryId was missing or
+   *  unrecognized — surfaced (never silently defaulted) so the audit migration can report it. */
+  inferred: boolean;
+};
+
+/**
+ * Migration-first stamp of the listing's CURRENT rental model. Idempotent: an already
+ * stamped listing returns its stamp unchanged. Reads the authoritative
+ * `listingPlaceCategoryId`; a missing/malformed value yields the historical `shared_home`
+ * default but is flagged `inferred` so it is reported, not silently assumed. Kept dormant
+ * (nothing reads the stamp) until the derivation switch lands.
+ */
+export function stampRentalModel(
+  sub: Pick<ManagerListingSubmissionV1, "listingPlaceCategoryId" | "rentalModelStamp">,
+): RentalModelStampResult {
+  if (sub.rentalModelStamp === "entire_home" || sub.rentalModelStamp === "shared_home") {
+    return { model: sub.rentalModelStamp, inferred: false };
+  }
+  // Mirror TODAY's behavior exactly: isEntireHomeListing is `=== "entire_home"`, so ANY
+  // other non-empty stored value (e.g. the legacy `private_room` that the dev data still
+  // carries) already behaves as shared-home everywhere — stamping shared_home preserves
+  // that and is NOT an inference. Only a truly missing value is inferred and reported.
+  const pc = (sub.listingPlaceCategoryId ?? "").trim();
+  if (pc === "entire_home") return { model: "entire_home", inferred: false };
+  if (pc === "") return { model: "shared_home", inferred: true };
+  return { model: "shared_home", inferred: false };
+}
+
 /** Resolved monthly rent for an entire-home listing. */
 export function entireHomeMonthlyRentAmount(sub: Pick<ManagerListingSubmissionV1, "entireHomeMonthlyRent" | "rooms">): number {
   if (typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0) {
@@ -874,6 +989,32 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       utilitiesPaymentModel: normalizeUtilitiesPaymentModel(
         (legacyRoom as ManagerRoomSubmission).utilitiesPaymentModel,
       ),
+      // Optional per-room deposit override; undefined (not "") when absent so a room
+      // that never set one is byte-identical to a legacy room and toEqual snapshots
+      // are unchanged. Charge generation falls back to the shared listing deposit.
+      securityDeposit:
+        typeof legacyRoom.securityDeposit === "string" && legacyRoom.securityDeposit.trim()
+          ? legacyRoom.securityDeposit.trim()
+          : undefined,
+      moveInFee:
+        typeof legacyRoom.moveInFee === "string" && legacyRoom.moveInFee.trim()
+          ? legacyRoom.moveInFee.trim()
+          : undefined,
+      // Per-room short-term set (round 20) — undefined when absent so rooms that never
+      // offered short-term stay byte-identical. Charge generation prefers these over the
+      // listing-level short-term fields when the booked room has them.
+      shortTermRent:
+        typeof legacyRoom.shortTermRent === "string" && legacyRoom.shortTermRent.trim()
+          ? legacyRoom.shortTermRent.trim()
+          : undefined,
+      shortTermMoveInFee:
+        typeof legacyRoom.shortTermMoveInFee === "string" && legacyRoom.shortTermMoveInFee.trim()
+          ? legacyRoom.shortTermMoveInFee.trim()
+          : undefined,
+      shortTermDeposit:
+        typeof legacyRoom.shortTermDeposit === "string" && legacyRoom.shortTermDeposit.trim()
+          ? legacyRoom.shortTermDeposit.trim()
+          : undefined,
       furnishing: (() => {
         const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
         return f.trim().length === 0 ? "" : f;
@@ -891,6 +1032,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
       prorateMethod: (legacyRoom.prorateMethod === "daily_rate" ? "daily_rate" : "auto") as "auto" | "daily_rate",
+      // Prorated per-day rent and per-day utilities are SEPARATE again (the earlier all-in
+      // fold was reversed). Each is read straight from storage; charge generation reads a
+      // missing per-day utilities rate as zero, so a listing that was folded during the
+      // fold's brief life bills rent-including-utilities + zero utilities = the same total.
       dailyRentRate: (() => {
         const v = legacyRoom.dailyRentRate;
         const n = typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
@@ -956,6 +1101,29 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
           : legacyShortTerm
             ? (sub.shortTermDailyCost ?? "").trim()
             : "",
+      // Optional per-bundle deposit/utilities — undefined when absent so legacy
+      // bundles are byte-identical and toEqual snapshots are unchanged.
+      securityDeposit:
+        typeof b.securityDeposit === "string" && b.securityDeposit.trim()
+          ? b.securityDeposit.trim()
+          : undefined,
+      moveInFee:
+        typeof b.moveInFee === "string" && b.moveInFee.trim() ? b.moveInFee.trim() : undefined,
+      shortTermMoveInFee:
+        typeof b.shortTermMoveInFee === "string" && b.shortTermMoveInFee.trim()
+          ? b.shortTermMoveInFee.trim()
+          : undefined,
+      shortTermDeposit:
+        typeof b.shortTermDeposit === "string" && b.shortTermDeposit.trim()
+          ? b.shortTermDeposit.trim()
+          : undefined,
+      utilitiesPaymentModel: b.utilitiesPaymentModel
+        ? normalizeUtilitiesPaymentModel(b.utilitiesPaymentModel)
+        : undefined,
+      utilitiesEstimate:
+        typeof b.utilitiesEstimate === "string" && b.utilitiesEstimate.trim()
+          ? b.utilitiesEstimate.trim()
+          : undefined,
     };
   });
 
@@ -969,23 +1137,23 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   let customFees = sub.customFees;
   if (!Array.isArray(customFees)) customFees = [];
-  // Spread the row first so the unified-fee metadata (presetId, cadence,
-  // dueAtSigning, shortTermOnly, creditsTowardSecurity) survives normalization.
-  // Stripping each row to the four legacy fields is what stopped unified fees
-  // from ever persisting through a save.
-  customFees = customFees.map((f) => ({
-    ...f,
-    id: f.id ?? rid("fee"),
-    label: typeof f.label === "string" ? f.label.trim() : "",
-    amount: typeof f.amount === "string" ? f.amount.trim() : "",
-    frequency: f.frequency === "one-time" ? "one-time" : "monthly",
-  }));
-  // A submission still carrying only the old individual fee fields (securityDeposit,
-  // moveInFee, parkingMonthly, …) is migrated to unified preset rows on read, which
-  // is the "legacy dual-write" half that was never wired up. Already-unified rows
-  // are left alone.
   if (!submissionUsesUnifiedListingFees(customFees)) {
-    customFees = resolveListingFees({ ...sub, customFees });
+    customFees = resolveListingFees({
+      ...sub,
+      customFees,
+      paymentAtSigningIncludes,
+    });
+  } else {
+    // Route every row through normalizeListingFeeRow so a legacy row that was stripped
+    // to {id,label,amount,frequency} recovers its presetId FROM ITS LABEL (0825197f).
+    // The old minimal map dropped presetId, so an untagged "Security deposit" row loaded
+    // back as a custom fee and rendered a SECOND time below the standard row — the
+    // duplicate-preset-row bug on existing listings. Recovering the tag lets the Fees
+    // table's `!presetId || presetId === "custom"` filter exclude it. Idempotent: a row
+    // that already carries a presetId keeps it. normalizeListingFeeRow already applies the
+    // id/label/amount/frequency defaulting the prakrit lane did explicitly, and it
+    // additionally preserves the custom-fee shortTermAmount and recovers preset labels.
+    customFees = customFees.map((f) => normalizeListingFeeRow(f as ListingFeeRow));
   }
 
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
@@ -1196,6 +1364,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   );
   const entireHomeProrateMethod: "auto" | "daily_rate" =
     sub.entireHomeProrateMethod === "daily_rate" ? "daily_rate" : (primaryRoom?.prorateMethod === "daily_rate" ? "daily_rate" : "auto");
+  // Separate per-day rent and utilities again (all-in fold reversed).
   const entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
   const entireHomeDailyUtilitiesRate = sub.entireHomeDailyUtilitiesRate ?? primaryRoom?.dailyUtilitiesRate;
 
@@ -1217,6 +1386,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   const next = {
     ...sub,
     listingPropertyTypeId: typeof sub.listingPropertyTypeId === "string" ? sub.listingPropertyTypeId : "",
+    // Migration-first (dormant): record the current rental model as durable data. Nothing
+    // reads this yet — listingPlaceCategoryId (kept as the rollback source) still drives
+    // isEntireHomeListing — so this stamp cannot change any behavior on its own.
+    rentalModelStamp: stampRentalModel({ listingPlaceCategoryId, rentalModelStamp: sub.rentalModelStamp }).model,
     listingPlaceCategoryId,
     entireHomeMonthlyRent: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeMonthlyRent : undefined,
     entireHomeUtilitiesEstimate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeUtilitiesEstimate : undefined,
@@ -1296,6 +1469,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     propertyLeaseTemplates: Array.isArray((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates)
       ? ((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates as import("@/lib/property-lease-templates").PropertyLeaseTemplate[])
       : undefined,
+    propertyApplicationTemplates: Array.isArray((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates)
+      ? ((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates as import("@/lib/property-application-templates").PropertyApplicationTemplate[])
+      : undefined,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
@@ -1370,7 +1546,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;
   delete (next as Record<string, unknown>).utilitiesMonthly;
-  return next as ManagerListingSubmissionV1;
+  return ensureSubmissionListingFees(next as ManagerListingSubmissionV1);
 }
 
 export function emptyRoom(index: number): ManagerRoomSubmission {
@@ -1688,6 +1864,22 @@ export function resolveServiceOfferPricing(offer: {
     (p) => p.name.trim().toLowerCase() === offer.name.trim().toLowerCase(),
   );
   return { price: preset?.price?.trim() ?? "", deposit: preset?.deposit?.trim() ?? "" };
+}
+
+/**
+ * A brand-new listing the manager opens in the wizard — the blank
+ * {@link createDefaultListingSubmission} (which stays a truly-empty base for tests and
+ * back-compat) plus the sensible starting defaults that let the common case publish with
+ * minimal typing: a 12-Month long-term lease (the most common term, and one is required to
+ * publish) is pre-selected. Everything else already has a good default on the base
+ * (holding deposit $100, late fee on, PropLane payments on, auto proration), and the
+ * manager-specific fields (address, rent) are the only ones left to type.
+ */
+export function createNewListingWizardSubmission(): ManagerListingSubmissionV1 {
+  return {
+    ...createDefaultListingSubmission(),
+    allowedLeaseTerms: ["12-Month"],
+  };
 }
 
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {

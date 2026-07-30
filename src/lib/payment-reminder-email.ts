@@ -1,6 +1,7 @@
 import type { PaymentReminderKind } from "@/lib/payment-automation-settings";
 import type { ManagerAutomationSettings, ScheduledMessageOverride } from "@/lib/payment-automation-settings";
 import { DEFAULT_MANAGER_AUTOMATION_SETTINGS } from "@/lib/payment-automation-settings";
+import { expandResidentPortalLoginTemplatePlaceholder } from "@/lib/resident-portal-login-copy";
 
 /** @deprecated Use PaymentReminderKind + daysBeforeDue instead. */
 export type PaymentReminderSlot = "7d" | "5d" | "3d" | "12h" | "overdue_daily";
@@ -23,6 +24,7 @@ export type ReminderTemplateParams = {
   daysUntilDue: number;
   lateFeeAmount?: string;
   graceDays?: number;
+  residentEmail?: string;
 };
 
 export function applyReminderTemplate(template: string, params: ReminderTemplateParams): string {
@@ -37,7 +39,8 @@ export function applyReminderTemplate(template: string, params: ReminderTemplate
           ? `${Math.abs(params.daysUntilDue)} day(s) ago`
           : `${params.daysUntilDue} days`;
 
-  return template
+  return expandResidentPortalLoginTemplatePlaceholder(
+    template
     .replaceAll("{residentName}", params.residentName)
     .replaceAll("{chargeTitle}", params.chargeTitle)
     .replaceAll("{balanceDue}", params.balanceDue)
@@ -49,7 +52,9 @@ export function applyReminderTemplate(template: string, params: ReminderTemplate
     .replaceAll("{lateFeeAmount}", params.lateFeeAmount ?? "")
     .replaceAll("{graceDays}", String(params.graceDays ?? ""))
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim(),
+    { residentEmail: params.residentEmail, afterLoginHint: "payments" },
+  );
 }
 
 export function buildReminderContent(input: {
