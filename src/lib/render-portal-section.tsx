@@ -284,8 +284,28 @@ export async function renderPortalSection(
         })
       : false;
   if (kind === "resident" && section === "applications") {
-    if (tabParts?.length) notFound();
-    return <ResidentApplicationsPanel />;
+    const RESIDENT_APP_BUCKETS = ["pending", "approved", "rejected"] as const;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/applications/pending`);
+    }
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const applicationBucket = RESIDENT_APP_BUCKETS.includes(
+      tabRaw as (typeof RESIDENT_APP_BUCKETS)[number],
+    )
+      ? (tabRaw as (typeof RESIDENT_APP_BUCKETS)[number])
+      : "pending";
+    if (tabRaw !== applicationBucket) {
+      redirect(`${def.basePath}/applications/${applicationBucket}`);
+    }
+    const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+    return (
+      <ResidentApplicationsPanel
+        bucket={applicationBucket}
+        basePath={def.basePath}
+        applicationId={applicationId}
+      />
+    );
   }
   if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
     const allowDashboard =
