@@ -81,7 +81,13 @@ describe("resident portal redesign completeness", () => {
         join(process.cwd(), "src/components/portal/portal-metrics.tsx"),
         "utf8",
       );
-      expect(src).toMatch(/titleAsideDesktopOnly = Boolean\(titleAside && filterRow\) \|\| Boolean\(titleAside && hideTitleOnMobileNav\)/);
+      // Both clauses must survive: actions go desktop-only when a filter row occupies the
+      // mobile chrome, and when the title is hidden on mobile nav. The second clause may
+      // carry further conditions (it is currently also gated on the inline title band, which
+      // has its own home for actions), so this asserts the clauses rather than exact text.
+      expect(src).toMatch(
+        /titleAsideDesktopOnly =\s*Boolean\(titleAside && filterRow\) \|\| Boolean\(titleAside && hideTitleOnMobileNav/,
+      );
     });
 
     it("legacy inbox panel folder tabs are not mounted from resident-communication", () => {

@@ -221,7 +221,6 @@ function ModalPanelInner({
   children,
   footer,
   dense,
-  onClose,
   showAssistantStrip,
   assistantHint,
   assistantStorageScopeKey,
@@ -239,7 +238,6 @@ function ModalPanelInner({
   children: ReactNode;
   footer?: ReactNode;
   dense: boolean;
-  onClose: () => void;
   showAssistantStrip: boolean;
   assistantHint: string;
   assistantStorageScopeKey?: string;
@@ -272,8 +270,11 @@ function ModalPanelInner({
               {title}
             </h3>
           </TitlePrimitive>
+          {/* No onClick: ClosePrimitive is Dialog.Close / Drawer.Close, which dismisses and
+              fires onOpenChange -> onClose. Calling onClose here too ran it TWICE, so a modal
+              with a save gate asked "Discard unsaved changes?" twice for one click. */}
           <ClosePrimitive asChild>
-            <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
+            <button type="button" aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
               <X className="h-5 w-5" aria-hidden />
             </button>
           </ClosePrimitive>
@@ -389,7 +390,6 @@ export function Modal({
     children,
     footer,
     dense,
-    onClose,
     showAssistantStrip,
     assistantHint,
     assistantStorageScopeKey,

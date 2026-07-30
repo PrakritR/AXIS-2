@@ -3204,6 +3204,7 @@ export function ManagerAddListingForm({
             </div>
             <button
               type="button"
+              data-attr="listing-wizard-close"
               onClick={closeWizard}
               disabled={busy || closingDraft}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/30 text-muted hover:bg-accent/40 disabled:opacity-60"

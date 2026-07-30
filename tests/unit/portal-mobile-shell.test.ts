@@ -9,6 +9,11 @@ const PORTAL_METRICS_SOURCE = readFileSync(
 
 const GLOBALS_CSS = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
 
+const PORTAL_SIDEBAR_SOURCE = readFileSync(
+  join(process.cwd(), "src/components/portal/portal-sidebar.tsx"),
+  "utf8",
+);
+
 describe("portal mobile shell conventions", () => {
   it("keeps ManagerPortalPageShell header compact on narrow screens", () => {
     expect(PORTAL_METRICS_SOURCE).toContain("PageHeader");
@@ -59,15 +64,28 @@ describe("portal mobile shell conventions", () => {
   });
 
   it("evenly distributes Instagram-style bottom tabs instead of scrolling", () => {
+    // The bar is a GRID of equal columns, not flexbox `space-evenly` + `flex: 1 1 0`.
+    // The column count is the tab count, so every tab gets exactly the same width and the
+    // strip can never scroll. Assert that shape rather than the properties it replaced.
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll");
-    expect(GLOBALS_CSS).toContain("justify-content: space-evenly");
+    expect(GLOBALS_CSS).toContain("display: grid");
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll > a");
-    expect(GLOBALS_CSS).toContain("flex: 1 1 0;");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("portal-native-bottom-nav-scroll");
+    expect(PORTAL_SIDEBAR_SOURCE).toMatch(/gridTemplateColumns:\s*`repeat\(\$\{[^}]+\},\s*minmax\(0,\s*1fr\)\)`/);
   });
 
   it("sizes native bottom tab icons consistently", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
-    expect(GLOBALS_CSS).toContain("height: 1.4375rem");
+    // One size for both the anchor and button tabs; the exact value is a design choice, so
+    // assert they MATCH rather than pinning a number that moves with the design.
+    const iconRule = GLOBALS_CSS.match(
+      /html\[data-native\] \.portal-native-bottom-nav-scroll a svg,\s*html\[data-native\] \.portal-native-bottom-nav-scroll button svg \{([^}]*)\}/,
+    );
+    expect(iconRule).not.toBeNull();
+    const height = iconRule![1]!.match(/height:\s*([\d.]+rem)/)?.[1];
+    const width = iconRule![1]!.match(/width:\s*([\d.]+rem)/)?.[1];
+    expect(height).toBeDefined();
+    expect(width).toBe(height);
   });
 
   it("floats the assistant FAB above the native bottom bar instead of a bar slot", () => {

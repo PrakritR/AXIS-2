@@ -134,9 +134,11 @@ afterEach(() => {
 
 describe("manager Applications — delete incomplete draft", () => {
   it("drops the row from the session cache when Delete is pressed so sync cannot resurrect it", async () => {
-    render(<ManagerApplications bucket="incomplete" />);
+    // Applications open as a detail ROUTE now, not an inline-expand row, so the row actions
+    // (Delete among them) live on that page. Render it directly rather than clicking a row
+    // open, which only navigates.
+    render(<ManagerApplications bucket="incomplete" applicationId={INCOMPLETE_ROW.id} />);
 
-    fireEvent.click((await screen.findAllByText("ambika Mago"))[0]!.closest("button")!);
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
