@@ -56,6 +56,13 @@ function makeDbMock(options: {
           }),
         };
       }
+      if (table === "resident_tour_links") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
+          }),
+        };
+      }
       return {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -114,7 +121,8 @@ describe("resident portal access state", () => {
     expect(access.isPreApplicationResident).toBe(false);
     expect(access.applicationApproved).toBe(false);
     expect(access.leaseAccessUnlocked).toBe(false);
-    expect(residentPortalHomePath(access)).toBe("/resident/applications/apply");
+    expect(access.isPreLeaseResident).toBe(true);
+    expect(residentPortalHomePath(access)).toBe("/resident/dashboard");
   });
 
   it("does not treat in-progress drafts as completed submissions", async () => {

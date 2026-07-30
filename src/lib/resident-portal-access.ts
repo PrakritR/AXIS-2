@@ -11,6 +11,10 @@ export type ResidentPortalAccessState = {
   hasCompletedApplicationSubmission: boolean;
   /** Resident with no submitted application yet — Applications-only portal. */
   isPreApplicationResident: boolean;
+  /** True when a tour inquiry is linked to this account by record id. */
+  hasTourLink: boolean;
+  /** Tour booked or application submitted, but lease access not yet unlocked. */
+  isPreLeaseResident: boolean;
   applicationApproved: boolean;
   applicationId: string | null;
   applicationStage: string | null;
@@ -26,6 +30,8 @@ function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): Res
     hasSubmittedApplication: false,
     hasCompletedApplicationSubmission: false,
     isPreApplicationResident: false,
+    hasTourLink: false,
+    isPreLeaseResident: false,
     applicationApproved: false,
     applicationId: null,
     applicationStage: null,
@@ -160,13 +166,23 @@ const loadResidentPortalAccessStateCached = cache(
     }
 
     const leaseAccessUnlocked = applicationApproved;
-    const isPreApplicationResident = roleOk && !hasSubmittedApplication;
+    let hasTourLink = false;
+    if (userId) {
+      const { count: tourLinkCount } = await db
+        .from("resident_tour_links")
+        .select("id", { count: "exact", head: true })
+        .eq("resident_user_id", userId);
+      hasTourLink = (tourLinkCount ?? 0) > 0;
+    }
+    const isPreLeaseResident = roleOk && !leaseAccessUnlocked && (hasTourLink || hasSubmittedApplication);
 
     return {
       roleOk,
       hasSubmittedApplication,
       hasCompletedApplicationSubmission,
-      isPreApplicationResident,
+      isPreApplicationResident: roleOk && !hasSubmittedApplication && !hasTourLink,
+      hasTourLink,
+      isPreLeaseResident,
       applicationApproved,
       applicationId: latestApplication.id,
       applicationStage: latestApplication.stage,
@@ -225,9 +241,11 @@ export async function loadResidentLeaseSignedStatus(email: string): Promise<bool
 
 /** Default resident landing route after sign-in / account creation. */
 export function residentPortalHomePath(
-  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked">,
+  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked" | "isPreLeaseResident" | "hasTourLink">,
 ): string {
-  return access.leaseAccessUnlocked ? "/resident/dashboard" : "/resident/applications/apply";
+  if (access.leaseAccessUnlocked) return "/resident/dashboard";
+  if (access.isPreLeaseResident || access.hasTourLink) return "/resident/dashboard";
+  return "/resident/applications/apply";
 }
 
 export function residentHasFullPortalAccess(params: {

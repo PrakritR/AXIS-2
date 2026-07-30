@@ -307,7 +307,7 @@ function TourFlow({
   const [step, setStep] = useState<TourStep>(1);
   const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
-  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string } | null>(null);
+  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string; inquiryId: string } | null>(null);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -389,9 +389,14 @@ function TourFlow({
 
   if (submitted) {
     const createAccountHref = submittedContact?.email
-      ? residentCreateAccountHref(returnAfterAuth, { email: submittedContact.email })
+      ? residentCreateAccountHref(returnAfterAuth, {
+          email: submittedContact.email,
+          tourInquiryId: submittedContact.inquiryId,
+        })
       : residentCreateAccountHref(returnAfterAuth);
-    const signInHref = residentSignInHref(returnAfterAuth);
+    const signInHref = residentSignInHref(returnAfterAuth, {
+      tourInquiryId: submittedContact?.inquiryId,
+    });
 
     return (
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
@@ -669,7 +674,8 @@ function TourFlow({
                 return;
               }
               setSubmitted(true);
-              setSubmittedContact({ name: name.trim(), email: email.trim() });
+              const firstInquiryId = results.find((item) => item.row?.id)?.row?.id ?? "";
+              setSubmittedContact({ name: name.trim(), email: email.trim(), inquiryId: firstInquiryId });
               onSuccess();
             }}
           />

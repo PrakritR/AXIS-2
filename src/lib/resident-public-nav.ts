@@ -17,18 +17,26 @@ export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLI
 
 export function residentCreateAccountHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
-  opts?: { email?: string },
+  opts?: { email?: string; tourInquiryId?: string },
 ): string {
   const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
   const q = new URLSearchParams({ role: "resident", next });
   const email = opts?.email?.trim().toLowerCase();
   if (email) q.set("email", email);
+  const tourInquiryId = opts?.tourInquiryId?.trim();
+  if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
   return `/auth/create-account?${q.toString()}`;
 }
 
-export function residentSignInHref(nextPath = RESIDENT_APPLICATIONS_PATH): string {
+export function residentSignInHref(
+  nextPath = RESIDENT_APPLICATIONS_PATH,
+  opts?: { tourInquiryId?: string },
+): string {
   const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
-  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(next)}`;
+  const q = new URLSearchParams({ intent: "resident", next });
+  const tourInquiryId = opts?.tourInquiryId?.trim();
+  if (tourInquiryId) q.set("link_tour", tourInquiryId);
+  return `/auth/sign-in?${q.toString()}`;
 }
 
 /** Browse / portal CTA — signed-in residents land in portal; everyone else is routed to resident auth. */
