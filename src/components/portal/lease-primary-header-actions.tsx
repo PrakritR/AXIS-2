@@ -18,8 +18,10 @@ import { cn } from "@/lib/utils";
 
 const MOBILE_FOOTER_PRIMARY_BTN = cn(
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  "h-10 min-w-0 flex-1 px-2 text-sm sm:px-3",
+  "h-10 min-w-0 flex-1 truncate px-2 text-sm sm:px-3",
 );
+
+const MOBILE_FOOTER_ROW = "flex w-full min-w-0 flex-nowrap items-stretch gap-2";
 
 type LeasePrimaryHeaderActionsProps = {
   row: LeasePipelineRow;
@@ -217,77 +219,27 @@ export function LeasePrimaryHeaderActions({
     </>
   );
 
+  const mobilePrimaryId = showSendToResident
+    ? "send"
+    : showSign
+      ? "sign"
+      : showSigningReminder
+        ? "reminder"
+        : hasDocument
+          ? "download"
+          : showGenerate
+            ? "generate"
+            : null;
+
   const mobileOverflowItems: ReactNode[] = [];
-  let mobileShowsDownloadPrimary = false;
-
-  const mobilePrimaryButtons: ReactNode[] = [];
-  if (showSendToResident) {
-    mobilePrimaryButtons.push(
-      <Button
-        key="send"
-        type="button"
-        variant="outline"
-        className={MOBILE_FOOTER_PRIMARY_BTN}
-        data-attr={sendToResidentDataAttr}
-        disabled={sendToResidentBusy || sendToResidentDisabled}
-        onClick={onSendToResident}
-      >
-        {sendToResidentBusy ? "Sending…" : "Send to resident"}
-      </Button>,
-    );
-  } else if (showSign) {
-    mobilePrimaryButtons.push(
-      <Button
-        key="sign"
-        type="button"
-        variant="outline"
-        className={MOBILE_FOOTER_PRIMARY_BTN}
-        data-attr={signManagerDataAttr}
-        onClick={onSignManager}
-      >
-        Sign
-      </Button>,
-    );
-  } else if (showSigningReminder) {
-    mobilePrimaryButtons.push(
-      <Button
-        key="reminder"
-        type="button"
-        variant="outline"
-        className={MOBILE_FOOTER_PRIMARY_BTN}
-        data-attr={signingReminderDataAttr}
-        disabled={signingReminderBusy}
-        onClick={onSigningReminder}
-      >
-        {signingReminderBusy ? "Sending…" : "Send reminder"}
-      </Button>,
-    );
-  }
-
-  if (hasDocument && mobilePrimaryButtons.length < 2) {
-    mobileShowsDownloadPrimary = true;
-    mobilePrimaryButtons.push(
-      <Button
-        key="download"
-        type="button"
-        variant="outline"
-        className={MOBILE_FOOTER_PRIMARY_BTN}
-        data-attr={downloadDataAttr}
-        onClick={onDownload}
-      >
-        {downloadLabel}
-      </Button>,
-    );
-  }
-
-  if (hasDocument && !mobileShowsDownloadPrimary) {
+  if (hasDocument && mobilePrimaryId !== "download") {
     mobileOverflowItems.push(
       <DropdownMenuItem key="download" onClick={onDownload}>
         {downloadLabel}
       </DropdownMenuItem>,
     );
   }
-  if (showGenerate) {
+  if (showGenerate && mobilePrimaryId !== "generate") {
     mobileOverflowItems.push(
       <DropdownMenuItem
         key="generate"
@@ -317,11 +269,65 @@ export function LeasePrimaryHeaderActions({
     );
   }
 
+  const mobilePrimary =
+    mobilePrimaryId === "send" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={sendToResidentDataAttr}
+        disabled={sendToResidentBusy || sendToResidentDisabled}
+        onClick={onSendToResident}
+      >
+        {sendToResidentBusy ? "Sending…" : "Send to resident"}
+      </Button>
+    ) : mobilePrimaryId === "sign" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={signManagerDataAttr}
+        onClick={onSignManager}
+      >
+        Sign
+      </Button>
+    ) : mobilePrimaryId === "reminder" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={signingReminderDataAttr}
+        disabled={signingReminderBusy}
+        onClick={onSigningReminder}
+      >
+        {signingReminderBusy ? "Sending…" : "Send reminder"}
+      </Button>
+    ) : mobilePrimaryId === "download" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={downloadDataAttr}
+        onClick={onDownload}
+      >
+        {downloadLabel}
+      </Button>
+    ) : mobilePrimaryId === "generate" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        disabled={generateLeaseBusy || generateLeaseDisabled}
+        title={generateLeaseTitle}
+        onClick={onGenerateLease}
+      >
+        {generateLeaseBusy ? "Generating..." : "Generate lease"}
+      </Button>
+    ) : null;
+
   const mobileFooter = (
-    <div className="flex w-full min-w-0 items-stretch gap-2">
-      {mobilePrimaryButtons.length > 0 ? (
-        <div className="flex min-w-0 flex-1 gap-2">{mobilePrimaryButtons}</div>
-      ) : null}
+    <div className={MOBILE_FOOTER_ROW}>
+      {mobilePrimary ? <div className="min-w-0 flex-1">{mobilePrimary}</div> : null}
       {mobileOverflowItems.length > 0 || leaseDelete ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -356,26 +362,30 @@ export function LeasePrimaryHeaderActions({
     if (flatFooter) {
       return (
         <>
-          <div className="hidden w-full min-w-0 flex-wrap items-center justify-start gap-2 md:flex">
+          <div className="hidden w-full min-w-0 flex-wrap items-center justify-start gap-2 lg:flex">
             {desktopButtons}
           </div>
-          <div className="w-full min-w-0 md:hidden">{mobileFooter}</div>
+          <div className="w-full min-w-0 lg:hidden">{mobileFooter}</div>
           {uploadInput}
         </>
       );
     }
     return (
       <>
-        <div className="hidden w-full min-w-0 md:contents">{desktopButtons}</div>
-        <div className="w-full min-w-0 md:hidden">{mobileFooter}</div>
+        <div className="hidden w-full min-w-0 lg:contents">{desktopButtons}</div>
+        <div className="w-full min-w-0 lg:hidden">{mobileFooter}</div>
         {uploadInput}
       </>
     );
   }
 
   return (
-    <PortalSectionActionRow variant="header">
-      {desktopButtons}
-    </PortalSectionActionRow>
+    <>
+      <div className="hidden lg:block">
+        <PortalSectionActionRow variant="header">{desktopButtons}</PortalSectionActionRow>
+      </div>
+      <div className="w-full min-w-0 lg:hidden">{mobileFooter}</div>
+      {uploadInput}
+    </>
   );
 }

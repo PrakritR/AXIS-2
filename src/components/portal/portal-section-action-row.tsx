@@ -143,9 +143,7 @@ export function PortalPageFooterActions({
         <div className="mx-auto w-full min-w-0 max-w-5xl">
           {rowVariant === "header" ? (
             <div className={PORTAL_FOOTER_HEADER_ACTIONS_ROW}>
-              <PortalSectionActionRow variant="header" className="w-full min-w-0 gap-2 [&_button]:max-w-none">
-                {children}
-              </PortalSectionActionRow>
+              <div className="flex w-full min-w-0 flex-nowrap items-stretch gap-2">{children}</div>
             </div>
           ) : (
             <div {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}>
