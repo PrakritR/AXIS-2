@@ -41,18 +41,38 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Returning to PropLane</title>
   <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #080b14; color: #e2e8f0; }
+    body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-height: 100vh; margin: 0; padding: 1.5rem; background: #080b14; color: #e2e8f0; text-align: center; }
+    a { color: #8fb4ff; font-weight: 600; text-decoration: none; }
+    a:active { opacity: 0.85; }
   </style>
 </head>
 <body>
   <p>Returning to PropLane…</p>
+  <p><a id="open-app" href="${schemeUrl.replace(/"/g, "&quot;")}">Open PropLane</a></p>
   <script>
     (function () {
       var target = ${JSON.stringify(schemeUrl)};
-      try { window.location.replace(target); } catch (e) {}
-      setTimeout(function () {
-        try { window.location.href = target; } catch (e2) {}
-      }, 120);
+      function openDeepLink() {
+        try {
+          var link = document.getElementById("open-app");
+          if (link) {
+            link.click();
+            return;
+          }
+        } catch (e) {}
+        try {
+          var a = document.createElement("a");
+          a.href = target;
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+        } catch (e2) {
+          try { window.location.href = target; } catch (e3) {}
+        }
+      }
+      openDeepLink();
+      setTimeout(openDeepLink, 150);
+      setTimeout(openDeepLink, 500);
     })();
   </script>
 </body>
