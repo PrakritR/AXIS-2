@@ -1305,7 +1305,7 @@ function RentalApplicationWizardInner({
           );
           return;
         }
-        router.replace("/resident/applications");
+        router.replace(`/resident/applications/pending/${encodeURIComponent(axisId)}`);
         return;
       }
       setPostSubmit({

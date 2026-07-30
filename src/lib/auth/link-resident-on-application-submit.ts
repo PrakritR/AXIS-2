@@ -43,6 +43,8 @@ export async function linkResidentOnApplicationSubmit(
     id: normalizeApplicationAxisId(params.row.id),
     propertyId: propertyId || params.row.propertyId,
     managerUserId,
+    residentUserId: params.userId,
+    axisId: normalizeApplicationAxisId(params.row.id),
   };
 
   const axisId = normalizeApplicationAxisId(normalizedRow.id);

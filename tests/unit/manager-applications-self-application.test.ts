@@ -254,4 +254,30 @@ describe("GET /api/manager-applications?scope=self", () => {
     expect(body.rows?.[0]?.id).toBe("PROPLANE-SELFAPP1");
     expect(body.rows?.[0]?.email).toBe(CALLER_EMAIL);
   });
+
+  it("excludes rows linked to another resident user id even when resident_email matches", async () => {
+    STORED_ROWS = [
+      {
+        id: "PROPLANE-SELFAPP1",
+        row_data: inProgressRow({ residentUserId: CALLER }),
+        resident_email: CALLER_EMAIL,
+      },
+      {
+        id: "PROPLANE-OTHERUSER",
+        row_data: inProgressRow({
+          id: "PROPLANE-OTHERUSER",
+          residentUserId: "someone-else-user-id",
+        }),
+        resident_email: CALLER_EMAIL,
+      },
+    ];
+    const { GET } = await import("@/app/api/manager-applications/route");
+    const res = await GET(new Request("http://localhost/api/manager-applications?scope=self"));
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+
+    expect(res.status).toBe(200);
+    expect(body.rows).toHaveLength(1);
+    expect(body.rows?.[0]?.id).toBe("PROPLANE-SELFAPP1");
+    expect(body.rows?.[0]?.residentUserId).toBe(CALLER);
+  });
 });

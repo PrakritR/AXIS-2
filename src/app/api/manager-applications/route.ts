@@ -567,10 +567,21 @@ export async function GET(req?: Request) {
 
     const rows = [...byId.values()];
 
+    const scopedRows =
+      selfScope || role === "resident"
+        ? rows.filter((row) => {
+            const rowEmail = (row.email ?? "").trim().toLowerCase();
+            if (email && rowEmail !== email) return false;
+            const linkedUserId = row.residentUserId?.trim();
+            if (linkedUserId && linkedUserId !== user.id) return false;
+            return true;
+          })
+        : rows;
+
     // Provision approved residents that were never provisioned (e.g. restored via SQL migration).
     // One batch profiles query finds which are missing; parallel provisioning handles only those.
     // This runs synchronously so accounts exist by the time the client fetches portal statuses.
-    const approved = rows.filter((r) => r.bucket === "approved" && r.email?.trim().includes("@"));
+    const approved = scopedRows.filter((r) => r.bucket === "approved" && r.email?.trim().includes("@"));
     if (approved.length > 0) {
       const emails = [...new Set(approved.map((r) => r.email!.trim().toLowerCase()))];
       const { data: existing } = await db.from("profiles").select("email").in("email", emails);
@@ -581,7 +592,7 @@ export async function GET(req?: Request) {
       }
     }
 
-    return NextResponse.json({ rows });
+    return NextResponse.json({ rows: scopedRows });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load applications.";
     return NextResponse.json({ error: message }, { status: 500 });

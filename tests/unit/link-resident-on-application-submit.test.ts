@@ -70,6 +70,8 @@ describe("linkResidentOnApplicationSubmit", () => {
     expect(linked?.id).toBe("AXIS-ABC123");
     expect(linked?.managerUserId).toBe("manager-1");
     expect(linked?.propertyId).toBe("prop-1");
+    expect(linked?.residentUserId).toBe("user-1");
+    expect(linked?.axisId).toBe("AXIS-ABC123");
     expect(db.profileUpdate).toHaveBeenCalledWith({ manager_id: "AXIS-ABC123" });
     expect(db.profileUpdateEq).toHaveBeenCalledWith("id", "user-1");
   });
