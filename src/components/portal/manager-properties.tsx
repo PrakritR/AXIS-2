@@ -12,10 +12,11 @@ import {
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { propertyListHref, type PropertyDetailTabId } from "@/lib/portal-detail-routes";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -214,7 +215,7 @@ export function ManagerProperties({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
       disabled={shareableProperties.length === 0}
       title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
       data-attr="manager-properties-share"
@@ -228,7 +229,7 @@ export function ManagerProperties({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="manager-properties-create"
       onClick={tryOpenAdd}
       disabled={!skuLoaded}
@@ -239,20 +240,21 @@ export function ManagerProperties({
   );
 
   const propertiesDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
+    <>
       {propertiesShareButton}
       {propertiesAddButton}
-    </PortalSectionActionRow>
+    </>
   );
 
   const propertiesMobileActionsRow = (
-    <div
-      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
-      data-slot="properties-mobile-actions"
-    >
-      <div className="min-w-0">{propertiesShareButton}</div>
-      <div className="min-w-0">{propertiesAddButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {propertiesShareButton}
+          {propertiesAddButton}
+        </PortalSectionActionRow>
+      }
+    />
   );
 
   const isDetailView = Boolean(propertyKeyProp);
@@ -281,7 +283,7 @@ export function ManagerProperties({
         <ManagerPortalPageShell title="Properties" hideTitleOnMobileNav titleAside={propertiesDesktopHeaderActions} compactFilterRow>
           {propertiesMobileActionsRow}
           <PortalListControlStack
-            className="mb-3"
+            className="mb-2"
             destinations={MANAGER_STAGES.map((stage) => ({
               id: stage.key,
               label: stage.label,

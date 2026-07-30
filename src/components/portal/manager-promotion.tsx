@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
@@ -660,7 +660,7 @@ export function ManagerPromotion({
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
       desktopPresentation="panel"
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0"
       onReset={() => setPropertyFilters([])}
       dataAttr="promotion-filter-sheet-open"
     >
@@ -677,7 +677,7 @@ export function ManagerPromotion({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       onClick={() => openNewPromotion()}
       data-attr="promotion-new"
     >
@@ -694,24 +694,15 @@ export function ManagerPromotion({
     />
   );
 
-  const promotionDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
-      {promotionFilterSheet}
-      {promotionNewButton}
-    </PortalSectionActionRow>
-  );
-
   const promotionMobileActionsRow = (
-    <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="promotion-mobile-actions">
-      <div className="min-w-0">{promotionFilterSheet}</div>
-      <div className="min-w-0">{promotionNewButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow filter={promotionFilterSheet} actions={promotionNewButton} />
   );
 
   return (
     <ManagerPortalPageShell
       title="Promotion"
-      titleAside={promotionDesktopHeaderActions}
+      titleInlineFilter={promotionFilterSheet}
+      titleAside={promotionNewButton}
       hideTitleOnMobileNav
       compactFilterRow
     >

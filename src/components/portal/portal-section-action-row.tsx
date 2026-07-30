@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
+import { PAGE_HEADER_COUNT_CLASS, PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
 
 const PORTAL_FOOTER_INLINE_ACTIONS_ROW = cn(
   "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-start gap-1 pb-0.5",
@@ -16,6 +17,84 @@ const PORTAL_FOOTER_HEADER_ACTIONS_ROW = cn(
 
 const PORTAL_FOOTER_INLINE_SPACER =
   "h-[calc(2.5rem+var(--portal-native-bottom-nav-inset,0px)+env(safe-area-inset-bottom,0px))] shrink-0 md:hidden";
+
+/**
+ * Desktop title row — page title (and optional trailing tabs) on the left;
+ * filter + primary actions grouped flush right (filter touches the first action).
+ */
+export function PortalPageTitleBand({
+  title,
+  count,
+  filter,
+  actions,
+  titleTrailing,
+  className,
+}: {
+  title: string;
+  count?: number;
+  filter?: ReactNode;
+  actions?: ReactNode;
+  titleTrailing?: ReactNode;
+  className?: string;
+}) {
+  const headerActions = filter || actions ? (
+    <PortalSectionActionRow variant="header" className="shrink-0 gap-1.5 sm:gap-2">
+      {filter}
+      {actions}
+    </PortalSectionActionRow>
+  ) : null;
+
+  return (
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 sm:gap-2",
+        className,
+      )}
+      data-slot="portal-page-title-band"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden sm:gap-2">
+        <h1 className={cn(PAGE_HEADER_TITLE_CLASS, "shrink-0")}>
+          {title}
+          {count != null ? (
+            <span className="ml-2 align-middle">
+              <span className={PAGE_HEADER_COUNT_CLASS}>{count}</span>
+            </span>
+          ) : null}
+        </h1>
+        {titleTrailing ? (
+          <div className="min-w-0 flex-1 overflow-hidden">{titleTrailing}</div>
+        ) : null}
+      </div>
+      {headerActions}
+    </div>
+  );
+}
+
+/** Mobile — filter + primary actions grouped flush right (below the nav title). */
+export function PortalPageHeaderMobileActionsRow({
+  filter,
+  actions,
+  className,
+}: {
+  filter?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  if (!filter && !actions) return null;
+
+  return (
+    <div
+      className={cn(
+        "mb-2 flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2 md:hidden",
+        className,
+      )}
+      data-slot="portal-page-header-mobile-actions"
+    >
+      {filter ? <div className="shrink-0">{filter}</div> : null}
+      {actions ? <div className="shrink-0">{actions}</div> : null}
+    </div>
+  );
+}
 
 /** Fixed primary CTAs above the native bottom tab bar (Create, Add resident, Add payment, …). */
 export function PortalPageFooterActions({
@@ -90,7 +169,9 @@ export function PortalSectionActionRow({
     return (
       <div
         className={cn(
-          "flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3 [&_button]:w-auto [&_button]:max-w-none [&_a]:w-auto",
+          "flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3",
+          "md:[&_button]:box-border md:[&_button]:h-10 md:[&_button]:min-h-0",
+          "[&_button]:w-auto [&_button]:max-w-none [&_a]:w-auto",
           className,
         )}
         data-slot="portal-section-action-row"

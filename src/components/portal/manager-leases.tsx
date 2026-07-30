@@ -9,10 +9,10 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
@@ -224,7 +224,7 @@ export function ManagerLeases({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       data-attr="leases-share"
       disabled={shareableProperties.length === 0}
       title={shareableProperties.length === 0 ? "List a property as active before sharing" : "Share listing links"}
@@ -238,7 +238,7 @@ export function ManagerLeases({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       data-attr="leases-edit-properties"
       disabled={editablePropertyOptions.length === 0}
       title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
@@ -248,22 +248,22 @@ export function ManagerLeases({
     </Button>
   );
 
-  const leasesDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-2 sm:gap-3 md:flex">
-      {leasesFilterSheet}
+  const leasesHeaderActions = (
+    <>
       {leasesShareButton}
       {leasesEditButton}
-    </PortalSectionActionRow>
+    </>
   );
 
   const leasesMobileActionsRow = (
-    <div className="mb-3 md:hidden" data-slot="leases-mobile-actions">
-      <div className="grid grid-cols-3 gap-2 [&_button]:min-w-0 [&_button]:w-full [&>div]:min-w-0">
-        {leasesFilterSheet}
-        {leasesShareButton}
-        {leasesEditButton}
-      </div>
-    </div>
+    <PortalPageHeaderMobileActionsRow
+      filter={leasesFilterSheet}
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {leasesHeaderActions}
+        </PortalSectionActionRow>
+      }
+    />
   );
 
   const modals = (
@@ -309,13 +309,14 @@ export function ManagerLeases({
     <>
       <ManagerPortalPageShell
         title="Leases"
-        titleAside={leasesDesktopHeaderActions}
+        titleInlineFilter={leasesFilterSheet}
+        titleAside={leasesHeaderActions}
         hideTitleOnMobileNav
         compactFilterRow
       >
         {leasesMobileActionsRow}
         <PortalListControlStack
-          className="mb-3"
+          className="mb-2"
           destinations={tabs.map((t) => ({
             id: t.id,
             label: t.label,

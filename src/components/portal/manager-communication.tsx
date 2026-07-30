@@ -15,8 +15,8 @@ import {
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   axisAdminFilterContact,
   EMPTY_COMMUNICATION_THREAD_FILTERS,
@@ -235,7 +235,7 @@ export function ManagerCommunication({
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
       desktopPresentation="dropdown"
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0"
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
         setListSort("recent");
@@ -250,7 +250,7 @@ export function ManagerCommunication({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="communication-new-message"
       onClick={() => openCompose("email")}
     >
@@ -258,22 +258,18 @@ export function ManagerCommunication({
     </Button>
   );
 
-  const communicationDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
+  const communicationHeaderActions = (
+    <>
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
-      {communicationFilterSheet}
       {communicationNewMessageButton}
-    </PortalSectionActionRow>
+    </>
   );
 
   const communicationMobileActionsRow = (
-    <div
-      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
-      data-slot="communication-mobile-actions"
-    >
-      <div className="min-w-0">{communicationFilterSheet}</div>
-      <div className="min-w-0">{communicationNewMessageButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow
+      filter={communicationFilterSheet}
+      actions={communicationHeaderActions}
+    />
   );
 
   const controlStack = (
@@ -310,7 +306,8 @@ export function ManagerCommunication({
   return (
     <PortalCommunicationShell
       title="Communication"
-      titleAside={communicationDesktopHeaderActions}
+      titleInlineFilter={communicationFilterSheet}
+      titleAside={communicationHeaderActions}
       hideTitleOnMobileNav
       controlStack={controlStack}
       mobileActionsRow={communicationMobileActionsRow}

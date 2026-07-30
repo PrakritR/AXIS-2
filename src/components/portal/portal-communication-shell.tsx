@@ -12,6 +12,7 @@ export function PortalCommunicationShell({
   controlStack,
   /** @deprecated Prefer `controlStack`. Kept for resident/vendor/admin shells. */
   titleAside,
+  titleInlineFilter,
   /** @deprecated Prefer `controlStack`. */
   threadFilters,
   children,
@@ -24,6 +25,7 @@ export function PortalCommunicationShell({
   title: string;
   controlStack?: ReactNode;
   titleAside?: ReactNode;
+  titleInlineFilter?: ReactNode;
   threadFilters?: ReactNode;
   children: ReactNode;
   hideMobileFilterRow?: boolean;
@@ -41,6 +43,7 @@ export function PortalCommunicationShell({
     <ManagerPortalPageShell
       title={title}
       titleAside={titleAside}
+      titleInlineFilter={titleInlineFilter}
       hideTitleOnMobileNav={hideTitleOnMobileNav}
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
@@ -48,7 +51,7 @@ export function PortalCommunicationShell({
     >
       {mobileActionsRow && !hideMobileFilterRow ? mobileActionsRow : null}
       {resolvedStack ? (
-        <div className={hideMobileFilterRow ? "mb-3 max-md:hidden" : "mb-3"}>{resolvedStack}</div>
+        <div className={hideMobileFilterRow ? "mb-2 max-md:hidden" : "mb-2"}>{resolvedStack}</div>
       ) : null}
       <div className="portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1">{children}</div>
     </ManagerPortalPageShell>

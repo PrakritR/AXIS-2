@@ -9,10 +9,10 @@ import {
 } from "@/lib/portal-detail-routes";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
@@ -329,8 +329,9 @@ export function ManagerAllServicesPanel({
     typeFilter !== "vendors" ? (
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilter])}
+        compactPanel
         desktopPresentation="panel"
-        className="max-md:flex-none max-md:w-full max-md:[&_button]:w-full"
+        className="min-w-0 shrink-0"
         onReset={resetServicesFilters}
         dataAttr="services-filter-sheet-open"
       >
@@ -425,7 +426,7 @@ export function ManagerAllServicesPanel({
       <Button
         type="button"
         variant="primary"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         onClick={() => vendorsPanelRef.current?.openSettings()}
         data-attr="manager-vendor-settings-open"
       >
@@ -435,7 +436,7 @@ export function ManagerAllServicesPanel({
       <Button
         type="button"
         variant="primary"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         data-attr="manager-service-request-add"
         onClick={() => setAddRequestOpen(true)}
       >
@@ -445,7 +446,7 @@ export function ManagerAllServicesPanel({
       <Button
         type="button"
         variant="primary"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         data-attr="manager-work-order-add"
         onClick={() => setAddWorkOrderOpen(true)}
       >
@@ -453,31 +454,8 @@ export function ManagerAllServicesPanel({
       </Button>
     );
 
-  const servicesDesktopTypeNav = (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5 lg:gap-3">
-      <div className="min-w-0 flex-1">{servicesTypeNav}</div>
-      {typeFilter !== "vendors" ? <div className="shrink-0">{servicesFilterSheet}</div> : null}
-    </div>
-  );
-
-  const servicesDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden shrink-0 gap-2 sm:gap-3 md:flex">
-      {servicesAddButton}
-    </PortalSectionActionRow>
-  );
-
-  const servicesMobileChrome = (
-    <div className="mb-3 space-y-2 md:hidden" data-slot="services-mobile-chrome">
-      <div className="min-w-0">{servicesTypeNav}</div>
-      {typeFilter !== "vendors" ? (
-        <div className="grid grid-cols-2 gap-2 [&_button]:min-w-0">
-          <div className="min-w-0">{servicesFilterSheet}</div>
-          <div className="min-w-0">{servicesAddButton}</div>
-        </div>
-      ) : (
-        <div className="flex justify-end">{servicesAddButton}</div>
-      )}
-    </div>
+  const servicesMobileActionsRow = (
+    <PortalPageHeaderMobileActionsRow filter={servicesFilterSheet} actions={servicesAddButton} />
   );
 
   if (serviceRequestIdProp && detailRequest) {
@@ -565,22 +543,31 @@ export function ManagerAllServicesPanel({
   const activeBucketId =
     typeFilter === "work-orders" ? woBucket : typeFilter === "requests" ? reqBucket : undefined;
 
+  const servicesListDestinations = (
+    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-1.5">
+      {servicesTypeNav}
+      {bucketDestinations ? (
+        <DestinationNav
+          items={bucketDestinations}
+          activeId={activeBucketId}
+          ariaLabel={typeFilter === "work-orders" ? "Work order status" : "Request status"}
+        />
+      ) : null}
+    </div>
+  );
+
   return (
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
-      titleTrailing={<div className="hidden min-w-0 flex-1 md:flex">{servicesDesktopTypeNav}</div>}
-      titleAside={servicesDesktopHeaderActions}
+      titleInlineFilter={typeFilter !== "vendors" ? servicesFilterSheet : null}
+      titleAside={servicesAddButton}
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {servicesMobileChrome}
+      {servicesMobileActionsRow}
       <PortalListControlStack
-        className="mb-3"
-        destinations={bucketDestinations}
-        activeDestinationId={activeBucketId}
-        destinationAriaLabel={
-          typeFilter === "work-orders" ? "Work order status" : "Request status"
-        }
+        className="mb-2"
+        destinationRow={servicesListDestinations}
         search={
           typeFilter === "vendors"
             ? undefined

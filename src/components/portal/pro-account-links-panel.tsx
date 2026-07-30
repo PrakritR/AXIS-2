@@ -6,15 +6,17 @@ import { Modal } from "@/components/ui/modal";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -26,7 +28,11 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { PortalEmptyState } from "@/components/portal/portal-empty-state";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
@@ -144,19 +150,6 @@ function TeamAssignedPropertySummary({ propertyIds, max = 3 }: { propertyIds: st
       ))}
       {rest > 0 ? <li className="text-xs text-muted">+{rest} more</li> : null}
     </ul>
-  );
-}
-
-function TeamLinksEmptyPanel({ variant }: { variant: "none" | "filtered" }) {
-  const message =
-    variant === "none"
-      ? "No co-managers yet. Invite another manager with their PropLane ID. You choose which properties they can access and what they can do on each."
-      : "No team members match this property filter. Try All properties or pick another listing.";
-
-  return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <PortalEmptyState title={message} icon="team" />
-    </div>
   );
 }
 
@@ -1431,7 +1424,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([teamPropertyFilters])}
       desktopPresentation="panel"
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0"
       onReset={() => setTeamPropertyFilters([])}
       dataAttr="team-links-filter-sheet-open"
     >
@@ -1448,7 +1441,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       disabled={atLinkCap}
       onClick={openLinkModal}
       title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
@@ -1458,18 +1451,18 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     </Button>
   );
 
-  const teamDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
-      {teamFilterSheet}
-      {teamLinkButton}
-    </PortalSectionActionRow>
+  const teamListAddRow = (
+    <PortalListAddRow
+      label="Link account"
+      icon={PORTAL_LIST_ADD_ICONS.team}
+      onClick={openLinkModal}
+      disabled={atLinkCap}
+      dataAttr="co-manager-list-add"
+    />
   );
 
   const teamMobileActionsRow = (
-    <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="team-mobile-actions">
-      <div className="min-w-0">{teamFilterSheet}</div>
-      <div className="min-w-0">{teamLinkButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow filter={teamFilterSheet} actions={teamLinkButton} />
   );
 
   const teamActiveFilterChips = teamPropertyFilters.length > 0 ? (
@@ -1489,7 +1482,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   return (
     <ManagerPortalPageShell
       title="Team"
-      titleAside={teamDesktopHeaderActions}
+      titleInlineFilter={teamFilterSheet}
+      titleAside={teamLinkButton}
       hideTitleOnMobileNav
       compactFilterRow
     >
@@ -1524,9 +1518,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!hasCoManagerLinks ? (
-          <TeamLinksEmptyPanel variant="none" />
+          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{teamListAddRow}</div>
         ) : !hasVisibleTeamRows ? (
-          <TeamLinksEmptyPanel variant={teamPropertyFilters.length > 0 ? "filtered" : "none"} />
+          <PortalDataTableEmpty
+            icon="team"
+            message="No team members match this property filter. Try All properties or pick another listing."
+          />
         ) : (
           <>
             <div className="space-y-4 lg:hidden">

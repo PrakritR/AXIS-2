@@ -853,7 +853,7 @@ export function ManagerPaymentsLedgerPanel({
       />
     ) : null}
     {selectedIds.size > 0 ? (
-      <BulkActionBar count={selectedIds.size}>
+      <BulkActionBar count={selectedIds.size} variant="payments">
         {selectedRows.some(isMarkableAsPaid) ? (
           <Button
             type="button"

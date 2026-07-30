@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
@@ -196,8 +197,9 @@ function PaymentsFilterSheet({
   return (
     <PortalFilterSortSheet
       activeCount={activeCount}
+      compactPanel
       desktopPresentation="panel"
-      className="max-md:flex-none max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
     >
@@ -606,7 +608,7 @@ export function ManagerPayments({
       <Button
         type="button"
         variant="outline"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
         onClick={() => setReminderSettingsOpen(true)}
         data-attr="payments-reminder-settings"
       >
@@ -618,7 +620,7 @@ export function ManagerPayments({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       onClick={() => setPaymentSetupOpen(true)}
       data-attr="payments-setup"
     >
@@ -630,7 +632,7 @@ export function ManagerPayments({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
       onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
       data-attr="payments-add"
     >
@@ -638,27 +640,18 @@ export function ManagerPayments({
     </Button>
   );
 
-  const paymentsDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
-      <PaymentsFilterSheet {...paymentsFilterSheetProps} />
+  const paymentsHeaderActions = (
+    <>
       {paymentsRemindersButton}
       {paymentsSetupButton}
       {paymentsAddButton}
-    </PortalSectionActionRow>
+    </>
   );
 
+  const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
+
   const paymentsMobileActionsRow = (
-    <div
-      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
-      data-slot="payments-mobile-actions"
-    >
-      <div className="min-w-0">
-        <PaymentsFilterSheet {...paymentsFilterSheetProps} />
-      </div>
-      {paymentsRemindersButton}
-      {paymentsSetupButton}
-      <div className={direction === "incoming" ? "min-w-0" : "col-span-2 min-w-0"}>{paymentsAddButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow filter={paymentsFilterControl} actions={paymentsHeaderActions} />
   );
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
@@ -708,8 +701,26 @@ export function ManagerPayments({
       activeId={direction}
       ariaLabel="Payment direction"
       size="toolbar"
-      className="max-w-none gap-2 sm:gap-3"
+      className="max-w-none"
     />
+  );
+
+  const paymentsListDestinations = (
+    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-1.5">
+      {directionNav}
+      <DestinationNav
+        items={tabs.map((t) => ({
+          id: t.id,
+          label: t.label,
+          href: `${paymentsBase}/${direction}/${t.id}`,
+          count: t.count,
+          alert: t.alert,
+          dataAttr: `payments-bucket-${t.id}`,
+        }))}
+        activeId={bucket}
+        ariaLabel="Payment status"
+      />
+    </div>
   );
 
   const paymentsPanel =
@@ -794,24 +805,15 @@ export function ManagerPayments({
   return (
     <ManagerPortalPageShell
       title="Payments"
-      titleTrailing={directionNav}
-      titleAside={paymentsDesktopHeaderActions}
       hideTitleOnMobileNav
+      titleInlineFilter={paymentsFilterControl}
+      titleAside={paymentsHeaderActions}
       compactFilterRow
     >
       {paymentsMobileActionsRow}
       <PortalListControlStack
-        className="mb-3"
-        destinations={tabs.map((t) => ({
-          id: t.id,
-          label: t.label,
-          href: `${paymentsBase}/${direction}/${t.id}`,
-          count: t.count,
-          alert: t.alert,
-          dataAttr: `payments-bucket-${t.id}`,
-        }))}
-        activeDestinationId={bucket}
-        destinationAriaLabel="Payment status"
+        className="mb-2"
+        destinationRow={paymentsListDestinations}
         search={{
           value: searchQuery,
           onChange: setSearchQuery,

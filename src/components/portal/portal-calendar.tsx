@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
 } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
@@ -413,7 +414,7 @@ export function PortalCalendar({
         activeCount={portalFilterActiveCount([activeCalendarPropertyFilters])}
         compactPanel
         desktopPresentation="panel"
-        className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+        className="min-w-0 shrink-0"
         onReset={() => setCalendarPropertyFilters([])}
         dataAttr="calendar-filter-sheet-open"
       >
@@ -432,7 +433,7 @@ export function PortalCalendar({
       <Button
         type="button"
         variant="outline"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         disabled={shareableProperties.length === 0 || calendarView === "services"}
         title={
           calendarView === "services"
@@ -450,42 +451,30 @@ export function PortalCalendar({
   const calendarGoogleCalendarButton =
     portal === "manager" ? (
       <GoogleCalendarConnectDialog
-        className="w-full shrink-0 md:w-auto"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)}
       />
     ) : null;
 
-  const calendarHeaderActionCluster =
+  const calendarHeaderActions =
     portal === "manager" ? (
-      <div
-        className="ml-auto flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-2 sm:gap-3"
-        data-slot="calendar-header-action-cluster"
-      >
-        <div className="min-w-0 shrink-0">{calendarFilterSheet}</div>
-        <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3 [&_button]:shrink-0">
-          {calendarGoogleCalendarButton}
-          {calendarShareTourButton}
-        </div>
-      </div>
-    ) : null;
-
-  const calendarDesktopHeaderActions =
-    portal === "manager" ? (
-      <PortalSectionActionRow variant="header" className="ml-auto hidden min-w-0 max-w-full md:flex md:justify-end">
-        {calendarHeaderActionCluster}
-      </PortalSectionActionRow>
+      <>
+        {calendarGoogleCalendarButton}
+        {calendarShareTourButton}
+      </>
     ) : null;
 
   const calendarMobileActionsRow =
     portal === "manager" ? (
-      <div
-        className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
-        data-slot="calendar-mobile-actions"
-      >
-        <div className="min-w-0">{calendarFilterSheet}</div>
-        <div className="min-w-0 [&_button]:w-full">{calendarGoogleCalendarButton}</div>
-        <div className="col-span-2 min-w-0 [&_button]:w-full">{calendarShareTourButton}</div>
-      </div>
+      <PortalPageHeaderMobileActionsRow
+        filter={calendarFilterSheet}
+        actions={
+          <PortalSectionActionRow variant="header" className="gap-2">
+            {calendarGoogleCalendarButton}
+            {calendarShareTourButton}
+          </PortalSectionActionRow>
+        }
+      />
     ) : null;
 
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
@@ -516,12 +505,14 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         hideTitleOnMobileNav
-        titleAside={calendarDesktopHeaderActions}
+        titleInlineFilter={portal === "manager" ? calendarFilterSheet : undefined}
+        titleAside={calendarHeaderActions ?? undefined}
+        compactFilterRow={portal === "manager"}
       >
         {calendarMobileActionsRow}
         {portal === "manager" ? (
           <PortalListControlStack
-            className="mb-3"
+            className="mb-2"
             destinations={calendarTabs}
             activeDestinationId={calendarView}
             destinationAriaLabel="Calendar views"

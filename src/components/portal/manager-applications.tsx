@@ -18,7 +18,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -26,7 +26,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
@@ -1066,7 +1066,7 @@ export function ManagerApplications({
       onReset={() => setPropertyFilters([])}
       dataAttr="applications-filter-sheet-open"
       desktopPresentation="panel"
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0"
     >
       <ApplicationFilterSortFields
         layout="inline"
@@ -1088,7 +1088,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       data-attr="application-settings-open"
       onClick={() => setApplicationSettingsOpen(true)}
     >
@@ -1100,7 +1100,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       data-attr="edit-application-open"
       onClick={() => setEditApplicationOpen(true)}
       disabled={propertyOptions.length === 0}
@@ -1114,7 +1114,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       onClick={() => setInviteModalOpen(true)}
       disabled={shareableProperties.length === 0}
       title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
@@ -1123,24 +1123,24 @@ export function ManagerApplications({
     </Button>
   );
 
-  const applicationsDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-2 sm:gap-3 md:flex">
+  const applicationsHeaderActions = (
+    <>
       {applicationsScreeningButton}
-      {applicationsFilterSort}
       {applicationsPromoButton}
       {applicationsEditButton}
       {applicationsSendButton}
-    </PortalSectionActionRow>
+    </>
   );
 
   const applicationsMobileActionsRow = (
-    <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="applications-mobile-actions">
-      <div className="min-w-0">{applicationsScreeningButton}</div>
-      <div className="min-w-0">{applicationsFilterSort}</div>
-      <div className="min-w-0">{applicationsPromoButton}</div>
-      <div className="min-w-0">{applicationsEditButton}</div>
-      <div className="col-span-2 min-w-0">{applicationsSendButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow
+      filter={applicationsFilterSort}
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {applicationsHeaderActions}
+        </PortalSectionActionRow>
+      }
+    />
   );
 
   const applicationModals = (
@@ -1241,12 +1241,13 @@ export function ManagerApplications({
     <ManagerPortalPageShell
       title="Applications"
       hideTitleOnMobileNav
-      titleAside={applicationsDesktopHeaderActions}
+      titleInlineFilter={applicationsFilterSort}
+      titleAside={applicationsHeaderActions}
       compactFilterRow
     >
       {applicationsMobileActionsRow}
       <PortalListControlStack
-        className="mb-3 max-lg:mb-4"
+        className="mb-2 max-lg:mb-2"
         destinationInset
         destinations={tabs.map((t) => ({
           id: t.id,

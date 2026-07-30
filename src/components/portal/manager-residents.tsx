@@ -17,6 +17,7 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalStatusFilterRow,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -47,7 +48,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageFooterActions, PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   RESIDENT_DETAIL_TAB_LABELS,
   RESIDENT_DETAIL_TAB_SHORT_LABELS,
@@ -2363,7 +2364,7 @@ export function ManagerResidents({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
       onClick={() => setAddResidentOpen(true)}
     >
       + Add
@@ -2374,8 +2375,9 @@ export function ManagerResidents({
     propertyOptions.length > 0 ? (
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilters])}
+        compactPanel
         desktopPresentation="panel"
-        className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+        className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
         onReset={() => setPropertyFilters([])}
         dataAttr="residents-filter-sheet-open"
       >
@@ -2388,21 +2390,11 @@ export function ManagerResidents({
       </PortalFilterSortSheet>
     ) : null;
 
-  const residentsDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
-      {residentsFilterSheet}
-      {residentsAddButton}
-    </PortalSectionActionRow>
-  );
-
   const residentsMobileActionsRow = (
-    <div
-      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
-      data-slot="residents-mobile-actions"
-    >
-      {propertyOptions.length > 0 ? <div className="min-w-0">{residentsFilterSheet}</div> : null}
-      <div className={propertyOptions.length > 0 ? "min-w-0" : "col-span-2 min-w-0"}>{residentsAddButton}</div>
-    </div>
+    <PortalPageHeaderMobileActionsRow
+      filter={residentsFilterSheet}
+      actions={residentsAddButton}
+    />
   );
 
   return (
@@ -2447,7 +2439,8 @@ export function ManagerResidents({
       <ManagerPortalPageShell
         title="Residents"
         hideTitleOnMobileNav
-        titleAside={residentsDesktopHeaderActions}
+        titleInlineFilter={residentsFilterSheet}
+        titleAside={residentsAddButton}
         compactFilterRow
       >
       {residentsMobileActionsRow}
