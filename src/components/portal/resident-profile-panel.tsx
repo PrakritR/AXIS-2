@@ -162,7 +162,7 @@ export function ResidentProfilePanel() {
   };
 
   return (
-    <ManagerPortalPageShell title="Settings" subtitle="Manage your account settings and preferences.">
+    <ManagerPortalPageShell title="Settings" hideTitleOnMobileNav>
       <PortalSettingsSections>
         <PortalSettingsProfileHeader name={name} email={email} />
 
