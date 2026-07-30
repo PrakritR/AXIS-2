@@ -247,7 +247,7 @@ export function ServiceRequestCard({
     deleteServiceRequest(req.id);
     setDeleteOpen(false);
     onDelete();
-    showToast("Add-on service deleted.");
+    showToast("Request deleted.");
   }
 
   const feePaid = isServiceRequestFeePaid(req);
@@ -332,7 +332,7 @@ export function ServiceRequestCard({
             data-attr="resident-service-request-edit"
             onClick={onEdit}
           >
-            Edit add-on service
+            Edit request
           </Button>
         ) : null}
         <Button
@@ -341,15 +341,15 @@ export function ServiceRequestCard({
           className={PORTAL_DETAIL_BTN}
           onClick={() => setDeleteOpen(true)}
         >
-          Delete add-on service
+          Delete request
         </Button>
       </PortalTableDetailActions>
 
       <ConfirmDeleteModal
         open={deleteOpen}
-        title="Delete add-on service"
+        title="Delete request"
         description={`Delete “${req.offerName}”?`}
-        confirmLabel="Delete add-on service"
+        confirmLabel="Delete request"
         dataAttr="resident-service-request-delete-confirm"
         onClose={() => setDeleteOpen(false)}
         onConfirm={removeRequest}
@@ -792,7 +792,7 @@ export function ResidentServicesPanel({
     });
     setEditingRequest(null);
     reloadServiceRequests();
-    showToast("Add-on service updated.");
+    showToast("Request updated.");
   }
 
   function openWorkOrderEdit(row: DemoManagerWorkOrderRow) {
@@ -1201,7 +1201,7 @@ export function ResidentServicesPanel({
           setModalMode("service");
         }}
       >
-        Request add-on service
+        Request service
       </Button>
     );
 
@@ -1211,7 +1211,7 @@ export function ResidentServicesPanel({
       destinations={[
         {
           id: "requests",
-          label: "Add-on services",
+          label: "Requests",
           href: `${basePath}/services/requests`,
           count: sortedRequests.length,
           dataAttr: "resident-services-tab-requests",
@@ -1237,7 +1237,7 @@ export function ResidentServicesPanel({
             }))}
             activeId={requestsFilter}
             onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
-            ariaLabel="Add-on service status"
+            ariaLabel="Request status"
             className="w-full"
           />
         ) : (
@@ -1258,7 +1258,7 @@ export function ResidentServicesPanel({
       search={{
         value: searchQuery,
         onChange: setSearchQuery,
-        placeholder: activeTab === "requests" ? "Search add-on services" : "Search work orders",
+        placeholder: activeTab === "requests" ? "Search requests" : "Search work orders",
         dataAttr: "resident-services-search",
       }}
     />
@@ -1282,20 +1282,20 @@ export function ResidentServicesPanel({
       {!servicesUnlocked ? (
         <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
-          Maintenance and add-on service requests become available once you and your manager have both signed.
+          Maintenance and service requests become available once you and your manager have both signed.
         </p>
       ) : null}
 
       {activeTab === "requests" ? (
         <div>
           {sortedRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
+            <PortalDataTableEmpty message="No requests yet." icon="service" />
           ) : filteredRequests.length === 0 ? (
             <PortalDataTableEmpty
               message={
                 searchQuery.trim()
-                  ? "No add-on services match your search."
-                  : "No add-on services in this status yet."
+                  ? "No requests match your search."
+                  : "No requests in this status yet."
               }
               icon="service"
             />
@@ -1593,7 +1593,7 @@ export function ResidentServicesPanel({
       {/* Request modal */}
       <Modal
         open={modalMode === "service"}
-        title="Request add-on service"
+        title="Request service"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
         footer={
@@ -1632,7 +1632,7 @@ export function ResidentServicesPanel({
               <div className="mt-4 space-y-3">
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted">
-                    Add-on service type <span className="text-rose-500">*</span>
+                    Service type <span className="text-rose-500">*</span>
                   </p>
                   <Select
                     value={
@@ -1652,7 +1652,7 @@ export function ResidentServicesPanel({
                     disabled={serviceSubmitting}
                   >
                     {availableOffers.length > 0 ? (
-                      <option value="">Select an add-on service</option>
+                      <option value="">Select a service</option>
                     ) : null}
                     {availableOffers.map((offer) => (
                       <option key={offer.id} value={offer.id}>
@@ -1745,7 +1745,7 @@ export function ResidentServicesPanel({
       {/* Edit add-on service request modal */}
       <Modal
         open={editingRequest !== null}
-        title="Edit add-on service"
+        title="Edit request"
         onClose={() => setEditingRequest(null)}
         panelClassName="max-w-lg"
         footer={

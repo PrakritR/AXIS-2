@@ -20,23 +20,12 @@ import {
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
 const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 
-/** Portal menus into an open modal/drawer when present so Vaul modal trapping does not swallow clicks. */
+/** Always portal to body — viewport `fixed` coords break inside transformed Vaul/Radix shells. */
 function resolveFieldSelectMenuPortal(): HTMLElement {
-  const selectors = [
-    '[data-slot="modal-vaul-drawer"][data-state="open"]',
-    '[data-slot="modal-radix-dialog"][data-state="open"]',
-    '[data-slot="vaul-bottom-sheet"][data-state="open"]',
-  ];
-  for (const selector of selectors) {
-    const host = document.querySelector<HTMLElement>(selector);
-    if (host) return host;
-  }
   return document.body;
 }
 
-function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
-  return portalHost === document.body ? 10000 : 80;
-}
+const FIELD_SELECT_MENU_Z_INDEX = 10000;
 
 type FieldSelectMenuRect = {
   top: number;
@@ -175,7 +164,7 @@ export function CheckboxMultiSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
+    const onPointerDownOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (wrapRef.current?.contains(target)) return;
       if (document.getElementById(listId)?.contains(target)) return;
@@ -184,10 +173,10 @@ export function CheckboxMultiSelect({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDownOutside, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDownOutside, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [listId, open]);
@@ -202,10 +191,7 @@ export function CheckboxMultiSelect({
       : summarizeSelection(selected, flatOptions, emptyLabel);
 
   const menu =
-    open && menuRect && isClient ? (() => {
-      const portalHost = resolveFieldSelectMenuPortal();
-      const menuZ = fieldSelectMenuZIndex(portalHost);
-      return (
+    open && menuRect && isClient ? (
       <div
         id={listId}
         role="listbox"
@@ -218,8 +204,9 @@ export function CheckboxMultiSelect({
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
           backgroundColor: "#ffffff",
-          zIndex: menuZ,
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {flatOptions.length === 0 ? (
           <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -275,8 +262,7 @@ export function CheckboxMultiSelect({
           <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
         ) : null}
       </div>
-      );
-    })() : null;
+    ) : null;
 
   const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
@@ -372,7 +358,7 @@ export function FieldSingleSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
+    const onPointerDownOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (wrapRef.current?.contains(target)) return;
       if (document.getElementById(listId)?.contains(target)) return;
@@ -381,19 +367,16 @@ export function FieldSingleSelect({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDownOutside, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDownOutside, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [listId, open]);
 
   const menu =
-    open && menuRect && isClient ? (() => {
-      const portalHost = resolveFieldSelectMenuPortal();
-      const menuZ = fieldSelectMenuZIndex(portalHost);
-      return (
+    open && menuRect && isClient ? (
       <div
         id={listId}
         role="listbox"
@@ -408,8 +391,9 @@ export function FieldSingleSelect({
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
           backgroundColor: "#ffffff",
-          zIndex: menuZ,
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         {options.map((opt) => {
           const active = opt.value === value;
@@ -440,8 +424,7 @@ export function FieldSingleSelect({
           );
         })}
       </div>
-      );
-    })() : null;
+    ) : null;
 
   const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 

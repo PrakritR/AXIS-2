@@ -39,7 +39,7 @@ import {
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   LEASE_PIPELINE_EVENT,
-  downloadLeaseFromRow,
+  runLeaseDownload,
   findLeaseForResidentEmail,
   getLeaseDocumentHtml,
   hasBothLeaseSignatures,
@@ -419,10 +419,7 @@ function SignedLeaseDocumentsTable() {
   const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
 
   const onDownload = () => {
-    downloadLeaseFromRow(row);
-    showToast(
-      pdfSrc ? "PDF download started." : "Print dialog opened. Choose 'Save as PDF' to download.",
-    );
+    runLeaseDownload(row, showToast);
   };
 
   return (

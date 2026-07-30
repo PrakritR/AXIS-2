@@ -24,6 +24,13 @@ import {
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
 import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import {
+  downloadDataUrl,
+  downloadTextContent,
+  leaseDownloadBaseName,
+  portalDownloadToastMessage,
+  type PortalDownloadResult,
+} from "@/lib/portal-document-download";
 import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
 import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel, getBundleChoiceLabel } from "@/lib/rental-application/data";
@@ -1687,22 +1694,36 @@ export function regenerateEditableLeasesForResident(
   return updated;
 }
 
-export function downloadLeaseFromRow(row: LeasePipelineRow): void {
-  if (typeof window === "undefined") return;
+export async function downloadLeaseFromRow(row: LeasePipelineRow): Promise<PortalDownloadResult> {
+  if (typeof window === "undefined") return "failed";
   if (row.managerUploadedPdf?.dataUrl) {
-    const a = document.createElement("a");
-    a.href = row.managerUploadedPdf.dataUrl;
-    a.download = row.managerUploadedPdf.fileName || "lease.pdf";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
+    return downloadDataUrl(
+      row.managerUploadedPdf.dataUrl,
+      row.managerUploadedPdf.fileName || `PropLane-Lease-${leaseDownloadBaseName(row)}.pdf`,
+    );
   }
-  if (row.generatedHtml) {
-    printLeaseAsPdf(row);
-    return;
+  const html = getLeaseDocumentHtml(row);
+  if (html) {
+    return downloadTextContent(
+      html,
+      `PropLane-Lease-${leaseDownloadBaseName(row)}.html`,
+      "text/html;charset=utf-8",
+      "Lease",
+    );
   }
+  return "failed";
+}
+
+export function runLeaseDownload(row: LeasePipelineRow, showToast: (message: string) => void): void {
+  void downloadLeaseFromRow(row).then((result) => {
+    const message = portalDownloadToastMessage(result, "lease");
+    if (message) showToast(message);
+  });
+}
+
+/** @deprecated Use {@link downloadLeaseFromRow} — kept for callers that still name this “print”. */
+export async function printLeaseAsPdf(row: LeasePipelineRow): Promise<PortalDownloadResult> {
+  return downloadLeaseFromRow(row);
 }
 
 export function dedupeLeasePipelineRows(rows: LeasePipelineRow[]): LeasePipelineRow[] {
@@ -1952,31 +1973,6 @@ export async function managerSignLease(
   };
   write(raw, managerUserId);
   return true;
-}
-
-/** Open the lease in a print-ready popup — browser saves as PDF from the print dialog. */
-export function printLeaseAsPdf(row: LeasePipelineRow): void {
-  if (typeof window === "undefined") return;
-  if (row.managerUploadedPdf?.dataUrl) {
-    const a = document.createElement("a");
-    a.href = row.managerUploadedPdf.dataUrl;
-    a.download = row.managerUploadedPdf.fileName || "lease.pdf";
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    return;
-  }
-  const html = getLeaseDocumentHtml(row);
-  if (!html) return;
-  const printHtml = html.replace(
-    "</head>",
-    `<style>@media print{body{margin:0}}</style><script>window.onload=function(){window.print();}<\/script></head>`,
-  );
-  const win = window.open("", "_blank", "width=900,height=700");
-  if (!win) return;
-  win.document.write(printHtml);
-  win.document.close();
 }
 
 export function residentRequestEdits(email: string, message: string): boolean {

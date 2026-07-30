@@ -38,7 +38,7 @@ import { buildApplicationHtml } from "@/lib/manager-application-html";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   LEASE_PIPELINE_EVENT,
-  downloadLeaseFromRow,
+  runLeaseDownload,
   getLeaseDocumentHtml,
   readLeasePipeline,
   syncLeasePipelineFromServer,
@@ -46,6 +46,7 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function DocumentsTableShell({
   head,
@@ -295,6 +296,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
 }
 
 export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) {
+  const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [propertyTick, setPropertyTick] = useState(0);
@@ -345,7 +347,7 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
         title={label}
         src={pdfSrc}
         srcDoc={html}
-        onDownload={() => downloadLeaseFromRow(row)}
+        onDownload={() => runLeaseDownload(row, showToast)}
         downloadLabel={pdfSrc ? "Download PDF" : "Download / print"}
         downloadAttr="manager-documents-lease-download"
       />

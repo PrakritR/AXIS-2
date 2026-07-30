@@ -790,14 +790,14 @@ export function ResidentDashboard({
                   ) : null}
                   {pendingRequestCount > 0 ? (
                     <StatusPill tone="pending">
-                      {pendingRequestCount} add-on service{pendingRequestCount === 1 ? "" : "s"}
+                      {pendingRequestCount} pending request{pendingRequestCount === 1 ? "" : "s"}
                     </StatusPill>
                   ) : null}
                 </span>
               ) : null
             }
             items={serviceItems}
-            emptyMessage="No open work orders or pending add-on services."
+            emptyMessage="No open work orders or pending requests."
             keyForItem={(item) => item.id}
             renderRow={(item, sectionTone) => {
               if (item.kind === "request") {
