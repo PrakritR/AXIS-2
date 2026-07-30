@@ -85,8 +85,8 @@ describe("manager Applications — no Approve on a withdrawn row", () => {
     // Detail route — no Approve button and no "Send reminder".
     expect(screen.queryByText("Approve")).toBeNull();
     expect(screen.queryByText("Send reminder")).toBeNull();
-    expect(screen.getByText("Reject")).toBeTruthy();
-    expect(screen.getByText("Delete")).toBeTruthy();
+    expect(screen.getAllByText("Reject").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Delete").length).toBeGreaterThan(0);
   });
 
   it("still offers Approve on a normal (non-withdrawn) pending row — the control", async () => {
