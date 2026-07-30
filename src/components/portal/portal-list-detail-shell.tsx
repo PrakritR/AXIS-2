@@ -65,7 +65,7 @@ export function usePortalListDetail<TId extends string>({
   };
 }
 
-/** Detail pane header — back on mobile, title + optional actions (Communication thread style). */
+/** Detail pane header — back control, title + optional actions (Communication thread style). */
 export function PortalDetailHeader({
   title,
   subtitle,
@@ -90,12 +90,12 @@ export function PortalDetailHeader({
           <button
             type="button"
             onClick={onBack}
-            className="flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary lg:hidden"
+            className="flex min-h-8 shrink-0 items-center gap-0.5 rounded-lg px-1 text-sm font-medium text-primary hover:bg-accent/40 md:px-2"
             aria-label={backLabel}
             data-attr={dataAttrBack}
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-            <span className="sr-only">{backLabel}</span>
+            <span className="max-md:sr-only">{backLabel}</span>
           </button>
         ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
