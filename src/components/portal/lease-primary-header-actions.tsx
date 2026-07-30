@@ -340,7 +340,7 @@ export function LeasePrimaryHeaderActions({
               <MoreHorizontal className="h-5 w-5" aria-hidden />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className="min-w-[12rem]">
+          <DropdownMenuContent side="top" align="end" className="z-[60] min-w-[12rem]">
             {mobileOverflowItems}
             {leaseDelete && mobileOverflowItems.length > 0 ? <DropdownMenuSeparator /> : null}
             {onDelete ? (
@@ -360,12 +360,10 @@ export function LeasePrimaryHeaderActions({
 
   if (embedded) {
     if (flatFooter) {
+      // Resident detail pinned dock: always one row + overflow (desktop inline row clipped actions).
       return (
         <>
-          <div className="hidden w-full min-w-0 flex-wrap items-center justify-start gap-2 lg:flex">
-            {desktopButtons}
-          </div>
-          <div className="w-full min-w-0 lg:hidden">{mobileFooter}</div>
+          <div className="w-full min-w-0">{mobileFooter}</div>
           {uploadInput}
         </>
       );
