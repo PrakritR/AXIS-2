@@ -25,7 +25,6 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
@@ -51,6 +50,7 @@ import { PortalListControlStack } from "@/components/portal/portal-list-control-
 import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   RESIDENT_DETAIL_TAB_LABELS,
+  RESIDENT_DETAIL_TAB_SHORT_LABELS,
   residentDetailHref,
   residentPaymentDetailHref,
   parseResidentDetailTab,
@@ -139,8 +139,7 @@ import {
   sendLeaseToResident,
   syncLeasePipelineFromApplications,
   syncLeasePipelineFromServer,
-  downloadLeaseFromRow,
-  printLeaseAsPdf,
+  runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
   updateLeasePipelineRow,
@@ -185,7 +184,7 @@ import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/c
 import {
   ApplicationReviewLauncherRow,
 } from "@/components/portal/application-review-launcher-row";
-import { downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { runApplicationPdfDownload } from "@/components/portal/manager-applications";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
@@ -1842,8 +1841,7 @@ export function ManagerResidents({
           className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
           data-attr="resident-application-download"
           onClick={() => {
-            downloadApplicationPdf(selectedApplicationRow);
-            showToast("Application download started.");
+            runApplicationPdfDownload(selectedApplicationRow, showToast);
           }}
         >
           Download
@@ -1887,7 +1885,7 @@ export function ManagerResidents({
             <Button
               type="button"
               variant="primary"
-              className={PORTAL_DETAIL_BTN_PRIMARY}
+              className={PORTAL_DETAIL_BTN}
               data-attr="resident-application-approve"
               onClick={() => setApprovePreviewRow(selectedApplicationRow)}
             >
@@ -1926,8 +1924,7 @@ export function ManagerResidents({
         className={PORTAL_DETAIL_BTN}
         data-attr="resident-application-download-footer"
         onClick={() => {
-          downloadApplicationPdf(selectedApplicationRow);
-          showToast("Application download started.");
+          runApplicationPdfDownload(selectedApplicationRow, showToast);
         }}
       >
         Download
@@ -1956,6 +1953,7 @@ export function ManagerResidents({
                                   .map((tab) => ({
                                     id: tab,
                                     label: RESIDENT_DETAIL_TAB_LABELS[tab],
+                                    shortLabel: RESIDENT_DETAIL_TAB_SHORT_LABELS[tab],
                                     href: residentDetailHref(portalBase, residentsTab, selected.id, tab),
                                     dataAttr: `resident-detail-tab-${tab}`,
                                   }))}
@@ -1996,14 +1994,7 @@ export function ManagerResidents({
                                     downloadDataAttr="resident-lease-download"
                                     signManagerDataAttr="resident-lease-sign-manager"
                                     signingReminderDataAttr="resident-lease-signing-reminder"
-                                    onDownload={() => {
-                                      if (residentLease.managerUploadedPdf?.dataUrl) {
-                                        downloadLeaseFromRow(residentLease);
-                                      } else if (residentLease.generatedHtml) {
-                                        printLeaseAsPdf(residentLease);
-                                      }
-                                      showToast("Lease download started.");
-                                    }}
+                                    onDownload={() => runLeaseDownload(residentLease, showToast)}
                                     onSignManager={() => signLeaseAsManager(residentLease)}
                                     onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
                                     signingReminderBusy={leaseReminderBusy}
@@ -2242,14 +2233,14 @@ export function ManagerResidents({
                                       }))}
                                       activeId={svcReqBucket}
                                       onChange={(id) => setSvcReqBucket(id as ManagerServiceRequestBucket)}
-                                      ariaLabel="Add-on service status"
+                                      ariaLabel="Request status"
                                       size="toolbar"
                                     />
                                   </div>
                                   {residentServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
+                                    <PortalDataTableEmpty message="No requests yet." icon="service" />
                                   ) : residentFilteredServiceRequests.length === 0 ? (
-                                    <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
+                                    <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
                                   ) : (
                                     <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
                                       <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>

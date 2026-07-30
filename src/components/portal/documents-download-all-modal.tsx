@@ -5,14 +5,15 @@ import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { applicationPdfHref } from "@/components/portal/manager-applications";
+import { downloadApplicationPdf } from "@/components/portal/manager-applications";
 import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
+import { downloadBlobFile } from "@/lib/portal-document-download";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readCosignerSubmissionsForSignerAppId } from "@/lib/cosigner-submissions-storage";
 import { DEMO_RESIDENT_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { readChargesForResident } from "@/lib/household-charges";
 import {
-  downloadLeaseFromRow,
+  runLeaseDownload,
   findLeaseForResidentEmail,
   hasBothLeaseSignatures,
   readLeasePipeline,
@@ -62,10 +63,16 @@ async function downloadApplicationRow(row: DemoApplicantRow): Promise<void> {
     const cosignerSubmissions =
       row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [];
     const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
-    triggerDocumentDownload(url, `rental-application-${row.id}.pdf`);
+    const blob = await (await fetch(url)).blob();
+    await downloadBlobFile({
+      fileName: `rental-application-${row.id}.pdf`,
+      mimeType: "application/pdf",
+      blob,
+      title: "Application",
+    });
     return;
   }
-  triggerDocumentDownload(applicationPdfHref(row), `rental-application-${row.id}.pdf`);
+  await downloadApplicationPdf(row);
 }
 
 function receiptPdfHref(date: string): string {
@@ -113,7 +120,7 @@ function buildManagerSections(userId: string | null): DownloadSection[] {
       label: row.residentName || row.residentEmail,
       sublabel: row.unit || undefined,
       run: () => {
-        downloadLeaseFromRow(row);
+        void downloadLeaseFromRow(row);
       },
     }));
 

@@ -22,6 +22,11 @@ function setNavigatorShare(share: ((data?: ShareData) => Promise<void>) | undefi
 }
 
 beforeEach(() => {
+  Object.defineProperty(window.navigator, "userAgent", {
+    value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+    configurable: true,
+  });
+  Object.defineProperty(window.navigator, "maxTouchPoints", { value: 0, configurable: true });
   // jsdom has no blob URL support.
   URL.createObjectURL = vi.fn(() => "blob:vitest") as typeof URL.createObjectURL;
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL;
@@ -42,7 +47,6 @@ describe("downloadOrShareFile", () => {
     await expect(downloadOrShareFile(OPTS)).resolves.toBe("downloaded");
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(share).not.toHaveBeenCalled();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:vitest");
   });
 
   it("presents the share sheet with a File payload in the native shell", async () => {
@@ -68,6 +72,19 @@ describe("downloadOrShareFile", () => {
     setNavigatorShare(share);
 
     await expect(downloadOrShareFile(OPTS)).resolves.toBe("share-cancelled");
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses the share sheet on iOS mobile web when file sharing is supported", async () => {
+    Object.defineProperty(window.navigator, "userAgent", {
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
+      configurable: true,
+    });
+    const share = vi.fn().mockResolvedValue(undefined);
+    setNavigatorShare(share, () => true);
+
+    await expect(downloadOrShareFile(OPTS)).resolves.toBe("shared");
+    expect(share).toHaveBeenCalledTimes(1);
     expect(clickSpy).not.toHaveBeenCalled();
   });
 

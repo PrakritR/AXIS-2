@@ -69,6 +69,12 @@ import {
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
 import { buildApplicationHtml } from "@/lib/manager-application-html";
+import { applicationPdfFilename } from "@/lib/manager-application-pdf";
+import {
+  downloadFetchedUrl,
+  portalDownloadToastMessage,
+  type PortalDownloadResult,
+} from "@/lib/portal-document-download";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
@@ -175,14 +181,49 @@ export function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: bool
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
 
-/** Trigger a browser download of the application PDF without opening a blank tab. */
-export function downloadApplicationPdf(row: DemoApplicantRow): void {
-  const anchor = document.createElement("a");
-  anchor.href = applicationPdfHref(row);
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
+/** Fetch the application PDF and save it — works on phone via blob download or the share sheet. */
+export async function downloadApplicationPdf(row: DemoApplicantRow): Promise<PortalDownloadResult> {
+  if (typeof window === "undefined") return "failed";
+  return downloadFetchedUrl(
+    applicationPdfHref(row),
+    applicationPdfFilename(row),
+    "application/pdf",
+    "Application",
+  );
+}
+
+/** Fire-and-forget helper for click handlers that already show their own toast. */
+export function runApplicationPdfDownload(
+  row: DemoApplicantRow,
+  showToast: (message: string) => void,
+): void {
+  void downloadApplicationPdf(row).then((result) => {
+    const message = portalDownloadToastMessage(result, "application");
+    if (message) showToast(message);
+  });
+}
+
+function ApplicationPdfDownloadButton({
+  row,
+  label = "Download PDF",
+  className = "h-8 rounded-full px-4 text-xs",
+}: {
+  row: DemoApplicantRow;
+  label?: string;
+  className?: string;
+}) {
+  const { showToast } = useAppUi();
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={className}
+      data-attr="application-pdf-download"
+      onClick={() => runApplicationPdfDownload(row, showToast)}
+    >
+      {label}
+    </Button>
+  );
 }
 
 /**
@@ -240,15 +281,7 @@ export function ApplicationDocumentPreview({
   );
 
   const downloadButton = showDownload ? (
-    <Button
-      type="button"
-      variant="outline"
-      className="h-8 rounded-full px-4 text-xs"
-      data-attr="application-pdf-download"
-      onClick={() => downloadApplicationPdf(row)}
-    >
-      Download PDF
-    </Button>
+    <ApplicationPdfDownloadButton row={row} />
   ) : null;
 
   const iframeHtml = useMemo(() => {
@@ -853,7 +886,7 @@ export function ManagerApplications({
         variant="outline"
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="application-pdf-download"
-        onClick={() => downloadApplicationPdf(row)}
+        onClick={() => runApplicationPdfDownload(row, showToast)}
       >
         Download application
       </Button>
@@ -923,7 +956,7 @@ export function ManagerApplications({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" backdrop>
-          <DropdownMenuItem data-attr="application-pdf-download" onSelect={() => downloadApplicationPdf(row)}>
+          <DropdownMenuItem data-attr="application-pdf-download" onSelect={() => runApplicationPdfDownload(row, showToast)}>
             Download application
           </DropdownMenuItem>
           {canDownloadScreening ? (

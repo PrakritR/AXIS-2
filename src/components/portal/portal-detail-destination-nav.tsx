@@ -43,7 +43,7 @@ export function PortalDetailDestinationNav({
 
   return (
     <div
-      className={cn("-mx-2.5 bg-background sm:-mx-4 lg:static lg:mx-0")}
+      className={cn("w-full min-w-0 bg-background lg:static")}
       data-portal-detail-destination-nav
       ref={wrapRef}
     >

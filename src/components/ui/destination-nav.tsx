@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 export type DestinationNavItem = {
   id: string;
   label: string;
+  /** Narrow-viewport label when the full label would clip in equal-width tabs. */
+  shortLabel?: string;
   href: string;
   count?: number;
   /** Highlight when this destination has urgent work (overdue, etc.). */
@@ -62,7 +64,7 @@ export function DestinationNav({
               itemLayout === "equal" ? "min-w-0" : destinationNavItemWidthClass(compactItems),
               "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
               itemLayout === "equal"
-                ? "min-h-11 min-w-0 px-1 py-2 text-center text-xs sm:px-2 sm:text-sm"
+                ? "min-h-10 min-w-0 px-0.5 py-1.5 text-center text-[10px] leading-tight sm:px-1 lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
                 : size === "toolbar"
                   ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
                   : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
@@ -74,7 +76,22 @@ export function DestinationNav({
             )}
             aria-current={active ? "page" : undefined}
           >
-            <span className={itemLayout === "equal" ? "truncate" : undefined}>{item.label}</span>
+            <span
+              className={
+                itemLayout === "equal"
+                  ? "block w-full max-w-full whitespace-nowrap max-lg:text-[10px] max-lg:leading-tight lg:truncate"
+                  : undefined
+              }
+            >
+              {item.shortLabel ? (
+                <>
+                  <span className="lg:hidden">{item.shortLabel}</span>
+                  <span className="hidden lg:inline">{item.label}</span>
+                </>
+              ) : (
+                item.label
+              )}
+            </span>
             {item.count != null ? (
               <span
                 className={cn(
@@ -103,7 +120,7 @@ export type LocalDestinationNavItem = {
 function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
   return cn(
     itemLayout === "equal"
-      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-1 rounded-2xl border border-border bg-accent/30 p-1"
+      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:gap-0 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
       : cn(
           "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
           PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,

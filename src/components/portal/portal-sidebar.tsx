@@ -34,6 +34,10 @@ import {
   PORTAL_MAIN_CONTENT_ID,
   PORTAL_MOBILE_CHROME_CLASS,
   PORTAL_NATIVE_BOTTOM_NAV_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
 } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/portal-sidebar-cookie";
@@ -288,14 +292,6 @@ export function PortalSidebar({
   }, [pathname]);
 
   useEffect(() => {
-    if (!showMobileNav) return;
-    const strip = bottomNavScrollRef.current;
-    if (!strip) return;
-    const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
-    activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [activeSection, nativeBottomNavItems, showMobileNav]);
-
-  useEffect(() => {
     if (showNativeChrome) return;
     const strip = topNavScrollRef.current;
     if (!strip) return;
@@ -355,22 +351,28 @@ export function PortalSidebar({
           onClick={portalNavClick(router, s.href, {
             preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
           })}
-          className={`portal-pressable flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 transition active:opacity-90 ${
+          className={`${PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS} ${
             active ? "text-primary" : "text-muted"
           }`}
           aria-label={lockAriaLabel(s.label, locked)}
           aria-current={active ? "page" : undefined}
         >
+          {active ? (
+            <span
+              className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary"
+              aria-hidden
+            />
+          ) : null}
           {showNavIcons ? (
             <span
-              className={`relative shrink-0 transition-opacity duration-200 ${
+              className={`${PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS} transition-opacity duration-200 ${
                 active ? "opacity-100" : locked ? "opacity-45" : "opacity-60"
               }`}
               aria-hidden
             >
               <PortalNavIcon
                 section={s.section}
-                className="h-[23px] w-[23px] shrink-0"
+                className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS}
                 active={active}
               />
               {!locked && count > 0 ? (
@@ -379,12 +381,10 @@ export function PortalSidebar({
                 </span>
               ) : null}
             </span>
-          ) : null}
-          <span
-            className={`max-w-full truncate text-[10px] font-medium leading-tight [html[data-native]_&]:text-[9px] ${
-              active ? "text-primary" : "text-muted"
-            }`}
-          >
+          ) : (
+            <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS} aria-hidden />
+          )}
+          <span className={`${PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS} ${active ? "text-primary" : "text-muted"}`}>
             {s.label}
           </span>
         </Link>
@@ -621,12 +621,12 @@ export function PortalSidebar({
         ? createPortal(
             <nav
               ref={setBottomNavEl}
-              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} flex flex-col`}
+              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} relative`}
               aria-label="Portal sections"
             >
               <button
                 type="button"
-                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0 pt-1"
+                className="portal-native-bottom-nav-pull absolute inset-x-0 top-0 z-10 flex h-2.5 items-start justify-center border-0 bg-transparent p-0"
                 aria-label="Show all sections"
                 onClick={() => setSectionsSheetOpen(true)}
                 onTouchStart={(e) => {
@@ -651,12 +651,17 @@ export function PortalSidebar({
                   }
                 }}
               >
-                <span className="portal-native-bottom-nav-pull-handle" aria-hidden />
+                {showMoreTab ? null : (
+                  <span className="portal-native-bottom-nav-pull-handle mt-0.5" aria-hidden />
+                )}
               </button>
               <div
                 ref={bottomNavScrollRef}
-                className="portal-native-bottom-nav-scroll flex min-w-0 w-full flex-nowrap items-stretch justify-evenly gap-0 px-1"
-                aria-label="Scroll portal sections"
+                className="portal-native-bottom-nav-scroll grid w-full min-w-0 pt-1"
+                style={{
+                  gridTemplateColumns: `repeat(${nativeBottomNavItems.length + (showMoreTab ? 1 : 0)}, minmax(0, 1fr))`,
+                }}
+                aria-label="Portal sections"
               >
                 {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
                 {showMoreTab ? (

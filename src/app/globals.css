@@ -2047,9 +2047,7 @@ html[data-native] .portal-native-bottom-nav {
   right: 0;
   bottom: 0;
   z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: block;
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
@@ -2068,32 +2066,23 @@ html[data-native] .portal-native-bottom-nav-pull-handle {
   background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
-/* Instagram-style: evenly-spaced icon-only tabs, no horizontal scroll — every
-   curated primary set is small enough (4-5 items) to fit at once.
-   `.portal-native-bottom-nav`'s flex-direction is `column`, so `flex: 1 1 0`
-   here sizes this row's HEIGHT (main axis) — it must NOT also carry `width: 0`
-   (that's a cross-axis override that collapsed the whole icon row to ~0px
-   wide, rendering an icon-less empty bar). Width comes from the parent's
-   `align-items: stretch` instead. */
+/* Instagram-style: evenly-spaced icon tabs in a single grid row — no horizontal scroll. */
 html[data-native] .portal-native-bottom-nav-scroll {
-  display: flex;
-  flex: 1 1 0;
+  display: grid;
+  width: 100%;
   min-width: 0;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  justify-content: space-evenly;
+  align-items: end;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll > a,
 html[data-native] .portal-native-bottom-nav-scroll > button {
-  flex: 1 1 0;
   min-width: 0;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll a svg,
 html[data-native] .portal-native-bottom-nav-scroll button svg {
-  height: 1.4375rem;
-  width: 1.4375rem;
+  height: 1.375rem;
+  width: 1.375rem;
 }
 
 html[data-native] .portal-shell,
@@ -2150,9 +2139,7 @@ html[data-native] .portal-mobile-nav-bar {
     right: 0;
     bottom: 0;
     z-index: 50;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    display: block;
     overflow: hidden;
     -webkit-user-select: none;
     user-select: none;
@@ -2171,15 +2158,17 @@ html[data-native] .portal-mobile-nav-bar {
     background: color-mix(in srgb, var(--muted) 45%, transparent);
   }
 
-  /* Same load-bearing height-distribution rule as the native block above —
-     do not add `width: 0` here (see comment there). */
+  /* Same grid row as the native block above. */
   .portal-native-bottom-nav-scroll {
-    display: flex;
-    flex: 1 1 0;
+    display: grid;
+    width: 100%;
     min-width: 0;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    justify-content: space-evenly;
+    align-items: end;
+  }
+
+  .portal-native-bottom-nav-scroll > a,
+  .portal-native-bottom-nav-scroll > button {
+    min-width: 0;
   }
 
   #portal-main-content {

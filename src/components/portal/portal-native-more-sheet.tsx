@@ -7,6 +7,12 @@ import { isCrossPortalNavigation, portalNavClick } from "@/lib/portal-nav-client
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import type { PortalKind } from "@/lib/portal-types";
+import {
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
+} from "@/lib/portal-layout-classes";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,7 +29,7 @@ export type PortalMoreNavItem = {
 
 function MoreGridIcon() {
   return (
-    <svg className="h-[23px] w-[23px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="5" cy="5" r="1.75" />
       <circle cx="12" cy="5" r="1.75" />
       <circle cx="19" cy="5" r="1.75" />
@@ -167,16 +173,22 @@ export function PortalNativeMoreNavButton({
       type="button"
       data-attr="bottom-nav-more"
       onClick={onClick}
-      className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
-        active ? "text-primary" : "text-foreground"
-      }`}
+      className={`${PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS} ${active ? "text-primary" : "text-muted"}`}
       aria-label="More portal sections"
     >
+      {active ? (
+        <span className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary" aria-hidden />
+      ) : null}
       <span
-        className={`shrink-0 transition-opacity duration-200 ${active ? "opacity-100" : "opacity-60"}`}
+        className={`${PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS} transition-opacity duration-200 ${
+          active ? "opacity-100" : "opacity-60"
+        }`}
         aria-hidden
       >
         <MoreGridIcon />
+      </span>
+      <span className={`${PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS} ${active ? "text-primary" : "text-muted"}`}>
+        More
       </span>
     </button>
   );

@@ -36,14 +36,13 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
-  downloadLeaseFromRow,
   generateLeaseHtmlForRow,
   getLeaseDocumentHtml,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   managerSignLease,
   managerUploadLeasePdf,
-  printLeaseAsPdf,
+  runLeaseDownload,
   sendLeaseBackToManager,
   sendLeaseToResident,
   hasBothLeaseSignatures,
@@ -276,17 +275,7 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onDownload = (row: LeasePipelineRow) => {
-    if (row.managerUploadedPdf?.dataUrl) {
-      downloadLeaseFromRow(row);
-      showToast("PDF download started.");
-      return;
-    }
-    if (row.generatedHtml) {
-      printLeaseAsPdf(row);
-      showToast("Print dialog opened. Choose 'Save as PDF' to download.");
-      return;
-    }
-    showToast("Generate a lease or upload a PDF first.");
+    runLeaseDownload(row, showToast);
   };
 
   const openSendLeasePreview = (row: LeasePipelineRow) => {
