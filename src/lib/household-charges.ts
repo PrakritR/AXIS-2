@@ -4,7 +4,7 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
@@ -2524,36 +2524,6 @@ function patchPendingApprovedChargeAmount(applicationId: string, draft: Approved
   return true;
 }
 
-function resolveApprovedLeaseRoom(
-  row: DemoApplicantRow,
-  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
-) {
-  if (isEntireHomeListing(sub)) {
-    const named = sub.rooms.find((room) => room.name.trim());
-    if (named) return named;
-  }
-  for (const choice of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-    const trimmed = choice?.trim();
-    if (!trimmed) continue;
-    const { listingRoomId } = parseRoomChoiceValue(trimmed);
-    if (listingRoomId) {
-      const byId = sub.rooms.find((room) => room.id === listingRoomId);
-      if (byId) return byId;
-    }
-  }
-  const signedRent = Number(row.signedMonthlyRent ?? 0);
-  if (signedRent > 0) {
-    const byRent = sub.rooms.filter((room) => room.monthlyRent === signedRent);
-    if (byRent.length === 1) return byRent[0] ?? null;
-  }
-  if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
-  const dailyRooms = sub.rooms.filter(
-    (room) => room.prorateMethod === "daily_rate" && room.dailyRentRate && room.dailyRentRate > 0,
-  );
-  if (dailyRooms.length === 1) return dailyRooms[0] ?? null;
-  return null;
-}
-
 function buildApprovedStandardChargeDrafts(
   row: DemoApplicantRow,
   sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
@@ -2583,7 +2553,10 @@ function buildApprovedStandardChargeDrafts(
     });
   };
 
-  const room = resolveApprovedLeaseRoom(row, sub);
+  // The SAME shared chain every other money path uses. A second resolver here silently
+  // disagreed with it whenever a placement resolved only by unit label, so this function
+  // prorated as monthly while the regenerate path billed the room by the day.
+  const room = roomForRow(sub, row, row.manualResidentDetails?.roomNumber);
   const entireHome = isEntireHomeListing(sub);
   const prorateMethod =
     entireHome && sub.entireHomeProrateMethod === "daily_rate"

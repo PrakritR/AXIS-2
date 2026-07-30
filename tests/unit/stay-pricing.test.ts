@@ -257,3 +257,56 @@ describe("resolveStayPricing null tolerance", () => {
     });
   });
 });
+
+/**
+ * A room may carry its own deposit, and the ledger charges the room's figure in preference
+ * to the listing's. The resolver has to apply the SAME precedence: when it only ever read the
+ * listing figure, the executed agreement printed one deposit and the resident was billed
+ * another, which is the exact document-vs-ledger divergence this resolver exists to remove.
+ */
+describe("resolveStayPricing room-first deposit precedence", () => {
+  const ROOM_WITH_DEPOSITS: RoomPricingLike = {
+    ...DAILY_ROOM,
+    shortTermDeposit: "500",
+    securityDeposit: "1500",
+  };
+
+  it("prefers the room's short-term deposit over the listing's on a short stay", () => {
+    expect(
+      resolveStayPricing({
+        room: ROOM_WITH_DEPOSITS,
+        submission: SUB,
+        application: { rentalType: "short_term" },
+      }).deposit,
+    ).toBe(500);
+  });
+
+  it("prefers the room's security deposit over the listing's on a long stay", () => {
+    expect(
+      resolveStayPricing({
+        room: { ...MONTHLY_ROOM, securityDeposit: "1500" },
+        submission: SUB,
+        application: { rentalType: "standard" },
+      }).deposit,
+    ).toBe(1500);
+  });
+
+  it("falls back to the listing deposit when the room carries none", () => {
+    expect(
+      resolveStayPricing({ room: DAILY_ROOM, submission: SUB, application: { rentalType: "short_term" } }).deposit,
+    ).toBe(300);
+    expect(
+      resolveStayPricing({ room: MONTHLY_ROOM, submission: SUB, application: { rentalType: "standard" } }).deposit,
+    ).toBe(900);
+  });
+
+  it("still lets a manager override beat the room's own deposit", () => {
+    expect(
+      resolveStayPricing({
+        room: ROOM_WITH_DEPOSITS,
+        submission: SUB,
+        application: { rentalType: "short_term", managerSecurityDepositOverride: "250" },
+      }).deposit,
+    ).toBe(250);
+  });
+});

@@ -32,6 +32,13 @@ export type RoomPricingLike = {
    * outranks both the daily basis and the listing-level `shortTermDailyCost`.
    */
   shortTermRent?: string | null;
+  /**
+   * Per-room deposits. The ledger charges these room-first, falling back to the listing's
+   * shared figure, so the resolver has to read them too: a resolver that only ever saw the
+   * listing figure would print one deposit on the agreement and bill another.
+   */
+  securityDeposit?: string | null;
+  shortTermDeposit?: string | null;
 };
 
 /**
@@ -236,9 +243,16 @@ export function resolveStayPricing(input: StayPricingInput): StayPricing {
   const isShortTermApplication = app?.rentalType === "short_term";
   const roomDaily = roomDailyRentPrice(room);
 
-  const deposit =
-    overrideMoney(app?.managerSecurityDepositOverride) ??
-    (isShortTermApplication ? positiveMoney(sub?.shortTermDeposit) : positiveMoney(sub?.securityDeposit));
+  // Room-first, then the listing, mirroring the ledger exactly. The room leg is what makes
+  // the agreement's deposit equal the deposit actually charged; reading only the listing
+  // figure understated the total on every listing whose room carries its own deposit.
+  const deposit = isShortTermApplication
+    ? (overrideMoney(app?.managerSecurityDepositOverride) ??
+      positiveMoney(room?.shortTermDeposit) ??
+      positiveMoney(sub?.shortTermDeposit))
+    : (overrideMoney(app?.managerSecurityDepositOverride) ??
+      positiveMoney(room?.securityDeposit) ??
+      positiveMoney(sub?.securityDeposit));
 
   if (isShortTermApplication) {
     // Precedence, most specific first: the booked room's own short-term rate, then the room's

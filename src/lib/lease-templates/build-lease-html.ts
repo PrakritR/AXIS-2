@@ -331,7 +331,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   // Whole-home application: the premises are the entire unit. Derived from the LISTING, not
   // from whether a room record resolved — the shared resolver can now match a single unnamed
   // room record on an entire-home listing, which is still a whole-home placement.
-  const wholeHome = !leasedBundle && Boolean(subNorm) && (isEntireHomeListing(subNorm!) || !subNorm!.rooms.some((r) => r.name.trim()));
+  // The unnamed-rooms clause stays gated on `!specificRoom`: a plain SHARED-home listing whose
+  // rooms simply have no names would otherwise describe a single-room letting as "Entire home"
+  // on an executed lease. An entire-home LISTING is whole-home regardless of what resolved.
+  const wholeHome =
+    !leasedBundle &&
+    Boolean(subNorm) &&
+    (isEntireHomeListing(subNorm!) || (!specificRoom && !subNorm!.rooms.some((r) => r.name.trim())));
 
   const roomLabel = escapeHtml(
     bundlePremisesLabel ||
@@ -531,9 +537,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     // The ledger bills more than rent + deposit on a stay, so the document has to list the
     // rest or its "Total due" understates what the guest owes. Which move-in field applies
     // follows rentalType, exactly as the ledger's two branches do.
+    // Room-first, then the listing, matching the ledger. A room carrying its own short-term
+    // move-in fee is charged that fee, so the agreement has to quote the same one.
     const stayMoveInLabel = overrideFeeLabel(
       a.managerMoveInFeeOverride,
-      (a.rentalType === "short_term" ? subNorm?.shortTermMoveInFee : subNorm?.moveInFee) ?? "",
+      (a.rentalType === "short_term"
+        ? (specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee)
+        : subNorm?.moveInFee) ?? "",
     );
     const stayMoveInNum = parseAmount(stayMoveInLabel) ?? 0;
     const stayOtherNum = showOtherSigningCost ? (otherCostNum ?? 0) : 0;
