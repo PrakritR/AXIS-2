@@ -282,3 +282,31 @@ describe("GET /api/manager-applications?scope=self", () => {
     expect(body.rows?.[0]?.residentUserId).toBe(CALLER);
   });
 });
+
+describe("GET /api/manager-applications resident email gate", () => {
+  it("returns no rows when a resident has no profile or auth email", async () => {
+    PROFILE = { role: "resident", email: "" };
+    getUser.mockResolvedValue({
+      data: { user: { id: "resident-no-email", user_metadata: {} } },
+      error: null,
+    });
+    STORED_ROWS = [
+      {
+        id: "ORPHAN-APP",
+        row_data: inProgressRow({ id: "ORPHAN-APP", email: "" }),
+        resident_email: null,
+      },
+      {
+        id: "OTHER-ORPHAN",
+        row_data: inProgressRow({ id: "OTHER-ORPHAN", email: OTHER_APPLICANT_EMAIL }),
+        resident_email: "",
+      },
+    ];
+    const { GET } = await import("@/app/api/manager-applications/route");
+    const res = await GET(new Request("http://localhost/api/manager-applications"));
+    const body = (await res.json()) as { rows?: DemoApplicantRow[] };
+
+    expect(res.status).toBe(200);
+    expect(body.rows).toEqual([]);
+  });
+});

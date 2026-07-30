@@ -519,7 +519,9 @@ export async function GET(req?: Request) {
     } catch {
       selfScope = false;
     }
-    if (selfScope && !email) return NextResponse.json({ rows: [] });
+    if (!email && (selfScope || (!admin && role === "resident"))) {
+      return NextResponse.json({ rows: [] });
+    }
 
     let data: { id: string; row_data: unknown }[] | null = null;
     let error: { message: string } | null = null;
