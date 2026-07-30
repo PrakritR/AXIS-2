@@ -26,6 +26,9 @@ describe("pre-lease resident portal access", () => {
 
   it("application-phase guard still blocks tour without pre-lease flag", () => {
     expect(isResidentApplicationPhaseAllowedPath("/resident/tour")).toBe(false);
-    expect(isResidentApplicationPhaseAllowedPath("/resident/communication/email/unopened")).toBe(false);
+  });
+
+  it("application-phase guard allows communication", () => {
+    expect(isResidentApplicationPhaseAllowedPath("/resident/communication/email/unopened")).toBe(true);
   });
 });

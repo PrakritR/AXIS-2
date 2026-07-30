@@ -92,7 +92,7 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "communication",
 ] as const;
 
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications", "communication"] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
   "lease",
@@ -126,7 +126,13 @@ export function nativeBottomNavShowMoreTab(
 ): boolean {
   if (kind === "resident" && items) {
     const navSections = items.filter((item) => item.section !== "profile").map((item) => item.section);
-    if (navSections.length === 1 && navSections[0] === "applications") return false;
+    if (
+      navSections.includes("applications") &&
+      !navSections.includes("lease") &&
+      !navSections.includes("dashboard")
+    ) {
+      return false;
+    }
   }
   return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor";
 }
@@ -137,7 +143,11 @@ function primaryOrderFor(
 ): readonly string[] {
   if (kind === "resident" && items) {
     const navSections = new Set(items.filter((item) => item.section !== "profile").map((item) => item.section));
-    if (navSections.size === 1 && navSections.has("applications")) {
+    if (
+      navSections.has("applications") &&
+      !navSections.has("lease") &&
+      !navSections.has("dashboard")
+    ) {
       return NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY;
     }
   }

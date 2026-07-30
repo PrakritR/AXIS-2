@@ -110,7 +110,7 @@ describe("resident portal nav grouping", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
     expectContiguousBlock(sections, ["communication", "documents"], "move-in", "profile");
     for (const id of ["communication", "documents"]) {
-      expect(freeIds.has(id)).toBe(false);
+      expect(freeIds.has(id)).toBe(id === "communication");
     }
   });
 

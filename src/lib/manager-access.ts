@@ -255,7 +255,7 @@ export function managerSectionLockedForTier(
 
 /**
  * Resident portal sections available when the linked property manager is on Free.
- * Mirrors manager Pro-gated features (documents, finances, services, inbox).
+ * Communication is always available; documents and services mirror manager Pro gates.
  */
 export const RESIDENT_FREE_MANAGER_SECTIONS = new Set<string>(RESIDENT_FREE_TIER_SECTION_IDS);
 

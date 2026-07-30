@@ -159,14 +159,21 @@ export function PortalEmptyIcon({
 export function PortalEmptyState({
   title,
   icon = "default",
+  variant = "card",
 }: {
   title: string;
   icon?: PortalEmptyIconKind | ReactNode;
+  /** `plain` drops the bordered card so copy sits on the page background. */
+  variant?: "card" | "plain";
 }) {
   const iconNode =
     typeof icon === "string" ? <PortalEmptyIcon kind={icon as PortalEmptyIconKind} /> : icon;
+  const wrapClass =
+    variant === "plain"
+      ? "flex flex-col items-center justify-center px-4 py-16 text-center sm:py-20"
+      : PORTAL_EMPTY_STATE_WRAP;
   return (
-    <div className={PORTAL_EMPTY_STATE_WRAP}>
+    <div className={wrapClass}>
       <AxisHeaderMarkTile>{iconNode}</AxisHeaderMarkTile>
       <p className="mt-4 text-sm font-medium text-muted">{title}</p>
     </div>

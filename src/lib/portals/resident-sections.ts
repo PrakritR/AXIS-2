@@ -5,7 +5,7 @@ export const RESIDENT_PORTAL_BASE_PATH = "/resident";
 
 /**
  * Resident sections available when the linked manager is on a free subscription.
- * Single source of truth — also drives manager-access tier gating.
+ * Communication is always available; single source of truth — also drives manager-access tier gating.
  */
 export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "dashboard",
@@ -13,6 +13,7 @@ export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "applications",
   "payments",
   "move-in",
+  "communication",
   "profile",
 ] as const;
 
@@ -67,9 +68,10 @@ export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { status?: string } |
     charges: {},
   });
 
-/** Sidebar during application phase (before lease is approved): Application + Settings only. */
+/** Sidebar during application phase: Application, Communication, and Settings. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Application", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 

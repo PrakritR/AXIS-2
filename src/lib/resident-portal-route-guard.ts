@@ -6,6 +6,8 @@ export function isResidentApplicationPhaseAllowedPath(
   if (options?.allowDashboard && pathname === "/resident/dashboard") return true;
   if (pathname === "/resident/applications") return true;
   if (pathname.startsWith("/resident/applications/")) return true;
+  if (pathname === "/resident/communication") return true;
+  if (pathname.startsWith("/resident/communication/")) return true;
   if (pathname === "/resident/profile") return true;
   if (pathname.startsWith("/resident/profile/")) return true;
   return false;

@@ -988,18 +988,6 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "communication") {
     const tierGate = residentManagerTierGate("communication", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
-    const inboxEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
-    const inboxLeaseSigned = inboxEmail ? await loadResidentLeaseSignedStatus(inboxEmail) : false;
-    if (!inboxLeaseSigned) {
-      return (
-        <ManagerPortalPageShell title="Communication" hideTitleOnMobileNav compactFilterRow>
-          <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
-            <span className="font-semibold">Available once your lease is signed.</span>
-          </p>
-          <PortalDataTableEmpty message="Communication unlocks after both signatures are complete." icon="lease" />
-        </ManagerPortalPageShell>
-      );
-    }
     if (!tabParts?.length) {
       redirect(`${def.basePath}/communication/inbox/unopened`);
     }
