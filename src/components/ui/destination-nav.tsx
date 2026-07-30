@@ -25,6 +25,8 @@ export function DestinationNav({
   ariaLabel = "Section views",
   className,
   size = "default",
+  /** `equal` stretches every tab across the full bar (record-detail rows). */
+  itemLayout = "auto",
 }: {
   items: DestinationNavItem[];
   /** Match the active item by normalized href. */
@@ -35,16 +37,17 @@ export function DestinationNav({
   className?: string;
   /** `toolbar` matches {@link PORTAL_HEADER_ACTION_BTN} in page header rows. */
   size?: "default" | "toolbar";
+  itemLayout?: "auto" | "equal";
 }) {
   const normalize = (href: string) => href.replace(/\/$/, "");
-  const compactItems = items.length > 4;
+  const compactItems = itemLayout === "equal" ? false : items.length > 4;
 
   return (
     <nav
-      className={destinationNavShellClassName(className)}
+      className={destinationNavShellClassName(className, itemLayout)}
       aria-label={ariaLabel}
       data-slot="destination-nav"
-      {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
+      {...(itemLayout === "equal" ? {} : { [HORIZONTAL_SCROLL_ATTR]: "" })}
     >
       {items.map((item) => {
         const active =
@@ -57,10 +60,12 @@ export function DestinationNav({
             data-attr={item.dataAttr}
             className={cn(
               destinationNavItemWidthClass(compactItems),
-              "portal-pressable inline-flex justify-center items-center gap-1.5 rounded-xl font-semibold transition-colors",
-              size === "toolbar"
-                ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
-                : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
+              "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
+              itemLayout === "equal"
+                ? "min-h-11 min-w-0 px-1 py-2 text-center text-xs sm:px-2 sm:text-sm"
+                : size === "toolbar"
+                  ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
+                  : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active
                 ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
@@ -69,7 +74,7 @@ export function DestinationNav({
             )}
             aria-current={active ? "page" : undefined}
           >
-            <span>{item.label}</span>
+            <span className={itemLayout === "equal" ? "truncate" : undefined}>{item.label}</span>
             {item.count != null ? (
               <span
                 className={cn(
@@ -95,11 +100,12 @@ export type LocalDestinationNavItem = {
   dataAttr?: string;
 };
 
-function destinationNavShellClassName(className?: string) {
+function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
   return cn(
     "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
-    PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-    "snap-x snap-mandatory scroll-px-1 md:snap-none",
+    itemLayout === "equal"
+      ? "min-w-0"
+      : cn(PORTAL_HORIZONTAL_SCROLL_ROW_CLASS, "snap-x snap-mandatory scroll-px-1 md:snap-none"),
     className,
   );
 }

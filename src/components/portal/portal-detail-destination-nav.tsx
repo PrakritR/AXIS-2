@@ -44,7 +44,7 @@ export function PortalDetailDestinationNav({
 
   return (
     <HorizontalScrollCapture
-      className={cn("-mx-2.5 bg-background sm:-mx-4 lg:mx-0")}
+      className={cn("-mx-2.5 bg-background sm:-mx-4 lg:static lg:mx-0")}
       data-portal-detail-destination-nav
     >
       <div ref={wrapRef}>
@@ -53,9 +53,9 @@ export function PortalDetailDestinationNav({
           activeId={activeId}
           activeHref={activeHref}
           ariaLabel={ariaLabel}
+          itemLayout="equal"
           className={cn(
-            "rounded-none border-0 border-b border-border bg-transparent p-0",
-            "md:rounded-2xl md:border md:border-border md:bg-accent/30 md:p-1",
+            "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent max-lg:p-0",
             className,
           )}
         />
