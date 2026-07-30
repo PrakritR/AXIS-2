@@ -173,6 +173,28 @@ export function residentApplicationDetailHref(
   return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
 }
 
+/** Resident house-details tabs (routed under /move-in). */
+export const RESIDENT_MOVE_IN_TABS = ["placement", "housemates", "info", "instructions"] as const;
+export type ResidentMoveInTabId = (typeof RESIDENT_MOVE_IN_TABS)[number];
+
+export const RESIDENT_MOVE_IN_TAB_LABELS: Record<ResidentMoveInTabId, string> = {
+  placement: "Your placement",
+  housemates: "Housemates",
+  info: "Info & rules",
+  instructions: "Instructions",
+};
+
+export function parseResidentMoveInTab(raw: string | undefined | null): ResidentMoveInTabId {
+  if (raw && (RESIDENT_MOVE_IN_TABS as readonly string[]).includes(raw)) {
+    return raw as ResidentMoveInTabId;
+  }
+  return "placement";
+}
+
+export function residentMoveInHref(basePath: string, tab: ResidentMoveInTabId): string {
+  return `${basePath}/move-in/${tab}`;
+}
+
 /** Manager lease pipeline tabs (Appendix D5). */
 export const LEASE_PIPELINE_TABS = ["manager", "resident", "signed", "completed"] as const;
 export type LeasePipelineTabId = (typeof LEASE_PIPELINE_TABS)[number];

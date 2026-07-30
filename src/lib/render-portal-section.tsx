@@ -943,17 +943,26 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "move-in") {
-    if (tabParts?.length) notFound();
     const moveInEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
-        <ManagerPortalPageShell title="House details">
+        <ManagerPortalPageShell title="House details" hideTitleOnMobileNav>
           <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
         </ManagerPortalPageShell>
       );
     }
-    return <ResidentMoveInPanel residentEmail={moveInEmail} />;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/move-in/placement`);
+    }
+    if (tabParts.length > 1) notFound();
+    return (
+      <ResidentMoveInPanel
+        residentEmail={moveInEmail}
+        tab={tabParts[0]}
+        basePath={def.basePath}
+      />
+    );
   }
 
   if (kind === "resident" && section === "communication") {
