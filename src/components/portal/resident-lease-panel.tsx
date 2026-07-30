@@ -7,7 +7,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
-import { ManagerPortalPageShell, ManagerPortalFilterRow, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
@@ -349,11 +352,11 @@ export function ResidentLeasePanel() {
 
   const pendingTitleAside =
     isPendingLease && pipelineRow ? (
-      <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+      <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
         <Button
           type="button"
           variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          className={PORTAL_HEADER_ACTION_BTN}
           onClick={onDownloadLeasePackage}
         >
           Download
@@ -363,7 +366,7 @@ export function ResidentLeasePanel() {
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              className={PORTAL_HEADER_ACTION_BTN}
               onClick={() => uploadRef.current?.click()}
               disabled={uploadingPdf}
             >
@@ -372,7 +375,7 @@ export function ResidentLeasePanel() {
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              className={PORTAL_HEADER_ACTION_BTN}
               onClick={onSendToManager}
             >
               Send to manager
@@ -380,7 +383,7 @@ export function ResidentLeasePanel() {
             <Button
               type="button"
               variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              className={PORTAL_HEADER_ACTION_BTN}
               data-attr="resident-sign-lease"
               onClick={() => onSignLease()}
             >
@@ -388,16 +391,16 @@ export function ResidentLeasePanel() {
             </Button>
           </>
         ) : null}
-      </div>
+      </PortalSectionActionRow>
     ) : null;
 
   const signedTitleAside =
     isSignedLease && pipelineRow ? (
-      <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+      <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
         <Button
           type="button"
           variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          className={PORTAL_HEADER_ACTION_BTN}
           onClick={() => setShowMoveOutModal(true)}
         >
           Renew
@@ -405,13 +408,64 @@ export function ResidentLeasePanel() {
         <Button
           type="button"
           variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          className={PORTAL_HEADER_ACTION_BTN}
           onClick={onDownloadLeasePackage}
         >
           Download
         </Button>
-      </div>
+      </PortalSectionActionRow>
     ) : null;
+
+  const leaseHeaderActions = tab === "pending" ? pendingTitleAside : signedTitleAside;
+
+  const leaseMobileActionsRow = leaseHeaderActions ? (
+    <div
+      className="mb-3 flex flex-wrap gap-2 md:hidden [&_button]:min-w-0 [&_button]:flex-1"
+      data-slot="resident-lease-mobile-actions"
+    >
+      {tab === "pending" && isPendingLease && pipelineRow ? (
+        <>
+          <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onDownloadLeasePackage}>
+            Download
+          </Button>
+          {showSigningWorkflowActions && !residentAlreadySigned ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={() => uploadRef.current?.click()}
+                disabled={uploadingPdf}
+              >
+                {uploadingPdf ? "Uploading..." : "Upload"}
+              </Button>
+              <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onSendToManager}>
+                Send to manager
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                data-attr="resident-sign-lease"
+                onClick={() => onSignLease()}
+              >
+                Sign lease
+              </Button>
+            </>
+          ) : null}
+        </>
+      ) : isSignedLease && pipelineRow ? (
+        <>
+          <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setShowMoveOutModal(true)}>
+            Renew
+          </Button>
+          <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onDownloadLeasePackage}>
+            Download
+          </Button>
+        </>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
     <>
@@ -445,17 +499,28 @@ export function ResidentLeasePanel() {
 
       <ManagerPortalPageShell
         title="Lease"
-        titleAside={tab === "pending" ? pendingTitleAside : signedTitleAside}
-        filterRow={
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills
-              tabs={[...leaseTabs]}
+        hideTitleOnMobileNav
+        titleAside={leaseHeaderActions}
+        compactFilterRow
+      >
+        {leaseMobileActionsRow}
+        <PortalListControlStack
+          className="mb-3 max-lg:mb-4"
+          destinationInset
+          destinationRow={
+            <LocalDestinationNav
+              items={leaseTabs.map((t) => ({
+                id: t.id,
+                label: t.label,
+                count: t.count,
+                dataAttr: `resident-lease-tab-${t.id}`,
+              }))}
               activeId={tab}
               onChange={(id) => setTab(id as LeaseStatusTab)}
+              ariaLabel="Lease status"
             />
-          </ManagerPortalFilterRow>
-        }
-      >
+          }
+        />
         {tab === "pending" ? renderPendingLeaseContent() : renderSignedLeaseContent()}
       </ManagerPortalPageShell>
     </>
