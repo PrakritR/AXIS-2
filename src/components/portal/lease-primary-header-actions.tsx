@@ -1,7 +1,6 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,7 +17,8 @@ import { cn } from "@/lib/utils";
 
 const FOOTER_ACTION_ROW = "flex w-full min-w-0 flex-nowrap items-stretch gap-2";
 const FOOTER_ACTION_BTN = "h-10 shrink-0 whitespace-nowrap px-2.5 text-xs sm:px-3";
-const FOOTER_MORE_BTN = "h-10 w-10 shrink-0 px-0";
+const FOOTER_MORE_BTN =
+  "inline-flex h-10 min-h-0 w-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card/80 p-0 text-base font-bold leading-none text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card [html[data-theme=dark]_&]:portal-outline-control";
 
 type LeaseFooterAction = {
   id: string;
@@ -26,7 +26,24 @@ type LeaseFooterAction = {
   menuItem: ReactNode;
 };
 
-function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]; btnClass: string }) {
+const LeaseFooterMoreTrigger = forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function LeaseFooterMoreTrigger(props, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={FOOTER_MORE_BTN}
+      aria-label="More lease actions"
+      {...props}
+    >
+      <span aria-hidden>⋯</span>
+    </button>
+  );
+});
+
+function LeaseFitActionRow({ actions }: { actions: LeaseFooterAction[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(actions.length);
@@ -40,7 +57,6 @@ function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]
     }
 
     const gap = 8;
-    const moreWidth = 40;
 
     const sync = () => {
       const containerWidth = container.clientWidth;
@@ -49,6 +65,9 @@ function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]
       const buttons = [...measure.querySelectorAll<HTMLElement>("[data-lease-fit-action]")];
       const widths = buttons.map((node) => node.offsetWidth);
       if (widths.length === 0) return;
+
+      const moreNode = measure.querySelector<HTMLElement>("[data-lease-fit-more]");
+      const moreWidth = moreNode?.offsetWidth ?? 40;
 
       const fitCount = (reserveMore: boolean) => {
         let used = 0;
@@ -89,7 +108,6 @@ function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]
 
   const visible = actions.slice(0, visibleCount);
   const overflow = actions.slice(visibleCount);
-  const moreBtnClass = cn(btnClass, FOOTER_MORE_BTN);
 
   return (
     <>
@@ -103,6 +121,9 @@ function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]
             {action.button}
           </div>
         ))}
+        <div data-lease-fit-more>
+          <LeaseFooterMoreTrigger />
+        </div>
       </div>
       <div ref={containerRef} className={FOOTER_ACTION_ROW}>
         {visible.map((action) => (
@@ -113,14 +134,7 @@ function LeaseFitActionRow({ actions, btnClass }: { actions: LeaseFooterAction[]
         {overflow.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className={moreBtnClass}
-                aria-label="More lease actions"
-              >
-                <MoreHorizontal className="h-5 w-5 text-foreground" aria-hidden />
-              </Button>
+              <LeaseFooterMoreTrigger />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="end" className="z-[60] min-w-[12rem]">
               {overflow
@@ -482,7 +496,7 @@ export function LeasePrimaryHeaderActions({
 
   const fitFooter = (
     <div className="relative w-full min-w-0">
-      <LeaseFitActionRow actions={footerActions} btnClass={btnClass} />
+      <LeaseFitActionRow actions={footerActions} />
     </div>
   );
 
