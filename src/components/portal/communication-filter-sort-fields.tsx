@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { FilterCheckboxList, FilterSingleSelectList } from "@/components/portal/filter-field-lists";
 import {
   contactsForSelectedRoles,
   type CommunicationFilterRole,
@@ -57,22 +57,18 @@ export function CommunicationFilterSortFields({
     <div className="grid gap-4">
       <div>
         <p className={FIELD_LABEL_CLASS}>House</p>
-        <CheckboxMultiSelect
-          label="House"
-          hideLabel
+        <FilterCheckboxList
           options={propertyOptions}
           selected={filters.propertyIds}
           onChange={(propertyIds) => onFiltersChange({ ...filters, propertyIds })}
-          emptyLabel="All houses"
+          emptyMenuText="No houses"
           dataAttr="communication-filter-house"
         />
       </div>
 
       <div>
         <p className={FIELD_LABEL_CLASS}>Role</p>
-        <CheckboxMultiSelect
-          label="Role"
-          hideLabel
+        <FilterCheckboxList
           options={roleOptions}
           selected={filters.roles}
           onChange={(roles) =>
@@ -82,20 +78,17 @@ export function CommunicationFilterSortFields({
               contactIds: [],
             })
           }
-          emptyLabel="All roles"
+          emptyMenuText="No roles"
           dataAttr="communication-filter-role"
         />
       </div>
 
       <div>
         <p className={FIELD_LABEL_CLASS}>Resident</p>
-        <CheckboxMultiSelect
-          label="Resident"
-          hideLabel
+        <FilterCheckboxList
           options={residentOptions}
           selected={filters.contactIds}
           onChange={(contactIds) => onFiltersChange({ ...filters, contactIds })}
-          emptyLabel="All residents"
           emptyMenuText="No residents match the current filters"
           dataAttr="communication-filter-resident"
         />
@@ -103,9 +96,7 @@ export function CommunicationFilterSortFields({
 
       <div>
         <p className={FIELD_LABEL_CLASS}>Sort</p>
-        <FieldSingleSelect
-          label="Sort"
-          hideLabel
+        <FilterSingleSelectList
           options={SORT_OPTIONS}
           value={listSort}
           onChange={(value) => onListSortChange(value as CommunicationListSort)}

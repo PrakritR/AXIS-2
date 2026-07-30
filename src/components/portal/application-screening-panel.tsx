@@ -31,6 +31,20 @@ function downloadBackgroundCheckPdf(applicationId: string): void {
   anchor.remove();
 }
 
+/** Download the background-check report PDF for an application row. */
+export function downloadBackgroundCheckForApplication(row: DemoApplicantRow): void {
+  const demo = isDemoModeActive();
+  if (demo) {
+    void import("@/lib/demo/demo-document-files")
+      .then(({ downloadDemoBackgroundCheckPdf }) => downloadDemoBackgroundCheckPdf(row))
+      .catch(() => undefined);
+    return;
+  }
+  if (row.backgroundCheck?.status === "complete") {
+    downloadBackgroundCheckPdf(row.id);
+  }
+}
+
 function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { row: DemoApplicantRow; demo: boolean; bareCanvas?: boolean }) {
   const bg = row.backgroundCheck;
   const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
@@ -246,7 +260,7 @@ export function ApplicationScreeningPanel({
             data-attr="screening-pdf-download"
             onClick={handleDownload}
           >
-            Download PDF
+            {headerActionsPlacement === "parent" ? "Download screening" : "Download PDF"}
           </Button>
         ) : null}
         {canRunBackgroundCheck ? (

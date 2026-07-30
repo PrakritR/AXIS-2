@@ -44,6 +44,8 @@ export type ModalAssistantStripProps = {
   defaultExpanded?: boolean;
   /** When true, the assistant stays open with no hide/expand toggle. */
   alwaysExpanded?: boolean;
+  /** Let the chat panel grow to fill the modal body (lease edit full-screen mobile). */
+  fillHeight?: boolean;
 };
 
 /**
@@ -65,6 +67,7 @@ export function ModalAssistantStrip({
   side = "right",
   defaultExpanded = false,
   alwaysExpanded = false,
+  fillHeight = false,
 }: ModalAssistantStripProps) {
   const config = usePortalAssistantConfig();
   const [expanded, setExpanded] = useState(alwaysExpanded || defaultExpanded);
@@ -94,7 +97,8 @@ export function ModalAssistantStrip({
     <AssistantConversationProvider endpoint={config.endpoint} storageScope={storageScope}>
       <div
         className={cn(
-          "flex min-w-0 shrink-0 flex-col border-t border-border bg-card",
+          "flex min-w-0 flex-col border-t border-border bg-card",
+          fillHeight ? "min-h-0 flex-1" : "shrink-0",
           showExpanded && "@2xl:min-h-0 @2xl:w-80 @2xl:shrink-0 @2xl:border-t-0",
           showExpanded && (side === "left" ? "@2xl:border-r" : "@2xl:border-l"),
           className,
@@ -132,7 +136,11 @@ export function ModalAssistantStrip({
               endpoint={config.endpoint}
               contextHint={contextHint}
               compact
-              className="max-h-[min(36vh,17rem)] @2xl:min-h-0 @2xl:max-h-none @2xl:flex-1"
+              className={
+                fillHeight
+                  ? "min-h-0 flex-1 max-h-none"
+                  : "max-h-[min(36vh,17rem)] @2xl:min-h-0 @2xl:max-h-none @2xl:flex-1"
+              }
             />
           </div>
         ) : alwaysExpanded ? null : (

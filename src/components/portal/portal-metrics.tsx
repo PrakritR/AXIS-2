@@ -229,7 +229,7 @@ export function ManagerPortalStatusPills({
   tabs,
   activeId,
   onChange,
-  /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
+  /** `primary` = blue active pill (inbox-style); `monochrome` = text-only active (resident detail). */
   activeTone = "default",
   /** Single-row horizontal scroll with tighter chips (long lease labels on mobile). */
   compact = false,
@@ -240,12 +240,13 @@ export function ManagerPortalStatusPills({
   tabs: { id: string; label: string; count: number; alert?: boolean; dataAttr?: string }[];
   activeId: string;
   onChange: (id: string) => void;
-  activeTone?: "default" | "primary";
+  activeTone?: "default" | "primary" | "monochrome";
   compact?: boolean;
   mobileSelect?: boolean;
   selectAriaLabel?: string;
 }) {
   const isPrimary = activeTone === "primary";
+  const isMonochrome = activeTone === "monochrome";
   const pills = (
     <div
       className={
@@ -268,7 +269,9 @@ export function ManagerPortalStatusPills({
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
-                  : "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active"
+                  : isMonochrome
+                    ? "text-foreground underline decoration-border underline-offset-4"
+                    : "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active"
                 : "text-muted hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
             }`}
           >
@@ -278,11 +281,13 @@ export function ManagerPortalStatusPills({
             {tab.label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                active
-                  ? isPrimary
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-accent text-foreground [html[data-theme=dark]_&]:portal-status-pill-count-active"
-                  : "bg-accent/50 text-muted [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/75"
+                isMonochrome
+                  ? "bg-transparent text-muted"
+                  : active
+                    ? isPrimary
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-accent text-foreground [html[data-theme=dark]_&]:portal-status-pill-count-active"
+                    : "bg-accent/50 text-muted [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/75"
               }`}
             >
               {tab.count}

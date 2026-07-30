@@ -44,7 +44,8 @@ import {
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
 import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -84,6 +85,7 @@ import {
   upsertApplicationRowToServer,
   upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
+  deleteManagerApplicationFromServer,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
@@ -181,6 +183,7 @@ import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
+import { downloadApplicationPdf } from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
@@ -291,7 +294,7 @@ export function ManagerResidents({
   const [workOrderTick, setWorkOrderTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
   const [inboxTick, setInboxTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const residentsTab = RESIDENTS_LIST_TAB;
   const [chargeBucket, setChargeBucket] = useState<ManagerPaymentBucket>("pending");
@@ -345,7 +348,8 @@ export function ManagerResidents({
   const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
   const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
   const [addResidentWorkOrderOpen, setAddResidentWorkOrderOpen] = useState(false);
-  const [embeddedPaymentHeaderActions, setEmbeddedPaymentHeaderActions] = useState<ReactNode>(null);
+  const [embeddedPaymentFooterActions, setEmbeddedPaymentFooterActions] = useState<ReactNode>(null);
+  const [screeningDetailActions, setScreeningDetailActions] = useState<ReactNode>(null);
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
@@ -710,8 +714,8 @@ export function ManagerResidents({
 
   const filtered = useMemo(() => {
     const inTab = residents.filter((resident) => !resident.isPrevious);
-    const base = propertyFilter
-      ? inTab.filter((r) => r.propertyId === propertyFilter)
+    const base = propertyFilters.length > 0
+      ? inTab.filter((r) => propertyFilters.includes(r.propertyId))
       : inTab;
     const q = searchQuery.trim().toLowerCase();
     const searched = q
@@ -725,7 +729,7 @@ export function ManagerResidents({
       : base;
 
     return [...searched].sort((a, b) => {
-      if (!propertyFilter) {
+      if (propertyFilters.length === 0) {
         const propCmp = a.propertyLabel.localeCompare(b.propertyLabel, undefined, { sensitivity: "base" });
         if (propCmp !== 0) return propCmp;
       }
@@ -737,7 +741,7 @@ export function ManagerResidents({
       const bNum = parseInt(b.roomLabel.match(/\d+/)?.[0] ?? "0", 10);
       return aNum - bNum;
     });
-  }, [residents, propertyFilter, searchQuery]);
+  }, [residents, propertyFilters, searchQuery]);
 
   const activeResidentId = residentIdProp ? decodeURIComponent(residentIdProp) : null;
   const selected = useMemo(
@@ -1253,6 +1257,44 @@ export function ManagerResidents({
     showToast(msg);
   };
 
+  const deleteApplicationForRow = async (row: DemoApplicantRow) => {
+    if (!window.confirm(`Delete the application for ${row.name || row.email}? This cannot be undone.`)) return;
+    const email = row.email?.trim().toLowerCase();
+    const nextRows = readManagerApplicationRows().filter((candidate) => candidate.id !== row.id);
+    writeManagerApplicationRows(nextRows);
+    setHcTick((n) => n + 1);
+
+    let serverError: string | null = null;
+    if (email || row.id) {
+      try {
+        const res = await fetch("/api/portal/delete-resident-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, purgeData: true, applicationId: row.id }),
+        });
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) {
+          serverError = body?.error ?? "Could not delete application.";
+        }
+      } catch {
+        serverError = "Could not delete application.";
+      }
+    } else {
+      const result = await deleteManagerApplicationFromServer(row.id);
+      if (!result.ok) serverError = result.error ?? "Could not delete application.";
+    }
+
+    if (serverError) {
+      void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
+      showToast(serverError);
+      return;
+    }
+
+    showToast("Application deleted.");
+    navigate(`${portalBase}/residents/${residentsTab}`);
+  };
+
   const handleScreeningUpdated = useCallback(() => {
     void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
   }, [userId]);
@@ -1744,7 +1786,7 @@ export function ManagerResidents({
       <Button
         type="button"
         variant="outline"
-        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="resident-email-setup"
         onClick={() => {
           const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
@@ -1817,23 +1859,13 @@ export function ManagerResidents({
 
   useEffect(() => {
     if (!paymentIdProp || activeDetailTab !== "payments") {
-      setEmbeddedPaymentHeaderActions(null);
+      setEmbeddedPaymentFooterActions(null);
     }
   }, [paymentIdProp, activeDetailTab]);
 
   const residentPaymentsListHref = selected
     ? residentDetailHref(portalBase, residentsTab, selected.id, "payments")
     : undefined;
-
-  const residentApplicationActionRow = residentApplicationTabActions;
-
-  const residentDetailHeaderActions = selected ? (
-    <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
-      {residentProfileHeaderActions}
-      {resolvedDetailTab === "application" ? residentApplicationTabActions : null}
-      {resolvedDetailTab === "payments" ? embeddedPaymentHeaderActions : null}
-    </PortalSectionActionRow>
-  ) : null;
 
   const residentDetailPanel =
     selected ? (
@@ -2040,7 +2072,7 @@ export function ManagerResidents({
                             {resolvedDetailTab === "payments" ? (
                             <ResidentDetailTabPanel
                               footerActions={
-                                paymentIdProp ? undefined : (
+                                paymentIdProp ? embeddedPaymentFooterActions ?? undefined : (
                                   <>
                                     <Button
                                       type="button"
@@ -2106,7 +2138,7 @@ export function ManagerResidents({
                                     ? (row) => residentPaymentDetailHref(portalBase, residentsTab, selected.id, row.id)
                                     : undefined
                                 }
-                                onEmbeddedDetailActions={setEmbeddedPaymentHeaderActions}
+                                onEmbeddedDetailActions={setEmbeddedPaymentFooterActions}
                               />
                             </ResidentDetailTabPanel>
                             ) : null}
@@ -2302,53 +2334,27 @@ export function ManagerResidents({
     </Button>
   );
 
-  const residentsPropertyFilterDesktop =
+  const residentsFilterSheet =
     propertyOptions.length > 0 ? (
-      <FieldSingleSelect
-        hideLabel
-        label="Property"
-        variant="pill"
-        value={propertyFilter}
-        onChange={setPropertyFilter}
-        placeholder="All properties"
-        options={[
-          { value: "", label: "All properties" },
-          ...propertyOptions.map((property) => ({
-            value: property.id,
-            label: property.label,
-          })),
-        ]}
-        dataAttr="residents-filter-property"
-        wrapperClassName="w-[min(11.5rem,42vw)] shrink-0"
-        triggerClassName="[&>span:first-child]:flex-1 [&>span:first-child]:text-center"
-      />
-    ) : null;
-
-  const residentsPropertyFilterMobile =
-    propertyOptions.length > 0 ? (
-      <FieldSingleSelect
-        hideLabel
-        label="Property"
-        variant="pill"
-        value={propertyFilter}
-        onChange={setPropertyFilter}
-        placeholder="All properties"
-        options={[
-          { value: "", label: "All properties" },
-          ...propertyOptions.map((property) => ({
-            value: property.id,
-            label: property.label,
-          })),
-        ]}
-        dataAttr="residents-filter-property"
-        wrapperClassName="w-full min-w-0"
-        triggerClassName="w-full min-w-0 [&>span:first-child]:block [&>span:first-child]:truncate"
-      />
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilters])}
+        desktopPresentation="panel"
+        className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+        onReset={() => setPropertyFilters([])}
+        dataAttr="residents-filter-sheet-open"
+      >
+        <ApplicationFilterSortFields
+          propertyOptions={propertyOptions}
+          propertyFilters={propertyFilters}
+          onPropertyFiltersChange={setPropertyFilters}
+          dataAttr="residents-filter-property"
+        />
+      </PortalFilterSortSheet>
     ) : null;
 
   const residentsDesktopHeaderActions = (
     <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
-      {residentsPropertyFilterDesktop}
+      {residentsFilterSheet}
       {residentsAddButton}
     </PortalSectionActionRow>
   );
@@ -2358,7 +2364,7 @@ export function ManagerResidents({
       className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
       data-slot="residents-mobile-actions"
     >
-      {propertyOptions.length > 0 ? <div className="min-w-0">{residentsPropertyFilterMobile}</div> : null}
+      {propertyOptions.length > 0 ? <div className="min-w-0">{residentsFilterSheet}</div> : null}
       <div className={propertyOptions.length > 0 ? "min-w-0" : "col-span-2 min-w-0"}>{residentsAddButton}</div>
     </div>
   );
@@ -2440,7 +2446,7 @@ export function ManagerResidents({
       ) : (
         <div className={PORTAL_LIST_PAGE_BODY}>
           {filtered.map((res) => {
-            const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null]
+            const housingLabel = [res.roomLabel, !propertyFilters.length ? res.propertyLabel : null]
               .filter(Boolean)
               .join(" · ");
             return (

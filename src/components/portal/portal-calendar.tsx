@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -381,26 +382,24 @@ export function PortalCalendar({
   const calendarPropertyFilterAllLabel =
     calendarView === "tours" ? "Select a house" : "All properties";
 
-  const calendarPropertySelect =
+  const calendarFilterSheet =
     portal === "manager" ? (
-      <FieldSingleSelect
-        hideLabel
-        label="Property"
-        variant="pill"
-        value={calendarPropertyId}
-        onChange={setCalendarPropertyId}
-        placeholder="Select property"
-        options={[
-          { value: "", label: calendarPropertyFilterAllLabel },
-          ...managerPropertyFilterOptions.map((property) => ({
-            value: property.id,
-            label: property.label,
-          })),
-        ]}
-        dataAttr="calendar-filter-property"
-        wrapperClassName="w-max min-w-0 max-w-full"
-        triggerClassName="w-auto max-w-full min-w-[8.5rem] [&>span:first-child]:block [&>span:first-child]:truncate"
-      />
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([calendarPropertyId ? [calendarPropertyId] : []])}
+        desktopPresentation="panel"
+        className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+        onReset={() => setCalendarPropertyId("")}
+        dataAttr="calendar-filter-sheet-open"
+      >
+        <ApplicationFilterSortFields
+          propertyOptions={managerPropertyFilterOptions}
+          propertyFilters={calendarPropertyId ? [calendarPropertyId] : []}
+          onPropertyFiltersChange={(ids) => setCalendarPropertyId(ids[0] ?? "")}
+          allLabel={calendarPropertyFilterAllLabel}
+          dataAttr="calendar-filter-property"
+          selectionMode="single"
+        />
+      </PortalFilterSortSheet>
     ) : null;
 
   const calendarShareTourButton =
@@ -437,7 +436,7 @@ export function PortalCalendar({
         className="ml-auto flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-2 sm:gap-3"
         data-slot="calendar-header-action-cluster"
       >
-        <div className="min-w-0 w-max max-w-[min(100%,22rem)]">{calendarPropertySelect}</div>
+        <div className="min-w-0 shrink-0">{calendarFilterSheet}</div>
         <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3 [&_button]:shrink-0">
           {calendarGoogleCalendarButton}
           {calendarShareTourButton}
@@ -452,35 +451,13 @@ export function PortalCalendar({
       </PortalSectionActionRow>
     ) : null;
 
-  const calendarPropertySelectMobile =
-    portal === "manager" ? (
-      <FieldSingleSelect
-        hideLabel
-        label="Property"
-        variant="pill"
-        value={calendarPropertyId}
-        onChange={setCalendarPropertyId}
-        placeholder="Select property"
-        options={[
-          { value: "", label: calendarPropertyFilterAllLabel },
-          ...managerPropertyFilterOptions.map((property) => ({
-            value: property.id,
-            label: property.label,
-          })),
-        ]}
-        dataAttr="calendar-filter-property"
-        wrapperClassName="w-full min-w-0"
-        triggerClassName="w-full min-w-0 [&>span:first-child]:block [&>span:first-child]:truncate"
-      />
-    ) : null;
-
   const calendarMobileActionsRow =
     portal === "manager" ? (
       <div
         className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
         data-slot="calendar-mobile-actions"
       >
-        <div className="min-w-0">{calendarPropertySelectMobile}</div>
+        <div className="min-w-0">{calendarFilterSheet}</div>
         <div className="min-w-0 [&_button]:w-full">{calendarGoogleCalendarButton}</div>
         <div className="col-span-2 min-w-0 [&_button]:w-full">{calendarShareTourButton}</div>
       </div>

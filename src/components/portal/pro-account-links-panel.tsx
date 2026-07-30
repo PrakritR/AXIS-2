@@ -382,7 +382,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     propertyIds: string[];
   } | null>(null);
 
-  const [teamPropertyFilter, setTeamPropertyFilter] = useState("");
+  const [teamPropertyFilters, setTeamPropertyFilters] = useState<string[]>([]);
 
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
@@ -541,9 +541,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [userId, localTick]);
 
   const passesTeamPropertyFilter = useCallback((assignedPropertyIds: string[]) => {
-    if (!teamPropertyFilter) return true;
-    return assignedPropertyIds.some((id) => samePropertyId(id, teamPropertyFilter));
-  }, [teamPropertyFilter]);
+    if (teamPropertyFilters.length === 0) return true;
+    return assignedPropertyIds.some((id) => teamPropertyFilters.some((filterId) => samePropertyId(id, filterId)));
+  }, [teamPropertyFilters]);
 
   const visibleIncomingPending = useMemo(() => {
     if (!useRemote) return [];
@@ -1429,16 +1429,16 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   const teamFilterSheet = (
     <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([teamPropertyFilter])}
+      activeCount={portalFilterActiveCount([teamPropertyFilters])}
       desktopPresentation="panel"
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
-      onReset={() => setTeamPropertyFilter("")}
+      onReset={() => setTeamPropertyFilters([])}
       dataAttr="team-links-filter-sheet-open"
     >
       <ApplicationFilterSortFields
         propertyOptions={teamFilterPropertyOptions}
-        propertyFilter={teamPropertyFilter}
-        onPropertyFilterChange={setTeamPropertyFilter}
+        propertyFilters={teamPropertyFilters}
+        onPropertyFiltersChange={setTeamPropertyFilters}
         dataAttr="team-filter-property"
       />
     </PortalFilterSortSheet>
@@ -1472,14 +1472,14 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     </div>
   );
 
-  const teamActiveFilterChips = teamPropertyFilter ? (
+  const teamActiveFilterChips = teamPropertyFilters.length > 0 ? (
     <div className="mb-3">
       <PortalActiveFilterChips
         chips={[
           {
             id: "property",
-            label: `Property: ${teamPropertyFilter}`,
-            onRemove: () => setTeamPropertyFilter(""),
+            label: teamPropertyFilters.length === 1 ? `Property: ${teamPropertyFilters[0]}` : `${teamPropertyFilters.length} properties`,
+            onRemove: () => setTeamPropertyFilters([]),
           },
         ]}
       />
@@ -1526,7 +1526,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         {!hasCoManagerLinks ? (
           <TeamLinksEmptyPanel variant="none" />
         ) : !hasVisibleTeamRows ? (
-          <TeamLinksEmptyPanel variant={teamPropertyFilter.trim() ? "filtered" : "none"} />
+          <TeamLinksEmptyPanel variant={teamPropertyFilters.length > 0 ? "filtered" : "none"} />
         ) : (
           <>
             <div className="space-y-4 lg:hidden">

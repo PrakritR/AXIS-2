@@ -1,6 +1,6 @@
 "use client";
 
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { FilterCheckboxList, FilterSingleSelectList } from "@/components/portal/filter-field-lists";
 
 const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
 
@@ -10,10 +10,10 @@ export function PaymentFilterSortFields({
   propertyOptions,
   residentOptions,
   showResidentFilter,
-  propertyFilter,
-  onPropertyFilterChange,
-  residentFilter,
-  onResidentFilterChange,
+  propertyFilters,
+  onPropertyFiltersChange,
+  residentFilters,
+  onResidentFiltersChange,
   listSort,
   onListSortChange,
   sortOptions,
@@ -21,34 +21,23 @@ export function PaymentFilterSortFields({
   propertyOptions: { id: string; label: string }[];
   residentOptions: { id: string; label: string }[];
   showResidentFilter: boolean;
-  propertyFilter: string;
-  onPropertyFilterChange: (next: string) => void;
-  residentFilter: string;
-  onResidentFilterChange: (next: string) => void;
+  propertyFilters: string[];
+  onPropertyFiltersChange: (next: string[]) => void;
+  residentFilters: string[];
+  onResidentFiltersChange: (next: string[]) => void;
   listSort: PaymentListSort;
   onListSortChange: (next: PaymentListSort) => void;
   sortOptions: { value: PaymentListSort; label: string }[];
 }) {
-  const propertySelectOptions = [
-    { value: "", label: "All properties" },
-    ...propertyOptions.map((option) => ({ value: option.id, label: option.label })),
-  ];
-  const residentSelectOptions = [
-    { value: "", label: "All residents" },
-    ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
-  ];
-
   return (
     <div className="grid gap-4">
       <div>
         <p className={FIELD_LABEL_CLASS}>Property</p>
-        <FieldSingleSelect
-          label="Property"
-          hideLabel
-          options={propertySelectOptions}
-          value={propertyFilter}
-          onChange={onPropertyFilterChange}
-          placeholder="All properties"
+        <FilterCheckboxList
+          options={propertyOptions.map((option) => ({ value: option.id, label: option.label }))}
+          selected={propertyFilters}
+          onChange={onPropertyFiltersChange}
+          emptyMenuText="No properties"
           dataAttr="payments-filter-property"
         />
       </div>
@@ -56,13 +45,11 @@ export function PaymentFilterSortFields({
       {showResidentFilter ? (
         <div>
           <p className={FIELD_LABEL_CLASS}>Resident</p>
-          <FieldSingleSelect
-            label="Resident"
-            hideLabel
-            options={residentSelectOptions}
-            value={residentFilter}
-            onChange={onResidentFilterChange}
-            placeholder="All residents"
+          <FilterCheckboxList
+            options={residentOptions.map((option) => ({ value: option.id, label: option.label }))}
+            selected={residentFilters}
+            onChange={onResidentFiltersChange}
+            emptyMenuText="No residents match the current filters"
             dataAttr="payments-filter-resident"
           />
         </div>
@@ -70,10 +57,8 @@ export function PaymentFilterSortFields({
 
       <div>
         <p className={FIELD_LABEL_CLASS}>Sort</p>
-        <FieldSingleSelect
-          label="Sort"
-          hideLabel
-          options={sortOptions}
+        <FilterSingleSelectList
+          options={sortOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
           value={listSort}
           onChange={(value) => onListSortChange(value as PaymentListSort)}
           dataAttr="payments-filter-sort"

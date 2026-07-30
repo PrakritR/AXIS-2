@@ -1,12 +1,32 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import { Modal } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { cn } from "@/lib/utils";
+
+
+
+const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
+
+function subscribeSmallPortalViewport(onStoreChange: () => void): () => void {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const mql = window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY);
+  mql.addEventListener("change", onStoreChange);
+  return () => mql.removeEventListener("change", onStoreChange);
+}
+
+function getSmallPortalViewport(): boolean {
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY).matches;
+}
+
+function useSmallPortalViewport(): boolean {
+  return useSyncExternalStore(subscribeSmallPortalViewport, getSmallPortalViewport, () => false);
+}
 
 function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: () => void }) {
   return (
@@ -51,6 +71,7 @@ export function PortalFilterSortSheet({
   desktopPresentation?: "inline" | "panel";
 }) {
   const [open, setOpen] = useState(false);
+  const isMobile = useSmallPortalViewport();
   const panelOnly = desktopPresentation === "panel";
   const sheetBody = (
     <div className="flex flex-col gap-4">
@@ -96,19 +117,7 @@ export function PortalFilterSortSheet({
           {children}
         </div>
       ) : null}
-      {panelOnly ? (
-        <Modal
-          open={open}
-          onClose={() => setOpen(false)}
-          title="Filter"
-          footer={footer}
-          panelClassName="max-w-md"
-          dense
-          assistantStrip={false}
-        >
-          {sheetBody}
-        </Modal>
-      ) : (
+      {isMobile ? (
         <VaulBottomSheet
           open={open}
           onOpenChange={setOpen}
@@ -117,16 +126,30 @@ export function PortalFilterSortSheet({
         >
           {sheetBody}
         </VaulBottomSheet>
-      )}
+      ) : panelOnly ? (
+        <Modal
+          open={open}
+          onClose={() => setOpen(false)}
+          title="Filter"
+          footer={footer}
+          panelClassName="h-auto max-h-[min(92dvh,36rem)] max-w-md"
+          dense
+          scrollableContent={false}
+          assistantStrip={false}
+        >
+          {sheetBody}
+        </Modal>
+      ) : null}
     </>
   );
 }
 
 /** Count non-default property / resident / sort filters for the mobile badge. */
 export function portalFilterActiveCount(
-  values: Array<string | number | boolean | null | undefined>,
+  values: Array<string | number | boolean | null | undefined | readonly string[]>,
 ): number {
   return values.filter((v) => {
+    if (Array.isArray(v)) return v.length > 0;
     if (typeof v === "string") return v.trim().length > 0;
     if (typeof v === "boolean") return v;
     if (typeof v === "number") return v !== 0;

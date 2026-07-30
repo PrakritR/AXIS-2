@@ -161,8 +161,20 @@ export function formatDate(iso: string) {
   return formatPacificDate(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
+export function ServiceStatusBadge({
+  status,
+  neutral = false,
+}: {
+  status: ServiceRequest["status"];
+  neutral?: boolean;
+}) {
   if (status === "pending") return null;
+  const label =
+    status === "approved" ? "Approved" : status === "denied" ? "Denied" : status === "returned" ? "Return submitted" : null;
+  if (!label) return null;
+  if (neutral) {
+    return <span className="text-xs font-medium text-muted">{label}</span>;
+  }
   if (status === "approved")
     return (
       <span className="rounded-full portal-badge-info px-2.5 py-0.5 text-[10px] font-semibold">
@@ -190,7 +202,11 @@ const WORK_ORDER_BUCKET_LABEL: Record<ResidentWorkBucket, string> = {
   completed: "Completed",
 };
 
-export function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket }) {
+export function WorkOrderStatusBadge({ bucket, neutral = false }: { bucket: ResidentWorkBucket; neutral?: boolean }) {
+  const label = WORK_ORDER_BUCKET_LABEL[bucket];
+  if (neutral) {
+    return <span className="text-xs font-medium text-muted">{label}</span>;
+  }
   const cls =
     bucket === "completed"
       ? "portal-badge-success"

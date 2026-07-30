@@ -16,6 +16,43 @@ import {
   partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
 
+
+export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
+const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
+
+type FieldSelectMenuRect = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+function computeFieldSelectMenuRect(button: HTMLButtonElement, optionCount: number): FieldSelectMenuRect {
+  const rect = button.getBoundingClientRect();
+  const viewportH = window.innerHeight;
+  const viewportPadding = 12;
+  const fiveItemCap =
+    FIELD_SELECT_MENU_VISIBLE_ITEMS * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12;
+  const estimatedMenuHeight = Math.min(
+    Math.max(optionCount, 1) * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
+    fiveItemCap,
+  );
+  const spaceBelow = viewportH - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const openUp = spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(
+    FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
+    Math.min(fiveItemCap, openUp ? spaceAbove - 8 : spaceBelow - 8),
+  );
+  const top = openUp ? Math.max(viewportPadding, rect.top - maxHeight - 4) : rect.bottom + 4;
+  return {
+    top,
+    left: rect.left,
+    width: rect.width,
+    maxHeight,
+  };
+}
+
 export type CheckboxMultiSelectOption = { value: string; label: string };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
 
@@ -88,7 +125,7 @@ export function CheckboxMultiSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
   const pill = variant === "pill";
   const { wrapperClassName, triggerClassName } = partitionFieldSelectClasses(className);
 
@@ -100,12 +137,7 @@ export function CheckboxMultiSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    setMenuRect({
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-    });
+    setMenuRect(computeFieldSelectMenuRect(button, flatOptions.length));
   };
 
   useLayoutEffect(() => {
@@ -161,6 +193,8 @@ export function CheckboxMultiSelect({
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          overflowY: "auto",
           backgroundColor: "#ffffff",
         }}
       >
@@ -282,7 +316,7 @@ export function FieldSingleSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
   const pill = variant === "pill";
   const partitioned = partitionFieldSelectClasses(className);
   const wrapperClassName = wrapperClassNameProp ?? partitioned.wrapperClassName;
@@ -293,12 +327,7 @@ export function FieldSingleSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    setMenuRect({
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-    });
+    setMenuRect(computeFieldSelectMenuRect(button, options.length));
   };
 
   useLayoutEffect(() => {
@@ -351,6 +380,8 @@ export function FieldSingleSelect({
           left: menuRect.left,
           minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          overflowY: "auto",
           backgroundColor: "#ffffff",
         }}
       >

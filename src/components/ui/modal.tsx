@@ -228,6 +228,7 @@ function ModalPanelInner({
   assistantExpanded,
   onAssistantExpandedChange,
   assistantDefaultExpanded = false,
+  scrollableContent = true,
   TitlePrimitive,
   DescriptionPrimitive,
   ClosePrimitive,
@@ -245,12 +246,13 @@ function ModalPanelInner({
   assistantExpanded: boolean;
   onAssistantExpandedChange: (expanded: boolean) => void;
   assistantDefaultExpanded?: boolean;
+  scrollableContent?: boolean;
   TitlePrimitive: ComponentType<ModalTitlePrimitiveProps>;
   DescriptionPrimitive: ComponentType<ModalDescriptionPrimitiveProps>;
   ClosePrimitive: ComponentType<ModalClosePrimitiveProps>;
 }) {
   return (
-    <>
+    <div className={cn("flex flex-col overflow-hidden", scrollableContent ? "min-h-0 flex-1" : "shrink-0")}>
       <div
         className={cn(
           "flex shrink-0 flex-col border-b border-border",
@@ -285,14 +287,16 @@ function ModalPanelInner({
       </div>
       <div
         className={cn(
-          "flex min-h-0 flex-1",
+          scrollableContent ? "flex min-h-0 flex-1" : "flex shrink-0",
           showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
         )}
       >
         <div
           className={cn(
-            "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-            footer && "flex flex-col",
+            scrollableContent
+              ? "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+              : "min-w-0 shrink-0 flex-col",
+            footer && scrollableContent && "flex flex-col",
             dense ? "pt-2" : "pt-4",
           )}
         >
@@ -319,7 +323,7 @@ function ModalPanelInner({
           {footer}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -337,6 +341,10 @@ export function Modal({
   assistantContext,
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
+  /** Drawer fills the viewport below portal `lg` (no partial sheet). */
+  fullScreenMobile = false,
+  /** When false, modal body does not scroll — children own internal overflow. */
+  scrollableContent = true,
 }: {
   open: boolean;
   title: ReactNode;
@@ -352,6 +360,8 @@ export function Modal({
   assistantStorageScopeKey?: string;
   /** Open the assistant strip expanded when the modal opens. */
   assistantDefaultExpanded?: boolean;
+  fullScreenMobile?: boolean;
+  scrollableContent?: boolean;
 }) {
   const presentation = useModalPresentation();
   const portalAssistant = usePortalAssistantConfig();
@@ -386,6 +396,7 @@ export function Modal({
     assistantExpanded,
     onAssistantExpandedChange: setAssistantExpanded,
     assistantDefaultExpanded,
+    scrollableContent,
   };
 
   if (!open) return null;
@@ -396,10 +407,12 @@ export function Modal({
         open={open}
         onClose={onClose}
         presentation="drawer"
+        showDrawerHandle={!fullScreenMobile}
         ariaDescribedBy={description ? "modal-description" : undefined}
         panelClassName={cn(
-          "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none",
-          "pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3 motion-reduce:transition-none",
+          fullScreenMobile
+            ? "modal-panel fixed inset-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 shadow-none outline-none pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
+            : "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3 motion-reduce:transition-none",
           dense ? "px-4" : "px-5",
           panelClassName,
         )}

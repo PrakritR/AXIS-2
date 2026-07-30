@@ -83,14 +83,14 @@ type PaymentListSort = "dueSoon" | "dueLatest" | "amountDesc" | "amountAsc" | "r
 const DEFAULT_PAYMENT_LIST_SORT: PaymentListSort = "dueSoon";
 
 function paymentFilterTouches(
-  propertyFilter: string,
-  residentFilter: string,
+  propertyFilters: string[],
+  residentFilters: string[],
   listSort: PaymentListSort,
   direction: ManagerPaymentDirection,
 ): number {
   let count = 0;
-  if (propertyFilter) count += 1;
-  if (direction === "incoming" && residentFilter) count += 1;
+  if (propertyFilters.length > 0) count += 1;
+  if (direction === "incoming" && residentFilters.length > 0) count += 1;
   if (listSort !== DEFAULT_PAYMENT_LIST_SORT) count += 1;
   return count;
 }
@@ -185,8 +185,8 @@ export function ManagerPayments({
   const [outgoingTick, setOutgoingTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [addOutgoingOpen, setAddOutgoingOpen] = useState(false);
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [residentFilter, setResidentFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  const [residentFilters, setResidentFilters] = useState<string[]>([]);
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
@@ -203,7 +203,7 @@ export function ManagerPayments({
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
 
   useEffect(() => {
-    setResidentFilter("");
+    setResidentFilters([]);
   }, [direction]);
 
   useEffect(() => {
@@ -373,9 +373,9 @@ export function ManagerPayments({
     
     for (const app of applications) {
       // If property filter is active, only include residents from that property
-      if (propertyFilter) {
-        const appPropertyName = app.property?.trim() || "";
-        if (normalizePropertyLabel(appPropertyName) !== propertyFilter) continue;
+      if (propertyFilters.length > 0) {
+        const appPropertyName = normalizePropertyLabel(app.property?.trim() || "");
+        if (!propertyFilters.includes(appPropertyName)) continue;
       }
       
       const name = app.name?.trim();
@@ -386,17 +386,17 @@ export function ManagerPayments({
     return [...seen.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [propertyFilter, applicationTick]);
+  }, [propertyFilters, applicationTick]);
 
-  const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter) ? residentFilter : "";
+  const activeResidentFilters = residentFilters.filter((name) => residentOptions.some((option) => option.id === name));
 
   const rowsForCounts = useMemo(() => {
     return mergedRows.filter((row) => {
-      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
-      if (activeResidentFilter && row.residentName !== activeResidentFilter) return false;
+      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(row.propertyName))) return false;
+      if (activeResidentFilters.length > 0 && !activeResidentFilters.includes(row.residentName)) return false;
       return true;
     });
-  }, [mergedRows, propertyFilter, activeResidentFilter]);
+  }, [mergedRows, propertyFilters, activeResidentFilters]);
 
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
@@ -438,10 +438,10 @@ export function ManagerPayments({
 
   const outgoingRowsForCounts = useMemo(() => {
     return outgoingRows.filter((row) => {
-      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
+      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(row.propertyName))) return false;
       return true;
     });
-  }, [outgoingRows, propertyFilter]);
+  }, [outgoingRows, propertyFilters]);
 
   const outgoingCounts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
@@ -493,8 +493,8 @@ export function ManagerPayments({
   const rowsForBucket = useMemo(() => {
     const filtered = mergedRows.filter((r) => {
       if (r.bucket !== bucket) return false;
-      if (propertyFilter && normalizePropertyLabel(r.propertyName) !== propertyFilter) return false;
-      if (activeResidentFilter && r.residentName !== activeResidentFilter) return false;
+      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(r.propertyName))) return false;
+      if (activeResidentFilters.length > 0 && !activeResidentFilters.includes(r.residentName)) return false;
       return true;
     });
 
@@ -508,9 +508,9 @@ export function ManagerPayments({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [mergedRows, bucket, propertyFilter, activeResidentFilter, listSort, searchQuery]);
+  }, [mergedRows, bucket, propertyFilters, activeResidentFilters, listSort, searchQuery]);
 
-  const filterTouchCount = paymentFilterTouches(propertyFilter, residentFilter, listSort, direction);
+  const filterTouchCount = paymentFilterTouches(propertyFilters, residentFilters, listSort, direction);
 
   const sortOptions = useMemo(
     () => [
@@ -527,8 +527,8 @@ export function ManagerPayments({
   );
 
   const resetPaymentFilters = () => {
-    setPropertyFilter("");
-    setResidentFilter("");
+    setPropertyFilters([]);
+    setResidentFilters([]);
     setListSort(DEFAULT_PAYMENT_LIST_SORT);
   };
 
@@ -544,13 +544,13 @@ export function ManagerPayments({
         propertyOptions={propertyOptions}
         residentOptions={residentOptions}
         showResidentFilter={direction === "incoming"}
-        propertyFilter={propertyFilter}
-        onPropertyFilterChange={(nextProperty) => {
-          setPropertyFilter(nextProperty);
-          setResidentFilter("");
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={(nextProperties) => {
+          setPropertyFilters(nextProperties);
+          setResidentFilters([]);
         }}
-        residentFilter={activeResidentFilter}
-        onResidentFilterChange={setResidentFilter}
+        residentFilters={activeResidentFilters}
+        onResidentFiltersChange={setResidentFilters}
         listSort={listSort}
         onListSortChange={setListSort}
         sortOptions={sortOptions}
@@ -618,21 +618,27 @@ export function ManagerPayments({
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     const chips: PortalActiveFilterChip[] = [];
-    if (propertyFilter) {
+    if (propertyFilters.length > 0) {
       chips.push({
         id: "property",
-        label: `Property: ${propertyFilter}`,
+        label:
+          propertyFilters.length === 1
+            ? `Property: ${propertyFilters[0]}`
+            : `${propertyFilters.length} properties`,
         onRemove: () => {
-          setPropertyFilter("");
-          setResidentFilter("");
+          setPropertyFilters([]);
+          setResidentFilters([]);
         },
       });
     }
-    if (direction === "incoming" && activeResidentFilter) {
+    if (direction === "incoming" && activeResidentFilters.length > 0) {
       chips.push({
         id: "resident",
-        label: `Resident: ${activeResidentFilter}`,
-        onRemove: () => setResidentFilter(""),
+        label:
+          activeResidentFilters.length === 1
+            ? `Resident: ${activeResidentFilters[0]}`
+            : `${activeResidentFilters.length} residents`,
+        onRemove: () => setResidentFilters([]),
       });
     }
     if (listSort !== DEFAULT_PAYMENT_LIST_SORT) {
@@ -644,7 +650,7 @@ export function ManagerPayments({
       });
     }
     return chips;
-  }, [propertyFilter, activeResidentFilter, listSort, direction, sortOptions]);
+  }, [propertyFilters, activeResidentFilters, listSort, direction, sortOptions]);
 
   const directionNav = (
     <DestinationNav

@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -32,6 +39,7 @@ import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
+import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
@@ -54,6 +62,7 @@ import {
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { transitionApplicationBucket } from "@/lib/application-review";
+import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   fetchCosignerSubmissionsForSignerAppId,
@@ -340,7 +349,7 @@ export function ManagerApplications({
     setPrevBucketProp(bucketProp);
     if (bucket !== bucketProp) setBucket(bucketProp);
   }
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
@@ -360,7 +369,6 @@ export function ManagerApplications({
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
-  const [screeningDetailActions, setScreeningDetailActions] = useState<ReactNode>(null);
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -474,15 +482,18 @@ export function ManagerApplications({
   );
 
   const propertyFilterLabel = useMemo(() => {
-    if (!propertyFilter.trim()) return "";
-    return propertyOptions.find((o) => o.id === propertyFilter)?.label ?? propertyFilter;
-  }, [propertyFilter, propertyOptions]);
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return propertyOptions.find((o) => o.id === propertyFilters[0])?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, propertyOptions]);
 
   const rowsForBucket = useMemo(() => {
     const inBucket = scopedRows.filter((r) => tabForRow(r) === bucket);
-    const filtered = !propertyFilter.trim()
+    const filtered = propertyFilters.length === 0
       ? inBucket
-      : inBucket.filter((r) => (r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim()) === propertyFilter);
+      : inBucket.filter((r) => propertyFilters.includes(r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim() || ""));
     const q = searchQuery.trim().toLowerCase();
     const searched = q
       ? filtered.filter((r) =>
@@ -494,22 +505,17 @@ export function ManagerApplications({
         )
       : filtered;
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
-  }, [scopedRows, bucket, propertyFilter, searchQuery]);
+  }, [scopedRows, bucket, propertyFilters, searchQuery]);
 
-  useEffect(() => {
-    if (!applicationIdProp) setScreeningDetailActions(null);
-  }, [applicationIdProp]);
+  const openDetailScreeningModal = useCallback((row: DemoApplicantRow) => {
+    setCheckrScreeningRowId(row.id);
+  }, []);
 
   const detailRow = useMemo(() => {
     if (!applicationIdProp) return null;
     const decoded = decodeURIComponent(applicationIdProp);
     return scopedRows.find((r) => r.id === decoded) ?? null;
   }, [applicationIdProp, scopedRows]);
-
-  const openDetailScreeningModal = useCallback(() => {
-    if (!detailRow) return;
-    setCheckrScreeningRowId(detailRow.id);
-  }, [detailRow]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -750,74 +756,186 @@ export function ManagerApplications({
     }
   };
 
-  const renderApplicationRowActions = (row: DemoApplicantRow) => (
-    <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
-      <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+  const renderApplicationRowActions = (row: DemoApplicantRow) => {
+    const isPending = row.bucket === "pending";
+    const showsRunCheck =
+      applicationShowsBackgroundCheck(row) && Boolean(row.application?.consentCredit) && row.backgroundCheck?.status !== "pending";
+    const canDownloadScreening =
+      row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
+
+    const approveButton =
+      isPending && !isWithdrawnApplicationRow(row) ? (
         <Button
           type="button"
           variant="outline"
           className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-          data-attr="application-pdf-download"
-          onClick={() => downloadApplicationPdf(row)}
+          data-attr="application-approve"
+          onClick={() => setApprovePreviewRow(row)}
         >
-          Download PDF
+          Approve
         </Button>
-        {screeningDetailActions}
-      {row.bucket === "pending" ? (
-        <>
-          {isWithdrawnApplicationRow(row) ? null : (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="application-approve"
-              onClick={() => setApprovePreviewRow(row)}
-            >
-              Approve
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-            onClick={() => setRowBucket(row.id, "rejected")}
-          >
-            Reject
-          </Button>
-          {!isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="application-send-reminder"
-              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-              onClick={() => void openReminderPreview(row)}
-            >
-              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
-            </Button>
-          ) : null}
-        </>
-      ) : (
+      ) : null;
+
+    const rejectButton = isPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-reject"
+        onClick={() => setRowBucket(row.id, "rejected")}
+      >
+        Reject
+      </Button>
+    ) : null;
+
+    const runCheckButton = showsRunCheck ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="run-background-check"
+        onClick={() => openDetailScreeningModal(row)}
+      >
+        Run check
+      </Button>
+    ) : null;
+
+    const downloadApplicationButton = (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-pdf-download"
+        onClick={() => downloadApplicationPdf(row)}
+      >
+        Download application
+      </Button>
+    );
+
+    const downloadScreeningButton = canDownloadScreening ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="screening-pdf-download"
+        onClick={() => downloadBackgroundCheckForApplication(row)}
+      >
+        Download background check
+      </Button>
+    ) : null;
+
+    const moveToPendingButton = !isPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="application-move-pending"
+        onClick={() => setRowBucket(row.id, "pending")}
+      >
+        Move to pending
+      </Button>
+    ) : null;
+
+    const sendReminderButton =
+      isPending && !isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
         <Button
           type="button"
           variant="outline"
           className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-          onClick={() => setRowBucket(row.id, "pending")}
+          data-attr="application-send-reminder"
+          disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+          onClick={() => void openReminderPreview(row)}
         >
-          Move to pending
+          {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
         </Button>
-      )}
+      ) : null;
+
+    const deleteButton = (
       <Button
         type="button"
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="application-delete"
         onClick={() => void deleteApplication(row.id)}
       >
         Delete
       </Button>
-      </PortalSectionActionRow>
-    </div>
-  );
+    );
+
+    const mobileOverflowMenu = (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} max-md:px-2.5 max-md:text-base`}
+            data-attr="application-more-actions"
+            aria-label="More application actions"
+          >
+            …
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" backdrop>
+          <DropdownMenuItem data-attr="application-pdf-download" onSelect={() => downloadApplicationPdf(row)}>
+            Download application
+          </DropdownMenuItem>
+          {canDownloadScreening ? (
+            <DropdownMenuItem
+              data-attr="screening-pdf-download"
+              onSelect={() => downloadBackgroundCheckForApplication(row)}
+            >
+              Download background check
+            </DropdownMenuItem>
+          ) : null}
+          {moveToPendingButton ? (
+            <DropdownMenuItem data-attr="application-move-pending" onSelect={() => setRowBucket(row.id, "pending")}>
+              Move to pending
+            </DropdownMenuItem>
+          ) : null}
+          {sendReminderButton ? (
+            <DropdownMenuItem
+              data-attr="application-send-reminder"
+              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+              onSelect={() => void openReminderPreview(row)}
+            >
+              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            data-attr="application-delete"
+            className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+            onSelect={() => void deleteApplication(row.id)}
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+
+    return (
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+        <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
+          <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+            {approveButton}
+            {rejectButton}
+            {runCheckButton}
+            {mobileOverflowMenu}
+          </div>
+          <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+            {approveButton}
+            {rejectButton}
+            {runCheckButton}
+            {downloadApplicationButton}
+            {downloadScreeningButton}
+            {moveToPendingButton}
+            {sendReminderButton}
+            {deleteButton}
+          </div>
+        </PortalSectionActionRow>
+      </div>
+    );
+  };
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
@@ -853,8 +971,7 @@ export function ManagerApplications({
         bareCanvas
         showDownload={false}
         onScreeningUpdated={handleScreeningUpdated}
-        onOpenScreeningModal={openDetailScreeningModal}
-        onScreeningHeaderActionsChange={setScreeningDetailActions}
+        onOpenScreeningModal={() => openDetailScreeningModal(row)}
       />
 
       <ApplicationVerificationPhotos row={row} />
@@ -864,16 +981,16 @@ export function ManagerApplications({
 
   const applicationsFilterSort = (
     <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([propertyFilter])}
-      onReset={() => setPropertyFilter("")}
+      activeCount={portalFilterActiveCount([propertyFilters])}
+      onReset={() => setPropertyFilters([])}
       dataAttr="applications-filter-sheet-open"
       desktopPresentation="panel"
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
     >
       <ApplicationFilterSortFields
         propertyOptions={propertyOptions}
-        propertyFilter={propertyFilter}
-        onPropertyFilterChange={setPropertyFilter}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
       />
     </PortalFilterSortSheet>
   );
@@ -1065,13 +1182,13 @@ export function ManagerApplications({
           dataAttr: "applications-search",
         }}
         activeFilterChips={
-          propertyFilter ? (
+          propertyFilters.length > 0 ? (
             <PortalActiveFilterChips
               chips={[
                 {
                   id: "property",
                   label: `Property: ${propertyFilterLabel}`,
-                  onRemove: () => setPropertyFilter(""),
+                  onRemove: () => setPropertyFilters([]),
                 },
               ]}
             />
@@ -1104,7 +1221,7 @@ export function ManagerApplications({
                 ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
                 : searchQuery.trim()
                   ? "No applications match your search."
-                  : propertyFilter.trim()
+                  : propertyFilters.length > 0
                     ? "No applications for this property yet."
                     : bucket === "pending"
                       ? "No pending applications. Submitted applications awaiting your review will appear here."

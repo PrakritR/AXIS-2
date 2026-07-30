@@ -29,7 +29,10 @@ export function ApplicationReviewLauncherRow({
   const showsScreening = applicationShowsBackgroundCheck(row);
 
   return (
-    <div className="space-y-8" data-slot="application-review-inline">
+    <div
+      className={showsScreening ? "grid gap-8 md:grid-cols-2 md:items-start md:gap-6" : "space-y-8"}
+      data-slot="application-review-inline"
+    >
       <section className="space-y-3">
         <h2 className={SECTION_HEADING_CLASS}>Application</h2>
         <ApplicationDocumentPreview row={row} collapsible={false} showDownload={showDownload} bareCanvas={bareCanvas} />

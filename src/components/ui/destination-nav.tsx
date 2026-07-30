@@ -109,26 +109,36 @@ function destinationNavItemClassName({
   active,
   alert,
   size = "default",
+  tone = "default",
 }: {
   active: boolean;
   alert?: boolean;
   size?: "default" | "toolbar";
+  tone?: "default" | "monochrome";
 }) {
   return cn(
     "portal-pressable inline-flex flex-1 basis-0 items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
     size === "toolbar" ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm" : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active
-      ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
-      : "text-muted hover:bg-card/60 hover:text-foreground",
-    alert && !active && "text-[var(--status-overdue-fg)]",
+    tone === "monochrome"
+      ? active
+        ? "text-foreground underline decoration-border underline-offset-4"
+        : "text-muted hover:text-foreground"
+      : active
+        ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
+        : "text-muted hover:bg-card/60 hover:text-foreground",
+    tone === "default" && alert && !active && "text-[var(--status-overdue-fg)]",
   );
 }
 
-function destinationNavCountClassName(active: boolean) {
+function destinationNavCountClassName(active: boolean, tone: "default" | "monochrome" = "default") {
   return cn(
     "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-    active ? "bg-primary/12 text-foreground" : "bg-accent/80 text-muted",
+    tone === "monochrome"
+      ? "bg-transparent text-muted"
+      : active
+        ? "bg-primary/12 text-foreground"
+        : "bg-accent/80 text-muted",
   );
 }
 
@@ -140,6 +150,7 @@ export function LocalDestinationNav({
   ariaLabel = "Section views",
   className,
   size = "default",
+  tone = "default",
 }: {
   items: LocalDestinationNavItem[];
   activeId: string;
@@ -147,6 +158,7 @@ export function LocalDestinationNav({
   ariaLabel?: string;
   className?: string;
   size?: "default" | "toolbar";
+  tone?: "default" | "monochrome";
 }) {
   return (
     <nav className={destinationNavShellClassName(className)} aria-label={ariaLabel} data-slot="local-destination-nav">
@@ -157,12 +169,14 @@ export function LocalDestinationNav({
             key={item.id}
             type="button"
             data-attr={item.dataAttr}
-            className={destinationNavItemClassName({ active, alert: item.alert, size })}
+            className={destinationNavItemClassName({ active, alert: item.alert, size, tone })}
             aria-current={active ? "page" : undefined}
             onClick={() => onChange(item.id)}
           >
             <span>{item.label}</span>
-            {item.count != null ? <span className={destinationNavCountClassName(active)}>{item.count}</span> : null}
+            {item.count != null ? (
+              <span className={destinationNavCountClassName(active, tone)}>{item.count}</span>
+            ) : null}
           </button>
         );
       })}

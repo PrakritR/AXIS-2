@@ -153,7 +153,7 @@ export function ManagerPromotion({
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -190,9 +190,9 @@ export function ManagerPromotion({
   // Property filter drives both the visible list and the content-type counts,
   // mirroring the Services page (counts reflect the current property scope).
   const propertyScopedAssets = useMemo(() => {
-    if (!propertyFilter) return assets;
-    return assets.filter((a) => samePropertyId(a.row.propertyId, propertyFilter));
-  }, [assets, propertyFilter]);
+    if (propertyFilters.length === 0) return assets;
+    return assets.filter((a) => propertyFilters.some((id) => samePropertyId(a.row.propertyId, id)));
+  }, [assets, propertyFilters]);
 
   const listings = useMemo<ManagerPromotionPropertyOption[]>(() => {
     void propertyTick;
@@ -648,16 +648,16 @@ export function ManagerPromotion({
 
   const promotionFilterSheet = (
     <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([propertyFilter])}
+      activeCount={portalFilterActiveCount([propertyFilters])}
       desktopPresentation="panel"
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
-      onReset={() => setPropertyFilter("")}
+      onReset={() => setPropertyFilters([])}
       dataAttr="promotion-filter-sheet-open"
     >
       <ApplicationFilterSortFields
         propertyOptions={filterPropertyOptions}
-        propertyFilter={propertyFilter}
-        onPropertyFilterChange={setPropertyFilter}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
         dataAttr="promotion-filter-property"
       />
     </PortalFilterSortSheet>

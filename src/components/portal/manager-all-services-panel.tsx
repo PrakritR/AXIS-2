@@ -16,7 +16,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { FilterSingleSelectList } from "@/components/portal/filter-field-lists";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -88,7 +88,7 @@ export function ManagerAllServicesPanel({
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
@@ -180,15 +180,15 @@ export function ManagerAllServicesPanel({
     };
     if (typeFilter === "requests") {
       for (const row of serviceRequests) {
-        if (propertyFilter && !samePropertyId(row.propertyId, propertyFilter) && row.propertyId?.trim()) continue;
+        if (propertyFilters.length > 0 && !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) && row.propertyId?.trim()) continue;
         consider(row.residentName);
       }
     } else if (typeFilter === "work-orders") {
       for (const row of workOrders) {
         if (
-          propertyFilter &&
-          row.propertyId !== propertyFilter &&
-          row.assignedPropertyId !== propertyFilter
+          propertyFilters.length > 0 &&
+          !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) &&
+          !propertyFilters.some((id) => samePropertyId(row.assignedPropertyId, id))
         ) {
           continue;
         }
@@ -198,7 +198,7 @@ export function ManagerAllServicesPanel({
     return [...seen.entries()]
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [typeFilter, serviceRequests, workOrders, propertyFilter]);
+  }, [typeFilter, serviceRequests, workOrders, propertyFilters]);
 
   const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter)
     ? residentFilter
@@ -206,7 +206,7 @@ export function ManagerAllServicesPanel({
 
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
-    if (propertyFilter) rows = rows.filter((r) => r.propertyId === propertyFilter || r.assignedPropertyId === propertyFilter);
+    if (propertyFilters.length > 0) rows = rows.filter((r) => propertyFilters.some((id) => r.propertyId === id || r.assignedPropertyId === id));
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
@@ -217,13 +217,13 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [workOrders, propertyFilter, activeResidentFilter, searchQuery]);
+  }, [workOrders, propertyFilters, activeResidentFilter, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
-    if (propertyFilter) {
+    if (propertyFilters.length > 0) {
       rows = rows.filter(
-        (r) => samePropertyId(r.propertyId, propertyFilter) || !r.propertyId?.trim(),
+        (r) => propertyFilters.some((id) => samePropertyId(r.propertyId, id)) || !r.propertyId?.trim(),
       );
     }
     if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
@@ -236,7 +236,7 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [serviceRequests, propertyFilter, activeResidentFilter, searchQuery]);
+  }, [serviceRequests, propertyFilters, activeResidentFilter, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -309,21 +309,22 @@ export function ManagerAllServicesPanel({
   );
 
   const propertyFilterLabel = useMemo(() => {
-    if (!propertyFilter) return "";
-    return (
-      filterPropertyOptions.find((option) => samePropertyId(option.id, propertyFilter))?.label ?? propertyFilter
-    );
-  }, [propertyFilter, filterPropertyOptions]);
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return filterPropertyOptions.find((option) => samePropertyId(option.id, propertyFilters[0]))?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, filterPropertyOptions]);
 
   const resetServicesFilters = () => {
-    setPropertyFilter("");
+    setPropertyFilters([]);
     setResidentFilter("");
   };
 
   const servicesFilterSheet =
     typeFilter !== "vendors" ? (
       <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([propertyFilter, activeResidentFilter])}
+        activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilter])}
         desktopPresentation="panel"
         className="max-md:flex-none max-md:w-full max-md:[&_button]:w-full"
         onReset={resetServicesFilters}
@@ -332,9 +333,9 @@ export function ManagerAllServicesPanel({
         <div className="grid gap-4">
           <ApplicationFilterSortFields
             propertyOptions={filterPropertyOptions}
-            propertyFilter={propertyFilter}
-            onPropertyFilterChange={(nextProperty) => {
-              setPropertyFilter(nextProperty);
+            propertyFilters={propertyFilters}
+            onPropertyFiltersChange={(nextProperties) => {
+              setPropertyFilters(nextProperties);
               setResidentFilter("");
             }}
             dataAttr="services-filter-property"
@@ -342,16 +343,13 @@ export function ManagerAllServicesPanel({
           {residentOptions.length > 0 ? (
             <div>
               <p className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Resident</p>
-              <FieldSingleSelect
-                label="Resident"
-                hideLabel
+              <FilterSingleSelectList
                 options={[
                   { value: "", label: "All residents" },
                   ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
                 ]}
                 value={activeResidentFilter}
                 onChange={setResidentFilter}
-                placeholder="All residents"
                 dataAttr="services-filter-resident"
               />
             </div>
@@ -363,12 +361,12 @@ export function ManagerAllServicesPanel({
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     if (typeFilter === "vendors") return [];
     const chips: PortalActiveFilterChip[] = [];
-    if (propertyFilter) {
+    if (propertyFilters.length > 0) {
       chips.push({
         id: "property",
         label: `Property: ${propertyFilterLabel}`,
         onRemove: () => {
-          setPropertyFilter("");
+          setPropertyFilters([]);
           setResidentFilter("");
         },
       });
@@ -381,7 +379,7 @@ export function ManagerAllServicesPanel({
       });
     }
     return chips;
-  }, [typeFilter, propertyFilter, propertyFilterLabel, activeResidentFilter]);
+  }, [typeFilter, propertyFilters, propertyFilterLabel, activeResidentFilter]);
 
   const servicesTypeNav = (
     <DestinationNav
@@ -503,7 +501,7 @@ export function ManagerAllServicesPanel({
           open={addRequestOpen}
           onClose={() => setAddRequestOpen(false)}
           managerUserId={userId}
-          defaultPropertyId={propertyFilter || undefined}
+          defaultPropertyId={propertyFilters[0] || undefined}
           onSubmitted={() => {
             setDataTick((t) => t + 1);
             setReqBucket("pending");
@@ -513,7 +511,7 @@ export function ManagerAllServicesPanel({
           open={addWorkOrderOpen}
           onClose={() => setAddWorkOrderOpen(false)}
           managerUserId={userId}
-          defaultPropertyId={propertyFilter || undefined}
+          defaultPropertyId={propertyFilters[0] || undefined}
           onSubmitted={(bucket) => {
             setDataTick((t) => t + 1);
             setWoBucket(bucket);
@@ -537,7 +535,7 @@ export function ManagerAllServicesPanel({
           open={addWorkOrderOpen}
           onClose={() => setAddWorkOrderOpen(false)}
           managerUserId={userId}
-          defaultPropertyId={propertyFilter || undefined}
+          defaultPropertyId={propertyFilters[0] || undefined}
           onSubmitted={(bucket) => {
             setDataTick((t) => t + 1);
             setWoBucket(bucket);
@@ -644,7 +642,7 @@ export function ManagerAllServicesPanel({
         open={addRequestOpen}
         onClose={() => setAddRequestOpen(false)}
         managerUserId={userId}
-        defaultPropertyId={propertyFilter || undefined}
+        defaultPropertyId={propertyFilters[0] || undefined}
         onSubmitted={() => {
           setDataTick((t) => t + 1);
           setReqBucket("pending");
@@ -655,7 +653,7 @@ export function ManagerAllServicesPanel({
         open={addWorkOrderOpen}
         onClose={() => setAddWorkOrderOpen(false)}
         managerUserId={userId}
-        defaultPropertyId={propertyFilter || undefined}
+        defaultPropertyId={propertyFilters[0] || undefined}
         onSubmitted={(bucket) => {
           setDataTick((t) => t + 1);
           setWoBucket(bucket);

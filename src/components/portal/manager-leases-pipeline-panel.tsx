@@ -18,6 +18,13 @@ import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
 import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
@@ -411,161 +418,272 @@ export function ManagerLeasesPipelinePanel({
       !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
       (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl);
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
+    const showDelete = row.status !== "Fully Signed";
+    const showMoveToReview = row.status === "Resident Signature Pending";
+    const showManagerSign = !row.managerSignature && residentHasSignedLease(row);
+    const showSigningReminder = row.status === "Resident Signature Pending";
+    const showRenewals = hasBothLeaseSignatures(row) && row.status === "Fully Signed";
+
+    const uploadLabel = pendingRowId === row.id ? "Uploading…" : hasDocument ? "Upload" : "Upload PDF";
+
+    const triggerUpload = () => {
+      uploadTargetRowIdRef.current = row.id;
+      uploadRef.current?.click();
+    };
+
+    const signButton = showManagerSign ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-manager-sign"
+        onClick={() => onManagerSign(row)}
+      >
+        Sign
+      </Button>
+    ) : showSigningReminder ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-signing-reminder"
+        disabled={reminderBusyForRow === row.id}
+        title="Send signing reminder"
+        onClick={() => openLeaseSigningReminderPreview(row)}
+      >
+        {reminderBusyForRow === row.id ? "Sending…" : "Sign"}
+      </Button>
+    ) : null;
+
+    const sendToResidentButton = showSendToResident ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-send-resident"
+        disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
+        onClick={() => openSendLeasePreview(row)}
+      >
+        {sendingToResidentRowId === row.id ? "Sending…" : (
+          <>
+            <span className="max-md:hidden">Send to resident</span>
+            <span className="md:hidden">Send</span>
+          </>
+        )}
+      </Button>
+    ) : null;
+
+    const editButton = canEditDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-edit"
+        onClick={() => setEditLeaseRowId(row.id)}
+      >
+        Edit
+      </Button>
+    ) : null;
+
+    const downloadButton = hasDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-download"
+        onClick={() => onDownload(row)}
+      >
+        Download
+      </Button>
+    ) : null;
+
+    const generateButton = showGenerate ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-generate"
+        disabled={generatingRowId === row.id || !generation.ok}
+        title={generation.ok ? undefined : generation.error}
+        onClick={() => runGenerateLease(row)}
+      >
+        {generatingRowId === row.id ? "Generating…" : "Generate lease"}
+      </Button>
+    ) : null;
+
+    const uploadButton = canEditDocument ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        onClick={triggerUpload}
+        disabled={pendingRowId === row.id}
+      >
+        {uploadLabel}
+      </Button>
+    ) : null;
+
+    const deleteButton = showDelete ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        data-attr="lease-delete"
+        onClick={() => onDeleteLease(row)}
+      >
+        Delete
+      </Button>
+    ) : null;
+
+    const moveToReviewButton = showMoveToReview ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-move-manager-review"
+        onClick={() => onMoveToManagerReview(row)}
+      >
+        Move to review
+      </Button>
+    ) : null;
+
+    const renewButton = showRenewals ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-renew"
+        onClick={() => setRenewLeaseRow(row)}
+      >
+        Renew lease
+      </Button>
+    ) : null;
+
+    const extendButton = showRenewals ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        onClick={() => setAmendLeaseRow(row)}
+      >
+        Extend move-out
+      </Button>
+    ) : null;
+
+    const emailSetupButton = needsAccountEmail ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
+        disabled={emailBusyForRow === row.id}
+        onClick={() => void sendAccountEmail(row)}
+      >
+        {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
+      </Button>
+    ) : null;
+
+    const hasMobileOverflow =
+      hasDocument ||
+      canEditDocument ||
+      showDelete ||
+      showGenerate ||
+      showMoveToReview ||
+      showRenewals ||
+      needsAccountEmail;
+
+    const mobileOverflowMenu = hasMobileOverflow ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} max-md:px-2.5 max-md:text-base`}
+            data-attr="lease-more-actions"
+            aria-label="More lease actions"
+          >
+            …
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" backdrop>
+          {hasDocument ? (
+            <DropdownMenuItem data-attr="lease-download" onSelect={() => onDownload(row)}>
+              Download
+            </DropdownMenuItem>
+          ) : null}
+          {canEditDocument ? (
+            <DropdownMenuItem
+              data-attr="lease-upload"
+              disabled={pendingRowId === row.id}
+              onSelect={triggerUpload}
+            >
+              {uploadLabel}
+            </DropdownMenuItem>
+          ) : null}
+          {showDelete ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-attr="lease-delete"
+                className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
+                onSelect={() => onDeleteLease(row)}
+              >
+                Delete
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {showGenerate ? (
+            <DropdownMenuItem
+              data-attr="lease-generate"
+              disabled={generatingRowId === row.id || !generation.ok}
+              onSelect={() => runGenerateLease(row)}
+            >
+              {generatingRowId === row.id ? "Generating…" : "Generate lease"}
+            </DropdownMenuItem>
+          ) : null}
+          {showMoveToReview ? (
+            <DropdownMenuItem data-attr="lease-move-manager-review" onSelect={() => onMoveToManagerReview(row)}>
+              Move to review
+            </DropdownMenuItem>
+          ) : null}
+          {showRenewals ? (
+            <>
+              <DropdownMenuItem data-attr="lease-renew" onSelect={() => setRenewLeaseRow(row)}>
+                Renew lease
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAmendLeaseRow(row)}>Extend move-out</DropdownMenuItem>
+            </>
+          ) : null}
+          {needsAccountEmail ? (
+            <DropdownMenuItem disabled={emailBusyForRow === row.id} onSelect={() => void sendAccountEmail(row)}>
+              {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
 
     return (
       <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
-          {hasDocument ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-download"
-              onClick={() => onDownload(row)}
-            >
-              Download
-            </Button>
-          ) : null}
-          {showGenerate ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-generate"
-              disabled={generatingRowId === row.id || !generation.ok}
-              title={generation.ok ? undefined : generation.error}
-              onClick={() => runGenerateLease(row)}
-            >
-              {generatingRowId === row.id ? "Generating…" : "Generate lease"}
-            </Button>
-          ) : null}
-          {canEditDocument ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              onClick={() => {
-                uploadTargetRowIdRef.current = row.id;
-                uploadRef.current?.click();
-              }}
-              disabled={pendingRowId === row.id}
-            >
-              {pendingRowId === row.id ? "Uploading…" : hasDocument ? "Upload replacement" : "Upload PDF"}
-            </Button>
-          ) : null}
-          {canEditDocument ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-edit"
-              onClick={() => setEditLeaseRowId(row.id)}
-            >
-              Edit
-            </Button>
-          ) : null}
-          {row.status !== "Fully Signed" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              data-attr="lease-delete"
-              onClick={() => onDeleteLease(row)}
-            >
-              Delete
-            </Button>
-          ) : null}
-          {showSendToResident ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-send-resident"
-              disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
-              onClick={() => openSendLeasePreview(row)}
-            >
-              {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
-            </Button>
-          ) : null}
-          {showGenerate ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-generate"
-              disabled={generatingRowId === row.id || !generation.ok}
-              title={generation.ok ? undefined : generation.error}
-              onClick={() => runGenerateLease(row)}
-            >
-              {generatingRowId === row.id ? "Generating…" : "Generate lease"}
-            </Button>
-          ) : null}
-          {row.status === "Resident Signature Pending" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-move-manager-review"
-              onClick={() => onMoveToManagerReview(row)}
-            >
-              Move to review
-            </Button>
-          ) : null}
-          {!row.managerSignature && residentHasSignedLease(row) ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-manager-sign"
-              onClick={() => onManagerSign(row)}
-            >
-              Sign
-            </Button>
-          ) : row.status === "Resident Signature Pending" ? (
-            <Button
-              type="button"
-              variant="primary"
-              className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-              data-attr="lease-signing-reminder"
-              disabled={reminderBusyForRow === row.id}
-              title="Send signing reminder"
-              onClick={() => openLeaseSigningReminderPreview(row)}
-            >
-              {reminderBusyForRow === row.id ? "Sending…" : "Sign"}
-            </Button>
-          ) : null}
-          {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                data-attr="lease-renew"
-                onClick={() => setRenewLeaseRow(row)}
-              >
-                Renew lease
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-                onClick={() => setAmendLeaseRow(row)}
-              >
-                Extend move-out
-              </Button>
-            </>
-          ) : null}
-          {needsAccountEmail ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
-              disabled={emailBusyForRow === row.id}
-              onClick={() => void sendAccountEmail(row)}
-            >
-              {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
-            </Button>
-          ) : null}
+          <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
+            {sendToResidentButton}
+            {signButton}
+            {editButton}
+            {mobileOverflowMenu}
+          </div>
+          <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
+            {sendToResidentButton}
+            {signButton}
+            {editButton}
+            {downloadButton}
+            {generateButton}
+            {uploadButton}
+            {moveToReviewButton}
+            {renewButton}
+            {extendButton}
+            {emailSetupButton}
+            {deleteButton}
+          </div>
         </PortalSectionActionRow>
       </div>
     );

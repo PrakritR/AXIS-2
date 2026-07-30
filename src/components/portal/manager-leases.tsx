@@ -58,7 +58,7 @@ export function ManagerLeases({
   }
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
+  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
@@ -111,20 +111,23 @@ export function ManagerLeases({
   }, [clientReady, userId, tick, propertyTick]);
 
   const propertyFilterLabel = useMemo(() => {
-    if (!propertyFilter.trim()) return "";
-    return propertyOptions.find((option) => option.id === propertyFilter)?.label ?? propertyFilter;
-  }, [propertyFilter, propertyOptions]);
+    if (propertyFilters.length === 0) return "";
+    if (propertyFilters.length === 1) {
+      return propertyOptions.find((option) => option.id === propertyFilters[0])?.label ?? propertyFilters[0];
+    }
+    return `${propertyFilters.length} properties`;
+  }, [propertyFilters, propertyOptions]);
 
   const rows = useMemo(() => {
     if (!clientReady) return [];
     void tick;
     const allRows = readLeasePipeline(userId);
-    const filtered = !propertyFilter.trim()
+    const filtered = propertyFilters.length === 0
       ? allRows
-      : allRows.filter((row) => row.application?.propertyId?.trim() === propertyFilter);
+      : allRows.filter((row) => propertyFilters.includes(row.application?.propertyId?.trim() ?? ""));
 
     return [...filtered].sort((a, b) => {
-      if (propertyFilter) {
+      if (propertyFilters.length === 0) {
         const byResident = a.residentName.localeCompare(b.residentName, undefined, { sensitivity: "base" });
         if (byResident !== 0) return byResident;
       }
@@ -139,7 +142,7 @@ export function ManagerLeases({
       const bTs = Date.parse(b.updatedAtIso || "");
       return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
     });
-  }, [clientReady, tick, propertyFilter, userId]);
+  }, [clientReady, tick, propertyFilters, userId]);
 
   const searchedRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -202,16 +205,16 @@ export function ManagerLeases({
 
   const leasesFilterSheet = (
     <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([propertyFilter])}
+      activeCount={portalFilterActiveCount([propertyFilters])}
       desktopPresentation="panel"
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
-      onReset={() => setPropertyFilter("")}
+      onReset={() => setPropertyFilters([])}
       dataAttr="leases-filter-sheet-open"
     >
       <ApplicationFilterSortFields
         propertyOptions={propertyOptions}
-        propertyFilter={propertyFilter}
-        onPropertyFilterChange={setPropertyFilter}
+        propertyFilters={propertyFilters}
+        onPropertyFiltersChange={setPropertyFilters}
         dataAttr="leases-filter-property"
       />
     </PortalFilterSortSheet>
@@ -329,13 +332,13 @@ export function ManagerLeases({
             dataAttr: "leases-search",
           }}
           activeFilterChips={
-            propertyFilter ? (
+            propertyFilters.length > 0 ? (
               <PortalActiveFilterChips
                 chips={[
                   {
                     id: "property",
                     label: `Property: ${propertyFilterLabel}`,
-                    onRemove: () => setPropertyFilter(""),
+                    onRemove: () => setPropertyFilters([]),
                   },
                 ]}
               />
