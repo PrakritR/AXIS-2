@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -114,6 +114,20 @@ import {
   applicationDetailHref,
   applicationListHref,
 } from "@/lib/portal-detail-routes";
+import {
+  appendPortalPropertyFilterQuery,
+  parsePortalPropertyFilterQuery,
+  sanitizePortalPropertyFilterIds,
+} from "@/lib/portal-property-list-filters";
+
+function applicationRowPropertyId(row: DemoApplicantRow): string {
+  return row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+}
+
+function applicationRowsForPropertyFilters(rows: DemoApplicantRow[], propertyFilters: string[]): DemoApplicantRow[] {
+  if (propertyFilters.length === 0) return rows;
+  return rows.filter((r) => propertyFilters.includes(applicationRowPropertyId(r)));
+}
 
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -341,6 +355,7 @@ export function ManagerApplications({
   const { userId, ready: authReady } = useManagerUserId();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const navigate = usePortalNavigate();
   const openHandled = useRef(false);
   const [bucket, setBucket] = useState<ManagerApplicationTabId>(bucketProp);
@@ -349,7 +364,7 @@ export function ManagerApplications({
     setPrevBucketProp(bucketProp);
     if (bucket !== bucketProp) setBucket(bucketProp);
   }
-  const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  // propertyFilters derived from URL (see appliedPropertyFilters below)
   const [searchQuery, setSearchQuery] = useState("");
   const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
     typeof window === "undefined" ? [] : readManagerApplicationRows(),
@@ -461,10 +476,15 @@ export function ManagerApplications({
     [scopedRows],
   );
 
-  const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
+  const propertyFilteredRows = useMemo(
+    () => applicationRowsForPropertyFilters(scopedRows, propertyFilters),
+    [scopedRows, propertyFilters],
+  );
+
+  const counts = useMemo(() => countByBucket(propertyFilteredRows), [propertyFilteredRows]);
   const incompleteCount = useMemo(
-    () => scopedRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
-    [scopedRows],
+    () => propertyFilteredRows.filter((r) => r.bucket === "pending" && isInProgressApplicationRow(r)).length,
+    [propertyFilteredRows],
   );
   // "Pending" now means submitted and awaiting review — Incomplete (still a
   // draft) is its own tab, so it is subtracted out here rather than shown as
@@ -490,22 +510,19 @@ export function ManagerApplications({
   }, [propertyFilters, propertyOptions]);
 
   const rowsForBucket = useMemo(() => {
-    const inBucket = scopedRows.filter((r) => tabForRow(r) === bucket);
-    const filtered = propertyFilters.length === 0
-      ? inBucket
-      : inBucket.filter((r) => propertyFilters.includes(r.assignedPropertyId?.trim() || r.propertyId?.trim() || r.application?.propertyId?.trim() || ""));
+    const inBucket = propertyFilteredRows.filter((r) => tabForRow(r) === bucket);
     const q = searchQuery.trim().toLowerCase();
     const searched = q
-      ? filtered.filter((r) =>
+      ? inBucket.filter((r) =>
           [r.name, r.email, r.property, r.id, r.application?.email]
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
             .includes(q),
         )
-      : filtered;
+      : inBucket;
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
-  }, [scopedRows, bucket, propertyFilters, searchQuery]);
+  }, [propertyFilteredRows, bucket, searchQuery]);
 
   const openDetailScreeningModal = useCallback((row: DemoApplicantRow) => {
     setCheckrScreeningRowId(row.id);
@@ -529,7 +546,7 @@ export function ManagerApplications({
     queueMicrotask(() => {
       const tab = tabForRow(hit);
       setBucket(tab);
-      router.replace(`${applicationListHref(basePath, tab)}${window.location.search}`, { scroll: false });
+      router.replace(applicationsListHref(tab), { scroll: false });
       navigate(applicationDetailHref(basePath, tab, hit.id));
     });
     requestAnimationFrame(() => {
@@ -553,7 +570,7 @@ export function ManagerApplications({
       return;
     }
 
-    router.push(applicationListHref(basePath, nextBucket));
+    router.push(applicationsListHref(nextBucket));
     const msg =
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
@@ -645,7 +662,7 @@ export function ManagerApplications({
     setRows(syncedRows);
 
     if (applicationIdProp) {
-      navigate(applicationListHref(basePath, bucket));
+      navigate(applicationsListHref(bucket));
     }
 
     showToast(
@@ -796,7 +813,7 @@ export function ManagerApplications({
         data-attr="run-background-check"
         onClick={() => openDetailScreeningModal(row)}
       >
-        Run check
+        Run background check
       </Button>
     ) : null;
 
@@ -982,12 +999,14 @@ export function ManagerApplications({
   const applicationsFilterSort = (
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
+      compactPanel
       onReset={() => setPropertyFilters([])}
       dataAttr="applications-filter-sheet-open"
       desktopPresentation="panel"
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
     >
       <ApplicationFilterSortFields
+        layout="inline"
         propertyOptions={propertyOptions}
         propertyFilters={propertyFilters}
         onPropertyFiltersChange={setPropertyFilters}
@@ -1141,7 +1160,7 @@ export function ManagerApplications({
           title={detailRow.name}
           subtitle={detailRow.email}
           avatarName={detailRow.name}
-          backHref={applicationListHref(basePath, tabForRow(detailRow))}
+          backHref={applicationsListHref(tabForRow(detailRow))}
           hideBackText
           bareHeader
           dataAttrBack="application-detail-back"
@@ -1169,7 +1188,7 @@ export function ManagerApplications({
         destinations={tabs.map((t) => ({
           id: t.id,
           label: t.label,
-          href: applicationListHref(basePath, t.id),
+          href: applicationsListHref(t.id),
           count: t.count,
           dataAttr: `applications-bucket-${t.id}`,
         }))}

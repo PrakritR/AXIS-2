@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
 import {
+  PORTAL_FILTER_PANEL_COMPACT_CLASS,
   PORTAL_FILTER_PANEL_SIZE_CLASS,
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
 } from "@/components/portal/filter-field-lists";
@@ -67,17 +68,27 @@ function FilterPanelFields({
   children,
   extraModalContent,
   onReset,
+  compact = false,
 }: {
   children: ReactNode;
   extraModalContent?: ReactNode;
   onReset: () => void;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 justify-end pb-2">
-        <FilterResetLink onReset={onReset} />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+    <div className={cn("flex flex-col", compact ? "gap-3" : "min-h-0 flex-1")}>
+      {!compact ? (
+        <div className="flex shrink-0 justify-end pb-2">
+          <FilterResetLink onReset={onReset} />
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          compact
+            ? "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+            : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+        )}
+      >
         <div className="flex flex-col gap-4">
           {children}
           {extraModalContent}
@@ -101,6 +112,7 @@ export function PortalFilterSortSheet({
   extraModalContent,
   className,
   desktopPresentation = "inline",
+  compactPanel = false,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -109,13 +121,15 @@ export function PortalFilterSortSheet({
   extraModalContent?: ReactNode;
   className?: string;
   desktopPresentation?: "inline" | "panel" | "dropdown";
+  compactPanel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isMobile = useSmallPortalViewport();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
   const close = () => setOpen(false);
+  const panelSizeClass = compactPanel ? PORTAL_FILTER_PANEL_COMPACT_CLASS : PORTAL_FILTER_PANEL_SIZE_CLASS;
   const fields = (
-    <FilterPanelFields onReset={onReset} extraModalContent={extraModalContent}>
+    <FilterPanelFields onReset={onReset} extraModalContent={extraModalContent} compact={compactPanel}>
       {children}
     </FilterPanelFields>
   );
@@ -162,7 +176,7 @@ export function PortalFilterSortSheet({
               role="dialog"
               aria-label="Filter"
               className={cn(
-                PORTAL_FILTER_PANEL_SIZE_CLASS,
+                panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
                 "absolute right-0 top-[calc(100%+0.5rem)] z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
@@ -181,7 +195,7 @@ export function PortalFilterSortSheet({
       ) : null}
       {isMobile ? (
         <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" autoElevate>
-          <div className={cn(PORTAL_FILTER_PANEL_SIZE_CLASS, "flex flex-col overflow-hidden -mx-4 px-4")}>
+          <div className={cn(panelSizeClass, "flex flex-col overflow-hidden -mx-4 px-4")}>
             {fields}
           </div>
         </VaulBottomSheet>
@@ -190,10 +204,17 @@ export function PortalFilterSortSheet({
           open={open}
           onClose={close}
           title="Filter"
-          panelClassName={cn(PORTAL_FILTER_PANEL_SIZE_CLASS, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-hidden")}
+          panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-hidden")}
           dense
-          scrollableContent={false}
+          scrollableContent={compactPanel}
           assistantStrip={false}
+          footer={
+            compactPanel ? (
+              <div className="flex w-full justify-end">
+                <FilterResetLink onReset={onReset} />
+              </div>
+            ) : undefined
+          }
         >
           {fields}
         </Modal>

@@ -34,9 +34,28 @@ export type CoManagerAvailabilityOverlay = {
 
 export type ScheduledTourFilter = {
   viewerUserId: string;
+  /** Single-property scope (availability peers, legacy callers). */
   propertyId: string | null;
+  /** When set, tours are limited to these properties (multi-select calendar filter). */
+  propertyIds?: string[];
   peers: PropertyCalendarPeer[];
 };
+
+function scheduledTourPropertyIds(filter: ScheduledTourFilter): string[] | null {
+  if (filter.propertyIds?.length) return filter.propertyIds;
+  const single = filter.propertyId?.trim();
+  return single ? [single] : null;
+}
+
+function eventMatchesScheduledTourProperty(
+  eventPropertyId: string | undefined,
+  filter: ScheduledTourFilter,
+): boolean {
+  const ids = scheduledTourPropertyIds(filter);
+  if (!ids) return true;
+  if (!eventPropertyId) return false;
+  return ids.some((id) => samePropertyId(id, eventPropertyId));
+}
 
 export type CoManagerCalendarPeerDto = PropertyCalendarPeer & {
   sharesAvailability: boolean;
@@ -155,20 +174,21 @@ function viewerHasCalendarAccess(viewerUserId: string, propertyId: string): bool
 /** Pending tour requests are visible only to the manager who was available when the guest booked. */
 export function tourInquiryVisibleToViewer(row: PartnerInquiry, filter: ScheduledTourFilter): boolean {
   if (row.kind !== "tour" || row.status !== "pending") return false;
-  if (filter.propertyId && row.propertyId && !samePropertyId(row.propertyId, filter.propertyId)) return false;
+  if (!eventMatchesScheduledTourProperty(row.propertyId, filter)) return false;
   return row.managerUserId === filter.viewerUserId;
 }
 
 /** Confirmed tours: assigned host always; co-manager peers only if they were available at booking time. */
 export function plannedTourVisibleToViewer(event: PlannedEvent, filter: ScheduledTourFilter): boolean {
   if (event.kind !== "tour") return false;
-  if (filter.propertyId && event.propertyId && !samePropertyId(event.propertyId, filter.propertyId)) return false;
+  if (!eventMatchesScheduledTourProperty(event.propertyId, filter)) return false;
   if (event.managerUserId === filter.viewerUserId) return true;
-  if (!filter.propertyId || !event.managerUserId) return false;
-  if (!viewerHasCalendarAccess(filter.viewerUserId, filter.propertyId)) return false;
+  const eventPropertyId = event.propertyId?.trim();
+  if (!eventPropertyId) return false;
+  if (!viewerHasCalendarAccess(filter.viewerUserId, eventPropertyId)) return false;
   const isPeer = filter.peers.some((peer) => peer.userId === event.managerUserId && !peer.isSelf);
   if (!isPeer) return false;
-  return managerHadAvailabilityAtSlot(filter.viewerUserId, filter.propertyId, event.start);
+  return managerHadAvailabilityAtSlot(filter.viewerUserId, eventPropertyId, event.start);
 }
 
 export function coManagerOverlaysFromPeers(

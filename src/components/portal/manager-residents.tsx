@@ -184,9 +184,7 @@ import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
   ApplicationReviewLauncherRow,
-  type ApplicationReviewSubTab,
 } from "@/components/portal/application-review-launcher-row";
-import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { downloadApplicationPdf } from "@/components/portal/manager-applications";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
@@ -355,7 +353,6 @@ export function ManagerResidents({
   const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
   const [addResidentWorkOrderOpen, setAddResidentWorkOrderOpen] = useState(false);
   const [embeddedPaymentFooterActions, setEmbeddedPaymentFooterActions] = useState<ReactNode>(null);
-  const [applicationReviewSubTab, setApplicationReviewSubTab] = useState<ApplicationReviewSubTab>("application");
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
@@ -890,10 +887,6 @@ export function ManagerResidents({
     if (!selectedApplicationRow) return null;
     return groupForRow(applicationGroups, { groupId: groupIdForRow(selectedApplicationRow) });
   }, [applicationGroups, selectedApplicationRow]);
-
-  useEffect(() => {
-    setApplicationReviewSubTab("application");
-  }, [selected?.id]);
 
   useEffect(() => {
     if (!paymentIdProp || activeDetailTab !== "payments") {
@@ -1848,23 +1841,7 @@ export function ManagerResidents({
           variant="outline"
           className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
           data-attr="resident-application-download"
-          disabled={
-            applicationReviewSubTab === "background-check" &&
-            !(
-              selectedApplicationRow.backgroundCheck?.status === "complete" ||
-              (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow))
-            )
-          }
           onClick={() => {
-            if (!selectedApplicationRow) return;
-            if (
-              applicationReviewSubTab === "background-check" &&
-              applicationShowsBackgroundCheck(selectedApplicationRow)
-            ) {
-              downloadBackgroundCheckForApplication(selectedApplicationRow);
-              showToast("Background check download started.");
-              return;
-            }
             downloadApplicationPdf(selectedApplicationRow);
             showToast("Application download started.");
           }}
@@ -1930,27 +1907,25 @@ export function ManagerResidents({
           <span className="md:hidden">Pending</span>
         </Button>
       )}
+      {applicationShowsBackgroundCheck(selectedApplicationRow) &&
+      Boolean(selectedApplicationRow.application?.consentCredit) &&
+      selectedApplicationRow.backgroundCheck?.status !== "pending" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="run-background-check"
+          onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+        >
+          Run background check
+        </Button>
+      ) : null}
       <Button
         type="button"
         variant="outline"
         className={PORTAL_DETAIL_BTN}
         data-attr="resident-application-download-footer"
-        disabled={
-          applicationReviewSubTab === "background-check" &&
-          !(
-            selectedApplicationRow.backgroundCheck?.status === "complete" ||
-            (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow))
-          )
-        }
         onClick={() => {
-          if (
-            applicationReviewSubTab === "background-check" &&
-            applicationShowsBackgroundCheck(selectedApplicationRow)
-          ) {
-            downloadBackgroundCheckForApplication(selectedApplicationRow);
-            showToast("Background check download started.");
-            return;
-          }
           downloadApplicationPdf(selectedApplicationRow);
           showToast("Application download started.");
         }}
@@ -2002,8 +1977,6 @@ export function ManagerResidents({
                                     row={selectedApplicationRow}
                                     bareCanvas
                                     showDownload={false}
-                                    activeSubTab={applicationReviewSubTab}
-                                    onSubTabChange={setApplicationReviewSubTab}
                                     onScreeningUpdated={handleScreeningUpdated}
                                     onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
                                   />

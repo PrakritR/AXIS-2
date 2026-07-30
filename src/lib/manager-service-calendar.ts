@@ -43,16 +43,20 @@ export function managerWorkOrderToCalendarMeeting(row: DemoManagerWorkOrderRow):
 /** Scheduled vendor visits and manager self-assigned work orders for the services calendar. */
 export function listManagerServiceCalendarMeetings(
   managerUserId: string,
-  propertyId?: string | null,
+  propertyScope?: string | string[] | null,
 ): DemoMeeting[] {
-  const pid = propertyId?.trim() || "";
+  const propertyIds = Array.isArray(propertyScope)
+    ? propertyScope.map((id) => id.trim()).filter(Boolean)
+    : propertyScope?.trim()
+      ? [propertyScope.trim()]
+      : [];
   return readManagerWorkOrderRows()
     .filter((row) => moduleRowVisibleToPortalUser(row, managerUserId, "services"))
     .filter((row) => row.bucket === "scheduled" || (row.bucket === "open" && Boolean(row.scheduledAtIso)))
     .filter((row) => {
-      if (!pid) return true;
+      if (propertyIds.length === 0) return true;
       const rowPid = (row.propertyId ?? row.assignedPropertyId ?? "").trim();
-      return rowPid === pid;
+      return propertyIds.some((id) => id === rowPid);
     })
     .map(managerWorkOrderToCalendarMeeting)
     .filter((m): m is DemoMeeting => m != null)

@@ -15,6 +15,8 @@ export const FILTER_LIST_MAX_HEIGHT_PX = FILTER_LIST_VISIBLE_ROWS * FILTER_LIST_
 export const PORTAL_FILTER_PANEL_WIDTH_CLASS = "w-[min(22rem,calc(100vw-2rem))]";
 export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
 export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
+/** Single-field filter sheets — size to content instead of a tall empty modal. */
+export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} h-auto max-h-[min(70vh,20rem)]`;
 export const PORTAL_FILTER_BODY_CLASS =
   "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch]";
 

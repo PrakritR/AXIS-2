@@ -114,6 +114,28 @@ describe("co-manager-calendar", () => {
     expect(plannedTourVisibleToViewer(event, filter)).toBe(false);
   });
 
+  it("filters tours by multiple property ids", () => {
+    const filter: ScheduledTourFilter = {
+      viewerUserId: "owner-1",
+      propertyId: null,
+      propertyIds: ["prop-1"],
+      peers,
+    };
+    const eventProp1 = {
+      id: "planned-1",
+      title: "Tour · Guest",
+      start: sharedStart,
+      end: "2026-06-30T21:30:00.000Z",
+      kind: "tour",
+      managerUserId: "owner-1",
+      propertyId: "prop-1",
+    } satisfies PlannedEvent;
+    const eventProp2 = { ...eventProp1, id: "planned-2", propertyId: "prop-2" };
+
+    expect(plannedTourVisibleToViewer(eventProp1, filter)).toBe(true);
+    expect(plannedTourVisibleToViewer(eventProp2, filter)).toBe(false);
+  });
+
   it("shows confirmed peer tours when viewer was also available", () => {
     vi.mocked(readAvailabilityDateSetForStorageKey).mockReturnValue(new Set([sharedSlotKey]));
     const filter: ScheduledTourFilter = { viewerUserId: "owner-1", propertyId: "prop-1", peers };
