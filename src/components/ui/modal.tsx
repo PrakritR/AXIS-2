@@ -135,7 +135,7 @@ export function ModalShell({
 
   if (resolvedPresentation === "drawer") {
     return (
-      <Drawer.Root open={open} onOpenChange={handleOpenChange} shouldScaleBackground>
+      <Drawer.Root open={open} onOpenChange={handleOpenChange} handleOnly noBodyStyles>
         <Drawer.Portal container={portalContainer ?? undefined}>
           {!hideOverlay ? (
             <Drawer.Overlay
@@ -155,7 +155,7 @@ export function ModalShell({
             {...contentA11y}
           >
             {showDrawerHandle ? (
-              <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+              <Drawer.Handle className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
             ) : null}
             {children}
           </Drawer.Content>

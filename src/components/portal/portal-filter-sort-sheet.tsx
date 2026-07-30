@@ -78,7 +78,7 @@ function FilterPanelFields({
   return (
     <div className={cn("flex flex-col", compact ? "gap-3" : "min-h-0 flex-1")}>
       {!compact ? (
-        <div className="flex shrink-0 justify-end pb-2">
+        <div className="flex shrink-0 justify-end px-4 pb-2">
           <FilterResetLink onReset={onReset} />
         </div>
       ) : null}
@@ -89,7 +89,7 @@ function FilterPanelFields({
             : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
         )}
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 max-lg:gap-0">
           {children}
           {extraModalContent}
         </div>
@@ -194,10 +194,8 @@ export function PortalFilterSortSheet({
         </div>
       ) : null}
       {isMobile ? (
-        <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" autoElevate>
-          <div className={cn(panelSizeClass, "flex flex-col overflow-hidden -mx-4 px-4")}>
-            {fields}
-          </div>
+        <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" autoElevate flushBody>
+          <div className="flex w-full flex-col overflow-hidden">{fields}</div>
         </VaulBottomSheet>
       ) : desktopPresentation === "panel" ? (
         <Modal

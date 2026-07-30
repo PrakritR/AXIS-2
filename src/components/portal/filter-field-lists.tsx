@@ -5,7 +5,8 @@ import { createContext, useContext, useId, useState, type ReactNode } from "reac
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import { cn } from "@/lib/utils";
 
-export const FILTER_FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
+export const FILTER_FIELD_LABEL_CLASS =
+  "mb-1.5 block px-4 text-xs font-semibold uppercase tracking-wide text-muted lg:px-0";
 
 export const FILTER_LIST_VISIBLE_ROWS = 5;
 const FILTER_LIST_ROW_PX = 40;
@@ -21,7 +22,7 @@ export const PORTAL_FILTER_BODY_CLASS =
   "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch]";
 
 const FILTER_TRIGGER_CLASS =
-  "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10";
+  "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-none max-lg:border-x-0";
 
 type Option = { value: string; label: string };
 
@@ -42,7 +43,7 @@ export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <FilterFieldsAccordionContext.Provider value={{ openId, setOpenId }}>
-      <div className="grid gap-4">{children}</div>
+      <div className="grid gap-4 max-lg:gap-0">{children}</div>
     </FilterFieldsAccordionContext.Provider>
   );
 }
@@ -126,11 +127,8 @@ export function FilterCollapsibleSection({
         <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted transition-transform", open && "rotate-180")} aria-hidden />
       </button>
       {open ? (
-        <div className="-mt-px overflow-hidden rounded-b-2xl border border-t-0 border-border bg-card shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-          <div
-            className="overflow-hidden bg-card"
-            style={{ height: FILTER_LIST_MAX_HEIGHT_PX }}
-          >
+        <div className="-mt-px overflow-hidden rounded-b-2xl border border-t-0 border-border bg-card shadow-[0_4px_12px_rgba(15,23,42,0.06)] max-lg:rounded-none max-lg:border-x-0 max-lg:shadow-none">
+          <div className="max-h-[12.5rem] overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]">
             {children}
           </div>
         </div>
@@ -162,7 +160,7 @@ export function FilterCheckboxList({
       role="listbox"
       aria-multiselectable="true"
       data-attr={dataAttr}
-      className="h-full overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
+      className="overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
     >
       {options.length === 0 ? (
         <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -214,7 +212,7 @@ export function FilterSingleSelectList({
     <div
       role="listbox"
       data-attr={dataAttr}
-      className="h-full overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
+      className="overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
     >
       {options.map((opt) => {
         const active = opt.value === value;
