@@ -17,7 +17,7 @@ import {
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
+import { DataList } from "@/components/ui/data-list";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE,
@@ -713,24 +713,36 @@ export function ResidentApplicationsPanel({
   ) : null;
 
   const renderRoutedList = () => (
-    <div className={PORTAL_LIST_PAGE_BODY}>
-      {filteredRowsForBucket.map((row) => {
+    <DataList
+      rows={filteredRowsForBucket.map((row) => {
         const room = displayRoomForRow(row);
         const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room !== "—" ? `Room ${room}` : ""]
           .filter(Boolean)
           .join(" · ");
-        return (
-          <PortalPersonRecordRow
-            key={row.id}
-            name={row.name || "Applicant"}
-            subtitle={subtitle || undefined}
-            preview={rowStatusLabel(row)}
-            onOpen={() => portalNavigate(residentApplicationDetailHref(basePath, bucket, row.id))}
-            dataAttr="resident-application-list-row"
-          />
-        );
+        return {
+          id: row.id,
+          data: row,
+          primary: row.name || "Applicant",
+          meta: subtitle || rowStatusLabel(row),
+          trailing: <span className="text-xs font-semibold text-muted">{rowStatusLabel(row)}</span>,
+          onClick: () => portalNavigate(residentApplicationDetailHref(basePath, bucket, row.id)),
+        };
       })}
-    </div>
+      columns={[
+        { id: "name", header: "Application", cell: (row) => row.name || "Applicant" },
+        { id: "property", header: "Property", cell: (row) => row.property || "—" },
+        { id: "room", header: "Room", cell: (row) => displayRoomForRow(row) },
+        { id: "status", header: "Status", cell: (row) => rowStatusLabel(row) },
+      ]}
+      emptyState={
+        <PortalDataTableEmpty
+          icon="application"
+          message={
+            searchQuery.trim() ? "No applications match your search." : "No applications in this tab yet."
+          }
+        />
+      }
+    />
   );
 
   const renderApplicationsTable = () => (
