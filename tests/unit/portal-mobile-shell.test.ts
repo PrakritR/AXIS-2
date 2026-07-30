@@ -60,14 +60,17 @@ describe("portal mobile shell conventions", () => {
 
   it("evenly distributes Instagram-style bottom tabs instead of scrolling", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll");
-    expect(GLOBALS_CSS).toContain("justify-content: space-evenly");
+    // Grid row — tabs share width evenly without horizontal scroll.
+    expect(GLOBALS_CSS).toContain("display: grid");
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll > a");
-    expect(GLOBALS_CSS).toContain("flex: 1 1 0;");
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll > button");
+    expect(GLOBALS_CSS).toContain("min-width: 0");
   });
 
   it("sizes native bottom tab icons consistently", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
-    expect(GLOBALS_CSS).toContain("height: 1.4375rem");
+    expect(GLOBALS_CSS).toContain("height: 1.375rem");
+    expect(GLOBALS_CSS).toContain("width: 1.375rem");
   });
 
   it("floats the assistant FAB above the native bottom bar instead of a bar slot", () => {

@@ -138,11 +138,18 @@ function wizardField(name: string): HTMLInputElement {
   return el as HTMLInputElement;
 }
 
-/** The wizard's footer Close button, not the header icon or the backdrop. */
+/** Header × — the sole explicit close control (footer Save & close was removed). */
 function clickClose() {
   const btn = document.querySelector('[data-attr="listing-wizard-close"]');
   if (!btn) throw new Error("no wizard close button");
   fireEvent.click(btn);
+}
+
+/** Backdrop click on the wizard overlay — same `closeWizard` path as the header. */
+function clickBackdropClose() {
+  const overlay = document.querySelector(".modal-overlay");
+  if (!overlay) throw new Error("no wizard overlay");
+  fireEvent.click(overlay);
 }
 
 /**
@@ -183,7 +190,7 @@ describe("closing the add-listing wizard saves the work in progress", () => {
   it("creates no draft when the wizard was never touched", async () => {
     const { onClose } = renderWizard();
 
-    clickClose();
+    clickBackdropClose();
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(0);

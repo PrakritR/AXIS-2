@@ -2,18 +2,23 @@ default_platform(:ios)
 
 # PropLane iOS release automation.
 #
-# The `beta` lane builds the app and ships it to TestFlight. It authenticates with
-# an App Store Connect API key (never an Apple ID / password), auto-manages signing
-# in the cloud via `-allowProvisioningUpdates`, and picks the next build number as
-# (latest TestFlight build + 1) so uploads are always monotonic. `MARKETING_VERSION`
-# (1.0) stays whatever the project holds — bump it in Xcode for a new marketing rev.
+# The `beta` lane builds the app and ships it to TestFlight. Signing uses the
+# distribution certificate + provisioning profile from GitHub Actions secrets
+# (manual signing) so CI never mints new Apple distribution certificates.
+# Upload + build-number lookup still authenticate via App Store Connect API key.
 #
 # Required env (set as GitHub Actions secrets — see .github/workflows/ios-testflight.yml):
-#   ASC_KEY_ID     App Store Connect API key id
-#   ASC_ISSUER_ID  App Store Connect issuer id
-#   ASC_KEY_P8     base64 of the AuthKey_XXXX.p8 file contents
+#   ASC_KEY_ID              App Store Connect API key id
+#   ASC_ISSUER_ID           App Store Connect issuer id
+#   ASC_KEY_P8              base64 of the AuthKey_XXXX.p8 file contents
+#   APPLE_DIST_P12_BASE64   base64 of the distribution certificate .p12
+#   APPLE_DIST_P12_PASSWORD password for the .p12
+#   APPLE_PROFILE_BASE64    base64 of the App Store .mobileprovision
 require "base64"
 require "fileutils"
+require "plist"
+require "shellwords"
+require "tmpdir"
 
 platform :ios do
   desc "Build and upload a new build to TestFlight"
@@ -21,14 +26,41 @@ platform :ios do
     key_id = ENV.fetch("ASC_KEY_ID")
     issuer_id = ENV.fetch("ASC_ISSUER_ID")
 
-    # Materialize the .p8 to disk so we can hand its path to BOTH fastlane and,
-    # crucially, xcodebuild's -allowProvisioningUpdates (which needs explicit
-    # -authenticationKey* flags — passing key_content alone leaves the archive
-    # step with "No Accounts / no provisioning profiles" as it can't call Apple).
     key_dir = File.expand_path(".keys", __dir__)
     FileUtils.mkdir_p(key_dir)
     key_path = File.join(key_dir, "AuthKey_#{key_id}.p8")
     File.write(key_path, Base64.decode64(ENV.fetch("ASC_KEY_P8")))
+
+    p12_path = File.join(Dir.tmpdir, "proplane-dist-#{Process.pid}.p12")
+    profile_path = File.join(Dir.tmpdir, "proplane-dist-#{Process.pid}.mobileprovision")
+    File.binwrite(p12_path, Base64.decode64(ENV.fetch("APPLE_DIST_P12_BASE64")))
+    File.binwrite(profile_path, Base64.decode64(ENV.fetch("APPLE_PROFILE_BASE64")))
+
+    setup_ci
+
+    import_certificate(
+      certificate_path: p12_path,
+      certificate_password: ENV.fetch("APPLE_DIST_P12_PASSWORD"),
+      keychain_name: ENV["MATCH_KEYCHAIN_NAME"],
+      keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"],
+    )
+
+    install_provisioning_profile(path: profile_path)
+
+    profile_plist_xml = `security cms -D -i #{Shellwords.escape(profile_path)}`
+    profile_data = Plist.parse_xml(profile_plist_xml)
+    profile_name = profile_data.fetch("Name")
+    has_provisioned_devices = profile_data.key?("ProvisionedDevices")
+    UI.message(
+      "Provisioning profile: #{profile_name} (has ProvisionedDevices: #{has_provisioned_devices})",
+    )
+    if has_provisioned_devices
+      UI.user_error!(
+        "Installed provisioning profile '#{profile_name}' has ProvisionedDevices — " \
+        "this is a development/ad-hoc profile, not App Store distribution. " \
+        "Upload an App Store profile to APPLE_PROFILE_BASE64.",
+      )
+    end
 
     api_key = app_store_connect_api_key(
       key_id: key_id,
@@ -42,23 +74,31 @@ platform :ios do
       initial_build_number: 6,
     ).to_i + 1).to_s
 
+    # Manual signing must be scoped to the App target only. Global xcargs would also
+    # set PROVISIONING_PROFILE_SPECIFIER on Swift Package dependency targets, which
+    # cannot accept a provisioning profile.
+    update_code_signing_settings(
+      path: "App.xcodeproj",
+      targets: ["App"],
+      build_configurations: ["Release"],
+      use_automatic_signing: false,
+      code_sign_identity: "Apple Distribution",
+      profile_name: profile_name,
+      team_id: "8FH3GVHCZ9",
+    )
+
     build_app(
       project: "App.xcodeproj",
       scheme: "App",
       configuration: "Release",
       export_method: "app-store",
-      # Cloud-managed signing: xcodebuild creates/fetches the distribution cert +
-      # App Store profile headlessly, authenticated by the API key passed here.
-      xcargs: [
-        "-allowProvisioningUpdates",
-        "-authenticationKeyPath", key_path,
-        "-authenticationKeyID", key_id,
-        "-authenticationKeyIssuerID", issuer_id,
-        "CURRENT_PROJECT_VERSION=#{next_build}",
-      ].join(" "),
+      xcargs: "CURRENT_PROJECT_VERSION=#{next_build}",
       export_options: {
-        signingStyle: "automatic",
+        signingStyle: "manual",
         teamID: "8FH3GVHCZ9",
+        provisioningProfiles: {
+          "space.proplane.app" => profile_name,
+        },
       },
       output_directory: "build",
       output_name: "PropLane.ipa",
@@ -72,5 +112,7 @@ platform :ios do
     )
   ensure
     File.delete(key_path) if defined?(key_path) && key_path && File.exist?(key_path)
+    File.delete(p12_path) if defined?(p12_path) && p12_path && File.exist?(p12_path)
+    File.delete(profile_path) if defined?(profile_path) && profile_path && File.exist?(profile_path)
   end
 end

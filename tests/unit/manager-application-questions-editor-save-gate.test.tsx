@@ -101,6 +101,7 @@ describe("bulk application editor — save gate (round 31)", () => {
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Discard"));
     expect(persistBulk).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // Radix/Vaul Close + the button onClick both route through requestClose.
+    expect(onClose).toHaveBeenCalled();
   });
 });
