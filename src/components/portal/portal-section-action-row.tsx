@@ -40,14 +40,26 @@ export function PortalSectionActionRow({
     return (
       <div
         className={cn(
-          "grid w-full grid-cols-2 gap-2 [&_button]:w-full [&_a]:w-full",
+          "grid w-full grid-cols-2 gap-2",
+          "md:flex md:flex-wrap md:items-center md:justify-end md:gap-2",
+          "[&_button]:w-full md:[&_button]:w-auto",
           className,
         )}
         data-slot="portal-section-action-row"
         data-variant="grid"
       >
         {children}
-        {destructive}
+        {destructive ? (
+          <div
+            className={cn(
+              "col-span-2 flex w-full md:col-span-1 md:ml-0.5 md:w-auto md:border-l md:border-border md:pl-2",
+              "[&_button]:w-full md:[&_button]:w-auto",
+            )}
+            data-slot="portal-section-action-row-destructive"
+          >
+            {destructive}
+          </div>
+        ) : null}
       </div>
     );
   }

@@ -64,6 +64,7 @@ export function ListingDetailCollapsibleSection({
   dataAttrToggle,
   className = "",
   contentClassName = "",
+  compact = false,
 }: {
   id?: string;
   title: string;
@@ -75,6 +76,7 @@ export function ListingDetailCollapsibleSection({
   dataAttrToggle?: string;
   className?: string;
   contentClassName?: string;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const mobileContentClass = collapseOnMobile
@@ -82,17 +84,21 @@ export function ListingDetailCollapsibleSection({
       ? "block"
       : "hidden md:block"
     : "block";
+  const cardPadding = compact ? "p-4 sm:p-5" : "p-5 sm:p-7";
+  const titleClass = compact
+    ? "text-base font-semibold leading-snug sm:text-lg"
+    : "text-lg leading-snug sm:text-2xl font-bold";
 
   return (
     <section id={id} className={`${listingSectionScrollClass} ${className}`}>
-      <div className={`${listingSectionCardClass} p-5 sm:p-7`}>
+      <div className={`${listingSectionCardClass} ${cardPadding}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 flex-1 pr-1">
             {eyebrow ? (
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
             ) : null}
             <h2
-              className={`font-bold tracking-tight text-foreground ${eyebrow ? "mt-1 text-lg leading-snug sm:text-2xl" : "text-lg leading-snug sm:text-2xl"}`}
+              className={`tracking-tight text-foreground ${eyebrow ? `mt-1 ${titleClass}` : `${titleClass}`}`}
             >
               {title}
             </h2>
@@ -109,7 +115,7 @@ export function ListingDetailCollapsibleSection({
             ) : null}
           </div>
         </div>
-        <div className={`mt-5 sm:mt-6 ${mobileContentClass} ${contentClassName}`}>{children}</div>
+        <div className={`${compact ? "mt-4 sm:mt-5" : "mt-5 sm:mt-6"} ${mobileContentClass} ${contentClassName}`}>{children}</div>
       </div>
     </section>
   );
@@ -125,6 +131,7 @@ export function ListingDetailCollapsibleSimpleSection({
   dataAttrToggle,
   className = "",
   collapseOnMobile = true,
+  compact = false,
 }: {
   id?: string;
   title: string;
@@ -134,6 +141,7 @@ export function ListingDetailCollapsibleSimpleSection({
   dataAttrToggle?: string;
   className?: string;
   collapseOnMobile?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const mobileContentClass = collapseOnMobile
@@ -141,12 +149,14 @@ export function ListingDetailCollapsibleSimpleSection({
       ? "block"
       : "hidden md:block"
     : "block";
+  const cardPadding = compact ? "p-4 sm:p-5" : "p-5 sm:p-7";
+  const titleClass = compact ? "text-lg font-semibold sm:text-xl" : "text-xl font-bold sm:text-2xl";
 
   return (
     <section id={id} className={`${listingSectionScrollClass} ${className}`}>
-      <div className={`${listingSectionCardClass} p-5 sm:p-7`}>
+      <div className={`${listingSectionCardClass} ${cardPadding}`}>
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h2>
+          <h2 className={`tracking-tight text-foreground ${titleClass}`}>{title}</h2>
           {hasContent && collapseOnMobile ? (
             <ViewToggleButton
               open={open}
@@ -159,7 +169,7 @@ export function ListingDetailCollapsibleSimpleSection({
         {!hasContent && emptyMessage ? (
           <p className="mt-4 text-sm leading-relaxed text-muted">{emptyMessage}</p>
         ) : hasContent ? (
-          <div className={`mt-5 sm:mt-6 ${mobileContentClass}`}>{children}</div>
+          <div className={`${compact ? "mt-4 sm:mt-5" : "mt-5 sm:mt-6"} ${mobileContentClass}`}>{children}</div>
         ) : null}
       </div>
     </section>

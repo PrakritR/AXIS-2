@@ -374,6 +374,8 @@ export function ListingDetailSections({
   hidePreviewSubnav = false,
   /** Manager property preview — show full section bodies on mobile (no View pill). */
   expandSectionsOnMobile = false,
+  /** Tighter portal chrome inside manager property preview tab. */
+  managerPreviewChrome = false,
 }: {
   property: MockProperty;
   rich: ListingRichContent;
@@ -382,9 +384,11 @@ export function ListingDetailSections({
   /** When true, parent renders pinned preview subnav outside the scroller (manager property tab). */
   hidePreviewSubnav?: boolean;
   expandSectionsOnMobile?: boolean;
+  managerPreviewChrome?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   const collapseOnMobile = !expandSectionsOnMobile;
+  const compactSections = managerPreviewChrome;
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
@@ -393,7 +397,17 @@ export function ListingDetailSections({
   return (
     <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
-      <div className={`mx-auto flex max-w-6xl flex-col px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))]"}`}>
+      <div
+        className={`mx-auto flex max-w-6xl flex-col ${
+          managerPreviewChrome ? "px-3 sm:px-4" : "px-4"
+        } ${
+          previewModal
+            ? managerPreviewChrome
+              ? "pb-6 pt-1 sm:pb-8 sm:pt-2"
+              : "pb-8 pt-2 sm:pb-10 sm:pt-3"
+            : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))]"
+        }`}
+      >
         {previewModal && !hidePreviewSubnav ? (
           <ListingStickySubnav mode="modal" />
         ) : previewModal ? null : (
@@ -432,18 +446,19 @@ export function ListingDetailSections({
         </div>
         ) : null}
 
-        <div className={`order-4 ${previewModal ? "mt-6" : "mt-6 lg:mt-8"}`}>
+        <div className={`order-4 ${previewModal ? (managerPreviewChrome ? "mt-4" : "mt-6") : "mt-6 lg:mt-8"}`}>
           {!previewModal ? <ListingStickySubnav className="mb-4 lg:mb-6" /> : null}
           {!previewModal ? (
             <ListingPricingCtaCard property={property} rich={rich} className="mb-6 lg:hidden" />
           ) : null}
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
-            <div className="order-1 space-y-8 lg:space-y-10">
+            <div className={`order-1 ${compactSections ? "space-y-5 lg:space-y-6" : "space-y-8 lg:space-y-10"}`}>
               <ListingDetailCollapsibleSection
                 id="floor-plans"
                 title={rich.floorPlansSectionTitle ?? "Floor plans"}
                 dataAttrToggle="listing-floor-plans-toggle"
                 collapseOnMobile={collapseOnMobile}
+                compact={compactSections}
                 headerAside={
                   roomCount > 0 ? (
                     <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
@@ -466,6 +481,7 @@ export function ListingDetailSections({
                 title="Lease basics"
                 dataAttrToggle="listing-lease-basics-toggle"
                 collapseOnMobile={collapseOnMobile}
+                compact={compactSections}
               >
                 <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
@@ -476,6 +492,7 @@ export function ListingDetailSections({
                 eyebrow="Building & neighborhood"
                 dataAttrToggle="listing-amenities-toggle"
                 collapseOnMobile={collapseOnMobile}
+                compact={compactSections}
               >
                 <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} propertyLabel={propertyLabel} contactSmsPhone={property.contactSmsPhone} />
               </ListingDetailCollapsibleSection>
@@ -506,6 +523,7 @@ export function ListingDetailSections({
                 emptyMessage="No house rules were added to this listing yet."
                 dataAttrToggle="listing-house-rules-toggle"
                 collapseOnMobile={collapseOnMobile}
+                compact={compactSections}
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{houseRulesDisplay}</p>
               </ListingDetailCollapsibleSimpleSection>
@@ -515,6 +533,7 @@ export function ListingDetailSections({
                 title="Location"
                 dataAttrToggle="listing-location-toggle"
                 collapseOnMobile={collapseOnMobile}
+                compact={compactSections}
               >
                 <ListingLocationBlock property={property} embedded />
               </ListingDetailCollapsibleSection>
