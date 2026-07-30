@@ -143,7 +143,7 @@ export function DemoSectionRenderer({
       case "applications":
         return <ManagerApplications />;
       case "residents":
-        return <ManagerResidents tabId={(tabId as "current" | "previous") ?? "current"} />;
+        return <ManagerResidents tabId="current" />;
       case "leases":
         return <ManagerLeases />;
       case "payments":
