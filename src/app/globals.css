@@ -1361,6 +1361,28 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   [data-slot="portal-tabs-mobile"] button {
     min-height: 2.75rem;
   }
+
+  html:has(.portal-shell) {
+    height: 100%;
+    overflow: hidden;
+    overflow-x: clip;
+    max-width: 100%;
+    touch-action: manipulation;
+  }
+
+  html:has(.portal-shell) body {
+    height: 100%;
+    overflow: hidden;
+    overflow-x: clip;
+    max-width: 100%;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  html:has(.portal-shell) #portal-main-content {
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* App Store compliance (Guideline 2.1(b) / 3.1.1): the iOS app must not present

@@ -30,6 +30,7 @@ export function VaulBottomSheet({
    * the bottom nav with a large empty gap above.
    */
   autoElevate = false,
+  flushBody = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,9 +38,9 @@ export function VaulBottomSheet({
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  /** Nearly full viewport — dense panels that need maximum height. */
   fullScreen?: boolean;
   autoElevate?: boolean;
+  flushBody?: boolean;
 }) {
   const contentHugging = !fullScreen;
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ export function VaulBottomSheet({
     "bottom-[max(26vh,calc(var(--portal-native-bottom-nav-inset,0px)+5.5rem))] top-auto";
 
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} shouldScaleBackground>
+    <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content
@@ -96,7 +97,7 @@ export function VaulBottomSheet({
           onPointerDownOutside={allowPortaledFieldSelectInteraction}
           onInteractOutside={allowPortaledFieldSelectInteraction}
         >
-          <div className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+          <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
           <div className="shrink-0 border-b border-border px-4 pb-3 pt-2">
             <Drawer.Title className="text-base font-semibold text-foreground">{title}</Drawer.Title>
             {description ? (
@@ -111,7 +112,8 @@ export function VaulBottomSheet({
           >
             <div
               className={cn(
-                "px-4 py-3",
+                flushBody ? "px-0" : "px-4",
+                "py-3",
                 contentHugging
                   ? "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
                   : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
