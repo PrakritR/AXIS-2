@@ -1294,9 +1294,7 @@ export function PortalCalendarPanels({
                 {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
                 {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
                 {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
-                {!readOnly ? (
-                  <div className={`rounded-full px-2 py-0.5 text-[11px] font-semibold sm:text-xs ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
-                ) : null}
+                {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
                 {vendorMode ? (
                   <Button
                     type="button"
@@ -1323,69 +1321,30 @@ export function PortalCalendarPanels({
             </div>
 
             {!vendorMode && !readOnly ? (
-              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="min-w-0">{renderTimeWindowControl(true)}</div>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto md:gap-2">
-                  <div className="hidden items-center gap-2 md:flex">
-                    <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
-                      Copy previous week
-                    </Button>
-                    <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
-                      Block
-                    </Button>
-                    <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
-                      Clear
-                    </Button>
-                    {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={COMPACT_CALENDAR_ACTION_BTN}
-                        onClick={() => {
-                          setSelectedHouseIds(new Set());
-                          setCopyToHousesScope("week");
-                          setUpdateToHousesOpen(true);
-                        }}
-                      >
-                        Copy to houses
-                      </Button>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-1.5 md:hidden">
-                    <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
-                      Block
-                    </Button>
-                    <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
-                      Clear
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-7 min-w-8 shrink-0 rounded-full px-0 text-base font-bold leading-none text-foreground max-lg:h-8"
-                          aria-label="More availability actions"
-                        >
-                          …
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" backdrop>
-                        <DropdownMenuItem onSelect={copyPreviousWeek}>Copy previous week</DropdownMenuItem>
-                        {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setSelectedHouseIds(new Set());
-                              setCopyToHousesScope("week");
-                              setUpdateToHousesOpen(true);
-                            }}
-                          >
-                            Copy to houses
-                          </DropdownMenuItem>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:gap-2">
+                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
+                  Copy previous week
+                </Button>
+                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={openBlockModal}>
+                  Block
+                </Button>
+                <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={clearCurrentWeek}>
+                  Clear
+                </Button>
+                {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={COMPACT_CALENDAR_ACTION_BTN}
+                    onClick={() => {
+                      setSelectedHouseIds(new Set());
+                      setCopyToHousesScope("week");
+                      setUpdateToHousesOpen(true);
+                    }}
+                  >
+                    Copy to houses
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
