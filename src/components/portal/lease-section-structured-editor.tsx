@@ -17,9 +17,18 @@ type Props = {
   value: string;
   documentStyles: string;
   onChange: (html: string) => void;
+  /** When true, only label/value fields — visual/HTML editing lives on the document panel. */
+  fieldsOnly?: boolean;
 };
 
-export function LeaseSectionStructuredEditor({ sectionId, title, value, documentStyles, onChange }: Props) {
+export function LeaseSectionStructuredEditor({
+  sectionId,
+  title,
+  value,
+  documentStyles,
+  onChange,
+  fieldsOnly = false,
+}: Props) {
   const parsedParts = useMemo(() => parseLeaseSectionEditableParts(value), [value, sectionId]);
   const [parts, setParts] = useState<LeaseSectionEditablePart[]>(parsedParts);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -28,8 +37,10 @@ export function LeaseSectionStructuredEditor({ sectionId, title, value, document
   useEffect(() => {
     const next = parseLeaseSectionEditableParts(value);
     setParts(next);
-    setShowAdvanced(!leaseSectionHasStructuredFields(next));
-  }, [sectionId]);
+    if (!fieldsOnly) {
+      setShowAdvanced(!leaseSectionHasStructuredFields(next));
+    }
+  }, [fieldsOnly, sectionId]);
 
   const updateParts = (nextParts: LeaseSectionEditablePart[]) => {
     setParts(nextParts);
@@ -60,6 +71,7 @@ export function LeaseSectionStructuredEditor({ sectionId, title, value, document
                       value={part.label}
                       onChange={(e) => updatePart(part.id, { label: e.target.value })}
                       data-attr={`lease-section-field-label-${part.id}`}
+                      className="rounded-full"
                     />
                   </div>
                   <div>
@@ -68,6 +80,7 @@ export function LeaseSectionStructuredEditor({ sectionId, title, value, document
                       value={part.value}
                       onChange={(e) => updatePart(part.id, { value: e.target.value })}
                       data-attr={`lease-section-field-value-${part.id}`}
+                      className="rounded-full"
                     />
                   </div>
                 </div>
@@ -92,6 +105,7 @@ export function LeaseSectionStructuredEditor({ sectionId, title, value, document
             }
             return null;
           })}
+          {!fieldsOnly ? (
           <button
             type="button"
             className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
@@ -100,17 +114,20 @@ export function LeaseSectionStructuredEditor({ sectionId, title, value, document
           >
             {showAdvanced ? "Hide advanced editor" : "Advanced HTML editor"}
           </button>
+          ) : null}
         </div>
       ) : null}
 
-      {showAdvanced || !hasStructured ? (
-        <LeaseSectionBodyEditor
-          sectionId={sectionId}
-          title={title}
-          value={value}
-          documentStyles={documentStyles}
-          onChange={onChange}
-        />
+      {!fieldsOnly && (showAdvanced || !hasStructured) ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <LeaseSectionBodyEditor
+            sectionId={sectionId}
+            title={title}
+            value={value}
+            documentStyles={documentStyles}
+            onChange={onChange}
+          />
+        </div>
       ) : null}
 
     </div>

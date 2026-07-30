@@ -1,6 +1,7 @@
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
+import { readLeaseSectionsForEdit } from "@/lib/lease-section-edit.client";
 
 /** Rich context for the property Lease editor modal assistant strip. */
 export function buildLeaseModalAssistantContext(opts: {
@@ -48,8 +49,21 @@ export function buildLeasePacketEditAssistantContext(row: LeasePipelineRow): str
   if (app.leaseEnd?.trim()) parts.push(`end=${app.leaseEnd.trim()}`);
   else if (app.leaseTerm?.toLowerCase().includes("month")) parts.push("end=month-to-month");
   if (app.rentalType === "short_term") parts.push("stay=short-term");
-  parts.push(
-    "Propose update_lease_packet with this leaseId when the manager asks to change rent, fees, dates, term, room, stay type, unit label, or notes. The lease document regenerates and stays in manager review.",
-  );
+  const sections = readLeaseSectionsForEdit(row);
+  if (sections.length) {
+    parts.push(
+      `documentSections=${sections.map((section) => `${section.id}:${section.title}`).join(";")}`,
+    );
+    parts.push(
+      "UI: the full lease is directly editable in Visual/HTML mode. Double-click a section to focus it and edit in place.",
+    );
+    parts.push(
+      "Propose update_lease_document_sections with sectionBodies (section id → body HTML) for clause wording, tables, or addenda. Propose update_lease_packet for rent, fees, dates, term, room, stay type, unit label, or notes (regenerates the document).",
+    );
+  } else {
+    parts.push(
+      "Propose update_lease_packet with this leaseId when the manager asks to change rent, fees, dates, term, room, stay type, unit label, or notes. The lease document regenerates and stays in manager review.",
+    );
+  }
   return parts.join(" · ");
 }
