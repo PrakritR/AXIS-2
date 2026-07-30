@@ -69,10 +69,19 @@ describe("resident portal redesign completeness", () => {
       expect(src).not.toMatch(/\bDropdownMenu\b/);
     });
 
-    it("services uses PillTabs (visible chips) for in-tab status filters, not dropdowns", () => {
+    it("services uses LocalDestinationNav for status filters, not mobile dropdowns", () => {
       const src = readPanel("resident-services-panel.tsx");
-      expect(src).toContain("PillTabs");
+      expect(src).toContain("LocalDestinationNav");
+      expect(src).not.toMatch(/\bPillTabs\b/);
       expect(src).not.toMatch(/Filter & sort/);
+    });
+
+    it("hideTitleOnMobileNav keeps section actions off the mobile PageHeader row", () => {
+      const src = readFileSync(
+        join(process.cwd(), "src/components/portal/portal-metrics.tsx"),
+        "utf8",
+      );
+      expect(src).toMatch(/titleAsideDesktopOnly = Boolean\(titleAside && filterRow\) \|\| Boolean\(titleAside && hideTitleOnMobileNav\)/);
     });
 
     it("legacy inbox panel folder tabs are not mounted from resident-communication", () => {

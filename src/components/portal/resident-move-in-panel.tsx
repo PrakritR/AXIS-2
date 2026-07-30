@@ -28,7 +28,7 @@ export async function ResidentMoveInPanel({
           </p>
         ) : !resolved ? (
           <section className="rounded-xl border border-border bg-card p-6">
-            <h2 className="text-base font-semibold text-foreground">House details</h2>
+            <p className="text-base font-semibold text-foreground">No placement assigned yet</p>
             <p className="mt-3 text-muted">
               We could not find an approved placement tied to this account yet. Once your property manager assigns your
               listing room, your house details will appear here automatically.

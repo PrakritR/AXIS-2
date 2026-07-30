@@ -613,7 +613,7 @@ export function ManagerPortalPageShell({
   /** Optional record count beside the title. */
   count?: number;
 }) {
-  const titleAsideDesktopOnly = Boolean(titleAside && filterRow);
+  const titleAsideDesktopOnly = Boolean(titleAside && filterRow) || Boolean(titleAside && hideTitleOnMobileNav);
   const showMobileFooterActions = titleAsideDesktopOnly;
   const showTitleOnMobile = !hideTitleOnMobileNav;
   const filterRowBorder = surfaceCard ? "border-b border-border" : "";
