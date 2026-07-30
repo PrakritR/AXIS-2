@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantRail } from "@/components/portal/portal-assistant-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { ResidentPreApplicationGuard } from "@/components/portal/resident-pre-application-guard";
+import { ResidentTourLinkOnMount } from "@/components/portal/resident-tour-link-on-mount";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -70,7 +72,14 @@ export default async function ResidentLayout({ children }: { children: React.Rea
                 name={profile?.full_name ?? null}
                 email={profile?.email ?? null}
               />
-              <ResidentPreApplicationGuard leaseAccessUnlocked={access.leaseAccessUnlocked}>
+              <Suspense fallback={null}>
+                <ResidentTourLinkOnMount />
+              </Suspense>
+              <ResidentPreApplicationGuard
+                leaseAccessUnlocked={access.leaseAccessUnlocked}
+                isPreLeaseResident={access.isPreLeaseResident}
+                hasCompletedApplicationSubmission={access.hasCompletedApplicationSubmission}
+              >
                 {children}
               </ResidentPreApplicationGuard>
             </div>

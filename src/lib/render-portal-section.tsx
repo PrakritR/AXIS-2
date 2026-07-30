@@ -22,6 +22,7 @@ import { VendorCommunication } from "@/components/portal/vendor-communication";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
 import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
+import { ResidentTourPanel } from "@/components/portal/resident-tour-panel";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
@@ -303,10 +304,22 @@ export async function renderPortalSection(
     );
   }
   if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
-    const allowDashboard =
-      section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
-    if (!allowDashboard && section !== "applications" && section !== "profile") {
-      redirect(residentPortalHomePath(residentAccess));
+    if (residentAccess.isPreLeaseResident) {
+      const preLeaseAllowed =
+        section === "dashboard" ||
+        section === "tour" ||
+        section === "applications" ||
+        section === "communication" ||
+        section === "profile";
+      if (!preLeaseAllowed) {
+        redirect(residentPortalHomePath(residentAccess));
+      }
+    } else {
+      const allowDashboard =
+        section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
+      if (!allowDashboard && section !== "applications" && section !== "profile") {
+        redirect(residentPortalHomePath(residentAccess));
+      }
     }
   }
   // Legacy path support: work-orders moved under Services tabs.
@@ -880,6 +893,11 @@ export async function renderPortalSection(
         managerSubscriptionTier={residentManagerTier}
       />
     );
+  }
+
+  if (kind === "resident" && section === "tour") {
+    if (tabParts?.length) notFound();
+    return <ResidentTourPanel />;
   }
 
   if (kind === "resident" && section === "profile") {

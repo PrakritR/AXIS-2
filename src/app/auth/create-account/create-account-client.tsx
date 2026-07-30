@@ -61,6 +61,14 @@ export default function CreateAccountClient() {
     () => searchParams.get("email")?.trim().toLowerCase() || "",
     [searchParams],
   );
+  const tourInquiryFromUrl = useMemo(
+    () => searchParams.get("tour_inquiry")?.trim() || "",
+    [searchParams],
+  );
+  const nextFromUrl = useMemo(
+    () => searchParams.get("next")?.trim() || "",
+    [searchParams],
+  );
   const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
@@ -350,6 +358,60 @@ export default function CreateAccountClient() {
 
     if (role !== "resident") {
       showToast("Manager signup starts from Partner pricing.");
+      return;
+    }
+
+    // Tour booking handoff: opt-in account creation linked to the inquiry record.
+    if (tourInquiryFromUrl) {
+      if (!email.trim().includes("@")) {
+        showToast("Enter the email you used to book your tour.");
+        return;
+      }
+      if (!phone.trim()) {
+        showToast("Enter a phone number.");
+        return;
+      }
+      if (password.length < 8) {
+        showToast("Enter a valid password (8+ characters).");
+        return;
+      }
+      setBusy(true);
+      try {
+        const res = await fetch("/api/auth/tour-resident-register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            fullName: fullName.trim() || undefined,
+            phone: phone.trim(),
+            tourInquiryId: tourInquiryFromUrl,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string; redirectTo?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not create your account. Check your details and try again.");
+          return;
+        }
+        const supabase = createSupabaseBrowserClient();
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signInError) {
+          showToast("Account created. Sign in to view your tour.");
+          router.push("/auth/sign-in");
+          return;
+        }
+        if (signInData?.user) {
+          posthog.identify(signInData.user.id);
+        }
+        window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour");
+      } catch {
+        showToast("Network error.");
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 

@@ -73,6 +73,15 @@ export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
+/** Pre-lease workspace: booked a tour or submitted an application, not yet approved. */
+export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "tour", label: "Tour", tabs: [] },
+  { section: "applications", label: "Application", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "profile", label: "Settings", tabs: [] },
+];
+
 /** @deprecated Use RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS */
 export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS = RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS;
 
@@ -105,6 +114,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
 export const RESIDENT_PORTAL_SECTION_IDS = [
   ...new Set([
     ...RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((s) => s.section),
+    ...RESIDENT_PRE_LEASE_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
   ]),
@@ -116,6 +126,7 @@ export const RESIDENT_PORTAL_SECTION_IDS = [
  */
 export const RESIDENT_RENDERED_SECTION_IDS = [
   "dashboard",
+  "tour",
   "lease",
   "payments",
   "move-in",

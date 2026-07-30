@@ -286,6 +286,20 @@ export async function notifyTenantTourRequestReceived(
   const text = buildTourRequestTenantBody(ctx);
   const email = await deliverEmail([guestEmail], subject, text);
 
+  const { data: guestProfile } = await db.from("profiles").select("id").eq("email", guestEmail).maybeSingle();
+
+  await upsertInboxThread(db, {
+    scope: RESIDENT_INBOX_SCOPE,
+    ownerUserId: (guestProfile?.id as string | null) ?? null,
+    participantEmail: guestEmail,
+    folder: "inbox",
+    fromName: "PropLane Tours",
+    fromEmail: "tours@axis.local",
+    toLine: guestEmail,
+    subject,
+    body: text,
+  });
+
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
   await textTourGuest({
