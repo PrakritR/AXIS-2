@@ -81,7 +81,12 @@ describe("resident portal redesign completeness", () => {
         join(process.cwd(), "src/components/portal/portal-metrics.tsx"),
         "utf8",
       );
-      expect(src).toMatch(/titleAsideDesktopOnly = Boolean\(titleAside && filterRow\) \|\| Boolean\(titleAside && hideTitleOnMobileNav\)/);
+      expect(src).toMatch(/useInlineTitleBand[\s\S]*hideTitleOnMobileNav/);
+      expect(src).toMatch(
+        /titleAsideDesktopOnly[\s\S]*Boolean\(titleAside && hideTitleOnMobileNav && !useInlineTitleBand\)/,
+      );
+      expect(src).toMatch(/primaryAction=\{titleAside && !titleAsideDesktopOnly/);
+      expect(src).toContain("showMobileFooterActions = titleAsideDesktopOnly");
     });
 
     it("legacy inbox panel folder tabs are not mounted from resident-communication", () => {
