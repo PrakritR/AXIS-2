@@ -87,7 +87,7 @@ export function VaulBottomSheet({
           className={cn(
             "fixed inset-x-0 bottom-0 z-[71] flex flex-col border-t border-border bg-background outline-none motion-reduce:transition-none",
             fullScreen
-              ? "top-[max(1.25rem,var(--native-safe-top,0px))] max-h-none rounded-t-2xl"
+              ? "inset-0 top-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
               : cn(
                   "h-auto max-h-[min(88dvh,36rem)] rounded-t-2xl",
                   elevatedPlacement,
@@ -99,7 +99,9 @@ export function VaulBottomSheet({
           onPointerDownOutside={allowPortaledFieldSelectInteraction}
           onInteractOutside={allowPortaledFieldSelectInteraction}
         >
-          <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+          {!fullScreen ? (
+            <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+          ) : null}
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 pb-3 pt-2">
             <div className="min-w-0 flex-1">
               <Drawer.Title className="text-base font-semibold text-foreground">{title}</Drawer.Title>

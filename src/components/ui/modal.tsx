@@ -343,7 +343,7 @@ export function Modal({
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
   /** Drawer fills the viewport below portal `lg` (no partial sheet). */
-  fullScreenMobile = false,
+  fullScreenMobile = true,
   /** When false, modal body does not scroll — children own internal overflow. */
   scrollableContent = true,
 }: {

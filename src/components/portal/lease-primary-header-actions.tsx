@@ -218,7 +218,69 @@ export function LeasePrimaryHeaderActions({
   );
 
   const mobileOverflowItems: ReactNode[] = [];
-  if (downloadButton) {
+  let mobileShowsDownloadPrimary = false;
+
+  const mobilePrimaryButtons: ReactNode[] = [];
+  if (showSendToResident) {
+    mobilePrimaryButtons.push(
+      <Button
+        key="send"
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={sendToResidentDataAttr}
+        disabled={sendToResidentBusy || sendToResidentDisabled}
+        onClick={onSendToResident}
+      >
+        {sendToResidentBusy ? "Sending…" : "Send to resident"}
+      </Button>,
+    );
+  } else if (showSign) {
+    mobilePrimaryButtons.push(
+      <Button
+        key="sign"
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={signManagerDataAttr}
+        onClick={onSignManager}
+      >
+        Sign
+      </Button>,
+    );
+  } else if (showSigningReminder) {
+    mobilePrimaryButtons.push(
+      <Button
+        key="reminder"
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={signingReminderDataAttr}
+        disabled={signingReminderBusy}
+        onClick={onSigningReminder}
+      >
+        {signingReminderBusy ? "Sending…" : "Send reminder"}
+      </Button>,
+    );
+  }
+
+  if (hasDocument && mobilePrimaryButtons.length < 2) {
+    mobileShowsDownloadPrimary = true;
+    mobilePrimaryButtons.push(
+      <Button
+        key="download"
+        type="button"
+        variant="outline"
+        className={MOBILE_FOOTER_PRIMARY_BTN}
+        data-attr={downloadDataAttr}
+        onClick={onDownload}
+      >
+        {downloadLabel}
+      </Button>,
+    );
+  }
+
+  if (hasDocument && !mobileShowsDownloadPrimary) {
     mobileOverflowItems.push(
       <DropdownMenuItem key="download" onClick={onDownload}>
         {downloadLabel}
@@ -257,42 +319,9 @@ export function LeasePrimaryHeaderActions({
 
   const mobileFooter = (
     <div className="flex w-full min-w-0 items-stretch gap-2">
-      <div className="flex min-w-0 flex-1 gap-2">
-        {showSendToResident ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={MOBILE_FOOTER_PRIMARY_BTN}
-            data-attr={sendToResidentDataAttr}
-            disabled={sendToResidentBusy || sendToResidentDisabled}
-            onClick={onSendToResident}
-          >
-            {sendToResidentBusy ? "Sending…" : "Send to resident"}
-          </Button>
-        ) : null}
-        {showSign ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={MOBILE_FOOTER_PRIMARY_BTN}
-            data-attr={signManagerDataAttr}
-            onClick={onSignManager}
-          >
-            Sign
-          </Button>
-        ) : showSigningReminder ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={MOBILE_FOOTER_PRIMARY_BTN}
-            data-attr={signingReminderDataAttr}
-            disabled={signingReminderBusy}
-            onClick={onSigningReminder}
-          >
-            {signingReminderBusy ? "Sending…" : "Send reminder"}
-          </Button>
-        ) : null}
-      </div>
+      {mobilePrimaryButtons.length > 0 ? (
+        <div className="flex min-w-0 flex-1 gap-2">{mobilePrimaryButtons}</div>
+      ) : null}
       {mobileOverflowItems.length > 0 || leaseDelete ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -327,9 +356,10 @@ export function LeasePrimaryHeaderActions({
     if (flatFooter) {
       return (
         <>
-          <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2">
+          <div className="hidden w-full min-w-0 flex-wrap items-center justify-start gap-2 md:flex">
             {desktopButtons}
           </div>
+          <div className="w-full min-w-0 md:hidden">{mobileFooter}</div>
           {uploadInput}
         </>
       );
