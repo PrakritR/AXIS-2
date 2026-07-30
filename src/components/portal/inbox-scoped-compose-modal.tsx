@@ -327,9 +327,6 @@ export function ScopedInboxComposeModal({
       onClose={onClose}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
             {scheduleLater ? "Schedule" : deliverViaSms ? "Send email + SMS" : "Send"}
           </Button>

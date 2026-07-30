@@ -1990,113 +1990,84 @@ export function ManagerResidents({
                             {showResidentLease && resolvedDetailTab === "lease" ? (
                             <ResidentDetailTabPanel
                               footerActions={residentLease ? (
-                                  <>
-                                    <LeasePrimaryHeaderActions
-                                      embedded
-                                      row={residentLease}
-                                      downloadDataAttr="resident-lease-download"
-                                      signManagerDataAttr="resident-lease-sign-manager"
-                                      signingReminderDataAttr="resident-lease-signing-reminder"
-                                      onDownload={() => {
-                                        if (residentLease.managerUploadedPdf?.dataUrl) {
-                                          downloadLeaseFromRow(residentLease);
-                                        } else if (residentLease.generatedHtml) {
-                                          printLeaseAsPdf(residentLease);
-                                        }
-                                        showToast("Lease download started.");
-                                      }}
-                                      onSignManager={() => signLeaseAsManager(residentLease)}
-                                      onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
-                                      signingReminderBusy={leaseReminderBusy}
-                                      sendToResidentDataAttr="resident-lease-send"
-                                      moveToManagerReviewDataAttr="resident-lease-move-manager-review"
-                                      onSendToResident={() => openLeaseSendPreview(selected, residentLease)}
-                                      sendToResidentBusy={leaseSendBusy}
-                                      sendToResidentDisabled={
-                                        !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
-                                        (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+                                  <LeasePrimaryHeaderActions
+                                    embedded
+                                    row={residentLease}
+                                    downloadDataAttr="resident-lease-download"
+                                    signManagerDataAttr="resident-lease-sign-manager"
+                                    signingReminderDataAttr="resident-lease-signing-reminder"
+                                    onDownload={() => {
+                                      if (residentLease.managerUploadedPdf?.dataUrl) {
+                                        downloadLeaseFromRow(residentLease);
+                                      } else if (residentLease.generatedHtml) {
+                                        printLeaseAsPdf(residentLease);
                                       }
-                                      onMoveToManagerReview={() => {
-                                        const moveResult = sendLeaseBackToManager(residentLease.id, userId);
-                                        if (!moveResult.ok) {
-                                          showToast(moveResult.error);
-                                          return;
-                                        }
-                                        appendLeaseThreadMessage(
-                                          residentLease.id,
-                                          "manager",
-                                          "Moved lease back to manager review.",
-                                          userId,
-                                        );
+                                      showToast("Lease download started.");
+                                    }}
+                                    onSignManager={() => signLeaseAsManager(residentLease)}
+                                    onSigningReminder={() => openLeaseSigningReminderPreview(selected, residentLease)}
+                                    signingReminderBusy={leaseReminderBusy}
+                                    sendToResidentDataAttr="resident-lease-send"
+                                    moveToManagerReviewDataAttr="resident-lease-move-manager-review"
+                                    onSendToResident={() => openLeaseSendPreview(selected, residentLease)}
+                                    sendToResidentBusy={leaseSendBusy}
+                                    sendToResidentDisabled={
+                                      !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
+                                      (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+                                    }
+                                    onMoveToManagerReview={() => {
+                                      const moveResult = sendLeaseBackToManager(residentLease.id, userId);
+                                      if (!moveResult.ok) {
+                                        showToast(moveResult.error);
+                                        return;
+                                      }
+                                      appendLeaseThreadMessage(
+                                        residentLease.id,
+                                        "manager",
+                                        "Moved lease back to manager review.",
+                                        userId,
+                                      );
+                                      setLeaseTick((n) => n + 1);
+                                      showToast("Lease moved to Manager Review.");
+                                    }}
+                                    canEditDocument={leaseAllowsManagerDocumentEdits(residentLease)}
+                                    generateLeaseDisabled={
+                                      generatingLeaseRowId === residentLease.id ||
+                                      !leaseGenerationSupportedForRow(residentLease).ok
+                                    }
+                                    generateLeaseBusy={generatingLeaseRowId === residentLease.id}
+                                    generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
+                                    onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
+                                    uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
+                                    onUploadPdf={async (file) => {
+                                      setUploadingLeaseRowId(residentLease.id);
+                                      const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+                                      setUploadingLeaseRowId(null);
+                                      if (result.ok) {
                                         setLeaseTick((n) => n + 1);
-                                        showToast("Lease moved to Manager Review.");
-                                      }}
-                                    />
-                                    {leaseAllowsManagerDocumentEdits(residentLease) ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={
-                                            generatingLeaseRowId === residentLease.id ||
-                                            !leaseGenerationSupportedForRow(residentLease).ok
-                                          }
-                                          title={leaseGenerationGateTitle(residentLease)}
-                                          onClick={() => openGenerateLeaseConfirm(residentLease.id)}
-                                        >
-                                          {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
-                                        </Button>
-                                        <label
-                                          className={`inline-flex cursor-pointer items-center ${PORTAL_DETAIL_BTN} hover:bg-accent/30`}
-                                        >
-                                          {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
-                                          <input
-                                            type="file"
-                                            accept="application/pdf"
-                                            className="sr-only"
-                                            onChange={async (e) => {
-                                              const file = e.target.files?.[0];
-                                              if (!file || !residentLease) return;
-                                              setUploadingLeaseRowId(residentLease.id);
-                                              const result = await managerUploadLeasePdf(residentLease.id, file, userId);
-                                              setUploadingLeaseRowId(null);
-                                              e.currentTarget.value = "";
-                                              if (result.ok) {
-                                                setLeaseTick((n) => n + 1);
-                                                showToast("Lease PDF uploaded.");
-                                              } else {
-                                                showToast(result.error ?? "Upload failed.");
-                                              }
-                                            }}
-                                          />
-                                        </label>
-                                      </>
-                                    ) : null}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                                      data-attr="resident-lease-delete"
-                                      onClick={() => {
-                                        if (
-                                          !window.confirm(
-                                            `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
-                                          )
-                                        ) {
-                                          return;
-                                        }
-                                        if (deleteLeasePipelineRow(residentLease.id, userId)) {
-                                          setLeaseTick((n) => n + 1);
-                                          showToast("Lease document deleted.");
-                                        } else {
-                                          showToast("Could not delete lease document.");
-                                        }
-                                      }}
-                                    >
-                                      Delete lease
-                                    </Button>
-                                  </>
+                                        showToast("Lease PDF uploaded.");
+                                      } else {
+                                        showToast(result.error ?? "Upload failed.");
+                                      }
+                                    }}
+                                    deleteLabel="Delete lease"
+                                    deleteDataAttr="resident-lease-delete"
+                                    onDelete={() => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      if (deleteLeasePipelineRow(residentLease.id, userId)) {
+                                        setLeaseTick((n) => n + 1);
+                                        showToast("Lease document deleted.");
+                                      } else {
+                                        showToast("Could not delete lease document.");
+                                      }
+                                    }}
+                                  />
                                 ) : undefined
                               }
                             >
@@ -2740,14 +2711,6 @@ export function ManagerResidents({
           <PortalSectionActionRow className="pt-1">
             <Button
               type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setAddPaymentMethodOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
               variant="primary"
               className="rounded-full"
               onClick={savePaymentMethodSettings}
@@ -2766,9 +2729,6 @@ export function ManagerResidents({
         onClose={() => setAddResidentOpen(false)}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)} disabled={arSaving}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
               {arSaving ? "Adding…" : "Add resident"}
             </Button>
@@ -2949,9 +2909,6 @@ export function ManagerResidents({
         onClose={() => setEditResidentOpen(false)}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
               Save resident
             </Button>
@@ -3241,9 +3198,6 @@ export function ManagerResidents({
         }}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
-              Cancel
-            </Button>
             <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
               {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
             </Button>

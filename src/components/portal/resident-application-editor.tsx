@@ -323,9 +323,13 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
       </div>
 
       <div className="mt-8 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <Button type="button" variant="outline" onClick={handleBack} disabled={saving}>
-          {step <= firstActiveStep ? "Cancel" : "Back"}
-        </Button>
+        {step > firstActiveStep ? (
+          <Button type="button" variant="outline" onClick={handleBack} disabled={saving}>
+            Back
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button type="button" onClick={handleContinue} disabled={saving}>
           {saving ? "Saving…" : step >= lastActiveStep ? "Save application" : "Continue"}
         </Button>

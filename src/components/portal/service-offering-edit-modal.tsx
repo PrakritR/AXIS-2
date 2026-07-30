@@ -151,9 +151,6 @@ export function ServiceOfferingEditModal({
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

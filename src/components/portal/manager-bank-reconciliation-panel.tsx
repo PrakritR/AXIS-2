@@ -344,9 +344,6 @@ export function ManagerBankReconciliationPanel() {
         title="Add bank account"
         footer={
           <ModalFooter>
-            <Button variant="outline" onClick={() => setAccountModal(false)}>
-              Cancel
-            </Button>
             <Button variant="primary" onClick={() => void createAccount()}>
               Save account
             </Button>
@@ -390,9 +387,6 @@ export function ManagerBankReconciliationPanel() {
         title="Add bank statement"
         footer={
           <ModalFooter>
-            <Button variant="outline" onClick={() => setStatementModal(false)}>
-              Cancel
-            </Button>
             <Button variant="primary" onClick={() => void createStatement()}>
               Save statement
             </Button>

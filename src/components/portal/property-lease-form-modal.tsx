@@ -206,9 +206,6 @@ export function PropertyLeaseFormModal({
       assistantContext="Lease — agreement type, PropLane default, custom clauses, or uploaded PDF"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={dismiss}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

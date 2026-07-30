@@ -96,9 +96,6 @@ export function PropertyApplicationFormModal({
       panelClassName="max-w-md"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" onClick={submit} data-attr="property-application-save">
             {mode === "edit" ? "Save" : "Add application"}
           </Button>

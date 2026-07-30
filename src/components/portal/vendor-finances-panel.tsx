@@ -364,9 +364,6 @@ function SubmitInvoiceModal({
       }}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving} data-attr="vendor-invoice-cancel">
-            Cancel
-          </Button>
           <Button
             variant="primary"
             onClick={handleSubmit}

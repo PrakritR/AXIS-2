@@ -231,9 +231,6 @@ export function PromotionTextGenerateModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
           <Button
             type="button"
             disabled={busy}

@@ -470,9 +470,6 @@ export function ManagerCreateWorkOrderModal({
       panelClassName="max-w-lg"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

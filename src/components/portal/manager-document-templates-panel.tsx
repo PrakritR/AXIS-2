@@ -155,9 +155,6 @@ export function ManagerDocumentTemplatesPanel() {
         footer={
           renderTarget ? (
             <ModalFooter>
-              <Button variant="outline" onClick={() => setRenderTarget(null)} disabled={busy}>
-                Cancel
-              </Button>
               <Button variant="primary" onClick={() => void downloadPdf()} disabled={busy} data-attr="document-template-download">
                 {busy ? "Generating…" : "Download PDF"}
               </Button>

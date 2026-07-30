@@ -944,9 +944,6 @@ export function ManagerPlan({
               saved card will be charged with proration. Changes apply immediately in your PropLane portal.
             </p>
             <div className="flex flex-wrap justify-start gap-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
-                Cancel
-              </Button>
               <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmPlanUpgrade()}>
                 Confirm upgrade
               </Button>

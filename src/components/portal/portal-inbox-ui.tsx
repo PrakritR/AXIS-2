@@ -142,9 +142,6 @@ export function InboxComposeModal({
       onClose={onClose}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
             Send
           </Button>
@@ -1276,16 +1273,7 @@ export function InboxScheduledCard({
                 >
                   {saving ? "Saving…" : "Save"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 min-h-0 px-3 text-[12px] text-muted"
-                  onClick={cancelEdit}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-              </div>
+                </div>
             </div>
           ) : (
             <>

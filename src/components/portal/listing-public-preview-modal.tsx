@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
-import { ModalShell } from "@/components/ui/modal";
+import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { X } from "lucide-react";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
@@ -70,10 +71,11 @@ export function ListingPublicPreviewModal({
           ) : null}
           <button
             type="button"
-            className="rounded-full bg-accent/30 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/40"
+            className={MODAL_HEADER_CLOSE_CLASS}
             onClick={onClose}
+            aria-label="Close"
           >
-            Close
+            <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
       </div>

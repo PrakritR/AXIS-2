@@ -708,7 +708,7 @@ export function ManagerPayments({
       activeId={direction}
       ariaLabel="Payment direction"
       size="toolbar"
-      className="max-w-none"
+      className="max-w-none gap-2 sm:gap-3"
     />
   );
 

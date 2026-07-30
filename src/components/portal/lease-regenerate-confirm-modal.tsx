@@ -23,9 +23,6 @@ export function LeaseRegenerateConfirmModal({
       panelClassName="max-w-md"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" className="rounded-full" onClick={onConfirm} disabled={busy}>
             {busy ? "Generating…" : "Regenerate lease"}
           </Button>
