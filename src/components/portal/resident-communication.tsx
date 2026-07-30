@@ -11,6 +11,7 @@ import {
   PortalInboxEmptyState,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
@@ -285,18 +286,33 @@ export function ResidentCommunication({
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
 
   const titleAside = (
-    <Button
-      type="button"
-      variant="primary"
-      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-      onClick={() => inboxRef.current?.openCompose()}
-    >
-      New message
-    </Button>
+    <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_ACTION_BTN}
+        onClick={() => inboxRef.current?.openCompose()}
+      >
+        New message
+      </Button>
+    </PortalSectionActionRow>
+  );
+
+  const mobileActionsRow = (
+    <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-communication-mobile-actions">
+      <Button
+        type="button"
+        variant="primary"
+        className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => inboxRef.current?.openCompose()}
+      >
+        New message
+      </Button>
+    </div>
   );
 
   return (
-    <PortalCommunicationShell title="Communication" titleAside={titleAside}>
+    <PortalCommunicationShell title="Communication" titleAside={titleAside} mobileActionsRow={mobileActionsRow}>
       <ResidentUnifiedInbox inboxRef={inboxRef} smsUiEnabled={smsUiEnabled} />
     </PortalCommunicationShell>
   );
