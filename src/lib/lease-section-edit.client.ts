@@ -40,6 +40,27 @@ export function saveLeaseSectionBodyEdits(
   }
 
   const nextHtml = applyLeaseSectionBodyEdits(baseHtml, sectionEdits);
+  return persistLeaseDocumentHtml(leaseId, nextHtml, managerUserId);
+}
+
+function persistLeaseDocumentHtml(
+  leaseId: string,
+  nextHtml: string,
+  managerUserId?: string | null,
+): { ok: true; row: LeasePipelineRow } | { ok: false; error: string } {
+  const row = readLeasePipeline(managerUserId).find((r) => r.id === leaseId);
+  if (!row) return { ok: false, error: "Lease not found." };
+  if (!leaseAllowsManagerDocumentEdits(row)) {
+    return { ok: false, error: "This lease can no longer be edited." };
+  }
+  const baseHtml = leaseDocumentHtmlForSectionEdit(row);
+  if (!baseHtml) {
+    return { ok: false, error: "Upload a PDF lease or generate HTML before editing." };
+  }
+  if (nextHtml.trim() === baseHtml.trim()) {
+    return { ok: false, error: "No document changes to save." };
+  }
+
   const iso = new Date().toISOString();
   const version = (row.versionNumber ?? row.pdfVersion ?? 0) + 1;
   const saved = updateLeasePipelineRow(
@@ -56,7 +77,16 @@ export function saveLeaseSectionBodyEdits(
     },
     managerUserId,
   );
-  if (!saved) return { ok: false, error: "Could not save section edits." };
+  if (!saved) return { ok: false, error: "Could not save document edits." };
   const updated = readLeasePipeline(managerUserId).find((r) => r.id === leaseId);
   return updated ? { ok: true, row: updated } : { ok: false, error: "Saved but could not reload the lease." };
+}
+
+/** Save the full generated HTML after visual or multi-section editing. */
+export function saveLeaseDocumentHtml(
+  leaseId: string,
+  documentHtml: string,
+  managerUserId?: string | null,
+): { ok: true; row: LeasePipelineRow } | { ok: false; error: string } {
+  return persistLeaseDocumentHtml(leaseId, documentHtml, managerUserId);
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { applyLeaseSectionBodyEdits } from "@/lib/lease-html-sections";
 import { regenerateLeaseHtmlForApplication } from "@/lib/lease-amendment.server";
 import {
   leaseAllowsManagerDocumentEdits,
@@ -101,6 +102,79 @@ export async function patchLeasePacketForManagerReview(
           versionNumber: version,
         }
       : {}),
+    status: "Manager Review",
+    currentActorRole: "manager",
+    bucket: "manager",
+    updatedAtIso: iso,
+    updated: "just now",
+  });
+
+  const { error: upsertError } = await db.from("portal_lease_pipeline_records").upsert(
+    {
+      id: record.id,
+      manager_user_id: landlordId,
+      resident_user_id: updatedRow.residentUserId ?? null,
+      resident_email: updatedRow.residentEmail.trim().toLowerCase() || null,
+      property_id: record.property_id ?? updatedRow.propertyId ?? null,
+      status: "manager",
+      row_data: updatedRow,
+      updated_at: iso,
+    },
+    { onConflict: "id" },
+  );
+  if (upsertError) return { ok: false, error: upsertError.message };
+
+  return { ok: true, row: updatedRow };
+}
+
+/** Patch section body HTML on a generated lease without regenerating from application data. */
+export async function patchLeaseDocumentSectionsForManagerReview(
+  db: SupabaseClient,
+  landlordId: string,
+  input: { leaseId: string; sectionBodies: Readonly<Record<string, string>> },
+): Promise<{ ok: true; row: LeasePipelineRow } | { ok: false; error: string }> {
+  const leaseId = input.leaseId.trim();
+  if (!leaseId) return { ok: false, error: "Lease id is required." };
+  const sectionIds = Object.keys(input.sectionBodies).filter((id) => id.trim());
+  if (!sectionIds.length) return { ok: false, error: "Provide at least one section body to update." };
+
+  const { data: record, error: loadError } = await db
+    .from("portal_lease_pipeline_records")
+    .select("id, manager_user_id, property_id, row_data")
+    .eq("id", leaseId)
+    .eq("manager_user_id", landlordId)
+    .maybeSingle();
+  if (loadError) return { ok: false, error: loadError.message };
+  if (!record?.row_data) {
+    return { ok: false, error: "No lease with that id belongs to this landlord." };
+  }
+
+  const leaseRow = normalizeLeasePipelineRow(record.row_data);
+  if (!leaseAllowsManagerDocumentEdits(leaseRow)) {
+    return {
+      ok: false,
+      error: "This lease can no longer be edited (it has signatures or has left manager review).",
+    };
+  }
+  const baseHtml = leaseRow.generatedHtml?.trim();
+  if (!baseHtml || leaseRow.managerUploadedPdf?.dataUrl) {
+    return { ok: false, error: "Section editing requires a generated HTML lease (not an uploaded PDF)." };
+  }
+
+  const nextHtml = applyLeaseSectionBodyEdits(baseHtml, input.sectionBodies);
+  if (nextHtml === baseHtml) {
+    return { ok: false, error: "No section content changed." };
+  }
+
+  const iso = new Date().toISOString();
+  const version = (leaseRow.versionNumber ?? leaseRow.pdfVersion ?? 0) + 1;
+  const updatedRow = normalizeLeasePipelineRow({
+    ...leaseRow,
+    generatedHtml: nextHtml,
+    managerUploadedPdf: null,
+    generatedAtIso: iso,
+    pdfVersion: version,
+    versionNumber: version,
     status: "Manager Review",
     currentActorRole: "manager",
     bucket: "manager",

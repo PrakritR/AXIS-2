@@ -4,7 +4,7 @@ import {
   parseLeaseSectionEditableParts,
   rebuildBodyHtmlFromParts,
 } from "@/lib/lease-section-structured-edit";
-import { injectLeasePreviewSectionMarkers, parseLeaseHtmlSections } from "@/lib/lease-html-sections";
+import { injectLeasePreviewSectionMarkers, injectLeaseVisualEditDocument, parseLeaseHtmlSections } from "@/lib/lease-html-sections";
 
 describe("lease-section-structured-edit", () => {
   const body = `
@@ -45,5 +45,14 @@ describe("injectLeasePreviewSectionMarkers", () => {
       expect(marked).toContain(`data-lease-section-id="${section.id}"`);
     }
     expect(marked).toContain("lease-preview-section-dblclick");
+  });
+});
+
+describe("injectLeaseVisualEditDocument", () => {
+  it("wraps sections and posts focus on double-click", () => {
+    const html = `<!DOCTYPE html><html><body><h2>1. Parties</h2><p>A</p></body></html>`;
+    const marked = injectLeaseVisualEditDocument(html);
+    expect(marked).toContain("lease-visual-section-focus");
+    expect(marked).toContain('data-lease-section-id="1-parties"');
   });
 });

@@ -26,6 +26,8 @@ type Props = {
   /** Section opened from preview double-click. */
   selectedSectionId?: string | null;
   onFocusSectionHandled?: () => void;
+  /** Left panel: only the active section (synced from document preview double-click). */
+  focusOnly?: boolean;
 };
 
 function draftsFromSections(sections: LeaseHtmlSection[]): DraftMap {
@@ -41,6 +43,7 @@ export function LeaseSectionEditor({
   fullHeight = false,
   selectedSectionId = null,
   onFocusSectionHandled,
+  focusOnly = false,
 }: Props) {
   const sections = useMemo(() => readLeaseSectionsForEdit(row), [row]);
   const documentStyles = useMemo(
@@ -128,6 +131,82 @@ export function LeaseSectionEditor({
     return (
       <div className={cn("rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted", className)}>
         No numbered sections were found in this lease document.
+      </div>
+    );
+  }
+
+  const activeSection = openSectionId ? sections.find((section) => section.id === openSectionId) : null;
+
+  if (focusOnly) {
+    return (
+      <div
+        className={cn("flex min-h-0 flex-1 flex-col", className)}
+        data-attr="lease-section-editor"
+      >
+        {error ? <p className="mb-2 text-sm text-rose-700">{error}</p> : null}
+        {!activeSection ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-accent/20 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-foreground">Double-click a section in the document</p>
+            <p className="mt-1 max-w-[16rem] text-xs text-muted">
+              Field boxes and the HTML editor open here for the section you select on the right.
+            </p>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-2">
+              <h3 className="min-w-0 text-sm font-semibold text-foreground">{activeSection.title}</h3>
+              {(drafts[activeSection.id] ?? "") !== activeSection.bodyHtml ? (
+                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                  Unsaved
+                </span>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+              <LeaseSectionStructuredEditor
+                sectionId={activeSection.id}
+                title={activeSection.title}
+                value={drafts[activeSection.id] ?? ""}
+                documentStyles={documentStyles}
+                onChange={(html) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [activeSection.id]: html,
+                  }))
+                }
+              />
+            </div>
+            <div className="flex shrink-0 justify-end gap-2 border-t border-border pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={
+                  savingId !== null || (drafts[activeSection.id] ?? "") === activeSection.bodyHtml
+                }
+                onClick={() =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [activeSection.id]: activeSection.bodyHtml,
+                  }))
+                }
+              >
+                Reset
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                disabled={
+                  savingId !== null || (drafts[activeSection.id] ?? "") === activeSection.bodyHtml
+                }
+                onClick={() => void saveSection(activeSection.id)}
+                data-attr="lease-section-save"
+              >
+                {savingId === activeSection.id ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

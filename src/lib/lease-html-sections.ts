@@ -148,6 +148,7 @@ const LEASE_PREVIEW_SECTION_STYLE = `
 .lease-preview-section { transition: outline-color 0.15s ease, background-color 0.15s ease; }
 .lease-preview-section:hover { outline: 2px dashed rgba(47, 107, 255, 0.45); outline-offset: 4px; background: rgba(47, 107, 255, 0.04); }
 .lease-preview-section:focus { outline: 2px solid rgba(47, 107, 255, 0.7); outline-offset: 4px; }
+.lease-visual-section-active { outline: 2px solid rgba(47, 107, 255, 0.75) !important; outline-offset: 4px; background: rgba(47, 107, 255, 0.06) !important; }
 `;
 
 const LEASE_PREVIEW_SECTION_SCRIPT = `
@@ -165,6 +166,10 @@ const LEASE_PREVIEW_SECTION_SCRIPT = `
         event.stopPropagation();
         var sectionId = el.getAttribute("data-lease-section-id");
         if (!sectionId) return;
+        document.querySelectorAll("[data-lease-section-id]").forEach(function (node) {
+          node.classList.toggle("lease-visual-section-active", node.getAttribute("data-lease-section-id") === sectionId);
+        });
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
         parent.postMessage({ type: "lease-preview-section-dblclick", sectionId: sectionId }, "*");
       });
     });
@@ -177,14 +182,50 @@ const LEASE_PREVIEW_SECTION_SCRIPT = `
 })();
 </script>`;
 
-/** Wrap each lease section for interactive preview (double-click posts section id to parent). */
-export function injectLeasePreviewSectionMarkers(html: string): string {
+const LEASE_VISUAL_EDIT_EXTRA_STYLE = `
+.lease-visual-section-active { outline: 2px solid rgba(47, 107, 255, 0.75) !important; outline-offset: 4px; background: rgba(47, 107, 255, 0.06) !important; }
+body[contenteditable="true"] { outline: none; }
+body[contenteditable="true"]:focus { outline: none; }
+`;
+
+const LEASE_VISUAL_EDIT_SCRIPT = `
+<script>
+(function () {
+  function bind() {
+    document.querySelectorAll("[data-lease-section-id]").forEach(function (el) {
+      if (el.getAttribute("data-lease-bound") === "1") return;
+      el.setAttribute("data-lease-bound", "1");
+      el.setAttribute("title", "Double-click to edit this section");
+      el.addEventListener("dblclick", function () {
+        var sectionId = el.getAttribute("data-lease-section-id");
+        if (!sectionId) return;
+        document.querySelectorAll("[data-lease-section-id]").forEach(function (node) {
+          node.classList.toggle("lease-visual-section-active", node.getAttribute("data-lease-section-id") === sectionId);
+        });
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        parent.postMessage({ type: "lease-visual-section-focus", sectionId: sectionId }, "*");
+      });
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+})();
+</script>`;
+
+function injectLeaseSectionMarkers(
+  html: string,
+  options: { extraStyle: string; script: string },
+): string {
   const sections = parseLeaseHtmlSections(html);
   if (!sections.length) return html;
 
+  const styleBlock = `${LEASE_PREVIEW_SECTION_STYLE}${options.extraStyle}`;
   const styledHtml = html.includes("</head>")
-    ? html.replace("</head>", `<style>${LEASE_PREVIEW_SECTION_STYLE}</style></head>`)
-    : `<style>${LEASE_PREVIEW_SECTION_STYLE}</style>${html}`;
+    ? html.replace("</head>", `<style>${styleBlock}</style></head>`)
+    : `<style>${styleBlock}</style>${html}`;
 
   let preamble = "";
   let offset = 0;
@@ -206,6 +247,31 @@ export function injectLeasePreviewSectionMarkers(html: string): string {
 
   const merged = `${preamble}${body}`;
   return merged.includes("</body>")
-    ? merged.replace("</body>", `${LEASE_PREVIEW_SECTION_SCRIPT}</body>`)
-    : `${merged}${LEASE_PREVIEW_SECTION_SCRIPT}`;
+    ? merged.replace("</body>", `${options.script}</body>`)
+    : `${merged}${options.script}`;
+}
+
+/** Serialize a live editor document back to stored lease HTML. */
+export function serializeLeaseEditorDocument(doc: Document): string {
+  const doctype = doc.doctype;
+  const prefix = doctype
+    ? `<!DOCTYPE ${doctype.name}${doctype.publicId ? ` PUBLIC "${doctype.publicId}"` : ""}${doctype.systemId ? ` "${doctype.systemId}"` : ""}>\n`
+    : "<!DOCTYPE html>\n";
+  return `${prefix}${doc.documentElement.outerHTML}`;
+}
+
+/** Wrap each lease section for interactive preview (double-click posts section id to parent). */
+export function injectLeasePreviewSectionMarkers(html: string): string {
+  return injectLeaseSectionMarkers(html, {
+    extraStyle: "",
+    script: LEASE_PREVIEW_SECTION_SCRIPT,
+  });
+}
+
+/** Full-document visual editor: section click posts focus; entire body is contentEditable in the host iframe. */
+export function injectLeaseVisualEditDocument(html: string): string {
+  return injectLeaseSectionMarkers(html, {
+    extraStyle: LEASE_VISUAL_EDIT_EXTRA_STYLE,
+    script: LEASE_VISUAL_EDIT_SCRIPT,
+  });
 }
