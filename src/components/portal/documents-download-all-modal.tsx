@@ -13,11 +13,11 @@ import { readCosignerSubmissionsForSignerAppId } from "@/lib/cosigner-submission
 import { DEMO_RESIDENT_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { readChargesForResident } from "@/lib/household-charges";
 import {
-  runLeaseDownload,
   findLeaseForResidentEmail,
   hasBothLeaseSignatures,
   readLeasePipeline,
   syncLeasePipelineFromServer,
+  downloadLeaseFromRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
