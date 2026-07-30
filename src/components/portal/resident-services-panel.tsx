@@ -11,10 +11,11 @@ import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -33,7 +34,7 @@ import {
   createPortalRowExpandClick,
   portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
-import { PillTabs, TabNav } from "@/components/ui/tabs";
+import { PillTabs } from "@/components/ui/tabs";
 import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
 import { formatPreferredArrival, parsePreferredArrival } from "@/lib/preferred-arrival";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
@@ -1127,63 +1128,84 @@ export function ResidentServicesPanel({
     !requestTypeId ||
     (serviceRequestIsCustom ? !customTitle.trim() || !customPriceLimit.trim() : !serviceRequestCatalogSelected);
 
+  const servicesHeaderAction =
+    activeTab === "work-orders" ? (
+      <Button
+        type="button"
+        className={PORTAL_HEADER_ACTION_BTN}
+        data-attr="resident-report-maintenance"
+        disabled={!servicesUnlocked}
+        onClick={() => {
+          if (!servicesUnlocked) {
+            showToast("Services unlock after your lease is fully signed.");
+            return;
+          }
+          setModalMode("maintenance");
+        }}
+      >
+        Report
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        className={PORTAL_HEADER_ACTION_BTN}
+        disabled={!servicesUnlocked}
+        onClick={() => {
+          if (!servicesUnlocked) {
+            showToast("Services unlock after your lease is fully signed.");
+            return;
+          }
+          setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
+          setModalMode("service");
+        }}
+      >
+        Request add-on service
+      </Button>
+    );
+
   return (
     <ManagerPortalPageShell
       title="Services"
+      hideTitleOnMobileNav
       titleAside={
-        activeTab === "work-orders" ? (
-          <Button
-            type="button"
-            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
-            data-attr="resident-report-maintenance"
-            disabled={!servicesUnlocked}
-            onClick={() => {
-              if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
-                return;
-              }
-              setModalMode("maintenance");
-            }}
-          >
-            Report
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
-            disabled={!servicesUnlocked}
-            onClick={() => {
-              if (!servicesUnlocked) {
-                showToast("Services unlock after your lease is fully signed.");
-                return;
-              }
-              setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
-              setModalMode("service");
-            }}
-          >
-            Request add-on service
-          </Button>
-        )
+        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+          {servicesHeaderAction}
+        </PortalSectionActionRow>
       }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav
-            activeId={activeTab}
-            items={[
-              { id: "requests", label: "Add-on services", href: `${basePath}/services/requests` },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-            ]}
-          />
-        </ManagerPortalFilterRow>
-      }
+      compactFilterRow
     >
+      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-services-mobile-actions">
+        {servicesHeaderAction}
+      </div>
+      <PortalListControlStack
+        className="mb-3 max-lg:mb-4"
+        destinationInset
+        destinations={[
+          {
+            id: "requests",
+            label: "Add-on services",
+            href: `${basePath}/services/requests`,
+            count: sortedRequests.length,
+            dataAttr: "resident-services-tab-requests",
+          },
+          {
+            id: "work-orders",
+            label: "Work orders",
+            href: `${basePath}/services/work-orders`,
+            count: myRows.length,
+            dataAttr: "resident-services-tab-work-orders",
+          },
+        ]}
+        activeDestinationId={activeTab}
+        destinationAriaLabel="Services"
+      />
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
       {!servicesUnlocked ? (
-        <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
-          <p className="font-medium text-foreground">Services unlock after your lease is fully signed</p>
-          <p className="mt-1">Maintenance and add-on service requests become available once you and your manager have both signed.</p>
-        </div>
+        <p className="mb-4 rounded-lg border border-border bg-[var(--status-pending-bg)] px-4 py-3 text-sm text-foreground">
+          <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
+          Maintenance and add-on service requests become available once you and your manager have both signed.
+        </p>
       ) : null}
 
       {activeTab === "requests" ? (
