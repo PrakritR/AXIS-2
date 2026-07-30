@@ -4,15 +4,14 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ManagerPortalPageShell,
-  portalDashboardWelcomeSubtitle,
-  PortalDashboardSectionHeader,
   PORTAL_DASHBOARD_STACK,
   PortalDashboardKpiRow,
   PortalDashboardKpiTile,
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import {
-  PortalPreviewOverflowLink,
+  PortalTableExpandChevron,
+  isPortalRowClickIgnored,
   usePortalPreviewSlice,
 } from "@/components/portal/portal-data-table";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
@@ -67,14 +66,30 @@ import {
 const BASE = "/resident";
 
 /** Semantic status foreground tokens for the leading issue-row dots. */
-const DOT_OVERDUE = "var(--status-overdue-fg)";
-const DOT_PENDING = "var(--status-pending-fg)";
 const DOT_CONFIRMED = "var(--status-confirmed-fg)";
-const DOT_INFO = "var(--status-approved-fg)";
 
 type AppStatus = "pending" | "approved" | "rejected";
 
 type PillTone = "pending" | "success" | "danger" | "info" | "neutral";
+
+type AttentionTone = "pending" | "success" | "danger" | "info";
+const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
+  danger: { fg: "var(--status-overdue-fg)", bg: "var(--status-overdue-bg)" },
+  pending: { fg: "var(--status-pending-fg)", bg: "var(--status-pending-bg)" },
+  info: { fg: "var(--status-approved-fg)", bg: "var(--status-approved-bg)" },
+  success: { fg: "var(--status-confirmed-fg)", bg: "var(--status-confirmed-bg)" },
+};
+
+function sectionAccentDot(tone: AttentionTone): string {
+  return ATTENTION_TONE[tone].fg;
+}
+
+type ResidentDashboardSectionId =
+  | "payments"
+  | "lease"
+  | "applications"
+  | "services"
+  | "communication";
 
 /** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
 function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
@@ -116,7 +131,7 @@ function IssueRow({
     <Link
       href={href}
       data-attr={dataAttr}
-      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      className="group flex items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_40%,transparent)] [html[data-native]_&]:gap-2.5 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
     >
       {dot ? (
         <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
@@ -148,14 +163,15 @@ function IssueRow({
 }
 
 /**
- * One "Needs attention" group: tiny uppercase label + section link, then a
- * hairline-bordered stack of dense issue rows (preview-sliced like the old
- * section cards, so native/mobile row limits + overflow link are preserved).
+ * One "Needs attention" group — collapsible card with status rail, matching the
+ * manager dashboard. Opens by default only when it has items.
  */
 function AttentionGroup<T>({
   title,
   href,
-  linkLabel,
+  sectionId,
+  tone,
+  order = 0,
   badge,
   items,
   emptyMessage,
@@ -164,35 +180,105 @@ function AttentionGroup<T>({
 }: {
   title: string;
   href: string;
-  linkLabel: string;
+  sectionId: ResidentDashboardSectionId;
+  tone: AttentionTone;
+  order?: number;
   badge?: ReactNode;
   items: T[];
   emptyMessage: string;
   keyForItem: (item: T) => string;
-  renderRow: (item: T) => ReactNode;
+  renderRow: (item: T, sectionTone: AttentionTone) => ReactNode;
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
+  const count = items.length;
+  const isEmpty = count === 0;
+  const accent = ATTENTION_TONE[tone];
+  const [override, setOverride] = useState<boolean | null>(null);
+  const open = override ?? !isEmpty;
 
   return (
-    <div className="space-y-2 [html[data-native]_&]:space-y-1.5">
-      <PortalDashboardSectionHeader title={title} href={href} linkLabel={linkLabel} badge={badge} />
-      {items.length === 0 ? (
-        <p className="text-sm text-muted [html[data-native]_&]:text-xs">{emptyMessage}</p>
-      ) : (
-        <>
-          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-            {visible.map((item) => (
-              <Fragment key={keyForItem(item)}>{renderRow(item)}</Fragment>
-            ))}
+    <div
+      className="pl-attn-enter overflow-hidden rounded-xl border border-border bg-card"
+      style={{
+        animationDelay: `${Math.min(order, 8) * 55}ms`,
+        borderLeftWidth: isEmpty ? undefined : 3,
+        borderLeftColor: isEmpty ? undefined : accent.fg,
+        background: isEmpty ? undefined : `color-mix(in srgb, ${accent.bg} 32%, var(--card))`,
+        ["--attn-section-bg" as string]: accent.bg,
+        ["--attn-section-fg" as string]: accent.fg,
+      }}
+    >
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        data-attr={`resident-dashboard-attention-toggle-${sectionId}`}
+        onClick={() => setOverride(!open)}
+        onKeyDown={(e) => {
+          if (isPortalRowClickIgnored(e.target)) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOverride(!open);
+          }
+        }}
+        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+      >
+        <PortalTableExpandChevron expanded={open} />
+        <h3
+          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug"
+          style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
+        >
+          {title}
+        </h3>
+        <span
+          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
+          style={
+            isEmpty
+              ? { color: "color-mix(in srgb, var(--muted) 60%, transparent)" }
+              : { background: accent.bg, color: accent.fg }
+          }
+        >
+          {count}
+        </span>
+        {badge ? <span className="shrink-0">{badge}</span> : null}
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Open ${title}`}
+          data-attr="resident-dashboard-attention-link"
+          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
+        >
+          →
+        </Link>
+      </div>
+      {open ? (
+        isEmpty ? (
+          <p className="border-t border-border px-3.5 py-2.5 text-xs text-muted [html[data-native]_&]:px-3 [html[data-native]_&]:py-2">
+            {emptyMessage}
+          </p>
+        ) : (
+          <div className="border-t border-border">
+            <div className="divide-y divide-border/80">
+              {visible.map((item) => (
+                <Fragment key={keyForItem(item)}>{renderRow(item, tone)}</Fragment>
+              ))}
+            </div>
+            {overflow > 0 ? (
+              <div className="border-t border-border/80 px-3.5 py-2 [html[data-native]_&]:px-3">
+                <Link
+                  href={href}
+                  className="inline-block text-xs font-semibold hover:underline underline-offset-2"
+                  style={{ color: accent.fg }}
+                >
+                  {isNative ? `View all (${count}) →` : `View all ${count} →`}
+                </Link>
+              </div>
+            ) : null}
           </div>
-          <PortalPreviewOverflowLink
-            overflow={overflow}
-            href={href}
-            label={isNative ? `View all (${items.length}) →` : undefined}
-          />
-        </>
-      )}
+        )
+      ) : null}
     </div>
   );
 }
@@ -238,17 +324,6 @@ function pillToneForBadgeTone(tone: string): PillTone {
     case "blue": return "info";
     case "slate": return "neutral";
     default: return "pending";
-  }
-}
-
-/** Map the legacy badge tone palette onto a leading status dot. */
-function dotForBadgeTone(tone: string): string {
-  switch (tone) {
-    case "emerald": return DOT_CONFIRMED;
-    case "rose": return DOT_OVERDUE;
-    case "sky":
-    case "blue": return DOT_INFO;
-    default: return DOT_PENDING;
   }
 }
 
@@ -495,6 +570,7 @@ export function ResidentDashboard({
 
   const welcomeName =
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
+  void welcomeName;
 
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
@@ -528,12 +604,10 @@ export function ResidentDashboard({
   return (
     <ManagerPortalPageShell
       title="Dashboard"
-      subtitle={portalDashboardWelcomeSubtitle(welcomeName)}
       hideTitleOnNative
       hideTitleOnMobileNav
-      welcomeSubtitle
     >
-      <div className={PORTAL_DASHBOARD_STACK}>
+      <div className={`min-w-0 ${PORTAL_DASHBOARD_STACK}`}>
         <PortalDashboardKpiRow>
             <PortalDashboardKpiTile
               label="Balance due"
@@ -579,14 +653,20 @@ export function ResidentDashboard({
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
         <div className="space-y-4 [html[data-native]_&]:space-y-3">
-          <div className="flex items-center gap-2">
-            <span aria-hidden className="text-primary">
+          <div className="flex items-center gap-2.5">
+            <span aria-hidden className="text-primary text-xl leading-none [html[data-native]_&]:text-lg">
               ✦
             </span>
-            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">Needs attention</h2>
+            <h2 className="text-xl font-bold leading-tight tracking-[-0.02em] text-foreground [html[data-native]_&]:text-lg">
+              Needs attention
+            </h2>
             {openCount > 0 ? (
-              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
-                <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2.5 py-0.5 text-[11px] font-medium text-muted">
+                <span
+                  aria-hidden
+                  className="pl-attn-pulse size-1.5 rounded-full"
+                  style={{ background: DOT_CONFIRMED }}
+                />
                 {openCount} open
               </span>
             ) : null}
@@ -595,7 +675,9 @@ export function ResidentDashboard({
           <AttentionGroup
             title="Pending & overdue payments"
             href={`${BASE}/payments`}
-            linkLabel="Payments →"
+            sectionId="payments"
+            tone={overdueChargeCount > 0 ? "danger" : "pending"}
+            order={0}
             badge={
               overdueChargeCount > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
@@ -607,12 +689,12 @@ export function ResidentDashboard({
             items={pendingCharges}
             emptyMessage="No outstanding charges."
             keyForItem={(charge) => charge.id}
-            renderRow={(charge) => {
+            renderRow={(charge, sectionTone) => {
               const overdue = isHouseholdChargeOverdue(charge);
               return (
                 <IssueRow
                   href={`${BASE}/payments`}
-                  dot={overdue ? DOT_OVERDUE : DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={charge.title || "Charge"}
                   subtitle={formatCompactChargeLine(
                     charge.title || "Charge",
@@ -635,14 +717,16 @@ export function ResidentDashboard({
           <AttentionGroup
             title="Lease"
             href={`${BASE}/lease`}
-            linkLabel="Lease →"
+            sectionId="lease"
+            tone={lease.cta ? "info" : "pending"}
+            order={1}
             items={leaseItems}
             emptyMessage={leaseEmptyMessage}
             keyForItem={(row) => row.id}
-            renderRow={() => (
+            renderRow={(_row, sectionTone) => (
               <IssueRow
                 href={`${BASE}/lease`}
-                dot={lease.cta ? DOT_INFO : dotForBadgeTone(lease.tone)}
+                dot={sectionAccentDot(sectionTone)}
                 title={lease.cta ? "Signature needed" : lease.tone === "emerald" ? "Lease active" : "Lease status"}
                 subtitle={leaseSubtitle}
                 meta={leaseRow?.signedRentLabel}
@@ -655,7 +739,9 @@ export function ResidentDashboard({
           <AttentionGroup
             title="Applications"
             href={`${BASE}/applications`}
-            linkLabel="Applications →"
+            sectionId="applications"
+            tone="pending"
+            order={2}
             badge={
               pendingApplicationCount > 0 || approvedApplicationCount > 0 ? (
                 <span className="flex flex-wrap items-center gap-1.5">
@@ -671,12 +757,12 @@ export function ResidentDashboard({
             items={applicationRows}
             emptyMessage="No applications yet. Start your first application."
             keyForItem={(row) => row.id}
-            renderRow={(row) => {
+            renderRow={(row, sectionTone) => {
               const badge = applicationStatusBadge(row);
               return (
                 <IssueRow
                   href={`${BASE}/applications`}
-                  dot={dotForBadgeTone(badge.tone)}
+                  dot={sectionAccentDot(sectionTone)}
                   title={row.name?.trim() || "Application"}
                   subtitle={applicationSubtitle(row)}
                   pill={<StatusPill tone={pillToneForBadgeTone(badge.tone)}>{badge.label}</StatusPill>}
@@ -689,7 +775,9 @@ export function ResidentDashboard({
           <AttentionGroup
             title="Services"
             href={servicesHref}
-            linkLabel="Services →"
+            sectionId="services"
+            tone="pending"
+            order={3}
             badge={
               canUseFullPortal &&
               (openWorkOrderCount > 0 ||
@@ -718,14 +806,14 @@ export function ResidentDashboard({
                 : "Available after your application is approved."
             }
             keyForItem={(item) => item.id}
-            renderRow={(item) => {
+            renderRow={(item, sectionTone) => {
               if (item.kind === "request") {
                 const approved = item.row.status === "approved";
                 const propertyName = getPropertyById(item.row.propertyId)?.buildingName?.trim() || "";
                 return (
                   <IssueRow
                     href={servicesHref}
-                    dot={approved ? DOT_CONFIRMED : DOT_PENDING}
+                    dot={sectionAccentDot(sectionTone)}
                     title={item.row.offerName?.trim() || "Add-on service"}
                     subtitle={propertyName || "Add-on service"}
                     pill={
@@ -741,7 +829,7 @@ export function ResidentDashboard({
               return (
                 <IssueRow
                   href={`${BASE}/services/work-orders`}
-                  dot={scheduled ? DOT_INFO : DOT_PENDING}
+                  dot={sectionAccentDot(sectionTone)}
                   title={item.row.title?.trim() || "Work order"}
                   subtitle={[item.row.propertyName, item.row.unit].filter(Boolean).join(" · ") || "Maintenance"}
                   pill={
@@ -758,7 +846,9 @@ export function ResidentDashboard({
           <AttentionGroup
             title="Communication"
             href={`${BASE}/communication/inbox/unopened`}
-            linkLabel="Communication →"
+            sectionId="communication"
+            tone="info"
+            order={4}
             badge={
               inbox > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-approved-fg)]">
@@ -770,10 +860,10 @@ export function ResidentDashboard({
             items={inboxThreads}
             emptyMessage="No unread messages. Communication is clear."
             keyForItem={(thread) => thread.id}
-            renderRow={(thread) => (
+            renderRow={(thread, sectionTone) => (
               <IssueRow
                 href={`${BASE}/communication/inbox/unopened`}
-                dot={DOT_INFO}
+                dot={sectionAccentDot(sectionTone)}
                 title={thread.from || "Unknown sender"}
                 subtitle={thread.subject || thread.preview || "—"}
                 pill={<StatusPill tone="info">Unread</StatusPill>}

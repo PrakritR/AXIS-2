@@ -284,8 +284,28 @@ export async function renderPortalSection(
         })
       : false;
   if (kind === "resident" && section === "applications") {
-    if (tabParts?.length) notFound();
-    return <ResidentApplicationsPanel />;
+    const RESIDENT_APP_BUCKETS = ["pending", "approved", "rejected"] as const;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/applications/pending`);
+    }
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const applicationBucket = RESIDENT_APP_BUCKETS.includes(
+      tabRaw as (typeof RESIDENT_APP_BUCKETS)[number],
+    )
+      ? (tabRaw as (typeof RESIDENT_APP_BUCKETS)[number])
+      : "pending";
+    if (tabRaw !== applicationBucket) {
+      redirect(`${def.basePath}/applications/${applicationBucket}`);
+    }
+    const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+    return (
+      <ResidentApplicationsPanel
+        bucket={applicationBucket}
+        basePath={def.basePath}
+        applicationId={applicationId}
+      />
+    );
   }
   if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
     const allowDashboard =
@@ -873,27 +893,29 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "payments") {
-    if (tabParts && tabParts.length > 1) notFound();
-    // Payments is Charges-only — the Summary/Statements tabs and the tab switcher
-    // were removed. Any legacy sub-path (charges/summary/statements or the old
-    // pending/overdue/paid/balance status tabs) redirects to the bare
-    // `/payments` URL, preserving a status pill where one existed so old deep
-    // links land on the right filter instead of 404ing.
-    const payTab = tabParts?.[0];
-    if (payTab) {
-      const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[payTab];
-      if (!legacy) notFound();
-      redirect(
-        `${def.basePath}/payments${searchSuffix(
-          searchParams,
-          legacy.status ? { status: legacy.status } : undefined,
-        )}`,
-      );
+    const PAY_BUCKETS = ["pending", "overdue", "paid"] as const;
+    if (!tabParts?.length) {
+      const legacyStatus = typeof searchParams?.status === "string" ? searchParams.status : undefined;
+      const bucket =
+        legacyStatus === "overdue" || legacyStatus === "paid" || legacyStatus === "pending"
+          ? legacyStatus
+          : "pending";
+      redirect(`${def.basePath}/payments/${bucket}`);
     }
-    const statusParam = searchParams?.status;
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const paymentBucket = PAY_BUCKETS.includes(tabRaw as (typeof PAY_BUCKETS)[number])
+      ? (tabRaw as (typeof PAY_BUCKETS)[number])
+      : "pending";
+    if (tabRaw !== paymentBucket) {
+      redirect(`${def.basePath}/payments/${paymentBucket}`);
+    }
+    const chargeId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
     return (
       <ResidentPaymentsPanel
-        initialStatus={typeof statusParam === "string" ? statusParam : undefined}
+        bucket={paymentBucket}
+        basePath={def.basePath}
+        chargeId={chargeId}
       />
     );
   }

@@ -147,6 +147,32 @@ export function applicationDetailHref(
   return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
 }
 
+/** Resident application list buckets (Pending / Approved / Rejected). */
+export const RESIDENT_APPLICATION_BUCKETS = ["pending", "approved", "rejected"] as const;
+export type ResidentApplicationBucketId = (typeof RESIDENT_APPLICATION_BUCKETS)[number];
+
+export function parseResidentApplicationBucket(raw: string | undefined | null): ResidentApplicationBucketId {
+  if (raw && (RESIDENT_APPLICATION_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as ResidentApplicationBucketId;
+  }
+  return "pending";
+}
+
+export function residentApplicationListHref(
+  basePath: string,
+  bucket: ResidentApplicationBucketId,
+): string {
+  return `${basePath}/applications/${bucket}`;
+}
+
+export function residentApplicationDetailHref(
+  basePath: string,
+  bucket: ResidentApplicationBucketId,
+  applicationId: string,
+): string {
+  return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
+}
+
 /** Manager lease pipeline tabs (Appendix D5). */
 export const LEASE_PIPELINE_TABS = ["manager", "resident", "signed", "completed"] as const;
 export type LeasePipelineTabId = (typeof LEASE_PIPELINE_TABS)[number];
@@ -202,6 +228,19 @@ export function paymentDetailHref(
   paymentId: string,
 ): string {
   return `${basePath}/payments/${direction}/${bucket}/${encodeURIComponent(paymentId)}`;
+}
+
+/** Resident portal payments status buckets (Pending / Overdue / Paid). */
+export function residentChargesListHref(basePath: string, bucket: PaymentBucketId): string {
+  return `${basePath}/payments/${bucket}`;
+}
+
+export function residentChargeDetailHref(
+  basePath: string,
+  bucket: PaymentBucketId,
+  chargeId: string,
+): string {
+  return `${basePath}/payments/${bucket}/${encodeURIComponent(chargeId)}`;
 }
 
 /** Manager add-on service request buckets (Appendix D5). */
