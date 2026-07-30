@@ -573,7 +573,8 @@ export function ResidentDashboard({
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
 
 
-  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`; = appStatus === "approved";
+  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
+  const leaseUnlocked = appStatus === "approved";
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
     ? `${leaseRow.application.leaseStart}${leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}`
@@ -874,7 +875,7 @@ export function ResidentDashboard({
         onClose={() => setCustomizeOpen(false)}
         sections={RESIDENT_DASHBOARD_SECTIONS}
         visibility={visibility}
-        onToggle={setVisible}
+        onToggle={(id, visible) => setVisible(id as ResidentDashboardSectionId, visible)}
         onReset={reset}
       />
     </ManagerPortalPageShell>

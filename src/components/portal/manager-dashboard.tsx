@@ -1194,7 +1194,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         open={customizeOpen}
         onClose={() => setCustomizeOpen(false)}
         visibility={visibility}
-        onToggle={setVisible}
+        onToggle={(id, visible) => setVisible(id as DashboardSectionId, visible)}
         onReset={reset}
       />
     </ManagerPortalPageShell>

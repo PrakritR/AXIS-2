@@ -178,8 +178,6 @@ export function rebuildPartHtml(part: LeaseSectionEditablePart): string {
       return rebuildListItemHtml(part);
     case "raw":
       return part.html;
-    default:
-      return part.originalHtml;
   }
 }
 

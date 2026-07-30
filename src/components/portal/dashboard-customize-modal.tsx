@@ -3,7 +3,6 @@
 import { Modal } from "@/components/ui/modal";
 import {
   MANAGER_DASHBOARD_SECTIONS,
-  type DashboardSectionDef,
 } from "@/lib/dashboard-preferences";
 
 /** Accessible on/off switch for a single dashboard section. */
@@ -67,7 +66,7 @@ export function DashboardCustomizeModal({
   visibility: Record<string, boolean>;
   onToggle: (id: string, visible: boolean) => void;
   onReset: () => void;
-  sections?: readonly DashboardSectionDef[];
+  sections?: readonly { id: string; label: string; description: string }[];
 }) {
   const visibleCount = sections.filter((s) => visibility[s.id]).length;
 
