@@ -30,6 +30,10 @@ export type ScheduledInboxMessageRecord = {
   createdAt: string;
   sentAt?: string | null;
   cancelledAt?: string | null;
+  /** Distinguishes automated tour reminders from manual scheduled inbox messages. */
+  messageKind?: string;
+  tourPlannedEventId?: string;
+  tourStartIso?: string;
 };
 
 function rowFromDb(row: {
@@ -70,6 +74,9 @@ function rowFromDb(row: {
     createdAt: row.created_at,
     sentAt: typeof data.sentAt === "string" ? data.sentAt : null,
     cancelledAt: typeof data.cancelledAt === "string" ? data.cancelledAt : null,
+    messageKind: typeof data.messageKind === "string" ? data.messageKind : undefined,
+    tourPlannedEventId: typeof data.tourPlannedEventId === "string" ? data.tourPlannedEventId : undefined,
+    tourStartIso: typeof data.tourStartIso === "string" ? data.tourStartIso : undefined,
   };
 }
 
