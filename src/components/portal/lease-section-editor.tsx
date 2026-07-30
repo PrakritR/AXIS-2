@@ -3,8 +3,8 @@
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
-import type { LeaseHtmlSection } from "@/lib/lease-html-sections";
+import { LeaseSectionBodyEditor } from "@/components/portal/lease-section-body-editor";
+import { extractLeaseDocumentStyles, type LeaseHtmlSection } from "@/lib/lease-html-sections";
 import {
   leaseDocumentHtmlForSectionEdit,
   readLeaseSectionsForEdit,
@@ -21,6 +21,8 @@ type Props = {
   onSaved: (row: LeasePipelineRow) => void;
   className?: string;
   embedded?: boolean;
+  /** When true, use the full column height (document-only tab). */
+  fullHeight?: boolean;
 };
 
 function draftsFromSections(sections: LeaseHtmlSection[]): DraftMap {
@@ -33,8 +35,13 @@ export function LeaseSectionEditor({
   onSaved,
   className,
   embedded = false,
+  fullHeight = false,
 }: Props) {
   const sections = useMemo(() => readLeaseSectionsForEdit(row), [row]);
+  const documentStyles = useMemo(
+    () => extractLeaseDocumentStyles(row.generatedHtml ?? ""),
+    [row.generatedHtml],
+  );
   const [drafts, setDrafts] = useState<DraftMap>(() => draftsFromSections(sections));
   const [openSectionId, setOpenSectionId] = useState<string | null>(sections[0]?.id ?? null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -133,7 +140,7 @@ export function LeaseSectionEditor({
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-foreground">Lease document sections</h3>
           <p className="text-xs text-muted">
-            All {sections.length} numbered sections and addenda (A–E) are editable below. Save each section to update the preview.
+            Every numbered section and addendum (A–E) from this lease is listed below. Use Visual to edit text and tables; use HTML for images and advanced markup.
           </p>
           {dirtySectionIds.length > 0 ? (
             <Button
@@ -150,7 +157,12 @@ export function LeaseSectionEditor({
         </div>
       )}
       {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-      <div className={cn(embedded ? "space-y-2" : "min-h-0 flex-1 space-y-2 overflow-y-auto pr-1")}>
+      <div
+        className={cn(
+          embedded ? "space-y-2" : "min-h-0 flex-1 space-y-2 overflow-y-auto pr-1",
+          fullHeight && "min-h-0 flex-1 overflow-y-auto",
+        )}
+      >
         {sections.map((section) => {
           const dirty = (drafts[section.id] ?? "") !== section.bodyHtml;
           const open = openSectionId === section.id;
@@ -178,17 +190,17 @@ export function LeaseSectionEditor({
               </button>
               {open ? (
                 <div className="space-y-3 border-t border-border px-3 py-3">
-                  <Textarea
+                  <LeaseSectionBodyEditor
+                    sectionId={section.id}
+                    title={section.title}
                     value={drafts[section.id] ?? ""}
-                    onChange={(e) =>
+                    documentStyles={documentStyles}
+                    onChange={(html) =>
                       setDrafts((current) => ({
                         ...current,
-                        [section.id]: e.target.value,
+                        [section.id]: html,
                       }))
                     }
-                    rows={Math.min(18, Math.max(8, (drafts[section.id] ?? "").split("\n").length + 2))}
-                    className="min-h-[10rem] font-mono text-xs leading-relaxed"
-                    aria-label={`${section.title} body`}
                   />
                   <div className="flex justify-end">
                     <Button

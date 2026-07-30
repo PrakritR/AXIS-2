@@ -7,6 +7,14 @@ export type LeaseHtmlSection = {
   bodyHtml: string;
 };
 
+const LEASE_DOCUMENT_HEADER_ID = "lease-document-header";
+
+/** Pull embedded `<style>` rules so section visual editors match the lease PDF. */
+export function extractLeaseDocumentStyles(html: string): string {
+  const match = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  return match?.[1]?.trim() ?? "";
+}
+
 function stripHtmlTags(value: string): string {
   return value.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 }
@@ -27,7 +35,7 @@ function slugifySectionTitle(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Split generated lease HTML into editable sections (each `<h2>` block + following body). */
+/** Split generated lease HTML into editable sections (preamble + each `<h2>` block). */
 export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
   if (!html.trim()) return [];
 
@@ -38,8 +46,20 @@ export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
   }
   if (!headings.length) return [];
 
+  const firstHeadingIndex = headings[0]!.index;
+  const sections: LeaseHtmlSection[] = [];
+  const preamble = html.slice(0, firstHeadingIndex).trim();
+  if (preamble) {
+    sections.push({
+      id: LEASE_DOCUMENT_HEADER_ID,
+      title: "Lease header & summary",
+      headingHtml: "",
+      bodyHtml: html.slice(0, firstHeadingIndex),
+    });
+  }
+
   const slugCounts = new Map<string, number>();
-  return headings.map((heading, idx) => {
+  headings.forEach((heading, idx) => {
     const bodyStart = heading.index + heading.headingHtml.length;
     const bodyEnd = headings[idx + 1]?.index ?? html.length;
     const bodyHtml = html.slice(bodyStart, bodyEnd);
@@ -48,28 +68,41 @@ export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
     const seen = slugCounts.get(baseSlug) ?? 0;
     slugCounts.set(baseSlug, seen + 1);
     const id = seen === 0 ? baseSlug : `${baseSlug}-${seen + 1}`;
-    return {
+    sections.push({
       id,
       title,
       headingHtml: heading.headingHtml,
       bodyHtml,
-    };
+    });
   });
+  return sections;
 }
 
 /** Rebuild full lease HTML from the document head plus edited section bodies. */
 export function rebuildLeaseHtmlFromSections(
   originalHtml: string,
-  sections: readonly Pick<LeaseHtmlSection, "headingHtml" | "bodyHtml">[],
+  sections: readonly Pick<LeaseHtmlSection, "id" | "headingHtml" | "bodyHtml">[],
 ): string {
   const parsed = parseLeaseHtmlSections(originalHtml);
   if (!parsed.length || parsed.length !== sections.length) {
     return originalHtml;
   }
-  const firstHeadingIndex = originalHtml.search(/<h2\b/i);
-  const head = firstHeadingIndex >= 0 ? originalHtml.slice(0, firstHeadingIndex) : "";
-  const body = sections.map((section, idx) => `${parsed[idx]!.headingHtml}${section.bodyHtml}`).join("");
-  return `${head}${body}`;
+
+  let preamble = "";
+  let offset = 0;
+  if (parsed[0]?.id === LEASE_DOCUMENT_HEADER_ID) {
+    preamble = sections[0]?.bodyHtml ?? "";
+    offset = 1;
+  } else {
+    const firstHeadingIndex = originalHtml.search(/<h2\b/i);
+    preamble = firstHeadingIndex >= 0 ? originalHtml.slice(0, firstHeadingIndex) : "";
+  }
+
+  const body = sections
+    .slice(offset)
+    .map((section, idx) => `${parsed[offset + idx]!.headingHtml}${section.bodyHtml}`)
+    .join("");
+  return `${preamble}${body}`;
 }
 
 export function applyLeaseSectionBodyEdits(

@@ -55,16 +55,23 @@ function patchFormValues(values: LeasePacketFormValues, patch: Partial<LeasePack
   return next;
 }
 
+type PanelMode = "terms" | "document";
+
 export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className, layout = "default" }: Props) {
   const { showToast } = useAppUi();
   const baseline = useMemo(() => leasePacketFormValuesFromRow(row), [row]);
   const [values, setValues] = useState<LeasePacketFormValues>(baseline);
   const [saving, setSaving] = useState(false);
+  const [panelMode, setPanelMode] = useState<PanelMode>("document");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValues(leasePacketFormValuesFromRow(row));
   }, [row]);
+
+  useEffect(() => {
+    setPanelMode("document");
+  }, [row.id]);
 
   const dirty = !leasePacketFormValuesEqual(values, baseline);
   const willRegenerate = dirty && leasePacketFormValuesRegeneratesDocument(baseline, values);
@@ -78,10 +85,17 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
   const reset = () => setValues(baseline);
 
   const jumpToSection = (sectionId: string) => {
-    const root = scrollRef.current;
-    if (!root) return;
-    const target = root.querySelector<HTMLElement>(`#${sectionId}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (sectionId === "lease-section-document") {
+      setPanelMode("document");
+      return;
+    }
+    setPanelMode("terms");
+    window.requestAnimationFrame(() => {
+      const root = scrollRef.current;
+      if (!root) return;
+      const target = root.querySelector<HTMLElement>(`#${sectionId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const save = async () => {
@@ -125,23 +139,46 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
       {isPanel ? (
         <div className="shrink-0 border-b border-border pb-3">
           <p className="text-sm font-semibold text-foreground">{row.residentName || "Resident"}</p>
-          <p className="mt-0.5 text-xs text-muted">Edit lease terms and every document section (1–26 and addenda A–E). Save to update the preview.</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Open <strong className="font-semibold text-foreground">Document</strong> to edit every section (1–26 + addenda A–E) — words, tables, and images. Use Terms for rent and dates.
+          </p>
           <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Lease form sections">
-            {LEASE_EDIT_SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => jumpToSection(section.id)}
-                className="rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted transition hover:border-primary/30 hover:text-foreground"
-                data-attr={`lease-edit-jump-${section.id}`}
-              >
-                {section.label}
-              </button>
-            ))}
+            {LEASE_EDIT_SECTIONS.map((section) => {
+              const isDocument = section.id === "lease-section-document";
+              const active = isDocument ? panelMode === "document" : panelMode === "terms";
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => jumpToSection(section.id)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-xs font-medium transition",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-border bg-card text-muted hover:border-primary/30 hover:text-foreground",
+                    isDocument && "font-semibold",
+                  )}
+                  data-attr={`lease-edit-jump-${section.id}`}
+                >
+                  {section.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
       ) : null}
 
+      {panelMode === "document" && isPanel ? (
+        <LeaseSectionEditor
+          row={row}
+          managerUserId={managerUserId}
+          onSaved={onSaved}
+          embedded
+          fullHeight
+          className="mt-3 min-h-0 flex-1"
+        />
+      ) : (
+        <>
       {willRegenerate ? (
         <p
           className={cn(
@@ -295,14 +332,6 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
             data-attr="lease-edit-notes"
           />
         </section>
-
-        <LeaseSectionEditor
-          row={row}
-          managerUserId={managerUserId}
-          onSaved={onSaved}
-          embedded
-          className="scroll-mt-2 border-t border-border pt-5"
-        />
       </div>
 
       <div
@@ -325,6 +354,8 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           {saving ? "Saving…" : "Save changes"}
         </Button>
       </div>
+        </>
+      )}
     </form>
   );
 }
