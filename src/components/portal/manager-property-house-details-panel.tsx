@@ -145,21 +145,17 @@ export function ManagerPropertyHouseDetailsPanel({
 
   return (
     <PortalPropertyDetailSection
-      actionsJustify="between"
       actions={
-        <>
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
-          <Button
-            type="button"
-            variant="primary"
-            className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-            data-attr="house-details-save"
-            disabled={!dirty}
-            onClick={save}
-          >
-            Save
-          </Button>
-        </>
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+          data-attr="house-details-save"
+          disabled={!dirty}
+          onClick={save}
+        >
+          Save
+        </Button>
       }
     >
       <FieldBlock

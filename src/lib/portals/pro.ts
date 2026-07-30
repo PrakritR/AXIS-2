@@ -15,10 +15,7 @@ export const proPortal: PortalDefinition = {
     {
       section: "residents",
       label: "Residents",
-      tabs: [
-        { id: "current", label: "Current residents" },
-        { id: "previous", label: "Previous residents" },
-      ],
+      tabs: [{ id: "current", label: "Residents" }],
     },
     {
       section: "payments",

@@ -844,6 +844,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
+      hideTitleOnMobileNav
       welcomeSubtitle
     >
       {/* Full width: the assistant is the floating popup by default, and a

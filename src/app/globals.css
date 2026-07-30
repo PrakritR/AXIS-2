@@ -2177,6 +2177,13 @@ html[data-native] .portal-mobile-nav-bar {
   }
 }
 
+/* Desktop: extra scroll room so list tails clear the assistant FAB. */
+@media (min-width: 1024px) {
+  #portal-main-content {
+    scroll-padding-bottom: calc(var(--portal-assistant-fab-clearance, 3.5rem) + 1.5rem);
+  }
+}
+
 /* Nested scroll panels: desktop only — mobile uses #portal-main-content scroll. */
 @media (min-width: 1024px) {
   .portal-desktop-scroll-panel {
@@ -2235,6 +2242,27 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
     right: max(1rem, env(safe-area-inset-right)) !important;
     z-index: 45;
   }
+
+  html[data-bulk-action-bar] #portal-main-content {
+    padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
+    scroll-padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
+  }
+
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.5rem) !important;
+  }
+
+  /* Record detail footer actions — float FAB above the centered action row. */
+  html:has([data-slot="portal-page-footer-actions"]) .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 4.5rem) !important;
+  }
+}
+
+/* Lift assistant FAB when bulk selection bar is open (desktop). */
+@media (min-width: 1024px) {
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: 5.5rem !important;
+  }
 }
 
 html[data-native] h1.text-\[1\.35rem\] {
@@ -2276,6 +2304,28 @@ html[data-native] [data-listing-sections-root] {
 /* Manager/admin listing preview: tabs sit flush at the top of the preview shell. */
 [data-listing-subnav-pinned] {
   top: 0 !important;
+}
+
+/* Manager property preview: section tabs stick flush under the mobile top bar. */
+#portal-main-content [data-listing-subnav-portal] {
+  top: var(--portal-mobile-top-chrome, 0px);
+  z-index: 39;
+}
+
+#portal-main-content:has([data-listing-subnav-portal]) .portal-mobile-nav-bar {
+  margin-bottom: 0;
+}
+
+/* Property / resident record detail: destination tabs scroll with content (not sticky). */
+
+/* Manager list sections: pipeline tabs stick flush under the mobile top bar. */
+#portal-main-content [data-portal-list-destination-nav] {
+  top: var(--portal-mobile-top-chrome, 0px);
+  z-index: 39;
+}
+
+#portal-main-content:has([data-portal-list-destination-nav]) .portal-mobile-nav-bar {
+  margin-bottom: 0;
 }
 
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */
@@ -2621,7 +2671,8 @@ html[data-native] [data-listing-subnav] {
   max-width: 100vw;
 }
 
-/* ── Portal Communication inbox (dark) — align with homepage lp-ibx surfaces ── */
+/* ── Portal Communication inbox — flat on page canvas (light + dark) ── */
+html[data-theme="light"] .portal-communication-inbox .portal-inbox-two-pane,
 html[data-theme="dark"] .portal-communication-inbox .portal-inbox-two-pane {
   background: transparent;
   border: none;

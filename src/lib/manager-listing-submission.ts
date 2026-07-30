@@ -482,6 +482,8 @@ export type ManagerListingSubmissionV1 = {
   leaseTemplateDocName?: string;
   /** Multiple lease templates per property (standard, month-to-month, short-term, custom). */
   propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
+  /** Multiple application templates per property (long-term, short-term, custom). */
+  propertyApplicationTemplates?: import("@/lib/property-application-templates").PropertyApplicationTemplate[];
 
   // ---------------------------------------------------------------------------
   // Disclosure trigger fields (building-level compliance inputs)
@@ -1466,6 +1468,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
     propertyLeaseTemplates: Array.isArray((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates)
       ? ((sub as { propertyLeaseTemplates?: unknown }).propertyLeaseTemplates as import("@/lib/property-lease-templates").PropertyLeaseTemplate[])
+      : undefined,
+    propertyApplicationTemplates: Array.isArray((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates)
+      ? ((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates as import("@/lib/property-application-templates").PropertyApplicationTemplate[])
       : undefined,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,

@@ -58,7 +58,7 @@ describe("portal-detail-routes", () => {
       "/portal/residents/current/res-1/lease",
     );
     expect(calendarViewHref("/portal", "tours")).toBe("/portal/calendar/tours");
-    expect(teamLinkHref("/portal", "linked")).toBe("/portal/relationships/linked");
+    expect(teamLinkHref("/portal", "linked")).toBe("/portal/relationships");
   });
 
   it("parses calendar and team routed tabs", () => {

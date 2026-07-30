@@ -14,7 +14,9 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -306,31 +308,108 @@ export function ManagerAllServicesPanel({
     [reqCounts],
   );
 
-  const portfolioScopeFilters = (
-    <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([
-        propertyFilter,
-        typeFilter !== "vendors" ? activeResidentFilter : "",
-      ])}
-      onReset={() => {
-        setPropertyFilter("");
-        setResidentFilter("");
-      }}
-      dataAttr="services-filter-sheet-open"
-    >
-      <PortalPropertyFilterPill
-        propertyOptions={filterPropertyOptions}
-        propertyValue={propertyFilter}
-        onPropertyChange={(nextProperty) => {
-          setPropertyFilter(nextProperty);
+  const propertyFilterLabel = useMemo(() => {
+    if (!propertyFilter) return "";
+    return (
+      filterPropertyOptions.find((option) => samePropertyId(option.id, propertyFilter))?.label ?? propertyFilter
+    );
+  }, [propertyFilter, filterPropertyOptions]);
+
+  const resetServicesFilters = () => {
+    setPropertyFilter("");
+    setResidentFilter("");
+  };
+
+  const servicesFilterSheet =
+    typeFilter !== "vendors" ? (
+      <PortalFilterSortSheet
+        activeCount={portalFilterActiveCount([propertyFilter, activeResidentFilter])}
+        desktopPresentation="panel"
+        className="max-md:flex-none max-md:w-full max-md:[&_button]:w-full"
+        onReset={resetServicesFilters}
+        dataAttr="services-filter-sheet-open"
+      >
+        <div className="grid gap-4">
+          <ApplicationFilterSortFields
+            propertyOptions={filterPropertyOptions}
+            propertyFilter={propertyFilter}
+            onPropertyFilterChange={(nextProperty) => {
+              setPropertyFilter(nextProperty);
+              setResidentFilter("");
+            }}
+            dataAttr="services-filter-property"
+          />
+          {residentOptions.length > 0 ? (
+            <div>
+              <p className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Resident</p>
+              <FieldSingleSelect
+                label="Resident"
+                hideLabel
+                options={[
+                  { value: "", label: "All residents" },
+                  ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
+                ]}
+                value={activeResidentFilter}
+                onChange={setResidentFilter}
+                placeholder="All residents"
+                dataAttr="services-filter-resident"
+              />
+            </div>
+          ) : null}
+        </div>
+      </PortalFilterSortSheet>
+    ) : null;
+
+  const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    if (typeFilter === "vendors") return [];
+    const chips: PortalActiveFilterChip[] = [];
+    if (propertyFilter) {
+      chips.push({
+        id: "property",
+        label: `Property: ${propertyFilterLabel}`,
+        onRemove: () => {
+          setPropertyFilter("");
           setResidentFilter("");
-        }}
-        residents={typeFilter !== "vendors"}
-        residentOptions={residentOptions}
-        residentValue={activeResidentFilter}
-        onResidentChange={setResidentFilter}
-      />
-    </PortalFilterSortSheet>
+        },
+      });
+    }
+    if (activeResidentFilter) {
+      chips.push({
+        id: "resident",
+        label: `Resident: ${activeResidentFilter}`,
+        onRemove: () => setResidentFilter(""),
+      });
+    }
+    return chips;
+  }, [typeFilter, propertyFilter, propertyFilterLabel, activeResidentFilter]);
+
+  const servicesTypeNav = (
+    <DestinationNav
+      items={[
+        {
+          id: "requests",
+          label: "Add",
+          href: `${basePath}/services/requests/pending`,
+          dataAttr: "manager-services-tab-requests",
+        },
+        {
+          id: "work-orders",
+          label: "Work orders",
+          href: `${basePath}/services/work-orders/open`,
+          dataAttr: "manager-services-tab-work-orders",
+        },
+        {
+          id: "vendors",
+          label: "Vendors",
+          href: `${basePath}/services/vendors`,
+          dataAttr: "manager-services-tab-vendors",
+        },
+      ]}
+      activeId={typeFilter}
+      ariaLabel="Services section"
+      size="toolbar"
+      className="max-w-none"
+    />
   );
 
   const renderRequestDetail = (req: ServiceRequest) => {
@@ -346,42 +425,64 @@ export function ManagerAllServicesPanel({
     );
   };
 
-  const servicesPrimaryAction = (
-    <PortalSectionActionRow>
-      {typeFilter === "vendors" ? (
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => vendorsPanelRef.current?.openSettings()}
-          data-attr="manager-vendor-settings-open"
-        >
-          Vendor settings
-        </Button>
-      ) : null}
-      {typeFilter === "requests" ? (
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="manager-service-request-add"
-          onClick={() => setAddRequestOpen(true)}
-        >
-          Add add-on service
-        </Button>
-      ) : null}
-      {typeFilter === "work-orders" ? (
-        <Button
-          type="button"
-          variant="primary"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="manager-work-order-add"
-          onClick={() => setAddWorkOrderOpen(true)}
-        >
-          Add work order
-        </Button>
-      ) : null}
+  const servicesAddButton =
+    typeFilter === "vendors" ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => vendorsPanelRef.current?.openSettings()}
+        data-attr="manager-vendor-settings-open"
+      >
+        Vendor settings
+      </Button>
+    ) : typeFilter === "requests" ? (
+      <Button
+        type="button"
+        variant="primary"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="manager-service-request-add"
+        onClick={() => setAddRequestOpen(true)}
+      >
+        Add add-on service
+      </Button>
+    ) : (
+      <Button
+        type="button"
+        variant="primary"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        data-attr="manager-work-order-add"
+        onClick={() => setAddWorkOrderOpen(true)}
+      >
+        Add work order
+      </Button>
+    );
+
+  const servicesDesktopTypeNav = (
+    <div className="flex min-w-0 flex-1 items-center gap-2.5 lg:gap-3">
+      <div className="min-w-0 flex-1">{servicesTypeNav}</div>
+      {typeFilter !== "vendors" ? <div className="shrink-0">{servicesFilterSheet}</div> : null}
+    </div>
+  );
+
+  const servicesDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden shrink-0 gap-2 sm:gap-3 md:flex">
+      {servicesAddButton}
     </PortalSectionActionRow>
+  );
+
+  const servicesMobileChrome = (
+    <div className="mb-3 space-y-2 md:hidden" data-slot="services-mobile-chrome">
+      <div className="min-w-0">{servicesTypeNav}</div>
+      {typeFilter !== "vendors" ? (
+        <div className="grid grid-cols-2 gap-2 [&_button]:min-w-0">
+          <div className="min-w-0">{servicesFilterSheet}</div>
+          <div className="min-w-0">{servicesAddButton}</div>
+        </div>
+      ) : (
+        <div className="flex justify-end">{servicesAddButton}</div>
+      )}
+    </div>
   );
 
   if (serviceRequestIdProp && detailRequest) {
@@ -446,34 +547,6 @@ export function ManagerAllServicesPanel({
     );
   }
 
-  const servicesTypeNav = (
-    <DestinationNav
-      items={[
-        {
-          id: "requests",
-          label: "Add-on services",
-          href: `${basePath}/services/requests/pending`,
-          dataAttr: "manager-services-tab-requests",
-        },
-        {
-          id: "work-orders",
-          label: "Work orders",
-          href: `${basePath}/services/work-orders/open`,
-          dataAttr: "manager-services-tab-work-orders",
-        },
-        {
-          id: "vendors",
-          label: "Vendors",
-          href: `${basePath}/services/vendors`,
-          dataAttr: "manager-services-tab-vendors",
-        },
-      ]}
-      activeId={typeFilter}
-      ariaLabel="Services section"
-      className="max-w-none"
-    />
-  );
-
   const bucketDestinations = useMemo(() => {
     if (typeFilter === "work-orders") {
       return woTabs.map((t) => ({
@@ -500,13 +573,14 @@ export function ManagerAllServicesPanel({
   return (
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
-      titleTrailing={servicesTypeNav}
-      titleAside={servicesPrimaryAction}
+      titleTrailing={<div className="hidden min-w-0 flex-1 md:flex">{servicesDesktopTypeNav}</div>}
+      titleAside={servicesDesktopHeaderActions}
+      hideTitleOnMobileNav
       compactFilterRow
     >
+      {servicesMobileChrome}
       <PortalListControlStack
         className="mb-3"
-        filterRow={typeFilter === "vendors" ? undefined : portfolioScopeFilters}
         destinations={bucketDestinations}
         activeDestinationId={activeBucketId}
         destinationAriaLabel={
@@ -523,6 +597,9 @@ export function ManagerAllServicesPanel({
                 dataAttr:
                   typeFilter === "work-orders" ? "services-work-orders-search" : "services-requests-search",
               }
+        }
+        activeFilterChips={
+          typeFilter !== "vendors" ? <PortalActiveFilterChips chips={activeFilterChips} /> : null
         }
       />
       {typeFilter === "vendors" ? (

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
+import { PortalPageFooterActions } from "@/components/portal/portal-section-action-row";
 import { Fragment, type ReactNode } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Select } from "@/components/ui/input";
@@ -18,6 +19,9 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] max-lg:rounded-2xl max-lg:p-3 sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3 [html[data-native]_&]:py-3";
+
+/** Flat manager page shell — content sits on the portal gradient canvas. */
+export const PORTAL_PAGE_SHELL_BARE = "relative z-0 min-w-0 w-full";
 
 /** Subtitle under the Dashboard heading — shared across all portal dashboards. */
 export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
@@ -576,6 +580,7 @@ export function ManagerPortalPageShell({
   compactFilterRow = false,
   mobileHideFilterRow = false,
   mobileFlush = false,
+  surfaceCard = false,
   count,
 }: {
   title: string;
@@ -597,16 +602,20 @@ export function ManagerPortalPageShell({
   mobileHideFilterRow?: boolean;
   /** Tighter section chrome on phones (e.g. full-bleed inbox thread). */
   mobileFlush?: boolean;
+  /** Legacy white card shell — default is flat on the page canvas. */
+  surfaceCard?: boolean;
   /** Optional record count beside the title. */
   count?: number;
 }) {
   const titleAsideDesktopOnly = Boolean(titleAside && filterRow);
+  const showMobileFooterActions = titleAsideDesktopOnly;
   const showTitleOnMobile = !hideTitleOnMobileNav;
+  const filterRowBorder = surfaceCard ? "border-b border-border" : "";
   return (
     <div
       className={cn(
-        PORTAL_SECTION_SURFACE,
-        "relative z-0 min-w-0 w-full shrink-0",
+        surfaceCard ? PORTAL_SECTION_SURFACE : PORTAL_PAGE_SHELL_BARE,
+        surfaceCard && "relative z-0 min-w-0 w-full shrink-0",
         mobileFlush &&
           "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
       )}
@@ -620,6 +629,7 @@ export function ManagerPortalPageShell({
         className={cn(
           hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
           !showTitleOnMobile && "max-md:[&_h1]:sr-only",
+          !showTitleOnMobile && titleAside && !titleAsideDesktopOnly && "max-md:mt-3 max-md:w-full [html[data-native]_&]:mt-2",
         )}
       />
       {subtitle ? (
@@ -629,7 +639,7 @@ export function ManagerPortalPageShell({
               ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-lg [html[data-native]_&]:text-base"
               : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:text-xs",
             hideTitleOnNative && "[html[data-native]_&]:sr-only",
-            !showTitleOnMobile && "max-md:sr-only",
+            !showTitleOnMobile && !welcomeSubtitle && "max-md:sr-only",
           )}
         >
           {subtitle}
@@ -643,20 +653,13 @@ export function ManagerPortalPageShell({
           <div
             className={cn(
               compactFilterRow
-                ? "mt-2 border-b border-border pb-2 max-md:mt-0 max-md:pb-1.5 sm:mt-4 sm:pb-4 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2"
-                : "mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5",
+                ? `mt-2 ${filterRowBorder} pb-2 max-md:mt-0 max-md:pb-1.5 sm:mt-4 sm:pb-4 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2`
+                : `mt-4 ${filterRowBorder} pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5`,
               mobileHideFilterRow && "max-md:hidden",
               mobileFlush && "max-md:mt-0 max-md:border-0 max-md:pb-0",
             )}
           >
-            <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>
-              {filterRow}
-              {titleAside && titleAsideDesktopOnly ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 max-md:flex-nowrap md:hidden">
-                  {titleAside}
-                </div>
-              ) : null}
-            </div>
+            <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>{filterRow}</div>
           </div>
           <div
             className={cn(
@@ -671,8 +674,11 @@ export function ManagerPortalPageShell({
           </div>
         </>
       ) : (
-        <div className="mt-4 sm:mt-6 max-lg:mt-2 [html[data-native]_&]:mt-0">{children}</div>
+        <div className="mt-4 sm:mt-6 max-lg:mt-0 [html[data-native]_&]:mt-0">{children}</div>
       )}
+      {showMobileFooterActions ? (
+        <PortalPageFooterActions className="md:hidden">{titleAside}</PortalPageFooterActions>
+      ) : null}
     </div>
   );
 }
@@ -729,10 +735,10 @@ export const PORTAL_HEADER_ACTION_BTN =
 
 /** Compact toolbar buttons (resident profile sections on mobile). */
 export const RESIDENT_DETAIL_HEADER_ACTION_BTN =
-  "h-8 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold sm:h-9 sm:px-3.5 sm:text-xs [html[data-native]_&]:h-8 [html[data-native]_&]:px-2.5 [html[data-native]_&]:text-[11px]";
+  "h-7 shrink-0 whitespace-nowrap rounded-full px-2 text-[10px] font-semibold sm:h-9 sm:px-3.5 sm:text-xs [html[data-native]_&]:h-7 [html[data-native]_&]:px-2 [html[data-native]_&]:text-[10px]";
 
 export const RESIDENT_DETAIL_HEADER_ACTIONS_ROW =
-  "flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0";
+  "flex max-w-full shrink-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:gap-2 sm:overflow-visible sm:pb-0";
 
 /** Desktop-only page actions — pair with {@link PORTAL_FILTER_ACTIONS_MOBILE} in filter rows. */
 export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";

@@ -307,3 +307,86 @@ export function PortalNotificationPreviewModal({
     </Modal>
   );
 }
+
+export type BulkPaymentReminderPreviewItem = {
+  id: string;
+  recipient: string;
+  chargeLabel: string;
+  subject: string;
+  body: string;
+};
+
+/** Scrollable preview before sending payment reminders to multiple charges. */
+export function PortalBulkPaymentReminderPreviewModal({
+  open,
+  onClose,
+  items,
+  confirmBusy = false,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: BulkPaymentReminderPreviewItem[];
+  confirmBusy?: boolean;
+  onConfirm: () => void;
+}) {
+  const count = items.length;
+  const title = count === 1 ? "Send payment reminder" : `Send ${count} payment reminders`;
+  const confirmLabel = count === 1 ? "Send reminder" : `Send ${count} reminders`;
+
+  const footer = (
+    <ModalFooter>
+      <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={confirmBusy}>
+        Cancel
+      </Button>
+      <Button
+        type="button"
+        variant="primary"
+        className="rounded-full"
+        data-attr="portal-bulk-notification-confirm"
+        disabled={confirmBusy || count === 0}
+        onClick={onConfirm}
+      >
+        {confirmBusy ? "Sending…" : confirmLabel}
+      </Button>
+    </ModalFooter>
+  );
+
+  return (
+    <Modal open={open} title={title} onClose={onClose} dense footer={footer} panelClassName="max-w-lg">
+      <p className="mb-4 text-sm leading-snug text-muted">
+        Review each message below. Reminders are saved to PropLane inbox and sent by email when an address is on file.
+      </p>
+      <div className="max-h-[min(52vh,26rem)] space-y-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+        {items.map((item, index) => (
+          <div key={item.id} className="space-y-2 rounded-xl border border-border bg-accent/10 p-3">
+            {count > 1 ? (
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">Reminder {index + 1}</p>
+            ) : null}
+            <p className="text-xs font-semibold text-foreground">{item.chargeLabel}</p>
+            <div>
+              <p className={fieldLabel()}>To</p>
+              <p className={cn("mt-0.5 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-1.5")}>{item.recipient}</p>
+            </div>
+            <div>
+              <p className={fieldLabel()}>Subject</p>
+              <p className={cn("mt-0.5 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-1.5")}>{item.subject}</p>
+            </div>
+            <div>
+              <p className={fieldLabel()}>Message</p>
+              <pre
+                className={cn(
+                  MODAL_INSET_BOX_CLASS,
+                  "mt-0.5 max-h-32 overflow-y-auto whitespace-pre-wrap py-2 text-sm leading-relaxed",
+                )}
+              >
+                {item.body}
+              </pre>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+

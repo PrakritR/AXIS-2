@@ -3,6 +3,64 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+const PORTAL_FOOTER_INLINE_ACTIONS_ROW =
+  "flex max-w-full shrink-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:gap-2 sm:overflow-visible sm:pb-0";
+
+const PORTAL_FOOTER_HEADER_ACTIONS_ROW =
+  "flex max-w-full shrink-0 flex-nowrap items-center justify-center gap-1 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2 sm:overflow-visible sm:pb-0";
+
+const PORTAL_FOOTER_INLINE_SPACER =
+  "h-[calc(2.5rem+var(--portal-native-bottom-nav-inset,0px)+env(safe-area-inset-bottom,0px))] shrink-0 md:hidden";
+
+/** Fixed primary CTAs above the native bottom tab bar (Create, Add resident, Add payment, …). */
+export function PortalPageFooterActions({
+  children,
+  className,
+  /** `header` keeps compact pills in one horizontal row on mobile (resident detail footers). */
+  rowVariant = "toolbar",
+}: {
+  children: ReactNode;
+  className?: string;
+  rowVariant?: "toolbar" | "header";
+}) {
+  return (
+    <>
+      <div
+        aria-hidden
+        className={
+          rowVariant === "header"
+            ? PORTAL_FOOTER_INLINE_SPACER
+            : "h-[calc(4.25rem+var(--portal-native-bottom-nav-inset,0px))] shrink-0 md:hidden"
+        }
+      />
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 shadow-[var(--shadow-lg)] backdrop-blur-md",
+          rowVariant === "header" ? "px-2 py-2 max-md:pb-2" : "px-4 py-3",
+          "pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]",
+          "max-lg:bottom-[var(--portal-native-bottom-nav-inset,0px)]",
+          "md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none",
+          className,
+        )}
+        data-slot="portal-page-footer-actions"
+        data-row-variant={rowVariant}
+      >
+        <div className="mx-auto w-full max-w-5xl">
+          {rowVariant === "header" ? (
+            <div className={PORTAL_FOOTER_HEADER_ACTIONS_ROW}>
+              <PortalSectionActionRow variant="header" className="mx-auto w-max justify-center gap-1 sm:gap-2">
+                {children}
+              </PortalSectionActionRow>
+            </div>
+          ) : (
+            <PortalSectionActionRow>{children}</PortalSectionActionRow>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 /**
  * Appendix C3 — one alignment rule for section action rows:
  * mobile: full-width / evenly distributed in the thumb arc;
@@ -25,7 +83,7 @@ export function PortalSectionActionRow({
     return (
       <div
         className={cn(
-          "flex shrink-0 flex-nowrap items-center gap-1.5 sm:gap-2 [&_button]:w-auto [&_a]:w-auto",
+          "flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3 [&_button]:w-auto [&_button]:max-w-none [&_a]:w-auto",
           className,
         )}
         data-slot="portal-section-action-row"

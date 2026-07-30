@@ -181,7 +181,13 @@ export function ManagerScreeningSettingsModal({
 }
 
 /** Compact toolbar trigger — opens screening modal. */
-export function ManagerScreeningSettingsButton({ onClick }: { onClick: () => void }) {
+export function ManagerScreeningSettingsButton({
+  onClick,
+  className,
+}: {
+  onClick: () => void;
+  className?: string;
+}) {
   const [mode, setMode] = useState<ScreeningMode | null>(null);
 
   useEffect(() => {
@@ -206,11 +212,15 @@ export function ManagerScreeningSettingsButton({ onClick }: { onClick: () => voi
     };
   }, []);
 
-  const shortLabel =
-    mode === "auto_on_submit" ? "Screening: Auto" : mode === "manual" ? "Screening: Manual" : mode === "off" ? "Screening: Off" : "Screening";
+  const shortLabel = "Screening";
 
   return (
-    <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onClick}>
+    <Button
+      type="button"
+      variant="outline"
+      className={className ? `${PORTAL_HEADER_ACTION_BTN} ${className}` : PORTAL_HEADER_ACTION_BTN}
+      onClick={onClick}
+    >
       {shortLabel}
     </Button>
   );

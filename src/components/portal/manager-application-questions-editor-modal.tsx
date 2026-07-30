@@ -32,6 +32,10 @@ import {
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
+function allApplicationSectionIds(): Set<string> {
+  return new Set(RENTAL_APPLICATION_SECTIONS.map((section) => section.id));
+}
+
 const APPLICATION_FORM_VARIANTS: ReadonlyArray<{ id: ApplicationFormVariant; label: string; hint: string }> = [
   { id: "standard", label: "Long-term lease", hint: "The full application for standard leases." },
   {
@@ -115,6 +119,7 @@ export function ManagerApplicationQuestionsEditorModal({
   propertyIds,
   managerUserId,
   initialVariant = "standard",
+  lockVariant = false,
   onClose,
   onSaved,
   showToast,
@@ -128,13 +133,15 @@ export function ManagerApplicationQuestionsEditorModal({
   managerUserId: string;
   /** Which stay-type form opens first (long-term vs short-term). */
   initialVariant?: ApplicationFormVariant;
+  /** Property detail row edit — one stay type only; hide the long-term / short-term switcher. */
+  lockVariant?: boolean;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
   const [localSub, setLocalSub] = useState(sub);
   const [variant, setVariant] = useState<ApplicationFormVariant>("standard");
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(() => allApplicationSectionIds());
   const [editOpen, setEditOpen] = useState(false);
   const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
   const [isNewField, setIsNewField] = useState(false);
@@ -148,7 +155,7 @@ export function ManagerApplicationQuestionsEditorModal({
     if (!open) return;
     setLocalSub(sub);
     setVariant(initialVariant);
-    setExpandedSectionId(null);
+    setExpandedSectionIds(allApplicationSectionIds());
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
@@ -228,7 +235,7 @@ export function ManagerApplicationQuestionsEditorModal({
     setIsNewField(true);
     setNewFieldSectionId(sectionId);
     setEditOpen(true);
-    setExpandedSectionId(sectionId);
+    setExpandedSectionIds((prev) => new Set(prev).add(sectionId));
   };
 
   const closeEdit = () => {
@@ -250,12 +257,16 @@ export function ManagerApplicationQuestionsEditorModal({
     const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
     if (sectionQuestions.length === 0) return;
     applyEditedSlice(applyFieldRemovals(configSlice, sectionQuestions));
-    if (expandedSectionId === sectionId) setExpandedSectionId(null);
+    setExpandedSectionIds((prev) => {
+      const next = new Set(prev);
+      next.delete(sectionId);
+      return next;
+    });
   };
 
   const restoreDefaults = () => {
     applySlice(restoreDefaultApplicationConfig());
-    setExpandedSectionId(null);
+    setExpandedSectionIds(allApplicationSectionIds());
   };
 
   const onQuestionSaved = (next: ManagerListingSubmissionV1) => {
@@ -300,6 +311,7 @@ export function ManagerApplicationQuestionsEditorModal({
             one these controls configure; turning a question off in one never
             affects the other (they persist to different submission fields).
           */}
+          {lockVariant ? null : (
           <div
             className="flex gap-1 rounded-full border border-border bg-accent/30 p-1"
             role="tablist"
@@ -317,7 +329,7 @@ export function ManagerApplicationQuestionsEditorModal({
                   data-attr={`application-variant-tab-${v.id}`}
                   onClick={() => {
                     setVariant(v.id);
-                    setExpandedSectionId(null);
+                    setExpandedSectionIds(allApplicationSectionIds());
                   }}
                   className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     active
@@ -330,6 +342,7 @@ export function ManagerApplicationQuestionsEditorModal({
               );
             })}
           </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted">
@@ -344,7 +357,7 @@ export function ManagerApplicationQuestionsEditorModal({
           {RENTAL_APPLICATION_SECTIONS.map((section) => {
             const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
             const sectionDisabled = disabledFields.filter((f) => (f.section ?? "additional") === section.id);
-            const sectionExpanded = expandedSectionId === section.id;
+            const sectionExpanded = expandedSectionIds.has(section.id);
             return (
               <PortalCollapsibleEditRow
                 key={section.id}
@@ -360,7 +373,14 @@ export function ManagerApplicationQuestionsEditorModal({
                       }`
                 }
                 expanded={sectionExpanded}
-                onExpandedChange={(next) => setExpandedSectionId(next ? section.id : null)}
+                onExpandedChange={(next) => {
+                  setExpandedSectionIds((prev) => {
+                    const ids = new Set(prev);
+                    if (next) ids.add(section.id);
+                    else ids.delete(section.id);
+                    return ids;
+                  });
+                }}
                 toggleDataAttr={`application-section-toggle-${section.id}`}
                 onRemove={sectionQuestions.length > 0 ? () => removeSection(section.id) : undefined}
                 removeTitle={`Remove all questions in ${section.title}`}

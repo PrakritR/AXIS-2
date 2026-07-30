@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE } from "@/components/portal/portal-metrics";
 
 export function AdminCreateResidentClient() {
   const { showToast } = useAppUi();
@@ -47,7 +47,7 @@ export function AdminCreateResidentClient() {
   };
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
+    <div className="relative z-0 w-full min-w-0">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className={PORTAL_PAGE_TITLE}>Create resident account</h1>
       </div>

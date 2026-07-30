@@ -4,8 +4,11 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalListPreviewLimit, sliceForPortalPreview } from "@/lib/portal-mobile-preview";
 
-/** Outer frame for tabbed portal tables — solid card surface (not glass). */
-export const PORTAL_DATA_TABLE_WRAP =
+/** Outer frame for tabbed portal tables — flat on the page canvas by default. */
+export const PORTAL_DATA_TABLE_WRAP = "relative z-0 max-w-full overflow-hidden";
+
+/** Optional card frame when a table needs explicit elevation. */
+export const PORTAL_DATA_TABLE_WRAP_CARD =
   "relative z-0 max-w-full overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-sm)]";
 
 export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 min-w-0 max-w-full overflow-hidden";

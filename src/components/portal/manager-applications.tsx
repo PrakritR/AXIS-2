@@ -14,14 +14,14 @@ import {
   PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
-import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
@@ -30,8 +30,8 @@ import {
 import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
 import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
-import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
@@ -66,7 +66,7 @@ import {
   isInProgressApplicationRow,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
-import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow, applicationStatusPill } from "@/components/portal/application-group-section";
+import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
   buildBundleApplicationGroups,
 } from "@/lib/bundle-group/bundle-group-application";
@@ -225,7 +225,7 @@ export function ApplicationDocumentPreview({
   ) : null;
 
   const previewBody = (
-    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+    <div className="overflow-hidden border-t border-border bg-white">
       <iframe
         key={previewKey}
         srcDoc={previewHtml}
@@ -241,7 +241,7 @@ export function ApplicationDocumentPreview({
     return (
       <div className="mt-4 space-y-3">
         {downloadButton ? (
-          <PortalSectionActionRow className="mt-0">{downloadButton}</PortalSectionActionRow>
+          <div className="flex flex-nowrap items-center justify-start gap-2">{downloadButton}</div>
         ) : null}
         {previewBody}
       </div>
@@ -253,8 +253,10 @@ export function ApplicationDocumentPreview({
       title="Application"
       defaultExpanded={false}
       surfaceMuted={false}
-      className="mt-4"
-      contentClassName="p-4 pt-0"
+      bareSurface
+      hideToggleIcon
+      className="mt-0"
+      contentClassName="pt-0"
       toggleDataAttr="application-document-toggle"
       headerActions={downloadButton ?? undefined}
       headerActionsInline={Boolean(downloadButton)}
@@ -453,6 +455,11 @@ export function ManagerApplications({
       ] as const,
     [counts, incompleteCount, pendingReviewCount],
   );
+
+  const propertyFilterLabel = useMemo(() => {
+    if (!propertyFilter.trim()) return "";
+    return propertyOptions.find((o) => o.id === propertyFilter)?.label ?? propertyFilter;
+  }, [propertyFilter, propertyOptions]);
 
   const rowsForBucket = useMemo(() => {
     const inBucket = scopedRows.filter((r) => tabForRow(r) === bucket);
@@ -717,29 +724,14 @@ export function ManagerApplications({
     }
   };
 
-  const renderApplicationRowActions = (row: DemoApplicantRow) => {
-    const status = applicationStatusPill(row);
-    return (
-    <PortalSectionActionRow
-      className="shrink-0"
-      destructive={
-        <Button
-          type="button"
-          variant="outline"
-          className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          onClick={() => void deleteApplication(row.id)}
-        >
-          Delete
-        </Button>
-      }
-    >
+  const renderApplicationRowActions = (row: DemoApplicantRow) => (
+    <PortalSectionActionRow variant="header" className="shrink-0">
       <div
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
         className="contents"
       >
-      <Badge tone={status.tone}>{status.label}</Badge>
       {row.bucket === "pending" ? (
         <>
           {isWithdrawnApplicationRow(row) ? null : (
@@ -784,10 +776,17 @@ export function ManagerApplications({
           Move to pending
         </Button>
       )}
+      <Button
+        type="button"
+        variant="outline"
+        className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+        onClick={() => void deleteApplication(row.id)}
+      >
+        Delete
+      </Button>
       </div>
     </PortalSectionActionRow>
-    );
-  };
+  );
 
   const renderApplicationDetail = (row: DemoApplicantRow) => {
     const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
@@ -818,53 +817,97 @@ export function ManagerApplications({
         <ApplicationGroupSection group={group} bundleGroup={group} currentRowId={row.id} />
       ) : null}
 
-      <ApplicationDocumentPreview row={row} />
-
-      <ApplicationVerificationPhotos row={row} />
-
-      <ApplicationScreeningPanel
+      <ApplicationReviewLauncherRow
         row={row}
-        onUpdated={handleScreeningUpdated}
+        onScreeningUpdated={handleScreeningUpdated}
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
       />
+
+      <ApplicationVerificationPhotos row={row} />
     </>
     );
   };
 
-  const applicationsHeaderActions = (
-    <PortalSectionActionRow>
-      <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="application-settings-open"
-        onClick={() => setApplicationSettingsOpen(true)}
-      >
-        Promo code
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="edit-application-open"
-        onClick={() => setEditApplicationOpen(true)}
-        disabled={propertyOptions.length === 0}
-        title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
-      >
-        Edit
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => setInviteModalOpen(true)}
-        disabled={shareableProperties.length === 0}
-        title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
-      >
-        Send
-      </Button>
+  const applicationsFilterSort = (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([propertyFilter])}
+      onReset={() => setPropertyFilter("")}
+      dataAttr="applications-filter-sheet-open"
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+    >
+      <ApplicationFilterSortFields
+        propertyOptions={propertyOptions}
+        propertyFilter={propertyFilter}
+        onPropertyFilterChange={setPropertyFilter}
+      />
+    </PortalFilterSortSheet>
+  );
+
+  const applicationsScreeningButton = (
+    <ManagerScreeningSettingsButton
+      className="w-full shrink-0 md:w-auto"
+      onClick={() => setScreeningModalOpen(true)}
+    />
+  );
+
+  const applicationsPromoButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      data-attr="application-settings-open"
+      onClick={() => setApplicationSettingsOpen(true)}
+    >
+      Promo
+    </Button>
+  );
+
+  const applicationsEditButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      data-attr="edit-application-open"
+      onClick={() => setEditApplicationOpen(true)}
+      disabled={propertyOptions.length === 0}
+      title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+    >
+      Edit
+    </Button>
+  );
+
+  const applicationsSendButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => setInviteModalOpen(true)}
+      disabled={shareableProperties.length === 0}
+      title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
+    >
+      Send
+    </Button>
+  );
+
+  const applicationsDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-2 sm:gap-3 md:flex">
+      {applicationsScreeningButton}
+      {applicationsFilterSort}
+      {applicationsPromoButton}
+      {applicationsEditButton}
+      {applicationsSendButton}
     </PortalSectionActionRow>
+  );
+
+  const applicationsMobileActionsRow = (
+    <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="applications-mobile-actions">
+      <div className="min-w-0">{applicationsScreeningButton}</div>
+      <div className="min-w-0">{applicationsFilterSort}</div>
+      <div className="min-w-0">{applicationsPromoButton}</div>
+      <div className="min-w-0">{applicationsEditButton}</div>
+      <div className="col-span-2 min-w-0">{applicationsSendButton}</div>
+    </div>
   );
 
   const applicationModals = (
@@ -950,6 +993,7 @@ export function ManagerApplications({
           backHref={applicationListHref(basePath, bucket)}
           backLabel="Back to applications"
           dataAttrBack="application-detail-back"
+          inlineActions
           actions={renderApplicationRowActions(detailRow)}
         >
           {renderApplicationDetail(detailRow)}
@@ -962,24 +1006,14 @@ export function ManagerApplications({
     <>
     <ManagerPortalPageShell
       title="Applications"
-      titleAside={applicationsHeaderActions}
+      hideTitleOnMobileNav
+      titleAside={applicationsDesktopHeaderActions}
       compactFilterRow
     >
+      {applicationsMobileActionsRow}
       <PortalListControlStack
-        className="mb-3"
-        filterRow={
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="applications-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-          </PortalFilterSortSheet>
-        }
+        className="mb-3 max-lg:mb-4"
+        destinationInset
         destinations={tabs.map((t) => ({
           id: t.id,
           label: t.label,
@@ -1001,7 +1035,7 @@ export function ManagerApplications({
               chips={[
                 {
                   id: "property",
-                  label: `Property: ${propertyFilter}`,
+                  label: `Property: ${propertyFilterLabel}`,
                   onRemove: () => setPropertyFilter(""),
                 },
               ]}
@@ -1009,7 +1043,7 @@ export function ManagerApplications({
           ) : null
         }
       />
-      <div className="mt-1 space-y-3">
+      <div className="mt-2 space-y-4 max-md:mt-3">
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
       <ManagerApplicationSettingsModal
         open={applicationSettingsOpen}
@@ -1027,7 +1061,8 @@ export function ManagerApplications({
           <ListSkeleton rows={5} showLeading={false} />
         </div>
       ) : rowsForBucket.length === 0 ? (
-        <PortalDataTableEmpty
+        <div className="px-3 py-2">
+          <PortalDataTableEmpty
             icon="application"
             message={
               scopedRows.length === 0
@@ -1043,8 +1078,11 @@ export function ManagerApplications({
                         : "No applications in this tab yet."
             }
           />
+        </div>
       ) : (
-        <div className={INBOX_LIST_SCROLL}>
+        <div
+          className={`${PORTAL_LIST_PAGE_BODY} max-md:[&_.portal-inbox-row]:gap-3 max-md:[&_.portal-inbox-row]:px-3.5 max-md:[&_.portal-inbox-row]:py-3.5`}
+        >
           {rowsForBucket.map((row) => {
             const room = displayRoomForRow(row);
             const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room]
@@ -1052,7 +1090,6 @@ export function ManagerApplications({
               .join(" · ");
             const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
             const groupBadge = group ? describeGroupBadge(group) : null;
-            const status = applicationStatusPill(row);
             return (
               <PortalPersonRecordRow
                 key={row.id}
@@ -1060,10 +1097,9 @@ export function ManagerApplications({
                 subtitle={subtitle || undefined}
                 preview={row.email}
                 badge={
-                  <div className="flex flex-wrap gap-1.5">
-                    {groupBadge ? <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge> : null}
-                    <Badge tone={status.tone}>{status.label}</Badge>
-                  </div>
+                  groupBadge ? (
+                    <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
+                  ) : undefined
                 }
                 onOpen={() => navigate(applicationDetailHref(basePath, bucket, row.id))}
                 dataAttr="application-list-row"

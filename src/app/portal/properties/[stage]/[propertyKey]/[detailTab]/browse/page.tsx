@@ -1,0 +1,10 @@
+import { renderProPortalSection } from "@/lib/portal-section-page";
+
+export default async function PropertyListingBrowsePage({
+  params,
+}: {
+  params: Promise<{ stage: string; propertyKey: string; detailTab: string }>;
+}) {
+  const { stage, propertyKey, detailTab } = await params;
+  return renderProPortalSection("properties", [stage, propertyKey, detailTab, "browse"]);
+}

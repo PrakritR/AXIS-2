@@ -455,20 +455,16 @@ export async function renderPortalSection(
     }
 
     if (kind === "pro" && section === "relationships") {
-      const TEAM_TABS = ["pending", "linked"] as const;
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/pending`);
+      if (tabParts?.length) {
+        const teamTabRaw = tabParts[0]!;
+        if (teamTabRaw === "owner" || teamTabRaw === "manager" || teamTabRaw === "pending" || teamTabRaw === "linked") {
+          redirect(`${def.basePath}/${section}`);
+        }
+        notFound();
       }
-      const teamTabRaw = tabParts[0]!;
-      if (teamTabRaw === "owner" || teamTabRaw === "manager") {
-        redirect(`${def.basePath}/${section}`);
-      }
-      if (!TEAM_TABS.includes(teamTabRaw as (typeof TEAM_TABS)[number])) notFound();
-      if (tabParts.length > 1) notFound();
-      const teamTab = teamTabRaw as (typeof TEAM_TABS)[number];
       const ProAccountLinksPanel = await loadProAccountLinksPanel();
       return subscriptionGated(
-        <ProAccountLinksPanel userId={effectiveWorkspaceUserId!} teamTab={teamTab} />,
+        <ProAccountLinksPanel userId={effectiveWorkspaceUserId!} />,
         kind,
         "relationships",
         managerOwnerSubscriptionTier,
@@ -487,16 +483,25 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/${section}/current`);
       }
       const residentsTab = tabParts[0]!;
-      if (!["current", "previous"].includes(residentsTab)) notFound();
-      if (tabParts.length > 3) notFound();
+      if (residentsTab === "previous") {
+        const tail = tabParts.slice(1);
+        redirect(`${def.basePath}/residents/current${tail.length ? `/${tail.join("/")}` : ""}`);
+      }
+      if (residentsTab !== "current") notFound();
       const residentId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
       const residentDetailTab = tabParts.length >= 3 ? tabParts[2]! : undefined;
+      const residentPaymentId =
+        residentDetailTab === "payments" && tabParts.length >= 4
+          ? decodeURIComponent(tabParts[3]!)
+          : undefined;
+      if (tabParts.length > (residentPaymentId ? 4 : 3)) notFound();
       const ManagerResidents = await loadManagerResidents();
       return subscriptionGated(
         <ManagerResidents
-          tabId={residentsTab as "current" | "previous"}
+          tabId="current"
           residentId={residentId}
           detailTab={residentDetailTab as import("@/lib/portal-detail-routes").ResidentDetailTabId | undefined}
+          paymentId={residentPaymentId}
           smsUiEnabled={isSmsCommUiEnabled()}
         />,
         kind,
@@ -782,20 +787,15 @@ export async function renderPortalSection(
     }
 
     if (section === "promotion") {
-      const PROMO_FILTERS = ["text", "image"] as const;
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/promotion/text`);
-      }
-      if (tabParts.length > 1) notFound();
-      const filterRaw = tabParts[0]!;
-      const contentFilter = PROMO_FILTERS.includes(filterRaw as typeof PROMO_FILTERS[number])
-        ? (filterRaw as typeof PROMO_FILTERS[number])
-        : "text";
-      if (filterRaw !== contentFilter) {
-        redirect(`${def.basePath}/promotion/${contentFilter}`);
+      if (tabParts?.length) {
+        const legacyFilter = tabParts[0];
+        if (legacyFilter === "text" || legacyFilter === "image") {
+          redirect(`${def.basePath}/promotion`);
+        }
+        notFound();
       }
       return subscriptionGated(
-        <ManagerPromotion contentFilter={contentFilter} basePath={def.basePath} />,
+        <ManagerPromotion basePath={def.basePath} />,
         kind,
         "promotion",
         managerOwnerSubscriptionTier,

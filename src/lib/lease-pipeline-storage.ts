@@ -705,6 +705,13 @@ function approvedLeasePlacementLabel(input: {
     if (bundleLabel) return `${propertyTitle} · ${bundleLabel}`;
   }
   const roomLabel = input.roomChoice?.trim() ? getRoomChoiceLabel(input.roomChoice).split(" · ")[0]?.trim() || "" : "";
+  if (roomLabel) {
+    const titleNorm = propertyTitle.toLowerCase();
+    const roomNorm = roomLabel.toLowerCase();
+    if (titleNorm === roomNorm || titleNorm.endsWith(` · ${roomNorm}`) || titleNorm.includes(` · ${roomNorm} ·`)) {
+      return propertyTitle;
+    }
+  }
   return [propertyTitle, roomLabel].filter(Boolean).join(" · ") || propertyTitle || "—";
 }
 

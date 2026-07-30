@@ -3,7 +3,7 @@
 import { User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
@@ -16,8 +16,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  portalDashboardMobileHeaderLabel,
+  portalMobileActiveSectionLabel,
   resolvePortalMobileBackTarget,
 } from "@/lib/portal-mobile-back";
+import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function ChevronLeftIcon() {
@@ -68,11 +71,35 @@ export function PortalMobileNavBar({
   const isDashboardBack =
     back != null && (back.label === "Dashboard" || /\/dashboard$/.test(back.href));
   const showBack = back != null && !isDashboardBack;
+  const sectionLabel = useMemo(() => {
+    if (showBack) return null;
+    const dashboardLabel = portalDashboardMobileHeaderLabel(pathname, definition);
+    if (dashboardLabel) return dashboardLabel;
+    return portalMobileActiveSectionLabel(pathname, definition);
+  }, [showBack, pathname, definition]);
   const nativeChrome = useNativeChrome();
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const sync = () => syncPortalMobileTopChrome(el);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
 
   return (
-    <div className="portal-mobile-nav-bar relative mb-1 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0">
+    <div
+      ref={barRef}
+      className="portal-mobile-nav-bar relative mb-0 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0"
+    >
       {/* Brand mark on tablet-only. */}
       <Link
         href={`${definition.basePath}/dashboard`}
@@ -92,6 +119,10 @@ export function PortalMobileNavBar({
           <ChevronLeftIcon />
           <span className="truncate">{back!.label}</span>
         </button>
+      ) : sectionLabel ? (
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-[-0.02em] text-foreground">
+          {sectionLabel}
+        </h1>
       ) : (
         <div className="min-w-0 flex-1" aria-hidden />
       )}

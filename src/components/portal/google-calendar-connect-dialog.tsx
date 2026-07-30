@@ -6,7 +6,13 @@ import { Modal } from "@/components/ui/modal";
 import { GoogleCalendarConnectPanel } from "@/components/portal/google-calendar-connect-panel";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 
-export function GoogleCalendarConnectDialog({ onConnectionChange }: { onConnectionChange?: () => void }) {
+export function GoogleCalendarConnectDialog({
+  onConnectionChange,
+  className,
+}: {
+  onConnectionChange?: () => void;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -20,7 +26,7 @@ export function GoogleCalendarConnectDialog({ onConnectionChange }: { onConnecti
       <Button
         type="button"
         variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        className={className ? `${PORTAL_HEADER_ACTION_BTN} ${className}` : `shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         onClick={() => setOpen(true)}
         data-attr="google-calendar-header-btn"
       >

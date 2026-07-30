@@ -18,6 +18,8 @@ export function PortalCommunicationShell({
   hideMobileFilterRow = false,
   compactFilterRow = true,
   mobileThreadReading = false,
+  hideTitleOnMobileNav = true,
+  mobileActionsRow,
 }: {
   title: string;
   controlStack?: ReactNode;
@@ -27,6 +29,9 @@ export function PortalCommunicationShell({
   hideMobileFilterRow?: boolean;
   compactFilterRow?: boolean;
   mobileThreadReading?: boolean;
+  hideTitleOnMobileNav?: boolean;
+  /** Full-width mobile action row (Filter | primary) above list chrome. */
+  mobileActionsRow?: ReactNode;
 }) {
   const resolvedStack =
     controlStack ??
@@ -36,10 +41,12 @@ export function PortalCommunicationShell({
     <ManagerPortalPageShell
       title={title}
       titleAside={titleAside}
+      hideTitleOnMobileNav={hideTitleOnMobileNav}
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
       mobileFlush={mobileThreadReading}
     >
+      {mobileActionsRow && !hideMobileFilterRow ? mobileActionsRow : null}
       {resolvedStack ? (
         <div className={hideMobileFilterRow ? "mb-3 max-md:hidden" : "mb-3"}>{resolvedStack}</div>
       ) : null}

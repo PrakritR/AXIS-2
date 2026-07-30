@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { DestinationNav, type DestinationNavItem } from "@/components/ui/destination-nav";
+import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,6 +25,8 @@ export function PortalListControlStack({
   search,
   activeFilterChips,
   className,
+  /** When true, destination tabs respect page horizontal padding on mobile (no bleed). */
+  destinationInset = false,
 }: {
   /** Typically {@link PortalFilterSortSheet} (mobile sheet; optional desktop inline pills or panel modal). */
   filterRow?: ReactNode;
@@ -43,22 +46,58 @@ export function PortalListControlStack({
   /** Removable chips when filters are active (Appendix F band 3). */
   activeFilterChips?: ReactNode;
   className?: string;
+  destinationInset?: boolean;
 }) {
   const showDestinations = Boolean(destinationRow) || (destinations && destinations.length > 0);
   const showFindRow = Boolean(filterRow || search);
+  const destinationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = destinationRef.current;
+    if (!el || !showDestinations) return;
+    const sync = () => syncPortalMobileTopChrome(el);
+    sync();
+    const ro = new ResizeObserver(sync);
+    const main = el.closest("#portal-main-content");
+    const mobileBar = main?.querySelector(".portal-mobile-nav-bar");
+    if (mobileBar) ro.observe(mobileBar);
+    ro.observe(el);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+      const mobileBar = main?.querySelector<HTMLElement>(".portal-mobile-nav-bar");
+      if (mobileBar) syncPortalMobileTopChrome(mobileBar);
+    };
+  }, [showDestinations]);
 
   if (!showDestinations && !showFindRow && !activeFilterChips) return null;
 
   return (
-    <div className={cn("space-y-2", className)} data-slot="portal-list-control-stack">
+    <div className={cn("space-y-2.5 max-lg:space-y-2", className)} data-slot="portal-list-control-stack">
       {showDestinations ? (
-        destinationRow ?? (
-          <DestinationNav
-            items={destinations!}
-            activeId={activeDestinationId}
-            ariaLabel={destinationAriaLabel}
-          />
-        )
+        <div
+          ref={destinationRef}
+          data-portal-list-destination-nav
+          className={cn(
+            "sticky z-[38] bg-background/95 backdrop-blur-md lg:static lg:mx-0",
+            destinationInset ? "mx-0" : "-mx-2.5 sm:-mx-4",
+            "[top:var(--portal-mobile-top-chrome,0px)]",
+            "lg:bg-transparent lg:backdrop-blur-none",
+          )}
+        >
+          {destinationRow ?? (
+            <DestinationNav
+              items={destinations!}
+              activeId={activeDestinationId}
+              ariaLabel={destinationAriaLabel}
+              className={cn(
+                "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent",
+                destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:p-0",
+              )}
+            />
+          )}
+        </div>
       ) : null}
       {showFindRow ? (
         <div className="flex w-full min-w-0 items-stretch gap-2 max-md:flex-col md:items-center">

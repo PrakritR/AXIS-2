@@ -54,6 +54,14 @@ const DEFAULT_STACK_CLASS = "fixed inset-0 z-[70] overflow-y-auto overscroll-con
 const DEFAULT_CENTER_CLASS =
   "relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6 [html[data-native]_&]:pt-[max(1rem,var(--native-safe-top))] [html[data-native]_&]:pb-[max(1rem,var(--native-safe-bottom))]";
 
+/** FieldSingleSelect menus portal to `document.body`; keep Radix/Vaul from treating them as outside dismiss. */
+function allowPortaledFieldSelectInteraction(event: Event) {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('[role="listbox"]')) {
+    event.preventDefault();
+  }
+}
+
 export type ModalShellProps = {
   open: boolean;
   onClose: () => void;
@@ -142,6 +150,8 @@ export function ModalShell({
             data-slot="modal-vaul-drawer"
             style={panelStyle}
             className={panelClassName}
+            onPointerDownOutside={allowPortaledFieldSelectInteraction}
+            onInteractOutside={allowPortaledFieldSelectInteraction}
             {...contentA11y}
           >
             {showDrawerHandle ? (
@@ -172,6 +182,8 @@ export function ModalShell({
               data-slot="modal-radix-dialog"
               style={panelStyle}
               className={panelClassName}
+              onPointerDownOutside={allowPortaledFieldSelectInteraction}
+              onInteractOutside={allowPortaledFieldSelectInteraction}
               {...contentA11y}
             >
               {children}

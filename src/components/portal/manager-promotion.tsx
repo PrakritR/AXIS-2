@@ -6,9 +6,8 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   buildManagerPropertyFilterOptions,
@@ -19,7 +18,6 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
-import { promotionListHref, type PromotionContentFilterId } from "@/lib/portal-detail-routes";
 import {
   DEMO_PROMOTION_AUTOFILL_EVENT,
   DEMO_PROMOTION_GENERATED_EVENT,
@@ -49,7 +47,6 @@ import {
   nextPromotionAssetDefaultTitle,
   sortPromotionAssets,
   type PromotionAsset,
-  type PromotionAssetKind,
 } from "@/lib/promotion-assets";
 import {
   buildManagerPromotionPropertyOptions,
@@ -96,12 +93,6 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
-/** Content-type filter pills at the top of the Promotion page. `image` maps to
- *  flyer assets (`kind: "flyer"`), `text` to text assets. The pills are mutually
- *  exclusive (no "All") — like the Applications/Services status pills, which
- *  default to their first bucket rather than an aggregate. */
-export type PromotionContentFilter = "text" | "image";
-
 function flyerEntryToDraft(
   row: ManagerPromotionRow,
   entry: FlyerEntry,
@@ -135,10 +126,8 @@ function flyerEntryToDraft(
 
 
 export function ManagerPromotion({
-  contentFilter: contentFilterProp = "text",
-  basePath = "/portal",
+  basePath: _basePath = "/portal",
 }: {
-  contentFilter?: PromotionContentFilter;
   basePath?: string;
 } = {}) {
   const { showToast } = useAppUi();
@@ -164,12 +153,6 @@ export function ManagerPromotion({
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
-  const [contentFilter, setContentFilter] = useState<PromotionContentFilter>(contentFilterProp);
-  const [prevContentFilterProp, setPrevContentFilterProp] = useState(contentFilterProp);
-  if (contentFilterProp !== prevContentFilterProp) {
-    setPrevContentFilterProp(contentFilterProp);
-    if (contentFilter !== contentFilterProp) setContentFilter(contentFilterProp);
-  }
   const [propertyFilter, setPropertyFilter] = useState("");
 
   useEffect(() => {
@@ -210,30 +193,6 @@ export function ManagerPromotion({
     if (!propertyFilter) return assets;
     return assets.filter((a) => samePropertyId(a.row.propertyId, propertyFilter));
   }, [assets, propertyFilter]);
-
-  const contentCounts = useMemo(() => {
-    let text = 0;
-    let image = 0;
-    for (const a of propertyScopedAssets) {
-      if (a.kind === "text") text += 1;
-      else image += 1;
-    }
-    return { text, image };
-  }, [propertyScopedAssets]);
-
-  const contentTabs = useMemo(
-    () =>
-      [
-        { id: "text" as const, label: "Text", count: contentCounts.text, dataAttr: "promotion-filter-text" },
-        { id: "image" as const, label: "Image", count: contentCounts.image, dataAttr: "promotion-filter-image" },
-      ] satisfies { id: PromotionContentFilterId; label: string; count: number; dataAttr: string }[],
-    [contentCounts],
-  );
-
-  const filteredAssets = useMemo(() => {
-    const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
-    return propertyScopedAssets.filter((a) => a.kind === wantedKind);
-  }, [propertyScopedAssets, contentFilter]);
 
   const listings = useMemo<ManagerPromotionPropertyOption[]>(() => {
     void propertyTick;
@@ -324,19 +283,12 @@ export function ManagerPromotion({
     setDraft(EMPTY_DRAFT);
   }, []);
 
-  // Both filters are mutually exclusive selections, so a saved asset can sit
-  // outside either of them. Move both to whatever renders the saved row before
-  // expanding it — otherwise the success toast points at nothing.
-  const revealAsset = useCallback(
-    (assetId: string, kind: PromotionContentFilter, rowPropertyId: string | null | undefined) => {
-      setContentFilter(kind);
-      setPropertyFilter((cur) =>
-        !cur || samePropertyId(rowPropertyId, cur) ? cur : rowPropertyId?.trim() || "",
-      );
-      setExpandedId(assetId);
-    },
-    [],
-  );
+  const revealAsset = useCallback((assetId: string, rowPropertyId: string | null | undefined) => {
+    setPropertyFilter((cur) =>
+      !cur || samePropertyId(rowPropertyId, cur) ? cur : rowPropertyId?.trim() || "",
+    );
+    setExpandedId(assetId);
+  }, []);
 
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
@@ -436,7 +388,7 @@ export function ManagerPromotion({
       upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
       const assetId = makePromotionAssetId(savedRow.id, "flyer", entryId);
-      revealAsset(assetId, "image", savedRow.propertyId);
+      revealAsset(assetId, savedRow.propertyId);
       if (isDemoModeActive()) {
         window.dispatchEvent(new CustomEvent(DEMO_PROMOTION_GENERATED_EVENT, { detail: { assetId } }));
       }
@@ -548,7 +500,7 @@ export function ManagerPromotion({
       });
       upsertManagerPromotion(row);
       closeForm();
-      revealAsset(makePromotionAssetId(row.id, "text", entry.id), "text", row.propertyId);
+      revealAsset(makePromotionAssetId(row.id, "text", entry.id), row.propertyId);
       showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
     } catch {
       showToast("Could not generate promotion text.");
@@ -602,7 +554,7 @@ export function ManagerPromotion({
         });
       upsertManagerPromotion(appendUploadEntryToRow(row, entry));
       closeForm();
-      revealAsset(makePromotionAssetId(row.id, "upload", entry.id), "image", propertyId);
+      revealAsset(makePromotionAssetId(row.id, "upload", entry.id), propertyId);
       showToast("Promotion uploaded.");
     } finally {
       setUploadBusy(false);
@@ -694,50 +646,60 @@ export function ManagerPromotion({
     );
   };
 
-  const promotionHeaderActions = (
-    <PortalSectionActionRow>
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => openNewPromotion()}
-        data-attr="promotion-new"
-      >
-        New promotion
-      </Button>
+  const promotionFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([propertyFilter])}
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      onReset={() => setPropertyFilter("")}
+      dataAttr="promotion-filter-sheet-open"
+    >
+      <ApplicationFilterSortFields
+        propertyOptions={filterPropertyOptions}
+        propertyFilter={propertyFilter}
+        onPropertyFilterChange={setPropertyFilter}
+        dataAttr="promotion-filter-property"
+      />
+    </PortalFilterSortSheet>
+  );
+
+  const promotionNewButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => openNewPromotion()}
+      data-attr="promotion-new"
+    >
+      New promotion
+    </Button>
+  );
+
+  const promotionDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
+      {promotionFilterSheet}
+      {promotionNewButton}
     </PortalSectionActionRow>
   );
 
+  const promotionMobileActionsRow = (
+    <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="promotion-mobile-actions">
+      <div className="min-w-0">{promotionFilterSheet}</div>
+      <div className="min-w-0">{promotionNewButton}</div>
+    </div>
+  );
+
   return (
-    <ManagerPortalPageShell title="Promotion" titleAside={promotionHeaderActions} compactFilterRow>
-      <PortalListControlStack
-        className="mb-3"
-        filterRow={
-          <PortalFilterSortSheet
-            activeCount={portalFilterActiveCount([propertyFilter])}
-            onReset={() => setPropertyFilter("")}
-            dataAttr="promotion-filter-sheet-open"
-          >
-            <PortalPropertyFilterPill
-              propertyOptions={filterPropertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-          </PortalFilterSortSheet>
-        }
-        destinations={contentTabs.map((t) => ({
-          id: t.id,
-          label: t.label,
-          href: promotionListHref(basePath, t.id),
-          count: t.count,
-          dataAttr: t.dataAttr,
-        }))}
-        activeDestinationId={contentFilter}
-        destinationAriaLabel="Promotion content type"
-      />
+    <ManagerPortalPageShell
+      title="Promotion"
+      titleAside={promotionDesktopHeaderActions}
+      hideTitleOnMobileNav
+      compactFilterRow
+    >
+      {promotionMobileActionsRow}
       <div data-attr="promotion-content-direct">
         <PromotionAssetStack
-          assets={filteredAssets}
+          assets={propertyScopedAssets}
           emptyMessage={
             assets.length === 0
               ? "No promotions yet."

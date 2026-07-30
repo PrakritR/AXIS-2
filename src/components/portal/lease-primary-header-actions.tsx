@@ -26,6 +26,8 @@ type LeasePrimaryHeaderActionsProps = {
   deleteDataAttr?: string;
   sendToResidentDataAttr?: string;
   moveToManagerReviewDataAttr?: string;
+  /** Render buttons only — parent supplies PortalSectionActionRow / footer shell. */
+  embedded?: boolean;
 };
 
 /** Download, sign, send — Appendix C3 aligned action row for lease detail surfaces. */
@@ -49,25 +51,12 @@ export function LeasePrimaryHeaderActions({
   deleteDataAttr = "lease-primary-delete",
   sendToResidentDataAttr = "lease-primary-send-resident",
   moveToManagerReviewDataAttr = "lease-primary-move-manager-review",
+  embedded = false,
 }: LeasePrimaryHeaderActionsProps) {
   const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
 
-  return (
-    <PortalSectionActionRow
-      destructive={
-        onDelete ? (
-          <Button
-            type="button"
-            variant="outline"
-            className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            data-attr={deleteDataAttr}
-            onClick={onDelete}
-          >
-            {deleteLabel}
-          </Button>
-        ) : undefined
-      }
-    >
+  const buttons = (
+    <>
       {hasDocument ? (
         <Button type="button" variant="outline" className={btnClass} data-attr={downloadDataAttr} onClick={onDownload}>
           {downloadLabel}
@@ -119,6 +108,34 @@ export function LeasePrimaryHeaderActions({
           {signingReminderBusy ? "Sending…" : "Sign"}
         </Button>
       ) : null}
+    </>
+  );
+
+  const leaseDelete = onDelete ? (
+    <Button
+      type="button"
+      variant="outline"
+      className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+      data-attr={deleteDataAttr}
+      onClick={onDelete}
+    >
+      {deleteLabel}
+    </Button>
+  ) : undefined;
+
+  if (embedded) {
+    return (
+      <>
+        {buttons}
+        {leaseDelete}
+      </>
+    );
+  }
+
+  return (
+    <PortalSectionActionRow variant="header">
+      {buttons}
+      {leaseDelete}
     </PortalSectionActionRow>
   );
 }

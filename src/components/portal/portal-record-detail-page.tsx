@@ -5,7 +5,7 @@ import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 /**
- * Full-page record detail (Appendix E2) — no split list pane; URL is the record route.
+ * Full-page record detail (Appendix E2) — no split list pane; URL is the lease route.
  */
 export function PortalRecordDetailPage({
   pageTitle: _pageTitle,
@@ -14,7 +14,12 @@ export function PortalRecordDetailPage({
   avatarName,
   backHref,
   backLabel,
+  hideBackText = false,
+  hideBack = false,
+  bareHeader = false,
   actions,
+  suppressMobileActions = false,
+  inlineActions = false,
   children,
   dataAttrBack = "portal-record-detail-back",
 }: {
@@ -23,9 +28,15 @@ export function PortalRecordDetailPage({
   title: string;
   subtitle?: string;
   avatarName?: string;
-  backHref: string;
-  backLabel: string;
+  backHref?: string;
+  backLabel?: string;
+  hideBackText?: boolean;
+  /** Omit the back control entirely (detail stays in-context). */
+  hideBack?: boolean;
+  bareHeader?: boolean;
   actions?: ReactNode;
+  suppressMobileActions?: boolean;
+  inlineActions?: boolean;
   children: ReactNode;
   dataAttrBack?: string;
 }) {
@@ -36,12 +47,16 @@ export function PortalRecordDetailPage({
         title={title}
         subtitle={subtitle}
         avatarName={avatarName}
-        onBack={() => navigate(backHref)}
-        backLabel={backLabel}
+        onBack={hideBack || !backHref ? undefined : () => navigate(backHref)}
+        backLabel={backLabel ?? "Back"}
+        hideBackText={hideBackText}
+        bare={bareHeader}
         dataAttrBack={dataAttrBack}
         actions={actions}
+        suppressMobileActions={suppressMobileActions}
+        inlineActions={inlineActions}
       />
-      <div className="min-h-0 flex-1 px-0 py-2 md:px-2 md:py-3">{children}</div>
+      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }

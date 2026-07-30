@@ -300,6 +300,7 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(displayName)}
       hideTitleOnNative
+      hideTitleOnMobileNav
       welcomeSubtitle
     >
       <div className={PORTAL_DASHBOARD_STACK}>

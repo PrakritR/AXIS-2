@@ -72,7 +72,13 @@ export function PortalDetailHeader({
   avatarName,
   onBack,
   backLabel = "Back",
+  hideBackText = false,
+  bare = false,
   actions,
+  /** When true, actions render only beside the title on md+ (footer or other mobile chrome owns actions). */
+  suppressMobileActions = false,
+  /** When true, actions stay in the title row on all breakpoints (horizontal scroll on narrow screens). */
+  inlineActions = false,
   dataAttrBack = "portal-detail-back",
 }: {
   title: string;
@@ -80,11 +86,21 @@ export function PortalDetailHeader({
   avatarName?: string;
   onBack?: () => void;
   backLabel?: string;
+  /** Hide visible back label; chevron only (accessibility label kept). */
+  hideBackText?: boolean;
+  /** No card chrome — sits on the portal page canvas. */
+  bare?: boolean;
   actions?: ReactNode;
+  suppressMobileActions?: boolean;
+  inlineActions?: boolean;
   dataAttrBack?: string;
 }) {
   return (
-    <header className="portal-detail-header flex shrink-0 flex-col border-b border-border bg-card max-md:gap-2 md:gap-0">
+    <header
+      className={`portal-detail-header flex shrink-0 flex-col max-md:gap-2 md:gap-0 ${
+        bare ? "bg-transparent" : "border-b border-border bg-card"
+      }`}
+    >
       <div className="flex items-center gap-0.5 px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]">
         {onBack ? (
           <button
@@ -95,7 +111,7 @@ export function PortalDetailHeader({
             data-attr={dataAttrBack}
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
-            <span className="max-md:sr-only">{backLabel}</span>
+            <span className={hideBackText ? "sr-only" : "max-md:sr-only"}>{backLabel}</span>
           </button>
         ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
@@ -107,9 +123,19 @@ export function PortalDetailHeader({
             {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
           </div>
         </div>
-        {actions ? <div className="hidden shrink-0 items-center gap-1.5 md:flex">{actions}</div> : null}
+        {actions ? (
+          <div
+            className={
+              inlineActions
+                ? "flex max-w-[min(70%,24rem)] shrink-0 items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:max-w-none [&::-webkit-scrollbar]:hidden"
+                : "hidden shrink-0 items-center gap-1.5 md:flex"
+            }
+          >
+            {actions}
+          </div>
+        ) : null}
       </div>
-      {actions ? (
+      {actions && !suppressMobileActions && !inlineActions ? (
         <div className="flex w-full min-w-0 flex-col gap-2 border-t border-border/60 px-2 pb-2 pt-2 md:hidden">
           {actions}
         </div>

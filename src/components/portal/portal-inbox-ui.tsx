@@ -567,9 +567,12 @@ export function InboxChannelTag({ channel }: { channel: InboxChannel }) {
 export const PORTAL_INBOX_LIST_TOOLBAR_CLASS =
   "portal-inbox-list-toolbar shrink-0 space-y-2 border-b border-border p-2 max-md:space-y-1.5 max-md:p-1.5 sm:p-2.5 sm:space-y-2.5";
 
-/** Scrollable body for a conversation list pane. */
+/** Scrollable body for a conversation list pane (inbox split view). */
 export const INBOX_LIST_SCROLL =
   "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]";
+
+/** Full-page record lists — let #portal-main-content scroll (no nested panel). */
+export const PORTAL_LIST_PAGE_BODY = "w-full min-w-0 pb-[var(--portal-assistant-fab-clearance,3.5rem)] lg:pb-[calc(var(--portal-assistant-fab-clearance,3.5rem)+1rem)]";
 
 export function inboxInitials(name: string): string {
   const parts = name

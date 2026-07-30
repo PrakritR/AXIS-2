@@ -106,7 +106,7 @@ export function PortalNativeMoreSheet({
   const navGroups = useMemo(() => {
     const grouped = groupNavItems(kind, items);
     const rendered = new Set(grouped.flatMap((g) => g.items.map((i) => i.section)));
-    const trailing = items.filter((i) => !rendered.has(i.section));
+    const trailing = items.filter((i) => !rendered.has(i.section) && i.section !== "profile");
     if (trailing.length) grouped.push({ id: "account-extra", label: null, items: trailing });
     return grouped;
   }, [kind, items]);

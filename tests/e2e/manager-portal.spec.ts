@@ -65,15 +65,12 @@ test.describe("Manager portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("residents tab switches between Current and Previous sub-tabs", async ({ page }) => {
+  test("residents tab loads with list heading", async ({ page }) => {
     await page.goto("/portal/residents/current");
     await expect(page).toHaveURL(/residents\/current/);
-    // Click Previous sub-tab if it exists
-    const prevTab = page.getByRole("tab", { name: /previous/i }).or(page.getByRole("link", { name: /previous/i }));
-    if (await prevTab.count() > 0) {
-      await prevTab.first().click();
-      await expect(page).toHaveURL(/residents\/previous/, { timeout: 10_000 });
-    }
+    await expect(page.getByRole("heading", { name: /residents/i }).first()).toBeVisible();
+    await expect(page.getByRole("tab", { name: /previous/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /previous/i })).toHaveCount(0);
   });
 
   test("services tab switches between sub-tabs", async ({ page }) => {

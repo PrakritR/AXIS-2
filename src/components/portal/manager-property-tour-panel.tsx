@@ -1,12 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PortalCalendarPanels } from "@/components/portal/portal-calendar-panels";
-import {
-  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
-  PortalPropertyDetailSection,
-} from "@/components/portal/portal-property-detail-section";
+import { PortalPropertyDetailSection } from "@/components/portal/portal-property-detail-section";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { managerPropertyAvailabilityStorageKey } from "@/lib/demo-admin-scheduling";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
@@ -15,13 +11,23 @@ export function ManagerPropertyTourPanel({
   listingId,
   managerUserId,
   propertyLabel,
+  onRegisterSendTour,
 }: {
   listingId: string;
   managerUserId: string | null;
   propertyLabel: string;
   showToast?: (message: string) => void;
+  /** Parent header "Send tour link" — same handler as the former section footer button. */
+  onRegisterSendTour?: (openSendTour: (() => void) | null) => void;
 }) {
   const [sendTourOpen, setSendTourOpen] = useState(false);
+
+  const openSendTour = useCallback(() => setSendTourOpen(true), []);
+
+  useEffect(() => {
+    onRegisterSendTour?.(openSendTour);
+    return () => onRegisterSendTour?.(null);
+  }, [onRegisterSendTour, openSendTour]);
 
   const storageKey = useMemo(() => {
     if (!managerUserId || !listingId) return null;
@@ -35,23 +41,11 @@ export function ManagerPropertyTourPanel({
 
   return (
     <>
-      <PortalPropertyDetailSection
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-            data-attr="listing-send-tour-link"
-            onClick={() => setSendTourOpen(true)}
-          >
-            Send tour link
-          </Button>
-        }
-        contentClassName="px-4 py-2"
-      >
+      <PortalPropertyDetailSection>
         <PortalCalendarPanels
           key={storageKey ?? "property-calendar-unavailable"}
           storageKey={storageKey}
+          bareSurface
           compactAvailability
           defaultViewMode="week"
           availabilityHeading="Your availability"

@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
 import {
   PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS,
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
 import {
@@ -16,15 +21,6 @@ import {
   promotionTextIdentityFromDraft,
   type PromotionDraft,
 } from "@/components/portal/promotion-form";
-import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
-import {
-  PromotionFlyerAssetDetail,
-  PromotionFlyerHeaderActions,
-  PromotionTextAssetDetail,
-  PromotionTextHeaderActions,
-  PromotionUploadAssetDetail,
-  PromotionUploadHeaderActions,
-} from "@/components/portal/promotion-asset-detail";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -43,8 +39,9 @@ import {
 } from "@/lib/manager-promotions-storage";
 import {
   flattenPromotionAssets,
-  makePromotionAssetId,
   nextPromotionAssetDefaultTitle,
+  promotionAssetBoxTitle,
+  promotionAssetKindIndices,
   sortPromotionAssets,
   type PromotionAsset,
   type PromotionAssetKind,
@@ -69,13 +66,19 @@ import {
   updateFlyerEntryOnRow,
   updateTextEntryOnRow,
 } from "@/lib/promotion-row-ops";
-import { type PromotionTextEntry, type PromotionTextFormat } from "@/lib/promotion-text";
+import { type PromotionTextFormat } from "@/lib/promotion-text";
 import {
   fileToPromotionUpload,
   makePromotionUploadId,
   readPromotionUploadEntries,
   type PromotionUploadEntry,
 } from "@/lib/promotion-upload";
+
+function promotionKindLabel(kind: PromotionAssetKind): string {
+  if (kind === "flyer") return "Flyer";
+  if (kind === "text") return "Text";
+  return "Upload";
+}
 
 function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingId: string): PromotionDraft {
   return {
@@ -106,11 +109,14 @@ export function ManagerPropertyPromotionPanel({
   showToast,
   onUpdated,
   headerActionsExtra,
+  onRegisterNewPromotion,
 }: {
   listingId: string;
   showToast: (m: string) => void;
   onUpdated?: () => void;
   headerActionsExtra?: ReactNode;
+  /** Parent header "New promotion" — same handler as the former section footer button. */
+  onRegisterNewPromotion?: (openNewPromotion: (() => void) | null) => void;
 }) {
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   // Aborts the copy request owned by whichever compose modal is open.
@@ -126,8 +132,6 @@ export function ManagerPropertyPromotionPanel({
   const [generating, setGenerating] = useState(false);
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [contentFilter, setContentFilter] = useState<"text" | "image">("text");
 
   useEffect(() => {
     if (!authReady) return;
@@ -162,28 +166,7 @@ export function ManagerPropertyPromotionPanel({
     return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
   }, [propertyId, tick]);
 
-  const contentCounts = useMemo(() => {
-    let text = 0;
-    let image = 0;
-    for (const a of assets) {
-      if (a.kind === "text") text += 1;
-      else image += 1;
-    }
-    return { text, image };
-  }, [assets]);
-
-  const contentTabs = useMemo(
-    () => [
-      { id: "text", label: "Text", count: contentCounts.text, dataAttr: "property-promotion-filter-text" },
-      { id: "image", label: "Flyers", count: contentCounts.image, dataAttr: "property-promotion-filter-image" },
-    ],
-    [contentCounts],
-  );
-
-  const filteredAssets = useMemo(() => {
-    const wantedKind: PromotionAssetKind = contentFilter === "image" ? "flyer" : "text";
-    return assets.filter((a) => a.kind === wantedKind);
-  }, [assets, contentFilter]);
+  const assetKindIndices = useMemo(() => promotionAssetKindIndices(assets), [assets]);
 
   // Open the unified "New promotion" modal (type dropdown + inline form, no
   // separate "Continue" step) seeded to this property.
@@ -193,6 +176,11 @@ export function ManagerPropertyPromotionPanel({
     setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts));
     setShowNewModal(true);
   }, [listings, propertyId, autofillOpts]);
+
+  useEffect(() => {
+    onRegisterNewPromotion?.(openNewPromotion);
+    return () => onRegisterNewPromotion?.(null);
+  }, [onRegisterNewPromotion, openNewPromotion]);
 
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
@@ -204,6 +192,19 @@ export function ManagerPropertyPromotionPanel({
       setShowForm(true);
     },
     [propertyId],
+  );
+
+  const openEditAsset = useCallback(
+    (asset: PromotionAsset) => {
+      if (asset.kind === "flyer" && asset.flyerEntry) {
+        openEditFlyer(asset.row, asset.flyerEntry.id);
+        return;
+      }
+      if (asset.kind === "text" && asset.textEntry) {
+        setTextModalAssetId(asset.id);
+      }
+    },
+    [openEditFlyer],
   );
 
   // Closes every promotion compose surface — the unified new modal, the
@@ -300,7 +301,6 @@ export function ManagerPropertyPromotionPanel({
       upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
       setTick((n) => n + 1);
-      setExpandedId(makePromotionAssetId(savedRow.id, "flyer", entryId));
       onUpdated?.();
       showToast(
         editingRow
@@ -406,7 +406,6 @@ export function ManagerPropertyPromotionPanel({
       });
       upsertManagerPromotion(row);
       closeForm();
-      setExpandedId(makePromotionAssetId(row.id, "text", entry.id));
       setTick((n) => n + 1);
       onUpdated?.();
       showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
@@ -416,27 +415,6 @@ export function ManagerPropertyPromotionPanel({
       if (generateAbortRef.current === abort) generateAbortRef.current = null;
       setGeneratingTextId(null);
     }
-  }
-
-  function saveAssetTitle(asset: PromotionAsset, title: string) {
-    if (asset.kind === "flyer" && asset.flyerEntry) {
-      upsertManagerPromotion(updateFlyerEntryOnRow(asset.row, asset.flyerEntry.id, { title }));
-    } else if (asset.kind === "text" && asset.textEntry) {
-      upsertManagerPromotion(updateTextEntryOnRow(asset.row, asset.textEntry.id, { title }));
-    } else if (asset.kind === "upload" && asset.uploadEntry) {
-      const entries = readPromotionUploadEntries(asset.row).map((entry) =>
-        entry.id === asset.uploadEntry!.id ? { ...entry, title, updatedAt: new Date().toISOString() } : entry,
-      );
-      upsertManagerPromotion(syncPromotionRowLegacy({ ...asset.row, uploadCopies: entries }));
-    }
-    setTick((n) => n + 1);
-    onUpdated?.();
-  }
-
-  function saveTextEntry(row: ManagerPromotionRow, entry: PromotionTextEntry) {
-    upsertManagerPromotion(updateTextEntryOnRow(row, entry.id, entry));
-    setTick((n) => n + 1);
-    onUpdated?.();
   }
 
   function deleteAsset(asset: PromotionAsset) {
@@ -453,7 +431,6 @@ export function ManagerPropertyPromotionPanel({
       if (next) upsertManagerPromotion(next);
       else deleteManagerPromotionRow(asset.row.id);
     }
-    if (expandedId === asset.id) setExpandedId(null);
     setTick((n) => n + 1);
     onUpdated?.();
     showToast("Promotion deleted.");
@@ -514,109 +491,59 @@ export function ManagerPropertyPromotionPanel({
     }
   }
 
-  const renderHeaderActions = (asset: PromotionAsset) => {
-    if (asset.kind === "flyer") {
-      return (
-        <PromotionFlyerHeaderActions
-          asset={asset}
-          onEdit={openEditFlyer}
-          onDelete={(_row, entryId) => {
-            const flyerAsset = assets.find(
-              (a) => a.row.id === asset.row.id && a.flyerEntry?.id === entryId,
-            );
-            if (flyerAsset) deleteAsset(flyerAsset);
-          }}
-          canDelete
-        />
-      );
-    }
-
-    if (asset.kind === "upload") {
-      return (
-        <PromotionUploadHeaderActions
-          asset={asset}
-          onDelete={(row, entryId) => {
-            const uploadAsset = assets.find((a) => a.row.id === row.id && a.uploadEntry?.id === entryId);
-            if (uploadAsset) deleteAsset(uploadAsset);
-          }}
-        />
-      );
-    }
-
-    return (
-      <PromotionTextHeaderActions
-        asset={asset}
-        onEdit={(row, entryId) =>
-          setTextModalAssetId(makePromotionAssetId(row.id, "text", entryId))
-        }
-        onDelete={(row, entryId) => {
-          const textAsset = assets.find((a) => a.row.id === row.id && a.textEntry?.id === entryId);
-          if (textAsset) deleteAsset(textAsset);
-        }}
-        editing={generatingTextId === asset.textEntry?.id}
-        showToast={showToast}
-      />
-    );
-  };
-
-  const renderExpanded = (asset: PromotionAsset) => {
-    if (asset.kind === "flyer") {
-      return <PromotionFlyerAssetDetail asset={asset} />;
-    }
-    if (asset.kind === "upload") {
-      return <PromotionUploadAssetDetail asset={asset} />;
-    }
-
-    return (
-      <PromotionTextAssetDetail
-        asset={asset}
-        onSave={saveTextEntry}
-        showToast={showToast}
-      />
-    );
-  };
-
   return (
     <>
-      <PortalPropertyDetailSection
-        surfaceMuted
-        actions={
-          <>
-            {headerActionsExtra}
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-              onClick={openNewPromotion}
-              data-attr="manager-property-new-promotion"
-            >
-              New promotion
-            </Button>
-          </>
-        }
-        contentClassName="px-4 py-3"
-      >
-          <div className="mb-4">
-            <ManagerPortalStatusPills
-              tabs={contentTabs}
-              activeId={contentFilter}
-              onChange={(id) => setContentFilter(id as "text" | "image")}
-            />
-          </div>
-          <PromotionAssetStack
-            assets={filteredAssets}
-            expandedId={expandedId}
-            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-            onSaveTitle={saveAssetTitle}
-            renderHeaderActions={renderHeaderActions}
-            renderExpanded={renderExpanded}
-            emptyMessage={
-              assets.length === 0
-                ? "No promotions for this property yet."
-                : "No promotions match this filter."
-            }
-          />
+      <PortalPropertyDetailSection contentClassName="space-y-0">
+        {headerActionsExtra ? <div className="mb-3">{headerActionsExtra}</div> : null}
+        {assets.map((asset) => {
+          const indexWithinKind = assetKindIndices.get(asset.id) ?? 0;
+          const title = promotionAssetBoxTitle(asset, indexWithinKind);
+          const canEdit = asset.kind === "flyer" || asset.kind === "text";
+          return (
+            <div key={asset.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">{title}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {promotionKindLabel(asset.kind)} · {asset.subtitle}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                    data-attr="promotion-row-edit"
+                    onClick={() => openEditAsset(asset)}
+                  >
+                    Edit
+                  </Button>
+                ) : null}
+                {assets.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                    data-attr="promotion-row-remove"
+                    onClick={() => deleteAsset(asset)}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
       </PortalPropertyDetailSection>
+
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label="Add promotion"
+          icon={PORTAL_LIST_ADD_ICONS.promotion}
+          onClick={openNewPromotion}
+          dataAttr="manager-property-new-promotion"
+        />
+      </div>
 
       <PromotionNewModal
         open={showNewModal}

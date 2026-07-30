@@ -231,10 +231,11 @@ export function ManagerCommunication({
     />
   );
 
-  const threadFilters = (
+  const communicationFilterSheet = (
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
       desktopPresentation="panel"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
         setListSort("recent");
@@ -245,24 +246,38 @@ export function ManagerCommunication({
     </PortalFilterSortSheet>
   );
 
-  const titleAside = (
-    <PortalSectionActionRow variant="header">
+  const communicationNewMessageButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      data-attr="communication-new-message"
+      onClick={() => openCompose("email")}
+    >
+      New message
+    </Button>
+  );
+
+  const communicationDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="communication-new-message"
-        onClick={() => openCompose("email")}
-      >
-        New message
-      </Button>
+      {communicationFilterSheet}
+      {communicationNewMessageButton}
     </PortalSectionActionRow>
+  );
+
+  const communicationMobileActionsRow = (
+    <div
+      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+      data-slot="communication-mobile-actions"
+    >
+      <div className="min-w-0">{communicationFilterSheet}</div>
+      <div className="min-w-0">{communicationNewMessageButton}</div>
+    </div>
   );
 
   const controlStack = (
     <PortalListControlStack
-      filterRow={threadFilters}
       destinations={[
         { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
         {
@@ -295,8 +310,10 @@ export function ManagerCommunication({
   return (
     <PortalCommunicationShell
       title="Communication"
-      titleAside={titleAside}
+      titleAside={communicationDesktopHeaderActions}
+      hideTitleOnMobileNav
       controlStack={controlStack}
+      mobileActionsRow={communicationMobileActionsRow}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
     >

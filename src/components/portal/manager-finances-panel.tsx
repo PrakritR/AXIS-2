@@ -7,7 +7,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
+import { PortalActiveFilterChips, PortalFilterChipRow, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -712,6 +712,7 @@ export function ManagerFinancesPanel({
       onRun={() => void loadTable()}
       loading={loading}
       showRunButton={false}
+      stacked
       trailing={
         LEDGER_TAB_IDS.has(tabId) ? null : (
           <FinancesRowFilters
@@ -729,6 +730,49 @@ export function ManagerFinancesPanel({
     setFilters(defaultFilters());
     setRowFilters(emptyRowFilters());
   };
+
+  const financesFilterSheet = showScopedReportFilters ? (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([
+        filters.propertyId,
+        rowFilters.resident,
+        rowFilters.type,
+        rowFilters.category,
+        rowFilters.vendor,
+      ])}
+      desktopPresentation="panel"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      onReset={resetFinanceFilters}
+      dataAttr="finances-filter-sheet-open"
+    >
+      {financeFilterControls}
+    </PortalFilterSortSheet>
+  ) : null;
+
+  const activeFinanceFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    if (!showScopedReportFilters) return [];
+    const chips: PortalActiveFilterChip[] = [];
+    const defaults = defaultFilters();
+    if (filters.propertyId) {
+      const label = propertyOptions.find((p) => p.id === filters.propertyId)?.label ?? filters.propertyId;
+      chips.push({ id: "property", label: `Property: ${label}`, onRemove: () => setFilters((f) => ({ ...f, propertyId: "" })) });
+    }
+    if (filters.from !== defaults.from || filters.to !== defaults.to) {
+      chips.push({
+        id: "dates",
+        label: `Dates: ${filters.from} – ${filters.to}`,
+        onRemove: () => setFilters((f) => ({ ...f, from: defaults.from, to: defaults.to })),
+      });
+    }
+    if (tabId === "income") {
+      if (rowFilters.resident) chips.push({ id: "resident", label: `Resident: ${rowFilters.resident}`, onRemove: () => setRowFilters((f) => ({ ...f, resident: "" })) });
+      if (rowFilters.type) chips.push({ id: "type", label: `Type: ${rowFilters.type}`, onRemove: () => setRowFilters((f) => ({ ...f, type: "" })) });
+    } else if (tabId === "expenses") {
+      if (rowFilters.category) chips.push({ id: "category", label: `Category: ${rowFilters.category}`, onRemove: () => setRowFilters((f) => ({ ...f, category: "" })) });
+      if (rowFilters.vendor) chips.push({ id: "vendor", label: `Vendor: ${rowFilters.vendor}`, onRemove: () => setRowFilters((f) => ({ ...f, vendor: "" })) });
+    }
+    return chips;
+  }, [showScopedReportFilters, filters, rowFilters, tabId, propertyOptions]);
 
   function openAddIncome() {
     setIncomeDraft({
@@ -756,62 +800,91 @@ export function ManagerFinancesPanel({
     setExpenseModal(true);
   }
 
-  const headerActions = (
-    <PortalSectionActionRow>
-      {tabId === "owner-statement" ? (
-        <a
-          href={`/api/reports/owner-statement/formal-export?${query}`}
-          className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
-          data-attr="owner-statement-formal-pdf"
-        >
-          Formal PDF
-        </a>
-      ) : null}
-      {report && report.rows.length > 0 ? (
-        <ReportExportButtons
-          reportId={reportId}
-          query={query}
-          formats={tabId === "general-ledger" ? ["csv", "pdf", "quickbooks"] : ["csv"]}
-        />
-      ) : tabId === "general-ledger" ? (
-        <ReportExportButtons reportId={reportId} query={query} formats={["quickbooks"]} />
-      ) : null}
-      {tabId === "income" ? (
-        <PortalSectionPrimaryButton onClick={openAddIncome} data-attr="finances-add-income">
-          Add income
-        </PortalSectionPrimaryButton>
-      ) : tabId === "expenses" ? (
-        <PortalSectionPrimaryButton onClick={openAddExpense} data-attr="finances-add-expense">
-          Add expense
-        </PortalSectionPrimaryButton>
-      ) : null}
+  const financesFormalPdfLink =
+    tabId === "owner-statement" ? (
+      <a
+        href={`/api/reports/owner-statement/formal-export?${query}`}
+        className="inline-flex h-9 w-full items-center justify-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40 md:w-auto"
+        data-attr="owner-statement-formal-pdf"
+      >
+        Formal PDF
+      </a>
+    ) : null;
+
+  const financesExportButtons =
+    report && report.rows.length > 0 ? (
+      <ReportExportButtons
+        reportId={reportId}
+        query={query}
+        formats={tabId === "general-ledger" ? ["csv", "pdf", "quickbooks"] : ["csv"]}
+      />
+    ) : tabId === "general-ledger" ? (
+      <ReportExportButtons reportId={reportId} query={query} formats={["quickbooks"]} />
+    ) : null;
+
+  const financesAddIncomeButton =
+    tabId === "income" ? (
+      <PortalSectionPrimaryButton
+        className="w-full shrink-0 md:w-auto"
+        onClick={openAddIncome}
+        data-attr="finances-add-income"
+      >
+        Add income
+      </PortalSectionPrimaryButton>
+    ) : null;
+
+  const financesAddExpenseButton =
+    tabId === "expenses" ? (
+      <PortalSectionPrimaryButton
+        className="w-full shrink-0 md:w-auto"
+        onClick={openAddExpense}
+        data-attr="finances-add-expense"
+      >
+        Add expense
+      </PortalSectionPrimaryButton>
+    ) : null;
+
+  const financesPrimaryButton = financesAddIncomeButton ?? financesAddExpenseButton;
+
+  const financesDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
+      {financesFilterSheet}
+      {financesFormalPdfLink}
+      {financesExportButtons}
+      {financesPrimaryButton}
     </PortalSectionActionRow>
   );
 
+  const financesMobileActionsRow =
+    showScopedReportFilters || financesPrimaryButton ? (
+      <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="finances-mobile-actions">
+        {showScopedReportFilters ? <div className="min-w-0">{financesFilterSheet}</div> : null}
+        <div className={showScopedReportFilters ? "min-w-0" : "col-span-2 min-w-0"}>
+          {financesFormalPdfLink}
+          {financesExportButtons}
+          {financesPrimaryButton}
+        </div>
+      </div>
+    ) : null;
+
   return (
-    <ManagerPortalPageShell title="Finances" titleAside={headerActions} compactFilterRow>
+    <ManagerPortalPageShell
+      title="Finances"
+      titleAside={financesDesktopHeaderActions}
+      hideTitleOnMobileNav
+      compactFilterRow
+    >
+      {financesMobileActionsRow}
       <PortalListControlStack
         className="mb-3"
-        filterRow={
-          showScopedReportFilters ? (
-            <PortalFilterSortSheet
-              activeCount={portalFilterActiveCount([
-                filters.propertyId,
-                rowFilters.resident,
-                rowFilters.type,
-                rowFilters.category,
-                rowFilters.vendor,
-              ])}
-              onReset={resetFinanceFilters}
-              dataAttr="finances-filter-sheet-open"
-            >
-              {financeFilterControls}
-            </PortalFilterSortSheet>
-          ) : undefined
-        }
         destinations={financeTabItems}
         activeDestinationId={tabId}
         destinationAriaLabel="Finance report"
+        activeFilterChips={
+          activeFinanceFilterChips.length > 0 ? (
+            <PortalActiveFilterChips chips={activeFinanceFilterChips} />
+          ) : null
+        }
       />
       {tabId === "bills" ? (
         <ManagerBillsPanel />

@@ -29,16 +29,26 @@ export function PageHeader({
   className?: string;
   showTitleOnMobile?: boolean;
 }) {
+  const hideTitleOnMobile = !showTitleOnMobile;
+
   return (
     <header
       className={cn(
-        "min-w-0 space-y-3",
-        !showTitleOnMobile && "max-md:[&_h1]:sr-only",
+        "min-w-0 space-y-3 max-lg:space-y-1.5",
+        hideTitleOnMobile && "max-md:[&_h1]:sr-only",
         className,
       )}
       data-slot="page-header"
     >
-      <div className="flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3">
+      <div
+        data-slot="page-header-title-row"
+        className={cn(
+          "flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3",
+          hideTitleOnMobile && primaryAction && !titleTrailing && "max-md:justify-end max-md:py-0",
+          hideTitleOnMobile && !primaryAction && !titleTrailing && "max-md:hidden",
+          hideTitleOnMobile && titleTrailing && !primaryAction && "max-md:w-full",
+        )}
+      >
         <h1
           className={cn(
             PAGE_HEADER_TITLE_CLASS,

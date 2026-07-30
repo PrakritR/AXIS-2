@@ -103,10 +103,7 @@ describe("resolvePortalMobileBackTarget", () => {
         {
           section: "residents",
           label: "Residents",
-          tabs: [
-            { id: "current", label: "Current" },
-            { id: "previous", label: "Previous" },
-          ],
+          tabs: [{ id: "current", label: "Current" }],
         },
       ],
     };
@@ -121,10 +118,7 @@ describe("resolvePortalMobileBackTarget", () => {
         {
           section: "residents",
           label: "Residents",
-          tabs: [
-            { id: "current", label: "Current" },
-            { id: "previous", label: "Previous" },
-          ],
+          tabs: [{ id: "current", label: "Current" }],
         },
       ],
     };

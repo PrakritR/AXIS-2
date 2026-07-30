@@ -7,7 +7,8 @@ import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PortalSortChipRow, PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
+import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
@@ -15,7 +16,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoing-payments-panel";
 import { ManagerAddOutgoingPaymentModal } from "@/components/portal/manager-add-outgoing-payment-modal";
@@ -526,39 +526,95 @@ export function ManagerPayments({
     [direction],
   );
 
-  const propertyFilterPill = (
-    <PortalPropertyFilterPill
-      propertyOptions={propertyOptions}
-      propertyValue={propertyFilter}
-      onPropertyChange={(nextProperty) => {
-        setPropertyFilter(nextProperty);
-        setResidentFilter("");
-      }}
-      residents={direction === "incoming"}
-      residentOptions={residentOptions}
-      residentValue={activeResidentFilter}
-      onResidentChange={setResidentFilter}
-    />
-  );
-
-  const filterControls = (
-    <>
-      {propertyFilterPill}
-      <PortalSortChipRow
-        label="Sort"
-        value={listSort}
-        onChange={setListSort}
-        ariaLabel="Sort payments"
-        options={sortOptions}
-      />
-    </>
-  );
-
   const resetPaymentFilters = () => {
     setPropertyFilter("");
     setResidentFilter("");
     setListSort(DEFAULT_PAYMENT_LIST_SORT);
   };
+
+  const paymentsFilterSheet = (
+    <PortalFilterSortSheet
+      activeCount={filterTouchCount}
+      desktopPresentation="panel"
+      className="max-md:flex-none max-md:w-full max-md:[&_button]:w-full"
+      onReset={resetPaymentFilters}
+      dataAttr="payments-filter-sheet-open"
+    >
+      <PaymentFilterSortFields
+        propertyOptions={propertyOptions}
+        residentOptions={residentOptions}
+        showResidentFilter={direction === "incoming"}
+        propertyFilter={propertyFilter}
+        onPropertyFilterChange={(nextProperty) => {
+          setPropertyFilter(nextProperty);
+          setResidentFilter("");
+        }}
+        residentFilter={activeResidentFilter}
+        onResidentFilterChange={setResidentFilter}
+        listSort={listSort}
+        onListSortChange={setListSort}
+        sortOptions={sortOptions}
+      />
+    </PortalFilterSortSheet>
+  );
+
+  const paymentsRemindersButton =
+    direction === "incoming" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        onClick={() => setReminderSettingsOpen(true)}
+        data-attr="payments-reminder-settings"
+      >
+        Reminders
+      </Button>
+    ) : null;
+
+  const paymentsSetupButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => setPaymentSetupOpen(true)}
+      data-attr="payments-setup"
+    >
+      Payment setup
+    </Button>
+  );
+
+  const paymentsAddButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+      data-attr="payments-add"
+    >
+      {direction === "incoming" ? "Add charge" : "Add payment"}
+    </Button>
+  );
+
+  const paymentsDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
+      {paymentsFilterSheet}
+      {paymentsRemindersButton}
+      {paymentsSetupButton}
+      {paymentsAddButton}
+    </PortalSectionActionRow>
+  );
+
+  const paymentsMobileActionsRow = (
+    <div
+      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+      data-slot="payments-mobile-actions"
+    >
+      <div className="min-w-0">{paymentsFilterSheet}</div>
+      {paymentsRemindersButton}
+      {paymentsSetupButton}
+      <div className={direction === "incoming" ? "min-w-0" : "col-span-2 min-w-0"}>{paymentsAddButton}</div>
+    </div>
+  );
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     const chips: PortalActiveFilterChip[] = [];
@@ -590,40 +646,6 @@ export function ManagerPayments({
     return chips;
   }, [propertyFilter, activeResidentFilter, listSort, direction, sortOptions]);
 
-  const paymentsHeaderActions = (
-    <PortalSectionActionRow className="max-sm:flex-row max-sm:[&_button]:w-auto max-sm:[&_button]:flex-1">
-      {direction === "incoming" ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          onClick={() => setReminderSettingsOpen(true)}
-          data-attr="payments-reminder-settings"
-        >
-          Reminders
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => setPaymentSetupOpen(true)}
-        data-attr="payments-setup"
-      >
-        Payment setup
-      </Button>
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
-        data-attr="payments-add"
-      >
-        {direction === "incoming" ? "Add charge" : "Add payment"}
-      </Button>
-    </PortalSectionActionRow>
-  );
-
   const directionNav = (
     <DestinationNav
       items={DIRECTION_LABELS.map((d) => ({
@@ -634,27 +656,20 @@ export function ManagerPayments({
       }))}
       activeId={direction}
       ariaLabel="Payment direction"
+      size="toolbar"
       className="max-w-none"
     />
-  );
-
-  const paymentsFilterSheet = (
-    <PortalFilterSortSheet
-      activeCount={filterTouchCount}
-      onReset={resetPaymentFilters}
-      dataAttr="payments-filter-sheet-open"
-    >
-      {filterControls}
-    </PortalFilterSortSheet>
   );
 
   return (
     <ManagerPortalPageShell
       title="Payments"
       titleTrailing={directionNav}
-      titleAside={paymentsHeaderActions}
+      titleAside={paymentsDesktopHeaderActions}
+      hideTitleOnMobileNav
       compactFilterRow
     >
+      {paymentsMobileActionsRow}
       <PortalListControlStack
         className="mb-3"
         destinations={tabs.map((t) => ({
@@ -667,7 +682,6 @@ export function ManagerPayments({
         }))}
         activeDestinationId={bucket}
         destinationAriaLabel="Payment status"
-        filterRow={paymentsFilterSheet}
         search={{
           value: searchQuery,
           onChange: setSearchQuery,

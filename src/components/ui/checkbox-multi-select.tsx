@@ -365,7 +365,8 @@ export function FieldSingleSelect({
               className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} ${
                 active ? "text-foreground" : "text-foreground"
               }`}
-              onClick={() => {
+              onPointerDown={(event) => {
+                event.preventDefault();
                 onChange(opt.value);
                 setOpen(false);
               }}

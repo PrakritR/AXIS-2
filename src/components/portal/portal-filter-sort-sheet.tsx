@@ -5,6 +5,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
+import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { cn } from "@/lib/utils";
 
 function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: () => void }) {
@@ -30,7 +31,7 @@ function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: (
 /**
  * Compact portal toolbar filter pattern (Communication / Payments):
  * `inline` — mobile Vaul bottom sheet + inline controls from `md` up (default).
- * `panel` — Filter & sort button on all breakpoints; sheet on mobile, modal on desktop.
+ * `panel` — Filter button on all breakpoints; sheet on mobile, modal on desktop.
  */
 export function PortalFilterSortSheet({
   children,
@@ -79,14 +80,15 @@ export function PortalFilterSortSheet({
           type="button"
           variant="outline"
           className={cn(
-            "h-9 rounded-full text-xs font-semibold whitespace-nowrap",
-            panelOnly ? "w-full max-md:min-w-0 md:w-auto md:px-4" : "min-w-0 w-full",
+            panelOnly
+              ? cn(PORTAL_HEADER_ACTION_BTN, "whitespace-nowrap w-full max-md:min-w-0 md:w-auto")
+              : "h-9 min-w-0 w-full rounded-full text-xs font-semibold whitespace-nowrap",
           )}
           data-attr={dataAttr}
           onClick={() => setOpen(true)}
         >
           <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
-          Filter &amp; sort{activeCount > 0 ? ` · ${activeCount} active` : ""}
+          Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
         </Button>
       </div>
       {!panelOnly ? (
@@ -98,7 +100,7 @@ export function PortalFilterSortSheet({
         <Modal
           open={open}
           onClose={() => setOpen(false)}
-          title="Filter & sort"
+          title="Filter"
           footer={footer}
           panelClassName="max-w-md"
           dense
@@ -110,7 +112,7 @@ export function PortalFilterSortSheet({
         <VaulBottomSheet
           open={open}
           onOpenChange={setOpen}
-          title="Filter & sort"
+          title="Filter"
           footer={footer}
         >
           {sheetBody}

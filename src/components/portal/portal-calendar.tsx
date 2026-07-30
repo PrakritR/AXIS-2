@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "./portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -79,6 +78,7 @@ export function PortalCalendar({
   const { showToast } = useAppUi();
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
   const [calendarPropertyId, setCalendarPropertyId] = useState<string>("");
+  const demoCalendarDefaultAppliedRef = useRef(false);
   const [propertyTick, setPropertyTick] = useState(0);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
@@ -179,11 +179,13 @@ export function PortalCalendar({
   // In the /demo sandbox, pre-select the first property so the calendar opens
   // populated (availability + tours) instead of on the "Select a house" blank.
   useEffect(() => {
-    if (!isDemoModeActive() || portal !== "manager" || calendarPropertyId) return;
+    if (!isDemoModeActive() || portal !== "manager" || demoCalendarDefaultAppliedRef.current) return;
     const first = managerProperties[0];
+    if (!first) return;
+    demoCalendarDefaultAppliedRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time demo default once seeded properties arrive
-    if (first) setCalendarPropertyId(first.id);
-  }, [portal, calendarPropertyId, managerProperties]);
+    setCalendarPropertyId(first.id);
+  }, [portal, managerProperties]);
 
   const activeCalendarPropertyId =
     calendarPropertyId && managerProperties.some((property) => property.id === calendarPropertyId) ? calendarPropertyId : "";
@@ -376,20 +378,112 @@ export function PortalCalendar({
       : "Select a house before creating tour windows.";
 
 
-  const calendarPropertyFilter =
+  const calendarPropertyFilterAllLabel =
+    calendarView === "tours" ? "Select a house" : "All properties";
+
+  const calendarPropertySelect =
     portal === "manager" ? (
-      <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([activeCalendarPropertyId])}
-        onReset={() => setCalendarPropertyId("")}
-        dataAttr="calendar-filter-sheet-open"
+      <FieldSingleSelect
+        hideLabel
+        label="Property"
+        variant="pill"
+        value={calendarPropertyId}
+        onChange={setCalendarPropertyId}
+        placeholder="Select property"
+        options={[
+          { value: "", label: calendarPropertyFilterAllLabel },
+          ...managerPropertyFilterOptions.map((property) => ({
+            value: property.id,
+            label: property.label,
+          })),
+        ]}
+        dataAttr="calendar-filter-property"
+        wrapperClassName="w-max min-w-0 max-w-full"
+        triggerClassName="w-auto max-w-full min-w-[8.5rem] [&>span:first-child]:block [&>span:first-child]:truncate"
+      />
+    ) : null;
+
+  const calendarShareTourButton =
+    portal === "manager" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        disabled={shareableProperties.length === 0 || calendarView === "services"}
+        title={
+          calendarView === "services"
+            ? "Switch to Tours or All to share a tour link"
+            : shareableProperties.length === 0
+              ? "List a property as active before sharing tour links"
+              : "Share tour links"
+        }
+        onClick={() => setShareTourModalOpen(true)}
       >
-        <PortalPropertyFilterPill
-          propertyOptions={managerPropertyFilterOptions}
-          propertyValue={activeCalendarPropertyId}
-          onPropertyChange={setCalendarPropertyId}
-          propertyPlaceholder={calendarView === "tours" ? "Select a house" : "All properties"}
-        />
-      </PortalFilterSortSheet>
+        Share tour
+      </Button>
+    ) : null;
+
+  const calendarGoogleCalendarButton =
+    portal === "manager" ? (
+      <GoogleCalendarConnectDialog
+        className="w-full shrink-0 md:w-auto"
+        onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)}
+      />
+    ) : null;
+
+  const calendarHeaderActionCluster =
+    portal === "manager" ? (
+      <div
+        className="ml-auto flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-2 sm:gap-3"
+        data-slot="calendar-header-action-cluster"
+      >
+        <div className="min-w-0 w-max max-w-[min(100%,22rem)]">{calendarPropertySelect}</div>
+        <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3 [&_button]:shrink-0">
+          {calendarGoogleCalendarButton}
+          {calendarShareTourButton}
+        </div>
+      </div>
+    ) : null;
+
+  const calendarDesktopHeaderActions =
+    portal === "manager" ? (
+      <PortalSectionActionRow variant="header" className="ml-auto hidden min-w-0 max-w-full md:flex md:justify-end">
+        {calendarHeaderActionCluster}
+      </PortalSectionActionRow>
+    ) : null;
+
+  const calendarPropertySelectMobile =
+    portal === "manager" ? (
+      <FieldSingleSelect
+        hideLabel
+        label="Property"
+        variant="pill"
+        value={calendarPropertyId}
+        onChange={setCalendarPropertyId}
+        placeholder="Select property"
+        options={[
+          { value: "", label: calendarPropertyFilterAllLabel },
+          ...managerPropertyFilterOptions.map((property) => ({
+            value: property.id,
+            label: property.label,
+          })),
+        ]}
+        dataAttr="calendar-filter-property"
+        wrapperClassName="w-full min-w-0"
+        triggerClassName="w-full min-w-0 [&>span:first-child]:block [&>span:first-child]:truncate"
+      />
+    ) : null;
+
+  const calendarMobileActionsRow =
+    portal === "manager" ? (
+      <div
+        className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+        data-slot="calendar-mobile-actions"
+      >
+        <div className="min-w-0">{calendarPropertySelectMobile}</div>
+        <div className="min-w-0 [&_button]:w-full">{calendarGoogleCalendarButton}</div>
+        <div className="col-span-2 min-w-0 [&_button]:w-full">{calendarShareTourButton}</div>
+      </div>
     ) : null;
 
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
@@ -415,36 +509,17 @@ export function PortalCalendar({
     );
   }
 
-  const calendarHeaderActions =
-    portal === "manager" ? (
-      <PortalSectionActionRow>
-        <GoogleCalendarConnectDialog onConnectionChange={() => setGoogleCalendarTick((n) => n + 1)} />
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-          disabled={shareableProperties.length === 0 || calendarView === "services"}
-          title={
-            calendarView === "services"
-              ? "Switch to Tours or All to share a tour link"
-              : shareableProperties.length === 0
-                ? "List a property as active before sharing tour links"
-                : "Share tour links"
-          }
-          onClick={() => setShareTourModalOpen(true)}
-        >
-          Share tour
-        </Button>
-      </PortalSectionActionRow>
-    ) : null;
-
   return (
     <>
-      <ManagerPortalPageShell title={pageTitle} titleAside={calendarHeaderActions}>
+      <ManagerPortalPageShell
+        title={pageTitle}
+        hideTitleOnMobileNav
+        titleAside={calendarDesktopHeaderActions}
+      >
+        {calendarMobileActionsRow}
         {portal === "manager" ? (
           <PortalListControlStack
             className="mb-3"
-            filterRow={calendarPropertyFilter ?? undefined}
             destinations={calendarTabs}
             activeDestinationId={calendarView}
             destinationAriaLabel="Calendar views"

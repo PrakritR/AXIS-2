@@ -69,7 +69,6 @@ export function ManagerProperties({
   const [shareListingOpen, setShareListingOpen] = useState(false);
   const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
   const [demoStage, setDemoStage] = useState<ManagerStageKey>("listed");
-  const [searchQuery, setSearchQuery] = useState("");
 
   const activeStage = isDemoModeActive()
     ? demoStage
@@ -211,31 +210,49 @@ export function ManagerProperties({
     setShareListingOpen(true);
   };
 
-  const propertiesHeaderActions = (
-    <PortalSectionActionRow variant="header">
-      <Button
-        type="button"
-        variant="outline"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        disabled={shareableProperties.length === 0}
-        title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
-        data-attr="manager-properties-share"
-        onClick={() => openShareListing()}
-      >
-        Share
-      </Button>
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="manager-properties-create"
-        onClick={tryOpenAdd}
-        disabled={!skuLoaded}
-        aria-busy={!skuLoaded}
-      >
-        {!skuLoaded ? "Loading…" : "Create"}
-      </Button>
+  const propertiesShareButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      disabled={shareableProperties.length === 0}
+      title={shareableProperties.length === 0 ? "No listed properties to share yet" : "Share a listing link"}
+      data-attr="manager-properties-share"
+      onClick={() => openShareListing()}
+    >
+      Share
+    </Button>
+  );
+
+  const propertiesAddButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      data-attr="manager-properties-create"
+      onClick={tryOpenAdd}
+      disabled={!skuLoaded}
+      aria-busy={!skuLoaded}
+    >
+      {!skuLoaded ? "Loading…" : "+ Add property"}
+    </Button>
+  );
+
+  const propertiesDesktopHeaderActions = (
+    <PortalSectionActionRow variant="header" className="hidden gap-2 sm:gap-3 md:flex">
+      {propertiesShareButton}
+      {propertiesAddButton}
     </PortalSectionActionRow>
+  );
+
+  const propertiesMobileActionsRow = (
+    <div
+      className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+      data-slot="properties-mobile-actions"
+    >
+      <div className="min-w-0">{propertiesShareButton}</div>
+      <div className="min-w-0">{propertiesAddButton}</div>
+    </div>
   );
 
   const isDetailView = Boolean(propertyKeyProp);
@@ -248,10 +265,11 @@ export function ManagerProperties({
       onSendToProspect={openShareListing}
       skuTier={skuTier}
       skuLoaded={skuLoaded}
-      searchQuery={searchQuery}
       propertiesBase={basePath}
       propertyKey={propertyKeyProp}
       detailTab={detailTabProp}
+      onAddProperty={tryOpenAdd}
+      addPropertyDisabled={!skuLoaded}
     />
   );
 
@@ -260,7 +278,20 @@ export function ManagerProperties({
       {isDetailView ? (
         listPanel
       ) : (
-        <ManagerPortalPageShell title="Properties" titleAside={propertiesHeaderActions} compactFilterRow>
+        <ManagerPortalPageShell title="Properties" hideTitleOnMobileNav titleAside={propertiesDesktopHeaderActions} compactFilterRow>
+          {propertiesMobileActionsRow}
+          <PortalListControlStack
+            className="mb-3"
+            destinations={MANAGER_STAGES.map((stage) => ({
+              id: stage.key,
+              label: stage.label,
+              href: propertyListHref(basePath, stage.key),
+              count: stageCounts[stage.key],
+              dataAttr: `manager-properties-tab-${stage.key}`,
+            }))}
+            activeDestinationId={activeStage}
+            destinationAriaLabel="Property pipeline stage"
+          />
           {atPropertyLimit && limitMax != null ? (
             <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
               You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
@@ -273,24 +304,6 @@ export function ManagerProperties({
               </span>
             </p>
           ) : null}
-          <PortalListControlStack
-            className="mb-3"
-            destinations={MANAGER_STAGES.map((stage) => ({
-              id: stage.key,
-              label: stage.label,
-              href: propertyListHref(basePath, stage.key),
-              count: stageCounts[stage.key],
-              dataAttr: `manager-properties-tab-${stage.key}`,
-            }))}
-            activeDestinationId={activeStage}
-            destinationAriaLabel="Property pipeline stage"
-            search={{
-              value: searchQuery,
-              onChange: setSearchQuery,
-              placeholder: "Search properties",
-              dataAttr: "properties-search",
-            }}
-          />
           {listPanel}
         </ManagerPortalPageShell>
       )}

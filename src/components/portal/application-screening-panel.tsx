@@ -90,6 +90,7 @@ export function ApplicationScreeningPanel({
   row,
   onUpdated,
   onOpenScreeningModal,
+  collapsible = true,
   headerActionsPlacement = "section",
   onHeaderActionsChange,
 }: {
@@ -97,6 +98,8 @@ export function ApplicationScreeningPanel({
   onUpdated?: () => void;
   /** Opens the cost-confirmation modal (billed to the manager) to start/re-run the Checkr check. */
   onOpenScreeningModal?: () => void;
+  /** When false, renders flat content (e.g. inside a review modal). */
+  collapsible?: boolean;
   /** When `parent`, header buttons render via `onHeaderActionsChange` instead of the Screening sub-section. */
   headerActionsPlacement?: "section" | "parent";
   onHeaderActionsChange?: (actions: React.ReactNode) => void;
@@ -294,17 +297,8 @@ export function ApplicationScreeningPanel({
 
   if (!showsBackgroundCheck) return null;
 
-  return (
-    <PortalCollapsibleSection
-      title="Screening"
-      defaultExpanded={false}
-      surfaceMuted={false}
-      className="mt-4"
-      contentClassName="p-4 pt-0"
-      toggleDataAttr="application-screening-toggle"
-      headerActions={headerActionsPlacement === "section" ? headerActions : undefined}
-      headerActionsInline={headerActionsPlacement === "section"}
-    >
+  const panelBody = (
+    <>
       {!screeningAllowed && !demo ? (
         <>
           <p className="native-hide text-xs text-muted">
@@ -360,12 +354,34 @@ export function ApplicationScreeningPanel({
         </p>
       ) : null}
 
-      {bg?.result === "consider" ? (
-        <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
-          Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before any
-          adverse action (FCRA).
-        </p>
-      ) : null}
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div className="space-y-3" data-slot="application-screening-inline">
+        {headerActions ? (
+          <div className="flex flex-nowrap items-center justify-start gap-2 overflow-x-auto">{headerActions}</div>
+        ) : null}
+        {panelBody}
+      </div>
+    );
+  }
+
+  return (
+    <PortalCollapsibleSection
+      title="Screening"
+      defaultExpanded={false}
+      surfaceMuted={false}
+      bareSurface
+      hideToggleIcon
+      className="mt-0"
+      contentClassName="pt-0"
+      toggleDataAttr="application-screening-toggle"
+      headerActions={headerActionsPlacement === "section" ? headerActions : undefined}
+      headerActionsInline={headerActionsPlacement === "section"}
+    >
+      {panelBody}
     </PortalCollapsibleSection>
   );
 }

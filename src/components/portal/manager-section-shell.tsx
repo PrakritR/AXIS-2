@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -157,7 +157,7 @@ export function ManagerSectionShell({
   const [activeKpi, setActiveKpi] = useState(activeKpiIndexProp);
 
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} flex min-h-0 w-full max-w-full flex-1 flex-col max-lg:flex-none`}>
+    <div className="relative z-0 flex min-h-0 w-full max-w-full flex-1 flex-col max-lg:flex-none">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <h1 className={PORTAL_PAGE_TITLE}>{title}</h1>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">

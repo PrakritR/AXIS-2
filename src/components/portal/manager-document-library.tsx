@@ -90,23 +90,147 @@ function isImageMime(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
+export type DocumentLibraryFilterFieldsProps = {
+  search: string;
+  onSearchChange: (value: string) => void;
+  categoryFilter: string;
+  onCategoryFilterChange: (value: string) => void;
+  scopeFilter: string;
+  onScopeFilterChange: (value: string) => void;
+  propertyFilter: string;
+  onPropertyFilterChange: (value: string) => void;
+  expiryFilter: string;
+  onExpiryFilterChange: (value: string) => void;
+  expiryPills: { id: string; label: string; count: number; alert?: boolean }[];
+  categoryFilterOptions: { id: string; label: string }[];
+  scopeFilterOptions: { id: string; label: string }[];
+  propertyFilterOptions: { id: string; label: string }[];
+  propertyOptions: { id: string; label: string }[];
+};
+
+export function DocumentLibraryFilterFields({
+  search,
+  onSearchChange,
+  categoryFilter,
+  onCategoryFilterChange,
+  scopeFilter,
+  onScopeFilterChange,
+  propertyFilter,
+  onPropertyFilterChange,
+  expiryFilter,
+  onExpiryFilterChange,
+  expiryPills,
+  categoryFilterOptions,
+  scopeFilterOptions,
+  propertyFilterOptions,
+  propertyOptions,
+}: DocumentLibraryFilterFieldsProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      <ManagerPortalStatusPills
+        tabs={expiryPills}
+        activeId={expiryFilter}
+        onChange={onExpiryFilterChange}
+        activeTone="primary"
+        compact
+      />
+      <Input
+        type="search"
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        placeholder="Search by name…"
+        className="h-10 w-full text-sm"
+        aria-label="Search documents"
+        data-attr="document-search"
+      />
+      <PortalFilterChipRow
+        ariaLabel="Filter by category"
+        value={categoryFilter}
+        onChange={onCategoryFilterChange}
+        allLabel="All categories"
+        options={categoryFilterOptions}
+        className="w-full"
+      />
+      <PortalFilterChipRow
+        ariaLabel="Filter by scope"
+        value={scopeFilter}
+        onChange={onScopeFilterChange}
+        allowAll={false}
+        options={scopeFilterOptions}
+        className="w-full"
+      />
+      {propertyOptions.length > 0 ? (
+        <PortalFilterChipRow
+          ariaLabel="Filter by property"
+          value={propertyFilter}
+          onChange={onPropertyFilterChange}
+          allLabel="All properties"
+          options={propertyFilterOptions}
+          className="w-full"
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export type ManagerDocumentLibraryHandle = {
   openUpload: () => void;
 };
 
-export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, { userId: string | null }>(
-  function ManagerDocumentLibrary({ userId }, ref) {
+type ManagerDocumentLibraryProps = {
+  userId: string | null;
+  hideFilterChrome?: boolean;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  categoryFilter?: string;
+  onCategoryFilterChange?: (value: string) => void;
+  scopeFilter?: string;
+  onScopeFilterChange?: (value: string) => void;
+  propertyFilter?: string;
+  onPropertyFilterChange?: (value: string) => void;
+  expiryFilter?: string;
+  onExpiryFilterChange?: (value: string) => void;
+};
+
+export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, ManagerDocumentLibraryProps>(
+  function ManagerDocumentLibrary(
+    {
+      userId,
+      hideFilterChrome = false,
+      search: searchProp,
+      onSearchChange,
+      categoryFilter: categoryFilterProp,
+      onCategoryFilterChange,
+      scopeFilter: scopeFilterProp,
+      onScopeFilterChange,
+      propertyFilter: propertyFilterProp,
+      onPropertyFilterChange,
+      expiryFilter: expiryFilterProp,
+      onExpiryFilterChange,
+    },
+    ref,
+  ) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
   const searchParams = useSearchParams();
 
   const [documents, setDocuments] = useState<ManagerDocumentDTO[]>([]);
   const [loading, setLoading] = useState(!demo);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
-  const [scopeFilter, setScopeFilter] = useState<string>("");
-  const [propertyFilter, setPropertyFilter] = useState<string>("");
-  const [expiryFilter, setExpiryFilter] = useState("");
+  const [searchState, setSearchState] = useState("");
+  const [categoryFilterState, setCategoryFilterState] = useState<string>("");
+  const [scopeFilterState, setScopeFilterState] = useState<string>("");
+  const [propertyFilterState, setPropertyFilterState] = useState<string>("");
+  const [expiryFilterState, setExpiryFilterState] = useState("");
+  const search = searchProp ?? searchState;
+  const setSearch = onSearchChange ?? setSearchState;
+  const categoryFilter = categoryFilterProp ?? categoryFilterState;
+  const setCategoryFilter = onCategoryFilterChange ?? setCategoryFilterState;
+  const scopeFilter = scopeFilterProp ?? scopeFilterState;
+  const setScopeFilter = onScopeFilterChange ?? setScopeFilterState;
+  const propertyFilter = propertyFilterProp ?? propertyFilterState;
+  const setPropertyFilter = onPropertyFilterChange ?? setPropertyFilterState;
+  const expiryFilter = expiryFilterProp ?? expiryFilterState;
+  const setExpiryFilter = onExpiryFilterChange ?? setExpiryFilterState;
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -441,50 +565,25 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, {
   return (
     <div className="space-y-3">
       {complianceBanner}
-      <div className="flex flex-wrap items-center gap-2">
-        <ManagerPortalStatusPills
-          tabs={expiryPills}
-          activeId={expiryFilter}
-          onChange={setExpiryFilter}
-          activeTone="primary"
-          compact
+      {hideFilterChrome ? null : (
+        <DocumentLibraryFilterFields
+          search={search}
+          onSearchChange={setSearch}
+          categoryFilter={categoryFilter}
+          onCategoryFilterChange={setCategoryFilter}
+          scopeFilter={scopeFilter}
+          onScopeFilterChange={setScopeFilter}
+          propertyFilter={propertyFilter}
+          onPropertyFilterChange={setPropertyFilter}
+          expiryFilter={expiryFilter}
+          onExpiryFilterChange={setExpiryFilter}
+          expiryPills={expiryPills}
+          categoryFilterOptions={categoryFilterOptions}
+          scopeFilterOptions={scopeFilterOptions}
+          propertyFilterOptions={propertyFilterOptions}
+          propertyOptions={propertyOptions}
         />
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          className="h-8 min-w-[7.5rem] max-w-[10rem] flex-1 text-sm"
-          aria-label="Search documents"
-          data-attr="document-search"
-        />
-        <PortalFilterChipRow
-          ariaLabel="Filter by category"
-          value={categoryFilter}
-          onChange={setCategoryFilter}
-          allLabel="All categories"
-          options={categoryFilterOptions}
-          className="w-full"
-        />
-        <PortalFilterChipRow
-          ariaLabel="Filter by scope"
-          value={scopeFilter}
-          onChange={setScopeFilter}
-          allowAll={false}
-          options={scopeFilterOptions}
-          className="w-full"
-        />
-        {propertyOptions.length > 0 ? (
-          <PortalFilterChipRow
-            ariaLabel="Filter by property"
-            value={propertyFilter}
-            onChange={setPropertyFilter}
-            allLabel="All properties"
-            options={propertyFilterOptions}
-            className="w-full"
-          />
-        ) : null}
-      </div>
+      )}
 
       {demo ? (
         <PortalDataTableEmpty

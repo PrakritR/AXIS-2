@@ -4,9 +4,9 @@ import path from "node:path";
 import { fieldSelectTrigger, pickFieldSelect } from "../helpers/field-select";
 
 /**
- * Promotion UX: the type filter reads Text | Image (no "All"), and "New
- * promotion" drops straight into the picked type's form inside one modal —
- * no intermediate "Continue" step.
+ * Promotion UX: one unified list (text + flyer assets) and "New promotion"
+ * drops straight into the picked type's form inside one modal — no
+ * intermediate "Continue" step.
  *
  * Driven through /demo, which mounts the real <ManagerPromotion /> panel with
  * seeded rows and needs no auth or Supabase.
@@ -35,8 +35,8 @@ async function openPromotionSection(page: Page) {
   // is visible at a given viewport.
   await page.locator('[data-attr="demo-nav-promotion"]:visible').first().click();
   await expect(page.getByRole("heading", { name: "Promotion", exact: true })).toBeVisible();
-  await expect(page.locator('[data-attr="promotion-filter-text"]')).toBeVisible();
-  // Land on the top of the panel so screenshots frame the filter row.
+  await expect(page.locator('[data-attr="promotion-new"]')).toBeVisible();
+  // Land on the top of the panel so screenshots frame the header actions.
   await page.evaluate(() => {
     document.getElementById("demo-portal-scroll")?.scrollTo(0, 0);
     window.scrollTo(0, 0);
@@ -51,30 +51,15 @@ for (const viewport of [
   test.describe(`Promotion UX (${viewport.name})`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test("type filter has no All pill and defaults to Text", async ({ page }) => {
+    test("shows one unified promotion list without text/image tabs", async ({ page }) => {
       const frame = await openPromotionSection(page);
 
-      await expect(page.locator('[data-attr="promotion-filter-all"]')).toHaveCount(0);
-      const pills = page.locator(
-        '[data-attr="promotion-filter-text"], [data-attr="promotion-filter-image"]',
-      );
-      await expect(pills).toHaveCount(2);
-
-      const text = page.locator('[data-attr="promotion-filter-text"]');
-      const image = page.locator('[data-attr="promotion-filter-image"]');
-      // Active pill = white card chip (ManagerPortalStatusPills).
-      await expect(text).toHaveClass(/bg-card/);
-      await expect(image).not.toHaveClass(/bg-card/);
+      await expect(page.locator('[data-attr="promotion-filter-text"]')).toHaveCount(0);
+      await expect(page.locator('[data-attr="promotion-filter-image"]')).toHaveCount(0);
+      await expect(page.locator('[data-attr="promotion-content-direct"]')).toBeVisible();
 
       await frame.screenshot({
-        path: `${SHOT_DIR}/${viewport.name}-01-filter-pills-text.png`,
-      });
-
-      await image.click();
-      await expect(image).toHaveClass(/bg-card/);
-      await expect(text).not.toHaveClass(/bg-card/);
-      await frame.screenshot({
-        path: `${SHOT_DIR}/${viewport.name}-02-filter-pills-image.png`,
+        path: `${SHOT_DIR}/${viewport.name}-01-promotion-list.png`,
       });
     });
 
@@ -158,9 +143,8 @@ for (const viewport of [
 
     test("creates a text promotion straight from the type dropdown", async ({ page }) => {
       const frame = await openPromotionSection(page);
-      const textPill = page.locator('[data-attr="promotion-filter-text"]');
-      const beforeText = await textPill.textContent();
-      const beforeCount = Number.parseInt(beforeText?.match(/\d+/)?.[0] ?? "0", 10);
+      const list = page.locator('[data-attr="promotion-content-direct"]');
+      const beforeCount = await list.locator('[data-attr="promotion-row"]').count();
 
       await page.locator('[data-attr="promotion-new"]').click();
       const dialog = page.getByRole("dialog");
@@ -179,10 +163,9 @@ for (const viewport of [
       }
       await dialog.locator('[data-attr="promotion-text-generate-submit"]').click();
 
-      // Modal closes on success and the new text asset lands in the list, with
-      // the Text pill count bumped.
+      // Modal closes on success and the new text asset lands in the unified list.
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(textPill).toContainText(String(beforeCount + 1));
+      await expect(list.locator('[data-attr="promotion-row"]')).toHaveCount(beforeCount + 1);
       await frame.screenshot({
         path: `${SHOT_DIR}/${viewport.name}-07-text-promotion-created.png`,
       });

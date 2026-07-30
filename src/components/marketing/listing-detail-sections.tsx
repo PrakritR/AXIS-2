@@ -372,6 +372,8 @@ export function ListingDetailSections({
   rich,
   previewModal = false,
   hidePreviewSubnav = false,
+  /** Manager property preview — scrolls inside #portal-main-content with a sticky section subnav. */
+  portalEmbedded = false,
   /** Manager property preview — show full section bodies on mobile (no View pill). */
   expandSectionsOnMobile = false,
   /** Tighter portal chrome inside manager property preview tab. */
@@ -383,25 +385,27 @@ export function ListingDetailSections({
   previewModal?: boolean;
   /** When true, parent renders pinned preview subnav outside the scroller (manager property tab). */
   hidePreviewSubnav?: boolean;
+  portalEmbedded?: boolean;
   expandSectionsOnMobile?: boolean;
   managerPreviewChrome?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   const collapseOnMobile = !expandSectionsOnMobile;
   const compactSections = managerPreviewChrome;
+  const embeddedPreview = previewModal || portalEmbedded;
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
   const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
   return (
-    <ListingPreviewNewTabContext.Provider value={previewModal}>
+    <ListingPreviewNewTabContext.Provider value={embeddedPreview}>
     <div className="bg-background text-foreground" data-listing-sections-root>
       <div
         className={`mx-auto flex max-w-6xl flex-col ${
           managerPreviewChrome ? "px-3 sm:px-4" : "px-4"
         } ${
-          previewModal
+          embeddedPreview
             ? managerPreviewChrome
               ? "pb-6 pt-1 sm:pb-8 sm:pt-2"
               : "pb-8 pt-2 sm:pb-10 sm:pt-3"
@@ -410,7 +414,7 @@ export function ListingDetailSections({
       >
         {previewModal && !hidePreviewSubnav ? (
           <ListingStickySubnav mode="modal" />
-        ) : previewModal ? null : (
+        ) : embeddedPreview || managerPreviewChrome ? null : (
           <Link
             href="/rent/browse"
             data-attr="listing-detail-back"
@@ -424,7 +428,7 @@ export function ListingDetailSections({
           <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
         </div>
 
-        {!(previewModal && expandSectionsOnMobile) ? (
+        {!(embeddedPreview && expandSectionsOnMobile) ? (
         <div className="order-3 mt-6 flex flex-col gap-4 lg:mt-8">
           <div className="max-w-3xl">
             <Badge tone="info">{property.neighborhood}</Badge>
@@ -446,9 +450,16 @@ export function ListingDetailSections({
         </div>
         ) : null}
 
-        <div className={`order-4 ${previewModal ? (managerPreviewChrome ? "mt-4" : "mt-6") : "mt-6 lg:mt-8"}`}>
-          {!previewModal ? <ListingStickySubnav className="mb-4 lg:mb-6" /> : null}
-          {!previewModal ? (
+        <div className={`order-4 ${embeddedPreview ? (managerPreviewChrome ? "mt-4" : "mt-6") : "mt-6 lg:mt-8"}`}>
+          {portalEmbedded ? (
+            <ListingStickySubnav
+              mode="portal"
+              className="-mx-3 mb-4 sm:mx-0 sm:rounded-2xl lg:mb-6"
+            />
+          ) : !previewModal ? (
+            <ListingStickySubnav className="mb-4 lg:mb-6" />
+          ) : null}
+          {!embeddedPreview ? (
             <ListingPricingCtaCard property={property} rich={rich} className="mb-6 lg:hidden" />
           ) : null}
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">

@@ -530,6 +530,7 @@ export function ResidentDashboard({
       title="Dashboard"
       subtitle={portalDashboardWelcomeSubtitle(welcomeName)}
       hideTitleOnNative
+      hideTitleOnMobileNav
       welcomeSubtitle
     >
       <div className={PORTAL_DASHBOARD_STACK}>

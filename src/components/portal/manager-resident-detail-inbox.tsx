@@ -246,7 +246,7 @@ export function ManagerResidentDetailInbox({
     ) : (
       <InboxThreadEmpty
         title={showArchived ? "No archived messages" : "No messages yet"}
-        hint={showArchived ? "Archived conversations with this resident will appear here." : "Use New message above to start a conversation."}
+        hint={showArchived ? "Archived conversations with this resident will appear here." : "Use New message to start a conversation."}
       />
     );
 

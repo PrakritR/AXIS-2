@@ -20,7 +20,7 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
 };
 
 /** Routed detail tabs for manager resident profile (Appendix C2). */
-export const RESIDENT_DETAIL_TABS = ["application", "lease", "payments", "services"] as const;
+export const RESIDENT_DETAIL_TABS = ["application", "lease", "payments", "services", "communication"] as const;
 
 export type ResidentDetailTabId = (typeof RESIDENT_DETAIL_TABS)[number];
 
@@ -29,6 +29,7 @@ export const RESIDENT_DETAIL_TAB_LABELS: Record<ResidentDetailTabId, string> = {
   lease: "Lease",
   payments: "Payments",
   services: "Services",
+  communication: "Communication",
 };
 
 export function parsePropertyDetailTab(raw: string | undefined | null): PropertyDetailTabId {
@@ -77,6 +78,15 @@ export function residentDetailHref(
 ): string {
   return `${basePath}/residents/${residentsTab}/${encodeURIComponent(residentId)}/${tab}`;
 }
+export function residentPaymentDetailHref(
+  basePath: string,
+  residentsTab: string,
+  residentId: string,
+  paymentId: string,
+): string {
+  return `${basePath}/residents/${residentsTab}/${encodeURIComponent(residentId)}/payments/${encodeURIComponent(paymentId)}`;
+}
+
 
 /** Routed calendar views (manager portal). */
 export const CALENDAR_VIEW_TABS = ["all", "tours", "services"] as const;
@@ -110,8 +120,8 @@ export function parseTeamLinkTab(raw: string | undefined | null): TeamLinkTabId 
   return "pending";
 }
 
-export function teamLinkHref(basePath: string, tab: TeamLinkTabId): string {
-  return `${basePath}/relationships/${tab}`;
+export function teamLinkHref(basePath: string, _tab?: TeamLinkTabId): string {
+  return `${basePath}/relationships`;
 }
 
 /** Manager applications list buckets (Appendix D5). */
@@ -240,12 +250,12 @@ export function workOrderDetailHref(
   return `${basePath}/services/work-orders/${bucket}/${encodeURIComponent(workOrderId)}`;
 }
 
-/** Manager promotion content filters (text flyers vs image assets). */
+/** Legacy promotion content filters — routes now redirect to the unified list. */
 export const PROMOTION_CONTENT_FILTERS = ["text", "image"] as const;
 export type PromotionContentFilterId = (typeof PROMOTION_CONTENT_FILTERS)[number];
 
-export function promotionListHref(basePath: string, filter: PromotionContentFilterId): string {
-  return `${basePath}/promotion/${filter}`;
+export function promotionListHref(basePath: string, _filter?: PromotionContentFilterId): string {
+  return `${basePath}/promotion`;
 }
 
 /** Map mistaken top-level portal segments to their routed section paths. */
@@ -260,7 +270,7 @@ export function legacyManagerPortalSectionPath(section: string): string | null {
     return `leases/${section}`;
   }
   if ((PROMOTION_CONTENT_FILTERS as readonly string[]).includes(section)) {
-    return `promotion/${section}`;
+    return "promotion";
   }
   if ((SERVICE_REQUEST_BUCKETS as readonly string[]).includes(section)) {
     return `services/requests/${section}`;

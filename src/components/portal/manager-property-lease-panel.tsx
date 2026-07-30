@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PropertyLeaseFormModal } from "@/components/portal/property-lease-form-modal";
 import {
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+} from "@/components/portal/portal-list-add-row";
+import {
   PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS,
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -57,6 +63,7 @@ export function ManagerPropertyLeasePanel({
   propertyLabel,
   demoMode = false,
   sectionActions,
+  onRegisterAddLease,
 }: {
   sub: ManagerListingSubmissionV1;
   saveTarget: LeaseSaveTarget;
@@ -68,6 +75,8 @@ export function ManagerPropertyLeasePanel({
   propertyLabel?: string | null;
   demoMode?: boolean;
   sectionActions?: ReactNode;
+  /** Parent header "Add lease" — same handler as the dashed list footer row. */
+  onRegisterAddLease?: (openAdd: (() => void) | null) => void;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
@@ -82,11 +91,16 @@ export function ManagerPropertyLeasePanel({
     return persistManagerListingSubmission(saveTarget, managerUserId, next);
   };
 
-  const openAdd = () => {
+  const openAdd = useCallback(() => {
     setFormMode("add");
     setEditingTemplateId(null);
     setFormOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    onRegisterAddLease?.(openAdd);
+    return () => onRegisterAddLease?.(null);
+  }, [onRegisterAddLease, openAdd]);
 
   const openEdit = (templateId: string) => {
     setFormMode("edit");
@@ -115,26 +129,10 @@ export function ManagerPropertyLeasePanel({
 
   return (
     <>
-      <PortalPropertyDetailSection
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-            data-attr="property-lease-add"
-            onClick={openAdd}
-          >
-            Add lease
-          </Button>
-        }
-        contentClassName="space-y-2 p-3"
-      >
+      <PortalPropertyDetailSection contentClassName="space-y-0">
           {sectionActions}
           {templates.map((template) => (
-            <div
-              key={template.id}
-              className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-3"
-            >
+            <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{template.label}</p>
                 <p className="mt-0.5 text-xs text-muted">
@@ -170,6 +168,15 @@ export function ManagerPropertyLeasePanel({
             </div>
           ))}
       </PortalPropertyDetailSection>
+
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label="Add lease"
+          icon={PORTAL_LIST_ADD_ICONS.lease}
+          onClick={openAdd}
+          dataAttr="property-lease-add"
+        />
+      </div>
 
       <PropertyLeaseFormModal
         open={formOpen}
