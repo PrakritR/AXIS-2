@@ -118,8 +118,16 @@ export function ListingRoomMediaBrowser({
             }
           : undefined
       }
-      resolvePrimaryCta={(_, index) => resolvePrimaryCta(entries[index]?.room.id ?? "", index)}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(entries[index]?.room.id ?? "", index)}
+      resolvePrimaryCta={
+        onOpenDetails
+          ? undefined
+          : (_, index) => resolvePrimaryCta(entries[index]?.room.id ?? "", index)
+      }
+      resolveSecondaryCta={
+        onOpenDetails
+          ? undefined
+          : (_, index) => resolveSecondaryCta(entries[index]?.room.id ?? "", index)
+      }
       className={className}
     />
   );

@@ -97,8 +97,12 @@ export function ListingBathroomMediaBrowser({
             }
           : undefined
       }
-      resolvePrimaryCta={(_, index) => resolvePrimaryCta(index)}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(index)}
+      resolvePrimaryCta={
+        onOpenDetails ? undefined : (_, index) => resolvePrimaryCta(index)
+      }
+      resolveSecondaryCta={
+        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
+      }
       className={className}
     />
   );
@@ -176,8 +180,10 @@ export function ListingSharedMediaBrowser({
             }
           : undefined
       }
-      resolvePrimaryCta={() => resolvePrimaryCta()}
-      resolveSecondaryCta={(_, index) => resolveSecondaryCta(index)}
+      resolvePrimaryCta={onOpenDetails ? undefined : () => resolvePrimaryCta()}
+      resolveSecondaryCta={
+        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
+      }
       className={className}
     />
   );

@@ -117,35 +117,6 @@ export function ListingSpaceMediaBrowser({
   const touchStartX = useRef<number | null>(null);
   const previewBrowse = useListingPreviewNewTab();
 
-  if (previewBrowse && onEntryPress) {
-    return (
-      <div className={`space-y-2 ${className}`} data-testid={testId}>
-        {entries.map((e, i) => (
-          <button
-            key={e.id}
-            type="button"
-            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-3 text-left transition hover:bg-accent/25 active:bg-accent/40"
-            onClick={() => onEntryPress(e, i)}
-            data-attr={`${testId}-row`}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{e.eyebrow}</p>
-              <p className="text-sm font-semibold text-foreground">{e.title}</p>
-              {e.metaLine ? <p className="mt-0.5 text-xs text-muted">{e.metaLine}</p> : null}
-            </div>
-            {e.availability ? (
-              <AvailabilityPill text={e.availability} variant={availabilityVariant} />
-            ) : (
-              <span className="shrink-0 text-lg text-muted" aria-hidden>
-                ›
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   const newTabProps = listingLinkTargetProps(previewBrowse);
 
   const safeIndex = entries.length ? Math.min(selectedIndex, entries.length - 1) : 0;
@@ -203,10 +174,17 @@ export function ListingSpaceMediaBrowser({
   const activeSecondary = entry
     ? resolveSecondaryCta?.(entry, safeIndex) ?? secondaryCta
     : secondaryCta;
-  if (!activePrimary || !activeSecondary) return null;
+
+  const footerPrimary = previewBrowse ? null : activePrimary;
+  const footerSecondary = previewBrowse ? null : activeSecondary;
 
   const heroShowsVideo = hasVideo;
   const heroPhotoUrl = !heroShowsVideo && photoCount > 0 ? photos[safePhotoIndex]! : null;
+  const heroOpensDetails = Boolean(onEntryPress && entry);
+
+  const stopOpenDetails = (e: React.MouseEvent) => {
+    if (heroOpensDetails) e.stopPropagation();
+  };
 
   const thumbForEntry = (e: ListingSpaceMediaEntry) => {
     const firstPhoto = e.photoUrls?.[0];
@@ -221,9 +199,24 @@ export function ListingSpaceMediaBrowser({
       data-testid={testId}
     >
       <div
-        className="relative aspect-[4/3] w-full overflow-hidden bg-accent/25"
+        className={`relative aspect-[4/3] w-full overflow-hidden bg-accent/25${
+          heroOpensDetails ? " cursor-pointer" : ""
+        }`}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
+        onClick={heroOpensDetails ? () => onEntryPress!(entry!, safeIndex) : undefined}
+        onKeyDown={
+          heroOpensDetails
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEntryPress!(entry!, safeIndex);
+                }
+              }
+            : undefined
+        }
+        role={heroOpensDetails ? "button" : undefined}
+        tabIndex={heroOpensDetails ? 0 : undefined}
       >
         {heroShowsVideo ? (
           <video
@@ -256,7 +249,10 @@ export function ListingSpaceMediaBrowser({
               type="button"
               aria-label={`Previous ${itemNoun}`}
               className="listing-photo-chip absolute left-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/95 shadow-md transition hover:bg-card"
-              onClick={() => goEntry(-1)}
+              onClick={(e) => {
+                stopOpenDetails(e);
+                goEntry(-1);
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -266,7 +262,10 @@ export function ListingSpaceMediaBrowser({
               type="button"
               aria-label={`Next ${itemNoun}`}
               className="listing-photo-chip absolute right-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card/95 shadow-md transition hover:bg-card"
-              onClick={() => goEntry(1)}
+              onClick={(e) => {
+                stopOpenDetails(e);
+                goEntry(1);
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -281,7 +280,10 @@ export function ListingSpaceMediaBrowser({
               type="button"
               aria-label="Previous photo"
               className="listing-photo-chip absolute bottom-3 left-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-              onClick={() => goPhoto(-1)}
+              onClick={(e) => {
+                stopOpenDetails(e);
+                goPhoto(-1);
+              }}
             >
               ‹
             </button>
@@ -289,7 +291,10 @@ export function ListingSpaceMediaBrowser({
               type="button"
               aria-label="Next photo"
               className="listing-photo-chip absolute bottom-3 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-              onClick={() => goPhoto(1)}
+              onClick={(e) => {
+                stopOpenDetails(e);
+                goPhoto(1);
+              }}
             >
               ›
             </button>
@@ -323,7 +328,10 @@ export function ListingSpaceMediaBrowser({
                 <button
                   key={e.id}
                   type="button"
-                  onClick={() => selectEntry(i)}
+                  onClick={(e) => {
+                    stopOpenDetails(e);
+                    selectEntry(i);
+                  }}
                   className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition ${
                     active ? "border-primary ring-2 ring-primary/25" : "border-border opacity-80 hover:opacity-100"
                   }`}
@@ -357,10 +365,16 @@ export function ListingSpaceMediaBrowser({
         </div>
       ) : null}
 
+      {footerPrimary || footerSecondary ? (
       <div className="flex flex-col gap-2 border-t border-border/60 px-4 py-3 sm:flex-row">
-        <SpaceMediaCtaButton cta={activePrimary} className={ctaClass} newTabProps={newTabProps} />
-        <SpaceMediaCtaButton cta={activeSecondary} className={secondaryCtaClass} newTabProps={newTabProps} />
+        {footerPrimary ? (
+          <SpaceMediaCtaButton cta={footerPrimary} className={ctaClass} newTabProps={newTabProps} />
+        ) : null}
+        {footerSecondary ? (
+          <SpaceMediaCtaButton cta={footerSecondary} className={secondaryCtaClass} newTabProps={newTabProps} />
+        ) : null}
       </div>
+      ) : null}
     </div>
   );
 }
