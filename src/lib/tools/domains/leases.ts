@@ -13,6 +13,7 @@ import {
   buildLeaseDraft,
   buildLeaseDraftPreview,
   buildLeasePacketPreview,
+  buildLeaseDocumentSectionsPreview,
   type CreateLeaseDraftInput,
   type UpdateLeaseDraftInput,
   type UpdateLeasePacketInput,
@@ -20,7 +21,7 @@ import {
 import { loadManagerApplications } from "./residents";
 import { findOwnedResident } from "./residents-logic";
 import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease } from "@/lib/lease-amendment.server";
-import { patchLeasePacketForManagerReview } from "@/lib/lease-packet-edit.server";
+import { patchLeasePacketForManagerReview, patchLeaseDocumentSectionsForManagerReview } from "@/lib/lease-packet-edit.server";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { loadAllManagerRows } from "./load-manager-rows";
@@ -629,6 +630,44 @@ export const updateLeasePacketTool = defineWriteTool<UpdateLeasePacketInput, { r
     await writeLeaseAudit(ctx, "update_lease_packet", result.row.id, null);
     return {
       reply: `Updated the lease for ${result.row.residentName}${appPatch ? " and regenerated the lease document" : ""}. It remains in manager review.`,
+    };
+  },
+});
+
+export const updateLeaseDocumentSectionsTool = defineWriteTool<
+  { leaseId: string; sectionBodies: Record<string, string> },
+  { reply: string }
+>({
+  name: "update_lease_document_sections",
+  description:
+    "Edit one or more HTML section bodies inside a generated lease document (clause wording, summary table rows, addenda) without regenerating from application data. Section ids appear in Lease packet edit context as documentSections= (slug from each h2 title, or lease-document-header for the preamble). Use update_lease_packet for rent, dates, fees, unit, or notes instead.",
+  inputSchema: z
+    .object({
+      leaseId: z.string().min(1).describe("Lease id from list_leases or Lease packet edit context."),
+      sectionBodies: z
+        .record(z.string(), z.string())
+        .describe("Map of section id → new section body HTML (not including the h2 heading)."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) {
+      throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    }
+    const ids = Object.keys(input.sectionBodies).filter((id) => id.trim());
+    if (!ids.length) throw new Error("Provide at least one section id and body HTML.");
+    return buildLeaseDocumentSectionsPreview(row, input.sectionBodies);
+  },
+  handler: async (ctx, input) => {
+    const result = await patchLeaseDocumentSectionsForManagerReview(ctx.db, ctx.landlordId, {
+      leaseId: input.leaseId,
+      sectionBodies: input.sectionBodies,
+    });
+    if (!result.ok) throw new Error(result.error);
+    await writeLeaseAudit(ctx, "update_lease_document_sections", result.row.id, null);
+    return {
+      reply: `Updated ${Object.keys(input.sectionBodies).length} section(s) on the lease for ${result.row.residentName}. The preview reflects the new wording.`,
     };
   },
 });

@@ -88,7 +88,7 @@ export function LeasePrimaryHeaderActions({
       {!row.managerSignature && residentHasSignedLease(row) && onSignManager ? (
         <Button
           type="button"
-          variant="primary"
+          variant="outline"
           className={btnClass}
           data-attr={signManagerDataAttr}
           onClick={onSignManager}
@@ -98,14 +98,14 @@ export function LeasePrimaryHeaderActions({
       ) : row.status === "Resident Signature Pending" && onSigningReminder ? (
         <Button
           type="button"
-          variant="primary"
+          variant="outline"
           className={btnClass}
           data-attr={signingReminderDataAttr}
           disabled={signingReminderBusy}
           title="Send signing reminder"
           onClick={onSigningReminder}
         >
-          {signingReminderBusy ? "Sending…" : "Sign"}
+          {signingReminderBusy ? "Sending…" : "Send reminder"}
         </Button>
       ) : null}
     </>

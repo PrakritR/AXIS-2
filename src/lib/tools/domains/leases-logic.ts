@@ -123,3 +123,20 @@ export function buildLeasePacketPreview(row: LeasePipelineRow, input: UpdateLeas
   };
 }
 
+export function buildLeaseDocumentSectionsPreview(
+  row: LeasePipelineRow,
+  sectionBodies: Record<string, string>,
+): ActionPreview {
+  const ids = Object.keys(sectionBodies).filter((id) => id.trim());
+  return {
+    kind: "lease_document_sections_edit",
+    title: "Update lease document sections",
+    summary: `Update ${ids.length} section${ids.length === 1 ? "" : "s"} on the lease for ${row.residentName}.`,
+    confirmLabel: "Update sections",
+    fields: [
+      { label: "Resident", value: row.residentName },
+      { label: "Sections", value: ids.map((id) => `• ${id}`).join("\n") },
+    ],
+  };
+}
+

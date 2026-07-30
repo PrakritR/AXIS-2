@@ -1,21 +1,22 @@
 "use client";
 
 import { ChevronUp } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Modal } from "@/components/ui/modal";
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
-import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseDocumentDirectEditor } from "@/components/portal/lease-document-direct-editor";
 import { AxisAssistantSparkleIcon } from "@/components/portal/assistant-shared";
 import { AssistantConversationProvider } from "@/lib/axis-assistant/assistant-conversation-context";
 import { modalAssistantStorageScope } from "@/lib/axis-assistant/assistant-chat-storage";
 import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 import { buildLeasePacketEditAssistantContext } from "@/lib/lease-assistant-context";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
+import { leaseDocumentHtmlForSectionEdit } from "@/lib/lease-section-edit.client";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { cn } from "@/lib/utils";
+import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
-/** Document preview with AI assistant pinned at bottom. */
+/** Full-width visual/HTML lease editor with assistant dock. */
 export function ManagerPipelineLeaseEditModal({
   open,
   row,
@@ -28,16 +29,26 @@ export function ManagerPipelineLeaseEditModal({
   onDone: () => void;
 }) {
   const config = usePortalAssistantConfig();
+  const { userId: managerUserId } = useManagerUserId();
   const [activeRow, setActiveRow] = useState(row);
+  const [draftHtml, setDraftHtml] = useState("");
+  const [baselineHtml, setBaselineHtml] = useState("");
   const assistantContext = useMemo(() => buildLeasePacketEditAssistantContext(activeRow), [activeRow]);
   const [conversationInstance, setConversationInstance] = useState(0);
   const [chatOpen, setChatOpen] = useState(true);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+  const editableHtml = leaseDocumentHtmlForSectionEdit(activeRow);
 
   useEffect(() => {
     if (!open) return;
+    const html = leaseDocumentHtmlForSectionEdit(row) ?? "";
     setActiveRow(row);
+    setDraftHtml(html);
+    setBaselineHtml(html);
     setConversationInstance((n) => n + 1);
     setChatOpen(true);
+    setActiveSectionId(null);
   }, [open, row.id, row]);
 
   useEffect(() => {
@@ -49,10 +60,21 @@ export function ManagerPipelineLeaseEditModal({
     return () => window.removeEventListener(AGENT_PENDING_ACTIONS_EVENT, refresh);
   }, [open, onDone]);
 
-  const finish = () => {
+  const handleClose = () => {
     onDone();
     onClose();
   };
+
+  const handleSaved = useCallback(
+    (updated: LeasePipelineRow) => {
+      const html = leaseDocumentHtmlForSectionEdit(updated) ?? "";
+      setActiveRow(updated);
+      setDraftHtml(html);
+      setBaselineHtml(html);
+      onDone();
+    },
+    [onDone],
+  );
 
   const storageScope = modalAssistantStorageScope(`Lease packet edit · ${activeRow.id}`, conversationInstance);
 
@@ -60,32 +82,37 @@ export function ManagerPipelineLeaseEditModal({
     <Modal
       open={open}
       title="Edit lease"
-      onClose={onClose}
+      onClose={handleClose}
       assistantStrip={false}
       fullScreenMobile
       scrollableContent={false}
       dense
-      panelClassName="flex w-full max-w-4xl flex-col overflow-hidden md:max-h-[min(92dvh,52rem)]"
-      footer={
-        <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" className="rounded-full" onClick={finish} data-attr="lease-packet-edit-done">
-            Done
-          </Button>
-        </ModalFooter>
-      }
+      panelClassName="flex w-full max-w-5xl flex-col overflow-hidden md:max-h-[min(92dvh,52rem)]"
     >
       <div
         className={cn(
           "flex flex-col gap-3",
-          "h-[calc(100dvh-15rem)] max-md:min-h-0",
-          "md:h-[min(calc(92dvh-13rem),44rem)]",
+          "h-[calc(100dvh-12rem)] max-md:min-h-0",
+          "md:h-[min(calc(92dvh-10rem),46rem)]",
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <LeaseDocumentPreview row={activeRow} fill className="min-h-0 flex-1" />
+          {editableHtml && draftHtml ? (
+            <LeaseDocumentDirectEditor
+              row={activeRow}
+              managerUserId={managerUserId}
+              html={draftHtml}
+              baselineHtml={baselineHtml}
+              onChange={setDraftHtml}
+              onSaved={handleSaved}
+              onSectionFocus={setActiveSectionId}
+              className="min-h-0 flex-1"
+            />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-border bg-accent/30 px-4 py-6 text-center text-sm text-muted">
+              No editable HTML lease document yet. Generate the lease or upload a PDF to preview it here.
+            </div>
+          )}
         </div>
 
         {config ? (
@@ -97,6 +124,7 @@ export function ManagerPipelineLeaseEditModal({
               )}
               data-attr="lease-edit-assistant"
               data-expanded={chatOpen ? "true" : "false"}
+              data-lease-selected-section={activeSectionId ?? ""}
             >
               {chatOpen ? (
                 <AssistantDockPanel

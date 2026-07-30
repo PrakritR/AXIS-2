@@ -2265,6 +2265,10 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
   }
 }
 
+html[data-hide-assistant-fab] .axis-assistant-fab {
+  display: none !important;
+}
+
 html[data-native] h1.text-\[1\.35rem\] {
   font-size: 1.25rem;
 }

@@ -26,11 +26,13 @@ import {
   appendReplyToInboxThread,
   collapsePersonInboxThreads,
   resolveCollapsedInboxThread,
+  type InboxAiDraft,
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
+  AiDraftReplyCard,
   InboxComposer,
   InboxReplyChannelPicker,
   InboxConversationRow,
@@ -84,7 +86,14 @@ type InboxThread = {
   time: string;
   unread: boolean;
   messages?: InboxThreadMessage[];
+  aiDraft?: InboxAiDraft;
 };
+
+function threadEligibleForAiDraft(thread: InboxThread): boolean {
+  if (thread.folder !== "inbox") return false;
+  if ((thread.messages ?? []).length > 0) return false;
+  return Boolean(thread.body?.trim());
+}
 
 /** Search deliberately skips the trash folder; say so rather than letting a
  *  manager conclude a trashed message no longer exists. Re-clicking the pill of
@@ -650,6 +659,11 @@ export const ManagerInbox = forwardRef<
   const [replySending, setReplySending] = useState(false);
   const [replyViaEmail, setReplyViaEmail] = useState(true);
   const [replyViaSms, setReplyViaSms] = useState(false);
+  const [approvingDraft, setApprovingDraft] = useState(false);
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [discardedDraftIds, setDiscardedDraftIds] = useState<Set<string>>(() => new Set());
+  const [draftingIds, setDraftingIds] = useState<Set<string>>(() => new Set());
+  const draftAttemptedRef = useRef<Set<string>>(new Set());
 
   const activeThread = useMemo(
     () => resolveCollapsedInboxThread(expandedId, emailThreads, local),
@@ -823,11 +837,106 @@ export const ManagerInbox = forwardRef<
     }
   }, [activeThread, replyDraft, replyViaEmail, replyViaSms, handleReply, showToast]);
 
+  const requestInboxAiDraft = useCallback(async (threadId: string, force = false) => {
+    if (isDemoModeActive()) return;
+    setDraftingIds((prev) => {
+      if (prev.has(threadId)) return prev;
+      const next = new Set(prev);
+      next.add(threadId);
+      return next;
+    });
+    try {
+      const res = await fetch("/api/portal/inbox-draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ threadId, force }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        skip?: boolean;
+        draft?: InboxAiDraft;
+        error?: string;
+      };
+      if (data.ok && data.draft) {
+        setLocal((prev) => {
+          const next = prev.map((t) => (t.id === threadId ? { ...t, aiDraft: data.draft } : t));
+          persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+          return next;
+        });
+        setDraftErrors((prev) => {
+          const next = { ...prev };
+          delete next[threadId];
+          return next;
+        });
+      } else if (!data.ok && data.error) {
+        setDraftErrors((prev) => ({ ...prev, [threadId]: data.error ?? "Could not draft reply." }));
+      }
+    } catch {
+      setDraftErrors((prev) => ({ ...prev, [threadId]: "Could not draft reply." }));
+    } finally {
+      setDraftingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(threadId);
+        return next;
+      });
+    }
+  }, []);
+
+  // Auto-draft every incoming resident thread that still needs a manager reply.
+  useEffect(() => {
+    if (!inboxSynced || isDemoModeActive()) return;
+    for (const thread of local) {
+      if (!threadEligibleForAiDraft(thread)) continue;
+      if (thread.aiDraft?.status === "pending_approval") continue;
+      if (discardedDraftIds.has(thread.id)) continue;
+      if (draftAttemptedRef.current.has(thread.id)) continue;
+      draftAttemptedRef.current.add(thread.id);
+      void requestInboxAiDraft(thread.id);
+    }
+  }, [discardedDraftIds, inboxSynced, local, requestInboxAiDraft]);
+
   const activeSmsAvailable = useMemo(() => {
     if (!smsUiEnabled || !activeThread?.email) return false;
     const norm = activeThread.email.trim().toLowerCase();
     return smsRecipients.some((r) => r.residentEmail?.trim().toLowerCase() === norm && r.phone?.trim());
   }, [activeThread, smsRecipients, smsUiEnabled]);
+
+  const discardActiveDraft = useCallback(async () => {
+    if (!activeThread?.aiDraft) return;
+    const updated: InboxThread = { ...activeThread, aiDraft: undefined };
+    const next = local.map((t) => (t.id === activeThread.id ? updated : t));
+    setDiscardedDraftIds((prev) => new Set(prev).add(activeThread.id));
+    persistInboxRef.current = false;
+    setLocal(next);
+    await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+    persistInboxRef.current = true;
+  }, [activeThread, local]);
+
+  const approveActiveDraft = useCallback(async () => {
+    if (!activeThread?.aiDraft?.text?.trim()) return;
+    const viaEmail = replyViaEmail || !activeSmsAvailable;
+    const viaSms = replyViaSms && activeSmsAvailable;
+    if (!viaEmail && !viaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    setApprovingDraft(true);
+    try {
+      await handleReply(activeThread.id, activeThread.aiDraft.text.trim(), { email: viaEmail, sms: viaSms });
+    } finally {
+      setApprovingDraft(false);
+    }
+  }, [activeSmsAvailable, activeThread, handleReply, replyViaEmail, replyViaSms, showToast]);
+
+  const editActiveDraft = useCallback(() => {
+    if (!activeThread?.aiDraft?.text) return;
+    setReplyDraft(activeThread.aiDraft.text);
+  }, [activeThread]);
+
+  const showAiDraftUi = Boolean(
+    activeThread && activeThread.folder === "inbox" && (activeThread.messages ?? []).length === 0,
+  );
 
   const emptyCopy = inboxTabEmptyCopy(tabId);
 
@@ -1095,25 +1204,48 @@ export const ManagerInbox = forwardRef<
       emptyLabel="No messages in this conversation."
       composer={
         activeThread.folder === "trash" ? undefined : (
-          <InboxComposer
-            value={replyDraft}
-            onChange={setReplyDraft}
-            onSubmit={() => void sendActiveReply()}
-            sending={replySending}
-            placeholder="Write a reply…"
-            maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
-            dataAttr="inbox-reply"
-            channelBar={
-              activeSmsAvailable ? (
-                <InboxReplyChannelPicker
-                  viaEmail={replyViaEmail}
-                  viaSms={replyViaSms}
-                  onViaEmailChange={setReplyViaEmail}
-                  onViaSmsChange={setReplyViaSms}
-                />
-              ) : null
-            }
-          />
+          <>
+            {showAiDraftUi ? (
+              <AiDraftReplyCard
+                drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft?.text}
+                draft={
+                  activeThread.aiDraft?.status === "pending_approval" ? activeThread.aiDraft.text : undefined
+                }
+                error={draftErrors[activeThread.id]}
+                approving={approvingDraft}
+                onApprove={() => void approveActiveDraft()}
+                onEdit={editActiveDraft}
+                onDiscard={() => void discardActiveDraft()}
+                onGenerate={
+                  discardedDraftIds.has(activeThread.id) || draftErrors[activeThread.id]
+                    ? () => {
+                        draftAttemptedRef.current.delete(activeThread.id);
+                        void requestInboxAiDraft(activeThread.id, true);
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+            <InboxComposer
+              value={replyDraft}
+              onChange={setReplyDraft}
+              onSubmit={() => void sendActiveReply()}
+              sending={replySending}
+              placeholder="Write a reply…"
+              maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
+              dataAttr="inbox-reply"
+              channelBar={
+                activeSmsAvailable ? (
+                  <InboxReplyChannelPicker
+                    viaEmail={replyViaEmail}
+                    viaSms={replyViaSms}
+                    onViaEmailChange={setReplyViaEmail}
+                    onViaSmsChange={setReplyViaSms}
+                  />
+                ) : null
+              }
+            />
+          </>
         )
       }
     />

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { LeaseSectionEditor } from "@/components/portal/lease-section-editor";
 import { patchLeasePacketFromManager } from "@/lib/lease-packet-edit.client";
 import {
   buildLeasePacketUpdateFromForm,
@@ -21,11 +22,14 @@ import { cn } from "@/lib/utils";
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
+type TermsEditSection = "placement" | "terms" | "fees" | "notes";
+
 type Props = {
   row: LeasePipelineRow;
   managerUserId?: string | null;
   onSaved: (row: LeasePipelineRow) => void;
   className?: string;
+  layout?: "default" | "panel";
 };
 
 function patchFormValues(values: LeasePacketFormValues, patch: Partial<LeasePacketFormValues>): LeasePacketFormValues {
@@ -44,19 +48,74 @@ function patchFormValues(values: LeasePacketFormValues, patch: Partial<LeasePack
   return next;
 }
 
-export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className }: Props) {
+function formatMoney(value: string): string {
+  const n = Number.parseFloat(value.replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(n) || n === 0) return value.trim() || "—";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+}
+
+function LeaseDoubleClickSection({
+  title,
+  summary,
+  editing,
+  onStartEdit,
+  onEndEdit,
+  sectionId,
+  children,
+}: {
+  title: string;
+  summary: ReactNode;
+  editing: boolean;
+  onStartEdit: () => void;
+  onEndEdit: () => void;
+  sectionId: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={sectionId} className="scroll-mt-2">
+      {editing ? (
+        <div className="space-y-3 rounded-xl border border-primary/25 bg-card p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <Button type="button" variant="outline" className="h-7 rounded-full px-3 text-xs" onClick={onEndEdit}>
+              Done
+            </Button>
+          </div>
+          {children}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="w-full cursor-text rounded-xl border border-border bg-card px-3 py-3 text-left transition hover:border-primary/25 hover:bg-foreground/[0.02]"
+          title="Double-click to edit"
+          onDoubleClick={onStartEdit}
+          data-attr={`lease-edit-dblclick-${sectionId}`}
+        >
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <div className="mt-1.5 text-sm leading-relaxed text-muted">{summary}</div>
+        </button>
+      )}
+    </section>
+  );
+}
+
+export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className, layout = "default" }: Props) {
   const { showToast } = useAppUi();
   const baseline = useMemo(() => leasePacketFormValuesFromRow(row), [row]);
   const [values, setValues] = useState<LeasePacketFormValues>(baseline);
   const [saving, setSaving] = useState(false);
+  const [editingSection, setEditingSection] = useState<TermsEditSection | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setValues(leasePacketFormValuesFromRow(row));
+    setEditingSection(null);
   }, [row]);
 
   const dirty = !leasePacketFormValuesEqual(values, baseline);
   const willRegenerate = dirty && leasePacketFormValuesRegeneratesDocument(baseline, values);
   const leaseEndAuto = shouldAutoComputeLeaseEnd(values.leaseTerm, values.rentalType);
+  const isPanel = layout === "panel";
 
   const update = (patch: Partial<LeasePacketFormValues>) => {
     setValues((cur) => patchFormValues(cur, patch));
@@ -79,6 +138,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
       }
       showToast(willRegenerate ? "Lease updated and document regenerated." : "Lease updated.");
       onSaved(result.row);
+      setEditingSection(null);
     } finally {
       setSaving(false);
     }
@@ -89,25 +149,72 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
       ? [SHORT_TERM_LEASE_TERM]
       : LEASE_PACKET_TERM_OPTIONS.filter((t) => t !== SHORT_TERM_LEASE_TERM);
 
+  const placementSummary =
+    values.unit.trim() || values.roomChoice.trim()
+      ? [values.unit.trim(), values.roomChoice.trim()].filter(Boolean).join(" · ")
+      : "Double-click to set unit and room.";
+
+  const termsSummary =
+    values.leaseStart || values.leaseTerm
+      ? `${values.rentalType === "short_term" ? "Short-term" : "Long-term"} · ${values.leaseTerm || "No term"} · ${values.leaseStart || "—"} → ${values.leaseEnd || "—"}`
+      : "Double-click to set lease dates and term.";
+
+  const feesSummary =
+    values.monthlyRent.trim() ||
+    values.monthlyUtilities.trim() ||
+    values.securityDeposit.trim() ||
+    values.moveInFee.trim()
+      ? `Rent ${formatMoney(values.monthlyRent)} · Utils ${formatMoney(values.monthlyUtilities)} · Deposit ${formatMoney(values.securityDeposit)} · Move-in ${formatMoney(values.moveInFee)}`
+      : "Double-click to set fees.";
+
+  const notesSummary = values.notes.trim() ? values.notes.trim() : "Double-click to add internal notes.";
+
   return (
     <form
-      className={cn("flex min-h-0 flex-col gap-4", className)}
+      className={cn(
+        "flex min-h-0 flex-col",
+        isPanel ? "h-full gap-0" : "gap-4",
+        className,
+      )}
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
       data-attr="lease-packet-inline-editor"
     >
+      {isPanel ? (
+        <div className="shrink-0 border-b border-border pb-3">
+          <p className="text-sm font-semibold text-foreground">{row.residentName || "Resident"}</p>
+        </div>
+      ) : null}
+
       {willRegenerate ? (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p
+          className={cn(
+            "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950",
+            isPanel ? "mx-0 mt-3 shrink-0" : "",
+          )}
+        >
           Term or fee changes will regenerate the lease document. It stays in manager review until you send it.
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Placement</h3>
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+      <div
+        ref={scrollRef}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]",
+          isPanel ? "mt-3 space-y-3 pb-2" : "space-y-3",
+        )}
+      >
+        <LeaseDoubleClickSection
+          title="Placement"
+          summary={placementSummary}
+          editing={editingSection === "placement"}
+          onStartEdit={() => setEditingSection("placement")}
+          onEndEdit={() => setEditingSection(null)}
+          sectionId="lease-section-placement"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={fieldLabelClass} htmlFor="lease-edit-unit">
                 Unit label
@@ -133,11 +240,17 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
               />
             </div>
           </div>
-        </section>
+        </LeaseDoubleClickSection>
 
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Lease terms</h3>
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+        <LeaseDoubleClickSection
+          title="Lease terms"
+          summary={termsSummary}
+          editing={editingSection === "terms"}
+          onStartEdit={() => setEditingSection("terms")}
+          onEndEdit={() => setEditingSection(null)}
+          sectionId="lease-section-terms"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className={fieldLabelClass} htmlFor="lease-edit-stay-type">
                 Stay type
@@ -197,11 +310,17 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
               {leaseEndAuto ? <p className="mt-1 text-xs text-muted">Calculated from start date and term.</p> : null}
             </div>
           </div>
-        </section>
+        </LeaseDoubleClickSection>
 
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground">Fees</h3>
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+        <LeaseDoubleClickSection
+          title="Fees"
+          summary={feesSummary}
+          editing={editingSection === "fees"}
+          onStartEdit={() => setEditingSection("fees")}
+          onEndEdit={() => setEditingSection(null)}
+          sectionId="lease-section-fees"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
                 ["monthlyRent", "Monthly rent", "lease-edit-rent"],
@@ -225,12 +344,16 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
               </div>
             ))}
           </div>
-        </section>
+        </LeaseDoubleClickSection>
 
-        <section className="space-y-2">
-          <label className={fieldLabelClass} htmlFor="lease-edit-notes">
-            Internal notes
-          </label>
+        <LeaseDoubleClickSection
+          title="Internal notes"
+          summary={notesSummary}
+          editing={editingSection === "notes"}
+          onStartEdit={() => setEditingSection("notes")}
+          onEndEdit={() => setEditingSection(null)}
+          sectionId="lease-section-notes"
+        >
           <Textarea
             id="lease-edit-notes"
             value={values.notes}
@@ -239,10 +362,25 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
             placeholder="Notes visible to managers only"
             data-attr="lease-edit-notes"
           />
-        </section>
+        </LeaseDoubleClickSection>
+
+        <LeaseSectionEditor
+          row={row}
+          managerUserId={managerUserId}
+          onSaved={onSaved}
+          embedded
+          fullHeight
+          className="scroll-mt-2 border-t border-border pt-4"
+        />
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card pt-3">
+      <div
+        className={cn(
+          "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card pt-3",
+          isPanel && dirty ? "shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]" : "",
+          isPanel ? "mt-2" : "",
+        )}
+      >
         <Button type="button" variant="outline" className="rounded-full" disabled={!dirty || saving} onClick={reset}>
           Reset
         </Button>
