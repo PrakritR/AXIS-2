@@ -1241,11 +1241,16 @@ function RentalApplicationWizardInner({
         backgroundCheckStatus: "pending_review" as const,
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
+        residentUserId: residentUserId ?? undefined,
+        axisId,
         application: structuredClone(submittedForm),
       };
 
       replaceManagerApplicationRowInCache(applicationRow);
       const sync = await upsertApplicationRowToServerAwait(applicationRow);
+      if (sync.ok && sync.row) {
+        replaceManagerApplicationRowInCache(sync.row);
+      }
 
       let emailSent = false;
       let mailtoHref: string | undefined;
@@ -1305,7 +1310,9 @@ function RentalApplicationWizardInner({
           );
           return;
         }
-        router.replace(`/resident/applications/pending/${encodeURIComponent(axisId)}`);
+        router.replace(
+          `/resident/applications/pending/${encodeURIComponent(sync.row?.id ?? axisId)}`,
+        );
         return;
       }
       setPostSubmit({

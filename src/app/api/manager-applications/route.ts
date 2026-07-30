@@ -15,6 +15,7 @@ import {
 } from "@/lib/application-submitted-notification.server";
 import { reclaimApplicationPhotos } from "@/lib/rental-application/application-photos.server";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { runExistingResidentOnboarding } from "@/lib/existing-resident-onboarding.server";
 import { SMS_CONSENT_WORDING_VERSION } from "@/lib/rental-application/sms-consent";
@@ -526,7 +527,7 @@ export async function GET(req?: Request) {
     if (selfScope || (!admin && role === "resident")) {
       const result = await db
         .from("manager_application_records")
-        .select("id, row_data, updated_at")
+        .select("id, row_data, resident_email, updated_at")
         .eq("resident_email", email)
         .order("updated_at", { ascending: false })
         .limit(500);
@@ -554,10 +555,19 @@ export async function GET(req?: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const byId = new Map<string, DemoApplicantRow>();
+    const recordEmailByRowId = new Map<string, string>();
     const rowsNeedingNormalization: Array<{ recordId: string; row: DemoApplicantRow }> = [];
     for (const record of data ?? []) {
       if (!record.row_data) continue;
-      const row = normalizeRow(record.row_data as DemoApplicantRow);
+      const recordEmail =
+        typeof (record as { resident_email?: string | null }).resident_email === "string"
+          ? (record as { resident_email?: string | null }).resident_email!.trim().toLowerCase()
+          : "";
+      let row = normalizeRow(record.row_data as DemoApplicantRow);
+      if ((selfScope || role === "resident") && recordEmail) {
+        row = { ...row, email: recordEmail };
+      }
+      if (recordEmail) recordEmailByRowId.set(row.id, recordEmail);
       byId.set(row.id, { ...byId.get(row.id), ...row });
       if (record.id !== row.id || (record.row_data as DemoApplicantRow).id !== row.id) {
         rowsNeedingNormalization.push({ recordId: record.id, row });
@@ -569,13 +579,11 @@ export async function GET(req?: Request) {
 
     const scopedRows =
       selfScope || role === "resident"
-        ? rows.filter((row) => {
-            const rowEmail = (row.email ?? "").trim().toLowerCase();
-            if (email && rowEmail !== email) return false;
-            const linkedUserId = row.residentUserId?.trim();
-            if (linkedUserId && linkedUserId !== user.id) return false;
-            return true;
-          })
+        ? rows.filter((row) =>
+            residentOwnsApplicationRow(row, { email, userId: user.id }, {
+              recordEmail: recordEmailByRowId.get(row.id),
+            }),
+          )
         : rows;
 
     // Provision approved residents that were never provisioned (e.g. restored via SQL migration).
@@ -779,6 +787,7 @@ export async function POST(req: Request) {
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
     let row = normalizeRow(body.row);
+    let residentSelfWrite = false;
     if (!user) {
       const ids = idVariants(row.id);
       const { data: records, error: loadError } = await db
@@ -835,6 +844,7 @@ export async function POST(req: Request) {
       }
     }
     if (role === "resident" || selfApplicationWrite) {
+      residentSelfWrite = true;
       const rowEmail = (row.email ?? "").trim().toLowerCase();
       if (!email || rowEmail !== email) {
         return NextResponse.json({ error: "You can only update your own application." }, { status: 403 });
@@ -878,32 +888,17 @@ export async function POST(req: Request) {
               }
             : row.application,
       };
-      if (role === "resident") {
-        const linked = await linkResidentOnApplicationSubmit(db, {
-          userId: user.id,
-          row,
-          isNewSubmit: !existing,
-          existingManagerUserId: existing?.managerUserId ?? null,
-        });
-        if (!linked.ok) {
-          return NextResponse.json({ error: linked.error }, { status: linked.status });
-        }
-        row = linked.row;
-      } else {
-        // Self-application from a non-resident login: attribution comes from the
-        // LISTING (like the guest path) — never from the request body, and never
-        // from the caller's own manager identity.
-        const propertyId =
-          row.propertyId?.trim() || row.assignedPropertyId?.trim() || row.application?.propertyId?.trim() || "";
-        const managerUserId =
-          (propertyId ? await resolveManagerUserIdForProperty(db, propertyId) : null) ||
-          existing?.managerUserId?.trim() ||
-          null;
-        if (!managerUserId && !existing) {
-          return NextResponse.json({ error: "This listing cannot accept applications yet." }, { status: 400 });
-        }
-        row = { ...row, id: normalizeApplicationAxisId(row.id), managerUserId };
+      const linked = await linkResidentOnApplicationSubmit(db, {
+        userId: user.id,
+        row,
+        isNewSubmit: !existing,
+        existingManagerUserId: existing?.managerUserId ?? null,
+        linkProfile: role === "resident",
+      });
+      if (!linked.ok) {
+        return NextResponse.json({ error: linked.error }, { status: linked.status });
       }
+      row = linked.row;
       row = anchorServerOwnedSmsConsent(row, existing ?? null);
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
@@ -977,7 +972,7 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(residentSelfWrite ? { ok: true, row } : { ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save application.";
     return NextResponse.json({ error: message }, { status: 500 });

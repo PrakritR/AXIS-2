@@ -174,6 +174,7 @@ describe("POST /api/manager-applications — self-application by a non-resident 
     expect(persisted.manager_user_id).toBe(LISTING_OWNER);
     expect(persisted.row_data.managerUserId).toBe(LISTING_OWNER);
     expect(persisted.row_data.email).toBe(CALLER_EMAIL);
+    expect(persisted.row_data.residentUserId).toBe(CALLER);
   });
 
   it("keeps autosaving after the row exists (the wizard's per-keystroke sync)", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -77,11 +77,13 @@ import {
   sortResidentApplicationRows,
 } from "@/lib/rental-application/resident-application-list";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
+import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
 import {
   residentApplicationDetailHref,
   residentApplicationListHref,
+  type ResidentApplicationBucketId,
 } from "@/lib/portal-detail-routes";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 
@@ -140,7 +142,8 @@ export function ResidentApplicationsPanel({
   basePath?: string;
 } = {}) {
   const pathname = usePathname();
-  const { email: sessionEmail, ready: sessionReady } = usePortalSession();
+  const router = useRouter();
+  const { email: sessionEmail, userId: sessionUserId, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
   const portalNavigate = usePortalNavigate();
   const { showToast } = useAppUi();
@@ -171,6 +174,8 @@ export function ResidentApplicationsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<DemoApplicantRow | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [fetchedDetailRow, setFetchedDetailRow] = useState<DemoApplicantRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   // Inline "Apply to a property" picker: choosing which property to apply for
   // happens in place (a searchable modal), then the wizard opens INLINE under
   // its own row in this same list — no round-trip out to the browse page.
@@ -187,10 +192,24 @@ export function ResidentApplicationsPanel({
   useEffect(() => {
     if (!sessionReady) return;
     const on = () => setTick((t) => t + 1);
-    void syncManagerApplicationsFromServer({ force: true }).then(on);
+    void syncManagerApplicationsFromServer({ force: true, selfScope: true }).then(on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
   }, [sessionReady]);
+
+  useEffect(() => {
+    if (!applicationIdProp) return;
+    const refresh = () => {
+      void syncManagerApplicationsFromServer({ force: true, selfScope: true }).then(() => setTick((t) => t + 1));
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [applicationIdProp]);
 
   useEffect(() => {
     if (!demoMode) return;
@@ -233,10 +252,12 @@ export function ResidentApplicationsPanel({
     // A withdrawn application leaves the resident's active list (the manager keeps it).
     return sortResidentApplicationRows(
       readManagerApplicationRows().filter(
-        (row) => (row.email ?? "").trim().toLowerCase() === residentEmail && !isWithdrawnApplicationRow(row),
+        (row) =>
+          residentOwnsApplicationRow(row, { email: residentEmail, userId: sessionUserId }) &&
+          !isWithdrawnApplicationRow(row),
       ),
     );
-  }, [residentEmail, tick]);
+  }, [residentEmail, sessionUserId, tick]);
 
   // What this /apply request is actually asking for, so an in-progress
   // application for a DIFFERENT property (or a different room in the same
@@ -308,8 +329,57 @@ export function ResidentApplicationsPanel({
   }, [rowsForBucket, searchQuery]);
 
   const detailRow = applicationIdProp
-    ? rows.find((row) => row.id === applicationIdProp)
+    ? rows.find(
+        (row) =>
+          normalizeApplicationAxisId(row.id).toUpperCase() ===
+          normalizeApplicationAxisId(applicationIdProp).toUpperCase(),
+      ) ?? fetchedDetailRow
     : undefined;
+
+  useEffect(() => {
+    if (!applicationIdProp || !sessionReady) return;
+    const normalizedTarget = normalizeApplicationAxisId(applicationIdProp).toUpperCase();
+    const cached = rows.find(
+      (row) => normalizeApplicationAxisId(row.id).toUpperCase() === normalizedTarget,
+    );
+    if (cached) {
+      setFetchedDetailRow(null);
+      setDetailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/manager-applications?scope=self", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const body = (await res.json().catch(() => null)) as { rows?: DemoApplicantRow[] } | null;
+        const hit = (body?.rows ?? []).find(
+          (row) => normalizeApplicationAxisId(row.id).toUpperCase() === normalizedTarget,
+        );
+        if (!hit || cancelled) return;
+        replaceManagerApplicationRowInCache(hit);
+        setFetchedDetailRow(hit);
+        setTick((t) => t + 1);
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationIdProp, rows, sessionReady]);
+
+  useEffect(() => {
+    if (!detailRow || !applicationIdProp) return;
+    const actualBucket = detailRow.bucket;
+    if (
+      actualBucket !== bucket &&
+      (actualBucket === "pending" || actualBucket === "approved" || actualBucket === "rejected")
+    ) {
+      router.replace(residentApplicationDetailHref(basePath, actualBucket as ResidentApplicationBucketId, detailRow.id));
+    }
+  }, [applicationIdProp, basePath, bucket, detailRow, router]);
 
   // Active public listings the resident can apply for — the same catalog the
   // wizard's own property picker reads, surfaced up here so property choice can
@@ -883,6 +953,17 @@ export function ResidentApplicationsPanel({
       );
     }
     if (!detailRow) {
+      if (detailLoading) {
+        return (
+          <ManagerPortalPageShell title="Applications" hideTitleOnMobileNav>
+            <div className={PORTAL_DATA_TABLE_WRAP}>
+              <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">
+                Loading application…
+              </div>
+            </div>
+          </ManagerPortalPageShell>
+        );
+      }
       return (
         <ManagerPortalPageShell title="Applications" hideTitleOnMobileNav>
           <PortalDataTableEmpty icon="application" message="Application not found." />

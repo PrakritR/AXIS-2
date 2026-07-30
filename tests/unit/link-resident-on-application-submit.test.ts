@@ -152,4 +152,29 @@ describe("linkResidentOnApplicationSubmit", () => {
     expect(result.ok).toBe(true);
     expect(result.ok ? result.row.managerUserId : null).toBe("manager-1");
   });
+
+  it("skips profile.manager_id when linkProfile is false", async () => {
+    const db = makeDbMock({ propertyRecord: { manager_user_id: "manager-1" }, profile: { manager_id: null } });
+    const row: DemoApplicantRow = {
+      id: "AXIS-ABC123",
+      name: "Manager applicant",
+      property: "Test House",
+      propertyId: "prop-1",
+      stage: "Submitted",
+      bucket: "pending",
+      detail: "",
+      email: "manager@example.com",
+    };
+
+    const result = await linkResidentOnApplicationSubmit(db as never, {
+      userId: "mgr-user",
+      row,
+      isNewSubmit: true,
+      linkProfile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.row.residentUserId : null).toBe("mgr-user");
+    expect(db.profileUpdate).not.toHaveBeenCalled();
+  });
 });
