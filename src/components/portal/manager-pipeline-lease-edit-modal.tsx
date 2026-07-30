@@ -72,7 +72,7 @@ export function ManagerPipelineLeaseEditModal({
     <Modal
       open={open}
       title="Edit lease"
-      description="Edit terms on the left, preview the document on the right, or describe changes to PropLane Assistant below."
+      description="Edit lease terms and every document section on the left, preview on the right, or describe changes to PropLane Assistant below."
       onClose={onClose}
       assistantStrip={false}
       fullScreenMobile

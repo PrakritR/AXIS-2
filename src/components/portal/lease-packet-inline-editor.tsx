@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { LeaseSectionEditor } from "@/components/portal/lease-section-editor";
 import { patchLeasePacketFromManager } from "@/lib/lease-packet-edit.client";
 import {
   buildLeasePacketUpdateFromForm,
@@ -26,6 +27,7 @@ const LEASE_EDIT_SECTIONS = [
   { id: "lease-section-terms", label: "Terms" },
   { id: "lease-section-fees", label: "Fees" },
   { id: "lease-section-notes", label: "Notes" },
+  { id: "lease-section-document", label: "Document" },
 ] as const;
 
 type Props = {
@@ -123,7 +125,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
       {isPanel ? (
         <div className="shrink-0 border-b border-border pb-3">
           <p className="text-sm font-semibold text-foreground">{row.residentName || "Resident"}</p>
-          <p className="mt-0.5 text-xs text-muted">Edit every section below — changes update the preview after you save.</p>
+          <p className="mt-0.5 text-xs text-muted">Edit lease terms and every document section (1–26 and addenda A–E). Save to update the preview.</p>
           <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Lease form sections">
             {LEASE_EDIT_SECTIONS.map((section) => (
               <button
@@ -293,6 +295,14 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
             data-attr="lease-edit-notes"
           />
         </section>
+
+        <LeaseSectionEditor
+          row={row}
+          managerUserId={managerUserId}
+          onSaved={onSaved}
+          embedded
+          className="scroll-mt-2 border-t border-border pt-5"
+        />
       </div>
 
       <div

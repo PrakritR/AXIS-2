@@ -2402,7 +2402,7 @@ export function ManagerResidents({
           hideBackText
           bareHeader
           dataAttrBack="resident-detail-back"
-          actions={residentDetailHeaderActions}
+          actions={residentProfileHeaderActions}
           inlineActions
         >
           {residentDetailPanel}
