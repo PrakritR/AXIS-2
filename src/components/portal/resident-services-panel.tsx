@@ -1260,8 +1260,6 @@ export function ResidentServicesPanel({
           dataAttr: "resident-services-search",
         }}
       />
-      <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
-
       {!servicesUnlocked ? (
         <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
@@ -1550,6 +1548,18 @@ export function ResidentServicesPanel({
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              tabIndex={-1}
+              aria-hidden
+              onChange={(e) => {
+                void onPickPhotos(e.target.files);
+              }}
+            />
             <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
               Attach photos
             </Button>

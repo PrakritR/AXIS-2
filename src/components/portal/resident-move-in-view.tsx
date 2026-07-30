@@ -1,8 +1,11 @@
 "use client";
 
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PORTAL_INLINE_UNLOCK_NOTICE_CLASS } from "@/components/portal/portal-metrics";
 import {
   RESIDENT_MOVE_IN_TAB_LABELS,
+  RESIDENT_MOVE_IN_TABS,
   residentMoveInHref,
   type ResidentMoveInTabId,
 } from "@/lib/portal-detail-routes";
@@ -16,34 +19,26 @@ function availableTabs(resolved: ResidentMoveInResolved): ResidentMoveInTabId[] 
   return tabs;
 }
 
-/** Resolved house details — routed tabs instead of stacked disclosure sections. */
-export function ResidentMoveInResolvedView({
+function moveInDestinations(basePath: string, tabIds: readonly ResidentMoveInTabId[]) {
+  return tabIds.map((id) => ({
+    id,
+    label: RESIDENT_MOVE_IN_TAB_LABELS[id],
+    href: residentMoveInHref(basePath, id),
+    dataAttr: `resident-move-in-tab-${id}`,
+  }));
+}
+
+function ResidentMoveInTabContent({
   resolved,
   activeTab,
-  basePath = "/resident",
 }: {
   resolved: ResidentMoveInResolved;
   activeTab: ResidentMoveInTabId;
-  basePath?: string;
 }) {
-  const tabs = availableTabs(resolved);
-  const tab = tabs.includes(activeTab) ? activeTab : "placement";
+  const tab = availableTabs(resolved).includes(activeTab) ? activeTab : "placement";
 
   return (
-    <div className="space-y-4 text-sm leading-relaxed text-muted">
-      <PortalListControlStack
-        className="mb-3 max-lg:mb-4"
-        destinationInset
-        destinations={tabs.map((id) => ({
-          id,
-          label: RESIDENT_MOVE_IN_TAB_LABELS[id],
-          href: residentMoveInHref(basePath, id),
-          dataAttr: `resident-move-in-tab-${id}`,
-        }))}
-        activeDestinationId={tab}
-        destinationAriaLabel="House details"
-      />
-
+    <>
       {tab === "placement" ? (
         <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <div className="grid gap-4 sm:grid-cols-3">
@@ -116,6 +111,85 @@ export function ResidentMoveInResolvedView({
           </div>
         </section>
       ) : null}
+    </>
+  );
+}
+
+function emptyMessageForTab(tab: ResidentMoveInTabId): string {
+  switch (tab) {
+    case "housemates":
+      return "Housemate details will appear here once your placement is assigned.";
+    case "info":
+      return "House info and rules will appear here once your placement is assigned.";
+    case "instructions":
+      return "Move-in instructions will appear here once your placement is assigned.";
+    default:
+      return "We could not find an approved placement tied to this account yet. Once your property manager assigns your listing room, your house details will appear here automatically.";
+  }
+}
+
+/** House details body: routed tabs always visible; content varies by placement / lock state. */
+export function ResidentMoveInShell({
+  activeTab,
+  basePath = "/resident",
+  resolved,
+  email,
+  locked = false,
+}: {
+  activeTab: ResidentMoveInTabId;
+  basePath?: string;
+  resolved: ResidentMoveInResolved | null;
+  email: string;
+  locked?: boolean;
+}) {
+  const tabIds = resolved ? availableTabs(resolved) : RESIDENT_MOVE_IN_TABS;
+  const tab = tabIds.includes(activeTab) ? activeTab : "placement";
+
+  return (
+    <div className="space-y-4 text-sm leading-relaxed text-muted">
+      <PortalListControlStack
+        className="mb-3 max-lg:mb-4"
+        destinationInset
+        destinations={moveInDestinations(basePath, tabIds)}
+        activeDestinationId={tab}
+        destinationAriaLabel="House details"
+      />
+
+      {locked ? (
+        <>
+          <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+            <span className="font-semibold">Available once your lease is signed.</span> House details unlock after both
+            you and your property manager have signed the lease.
+          </p>
+          <PortalDataTableEmpty message="House details unlock after both signatures are complete." icon="lease" />
+        </>
+      ) : !email ? (
+        <p className={`${PORTAL_INLINE_UNLOCK_NOTICE_CLASS} portal-banner-pending`}>
+          Sign in to see house details for your placement.
+        </p>
+      ) : !resolved ? (
+        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+          <p className="text-base font-semibold text-foreground">No placement assigned yet</p>
+          <p className="mt-3 text-sm text-muted">{emptyMessageForTab(tab)}</p>
+        </section>
+      ) : (
+        <ResidentMoveInTabContent resolved={resolved} activeTab={tab} />
+      )}
     </div>
+  );
+}
+
+/** @deprecated Use {@link ResidentMoveInShell} — kept for imports during migration. */
+export function ResidentMoveInResolvedView({
+  resolved,
+  activeTab,
+  basePath = "/resident",
+}: {
+  resolved: ResidentMoveInResolved;
+  activeTab: ResidentMoveInTabId;
+  basePath?: string;
+}) {
+  return (
+    <ResidentMoveInShell activeTab={activeTab} basePath={basePath} resolved={resolved} email="resident@placeholder.local" />
   );
 }

@@ -148,7 +148,7 @@ describe("resident portal redesign completeness", () => {
       const unlockSurfaces = [
         readPanel("resident-payments-panel.tsx"),
         readPanel("resident-services-panel.tsx"),
-        readPanel("resident-move-in-panel.tsx"),
+        readPanel("resident-move-in-view.tsx"),
         readFileSync(join(process.cwd(), "src/lib/render-portal-section.tsx"), "utf8"),
       ];
       for (const src of unlockSurfaces) {

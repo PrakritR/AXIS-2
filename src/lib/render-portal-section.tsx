@@ -16,6 +16,7 @@ import { AdminCommunication } from "@/components/portal/admin-communication";
 import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
+import { ResidentMoveInShell } from "@/components/portal/resident-move-in-view";
 import { ResidentCommunication } from "@/components/portal/resident-communication";
 import { VendorCommunication } from "@/components/portal/vendor-communication";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
@@ -60,7 +61,7 @@ import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
-import { legacyManagerPortalSectionPath } from "@/lib/portal-detail-routes";
+import { legacyManagerPortalSectionPath, parseResidentMoveInTab } from "@/lib/portal-detail-routes";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
@@ -938,21 +939,25 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "move-in") {
     const moveInEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
-    const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
-    if (!leaseSigned) {
-      return (
-        <ManagerPortalPageShell title="House details" hideTitleOnMobileNav compactFilterRow>
-          <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
-            <span className="font-semibold">Available once your lease is signed.</span>
-          </p>
-          <PortalDataTableEmpty message="House details unlock after both signatures are complete." icon="lease" />
-        </ManagerPortalPageShell>
-      );
-    }
     if (!tabParts?.length) {
       redirect(`${def.basePath}/move-in/placement`);
     }
     if (tabParts.length > 1) notFound();
+    const moveInTab = parseResidentMoveInTab(tabParts[0]);
+    const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
+    if (!leaseSigned) {
+      return (
+        <ManagerPortalPageShell title="House details" hideTitleOnMobileNav>
+          <ResidentMoveInShell
+            activeTab={moveInTab}
+            basePath={def.basePath}
+            resolved={null}
+            email={moveInEmail?.trim().toLowerCase() ?? ""}
+            locked
+          />
+        </ManagerPortalPageShell>
+      );
+    }
     return (
       <ResidentMoveInPanel
         residentEmail={moveInEmail}
