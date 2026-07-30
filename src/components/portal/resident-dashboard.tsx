@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { SlidersHorizontal } from "lucide-react";
+import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
 import {
   ManagerPortalPageShell,
   PORTAL_DASHBOARD_STACK,
@@ -15,6 +17,8 @@ import {
   usePortalPreviewSlice,
 } from "@/components/portal/portal-data-table";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { useResidentDashboardVisibility } from "@/hooks/use-resident-dashboard-visibility";
+import { RESIDENT_DASHBOARD_SECTIONS } from "@/lib/resident-dashboard-preferences";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -327,17 +331,6 @@ function pillToneForBadgeTone(tone: string): PillTone {
   }
 }
 
-/** Compact KPI-tile value for the resident's lease state. */
-function leaseKpiValue(tone: string): { value: string; accent: boolean } {
-  switch (tone) {
-    case "emerald": return { value: "Active", accent: false };
-    case "blue": return { value: "Sign", accent: true };
-    case "sky":
-    case "amber": return { value: "Pending", accent: false };
-    default: return { value: "—", accent: false };
-  }
-}
-
 function applicationStatusBadge(row: DemoApplicantRow): { label: string; tone: "emerald" | "amber" | "rose" | "slate" } {
   if (row.bucket === "approved") return { label: "Approved", tone: "emerald" };
   if (row.bucket === "rejected") return { label: "Rejected", tone: "rose" };
@@ -391,6 +384,9 @@ export function ResidentDashboard({
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
   const canUseFullPortal = applicationApproved;
+  const userId = session.userId ?? residentUserId;
+  const { visibility, setVisible, reset } = useResidentDashboardVisibility(userId);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const [appStatus, setAppStatus] = useState<AppStatus>(applicationApproved ? "approved" : "pending");
   const [appProperty, setAppProperty] = useState<string | null>(null);
@@ -576,10 +572,8 @@ export function ResidentDashboard({
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
 
-  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
-  const leaseKpi = leaseKpiValue(lease.tone);
 
-  const leaseUnlocked = appStatus === "approved";
+  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`; = appStatus === "approved";
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
     ? `${leaseRow.application.leaseStart}${leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}`
@@ -620,7 +614,7 @@ export function ResidentDashboard({
             />
             {canUseFullPortal ? (
             <PortalDashboardKpiTile
-              label="Open requests"
+              label="Services"
               value={openServiceCount}
               tone={openServiceCount > 0 ? "warning" : "neutral"}
               emphasis={openServiceCount > 0}
@@ -628,22 +622,6 @@ export function ResidentDashboard({
               dataAttr="resident-dashboard-kpi-services"
             />
             ) : null}
-            <PortalDashboardKpiTile
-              label="Lease"
-              value={leaseKpi.value}
-              tone={leaseKpi.accent ? "warning" : "brand"}
-              emphasis={leaseKpi.accent}
-              href={`${BASE}/lease`}
-              dataAttr="resident-dashboard-kpi-lease"
-            />
-            <PortalDashboardKpiTile
-              label="Applications"
-              value={pendingApplicationCount}
-              tone={pendingApplicationCount > 0 ? "warning" : "brand"}
-              emphasis={pendingApplicationCount > 0}
-              href={`${BASE}/applications`}
-              dataAttr="resident-dashboard-kpi-applications"
-            />
             <PortalDashboardKpiTile
               label="Unread messages"
               value={inbox}
@@ -673,8 +651,18 @@ export function ResidentDashboard({
                 {openCount} open
               </span>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setCustomizeOpen(true)}
+              data-attr="resident-dashboard-customize-open"
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              <span className="[html[data-native]_&]:sr-only">Customize</span>
+            </button>
           </div>
 
+          {visibility.payments ? (
           <AttentionGroup
             title="Pending & overdue payments"
             href={`${BASE}/payments`}
@@ -716,7 +704,9 @@ export function ResidentDashboard({
               );
             }}
           />
+          ) : null}
 
+          {visibility.lease ? (
           <AttentionGroup
             title="Lease"
             href={`${BASE}/lease`}
@@ -738,7 +728,9 @@ export function ResidentDashboard({
               />
             )}
           />
+          ) : null}
 
+          {visibility.applications ? (
           <AttentionGroup
             title="Applications"
             href={`${BASE}/applications`}
@@ -774,8 +766,9 @@ export function ResidentDashboard({
               );
             }}
           />
+          ) : null}
 
-          {canUseFullPortal ? (
+          {canUseFullPortal && visibility.services ? (
           <AttentionGroup
             title="Services"
             href={servicesHref}
@@ -843,6 +836,7 @@ export function ResidentDashboard({
           />
           ) : null}
 
+          {visibility.communication ? (
           <AttentionGroup
             title="Communication"
             href={communicationHref}
@@ -871,8 +865,18 @@ export function ResidentDashboard({
               />
             )}
           />
+          ) : null}
         </div>
       </div>
+
+      <DashboardCustomizeModal
+        open={customizeOpen}
+        onClose={() => setCustomizeOpen(false)}
+        sections={RESIDENT_DASHBOARD_SECTIONS}
+        visibility={visibility}
+        onToggle={setVisible}
+        onReset={reset}
+      />
     </ManagerPortalPageShell>
   );
 }

@@ -3,8 +3,7 @@
 import { Modal } from "@/components/ui/modal";
 import {
   MANAGER_DASHBOARD_SECTIONS,
-  type DashboardSectionId,
-  type DashboardVisibility,
+  type DashboardSectionDef,
 } from "@/lib/dashboard-preferences";
 
 /** Accessible on/off switch for a single dashboard section. */
@@ -61,14 +60,16 @@ export function DashboardCustomizeModal({
   visibility,
   onToggle,
   onReset,
+  sections = MANAGER_DASHBOARD_SECTIONS,
 }: {
   open: boolean;
   onClose: () => void;
-  visibility: DashboardVisibility;
-  onToggle: (id: DashboardSectionId, visible: boolean) => void;
+  visibility: Record<string, boolean>;
+  onToggle: (id: string, visible: boolean) => void;
   onReset: () => void;
+  sections?: readonly DashboardSectionDef[];
 }) {
-  const visibleCount = MANAGER_DASHBOARD_SECTIONS.filter((s) => visibility[s.id]).length;
+  const visibleCount = sections.filter((s) => visibility[s.id]).length;
 
   return (
     <Modal
@@ -98,16 +99,16 @@ export function DashboardCustomizeModal({
       }
     >
       <p className="text-xs text-muted">
-        Choose which sections appear on your dashboard. {visibleCount} of{" "}
-        {MANAGER_DASHBOARD_SECTIONS.length} shown. The stat row at the top always stays.
+        Choose which sections appear on your dashboard. {visibleCount} of {sections.length} shown. The stat row at the
+        top always stays.
       </p>
       <ul className="mt-3 space-y-2">
-        {MANAGER_DASHBOARD_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <SectionToggle
             key={section.id}
             label={section.label}
             description={section.description}
-            checked={visibility[section.id]}
+            checked={Boolean(visibility[section.id])}
             onChange={(next) => onToggle(section.id, next)}
             dataAttr={`dashboard-customize-toggle-${section.id}`}
           />
