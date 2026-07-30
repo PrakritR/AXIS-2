@@ -32,6 +32,15 @@ export const RESIDENT_DETAIL_TAB_LABELS: Record<ResidentDetailTabId, string> = {
   communication: "Communication",
 };
 
+/** Compact labels for resident detail tabs on phone-width layouts. */
+export const RESIDENT_DETAIL_TAB_SHORT_LABELS: Record<ResidentDetailTabId, string> = {
+  application: "Application",
+  lease: "Lease",
+  payments: "Payments",
+  services: "Services",
+  communication: "Comms",
+};
+
 export function parsePropertyDetailTab(raw: string | undefined | null): PropertyDetailTabId {
   if (raw && (PROPERTY_DETAIL_TABS as readonly string[]).includes(raw)) {
     return raw as PropertyDetailTabId;

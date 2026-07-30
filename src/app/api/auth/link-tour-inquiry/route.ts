@@ -10,6 +10,9 @@ export async function POST(req: Request) {
   try {
     const { user, profile } = await getEffectiveSessionForPortal("resident");
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    if (profile?.role && profile.role !== "resident") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Profile email required." }, { status: 400 });

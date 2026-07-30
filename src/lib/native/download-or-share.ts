@@ -16,7 +16,16 @@ export function triggerBrowserDownload(fileName: string, blob: Blob): void {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function prefersFileShareSheet(): boolean {
+  if (isNativeRuntimeSync()) return true;
+  if (typeof navigator === "undefined") return false;
+  const isIOS =
+    /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return isIOS;
 }
 
 /**
@@ -41,15 +50,15 @@ export async function downloadOrShareFile({
   title?: string;
 }): Promise<DownloadOrShareResult> {
   const blob = new Blob([content], { type: mimeType });
-  if (!isNativeRuntimeSync()) {
-    triggerBrowserDownload(fileName, blob);
-    return "downloaded";
-  }
-
   const nav = navigator as ShareCapableNavigator;
   const file = new File([blob], fileName, { type: mimeType });
   const payload: ShareData = { files: [file], title: title ?? fileName };
-  if (typeof nav.share === "function" && (!nav.canShare || nav.canShare(payload))) {
+  const canUseShare =
+    prefersFileShareSheet() &&
+    typeof nav.share === "function" &&
+    (!nav.canShare || nav.canShare(payload));
+
+  if (canUseShare) {
     try {
       await nav.share(payload);
       return "shared";

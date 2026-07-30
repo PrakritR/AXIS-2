@@ -132,8 +132,7 @@ export async function POST(req: Request) {
       secure,
     });
     return res;
-  } catch (e) {
-    const message = e instanceof Error ? e.message : GENERIC_FAILURE;
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: GENERIC_FAILURE }, { status: 500 });
   }
 }

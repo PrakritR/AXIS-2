@@ -56,6 +56,16 @@ function sameInstant(a: string | null | undefined, b: string): boolean {
   return Number.isFinite(aMs) && Number.isFinite(bMs) && aMs === bMs;
 }
 
+function inquiryManagerUserId(row: Record<string, unknown>): string {
+  return textField(row, "managerUserId") || textField(row, "adminUserId");
+}
+
+/** A manager may only mutate inquiries they own — the singleton payload is global. */
+function inquiryOwnedByManager(row: Record<string, unknown>, managerUserId: string): boolean {
+  const owner = inquiryManagerUserId(row);
+  return Boolean(owner && owner === managerUserId);
+}
+
 export async function POST(req: Request) {
   try {
     const auth = await createSupabaseServerClient();
@@ -119,10 +129,20 @@ export async function POST(req: Request) {
     if (inquiryError) return NextResponse.json({ error: inquiryError.message }, { status: 500 });
 
     const currentInquiries = inquiryRowsFromRecord(inquiryRecord?.row_data);
+    const targetInquiry = currentInquiries.find((row) => textField(row, "id") === id);
+    if (targetInquiry && !inquiryOwnedByManager(targetInquiry, managerUserId)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
     const nextInquiries = currentInquiries.filter((row) => {
       const rowId = textField(row, "id");
-      if (idsToRemove.has(rowId)) return false;
-      return !(start && end && sameTourSlot(row, managerUserId, start, end));
+      if (idsToRemove.has(rowId)) {
+        return !inquiryOwnedByManager(row, managerUserId);
+      }
+      if (start && end && sameTourSlot(row, managerUserId, start, end)) {
+        return !inquiryOwnedByManager(row, managerUserId);
+      }
+      return true;
     });
 
     const { error: writeError } = await db.from("portal_schedule_records").upsert(
