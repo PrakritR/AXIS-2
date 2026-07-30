@@ -473,8 +473,8 @@ export function ManagerApplications({
   const tabs = useMemo(
     () =>
       [
-        { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
         { id: "pending" as const, label: "Pending", count: pendingReviewCount },
+        { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
       ] as const,

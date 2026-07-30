@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
-import {
-  ManagerPortalStatusFilterRow,
-  ManagerPortalStatusPills,
-} from "@/components/portal/portal-metrics";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
@@ -50,19 +47,15 @@ export function ApplicationReviewLauncherRow({
   return (
     <div className="space-y-3" data-slot="application-review-inline">
       {showsScreening ? (
-        <ManagerPortalStatusFilterRow>
-          <ManagerPortalStatusPills
-            tabs={[
-              { id: "application", label: "Application" },
-              { id: "background-check", label: "Background check" },
-            ]}
-            activeId={subTab}
-            onChange={(id) => setSubTab(id as ApplicationReviewSubTab)}
-            mobileSelect={false}
-            compact
-            selectAriaLabel="Application review section"
-          />
-        </ManagerPortalStatusFilterRow>
+        <LocalDestinationNav
+          items={[
+            { id: "application", label: "Application", dataAttr: "application-review-tab-application" },
+            { id: "background-check", label: "Background check", dataAttr: "application-review-tab-background-check" },
+          ]}
+          activeId={subTab}
+          onChange={(id) => setSubTab(id as ApplicationReviewSubTab)}
+          ariaLabel="Application review section"
+        />
       ) : null}
 
       {!showsScreening || subTab === "application" ? (

@@ -10,10 +10,9 @@ import { GroupShareCallout } from "@/components/marketing/rental-application-fin
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  ManagerPortalStatusPills,
-  ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -685,9 +684,17 @@ export function ResidentApplicationsPanel({
   };
 
   const filterRow = (
-    <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-    </ManagerPortalFilterRow>
+    <LocalDestinationNav
+      items={tabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count: t.count,
+        dataAttr: `resident-applications-bucket-${t.id}`,
+      }))}
+      activeId={bucket}
+      onChange={(id) => setBucket(id as ManagerApplicationBucket)}
+      ariaLabel="Application status"
+    />
   );
 
   const newApplicationButton =
