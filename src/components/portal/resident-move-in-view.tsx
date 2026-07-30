@@ -115,19 +115,6 @@ function ResidentMoveInTabContent({
   );
 }
 
-function emptyMessageForTab(tab: ResidentMoveInTabId): string {
-  switch (tab) {
-    case "housemates":
-      return "Housemate details will appear here once your placement is assigned.";
-    case "info":
-      return "House info and rules will appear here once your placement is assigned.";
-    case "instructions":
-      return "Move-in instructions will appear here once your placement is assigned.";
-    default:
-      return "We could not find an approved placement tied to this account yet. Once your property manager assigns your listing room, your house details will appear here automatically.";
-  }
-}
-
 /** House details body: routed tabs always visible; content varies by placement / lock state. */
 export function ResidentMoveInShell({
   activeTab,
@@ -152,7 +139,7 @@ export function ResidentMoveInShell({
         destinationInset
         destinations={moveInDestinations(basePath, tabIds)}
         activeDestinationId={tab}
-        destinationAriaLabel="House details"
+        destinationAriaLabel="Placement views"
       />
 
       {locked ? (
@@ -161,17 +148,17 @@ export function ResidentMoveInShell({
             <span className="font-semibold">Available once your lease is signed.</span> House details unlock after both
             you and your property manager have signed the lease.
           </p>
-          <PortalDataTableEmpty message="House details unlock after both signatures are complete." icon="lease" />
+          <PortalDataTableEmpty message="Unlocks after both signatures are complete." icon="lease" />
         </>
       ) : !email ? (
         <p className={`${PORTAL_INLINE_UNLOCK_NOTICE_CLASS} portal-banner-pending`}>
           Sign in to see house details for your placement.
         </p>
       ) : !resolved ? (
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <p className="text-base font-semibold text-foreground">No placement assigned yet</p>
-          <p className="mt-3 text-sm text-muted">{emptyMessageForTab(tab)}</p>
-        </section>
+        <PortalDataTableEmpty
+          icon="residents"
+          message="We could not find an approved placement tied to this account yet. Once your property manager assigns your listing room, your house details will appear here automatically."
+        />
       ) : (
         <ResidentMoveInTabContent resolved={resolved} activeTab={tab} />
       )}

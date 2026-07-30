@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { formatPacificDate } from "@/lib/pacific-time";
@@ -489,7 +489,24 @@ export function ResidentServicesPanel({
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
-  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const openMaintenancePhotoPicker = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = true;
+    input.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0;width:0;height:0;";
+    input.setAttribute("tabindex", "-1");
+    input.setAttribute("aria-hidden", "true");
+    const onChange = () => {
+      void onPickPhotos(input.files);
+      input.removeEventListener("change", onChange);
+      input.remove();
+    };
+    input.addEventListener("change", onChange);
+    document.body.appendChild(input);
+    input.click();
+  };
 
   const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
@@ -890,7 +907,6 @@ export function ResidentServicesPanel({
     setMEntryPermission("call_first");
     setMEntryNotes("");
     setMPhotos([]);
-    if (photoInputRef.current) photoInputRef.current.value = "";
   };
   const resetService = () => {
     setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
@@ -1189,6 +1205,65 @@ export function ResidentServicesPanel({
       </Button>
     );
 
+  const servicesListChrome = (
+    <PortalListControlStack
+      destinationInset
+      destinations={[
+        {
+          id: "requests",
+          label: "Add-on services",
+          href: `${basePath}/services/requests`,
+          count: sortedRequests.length,
+          dataAttr: "resident-services-tab-requests",
+        },
+        {
+          id: "work-orders",
+          label: "Work orders",
+          href: `${basePath}/services/work-orders`,
+          count: myRows.length,
+          dataAttr: "resident-services-tab-work-orders",
+        },
+      ]}
+      activeDestinationId={activeTab}
+      destinationAriaLabel="Services"
+      filterRow={
+        activeTab === "requests" ? (
+          <LocalDestinationNav
+            items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+              id,
+              label,
+              count: requestsCounts[id],
+              dataAttr: `resident-services-request-status-${id}`,
+            }))}
+            activeId={requestsFilter}
+            onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
+            ariaLabel="Add-on service status"
+            className="w-full"
+          />
+        ) : (
+          <LocalDestinationNav
+            items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
+              id,
+              label,
+              count: workOrderFilterCounts[id],
+              dataAttr: `resident-services-work-order-status-${id}`,
+            }))}
+            activeId={workOrderFilter}
+            onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
+            ariaLabel="Work order status"
+            className="w-full"
+          />
+        )
+      }
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: activeTab === "requests" ? "Search add-on services" : "Search work orders",
+        dataAttr: "resident-services-search",
+      }}
+    />
+  );
+
   return (
     <ManagerPortalPageShell
       title="Services"
@@ -1199,67 +1274,11 @@ export function ResidentServicesPanel({
         </PortalSectionActionRow>
       }
       compactFilterRow
+      filterRow={servicesListChrome}
     >
       <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-services-mobile-actions">
         {servicesHeaderAction}
       </div>
-      <PortalListControlStack
-        className="mb-3 max-lg:mb-4"
-        destinationInset
-        destinations={[
-          {
-            id: "requests",
-            label: "Add-on services",
-            href: `${basePath}/services/requests`,
-            count: sortedRequests.length,
-            dataAttr: "resident-services-tab-requests",
-          },
-          {
-            id: "work-orders",
-            label: "Work orders",
-            href: `${basePath}/services/work-orders`,
-            count: myRows.length,
-            dataAttr: "resident-services-tab-work-orders",
-          },
-        ]}
-        activeDestinationId={activeTab}
-        destinationAriaLabel="Services"
-        filterRow={
-          activeTab === "requests" ? (
-            <LocalDestinationNav
-              items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
-                id,
-                label,
-                count: requestsCounts[id],
-                dataAttr: `resident-services-request-status-${id}`,
-              }))}
-              activeId={requestsFilter}
-              onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
-              ariaLabel="Add-on service status"
-              className="w-full"
-            />
-          ) : (
-            <LocalDestinationNav
-              items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
-                id,
-                label,
-                count: workOrderFilterCounts[id],
-                dataAttr: `resident-services-work-order-status-${id}`,
-              }))}
-              activeId={workOrderFilter}
-              onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
-              ariaLabel="Work order status"
-              className="w-full"
-            />
-          )
-        }
-        search={{
-          value: searchQuery,
-          onChange: setSearchQuery,
-          placeholder: activeTab === "requests" ? "Search add-on services" : "Search work orders",
-          dataAttr: "resident-services-search",
-        }}
-      />
       {!servicesUnlocked ? (
         <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
@@ -1458,9 +1477,10 @@ export function ResidentServicesPanel({
         </div>
       )}
 
-      {/* Maintenance modal */}
+      {/* Maintenance modal — mount only while open so no file input leaks to the list page */}
+      {modalMode === "maintenance" ? (
       <Modal
-        open={modalMode === "maintenance"}
+        open
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="max-w-lg"
@@ -1548,19 +1568,7 @@ export function ResidentServicesPanel({
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              tabIndex={-1}
-              aria-hidden
-              onChange={(e) => {
-                void onPickPhotos(e.target.files);
-              }}
-            />
-            <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
+            <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={openMaintenancePhotoPicker}>
               Attach photos
             </Button>
           </div>
@@ -1580,6 +1588,7 @@ export function ResidentServicesPanel({
           ) : null}
         </div>
       </Modal>
+      ) : null}
 
       {/* Request modal */}
       <Modal
