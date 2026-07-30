@@ -93,9 +93,10 @@ describe("bulk application editor — save gate (round 31)", () => {
     fireEvent.click(document.querySelector('[data-attr^="application-section-toggle-"]') as HTMLElement);
     removeFirstQuestion();
 
-    // Two Cancel buttons exist in the DOM tree (footer); click the save-gate footer's Cancel.
-    const cancelBtns = Array.from(document.querySelectorAll("button")).filter((b) => b.textContent === "Cancel");
-    fireEvent.click(cancelBtns[cancelBtns.length - 1]!);
+    // Footer Cancel was removed — dismiss via the header × (same save gate).
+    const closeBtn = document.querySelector('button[aria-label="Close"]') as HTMLElement | null;
+    expect(closeBtn).not.toBeNull();
+    fireEvent.click(closeBtn!);
 
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Discard"));
     expect(persistBulk).not.toHaveBeenCalled();

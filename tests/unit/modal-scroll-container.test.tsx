@@ -38,7 +38,8 @@ function modalBody(): HTMLElement {
   // Panel children: header, [row/column switch wrapper], (footer?). The actual
   // scroll container sits one level inside that wrapper (see modal.tsx) so the
   // assistant strip can sit beside it once the panel is wide enough.
-  const rowWrapper = dialog.children[1] as HTMLElement;
+  const panelInner = dialog.children[0] as HTMLElement;
+  const rowWrapper = panelInner.children[1] as HTMLElement;
   return rowWrapper.children[0] as HTMLElement;
 }
 

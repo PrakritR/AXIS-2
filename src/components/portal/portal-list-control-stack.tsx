@@ -58,14 +58,17 @@ export function PortalListControlStack({
     if (!el || !showDestinations) return;
     const sync = () => syncPortalMobileTopChrome(el);
     sync();
-    const ro = new ResizeObserver(sync);
     const main = el.closest("#portal-main-content");
     const mobileBar = main?.querySelector(".portal-mobile-nav-bar");
-    if (mobileBar) ro.observe(mobileBar);
-    ro.observe(el);
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(sync);
+      if (mobileBar) ro.observe(mobileBar);
+      ro.observe(el);
+    }
     window.addEventListener("resize", sync);
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
       window.removeEventListener("resize", sync);
       const mobileBar = main?.querySelector<HTMLElement>(".portal-mobile-nav-bar");
       if (mobileBar) syncPortalMobileTopChrome(mobileBar);
