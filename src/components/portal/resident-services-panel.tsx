@@ -16,6 +16,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -34,7 +35,6 @@ import {
   createPortalRowExpandClick,
   portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
-import { PillTabs } from "@/components/ui/tabs";
 import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
 import { formatPreferredArrival, parsePreferredArrival } from "@/lib/preferred-arrival";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
@@ -492,8 +492,13 @@ export function ResidentServicesPanel({
 
   const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const activeTab = tabId;
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [activeTab]);
 
   // modal state
   const [modalMode, setModalMode] = useState<"none" | "maintenance" | "service">("none");
@@ -733,9 +738,29 @@ export function ResidentServicesPanel({
   }, [sortedRequests]);
 
   const filteredRequests = useMemo(
-    () => sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter),
-    [sortedRequests, requestsFilter],
+    () => {
+      const bucketed = sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter);
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return bucketed;
+      return bucketed.filter((req) => {
+        const haystack = [req.offerName, req.notes, req.status].filter(Boolean).join(" ").toLowerCase();
+        return haystack.includes(q);
+      });
+    },
+    [sortedRequests, requestsFilter, searchQuery],
   );
+
+  const searchedWorkOrderRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const haystack = [row.title, row.description, row.propertyName, row.unit, row.priority]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, searchQuery]);
 
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
@@ -1198,6 +1223,41 @@ export function ResidentServicesPanel({
         ]}
         activeDestinationId={activeTab}
         destinationAriaLabel="Services"
+        filterRow={
+          activeTab === "requests" ? (
+            <LocalDestinationNav
+              items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+                id,
+                label,
+                count: requestsCounts[id],
+                dataAttr: `resident-services-request-status-${id}`,
+              }))}
+              activeId={requestsFilter}
+              onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
+              ariaLabel="Add-on service status"
+              className="w-full"
+            />
+          ) : (
+            <LocalDestinationNav
+              items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
+                id,
+                label,
+                count: workOrderFilterCounts[id],
+                dataAttr: `resident-services-work-order-status-${id}`,
+              }))}
+              activeId={workOrderFilter}
+              onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
+              ariaLabel="Work order status"
+              className="w-full"
+            />
+          )
+        }
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: activeTab === "requests" ? "Search add-on services" : "Search work orders",
+          dataAttr: "resident-services-search",
+        }}
       />
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
@@ -1210,21 +1270,17 @@ export function ResidentServicesPanel({
 
       {activeTab === "requests" ? (
         <div>
-          <div className="mb-3 w-fit max-w-full">
-            <PillTabs
-              items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
-                id,
-                label: pillLabelWithCount(label, requestsCounts[id]),
-              }))}
-              activeId={requestsFilter}
-              onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
-            />
-          </div>
-
           {sortedRequests.length === 0 ? (
             <PortalDataTableEmpty message="No add-on services requested yet." icon="service" />
           ) : filteredRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No add-on services in this status yet." icon="service" />
+            <PortalDataTableEmpty
+              message={
+                searchQuery.trim()
+                  ? "No add-on services match your search."
+                  : "No add-on services in this status yet."
+              }
+              icon="service"
+            />
           ) : (
         <>
         <div className="space-y-2 lg:hidden">
@@ -1301,28 +1357,21 @@ export function ResidentServicesPanel({
         </div>
       ) : (
         <div>
-          <div className="mb-3 w-fit max-w-full">
-            <PillTabs
-              items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
-                id,
-                label: pillLabelWithCount(label, workOrderFilterCounts[id]),
-              }))}
-              activeId={workOrderFilter}
-              onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
-            />
-          </div>
-
-          {rows.length === 0 ? (
+          {myRows.length === 0 ? (
+            <PortalDataTableEmpty icon="work-order" message="No work orders yet." />
+          ) : searchedWorkOrderRows.length === 0 ? (
             <PortalDataTableEmpty
               icon="work-order"
               message={
-                myRows.length === 0 ? "No work orders yet." : "No work orders in this status yet."
+                searchQuery.trim()
+                  ? "No work orders match your search."
+                  : "No work orders in this status yet."
               }
             />
           ) : (
             <>
             <div className="space-y-2 lg:hidden">
-              {rows.map((row) => {
+              {searchedWorkOrderRows.map((row) => {
                 const expanded = expandedId === row.id;
                 return (
                   <PortalMobileSummaryCard
@@ -1363,7 +1412,7 @@ export function ResidentServicesPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => {
+                    {searchedWorkOrderRows.map((row) => {
                       const isExpanded = expandedId === row.id;
                       return (
                       <Fragment key={row.id}>
