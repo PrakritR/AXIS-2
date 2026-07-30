@@ -13,6 +13,7 @@ import {
   buildLeaseDraft,
   buildLeaseDraftPreview,
   buildLeasePacketPreview,
+  buildLeaseDocumentSectionsPreview,
   type CreateLeaseDraftInput,
   type UpdateLeaseDraftInput,
   type UpdateLeasePacketInput,
@@ -656,11 +657,7 @@ export const updateLeaseDocumentSectionsTool = defineWriteTool<
     }
     const ids = Object.keys(input.sectionBodies).filter((id) => id.trim());
     if (!ids.length) throw new Error("Provide at least one section id and body HTML.");
-    return {
-      title: "Update lease document sections",
-      summary: `Update ${ids.length} section${ids.length === 1 ? "" : "s"} on the lease for ${row.residentName}.`,
-      details: ids.map((id) => `• ${id}`).join("\n"),
-    };
+    return buildLeaseDocumentSectionsPreview(row, input.sectionBodies);
   },
   handler: async (ctx, input) => {
     const result = await patchLeaseDocumentSectionsForManagerReview(ctx.db, ctx.landlordId, {
