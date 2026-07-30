@@ -20,8 +20,12 @@ function sectionIds(sections: { section: string }[]): string[] {
 
 describe("resident portal redesign completeness", () => {
   describe("three access-state section catalogs", () => {
-    it("application phase exposes only Application + Settings", () => {
-      expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).toEqual(["applications", "profile"]);
+    it("application phase exposes Application, Communication, and Settings", () => {
+      expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).toEqual([
+        "applications",
+        "communication",
+        "profile",
+      ]);
     });
 
     it("limited workspace includes dashboard and omits services", () => {
@@ -40,7 +44,8 @@ describe("resident portal redesign completeness", () => {
       expect(approved).toContain("services");
     });
 
-    it("application-phase route guard blocks dashboard unless submission completed", () => {
+    it("application-phase route guard allows communication and blocks lease", () => {
+      expect(isResidentApplicationPhaseAllowedPath("/resident/communication/inbox/unopened")).toBe(true);
       expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(false);
       expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard", { allowDashboard: true })).toBe(true);
       expect(isResidentApplicationPhaseAllowedPath("/resident/profile")).toBe(true);
@@ -99,7 +104,6 @@ describe("resident portal redesign completeness", () => {
   describe("three-band header contract on list sections", () => {
     const band2Panels: Array<{ file: string; marker: string }> = [
       { file: "resident-applications-panel.tsx", marker: "PortalListControlStack" },
-      { file: "resident-lease-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-payments-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-move-in-view.tsx", marker: "PortalListControlStack" },
       { file: "resident-services-panel.tsx", marker: "PortalListControlStack" },
@@ -164,8 +168,10 @@ describe("resident portal redesign completeness", () => {
       expect(readPanel("resident-lease-panel.tsx")).not.toContain("glass-card");
     });
 
-    it("status filter rows span full width on lease and services", () => {
-      expect(readPanel("resident-lease-panel.tsx")).toMatch(/LocalDestinationNav[\s\S]*className="w-full"/);
+    it("lease is a single view without status tabs; services filter rows span full width", () => {
+      const lease = readPanel("resident-lease-panel.tsx");
+      expect(lease).not.toContain("LocalDestinationNav");
+      expect(lease).toContain('variant="plain"');
       const services = readPanel("resident-services-panel.tsx");
       expect(services.match(/className="w-full"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     });

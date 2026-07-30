@@ -80,12 +80,15 @@ export function groupNavItems<T extends { section: string }>(
 ): GroupedNav<T>[] {
   const byId = new Map(items.map((i) => [i.section, i] as const));
 
-  // Application phase: only Application in the sidebar; Settings → account menu.
-  if (kind === "resident" && items.length === 2) {
+  // Application phase: Application + Communication in the sidebar; Settings → account menu.
+  if (kind === "resident" && byId.has("applications") && !byId.has("lease")) {
+    const homeItems: T[] = [];
     const applications = byId.get("applications");
-    const profile = byId.get("profile");
-    if (applications && profile) {
-      return [{ id: "home", label: null, items: [applications] }];
+    const communication = byId.get("communication");
+    if (applications) homeItems.push(applications);
+    if (communication) homeItems.push(communication);
+    if (homeItems.length > 0 && byId.has("profile")) {
+      return [{ id: "home", label: null, items: homeItems }];
     }
   }
 
