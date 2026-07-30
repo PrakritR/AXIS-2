@@ -21,6 +21,16 @@ describe("residentBrowseFromApplicationHref", () => {
   });
 });
 
+describe("residentSignInHref", () => {
+  it("embeds link_tour in next so post-auth routing reaches the resident layout", () => {
+    const href = residentSignInHref("/rent/tours-contact", { tourInquiryId: "inq-abc-123" });
+    expect(href).toContain("intent=resident");
+    expect(href).toContain(
+      `next=${encodeURIComponent("/resident/tour?link_tour=inq-abc-123")}`,
+    );
+  });
+});
+
 describe("residentPortalPublicHref", () => {
   it("sends signed-in residents to the portal", () => {
     expect(

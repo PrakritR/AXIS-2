@@ -659,7 +659,10 @@ export function ManagerPaymentsLedgerPanel({
           <Button type="button" variant="outline" className={btnClass} onClick={() => saveEdit(row)}>
             Save
           </Button>
-          </>
+          <Button type="button" variant="outline" className={btnClass} onClick={() => cancelEdit()}>
+            Cancel
+          </Button>
+        </>
       ) : (
         <Button type="button" variant="outline" className={btnClass} onClick={() => startEdit(row)}>
           Edit

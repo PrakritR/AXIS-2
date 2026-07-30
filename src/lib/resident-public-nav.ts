@@ -32,10 +32,14 @@ export function residentSignInHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
   opts?: { tourInquiryId?: string },
 ): string {
-  const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
-  const q = new URLSearchParams({ intent: "resident", next });
+  const baseNext = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
   const tourInquiryId = opts?.tourInquiryId?.trim();
-  if (tourInquiryId) q.set("link_tour", tourInquiryId);
+  // Post-auth routing only forwards `next` through /auth/continue — embed link_tour
+  // there so ResidentTourLinkOnMount runs inside the resident layout.
+  const next = tourInquiryId
+    ? `/resident/tour?link_tour=${encodeURIComponent(tourInquiryId)}`
+    : baseNext;
+  const q = new URLSearchParams({ intent: "resident", next });
   return `/auth/sign-in?${q.toString()}`;
 }
 

@@ -91,7 +91,8 @@ type InboxThread = {
 
 function threadEligibleForAiDraft(thread: InboxThread): boolean {
   if (thread.folder !== "inbox") return false;
-  if ((thread.messages ?? []).length > 0) return true;
+  // `messages` holds manager replies only — draft when the resident message is unanswered.
+  if ((thread.messages ?? []).length > 0) return false;
   return Boolean(thread.body?.trim());
 }
 

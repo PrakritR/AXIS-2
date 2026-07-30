@@ -20,13 +20,19 @@ export function ResidentTourLinkOnMount() {
       credentials: "include",
       body: JSON.stringify({ tourInquiryId }),
     })
-      .then(() => {
+      .then(async (res) => {
+        if (!res.ok) {
+          linkedRef.current = false;
+          return;
+        }
         const next = new URLSearchParams(searchParams.toString());
         next.delete("link_tour");
         const qs = next.toString();
         router.replace(qs ? `?${qs}` : window.location.pathname);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        linkedRef.current = false;
+      });
   }, [router, searchParams]);
 
   return null;
