@@ -91,7 +91,7 @@ type InboxThread = {
 
 function threadEligibleForAiDraft(thread: InboxThread): boolean {
   if (thread.folder !== "inbox") return false;
-  if ((thread.messages ?? []).length > 0) return false;
+  if ((thread.messages ?? []).length > 0) return true;
   return Boolean(thread.body?.trim());
 }
 
@@ -935,7 +935,9 @@ export const ManagerInbox = forwardRef<
   }, [activeThread]);
 
   const showAiDraftUi = Boolean(
-    activeThread && activeThread.folder === "inbox" && (activeThread.messages ?? []).length === 0,
+    activeThread &&
+      activeThread.folder === "inbox" &&
+      ((activeThread.messages ?? []).length > 0 || Boolean(activeThread.body?.trim())),
   );
 
   const emptyCopy = inboxTabEmptyCopy(tabId);

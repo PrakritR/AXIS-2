@@ -2244,7 +2244,7 @@ export function ManagerResidents({
                               <div className="-mx-2.5 mb-3 bg-background sm:-mx-4 lg:mx-0">
                                 <LocalDestinationNav
                                   items={[
-                                    { id: "requests", label: "Add-on services", dataAttr: "resident-services-tab-requests" },
+                                    { id: "requests", label: "Requests", dataAttr: "resident-services-tab-requests" },
                                     { id: "work-orders", label: "Work orders", dataAttr: "resident-services-tab-work-orders" },
                                   ]}
                                   activeId={svcSubTab}
@@ -2372,7 +2372,7 @@ export function ManagerResidents({
 
                             {resolvedDetailTab === "communication" ? (
                             <ResidentDetailTabPanel>
-                              <div className="@container flex min-h-[min(70vh,720px)] flex-col gap-0 @2xl:flex-row @2xl:items-stretch">
+                              <div className="flex min-h-[min(70vh,720px)] flex-col">
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                   <div className="mb-3">
                                     <p className="text-sm text-muted">{residentCommSummary}</p>
@@ -2388,9 +2388,8 @@ export function ManagerResidents({
                                   contextHint={`Resident communication · ${selected.name || selected.email}`}
                                   storageScopeKey={`resident-communication-${selected.id}`}
                                   conversationInstance={hcTick}
-                                  defaultExpanded
-                                  side="right"
-                                  className="min-h-0 @2xl:max-w-[22rem]"
+                                  defaultExpanded={false}
+                                  className="shrink-0"
                                 />
                               </div>
                             </ResidentDetailTabPanel>

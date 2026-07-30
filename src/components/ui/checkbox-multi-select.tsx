@@ -20,6 +20,24 @@ import {
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
 const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 
+/** Portal menus into an open modal/drawer when present so Vaul modal trapping does not swallow clicks. */
+function resolveFieldSelectMenuPortal(): HTMLElement {
+  const selectors = [
+    '[data-slot="modal-vaul-drawer"][data-state="open"]',
+    '[data-slot="modal-radix-dialog"][data-state="open"]',
+    '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+  ];
+  for (const selector of selectors) {
+    const host = document.querySelector<HTMLElement>(selector);
+    if (host) return host;
+  }
+  return document.body;
+}
+
+function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
+  return portalHost === document.body ? 10000 : 80;
+}
+
 type FieldSelectMenuRect = {
   top: number;
   left: number;
@@ -33,17 +51,18 @@ function computeFieldSelectMenuRect(button: HTMLButtonElement, optionCount: numb
   const viewportPadding = 12;
   const fiveItemCap =
     FIELD_SELECT_MENU_VISIBLE_ITEMS * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12;
-  const estimatedMenuHeight = Math.min(
+  const contentHeight = Math.min(
     Math.max(optionCount, 1) * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
     fiveItemCap,
   );
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
   const spaceAbove = rect.top - viewportPadding;
-  const openUp = spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(
+  const openUp = spaceBelow < contentHeight && spaceAbove > spaceBelow;
+  const viewportCap = Math.max(
     FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
-    Math.min(fiveItemCap, openUp ? spaceAbove - 8 : spaceBelow - 8),
+    openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
+  const maxHeight = Math.min(contentHeight, viewportCap);
   const top = openUp ? Math.max(viewportPadding, rect.top - maxHeight - 4) : rect.bottom + 4;
   return {
     top,
@@ -183,12 +202,15 @@ export function CheckboxMultiSelect({
       : summarizeSelection(selected, flatOptions, emptyLabel);
 
   const menu =
-    open && menuRect && isClient ? (
+    open && menuRect && isClient ? (() => {
+      const portalHost = resolveFieldSelectMenuPortal();
+      const menuZ = fieldSelectMenuZIndex(portalHost);
+      return (
       <div
         id={listId}
         role="listbox"
         aria-multiselectable="true"
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
           left: menuRect.left,
@@ -196,6 +218,7 @@ export function CheckboxMultiSelect({
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
           backgroundColor: "#ffffff",
+          zIndex: menuZ,
         }}
       >
         {flatOptions.length === 0 ? (
@@ -252,7 +275,10 @@ export function CheckboxMultiSelect({
           <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
         ) : null}
       </div>
-    ) : null;
+      );
+    })() : null;
+
+  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
@@ -275,7 +301,7 @@ export function CheckboxMultiSelect({
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
-      {menu ? createPortal(menu, document.body) : null}
+      {menu && portalHost ? createPortal(menu, portalHost) : null}
     </div>
   );
 }
@@ -364,15 +390,14 @@ export function FieldSingleSelect({
   }, [listId, open]);
 
   const menu =
-    open && menuRect && isClient ? (
+    open && menuRect && isClient ? (() => {
+      const portalHost = resolveFieldSelectMenuPortal();
+      const menuZ = fieldSelectMenuZIndex(portalHost);
+      return (
       <div
         id={listId}
         role="listbox"
-        // z-index must clear modal overlays (the listing wizard's is z-[9999]); this
-        // menu is portaled to document.body as a sibling of the modal, so a lower
-        // value renders it *behind* the modal and every option click lands on the
-        // modal instead — the dropdowns then silently refuse selections.
-        className={`fixed z-[10000] ${FIELD_SELECT_MENU_CLASS} ${
+        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${
           pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
         }`}
         style={{
@@ -383,6 +408,7 @@ export function FieldSingleSelect({
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
           backgroundColor: "#ffffff",
+          zIndex: menuZ,
         }}
       >
         {options.map((opt) => {
@@ -401,6 +427,10 @@ export function FieldSingleSelect({
                 onChange(opt.value);
                 setOpen(false);
               }}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
                 {active ? "✓" : ""}
@@ -410,7 +440,10 @@ export function FieldSingleSelect({
           );
         })}
       </div>
-    ) : null;
+      );
+    })() : null;
+
+  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
@@ -433,7 +466,7 @@ export function FieldSingleSelect({
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
       </button>
 
-      {menu ? createPortal(menu, document.body) : null}
+      {menu && portalHost ? createPortal(menu, portalHost) : null}
     </div>
   );
 }
