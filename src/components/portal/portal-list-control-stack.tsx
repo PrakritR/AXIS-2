@@ -25,7 +25,7 @@ export function PortalListControlStack({
   activeFilterChips,
   className,
 }: {
-  /** Typically {@link PortalFilterSortSheet} (mobile sheet + desktop inline pills). */
+  /** Typically {@link PortalFilterSortSheet} (mobile sheet; optional desktop inline pills or panel modal). */
   filterRow?: ReactNode;
   primaryAction?: ReactNode;
   destinations?: DestinationNavItem[];

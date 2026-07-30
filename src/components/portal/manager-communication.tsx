@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalMultiFilterChipRow, PortalSortChipRow } from "@/components/portal/portal-filter-chips";
+import { CommunicationFilterSortFields } from "@/components/portal/communication-filter-sort-fields";
+import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
 import { type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
@@ -168,51 +169,72 @@ export function ManagerCommunication({
 
   const filterTouchCount = communicationFilterTouches(filters, listSort);
 
-  const filterControls = (
-    <>
-      <PortalMultiFilterChipRow
-        label="House"
-        ariaLabel="Filter by house"
-        options={propertyOptions}
-        selected={filters.propertyIds}
-        onChange={(propertyIds) => setFilters((f) => ({ ...f, propertyIds }))}
-      />
-      <PortalMultiFilterChipRow
-        label="Role"
-        ariaLabel="Filter by role"
-        options={ROLE_OPTIONS}
-        selected={filters.roles}
-        onChange={(roles) =>
+  const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
+    const chips: PortalActiveFilterChip[] = [];
+    for (const propertyId of filters.propertyIds) {
+      const label = propertyOptions.find((p) => p.value === propertyId)?.label ?? propertyId;
+      chips.push({
+        id: `house-${propertyId}`,
+        label: `House: ${label}`,
+        onRemove: () =>
           setFilters((f) => ({
             ...f,
-            roles: roles as CommunicationFilterRole[],
+            propertyIds: f.propertyIds.filter((id) => id !== propertyId),
+          })),
+      });
+    }
+    for (const role of filters.roles) {
+      const label = ROLE_OPTIONS.find((r) => r.value === role)?.label ?? roleLabel(role);
+      chips.push({
+        id: `role-${role}`,
+        label: `Role: ${label}`,
+        onRemove: () =>
+          setFilters((f) => ({
+            ...f,
+            roles: f.roles.filter((r) => r !== role),
             contactIds: [],
-          }))
-        }
-      />
-      <PortalMultiFilterChipRow
-        label="Resident"
-        ariaLabel="Filter by resident"
-        options={residentOptions}
-        selected={filters.contactIds}
-        onChange={(contactIds) => setFilters((f) => ({ ...f, contactIds }))}
-      />
-      <PortalSortChipRow
-        label="Sort"
-        value={listSort}
-        onChange={setListSort}
-        ariaLabel="Sort conversations"
-        options={[
-          { value: "recent", label: "Most recent" },
-          { value: "resident", label: "Resident (A–Z)" },
-        ]}
-      />
-    </>
+          })),
+      });
+    }
+    for (const contactId of filters.contactIds) {
+      const label = residentOptions.find((r) => r.value === contactId)?.label ?? contactId;
+      chips.push({
+        id: `resident-${contactId}`,
+        label: `Resident: ${label}`,
+        onRemove: () =>
+          setFilters((f) => ({
+            ...f,
+            contactIds: f.contactIds.filter((id) => id !== contactId),
+          })),
+      });
+    }
+    if (listSort !== "recent") {
+      const sortLabel = listSort === "resident" ? "Resident (A–Z)" : listSort;
+      chips.push({
+        id: "sort",
+        label: `Sort: ${sortLabel}`,
+        onRemove: () => setListSort("recent"),
+      });
+    }
+    return chips;
+  }, [filters, listSort, propertyOptions, residentOptions]);
+
+  const filterControls = (
+    <CommunicationFilterSortFields
+      propertyOptions={propertyOptions}
+      roleOptions={ROLE_OPTIONS}
+      filterContacts={filterContacts}
+      filters={filters}
+      onFiltersChange={setFilters}
+      listSort={listSort}
+      onListSortChange={setListSort}
+    />
   );
 
   const threadFilters = (
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
+      desktopPresentation="panel"
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
         setListSort("recent");
@@ -266,6 +288,7 @@ export function ManagerCommunication({
         placeholder: "Search residents or messages",
         dataAttr: "unified-inbox-search",
       }}
+      activeFilterChips={<PortalActiveFilterChips chips={activeFilterChips} />}
     />
   );
 

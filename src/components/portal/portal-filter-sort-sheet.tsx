@@ -3,7 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
+import { cn } from "@/lib/utils";
 
 function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: () => void }) {
   return (
@@ -27,7 +29,8 @@ function FilterSheetFooter({ onReset, onDone }: { onReset: () => void; onDone: (
 
 /**
  * Compact portal toolbar filter pattern (Communication / Payments):
- * mobile Vaul bottom sheet + inline controls from `md` up.
+ * `inline` — mobile Vaul bottom sheet + inline controls from `md` up (default).
+ * `panel` — Filter & sort button on all breakpoints; sheet on mobile, modal on desktop.
  */
 export function PortalFilterSortSheet({
   children,
@@ -36,6 +39,7 @@ export function PortalFilterSortSheet({
   dataAttr = "portal-filter-sheet-open",
   extraModalContent,
   className,
+  desktopPresentation = "inline",
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -43,22 +47,41 @@ export function PortalFilterSortSheet({
   dataAttr?: string;
   extraModalContent?: ReactNode;
   className?: string;
+  desktopPresentation?: "inline" | "panel";
 }) {
   const [open, setOpen] = useState(false);
+  const panelOnly = desktopPresentation === "panel";
   const sheetBody = (
     <div className="flex flex-col gap-4">
       {children}
       {extraModalContent}
     </div>
   );
+  const footer = (
+    <FilterSheetFooter
+      onReset={onReset}
+      onDone={() => {
+        setOpen(false);
+      }}
+    />
+  );
 
   return (
     <>
-      <div className={`flex min-w-0 flex-1 md:hidden ${className ?? ""}`.trim()}>
+      <div
+        className={cn(
+          "flex min-w-0",
+          panelOnly ? "shrink-0 max-md:flex-1 md:flex-initial" : "flex-1 md:hidden",
+          className,
+        )}
+      >
         <Button
           type="button"
           variant="outline"
-          className="h-9 min-w-0 w-full rounded-full text-xs font-semibold"
+          className={cn(
+            "h-9 rounded-full text-xs font-semibold whitespace-nowrap",
+            panelOnly ? "w-full max-md:min-w-0 md:w-auto md:px-4" : "min-w-0 w-full",
+          )}
           data-attr={dataAttr}
           onClick={() => setOpen(true)}
         >
@@ -66,17 +89,33 @@ export function PortalFilterSortSheet({
           Filter &amp; sort{activeCount > 0 ? ` · ${activeCount} active` : ""}
         </Button>
       </div>
-      <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
-        {children}
-      </div>
-      <VaulBottomSheet
-        open={open}
-        onOpenChange={setOpen}
-        title="Filter & sort"
-        footer={<FilterSheetFooter onReset={onReset} onDone={() => setOpen(false)} />}
-      >
-        {sheetBody}
-      </VaulBottomSheet>
+      {!panelOnly ? (
+        <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
+          {children}
+        </div>
+      ) : null}
+      {panelOnly ? (
+        <Modal
+          open={open}
+          onClose={() => setOpen(false)}
+          title="Filter & sort"
+          footer={footer}
+          panelClassName="max-w-md"
+          dense
+          assistantStrip={false}
+        >
+          {sheetBody}
+        </Modal>
+      ) : (
+        <VaulBottomSheet
+          open={open}
+          onOpenChange={setOpen}
+          title="Filter & sort"
+          footer={footer}
+        >
+          {sheetBody}
+        </VaulBottomSheet>
+      )}
     </>
   );
 }
