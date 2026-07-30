@@ -454,6 +454,36 @@ export function ManagerApplications({
   const scopeUserId = resolveManagerScopeUserId(userId);
 
   const propertyOptions = buildManagerPropertyFilterOptions(scopeUserId);
+
+  const propertyFilters = useMemo(
+    () =>
+      sanitizePortalPropertyFilterIds(
+        parsePortalPropertyFilterQuery(searchParams),
+        propertyOptions.map((o) => o.id),
+      ),
+    [searchParams, propertyOptions],
+  );
+
+  const setPropertyFilters = useCallback(
+    (next: string[] | ((prev: string[]) => string[])) => {
+      const resolved = typeof next === "function" ? next(propertyFilters) : next;
+      const sanitized = sanitizePortalPropertyFilterIds(
+        resolved,
+        propertyOptions.map((o) => o.id),
+      );
+      router.replace(appendPortalPropertyFilterQuery(applicationListHref(basePath, bucket), sanitized), {
+        scroll: false,
+      });
+    },
+    [propertyFilters, propertyOptions, basePath, bucket, router],
+  );
+
+  const applicationsListHref = useCallback(
+    (tab: ManagerApplicationTabId) =>
+      appendPortalPropertyFilterQuery(applicationListHref(basePath, tab), propertyFilters),
+    [basePath, propertyFilters],
+  );
+
   const shareableProperties = useMemo(() => {
     void portfolioTick;
     return buildManagerShareablePropertyOptions(scopeUserId);
