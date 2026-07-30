@@ -8,13 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, formatCompactChargeLine } from "@/components/portal/portal-metrics";
 import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
-import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { DataList } from "@/components/ui/data-list";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
@@ -59,6 +63,11 @@ import {
   type ResidentPayMethod,
 } from "@/lib/platform/resident-payments";
 import { safeFormatDateTime } from "@/lib/pacific-time";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  residentChargeDetailHref,
+  residentChargesListHref,
+} from "@/lib/portal-detail-routes";
 
 
 type PayConfirmState = {
@@ -121,13 +130,23 @@ function isPaymentStatusBucket(value: string | undefined): value is PaymentStatu
 
 export function ResidentPaymentsPanel({
   initialStatus,
+  bucket: bucketProp,
+  chargeId: chargeIdProp,
+  basePath = "/resident",
 }: {
-  /** Status pill preselected from a legacy `/payments/{pending|overdue|paid}` link. */
+  /** @deprecated Use routed `/payments/{pending|overdue|paid}` instead. */
   initialStatus?: string;
+  bucket?: PaymentStatusBucket;
+  chargeId?: string;
+  basePath?: string;
 }) {
+  const resolvedBucketProp: PaymentStatusBucket =
+    bucketProp ??
+    (isPaymentStatusBucket(initialStatus) ? initialStatus : "pending");
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const portalNavigate = usePortalNavigate();
   const session = usePortalSession();
   const nativePlatform = useNativePlatform();
   const isNativeApp = nativePlatform !== null;
@@ -144,9 +163,13 @@ export function ResidentPaymentsPanel({
     [paymentMethodOptions],
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [bucket, setBucket] = useState<PaymentStatusBucket>(
-    isPaymentStatusBucket(initialStatus) ? initialStatus : "pending",
-  );
+  const [bucket, setBucket] = useState<PaymentStatusBucket>(resolvedBucketProp);
+  const [prevBucketProp, setPrevBucketProp] = useState(resolvedBucketProp);
+  if (resolvedBucketProp !== prevBucketProp) {
+    setPrevBucketProp(resolvedBucketProp);
+    setBucket(resolvedBucketProp);
+  }
+  const [searchQuery, setSearchQuery] = useState("");
   const [bucketTouched, setBucketTouched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
@@ -391,6 +414,19 @@ export function ResidentPaymentsPanel({
     if (bucket === "pending") return upcomingPendingRows;
     return paidRows;
   }, [bucket, overdueRows, upcomingPendingRows, paidRows]);
+
+  const filteredRowsForBucket = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rowsForBucket;
+    return rowsForBucket.filter((row) => {
+      const hay = [row.title, row.propertyLabel, row.balanceLabel, chargeDueLabel(row)]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rowsForBucket, searchQuery]);
+
+  const detailCharge = chargeIdProp ? charges.find((c) => c.id === chargeIdProp) : undefined;
 
   const bucketCounts = useMemo(
     () => ({
@@ -901,76 +937,120 @@ export function ResidentPaymentsPanel({
 
   const confirmTotalLabel = useMemo(() => formatUsd(confirmSubtotalCents), [confirmSubtotalCents]);
 
-
-  return (
+  const paymentsHeaderActions = !paymentsUnlocked ? (
     <>
-    <ManagerPortalPageShell
-      title="Payments"
-      titleAside={
-        !paymentsUnlocked ? (
-          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              disabled
-              onClick={() => showToast("Payments unlock after your lease is fully signed.")}
-            >
-              Payment method
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              disabled
-              onClick={() => showToast("Payments unlock after your lease is fully signed.")}
-            >
-              Pay all
-            </Button>
-          </div>
-        ) : unpaidPayableCharges.length > 0 ? (
-          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-            {unpaidAchCharges.length > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                data-attr="resident-payments-add-payment-method"
-                onClick={() => setPaymentMethodModalOpen(true)}
-              >
-                Payment method
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="primary"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              data-attr={hasPartialSelection ? "resident-payments-pay-selected" : "resident-payments-pay-all"}
-              onClick={payHeaderAction}
-            >
-              {hasPartialSelection ? "Pay" : "Pay all"}
-            </Button>
-          </div>
-        ) : null
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={[...statusTabs]}
-            activeId={bucket}
-            onChange={(id) => {
-              setBucketTouched(true);
-              setBucket(id as PaymentStatusBucket);
-            }}
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_ACTION_BTN}
+        disabled
+        onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+      >
+        Payment method
+      </Button>
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_ACTION_BTN}
+        disabled
+        onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+      >
+        Pay all
+      </Button>
+    </>
+  ) : unpaidPayableCharges.length > 0 ? (
+    <>
+      {unpaidAchCharges.length > 0 ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_HEADER_ACTION_BTN}
+          data-attr="resident-payments-add-payment-method"
+          onClick={() => setPaymentMethodModalOpen(true)}
+        >
+          Payment method
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="primary"
+        className={PORTAL_HEADER_ACTION_BTN}
+        data-attr={hasPartialSelection ? "resident-payments-pay-selected" : "resident-payments-pay-all"}
+        onClick={payHeaderAction}
+      >
+        {hasPartialSelection ? "Pay" : "Pay all"}
+      </Button>
+    </>
+  ) : null;
+
+  const paymentsMobileActionsRow =
+    paymentsHeaderActions ? (
+      <div
+        className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+        data-slot="resident-payments-mobile-actions"
+      >
+        {paymentsHeaderActions}
+      </div>
+    ) : null;
+
+  const renderChargeList = () => (
+    <div className={PORTAL_LIST_PAGE_BODY}>
+      <DataList
+        selectable={showSelectCol}
+        rows={filteredRowsForBucket.map((row) => ({
+          id: row.id,
+          data: row,
+          primary: row.title || "Charge",
+          meta: formatCompactChargeLine(
+            row.title || "Charge",
+            row.balanceLabel,
+            chargeDueLabel(row),
+            { omitBalance: true },
+          ),
+          trailing: (
+            <span className="text-sm font-semibold tabular-nums text-foreground">{row.balanceLabel}</span>
+          ),
+          selected: selectedIds.has(row.id),
+          onSelectedChange: () => toggleSelected(row.id),
+          onClick: () => portalNavigate(residentChargeDetailHref(basePath, bucket, row.id)),
+        }))}
+        columns={[
+          { id: "charge", header: "Charge", cell: (row) => row.title || "Charge" },
+          { id: "property", header: "Property", cell: (row) => row.propertyLabel || "—" },
+          { id: "due", header: "Due", cell: (row) => chargeDueLabel(row) },
+          {
+            id: "amount",
+            header: "Amount",
+            cell: (row) => row.balanceLabel,
+            headerClassName: "text-right",
+            cellClassName: "text-right tabular-nums",
+          },
+        ]}
+        emptyState={
+          <PortalDataTableEmpty
+            icon="payment"
+            message={
+              searchQuery.trim()
+                ? "No charges match your search."
+                : bucket === "overdue"
+                  ? "No overdue charges."
+                  : bucket === "pending"
+                    ? "No upcoming charges."
+                    : "No payments in this tab yet."
+            }
           />
-        </ManagerPortalFilterRow>
-      }
-    >
+        }
+      />
+    </div>
+  );
+
+  const paymentsBody = (
+    <>
       {!paymentsUnlocked ? (
-        <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
-          <p className="font-medium text-foreground">Payments unlock after your lease is fully signed</p>
-          <p className="mt-1">Rent, deposits, and online pay become available once you and your manager have both signed.</p>
-        </div>
+        <p className="mb-4 rounded-lg border border-border bg-[var(--status-pending-bg)] px-4 py-3 text-sm text-foreground">
+          <span className="font-semibold">Payments unlock after your lease is fully signed.</span>{" "}
+          Rent, deposits, and online pay become available once you and your manager have both signed.
+        </p>
       ) : null}
 
       {!email ? (
@@ -994,10 +1074,7 @@ export function ResidentPaymentsPanel({
             </div>
           ) : null}
           {rows.length === 0 ? (
-            <PortalDataTableEmpty
-              icon="payment"
-              message="No charges yet."
-            />
+            <PortalDataTableEmpty icon="payment" message="No charges yet." />
           ) : rowsForBucket.length === 0 ? (
             <PortalDataTableEmpty
               icon="payment"
@@ -1009,36 +1086,16 @@ export function ResidentPaymentsPanel({
                     : "No payments in this tab yet."
               }
             />
-          ) : (
-            <PortalPaymentsTable
-              rows={tableRows}
-              expandedId={expandedId}
-              onExpand={(id) => {
-                setExpandedId(id);
-                if (id) setCheckout(null);
-              }}
-              selection={
-                showSelectCol
-                  ? {
-                      selectedIds,
-                      allSelected: allBucketSelected,
-                      onToggle: toggleSelected,
-                      onToggleAll: toggleSelectAllBucket,
-                      selectLabel: (tr) => `Select ${tr.charge}`,
-                    }
-                  : undefined
-              }
-              renderExpandedActions={renderExpandedActions}
-              renderExpandedDetail={(tr) => {
-                const row = chargeById.get(tr.id);
-                return row ? renderRowDetail(row) : null;
-              }}
-            />
+          ) : chargeIdProp ? null : (
+            renderChargeList()
           )}
         </>
       )}
-    </ManagerPortalPageShell>
+    </>
+  );
 
+  const paymentModals = (
+    <>
     <Modal
       open={paymentMethodModalOpen}
       onClose={() => {
@@ -1271,6 +1328,83 @@ export function ResidentPaymentsPanel({
         </div>
       ) : null}
     </Modal>
+    </>
+  );
+
+  if (chargeIdProp && detailCharge) {
+    return (
+      <>
+        <PortalRecordDetailPage
+          pageTitle="Payments"
+          title={detailCharge.title || "Charge"}
+          subtitle={detailCharge.propertyLabel || undefined}
+          backHref={residentChargesListHref(basePath, bucket)}
+          hideBackText
+          bareHeader
+          dataAttrBack="resident-payment-detail-back"
+          inlineActions
+          actions={renderExpandedActions({
+            id: detailCharge.id,
+            charge: detailCharge.title,
+            property: detailCharge.propertyLabel,
+            payee: residentPayeeLabel,
+            dueDate: chargeDueLabel(detailCharge),
+            amount: detailCharge.amountLabel,
+          })}
+        >
+          {renderRowDetail(detailCharge)}
+        </PortalRecordDetailPage>
+        {paymentModals}
+      </>
+    );
+  }
+
+  if (chargeIdProp) {
+    return (
+      <ManagerPortalPageShell title="Payments" hideTitleOnMobileNav>
+        <PortalDataTableEmpty icon="payment" message="Charge not found." />
+      </ManagerPortalPageShell>
+    );
+  }
+
+  return (
+    <>
+      <ManagerPortalPageShell
+        title="Payments"
+        hideTitleOnMobileNav
+        titleAside={
+          paymentsHeaderActions ? (
+            <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+              {paymentsHeaderActions}
+            </PortalSectionActionRow>
+          ) : undefined
+        }
+        compactFilterRow
+      >
+        {paymentsMobileActionsRow}
+        <PortalListControlStack
+          className="mb-3 max-lg:mb-4"
+          destinationInset
+          destinations={statusTabs.map((t) => ({
+            id: t.id,
+            label: t.label,
+            href: residentChargesListHref(basePath, t.id),
+            count: t.count,
+            alert: "alert" in t ? t.alert : undefined,
+            dataAttr: t.dataAttr,
+          }))}
+          activeDestinationId={bucket}
+          destinationAriaLabel="Payment status"
+          search={{
+            value: searchQuery,
+            onChange: setSearchQuery,
+            placeholder: "Search charges",
+            dataAttr: "resident-payments-search",
+          }}
+        />
+        {paymentsBody}
+      </ManagerPortalPageShell>
+      {paymentModals}
     </>
   );
 }

@@ -1,0 +1,10 @@
+import { renderResidentPortalSection } from "@/lib/portal-section-page";
+
+export default async function ResidentPaymentDetailPage({
+  params,
+}: {
+  params: Promise<{ bucket: string; chargeId: string }>;
+}) {
+  const { bucket, chargeId } = await params;
+  return renderResidentPortalSection("payments", [bucket, chargeId]);
+}

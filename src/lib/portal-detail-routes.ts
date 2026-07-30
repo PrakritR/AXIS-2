@@ -230,6 +230,19 @@ export function paymentDetailHref(
   return `${basePath}/payments/${direction}/${bucket}/${encodeURIComponent(paymentId)}`;
 }
 
+/** Resident portal payments status buckets (Pending / Overdue / Paid). */
+export function residentChargesListHref(basePath: string, bucket: PaymentBucketId): string {
+  return `${basePath}/payments/${bucket}`;
+}
+
+export function residentChargeDetailHref(
+  basePath: string,
+  bucket: PaymentBucketId,
+  chargeId: string,
+): string {
+  return `${basePath}/payments/${bucket}/${encodeURIComponent(chargeId)}`;
+}
+
 /** Manager add-on service request buckets (Appendix D5). */
 export const SERVICE_REQUEST_BUCKETS = ["pending", "approved", "denied"] as const;
 export type ServiceRequestBucketId = (typeof SERVICE_REQUEST_BUCKETS)[number];
