@@ -1,6 +1,7 @@
 "use client";
 
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { applyDocumentTheme, readStoredTheme } from "@/lib/theme-storage";
 import { useEffect } from "react";
 
 /** Marks the document while portal auth is shown — hides site header/footer chrome. */
@@ -12,13 +13,14 @@ export function useAuthWelcomeChrome(active = true): void {
     document.documentElement.setAttribute("data-auth-welcome", "true");
     if (isNative) {
       document.documentElement.setAttribute("data-auth-native", "true");
-      document.documentElement.setAttribute("data-theme", "dark");
+      // Native auth defaults to light; only dark when the user chose it in a portal.
+      applyDocumentTheme(readStoredTheme("light"));
     }
     return () => {
       document.documentElement.removeAttribute("data-auth-welcome");
       document.documentElement.removeAttribute("data-auth-native");
-      if (isNative && previousTheme) {
-        document.documentElement.setAttribute("data-theme", previousTheme);
+      if (isNative && (previousTheme === "light" || previousTheme === "dark")) {
+        applyDocumentTheme(previousTheme);
       }
     };
   }, [active]);

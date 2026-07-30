@@ -1633,6 +1633,12 @@ html[data-auth-native] .auth-card {
   padding: 0 !important;
 }
 
+html[data-native] .auth-card-blend,
+html[data-auth-native] .auth-card-blend {
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
 html[data-auth-welcome] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
 html[data-auth-native] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   background: rgba(255, 255, 255, 0.08);

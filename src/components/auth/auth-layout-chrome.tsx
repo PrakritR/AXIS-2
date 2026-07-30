@@ -15,6 +15,8 @@ function shouldHideAuthFooter(): boolean {
 
 function shouldHideAuthSubstrate(): boolean {
   if (typeof document === "undefined") return false;
+  // Native auth screens use a flat canvas (no wallpaper glow) like sign-in / create-account.
+  if (detectNativePlatformSync()) return true;
   if (document.documentElement.hasAttribute("data-auth-native")) return false;
   return document.documentElement.hasAttribute("data-auth-welcome");
 }
