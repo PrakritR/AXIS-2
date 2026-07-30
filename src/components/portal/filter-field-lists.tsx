@@ -11,6 +11,13 @@ export const FILTER_LIST_VISIBLE_ROWS = 5;
 const FILTER_LIST_ROW_PX = 40;
 export const FILTER_LIST_MAX_HEIGHT_PX = FILTER_LIST_VISIBLE_ROWS * FILTER_LIST_ROW_PX;
 
+/** Fixed portal filter shell — same width/height for modal, sheet, and desktop dropdown. */
+export const PORTAL_FILTER_PANEL_WIDTH_CLASS = "w-[min(22rem,calc(100vw-2rem))]";
+export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
+export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
+export const PORTAL_FILTER_BODY_CLASS =
+  "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch]";
+
 const FILTER_TRIGGER_CLASS =
   "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10";
 
@@ -118,7 +125,12 @@ export function FilterCollapsibleSection({
       </button>
       {open ? (
         <div className="-mt-px overflow-hidden rounded-b-2xl border border-t-0 border-border bg-card shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-          {children}
+          <div
+            className="overflow-hidden bg-card"
+            style={{ height: FILTER_LIST_MAX_HEIGHT_PX }}
+          >
+            {children}
+          </div>
         </div>
       ) : null}
     </div>
@@ -148,8 +160,7 @@ export function FilterCheckboxList({
       role="listbox"
       aria-multiselectable="true"
       data-attr={dataAttr}
-      className="overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
-      style={{ maxHeight: FILTER_LIST_MAX_HEIGHT_PX }}
+      className="h-full overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
     >
       {options.length === 0 ? (
         <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -201,8 +212,7 @@ export function FilterSingleSelectList({
     <div
       role="listbox"
       data-attr={dataAttr}
-      className="overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
-      style={{ maxHeight: FILTER_LIST_MAX_HEIGHT_PX }}
+      className="h-full overflow-y-auto overscroll-contain bg-card [-webkit-overflow-scrolling:touch]"
     >
       {options.map((opt) => {
         const active = opt.value === value;

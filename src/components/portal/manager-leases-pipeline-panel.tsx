@@ -447,7 +447,7 @@ export function ManagerLeasesPipelinePanel({
     const signButton = showManagerSign ? (
       <Button
         type="button"
-        variant="primary"
+        variant="outline"
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="lease-manager-sign"
         onClick={() => onManagerSign(row)}
@@ -457,14 +457,14 @@ export function ManagerLeasesPipelinePanel({
     ) : showSigningReminder ? (
       <Button
         type="button"
-        variant="primary"
+        variant="outline"
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="lease-signing-reminder"
         disabled={reminderBusyForRow === row.id}
         title="Send signing reminder"
         onClick={() => openLeaseSigningReminderPreview(row)}
       >
-        {reminderBusyForRow === row.id ? "Sending…" : "Sign"}
+        {reminderBusyForRow === row.id ? "Sending…" : "Send reminder"}
       </Button>
     ) : null;
 
