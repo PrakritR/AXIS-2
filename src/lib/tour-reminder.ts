@@ -1,4 +1,11 @@
-import type { ManagerAutomationSettings, ReminderTemplate } from "@/lib/payment-automation-settings";
+import {
+  DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+  DEFAULT_TOUR_REMINDER_TEMPLATE,
+  type ManagerAutomationSettings,
+  type ReminderTemplate,
+} from "@/lib/payment-automation-settings";
+
+export { DEFAULT_TOUR_REMINDER_TEMPLATE };
 
 export const TOUR_REMINDER_MESSAGE_KIND = "tour_reminder" as const;
 
@@ -10,25 +17,8 @@ export type TourReminderTemplateContext = {
   instructions: string;
 };
 
-export const DEFAULT_TOUR_REMINDER_MINUTES_BEFORE = 30;
-
-export const DEFAULT_TOUR_REMINDER_TEMPLATE: ReminderTemplate = {
-  subject: "Reminder: your tour at {propertyTitle}",
-  body: [
-    "Hi {guestName},",
-    "",
-    "This is a friendly reminder about your upcoming property tour.",
-    "",
-    "When: {tourTime}",
-    "{propertyLine}",
-    "{instructionsLine}",
-    "",
-    "We look forward to seeing you!",
-    "",
-    "{managerName}",
-    "PropLane",
-  ].join("\n"),
-};
+export const DEFAULT_TOUR_REMINDER_MINUTES_BEFORE =
+  DEFAULT_MANAGER_AUTOMATION_SETTINGS.tourReminderMinutesBefore;
 
 export function fillTourReminderTemplate(
   template: ReminderTemplate,
