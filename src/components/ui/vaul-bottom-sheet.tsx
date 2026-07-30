@@ -5,12 +5,12 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
 import { MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { isPortaledFieldSelectMenuTarget } from "@/components/ui/field-select-portal-interaction";
 import { cn } from "@/lib/utils";
 
 /** Keep portaled FieldSingleSelect / CheckboxMultiSelect menus clickable inside sheets. */
 function allowPortaledFieldSelectInteraction(event: Event) {
-  const target = event.target as HTMLElement | null;
-  if (target?.closest('[role="listbox"]')) {
+  if (isPortaledFieldSelectMenuTarget(event.target)) {
     event.preventDefault();
   }
 }

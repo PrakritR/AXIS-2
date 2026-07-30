@@ -15,6 +15,10 @@ import {
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
   partitionFieldSelectClasses,
 } from "@/components/ui/field-select-styles";
+import {
+  FIELD_SELECT_MENU_DATA_ATTR,
+  handlePortaledFieldSelectOptionPointerDown,
+} from "@/components/ui/field-select-portal-interaction";
 
 
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
@@ -185,6 +189,29 @@ export function CheckboxMultiSelect({
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
 
+  const renderCheckboxOption = (opt: CheckboxMultiSelectOption) => {
+    const checked = selected.includes(opt.value);
+    return (
+      <label
+        key={opt.value}
+        role="option"
+        aria-selected={checked}
+        className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
+        onPointerDown={(event) => handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value))}
+      >
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+          checked={checked}
+          readOnly
+          tabIndex={-1}
+          aria-hidden
+        />
+        <span className="leading-snug text-foreground">{opt.label}</span>
+      </label>
+    );
+  };
+
   const buttonLabel =
     selected.length > 0 && selectionTriggerLabel
       ? selectionTriggerLabel
@@ -196,6 +223,7 @@ export function CheckboxMultiSelect({
         id={listId}
         role="listbox"
         aria-multiselectable="true"
+        {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
         className={`fixed ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           top: menuRect.top,
@@ -216,47 +244,11 @@ export function CheckboxMultiSelect({
               <p className="field-dropdown-menu-option sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
                 {group.label}
               </p>
-              {group.options.map((opt) => {
-                const checked = selected.includes(opt.value);
-                return (
-                  <label
-                    key={opt.value}
-                    role="option"
-                    aria-selected={checked}
-                    className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                      checked={checked}
-                      onChange={() => toggle(opt.value)}
-                    />
-                    <span className="leading-snug text-foreground">{opt.label}</span>
-                  </label>
-                );
-              })}
+              {group.options.map((opt) => renderCheckboxOption(opt))}
             </div>
           ))
         ) : (
-          (options ?? []).map((opt) => {
-            const checked = selected.includes(opt.value);
-            return (
-              <label
-                key={opt.value}
-                role="option"
-                aria-selected={checked}
-                className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
-                  checked={checked}
-                  onChange={() => toggle(opt.value)}
-                />
-                <span className="leading-snug text-foreground">{opt.label}</span>
-              </label>
-            );
-          })
+          (options ?? []).map((opt) => renderCheckboxOption(opt))
         )}
         {menuFooter ? (
           <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
@@ -380,6 +372,7 @@ export function FieldSingleSelect({
       <div
         id={listId}
         role="listbox"
+        {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
         className={`fixed ${FIELD_SELECT_MENU_CLASS} ${
           pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
         }`}
@@ -407,13 +400,10 @@ export function FieldSingleSelect({
                 active ? "text-foreground" : "text-foreground"
               }`}
               onPointerDown={(event) => {
-                event.preventDefault();
-                onChange(opt.value);
-                setOpen(false);
-              }}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
+                handlePortaledFieldSelectOptionPointerDown(event, () => {
+                  onChange(opt.value);
+                  setOpen(false);
+                });
               }}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>

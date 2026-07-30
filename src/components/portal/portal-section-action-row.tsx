@@ -12,7 +12,7 @@ const PORTAL_FOOTER_INLINE_ACTIONS_ROW = cn(
 );
 
 const PORTAL_FOOTER_HEADER_ACTIONS_ROW = cn(
-  "flex w-full min-w-0 shrink-0 flex-nowrap items-stretch justify-center gap-2 pb-0.5 sm:pb-0",
+  "flex w-full min-w-0 shrink-0 flex-nowrap items-stretch justify-start gap-2 pb-0.5 sm:pb-0",
 );
 
 const PORTAL_FOOTER_INLINE_SPACER =
@@ -96,38 +96,49 @@ export function PortalPageHeaderMobileActionsRow({
   );
 }
 
+const PORTAL_FOOTER_PINNED_SPACER =
+  "h-[calc(3.5rem+var(--portal-native-bottom-nav-inset,0px)+env(safe-area-inset-bottom,0px))] shrink-0";
+
 /** Fixed primary CTAs above the native bottom tab bar (Create, Add resident, Add payment, …). */
 export function PortalPageFooterActions({
   children,
   className,
   /** `header` keeps compact pills in one horizontal row on mobile (resident detail footers). */
   rowVariant = "toolbar",
+  /** Keep the white dock fixed on every breakpoint (resident profile sections). */
+  pinned = false,
 }: {
   children: ReactNode;
   className?: string;
   rowVariant?: "toolbar" | "header";
+  pinned?: boolean;
 }) {
   return (
     <>
       <div
         aria-hidden
         className={
-          rowVariant === "header"
-            ? PORTAL_FOOTER_INLINE_SPACER
-            : "h-[calc(4.25rem+var(--portal-native-bottom-nav-inset,0px))] shrink-0 md:hidden"
+          pinned
+            ? PORTAL_FOOTER_PINNED_SPACER
+            : rowVariant === "header"
+              ? PORTAL_FOOTER_INLINE_SPACER
+              : "h-[calc(4.25rem+var(--portal-native-bottom-nav-inset,0px))] shrink-0 md:hidden"
         }
       />
       <div
         className={cn(
-          "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 shadow-[var(--shadow-lg)] backdrop-blur-md",
+          "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background shadow-[var(--shadow-lg)]",
+          pinned ? "bg-background/98 backdrop-blur-sm" : "bg-background/95 backdrop-blur-md",
           rowVariant === "header" ? "px-2 py-2 max-md:pb-2" : "px-4 py-3",
           "pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]",
           "max-lg:bottom-[var(--portal-native-bottom-nav-inset,0px)]",
-          "md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none",
+          !pinned &&
+            "md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:px-0 md:py-0 md:shadow-none md:backdrop-blur-none",
           className,
         )}
         data-slot="portal-page-footer-actions"
         data-row-variant={rowVariant}
+        data-pinned={pinned ? "" : undefined}
       >
         <div className="mx-auto w-full min-w-0 max-w-5xl">
           {rowVariant === "header" ? (

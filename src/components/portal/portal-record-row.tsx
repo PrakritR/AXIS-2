@@ -39,7 +39,7 @@ export function PortalPersonRecordRow({
   );
 }
 
-/** Property-style card row — clean address block with chevron (Zillow / listing apps). */
+/** Property-style card row — address block without trailing chevron. */
 export function PortalPropertyRecordRow({
   title,
   address,
@@ -62,7 +62,7 @@ export function PortalPropertyRecordRow({
       type="button"
       data-attr={dataAttr}
       onClick={onOpen}
-      className={`portal-property-row flex w-full items-stretch gap-3 border-b border-border/50 px-3 py-3 text-left transition-colors max-md:px-2.5 max-md:py-2.5 ${
+      className={`portal-property-row flex w-full items-stretch border-b border-border/50 px-3 py-3 text-left transition-colors max-md:px-2.5 max-md:py-2.5 ${
         selected
           ? "border-l-[3px] border-l-primary bg-primary/[0.06]"
           : "border-l-[3px] border-l-transparent hover:bg-foreground/[0.03]"
@@ -73,9 +73,6 @@ export function PortalPropertyRecordRow({
         <p className="text-xs leading-relaxed text-muted">{address}</p>
         {summary ? <p className="text-xs text-muted">{summary}</p> : null}
         {badge ? <div className="mt-0.5">{badge}</div> : null}
-      </div>
-      <div className="flex shrink-0 items-center self-center text-muted">
-        <ChevronRight className="h-5 w-5" aria-hidden />
       </div>
     </button>
   );

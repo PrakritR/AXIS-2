@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
+import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import { cn } from "@/lib/utils";
 
@@ -177,12 +178,17 @@ export function FilterCheckboxList({
                 FIELD_SELECT_MENU_OPTION_CLASS,
                 checked && "bg-primary/5",
               )}
+              onPointerDown={(event) =>
+                handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value))
+              }
             >
               <input
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
                 checked={checked}
-                onChange={() => toggle(opt.value)}
+                readOnly
+                tabIndex={-1}
+                aria-hidden
               />
               <span className="leading-snug text-foreground">{opt.label}</span>
             </label>
@@ -227,10 +233,12 @@ export function FilterSingleSelectList({
               FIELD_SELECT_MENU_OPTION_CLASS,
               active ? "bg-primary/10 text-foreground" : "text-foreground",
             )}
-            onClick={() => {
-              onChange(opt.value);
-              onPick?.();
-            }}
+            onPointerDown={(event) =>
+              handlePortaledFieldSelectOptionPointerDown(event, () => {
+                onChange(opt.value);
+                onPick?.();
+              })
+            }
           >
             <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
               {active ? "✓" : ""}

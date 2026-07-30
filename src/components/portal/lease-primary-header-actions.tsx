@@ -50,6 +50,8 @@ type LeasePrimaryHeaderActionsProps = {
   moveToManagerReviewDataAttr?: string;
   /** Render buttons only — parent supplies PortalSectionActionRow / footer shell. */
   embedded?: boolean;
+  /** With embedded, show one flat row on all breakpoints (resident detail dock). */
+  flatFooter?: boolean;
 };
 
 /** Download, sign, send — Appendix C3 aligned action row for lease detail surfaces. */
@@ -81,6 +83,7 @@ export function LeasePrimaryHeaderActions({
   sendToResidentDataAttr = "lease-primary-send-resident",
   moveToManagerReviewDataAttr = "lease-primary-move-manager-review",
   embedded = false,
+  flatFooter = false,
 }: LeasePrimaryHeaderActionsProps) {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const hasDocument = Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
@@ -321,6 +324,16 @@ export function LeasePrimaryHeaderActions({
   );
 
   if (embedded) {
+    if (flatFooter) {
+      return (
+        <>
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2">
+            {desktopButtons}
+          </div>
+          {uploadInput}
+        </>
+      );
+    }
     return (
       <>
         <div className="hidden w-full min-w-0 md:contents">{desktopButtons}</div>

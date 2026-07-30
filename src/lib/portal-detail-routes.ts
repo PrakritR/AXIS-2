@@ -19,6 +19,24 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
   promotion: "Promotion",
 };
 
+/** Routed sections grouped under the property Details tab in the manager UI. */
+export const PROPERTY_DETAIL_SECTION_TABS = [
+  "preview",
+  "house-details",
+  "application",
+  "lease",
+] as const satisfies readonly PropertyDetailTabId[];
+
+export type PropertyDetailSectionTabId = (typeof PROPERTY_DETAIL_SECTION_TABS)[number];
+
+export const PROPERTY_DETAIL_TOP_TAB_LABELS = {
+  details: "Details",
+  calendar: "Calendar",
+  promotion: "Promotion",
+} as const;
+
+export type PropertyDetailTopTabId = keyof typeof PROPERTY_DETAIL_TOP_TAB_LABELS;
+
 /** Routed detail tabs for manager resident profile (Appendix C2). */
 export const RESIDENT_DETAIL_TABS = ["application", "lease", "payments", "services", "communication"] as const;
 

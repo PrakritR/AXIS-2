@@ -157,6 +157,14 @@ export function PortalSidebar({
     prefetchPortalPanelChunks();
   }, []);
 
+  useEffect(() => {
+    if (collapsed) {
+      document.documentElement.setAttribute("data-portal-sidebar-collapsed", "");
+    } else {
+      document.documentElement.removeAttribute("data-portal-sidebar-collapsed");
+    }
+  }, [collapsed]);
+
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;

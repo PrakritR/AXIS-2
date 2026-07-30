@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { useCommunicationSurfaceChrome } from "@/hooks/use-communication-surface-chrome";
+import { cn } from "@/lib/utils";
 
 /**
  * Communication page chrome — Appendix C1 control stack above the inbox body.
@@ -39,6 +41,8 @@ export function PortalCommunicationShell({
     controlStack ??
     (threadFilters ? <PortalListControlStack filterRow={threadFilters} /> : null);
 
+  useCommunicationSurfaceChrome({ active: true, threadReading: mobileThreadReading });
+
   return (
     <ManagerPortalPageShell
       title={title}
@@ -48,12 +52,20 @@ export function PortalCommunicationShell({
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
       mobileFlush={mobileThreadReading}
+      mobileThreadFill={mobileThreadReading}
     >
       {mobileActionsRow && !hideMobileFilterRow ? mobileActionsRow : null}
       {resolvedStack ? (
         <div className={hideMobileFilterRow ? "mb-2 max-md:hidden" : "mb-2"}>{resolvedStack}</div>
       ) : null}
-      <div className="portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1">{children}</div>
+      <div
+        className={cn(
+          "portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1",
+          mobileThreadReading && "max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+        )}
+      >
+        {children}
+      </div>
     </ManagerPortalPageShell>
   );
 }

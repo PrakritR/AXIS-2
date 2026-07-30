@@ -102,7 +102,23 @@ function handleOpenAssistant() {
  */
 function AxisAssistantFixedTrigger({ docked }: { docked: boolean }) {
   const open = useAxisAssistantOpen();
-  if (open) return null;
+  const hideFab = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof document === "undefined") return () => {};
+      const obs = new MutationObserver(onStoreChange);
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-hide-assistant-fab", "data-communication-surface"],
+      });
+      return () => obs.disconnect();
+    },
+    () =>
+      typeof document !== "undefined" &&
+      (document.documentElement.hasAttribute("data-hide-assistant-fab") ||
+        document.documentElement.hasAttribute("data-communication-surface")),
+    () => false,
+  );
+  if (open || hideFab) return null;
 
   return (
     <button

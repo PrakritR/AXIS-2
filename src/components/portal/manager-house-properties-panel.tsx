@@ -19,10 +19,13 @@ import { PortalSectionActionRow } from "@/components/portal/portal-section-actio
 import { PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS } from "@/components/portal/portal-property-detail-section";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import {
+  PROPERTY_DETAIL_SECTION_TABS,
   PROPERTY_DETAIL_TAB_LABELS,
+  PROPERTY_DETAIL_TOP_TAB_LABELS,
   propertyDetailHref,
   parsePropertyDetailTab,
   type PropertyDetailTabId,
+  type PropertyDetailSectionTabId,
 } from "@/lib/portal-detail-routes";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import {
@@ -679,6 +682,45 @@ function ManagerPropertyInlineDetails({
         ? ["preview", "house-details", "application", "lease", "calendar", "promotion"]
         : ["preview", "house-details", "application", "lease"];
   const activeDetailTab = availableTabs.includes(detailTab) ? detailTab : availableTabs[0]!;
+  const detailSectionTabs = useMemo(
+    () =>
+      availableTabs.filter((tab): tab is PropertyDetailSectionTabId =>
+        (PROPERTY_DETAIL_SECTION_TABS as readonly string[]).includes(tab),
+      ),
+    [availableTabs],
+  );
+  const topNavItems = useMemo(() => {
+    const items: Array<{ id: string; label: string; href: string; dataAttr: string }> = [];
+    if (detailSectionTabs.length > 0) {
+      items.push({
+        id: "details",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.details,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, detailSectionTabs[0]!),
+        dataAttr: "property-detail-tab-details",
+      });
+    }
+    if (availableTabs.includes("calendar")) {
+      items.push({
+        id: "calendar",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.calendar,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "calendar"),
+        dataAttr: "property-detail-tab-calendar",
+      });
+    }
+    if (availableTabs.includes("promotion")) {
+      items.push({
+        id: "promotion",
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS.promotion,
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "promotion"),
+        dataAttr: "property-detail-tab-promotion",
+      });
+    }
+    return items;
+  }, [availableTabs, detailSectionTabs, propertiesBase, propertyRouteKey, stage]);
+  const activeTopNavId =
+    activeDetailTab === "calendar" ? "calendar" : activeDetailTab === "promotion" ? "promotion" : "details";
+  const showDetailSectionNav =
+    activeTopNavId === "details" && detailSectionTabs.length > 1;
 
   const previewHeaderActionsRef = useRef(previewHeaderActions);
   previewHeaderActionsRef.current = previewHeaderActions;
@@ -745,15 +787,24 @@ function ManagerPropertyInlineDetails({
   return (
     <div className="space-y-0">
       <PortalDetailDestinationNav
-        items={availableTabs.map((tab) => ({
-          id: tab,
-          label: PROPERTY_DETAIL_TAB_LABELS[tab],
-          href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
-          dataAttr: `property-detail-tab-${tab}`,
-        }))}
-        activeId={activeDetailTab}
-        ariaLabel="Property detail sections"
+        items={topNavItems}
+        activeId={activeTopNavId}
+        ariaLabel="Property sections"
       />
+
+      {showDetailSectionNav ? (
+        <PortalDetailDestinationNav
+          items={detailSectionTabs.map((tab) => ({
+            id: tab,
+            label: PROPERTY_DETAIL_TAB_LABELS[tab],
+            href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
+            dataAttr: `property-detail-tab-${tab}`,
+          }))}
+          activeId={activeDetailTab}
+          ariaLabel="Property detail sections"
+          className="border-t border-border/40 bg-background/80"
+        />
+      ) : null}
 
       <div className="pt-3">
       {activeDetailTab === "preview" ? (
