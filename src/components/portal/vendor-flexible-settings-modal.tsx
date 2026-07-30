@@ -47,9 +47,6 @@ export function VendorFlexibleSettingsModal({
       description="Rank preferred times of day for auto-scheduling flexible visits. A tenant's requested time always wins when you're available."
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button
             type="button"
             className="rounded-full"

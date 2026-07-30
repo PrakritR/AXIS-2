@@ -4723,16 +4723,6 @@ export function ManagerAddListingForm({
           ) : null}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
-                data-attr="listing-wizard-close"
-                onClick={closeWizard}
-                disabled={busy || closingDraft}
-              >
-                {closingDraft ? "Saving progress…" : draftAutoSaveEligible ? "Save & close" : "Close"}
-              </Button>
               {visibleStepPosition > 0 ? (
                 <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
                   Back

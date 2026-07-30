@@ -466,13 +466,11 @@ export function ManagerCreateWorkOrderModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={mode === "request" ? "Add work order" : "Log completed work"}
+      title="Create work order"
       panelClassName="max-w-lg"
+      assistantStrip={false}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"
@@ -485,29 +483,19 @@ export function ManagerCreateWorkOrderModal({
         </ModalFooter>
       }
     >
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant={mode === "request" ? "primary" : "outline"}
-            className="rounded-full text-xs"
-            onClick={() => setMode("request")}
+      <div className="space-y-5">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+          Status
+          <Select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as CreateMode)}
             disabled={busy}
-            data-attr="manager-work-order-mode-request"
+            data-attr="manager-work-order-status"
           >
-            New request
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "log" ? "primary" : "outline"}
-            className="rounded-full text-xs"
-            onClick={() => setMode("log")}
-            disabled={busy}
-            data-attr="manager-work-order-mode-log"
-          >
-            Log completed work
-          </Button>
-        </div>
+            <option value="request">Open request</option>
+            <option value="log">Completed</option>
+          </Select>
+        </label>
 
         <p className="text-sm text-muted">
           {lockedResident

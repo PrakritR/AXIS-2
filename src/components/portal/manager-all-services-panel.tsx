@@ -383,7 +383,7 @@ export function ManagerAllServicesPanel({
       items={[
         {
           id: "requests",
-          label: "Add",
+          label: "Requests",
           href: `${basePath}/services/requests/pending`,
           dataAttr: "manager-services-tab-requests",
         },
@@ -439,7 +439,7 @@ export function ManagerAllServicesPanel({
         data-attr="manager-service-request-add"
         onClick={() => setAddRequestOpen(true)}
       >
-        Add add-on service
+        Add request
       </Button>
     ) : (
       <Button
@@ -579,7 +579,7 @@ export function ManagerAllServicesPanel({
         destinations={bucketDestinations}
         activeDestinationId={activeBucketId}
         destinationAriaLabel={
-          typeFilter === "work-orders" ? "Work order status" : "Add-on service status"
+          typeFilter === "work-orders" ? "Work order status" : "Request status"
         }
         search={
           typeFilter === "vendors"
@@ -588,7 +588,7 @@ export function ManagerAllServicesPanel({
                 value: searchQuery,
                 onChange: setSearchQuery,
                 placeholder:
-                  typeFilter === "work-orders" ? "Search maintenance requests" : "Search add-on services",
+                  typeFilter === "work-orders" ? "Search maintenance requests" : "Search requests",
                 dataAttr:
                   typeFilter === "work-orders" ? "services-work-orders-search" : "services-requests-search",
               }
@@ -609,7 +609,7 @@ export function ManagerAllServicesPanel({
         />
       ) : bucketedRequests.length === 0 ? (
         <PortalDataTableEmpty
-          message={filteredRequests.length === 0 ? "No add-on services requested yet." : "No add-on services in this bucket yet."}
+          message={filteredRequests.length === 0 ? "No requests yet." : "No requests in this status yet."}
           icon="service"
         />
       ) : (

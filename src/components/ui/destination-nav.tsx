@@ -59,7 +59,7 @@ export function DestinationNav({
             href={item.href}
             data-attr={item.dataAttr}
             className={cn(
-              destinationNavItemWidthClass(compactItems),
+              itemLayout === "equal" ? "min-w-0" : destinationNavItemWidthClass(compactItems),
               "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
               itemLayout === "equal"
                 ? "min-h-11 min-w-0 px-1 py-2 text-center text-xs sm:px-2 sm:text-sm"
@@ -102,10 +102,13 @@ export type LocalDestinationNavItem = {
 
 function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
   return cn(
-    "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
     itemLayout === "equal"
-      ? "min-w-0"
-      : cn(PORTAL_HORIZONTAL_SCROLL_ROW_CLASS, "snap-x snap-mandatory scroll-px-1 md:snap-none"),
+      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-1 rounded-2xl border border-border bg-accent/30 p-1"
+      : cn(
+          "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
+          PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+          "snap-x snap-mandatory scroll-px-1 md:snap-none",
+        ),
     className,
   );
 }

@@ -45,9 +45,6 @@ export function PromotionUploadModal({
       panelClassName="max-w-md"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={close}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

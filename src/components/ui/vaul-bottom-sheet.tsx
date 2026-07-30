@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Drawer } from "vaul";
+import { X } from "lucide-react";
+import { MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
 /** Keep portaled FieldSingleSelect / CheckboxMultiSelect menus clickable inside sheets. */
@@ -98,11 +100,23 @@ export function VaulBottomSheet({
           onInteractOutside={allowPortaledFieldSelectInteraction}
         >
           <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
-          <div className="shrink-0 border-b border-border px-4 pb-3 pt-2">
-            <Drawer.Title className="text-base font-semibold text-foreground">{title}</Drawer.Title>
-            {description ? (
-              <Drawer.Description className="mt-1 text-sm text-muted">{description}</Drawer.Description>
-            ) : null}
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 pb-3 pt-2">
+            <div className="min-w-0 flex-1">
+              <Drawer.Title className="text-base font-semibold text-foreground">{title}</Drawer.Title>
+              {description ? (
+                <Drawer.Description className="mt-1 text-sm text-muted">{description}</Drawer.Description>
+              ) : null}
+            </div>
+            <Drawer.Close asChild>
+              <button
+                type="button"
+                aria-label="Close"
+                className={MODAL_HEADER_CLOSE_CLASS}
+                onClick={() => onOpenChange(false)}
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </Drawer.Close>
           </div>
           <div
             className={cn(

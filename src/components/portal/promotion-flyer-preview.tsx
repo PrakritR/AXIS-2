@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
-import { ModalShell } from "@/components/ui/modal";
+import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { X } from "lucide-react";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
 import { computeFlyerFit, type FlyerFit } from "@/lib/promotion-flyer-fit";
@@ -192,10 +193,10 @@ export function PromotionFlyerPreview({
           >
             Print / Save PDF
           </Button>
-          <Button type="button" variant="outline" className="h-9 text-xs" onClick={onClose}>
-            Close
-          </Button>
-        </div>
+          <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
+            <X className="h-5 w-5 text-white" aria-hidden />
+          </button>
+          </div>
       </div>
       <div
         ref={scrollRef}

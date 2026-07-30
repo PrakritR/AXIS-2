@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { X } from "lucide-react";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -84,7 +85,7 @@ const WEEKDAY_OPTIONS = [
 const CALENDAR_HEADER_CELL =
   "bg-accent/30 font-bold uppercase tracking-[0.12em] text-muted [html[data-theme=dark]_&]:portal-calendar-header-cell";
 const CALENDAR_TIME_CELL =
-  "font-semibold text-muted [html[data-theme=dark]_&]:portal-calendar-time-cell";
+  "whitespace-nowrap text-[10px] font-semibold tabular-nums text-muted sm:text-[11px] [html[data-theme=dark]_&]:portal-calendar-time-cell";
 const CALENDAR_GRID_GAP = "gap-px bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";
 const CALENDAR_OPEN_SLOT =
   "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300 [html[data-theme=dark]_&]:portal-calendar-open-slot";
@@ -106,7 +107,7 @@ const CALENDAR_CO_MANAGER_SLOT =
 const COMPACT_CALENDAR_ACTION_BTN =
   "h-7 shrink-0 whitespace-nowrap rounded-full border-border px-2.5 text-xs font-semibold max-lg:h-8 max-lg:px-3";
 const COMPACT_TIME_SELECT_TRIGGER =
-  "h-7 min-h-0 w-full rounded-none border-0 bg-transparent px-2 text-xs font-semibold text-foreground shadow-none ring-0 hover:bg-accent/40 focus:border-transparent focus:ring-0";
+  "h-7 min-h-0 w-full rounded-none border-0 bg-transparent px-1.5 text-[11px] font-semibold whitespace-nowrap text-foreground shadow-none ring-0 hover:bg-accent/40 focus:border-transparent focus:ring-0";
 export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PEER_COLOR =
@@ -193,11 +194,7 @@ type CalendarBlockSelection =
 const slotRowIndices = Array.from({ length: SLOT_ROW_END - SLOT_ROW_START + 1 }, (_, i) => SLOT_ROW_START + i);
 
 function formatSlotEndLabel(slotIndexExclusive: number): string {
-  const mins = (slotIndexExclusive % SLOTS_PER_DAY) * 30;
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const d = new Date(2000, 0, 1, h24, m);
-  return formatPacificDateTime(d).replace(/^\w{3} \d{1,2}, /, "");
+  return formatAvailabilitySlotLabel(slotIndexExclusive);
 }
 
 function localIsoForSlot(dateStr: string, slotIndex: number): string {
@@ -739,15 +736,15 @@ export function PortalCalendarPanels({
         <div
           className={
             bareSurface
-              ? "inline-flex shrink-0 items-center gap-1"
-              : "inline-flex shrink-0 items-stretch overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm"
+              ? "inline-flex shrink-0 items-center gap-1 whitespace-nowrap"
+              : "inline-flex shrink-0 items-stretch overflow-hidden rounded-full border border-border/70 bg-card shadow-sm"
           }
         >
           <FieldSingleSelect
             hideLabel
             label="Start time"
             variant="pill"
-            wrapperClassName="w-[5.25rem] shrink-0"
+            wrapperClassName="min-w-[3.75rem] shrink-0"
             triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
             value={String(visibleStartSlot)}
             onChange={onStartChange}
@@ -757,7 +754,7 @@ export function PortalCalendarPanels({
             className={
               bareSurface
                 ? "px-0.5 text-[10px] font-medium text-muted"
-                : "flex items-center border-x border-border/50 bg-accent/25 px-1.5 text-[10px] font-medium text-muted"
+                : "flex items-center border-x border-border/50 bg-accent/25 px-1 text-[10px] font-medium text-muted"
             }
           >
             –
@@ -766,7 +763,7 @@ export function PortalCalendarPanels({
             hideLabel
             label="End time"
             variant="pill"
-            wrapperClassName="w-[5.25rem] shrink-0"
+            wrapperClassName="min-w-[3.75rem] shrink-0"
             triggerClassName={COMPACT_TIME_SELECT_TRIGGER}
             value={String(visibleEndSlotExclusive)}
             onChange={onEndChange}
@@ -1003,9 +1000,10 @@ export function PortalCalendarPanels({
         <button
           type="button"
           onClick={closeSelectedBlock}
-          className="shrink-0 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted hover:bg-accent/30"
+          aria-label="Close"
+          className={MODAL_HEADER_CLOSE_CLASS}
         >
-          Close
+          <X className="h-5 w-5" aria-hidden />
         </button>
       </div>
       {selectedBlock?.kind === "meeting" ? (
@@ -1130,14 +1128,6 @@ export function PortalCalendarPanels({
           ) : null}
 
           <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
-              onClick={closeSelectedBlock}
-            >
-              Close
-            </Button>
             {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
               <>
             <Button
@@ -1187,14 +1177,6 @@ export function PortalCalendarPanels({
           </div>
           <p className="text-sm text-muted">Delete this slot if you no longer want applicants to book it.</p>
           <div className="flex flex-nowrap items-center gap-1.5 border-t border-border pt-4 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
-              onClick={closeSelectedBlock}
-            >
-              Close
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1253,13 +1235,13 @@ export function PortalCalendarPanels({
         <div className={compactShellClass}>
           <div
             className={cn(
-              "grid gap-2 px-2 py-2.5 sm:px-3 sm:py-3",
+              "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
               bareSurface
                 ? "border-b border-border/50"
                 : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
             )}
           >
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center justify-center sm:justify-start">
               <div
                 className={cn(
                   bareSurface
@@ -1289,39 +1271,39 @@ export function PortalCalendarPanels({
                   →
                 </Button>
               </div>
+            </div>
 
-              <div className="flex shrink-0 items-center gap-1.5">
-                {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-                {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
-                {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
-                {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
-                {vendorMode ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 shrink-0 rounded-full px-2.5 text-xs"
-                    data-attr="vendor-flexible-settings-open"
-                    onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
-                  >
-                    Flexible
-                  </Button>
-                ) : null}
-                {vendorMode && vendorCalendarActions?.onAddWork ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 shrink-0 rounded-full px-2.5 text-xs"
-                    data-attr="vendor-add-work-open"
-                    onClick={vendorCalendarActions.onAddWork}
-                  >
-                    Add work
-                  </Button>
-                ) : null}
-              </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+              {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
+              {!vendorMode && !readOnly ? renderTimeWindowControl(true) : null}
+              {vendorMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-7 shrink-0 rounded-full px-2.5 text-xs"
+                  data-attr="vendor-flexible-settings-open"
+                  onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
+                >
+                  Flexible
+                </Button>
+              ) : null}
+              {vendorMode && vendorCalendarActions?.onAddWork ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-7 shrink-0 rounded-full px-2.5 text-xs"
+                  data-attr="vendor-add-work-open"
+                  onClick={vendorCalendarActions.onAddWork}
+                >
+                  Add work
+                </Button>
+              ) : null}
             </div>
 
             {!vendorMode && !readOnly ? (
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:gap-2">
+              <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
                 <Button type="button" variant="outline" className={COMPACT_CALENDAR_ACTION_BTN} onClick={copyPreviousWeek}>
                   Copy previous week
                 </Button>
@@ -1511,7 +1493,7 @@ export function PortalCalendarPanels({
                     <div className="mt-2 flex justify-center">{renderFlexibleToggle(mobileDate.getDay())}</div>
                   ) : null}
                   <div className={bareSurface ? "mt-2" : "mt-2 overflow-hidden rounded-2xl border border-border bg-card"}>
-                    <div className={`grid grid-cols-[64px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
+                    <div className={`grid grid-cols-[72px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       <div className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
                         {mobileDate.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
@@ -1532,7 +1514,7 @@ export function PortalCalendarPanels({
                 <div className="mt-2 hidden lg:block">
                   <div className={bareSurface ? "" : "overflow-hidden rounded-2xl border border-border bg-card"}>
                     <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                      <div className={`grid min-w-[760px] grid-cols-[52px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`grid min-w-[760px] grid-cols-[56px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
                         <div className={`px-1.5 py-2 sm:px-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                         {activeBlockDates.map((d) => {
                           const ds = toLocalDateStr(d);
@@ -1585,9 +1567,6 @@ export function PortalCalendarPanels({
           }}
           footer={
             <ModalFooter>
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-                Cancel
-              </Button>
               <Button
                 type="button"
                 variant="primary"
@@ -1703,9 +1682,6 @@ export function PortalCalendarPanels({
             onClose={() => setUpdateToHousesOpen(false)}
             footer={
               <ModalFooter>
-                <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
-                  Cancel
-                </Button>
                 <Button
                   type="button"
                   variant="primary"
@@ -1892,7 +1868,7 @@ export function PortalCalendarPanels({
                     <p className="text-sm font-semibold text-foreground">{d.toLocaleDateString(undefined, { weekday: "long" })}</p>
                     <p className="text-xs text-muted">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                   </div>
-                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-px bg-accent/30">
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-px bg-accent/30">
                     {visibleSlotIndices.map((slotIdx) => {
                       const meeting = meetings.find((m) => m.dateStr === ds && m.startSlot === slotIdx);
                       return (
@@ -1925,7 +1901,7 @@ export function PortalCalendarPanels({
 
       {viewMode === "day" ? (
         <div className={PORTAL_CALENDAR_FRAME}>
-          <div className={`grid grid-cols-[68px_minmax(0,1fr)] ${CALENDAR_GRID_GAP}`}>
+          <div className={`grid grid-cols-[72px_minmax(0,1fr)] ${CALENDAR_GRID_GAP}`}>
             <div className={`col-span-2 px-3 py-3 text-center ${CALENDAR_HEADER_CELL}`}>
               <p className="text-sm font-semibold text-foreground">{anchorDate.toLocaleDateString(undefined, { weekday: "long" })}</p>
               <p className="text-xs text-muted">{anchorDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
@@ -2084,9 +2060,6 @@ export function PortalCalendarPanels({
         }}
         footer={
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
-              Cancel
-            </Button>
             <Button
               type="button"
               variant="primary"

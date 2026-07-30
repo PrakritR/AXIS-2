@@ -851,9 +851,6 @@ function UploadModal({
       title={title}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
@@ -1075,9 +1072,6 @@ function EditDocumentModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>

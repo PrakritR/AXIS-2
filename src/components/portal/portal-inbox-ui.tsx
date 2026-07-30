@@ -142,9 +142,6 @@ export function InboxComposeModal({
       onClose={onClose}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
             Send
           </Button>
@@ -860,7 +857,7 @@ export function InboxComposer({
       >
         <div className="portal-inbox-composer-row flex items-end gap-2">
           <textarea
-            rows={1}
+            rows={3}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
@@ -868,7 +865,7 @@ export function InboxComposer({
             disabled={disabled}
             enterKeyHint="send"
             data-attr={dataAttr}
-            className="portal-inbox-composer-input max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-2.5 text-sm leading-snug text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+            className="portal-inbox-composer-input max-h-48 min-h-[3.25rem] flex-1 resize-none rounded-2xl border border-border bg-background px-3.5 py-3 text-[15px] leading-relaxed text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60 sm:text-sm"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -1209,7 +1206,7 @@ export function InboxScheduledCard({
 
   return (
     <div
-      className="portal-inbox-scheduled-card w-full max-w-[min(92%,34rem)] rounded-2xl border border-dashed border-primary/30 bg-primary/[0.06] max-md:ml-0 max-md:max-w-none md:ml-auto"
+      className="portal-inbox-scheduled-card mx-2 w-full max-w-[min(92%,34rem)] rounded-2xl border border-dashed border-primary/30 bg-primary/[0.06] max-md:max-w-none md:ml-auto md:mr-0"
       data-attr="inbox-scheduled-card"
     >
       {/* Compact summary row — always visible, click to expand. */}
@@ -1253,11 +1250,11 @@ export function InboxScheduledCard({
                 data-attr="inbox-scheduled-edit-subject"
               />
               <Textarea
-                rows={4}
+                rows={6}
                 value={draftBody}
                 onChange={(e) => setDraftBody(e.target.value)}
                 placeholder="Message…"
-                className="text-sm"
+                className="text-[15px] leading-relaxed sm:text-sm"
                 data-attr="inbox-scheduled-edit-body"
               />
               {saveError ? (
@@ -1276,16 +1273,7 @@ export function InboxScheduledCard({
                 >
                   {saving ? "Saving…" : "Save"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 min-h-0 px-3 text-[12px] text-muted"
-                  onClick={cancelEdit}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-              </div>
+                </div>
             </div>
           ) : (
             <>

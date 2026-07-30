@@ -91,9 +91,6 @@ export function ManagerVendorInviteModal({
       footer={
         busy || !vendor ? undefined : (
           <ModalFooter>
-            <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               className="rounded-full"

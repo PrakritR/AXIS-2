@@ -406,9 +406,6 @@ export function ManagerCreateServiceRequestModal({
       title="Add add-on service"
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

@@ -101,9 +101,6 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
           className="max-w-[220px] font-mono uppercase"
         />
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
           <Button
             type="button"
             className="px-4 text-[13px]"

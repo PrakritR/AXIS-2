@@ -158,9 +158,6 @@ export function LeaseAmendMoveOutModal({
       panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
       footer={
         <ModalFooter className="w-full">
-          <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => void handleConfirm()}>
             {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
           </Button>
@@ -398,9 +395,6 @@ export function LeaseRenewModal({
       </p>
 
       <div className="flex gap-2.5">
-        <Button type="button" variant="outline" className="flex-1 rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
         <Button
           type="button"
           variant="primary"

@@ -84,9 +84,6 @@ export function VendorWorkEventModal({
               Delete
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

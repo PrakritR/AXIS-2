@@ -210,9 +210,6 @@ export function ManagerSmsComposeModal({
       onClose={onClose}
       footer={
         <ModalFooter>
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="primary"

@@ -191,10 +191,7 @@ export function RentalApplicationFinishPanel({
       </div>
 
       <div className="mt-4 flex justify-center sm:mt-6">
-        <Button type="button" variant="ghost" className="h-9 px-4 text-[13px] sm:h-10 sm:text-sm" onClick={onDone}>
-          Close
-        </Button>
-      </div>
+        </div>
     </div>
   );
 }
