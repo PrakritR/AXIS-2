@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import type {
@@ -377,6 +377,39 @@ function ListingModalActions({
   );
 }
 
+/** Hides renter apply/message CTAs in manager and modal listing previews. */
+function PreviewSafeModalActions(props: Parameters<typeof ListingModalActions>[0]) {
+  const previewBrowse = useListingPreviewNewTab();
+  if (previewBrowse) return null;
+  return <ListingModalActions {...props} />;
+}
+
+function InteractiveListingRow({
+  previewBrowse,
+  onOpen,
+  children,
+  className,
+}: {
+  previewBrowse: boolean;
+  onOpen: () => void;
+  children: ReactNode;
+  className: string;
+}) {
+  if (previewBrowse) {
+    return (
+      <button
+        type="button"
+        data-attr="listing-row-open"
+        className={`${className} w-full text-left transition hover:bg-accent/20 active:bg-accent/40`}
+        onClick={onOpen}
+      >
+        {children}
+      </button>
+    );
+  }
+  return <div className={className}>{children}</div>;
+}
+
 function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: string[] }) {
   const imgs = imageUrls?.filter(Boolean) ?? [];
   if (imgs.length > 0) {
@@ -591,7 +624,7 @@ export function ListingDetailModal({
                       </>
                     );
                   })()}
-                  <ListingModalActions
+                  <PreviewSafeModalActions
                     newTabProps={newTabProps}
                     primary={{
                       href: textEnabled
@@ -644,7 +677,7 @@ export function ListingDetailModal({
                 )}
               </div>
             </ListingModalSection>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textMessageAbout("the floor plan / layout"),
@@ -681,7 +714,7 @@ export function ListingDetailModal({
             <ListingModalSection label="Info">
               <ListingModalTags tags={state.row.modal.includedTags} />
             </ListingModalSection>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textMessageAbout("this bathroom"),
@@ -716,7 +749,7 @@ export function ListingDetailModal({
             <ListingModalSection label="What's included">
               <ListingModalTags tags={state.row.modal.includedTags} />
             </ListingModalSection>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textApplyHref,
@@ -749,7 +782,7 @@ export function ListingDetailModal({
             <ListingModalSection label="Details">
               <p className="text-muted">{state.row.body}</p>
             </ListingModalSection>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textApplyHref,
@@ -796,7 +829,7 @@ export function ListingDetailModal({
               )}
             </ListingModalSection>
             <p className="text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textEnabled
@@ -829,7 +862,7 @@ export function ListingDetailModal({
                 This feature is included with the listing as described. Confirm specifics with the leasing team before you apply.
               </p>
             </ListingModalSection>
-            <ListingModalActions
+            <PreviewSafeModalActions
               newTabProps={newTabProps}
               primary={{
                 href: textMessageHref,
@@ -858,8 +891,9 @@ function FloorPlanSummaryBar({
   floor: ListingFloorCard;
   onOpenFloorPlan: () => void;
 }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
+  const previewBrowse = useListingPreviewNewTab();
+  const inner = (
+    <>
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{floor.floorLabel}</p>
         <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{floor.fromPrice}</p>
@@ -875,8 +909,25 @@ function FloorPlanSummaryBar({
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</span>
           <span className="text-sm font-bold text-foreground">{floor.roomCount}</span>
         </div>
-        <DetailsButton onClick={onOpenFloorPlan} />
+        {!previewBrowse ? <DetailsButton onClick={onOpenFloorPlan} /> : null}
       </div>
+    </>
+  );
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      {previewBrowse ? (
+        <button
+          type="button"
+          className="flex w-full flex-wrap items-center justify-between gap-4 text-left"
+          onClick={onOpenFloorPlan}
+          data-attr="listing-floor-plan-open"
+        >
+          {inner}
+        </button>
+      ) : (
+        inner
+      )}
     </div>
   );
 }
@@ -924,12 +975,18 @@ export function LeaseBasicsTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
+  const previewBrowse = useListingPreviewNewTab();
 
   return (
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className={LISTING_ROW_SURFACE}>
+          <InteractiveListingRow
+            key={r.id}
+            previewBrowse={previewBrowse}
+            onOpen={() => setModal({ kind: "lease", row: r })}
+            className={LISTING_ROW_SURFACE}
+          >
             <div className="flex items-start gap-2">
               <span className="text-lg leading-none" aria-hidden>
                 {r.icon}
@@ -940,8 +997,10 @@ export function LeaseBasicsTableInteractive({
               </div>
             </div>
             <p className="mt-2 text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
-          </div>
+            {!previewBrowse ? (
+              <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
+            ) : null}
+          </InteractiveListingRow>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
@@ -952,8 +1011,10 @@ export function LeaseBasicsTableInteractive({
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((r) => (
-            <div
+            <InteractiveListingRow
               key={r.id}
+              previewBrowse={previewBrowse}
+              onOpen={() => setModal({ kind: "lease", row: r })}
               className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
@@ -966,8 +1027,8 @@ export function LeaseBasicsTableInteractive({
                 </div>
               </div>
               <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-              <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} />
-            </div>
+              {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} /> : null}
+            </InteractiveListingRow>
           ))}
         </div>
       </div>
@@ -1045,50 +1106,75 @@ export function BundleTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
+  const previewBrowse = useListingPreviewNewTab();
 
   return (
     <>
       <div className={`grid gap-4 ${rows.length >= 3 ? "xl:grid-cols-3" : ""} md:grid-cols-2`}>
-        {rows.map((c) => (
-          <div
-            key={c.id}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20 sm:p-5"
-          >
-            <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
-            <div className="relative pl-2">
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
-                <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{c.label}</p>
-                {c.promo ? <BundlePromoLine promo={c.promo} /> : null}
-                {c.roomLines?.length ? null : c.roomsLine.trim() ? (
-                  <p className="mt-2 text-xs leading-snug text-muted">{c.roomsLine}</p>
+        {rows.map((c) => {
+          const cardBody = (
+            <>
+              <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
+              <div className="relative pl-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Package</p>
+                  <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{c.label}</p>
+                  {c.promo ? <BundlePromoLine promo={c.promo} /> : null}
+                  {c.roomLines?.length ? null : c.roomsLine.trim() ? (
+                    <p className="mt-2 text-xs leading-snug text-muted">{c.roomsLine}</p>
+                  ) : null}
+                </div>
+                <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                    {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
+                    <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{c.price}</span>
+                  </div>
+                </div>
+                {c.summaryItems && c.summaryItems.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {c.summaryItems.slice(0, 4).map((item) => (
+                      <span
+                        key={`${c.id}-${item.label}`}
+                        className="inline-flex items-center rounded-full border border-border bg-accent/35 px-2.5 py-1 text-[10px] font-semibold text-foreground"
+                      >
+                        <span className="text-muted">{item.label}:</span>
+                        <span className="ml-1 text-foreground">{item.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <BundleRoomPreview row={c} />
+                {!previewBrowse ? (
+                  <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
                 ) : null}
               </div>
-              <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
-                <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                  {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
-                  <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{c.price}</span>
-                </div>
-              </div>
-              {c.summaryItems && c.summaryItems.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {c.summaryItems.slice(0, 4).map((item) => (
-                    <span
-                      key={`${c.id}-${item.label}`}
-                      className="inline-flex items-center rounded-full border border-border bg-accent/35 px-2.5 py-1 text-[10px] font-semibold text-foreground"
-                    >
-                      <span className="text-muted">{item.label}:</span>
-                      <span className="ml-1 text-foreground">{item.value}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <BundleRoomPreview row={c} />
-              <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
+            </>
+          );
+          const cardClass =
+            "group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 sm:p-5";
+          if (previewBrowse) {
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={`${cardClass} w-full text-left hover:border-primary/35 hover:shadow-lg hover:ring-primary/20`}
+                onClick={() => setModal({ kind: "bundle", row: c })}
+                data-attr="listing-bundle-open"
+              >
+                {cardBody}
+              </button>
+            );
+          }
+          return (
+            <div
+              key={c.id}
+              className={`${cardClass} hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20`}
+            >
+              {cardBody}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <ListingDetailModal
         state={modal}
@@ -1113,12 +1199,18 @@ export function AmenitiesTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
+  const previewBrowse = useListingPreviewNewTab();
 
   return (
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((a) => (
-          <div key={a.id} className={LISTING_ROW_SURFACE}>
+          <InteractiveListingRow
+            key={a.id}
+            previewBrowse={previewBrowse}
+            onOpen={() => setModal({ kind: "amenity", row: a })}
+            className={LISTING_ROW_SURFACE}
+          >
             <div className="flex items-start gap-2">
               <span className="text-lg text-primary" aria-hidden>
                 {a.icon}
@@ -1126,8 +1218,10 @@ export function AmenitiesTableInteractive({
               <p className="text-sm font-semibold text-foreground">{a.label}</p>
             </div>
             <p className="mt-2 text-xs text-muted">House feature · included with this listing</p>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "amenity", row: a })} />
-          </div>
+            {!previewBrowse ? (
+              <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "amenity", row: a })} />
+            ) : null}
+          </InteractiveListingRow>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
@@ -1138,8 +1232,10 @@ export function AmenitiesTableInteractive({
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((a) => (
-            <div
+            <InteractiveListingRow
               key={a.id}
+              previewBrowse={previewBrowse}
+              onOpen={() => setModal({ kind: "amenity", row: a })}
               className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
@@ -1149,8 +1245,8 @@ export function AmenitiesTableInteractive({
                 <p className="min-w-0 text-sm font-semibold text-foreground">{a.label}</p>
               </div>
               <p className="text-xs text-muted sm:text-sm">With listing</p>
-              <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} />
-            </div>
+              {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} /> : null}
+            </InteractiveListingRow>
           ))}
         </div>
       </div>

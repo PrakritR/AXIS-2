@@ -98,6 +98,7 @@ export function ListingSpaceMediaBrowser({
   resolvePrimaryCta,
   resolveSecondaryCta,
   className = "",
+  onEntryPress,
 }: {
   entries: ListingSpaceMediaEntry[];
   testId: string;
@@ -108,11 +109,44 @@ export function ListingSpaceMediaBrowser({
   resolvePrimaryCta?: (entry: ListingSpaceMediaEntry, index: number) => ListingSpaceMediaCta;
   resolveSecondaryCta?: (entry: ListingSpaceMediaEntry, index: number) => ListingSpaceMediaCta;
   className?: string;
+  /** Preview/manager mode: compact list rows; tap opens details (no apply CTAs). */
+  onEntryPress?: (entry: ListingSpaceMediaEntry, index: number) => void;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
-  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
+  const previewBrowse = useListingPreviewNewTab();
+
+  if (previewBrowse && onEntryPress) {
+    return (
+      <div className={`space-y-2 ${className}`} data-testid={testId}>
+        {entries.map((e, i) => (
+          <button
+            key={e.id}
+            type="button"
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-3 text-left transition hover:bg-accent/25 active:bg-accent/40"
+            onClick={() => onEntryPress(e, i)}
+            data-attr={`${testId}-row`}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{e.eyebrow}</p>
+              <p className="text-sm font-semibold text-foreground">{e.title}</p>
+              {e.metaLine ? <p className="mt-0.5 text-xs text-muted">{e.metaLine}</p> : null}
+            </div>
+            {e.availability ? (
+              <AvailabilityPill text={e.availability} variant={availabilityVariant} />
+            ) : (
+              <span className="shrink-0 text-lg text-muted" aria-hidden>
+                ›
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  const newTabProps = listingLinkTargetProps(previewBrowse);
 
   const safeIndex = entries.length ? Math.min(selectedIndex, entries.length - 1) : 0;
   const entry = entries[safeIndex];
