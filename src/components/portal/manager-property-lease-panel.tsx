@@ -3,6 +3,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { PropertyLeaseFormModal } from "@/components/portal/property-lease-form-modal";
+import {
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PortalPropertyDetailSection,
+} from "@/components/portal/portal-property-detail-section";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
@@ -111,19 +115,20 @@ export function ManagerPropertyLeasePanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
+      <PortalPropertyDetailSection
+        actions={
           <Button
             type="button"
             variant="outline"
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
             data-attr="property-lease-add"
             onClick={openAdd}
           >
             Add lease
           </Button>
-        </div>
-        <div className="space-y-2 p-3">
+        }
+        contentClassName="space-y-2 p-3"
+      >
           {sectionActions}
           {templates.map((template) => (
             <div
@@ -145,7 +150,7 @@ export function ManagerPropertyLeasePanel({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-xs"
+                  className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
                   data-attr={`property-lease-edit-${template.id}`}
                   onClick={() => openEdit(template.id)}
                 >
@@ -155,7 +160,7 @@ export function ManagerPropertyLeasePanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-8 rounded-full px-3 text-xs"
+                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
                     onClick={() => handleRemove(template.id)}
                   >
                     Remove
@@ -164,8 +169,7 @@ export function ManagerPropertyLeasePanel({
               </div>
             </div>
           ))}
-        </div>
-      </div>
+      </PortalPropertyDetailSection>
 
       <PropertyLeaseFormModal
         open={formOpen}

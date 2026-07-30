@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import {
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PortalPropertyDetailSection,
+} from "@/components/portal/portal-property-detail-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -140,20 +144,24 @@ export function ManagerPropertyHouseDetailsPanel({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
-        <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
-        <Button
-          type="button"
-          variant="primary"
-          className="h-8 shrink-0 rounded-full px-3 text-xs"
-          data-attr="house-details-save"
-          disabled={!dirty}
-          onClick={save}
-        >
-          Save
-        </Button>
-      </div>
+    <PortalPropertyDetailSection
+      actionsJustify="between"
+      actions={
+        <>
+          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+            data-attr="house-details-save"
+            disabled={!dirty}
+            onClick={save}
+          >
+            Save
+          </Button>
+        </>
+      }
+    >
       <FieldBlock
         label="House description"
         badge="Manager only"
@@ -176,6 +184,6 @@ export function ManagerPropertyHouseDetailsPanel({
         onChange={(v) => updateField("generalHouseInfo", v)}
         placeholder="Gate/door codes, laundry tips, trash schedule…"
       />
-    </div>
+    </PortalPropertyDetailSection>
   );
 }

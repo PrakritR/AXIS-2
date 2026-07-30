@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PortalPropertyDetailSection,
+} from "@/components/portal/portal-property-detail-section";
+import {
   EMPTY_DRAFT,
   PromotionForm,
   draftInputs,
@@ -574,20 +578,24 @@ export function ManagerPropertyPromotionPanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-border bg-accent/30 px-4 py-2.5">
-          {headerActionsExtra}
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            onClick={openNewPromotion}
-            data-attr="manager-property-new-promotion"
-          >
-            New promotion
-          </Button>
-        </div>
-        <div className="px-4 py-3">
+      <PortalPropertyDetailSection
+        surfaceMuted
+        actions={
+          <>
+            {headerActionsExtra}
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+              onClick={openNewPromotion}
+              data-attr="manager-property-new-promotion"
+            >
+              New promotion
+            </Button>
+          </>
+        }
+        contentClassName="px-4 py-3"
+      >
           <div className="mb-4">
             <ManagerPortalStatusPills
               tabs={contentTabs}
@@ -608,8 +616,7 @@ export function ManagerPropertyPromotionPanel({
                 : "No promotions match this filter."
             }
           />
-        </div>
-      </div>
+      </PortalPropertyDetailSection>
 
       <PromotionNewModal
         open={showNewModal}

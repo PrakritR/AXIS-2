@@ -16,6 +16,7 @@ import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-prope
 import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-tour-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS } from "@/components/portal/portal-property-detail-section";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import {
   PROPERTY_DETAIL_TAB_LABELS,
@@ -310,7 +311,7 @@ function ManagerPropertyInlineDetails({
   if (!row || !mock || !managerSubmission) return null;
 
   const actionBtnClass = "rounded-full";
-  const sectionHeaderBtn = "h-8 rounded-full px-3 text-xs";
+  const sectionHeaderBtn = PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS;
   const canEditListing = Boolean(displaySub && portalSub);
   // Show Edit only with write (`edit`) level and Delete only with `delete` level.
   // Own properties always qualify; a linked property is gated by the grant.
@@ -326,7 +327,7 @@ function ManagerPropertyInlineDetails({
       <Button
         type="button"
         variant="outline"
-        className={`${actionBtnClass} h-8 px-3 text-xs`}
+        className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
         data-attr="listing-send-application"
         onClick={(e) => {
           e.stopPropagation();
