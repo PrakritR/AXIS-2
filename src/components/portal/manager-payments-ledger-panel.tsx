@@ -17,7 +17,7 @@ import {
 
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
-import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -1020,7 +1020,7 @@ export function ManagerPaymentsLedgerPanel({
     ) : !hasAnySource ? (
       <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
     ) : (
-      <div className={INBOX_LIST_SCROLL}>
+      <div className={PORTAL_LIST_PAGE_BODY}>
         {showSelection ? (
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
             <input
