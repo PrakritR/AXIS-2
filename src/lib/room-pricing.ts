@@ -246,12 +246,16 @@ export function resolveStayPricing(input: StayPricingInput): StayPricing {
   // Room-first, then the listing, mirroring the ledger exactly. The room leg is what makes
   // the agreement's deposit equal the deposit actually charged; reading only the listing
   // figure understated the total on every listing whose room carries its own deposit.
+  // The room leg uses overrideMoney (non-EMPTY wins), not positiveMoney (non-ZERO wins),
+  // because the ledger's test is emptiness too. A manager who waives the deposit on one
+  // room by entering "0" is charged nothing, so the agreement must print $0 rather than
+  // skipping the room and quoting the listing's figure.
   const deposit = isShortTermApplication
     ? (overrideMoney(app?.managerSecurityDepositOverride) ??
-      positiveMoney(room?.shortTermDeposit) ??
+      overrideMoney(room?.shortTermDeposit) ??
       positiveMoney(sub?.shortTermDeposit))
     : (overrideMoney(app?.managerSecurityDepositOverride) ??
-      positiveMoney(room?.securityDeposit) ??
+      overrideMoney(room?.securityDeposit) ??
       positiveMoney(sub?.securityDeposit));
 
   if (isShortTermApplication) {

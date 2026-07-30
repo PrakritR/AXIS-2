@@ -431,7 +431,14 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   // securityDeposit keyed on rentalType). Recomputing it here let the document and the ledger
   // drift the moment either rule changed.
   const secDep = escapeHtml(stay.deposit !== undefined ? fmtUsd(stay.deposit) : "—");
-  const moveInFee = escapeHtml(overrideFeeLabel(a.managerMoveInFeeOverride, sub?.moveInFee ?? "—"));
+  // Room-first, then the listing, matching the ledger. A room carrying its own move-in fee
+  // is charged that fee, so a lease quoting the listing's figure understates what is owed.
+  const moveInFee = escapeHtml(
+    overrideFeeLabel(
+      a.managerMoveInFeeOverride,
+      specificRoom?.moveInFee?.trim() || sub?.moveInFee || "—",
+    ),
+  );
   const rawOtherCostLabel = a.managerOtherCostLabel?.trim() || "Other costs";
   const otherCostIsMonthToMonth = isMonthToMonthOtherCost(rawOtherCostLabel);
   const otherCostLabel = escapeHtml(rawOtherCostLabel);
@@ -543,7 +550,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       a.managerMoveInFeeOverride,
       (a.rentalType === "short_term"
         ? (specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee)
-        : subNorm?.moveInFee) ?? "",
+        : (specificRoom?.moveInFee?.trim() || subNorm?.moveInFee)) ?? "",
     );
     const stayMoveInNum = parseAmount(stayMoveInLabel) ?? 0;
     const stayOtherNum = showOtherSigningCost ? (otherCostNum ?? 0) : 0;
@@ -565,25 +572,36 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       specificRoom?.prorateMethod === "daily_rate" && (specificRoom.dailyUtilitiesRate ?? 0) > 0
         ? specificRoom.dailyUtilitiesRate!
         : 0;
+    // A daily_rate room with NO per-day utilities rate bills ZERO utilities, not the monthly
+    // estimate prorated: its listing folds utilities into the daily rent, so quoting the
+    // estimate here would state a charge the resident never receives. The ledger has these
+    // same three cases; collapsing them to two is what made the document disagree.
+    const stayUtilitiesFolded =
+      specificRoom?.prorateMethod === "daily_rate" && stayDailyUtilitiesRate <= 0;
     const stayUtilitiesNum =
-      stayUtilitiesBase > 0 && stayUtilitiesSpan
+      stayUtilitiesBase > 0 && stayUtilitiesSpan && !stayUtilitiesFolded
         ? stayDailyUtilitiesRate > 0
           ? Number((stayUtilitiesSpan.billableDays * stayDailyUtilitiesRate).toFixed(2))
           : Number((stayUtilitiesBase * (stayUtilitiesSpan.billableDays / stayUtilitiesSpan.daysInMonth)).toFixed(2))
         : 0;
-    // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
-    // they must appear in the stay's Payment table and count toward the total due.
+    // Custom fees bill once before check-in, so they belong in the stay's Payment table.
+    // WHICH amount is keyed on rentalType, exactly like the move-in fee, the utilities and
+    // the deposit above: a stay can be "short" here while the application is standard (a
+    // daily-priced room on a short-stay listing), and the ledger then bills the one-time
+    // `amount`, never `shortTermAmount`. Reading the wrong one understates the total.
+    const stayFeeAmount = (fee: { amount?: string; shortTermAmount?: string }) =>
+      a.rentalType === "short_term" ? fee.shortTermAmount : fee.amount;
     const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
       const presetId = (fee as { presetId?: string }).presetId;
       if (presetId && presetId !== "custom") return false;
-      const n = parseAmount(fee.shortTermAmount);
+      const n = parseAmount(stayFeeAmount(fee));
       return n != null && n > 0;
     });
-    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(f.shortTermAmount) ?? 0), 0);
+    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(stayFeeAmount(f)) ?? 0), 0);
     const stCustomFeeRows = stCustomFees
       .map(
         (f) =>
-          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.shortTermAmount) ?? 0))}</td></tr>`,
+          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(stayFeeAmount(f)) ?? 0))}</td></tr>`,
       )
       .join("\n");
     const totalDue =

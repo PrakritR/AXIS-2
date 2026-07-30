@@ -35,7 +35,6 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
 import {
   intraMonthStaySpan,
-  shortTermNightlyRate,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
@@ -2553,10 +2552,11 @@ function buildApprovedStandardChargeDrafts(
     });
   };
 
-  // The SAME shared chain every other money path uses. A second resolver here silently
-  // disagreed with it whenever a placement resolved only by unit label, so this function
-  // prorated as monthly while the regenerate path billed the room by the day.
-  const room = roomForRow(sub, row, row.manualResidentDetails?.roomNumber);
+  // Resolved through resolveRowSubmissionRoom, NOT roomForRow with a hand-picked label.
+  // `selectedRoomRentAmount` and `selectedRoomUtilities` below go through that same
+  // function, and it passes the PROPERTY's unitLabel. Passing anything else here made this
+  // one function price rent off one room and prorate off another.
+  const room = resolveRowSubmissionRoom(row).room;
   const entireHome = isEntireHomeListing(sub);
   const prorateMethod =
     entireHome && sub.entireHomeProrateMethod === "daily_rate"
@@ -2698,7 +2698,24 @@ function syncPendingApprovedChargesFromListing(
             return parseMoneyAmount(fallback ?? "");
           };
           const out: ApprovedChargeDraft[] = [];
-          const nightlyRate = shortTermNightlyRate(sub.shortTermDailyCost);
+          // Same room-first resolution the CREATION branch and the lease document use. This
+          // path patches the amounts of an already-created pending charge on every Payments
+          // mount, so reading listing-level fields here quietly rewrote a room-priced stay
+          // back down to the listing's nightly rate minutes after it was billed correctly.
+          const stayRoom = resolveRowSubmissionRoom(row).room;
+          const nightlyRate =
+            resolveStayPricing({
+              room: stayRoom,
+              submission: sub,
+              application: {
+                rentalType: row.application?.rentalType,
+                leaseStart,
+                leaseEnd,
+                managerRentOverride: row.application?.managerRentOverride,
+                managerSecurityDepositOverride: row.application?.managerSecurityDepositOverride,
+                signedMonthlyRent: row.signedMonthlyRent,
+              },
+            }).dailyRate ?? 0;
           const nights = shortTermStayNightCount(leaseStart, leaseEnd);
           if (nightlyRate > 0 && nights) {
             out.push({
@@ -2713,7 +2730,8 @@ function syncPendingApprovedChargesFromListing(
             row.manualResidentDetails?.securityDeposit != null
               ? String(row.manualResidentDetails.securityDeposit)
               : allowListingDefaults
-                ? String(
+                ? (stayRoom?.shortTermDeposit ?? "").trim() ||
+                  String(
                     listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? ""),
                   )
                 : undefined,
@@ -2731,7 +2749,8 @@ function syncPendingApprovedChargesFromListing(
             row.manualResidentDetails?.moveInFee != null
               ? String(row.manualResidentDetails.moveInFee)
               : allowListingDefaults
-                ? String(
+                ? (stayRoom?.shortTermMoveInFee ?? "").trim() ||
+                  String(
                     listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? ""),
                   )
                 : undefined,

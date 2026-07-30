@@ -310,3 +310,28 @@ describe("resolveStayPricing room-first deposit precedence", () => {
     ).toBe(250);
   });
 });
+
+/**
+ * A waived deposit is entered as "0", and the ledger honours it: its test is whether the
+ * room's field is NON-EMPTY, not whether it is positive. The resolver has to use the same
+ * test, or a manager who waives the deposit on one room gets a lease quoting the listing's
+ * figure and a "total due at signing" that includes money nobody will ever be charged.
+ */
+describe("resolveStayPricing waived room deposit", () => {
+  it("honours a room deposit of 0 instead of falling back to the listing", () => {
+    expect(
+      resolveStayPricing({
+        room: { ...MONTHLY_ROOM, securityDeposit: "0" },
+        submission: SUB,
+        application: { rentalType: "standard" },
+      }).deposit,
+    ).toBe(0);
+    expect(
+      resolveStayPricing({
+        room: { ...DAILY_ROOM, shortTermDeposit: "0" },
+        submission: SUB,
+        application: { rentalType: "short_term" },
+      }).deposit,
+    ).toBe(0);
+  });
+});
