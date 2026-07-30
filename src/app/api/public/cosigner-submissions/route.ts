@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { notifyManagerCosignerSubmitted } from "@/lib/cosigner-notification.server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -19,6 +20,10 @@ function stripSensitiveForStorage(sub: CosignerSubmission): CosignerSubmission {
 
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`cosigner-submission:${clientIpFrom(req)}`, 10, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
     const body = (await req.json()) as Partial<CosignerSubmission>;
     const signerAppId = normalizeApplicationAxisId(String(body.signerAppId ?? "").trim());
     if (!signerAppId) {
