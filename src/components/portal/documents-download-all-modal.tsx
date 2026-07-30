@@ -18,6 +18,7 @@ import {
   hasBothLeaseSignatures,
   readLeasePipeline,
   syncLeasePipelineFromServer,
+  downloadLeaseFromRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
