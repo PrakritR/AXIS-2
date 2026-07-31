@@ -207,7 +207,7 @@ export function PortalFilterSortSheet({
           onClose={close}
           title="Filter"
           fullPage={false}
-          panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-hidden")}
+          panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-visible")}
           dense
           scrollableContent
           assistantStrip={false}

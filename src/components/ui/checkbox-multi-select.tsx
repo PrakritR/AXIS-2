@@ -24,12 +24,23 @@ import {
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
 const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 
+const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
+  '[data-slot="modal-vaul-drawer"][data-state="open"]',
+  '[data-slot="modal-radix-dialog"][data-state="open"]',
+  '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+  '[data-slot="portal-filter-dropdown-panel"]',
+];
+
 /**
- * Always portal menus to `document.body` with viewport `fixed` coords so overflow-hidden
- * filter/modal shells never clip the list. Modal outside-click handlers ignore menu
- * targets via `field-select-portal-interaction`.
+ * Portal into open modal/filter shells when present so Radix `hideOthers` does not mark
+ * menus aria-hidden (body portaled menus look fine but cannot receive clicks). Viewport
+ * `fixed` coords still apply; hosts use overflow-visible where needed to avoid clipping.
  */
 function resolveFieldSelectMenuPortal(): HTMLElement {
+  for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
+    const host = document.querySelector<HTMLElement>(selector);
+    if (host) return host;
+  }
   return document.body;
 }
 
@@ -251,6 +262,7 @@ export function CheckboxMultiSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
+          pointerEvents: "auto",
           zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
         onPointerDown={(event) => event.stopPropagation()}
@@ -411,6 +423,7 @@ export function FieldSingleSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
+          pointerEvents: "auto",
           zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
         onPointerDown={(event) => event.stopPropagation()}
