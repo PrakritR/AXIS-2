@@ -7,8 +7,14 @@ import {
   appendOAuthContextToCallbackPath,
   completeNativeOAuthInWebView,
 } from "@/lib/auth/complete-native-oauth-client";
+import {
+  NATIVE_OAUTH_SCHEME,
+  webPathFromNativeOAuthUrl,
+  isNativeOAuthShell,
+} from "@/lib/auth/native-oauth-callback";
 import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
-import { webPathFromNativeOAuthUrl, isNativeOAuthShell } from "@/lib/auth/native-oauth-callback";
+import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
+import { WebAuthSession } from "@/lib/native/web-auth-session";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 const NATIVE_OAUTH_CALLBACK_CODE_KEY = "axis_oauth_callback_code";
@@ -153,10 +159,27 @@ async function tryLaunchUrlOAuthComplete(
   }
 }
 
+function finishNativeOAuthFromRawUrl(rawUrl: string): boolean {
+  const pathAndQuery = resolveNativeOAuthCallbackTarget(rawUrl, window.location.origin);
+  if (!pathAndQuery) return false;
+
+  const parsed = new URL(pathAndQuery, window.location.origin);
+  if (parsed.searchParams.get("error")) {
+    const message =
+      parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
+      "Google sign-in could not be completed.";
+    navigateToNativeOAuthFailure(message);
+    return true;
+  }
+
+  navigateToNativeOAuthCallback(pathAndQuery);
+  return true;
+}
+
 /**
  * Google OAuth in the native shell — WKWebView is blocked (403 disallowed_useragent).
- * Opens SFSafariViewController / Chrome Custom Tab, then returns to the main WebView
- * via custom URL scheme or universal link when Supabase redirects to /auth/callback.
+ * iOS: ASWebAuthenticationSession intercepts the custom-scheme callback natively.
+ * Android: Chrome Custom Tab + HTTPS bridge redirect back to the app.
  */
 export async function openOAuthUrl(url: string): Promise<void> {
   if (!url) return;
@@ -165,6 +188,41 @@ export async function openOAuthUrl(url: string): Promise<void> {
     return;
   }
 
+  if (usesIosAsWebAuthenticationSession()) {
+    await openOAuthUrlWithWebAuthSession(url);
+    return;
+  }
+
+  await openOAuthUrlWithSystemBrowser(url);
+}
+
+async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
+  markNativeOAuthInProgress();
+  try {
+    const { url: callbackUrl } = await WebAuthSession.authenticate({
+      url: oauthUrl,
+      callbackScheme: NATIVE_OAUTH_SCHEME,
+    });
+    if (!finishNativeOAuthFromRawUrl(callbackUrl)) {
+      navigateToNativeOAuthFailure(
+        `Google sign-in returned an unexpected URL. ${nativeOAuthSetupHint()}`,
+      );
+    }
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: string }).code)
+        : "";
+    if (code === "CANCELED") {
+      clearNativeOAuthInProgress();
+      return;
+    }
+    const message = error instanceof Error ? error.message : "Google sign-in could not be completed.";
+    navigateToNativeOAuthFailure(message);
+  }
+}
+
+async function openOAuthUrlWithSystemBrowser(url: string): Promise<void> {
   markNativeOAuthInProgress();
   const { Browser } = await import("@capacitor/browser");
   const { App } = await import("@capacitor/app");
@@ -179,18 +237,7 @@ export async function openOAuthUrl(url: string): Promise<void> {
     settled = true;
     cleanups.forEach((fn) => fn());
     void Browser.close().catch(() => {});
-
-    const parsed = new URL(pathAndQuery, window.location.origin);
-    if (parsed.searchParams.get("error")) {
-      const message =
-        parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
-        "Google sign-in could not be completed.";
-      navigateToNativeOAuthFailure(message);
-      return true;
-    }
-
-    navigateToNativeOAuthCallback(pathAndQuery);
-    return true;
+    return finishNativeOAuthFromRawUrl(rawUrl) || true;
   };
 
   const appUrlListener = await App.addListener("appUrlOpen", (event) => {
@@ -285,23 +332,12 @@ export async function openOAuthUrl(url: string): Promise<void> {
 /** Handle OAuth/universal-link return when the app is already running. */
 export async function handleNativeOAuthReturnUrl(rawUrl: string): Promise<boolean> {
   if (!isNativeAppShell() || !rawUrl) return false;
-  const pathAndQuery = resolveNativeOAuthCallbackTarget(rawUrl, window.location.origin);
-  if (!pathAndQuery) return false;
+  if (!resolveNativeOAuthCallbackTarget(rawUrl, window.location.origin)) return false;
 
   const { Browser } = await import("@capacitor/browser");
   await Browser.close().catch(() => {});
 
-  const parsed = new URL(pathAndQuery, window.location.origin);
-  if (parsed.searchParams.get("error")) {
-    const message =
-      parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
-      "Google sign-in could not be completed.";
-    navigateToNativeOAuthFailure(message);
-    return true;
-  }
-
-  navigateToNativeOAuthCallback(pathAndQuery);
-  return true;
+  return finishNativeOAuthFromRawUrl(rawUrl);
 }
 
 /** External https links on native (Stripe Connect, etc.) — in-app browser, not WKWebView. */

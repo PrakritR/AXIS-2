@@ -3,10 +3,29 @@ import {
   NATIVE_OAUTH_BRIDGE_PARAM,
   appendNativeOAuthBridgeParam,
 } from "@/lib/auth/native-oauth-bridge";
-import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
+import {
+  NATIVE_OAUTH_CALLBACK_URL,
+  nativeOAuthCallbackUrl,
+  resolveOAuthCallbackRedirectUrl,
+} from "@/lib/auth/native-oauth-callback";
+
 /** Stub a native shell (no Capacitor global) tagged via the `data-native` attribute. */
 function stubNativeShell(): void {
   vi.stubGlobal("window", {});
+  vi.stubGlobal("document", {
+    documentElement: {
+      hasAttribute: (name: string) => name === "data-native",
+    },
+  });
+}
+
+function stubIosNativeShell(): void {
+  vi.stubGlobal("window", {
+    Capacitor: {
+      isNativePlatform: () => true,
+      getPlatform: () => "ios",
+    },
+  });
   vi.stubGlobal("document", {
     documentElement: {
       hasAttribute: (name: string) => name === "data-native",
@@ -19,7 +38,15 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns https callback with native_bridge for a dev native shell (http LAN/localhost origin)", () => {
+  it("returns custom scheme callback for iOS native (ASWebAuthenticationSession)", () => {
+    stubIosNativeShell();
+    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
+    expect(
+      resolveOAuthCallbackRedirectUrl("https://prop-lane.space", "/auth/callback/partner-pricing"),
+    ).toBe(nativeOAuthCallbackUrl("/auth/callback/partner-pricing"));
+  });
+
+  it("returns https callback with native_bridge for Android native shell", () => {
     stubNativeShell();
     expect(resolveOAuthCallbackRedirectUrl("http://192.168.5.121:3000")).toBe(
       appendNativeOAuthBridgeParam("http://192.168.5.121:3000/auth/callback"),
@@ -29,7 +56,7 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     );
   });
 
-  it("maps a fixed callback path onto https with native_bridge on native", () => {
+  it("maps a fixed callback path onto https with native_bridge on Android native", () => {
     stubNativeShell();
     expect(
       resolveOAuthCallbackRedirectUrl("http://192.168.5.121:3000", "/auth/callback/partner-pricing"),
@@ -38,7 +65,7 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     );
   });
 
-  it("returns https callback with native_bridge for production native (https origin)", () => {
+  it("returns https callback with native_bridge for production Android native (https origin)", () => {
     stubNativeShell();
     expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(
       appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback"),

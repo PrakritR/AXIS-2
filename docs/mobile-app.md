@@ -337,8 +337,16 @@ Until `FCM_*` is set it returns `{ sent: 0, skipped: true }` and changes nothing
 
 ### Google sign-in (native app)
 
-Google OAuth opens in the **system in-app browser** (not the main WebView). After you pick an
-account, Supabase must redirect back into the Axis app — not the marketing homepage.
+Google OAuth must **not** run in the main WebView (`disallowed_useragent`). Platform paths:
+
+- **iOS** — `ASWebAuthenticationSession` via `WebAuthSessionPlugin` (`ios/App/App/WebAuthSessionPlugin.swift`).
+  Supabase `redirectTo` is the custom scheme (`space.proplane.app://auth/callback`); the session
+  intercepts that callback natively. Do **not** use `@capacitor/browser` (SFSafariViewController) for
+  OAuth on iOS — it cannot follow custom-scheme redirects.
+- **Android** — Chrome Custom Tab (`@capacitor/browser`) + HTTPS callback with `native_bridge=1`
+  (server 302 into the custom scheme).
+
+After you pick an account, Supabase must redirect back into the Axis app — not the marketing homepage.
 
 **1. Supabase redirect URLs** (Authentication → URL configuration → Redirect URLs). **Required:**
 
@@ -349,22 +357,19 @@ https://prop-lane.space/auth/callback/resident-signup
 https://www.axis-seattle-housing.com/auth/callback
 https://www.axis-seattle-housing.com/auth/callback/partner-pricing
 https://www.axis-seattle-housing.com/auth/callback/resident-signup
-```
-
-The native app uses these HTTPS callbacks (same as web). A small bridge page bounces back into the app via the custom URL scheme registered in Xcode/Android.
-
-**Optional** (direct scheme return without the bridge page):
-
-```
 space.proplane.app://auth/callback
 space.proplane.app://auth/callback/**
 ```
+
+Android uses the HTTPS callbacks (bridge page). iOS OAuth uses the custom-scheme entries directly.
 
 If the HTTPS callback is missing, Supabase falls back to the **Site URL** and Google sign-in opens the marketing homepage in the system browser instead of the portal.
 
 **2. Universal / app links (https fallback)** — committed in `public/.well-known/`:
 
-- `apple-app-site-association` — iOS opens `/auth/callback` in the app WebView
+- `apple-app-site-association` — served as `application/json` (`next.config.ts` headers); iOS opens
+  `/auth/callback` from email/deep links (not from in-app OAuth — universal links are suppressed
+  inside SFSafariViewController / ASWebAuthenticationSession presented by the same app).
 - `assetlinks.json` — Android; replace `REPLACE_WITH_RELEASE_KEYSTORE_SHA256` with your
   signing cert fingerprint (`keytool -list -v -keystore …`)
 

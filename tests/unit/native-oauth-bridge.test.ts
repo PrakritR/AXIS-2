@@ -70,4 +70,12 @@ describe("native OAuth bridge", () => {
     expect(response.headers.get("location")).toBe(`${NATIVE_OAUTH_CALLBACK_URL}?code=abc123`);
     expect(await response.text()).toBe("");
   });
+
+  it("bridge is for Android Custom Tabs — iOS uses ASWebAuthenticationSession with a direct scheme redirect", () => {
+    const req = new NextRequest(
+      "https://www.axis-seattle-housing.com/auth/callback?native_bridge=1&code=abc123",
+      { headers: { "user-agent": "Mozilla/5.0 Capacitor iOS" } },
+    );
+    expect(shouldRenderNativeOAuthBridge(req)).toBe(false);
+  });
 });
