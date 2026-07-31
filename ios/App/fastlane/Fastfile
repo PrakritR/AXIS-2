@@ -3,9 +3,10 @@ default_platform(:ios)
 # PropLane iOS release automation.
 #
 # The `beta` lane builds the app and ships it to TestFlight. Signing uses the
-# distribution certificate + provisioning profile from GitHub Actions secrets
-# (manual signing) so CI never mints new Apple distribution certificates.
-# Upload + build-number lookup still authenticate via App Store Connect API key.
+# distribution certificate from GitHub Actions secrets plus an App Store
+# provisioning profile. CI refreshes the profile via App Store Connect (sigh)
+# so entitlements like Sign in with Apple stay in sync; APPLE_PROFILE_BASE64 is
+# the fallback when API refresh is unavailable.
 #
 # Required env (set as GitHub Actions secrets — see .github/workflows/ios-testflight.yml):
 #   ASC_KEY_ID              App Store Connect API key id
@@ -13,12 +14,68 @@ default_platform(:ios)
 #   ASC_KEY_P8              base64 of the AuthKey_XXXX.p8 file contents
 #   APPLE_DIST_P12_BASE64   base64 of the distribution certificate .p12
 #   APPLE_DIST_P12_PASSWORD password for the .p12
-#   APPLE_PROFILE_BASE64    base64 of the App Store .mobileprovision
+#   APPLE_PROFILE_BASE64    base64 of the App Store .mobileprovision (fallback)
 require "base64"
 require "fileutils"
 require "plist"
 require "shellwords"
 require "tmpdir"
+
+APP_IDENTIFIER = "space.proplane.app"
+TEAM_ID = "8FH3GVHCZ9"
+REQUIRED_PROFILE_ENTITLEMENTS = %w[
+  com.apple.developer.applesignin
+  aps-environment
+].freeze
+
+def profile_plist(path)
+  xml = `security cms -D -i #{Shellwords.escape(path)}`
+  Plist.parse_xml(xml)
+end
+
+def assert_app_store_profile!(profile_data)
+  name = profile_data.fetch("Name")
+  if profile_data.key?("ProvisionedDevices")
+    UI.user_error!(
+      "Provisioning profile '#{name}' has ProvisionedDevices — " \
+      "this is a development/ad-hoc profile, not App Store distribution.",
+    )
+  end
+
+  entitlements = profile_data["Entitlements"] || {}
+  missing = REQUIRED_PROFILE_ENTITLEMENTS.reject { |key| entitlements.key?(key) }
+  return if missing.empty?
+
+  UI.user_error!(
+    "Provisioning profile '#{name}' is missing entitlements: #{missing.join(', ')}. " \
+    "Enable them on the App ID in Apple Developer, regenerate the App Store profile, " \
+    "and update APPLE_PROFILE_BASE64 (or fix App Store Connect API access for sigh).",
+  )
+end
+
+def install_profile_from_path(path)
+  install_provisioning_profile(path: path)
+  data = profile_plist(path)
+  assert_app_store_profile!(data)
+  data.fetch("Name")
+end
+
+def refresh_profile_via_api(api_key, fallback_path)
+  UI.message("Refreshing App Store provisioning profile via App Store Connect API…")
+  refreshed_path = sigh(
+    api_key: api_key,
+    app_identifier: APP_IDENTIFIER,
+    force: true,
+    skip_install: false,
+    adhoc: false,
+  )
+  path = refreshed_path.to_s.strip
+  path = fallback_path if path.empty?
+  install_profile_from_path(path)
+rescue StandardError => e
+  UI.important("sigh profile refresh failed (#{e.message}); using APPLE_PROFILE_BASE64")
+  install_profile_from_path(fallback_path)
+end
 
 platform :ios do
   desc "Build and upload a new build to TestFlight"
@@ -45,32 +102,18 @@ platform :ios do
       keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"],
     )
 
-    install_provisioning_profile(path: profile_path)
-
-    profile_plist_xml = `security cms -D -i #{Shellwords.escape(profile_path)}`
-    profile_data = Plist.parse_xml(profile_plist_xml)
-    profile_name = profile_data.fetch("Name")
-    has_provisioned_devices = profile_data.key?("ProvisionedDevices")
-    UI.message(
-      "Provisioning profile: #{profile_name} (has ProvisionedDevices: #{has_provisioned_devices})",
-    )
-    if has_provisioned_devices
-      UI.user_error!(
-        "Installed provisioning profile '#{profile_name}' has ProvisionedDevices — " \
-        "this is a development/ad-hoc profile, not App Store distribution. " \
-        "Upload an App Store profile to APPLE_PROFILE_BASE64.",
-      )
-    end
-
     api_key = app_store_connect_api_key(
       key_id: key_id,
       issuer_id: issuer_id,
       key_filepath: key_path,
     )
 
+    profile_name = refresh_profile_via_api(api_key, profile_path)
+    UI.message("Using provisioning profile: #{profile_name}")
+
     next_build = (latest_testflight_build_number(
       api_key: api_key,
-      app_identifier: "space.proplane.app",
+      app_identifier: APP_IDENTIFIER,
       initial_build_number: 6,
     ).to_i + 1).to_s
 
@@ -84,7 +127,7 @@ platform :ios do
       use_automatic_signing: false,
       code_sign_identity: "Apple Distribution",
       profile_name: profile_name,
-      team_id: "8FH3GVHCZ9",
+      team_id: TEAM_ID,
     )
 
     build_app(
@@ -95,9 +138,9 @@ platform :ios do
       xcargs: "CURRENT_PROJECT_VERSION=#{next_build}",
       export_options: {
         signingStyle: "manual",
-        teamID: "8FH3GVHCZ9",
+        teamID: TEAM_ID,
         provisioningProfiles: {
-          "space.proplane.app" => profile_name,
+          APP_IDENTIFIER => profile_name,
         },
       },
       output_directory: "build",
