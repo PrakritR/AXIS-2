@@ -4,6 +4,7 @@ import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
+import { PortalSessionKeepalive } from "@/components/portal/portal-session-keepalive";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalHorizontalScrollRoot } from "@/components/portal/portal-horizontal-scroll";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
@@ -38,6 +39,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         <SurfaceThemeDefault theme="light" />
         <PublicHomePrefetch />
         <PortalDataPrefetch kind="pro" />
+        <PortalSessionKeepalive />
         <PropertyPipelineAccountSync />
         <AccountLinksSync />
         <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">

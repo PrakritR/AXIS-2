@@ -3773,6 +3773,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     householdChargeId: c.id,
     propertyName,
     roomNumber: "—",
+    chargeKind: c.kind,
     residentName: c.residentName,
     residentEmail: c.residentEmail,
     chargeTitle: c.title,

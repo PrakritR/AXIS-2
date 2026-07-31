@@ -835,10 +835,13 @@ export function ManagerResidents({
     });
   }, [selected, srTick]);
 
-  const residentLedgerRows = useMemo(
-    () => residentCharges.map((charge) => householdChargeToLedgerRow(charge)),
-    [residentCharges],
-  );
+  const residentLedgerRows = useMemo(() => {
+    const roomNumber = selected?.roomLabel?.replace(/^room\s+/i, "").trim() ?? "";
+    return residentCharges.map((charge) => {
+      const row = householdChargeToLedgerRow(charge);
+      return roomNumber ? { ...row, roomNumber } : row;
+    });
+  }, [residentCharges, selected?.roomLabel]);
 
   const residentChargeCounts = useMemo(() => {
     const counts: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };

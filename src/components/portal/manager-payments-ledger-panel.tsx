@@ -24,6 +24,11 @@ import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-me
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, legacyChargeIdAliases, markHouseholdChargePaid, markHouseholdChargePending, publicChargeIdForUrl, updateHouseholdChargeAmount } from "@/lib/household-charges";
+import {
+  parseShortTermStayChargeTitle,
+  shortTermStayChargeTitle,
+  shortTermStayTotalAmount,
+} from "@/lib/short-term-stay-pricing";
 import { Input } from "@/components/ui/input";
 import {
   PortalBulkPaymentReminderPreviewModal,
@@ -95,6 +100,16 @@ function dueDateInputToLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatLedgerRoomLabel(roomNumber: string): string {
+  const trimmed = roomNumber.trim();
+  if (!trimmed || trimmed === "—") return "";
+  return /^room\b/i.test(trimmed) ? trimmed : `Room ${trimmed}`;
+}
+
+function isStayTotalRow(row: DemoManagerPaymentLedgerRow): boolean {
+  return row.chargeKind === "stay_total" || /^Stay total \(/i.test(row.chargeTitle);
+}
+
 export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
@@ -134,6 +149,7 @@ export function ManagerPaymentsLedgerPanel({
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [editDueDateDraft, setEditDueDateDraft] = useState("");
+  const [editNightsDraft, setEditNightsDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
   const [bulkReminderPreview, setBulkReminderPreview] = useState<BulkPaymentReminderPreviewItem[] | null>(null);
@@ -180,6 +196,7 @@ export function ManagerPaymentsLedgerPanel({
     setEditingRowId(null);
     setEditAmountDraft("");
     setEditDueDateDraft("");
+    setEditNightsDraft("");
   }, [activeBucket, rowIdsKey]);
 
   const toggleSelected = (id: string) => {
@@ -264,27 +281,49 @@ export function ManagerPaymentsLedgerPanel({
     setEditingRowId(row.id);
     setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
     setEditDueDateDraft(dueDateDisplayToInputValue(row.dueDate));
+    if (isStayTotalRow(row)) {
+      const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+      setEditNightsDraft(parsed ? String(parsed.nights) : "");
+    } else {
+      setEditNightsDraft("");
+    }
   };
 
   const cancelEdit = () => {
     setEditingRowId(null);
     setEditAmountDraft("");
     setEditDueDateDraft("");
+    setEditNightsDraft("");
   };
 
   const saveEdit = (row: DemoManagerPaymentLedgerRow) => {
     if (!row.householdChargeId) return;
-    const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
+    let amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
     if (!Number.isFinite(amt) || amt < 0) {
       showToast("Enter a valid amount.");
       return;
+    }
+    let title: string | undefined;
+    if (isStayTotalRow(row)) {
+      const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+      const nights = parseInt(editNightsDraft.trim(), 10);
+      if (!parsed) {
+        showToast("Could not read this stay charge.");
+        return;
+      }
+      if (!Number.isFinite(nights) || nights < 1) {
+        showToast("Enter a valid number of nights.");
+        return;
+      }
+      amt = shortTermStayTotalAmount(parsed.nightlyRate, nights);
+      title = shortTermStayChargeTitle(nights, parsed.nightlyRate);
     }
     const dueLabel = editDueDateDraft.trim() ? dueDateInputToLabel(editDueDateDraft) : undefined;
     if (!dueLabel && editDueDateDraft.trim()) {
       showToast("Enter a valid due date.");
       return;
     }
-    if (updateHouseholdChargeAmount(row.householdChargeId, amt, managerUserId, undefined, dueLabel)) {
+    if (updateHouseholdChargeAmount(row.householdChargeId, amt, managerUserId, title, dueLabel)) {
       showToast("Payment updated.");
       onRowsChanged?.();
       onScheduleChanged?.();
@@ -300,6 +339,14 @@ export function ManagerPaymentsLedgerPanel({
 
   const renderAmountOwedCell = (row: DemoManagerPaymentLedgerRow) => {
     if (editingRowId === row.id && row.householdChargeId) {
+      if (isStayTotalRow(row)) {
+        const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+        return (
+          <span className="tabular-nums font-semibold text-foreground">
+            ${shortTermStayTotalAmount(parsed?.nightlyRate ?? 0, parseInt(editNightsDraft, 10) || 0).toFixed(2)}
+          </span>
+        );
+      }
       return (
         <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
           <span className="text-xs text-muted">$</span>
@@ -523,7 +570,39 @@ export function ManagerPaymentsLedgerPanel({
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
 
+  const renderStayNightsCell = (row: DemoManagerPaymentLedgerRow) => {
+    if (editingRowId !== row.id || !row.householdChargeId || !isStayTotalRow(row)) return null;
+    const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+    return (
+      <div onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs font-medium text-muted">Nights</p>
+        <Input
+          className="mt-1 h-8 w-24 rounded-lg px-2 py-1 text-xs tabular-nums"
+          inputMode="numeric"
+          value={editNightsDraft}
+          onChange={(e) => {
+            const next = e.target.value.replace(/[^\d]/g, "");
+            setEditNightsDraft(next);
+            if (parsed && next) {
+              const nights = parseInt(next, 10);
+              if (Number.isFinite(nights) && nights >= 1) {
+                setEditAmountDraft(shortTermStayTotalAmount(parsed.nightlyRate, nights).toFixed(2));
+              }
+            }
+          }}
+          aria-label="Number of nights"
+        />
+        {parsed ? (
+          <p className="mt-1 text-xs text-muted">
+            {parsed.nightlyRate % 1 === 0 ? `$${parsed.nightlyRate}` : `$${parsed.nightlyRate.toFixed(2)}`} / night
+          </p>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderPaymentDetailPanel = (row: DemoManagerPaymentLedgerRow) => {
+    const roomLabel = formatLedgerRoomLabel(row.roomNumber);
     return (
       <div className="space-y-4 px-3 py-2 text-sm sm:px-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -531,13 +610,23 @@ export function ManagerPaymentsLedgerPanel({
             <p className="text-xs font-medium text-muted">Property</p>
             <p className="text-foreground">{row.propertyName}</p>
           </div>
+          {roomLabel ? (
+            <div>
+              <p className="text-xs font-medium text-muted">Room</p>
+              <p className="text-foreground">{roomLabel}</p>
+            </div>
+          ) : null}
           <div>
             <p className="text-xs font-medium text-muted">Status</p>
             <p className="font-medium text-foreground">{row.statusLabel}</p>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs font-medium text-muted">Charge</p>
-            <p className="text-foreground">{row.chargeTitle}</p>
+            {editingRowId === row.id && isStayTotalRow(row) ? (
+              renderStayNightsCell(row)
+            ) : (
+              <p className="text-foreground">{row.chargeTitle}</p>
+            )}
           </div>
           <div>
             <p className="text-xs font-medium text-muted">Due date</p>
@@ -1056,24 +1145,58 @@ export function ManagerPaymentsLedgerPanel({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <p className="text-sm font-semibold text-foreground">{row.residentName}</p>
-                    <p className="text-xs text-muted">{row.chargeTitle}</p>
-                    <p className="mt-0.5 text-xs text-muted">{row.propertyName}</p>
+                    <p className="text-xs text-muted">
+                      {isStayTotalRow(row) && editingRowId === row.id
+                        ? shortTermStayChargeTitle(
+                            parseInt(editNightsDraft, 10) || parseShortTermStayChargeTitle(row.chargeTitle)?.nights || 0,
+                            parseShortTermStayChargeTitle(row.chargeTitle)?.nightlyRate ?? 0,
+                          )
+                        : row.chargeTitle}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {[row.propertyName, formatLedgerRoomLabel(row.roomNumber)].filter(Boolean).join(" · ")}
+                    </p>
                     <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
-                          Amount
-                        </label>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs text-muted">$</span>
+                      {isStayTotalRow(row) ? (
+                        <div>
+                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                            Nights
+                          </label>
                           <Input
                             className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
-                            inputMode="decimal"
-                            value={editAmountDraft}
-                            onChange={(e) => setEditAmountDraft(e.target.value)}
-                            aria-label="Amount owed"
+                            inputMode="numeric"
+                            value={editNightsDraft}
+                            onChange={(e) => {
+                              const next = e.target.value.replace(/[^\d]/g, "");
+                              setEditNightsDraft(next);
+                              const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+                              if (parsed && next) {
+                                const nights = parseInt(next, 10);
+                                if (Number.isFinite(nights) && nights >= 1) {
+                                  setEditAmountDraft(shortTermStayTotalAmount(parsed.nightlyRate, nights).toFixed(2));
+                                }
+                              }
+                            }}
+                            aria-label="Number of nights"
                           />
                         </div>
-                      </div>
+                      ) : (
+                        <div>
+                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+                            Amount
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted">$</span>
+                            <Input
+                              className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
+                              inputMode="decimal"
+                              value={editAmountDraft}
+                              onChange={(e) => setEditAmountDraft(e.target.value)}
+                              aria-label="Amount owed"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
                           Due date

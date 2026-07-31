@@ -149,6 +149,8 @@ export type DemoManagerPaymentLedgerRow = {
   id: string;
   propertyName: string;
   roomNumber: string;
+  /** Household charge kind when the row is backed by a charge (e.g. stay_total). */
+  chargeKind?: string;
   residentName: string;
   residentEmail?: string;
   chargeTitle: string;

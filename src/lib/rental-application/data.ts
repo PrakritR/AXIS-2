@@ -295,6 +295,22 @@ export function effectiveRoomAvailabilityLabel(
   return "Available now";
 }
 
+/** Compact room label for payment ledger rows (no rent suffix). */
+export function ledgerRoomNumberForApplication(row: {
+  assignedRoomChoice?: string;
+  application?: { roomChoice1?: string };
+  manualResidentDetails?: { roomNumber?: string };
+}): string {
+  const raw =
+    row.manualResidentDetails?.roomNumber?.trim() ||
+    row.assignedRoomChoice?.trim() ||
+    row.application?.roomChoice1?.trim() ||
+    "";
+  if (!raw) return "";
+  const label = getRoomChoiceLabel(raw).split(" · ")[0]?.trim() || raw;
+  return label.replace(/^room\s+/i, "").trim();
+}
+
 /** Human-readable label for a 1st/2nd/3rd room choice (legacy property id or `mgr-*::roomId`). */
 export function getRoomChoiceLabel(roomChoiceValue: string): string {
   const t = roomChoiceValue.trim();

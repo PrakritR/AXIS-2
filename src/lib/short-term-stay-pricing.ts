@@ -31,3 +31,13 @@ export function shortTermStayChargeTitle(nights: number, nightlyRate: number): s
   const nightLabel = nights === 1 ? "1 night" : `${nights} nights`;
   return `Stay total (${nightLabel} × ${rateLabel})`;
 }
+
+/** Inverse of {@link shortTermStayChargeTitle} for manager payment edits. */
+export function parseShortTermStayChargeTitle(title: string): { nights: number; nightlyRate: number } | null {
+  const match = title.trim().match(/^Stay total \((\d+) nights? × (\$[\d.]+)\)$/i);
+  if (!match) return null;
+  const nights = Number(match[1]);
+  const nightlyRate = parseMoneyAmount(match[2] ?? "");
+  if (!(nights > 0) || !(nightlyRate > 0)) return null;
+  return { nights, nightlyRate };
+}

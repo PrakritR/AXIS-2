@@ -11,7 +11,7 @@ import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/componen
 import { FilterCollapsibleSection, FilterFieldsAccordion, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -790,7 +790,7 @@ export function ManagerFinancesPanel({
         rowFilters.vendor,
       ])}
       desktopPresentation="panel"
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={resetFinanceFilters}
       dataAttr="finances-filter-sheet-open"
     >
@@ -906,14 +906,18 @@ export function ManagerFinancesPanel({
 
   const financesMobileActionsRow =
     showScopedReportFilters || financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
-      <div className="mb-3 flex flex-col gap-2 md:hidden" data-slot="finances-mobile-actions">
-        {showScopedReportFilters ? <div className="min-w-0">{financesFilterSheet}</div> : null}
-        <div className="flex min-w-0 flex-wrap items-stretch gap-2 [&_a]:min-w-0 [&_button]:min-w-0">
-          {financesFormalPdfLink ? <div className="min-w-0 flex-1">{financesFormalPdfLink}</div> : null}
-          {financesExportButtons ? <div className="min-w-0 shrink-0">{financesExportButtons}</div> : null}
-          {financesPrimaryButton ? <div className="min-w-0 flex-1">{financesPrimaryButton}</div> : null}
-        </div>
-      </div>
+      <PortalPageHeaderMobileActionsRow
+        filter={showScopedReportFilters ? financesFilterSheet : undefined}
+        actions={
+          financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
+            <PortalSectionActionRow variant="header" className="gap-2">
+              {financesFormalPdfLink}
+              {financesExportButtons}
+              {financesPrimaryButton}
+            </PortalSectionActionRow>
+          ) : undefined
+        }
+      />
     ) : null;
 
   return (

@@ -3,6 +3,7 @@ import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantRail } from "@/components/portal/portal-assistant-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
+import { PortalSessionKeepalive } from "@/components/portal/portal-session-keepalive";
 import { ResidentPreApplicationGuard } from "@/components/portal/resident-pre-application-guard";
 import { ResidentTourLinkOnMount } from "@/components/portal/resident-tour-link-on-mount";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -50,6 +51,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
       <PortalDataPrefetch kind="resident" />
+      <PortalSessionKeepalive />
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSkipLink />
         <PortalSidebar

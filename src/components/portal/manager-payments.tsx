@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -41,7 +41,7 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser, collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-access";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { ledgerRoomNumberForApplication } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
@@ -199,7 +199,7 @@ function PaymentsFilterSheet({
       activeCount={activeCount}
       compactPanel
       desktopPresentation="panel"
-      className="min-w-0 shrink-0"
+      className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
     >
@@ -412,9 +412,8 @@ export function ManagerPayments({
           const rowPropertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
           return rowEmail === chargeEmail && rowPropertyId === charge.propertyId;
         });
-        const roomChoice = application?.assignedRoomChoice?.trim() || application?.application?.roomChoice1?.trim() || "";
-        const roomLabel = getRoomChoiceLabel(roomChoice).split(" · ")[0]?.trim() || "";
-        return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
+        const roomNumber = application ? ledgerRoomNumberForApplication(application) : "";
+        return roomNumber ? { ...ledgerRow, roomNumber } : ledgerRow;
       });
   }, [userId, ledgerDataVersion]);
 
@@ -651,7 +650,14 @@ export function ManagerPayments({
   const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
 
   const paymentsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={paymentsFilterControl} actions={paymentsHeaderActions} />
+    <PortalPageHeaderMobileActionsRow
+      filter={paymentsFilterControl}
+      actions={
+        <PortalSectionActionRow variant="header" className="gap-2">
+          {paymentsHeaderActions}
+        </PortalSectionActionRow>
+      }
+    />
   );
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {

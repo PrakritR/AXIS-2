@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseShortTermStayChargeTitle,
   shortTermNightlyRate,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
@@ -53,5 +54,22 @@ describe("shortTermStayChargeTitle", () => {
     expect(shortTermStayChargeTitle(6, 85)).toBe("Stay total (6 nights × $85)");
     expect(shortTermStayChargeTitle(1, 85)).toBe("Stay total (1 night × $85)");
     expect(shortTermStayChargeTitle(4, 50)).toBe("Stay total (4 nights × $50)");
+  });
+});
+
+describe("parseShortTermStayChargeTitle", () => {
+  it("parses stay total titles", () => {
+    expect(parseShortTermStayChargeTitle("Stay total (5 nights × $50)")).toEqual({
+      nights: 5,
+      nightlyRate: 50,
+    });
+    expect(parseShortTermStayChargeTitle("Stay total (1 night × $85)")).toEqual({
+      nights: 1,
+      nightlyRate: 85,
+    });
+  });
+
+  it("returns null for non-stay titles", () => {
+    expect(parseShortTermStayChargeTitle("Security deposit")).toBeNull();
   });
 });
