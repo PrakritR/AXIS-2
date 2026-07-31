@@ -35,13 +35,21 @@ describe("resident portal redesign completeness", () => {
       expect(ids).toContain("communication");
     });
 
-    it("approved workspace adds services to the limited set", () => {
-      const limited = new Set(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS));
-      const approved = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-      for (const id of limited) {
-        expect(approved).toContain(id);
-      }
-      expect(approved).toContain("services");
+    it("post-lease workspace leads with services and payments", () => {
+      const ids = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
+      expect(ids[0]).toBe("services");
+      expect(ids[1]).toBe("payments");
+      expect(ids).toContain("dashboard");
+      expect(ids).toContain("communication");
+    });
+
+    it("pre-lease workspace omits services and payments", () => {
+      const ids = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
+      expect(ids).not.toContain("services");
+      expect(ids).not.toContain("payments");
+      expect(ids).toContain("applications");
+      expect(ids).toContain("lease");
+      expect(ids).toContain("dashboard");
     });
 
     it("application-phase route guard allows communication and blocks lease", () => {
@@ -146,7 +154,7 @@ describe("resident portal redesign completeness", () => {
 
     it("dashboard openCount respects customize visibility", () => {
       const src = readPanel("resident-dashboard.tsx");
-      expect(src).toMatch(/visibility\.payments \? pendingCharges\.length : 0/);
+      expect(src).toMatch(/canUseFullPortal && visibility\.payments \? pendingCharges\.length : 0/);
       expect(src).toMatch(/visibility\.services && canUseFullPortal/);
       expect(src).toMatch(/visibility\.communication \? inboxThreads\.length : 0/);
     });

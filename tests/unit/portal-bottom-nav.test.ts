@@ -4,6 +4,7 @@ import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
   NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
   nativeBottomBarEnabledForKind,
@@ -57,7 +58,7 @@ describe("orderNativeBottomNavItems", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
     expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
-    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
+    expect(ordered.indexOf("communication")).toBeLessThan(ordered.indexOf("documents"));
     expect(ordered.slice(0, NATIVE_BOTTOM_NAV_RESIDENT_ORDER.length)).toEqual([
       ...NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
     ]);
@@ -89,18 +90,15 @@ describe("splitNativeBottomNavItems", () => {
     expect(primary.length + overflow.length).toBe(items.length - 2);
   });
 
-  it("curates the resident bar (limited) to the primary set minus the missing 'services' section", () => {
+  it("curates the resident bar (pre-lease) to the pre-lease primary set", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    // Limited tier has no "services" section — splitNativeBottomNavItems intersects
-    // with real sections, so the bar gracefully shows the other primary tabs.
-    expect(primary.map((item) => item.section)).toEqual(
-      NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.filter((section) => section !== "services"),
-    );
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
-  it("curates the resident bar (approved) to the primary set and overflows the rest", () => {
+  it("curates the resident bar (post-lease) to the primary set and overflows the rest", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
