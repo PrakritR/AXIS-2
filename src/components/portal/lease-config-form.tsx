@@ -26,8 +26,10 @@ export function leaseModeFromDraft(draft: LeaseConfigDraft): "standard" | "custo
   return draft.leaseConfigMode === "custom" ? "custom" : "standard";
 }
 
-export function leaseKindFromDraft(draft: LeaseConfigDraft): "terms" | "document" {
-  return draft.leaseCustomKind === "document" ? "document" : "terms";
+export function leaseKindFromDraft(draft: LeaseConfigDraft): "terms" | "document" | "builder" {
+  if (draft.leaseCustomKind === "document") return "document";
+  if (draft.leaseCustomKind === "builder") return "builder";
+  return "terms";
 }
 
 /**

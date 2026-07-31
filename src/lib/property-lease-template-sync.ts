@@ -74,7 +74,7 @@ export function buildLeaseTemplateSeeds(
   const fixed = allowed.filter((t): t is (typeof FIXED_LEASE_TERMS)[number] =>
     (FIXED_LEASE_TERMS as readonly string[]).includes(t),
   );
-  const fixedKind = isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental";
+  const fixedKind: PropertyLeaseTemplateKind = "long-term";
   for (const term of fixed) {
     seeds.push({
       seedKey: listingSeedKeyForFixedLeaseTerm(term),
@@ -87,7 +87,7 @@ export function buildLeaseTemplateSeeds(
   if (allowed.includes("Month-to-Month")) {
     seeds.push({
       seedKey: "month-to-month",
-      kind: "month-to-month",
+      kind: "long-term",
       label: "Month-to-month lease",
       applicationLeaseTerms: ["Month-to-Month"],
     });
@@ -114,7 +114,7 @@ export function buildLeaseTemplateSeeds(
   if (seeds.length === 0) {
     seeds.push({
       seedKey: "primary",
-      kind: isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental",
+      kind: isEntireHomeListing(sub) ? "long-term" : "long-term",
       label: "Primary lease",
       applicationLeaseTerms: allowed.length > 0 ? [...allowed] : [],
     });
@@ -130,7 +130,7 @@ function appendDefaultHouseLeaseSeeds(
 ): LeaseTemplateSeed[] {
   const out = [...seeds];
   const keys = new Set(out.map((s) => s.seedKey));
-  const fixedKind = isEntireHomeListing(sub) ? "corporate-furnished" : "room-rental";
+  const fixedKind: PropertyLeaseTemplateKind = "long-term";
   if (!keys.has("fixed-12-month")) {
     out.push({
       seedKey: "fixed-12-month",
@@ -253,7 +253,11 @@ export function resolvePropertyLeaseTemplateForApplication(
   }
 
   if (term === "Month-to-Month") {
-    return templates.find((t) => t.kind === "month-to-month") ?? templates[0]!;
+    return (
+      templates.find((t) => t.listingSeedKey === "month-to-month") ??
+      templates.find((t) => t.kind === "long-term") ??
+      templates[0]!
+    );
   }
   if (term === SHORT_TERM_LEASE_TERM) {
     return (
@@ -268,7 +272,7 @@ export function resolvePropertyLeaseTemplateForApplication(
       templates.find((t) => t.listingSeedKey === fixedKey) ??
       templates.find((t) => (t.applicationLeaseTerms ?? []).includes(term)) ??
       templates.find((t) => t.listingSeedKey === "fixed-term" && (t.applicationLeaseTerms ?? []).includes(term)) ??
-      templates.find((t) => t.kind === "room-rental" || t.kind === "corporate-furnished") ??
+      templates.find((t) => t.kind === "long-term") ??
       templates[0]!
     );
   }

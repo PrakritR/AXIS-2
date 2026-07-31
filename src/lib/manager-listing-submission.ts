@@ -466,7 +466,7 @@ export type ManagerListingSubmissionV1 = {
    */
   leaseConfigMode?: "standard" | "custom";
   /** Which custom lease source applies when `leaseConfigMode` is "custom". Default "terms". */
-  leaseCustomKind?: "terms" | "document";
+  leaseCustomKind?: "terms" | "document" | "builder";
   /** Manager-authored clauses merged into the Axis generated lease as an Additional Provisions addendum. */
   customLeaseTerms?: string;
   /**
@@ -1461,7 +1461,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         : undefined,
     leaseConfigMode:
       sub.leaseConfigMode === "standard" || sub.leaseConfigMode === "custom" ? sub.leaseConfigMode : undefined,
-    leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : sub.leaseCustomKind === "terms" ? "terms" : undefined,
+    leaseCustomKind:
+      sub.leaseCustomKind === "document"
+        ? "document"
+        : sub.leaseCustomKind === "builder"
+          ? "builder"
+          : sub.leaseCustomKind === "terms"
+            ? "terms"
+            : undefined,
     customLeaseTerms: typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms : "",
     leaseUtilities: normalizeLeaseUtilities((sub as { leaseUtilities?: unknown }).leaseUtilities),
     leaseTemplateDocUrl: typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl || null : null,

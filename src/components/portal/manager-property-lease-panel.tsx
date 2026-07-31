@@ -37,8 +37,13 @@ function leaseDocumentSummary(template: PropertyLeaseTemplate): string {
   const source = propertyLeaseSourceFromTemplate(template);
   if (source === "custom_format") {
     return template.leaseTemplateDocName?.trim()
-      ? `Your PDF · ${template.leaseTemplateDocName}`
-      : "Your PDF · not uploaded yet";
+      ? `Parsed PDF · ${template.leaseTemplateDocName}`
+      : "Uploaded PDF · not parsed yet";
+  }
+  if (source === "custom_builder") {
+    return template.leaseTemplateHtmlOverride?.trim()
+      ? "Custom builder · edited"
+      : "Custom builder · blank shell";
   }
   if (source === "custom_comments") {
     const preview = template.customLeaseTerms?.trim();

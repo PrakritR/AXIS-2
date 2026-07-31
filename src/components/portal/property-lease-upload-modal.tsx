@@ -83,7 +83,7 @@ export function PropertyLeaseUploadModal({
     <Modal
       open={open}
       title="Upload lease"
-      description="Your PDF becomes the lease document. PropLane adds placement details and e-signatures at signing."
+      description="Your PDF is parsed into editable PropPlane sections. PropLane adds placement details and e-signatures at signing."
       onClose={close}
       panelClassName="max-w-md"
       footer={

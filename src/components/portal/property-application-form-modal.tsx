@@ -42,7 +42,7 @@ export function PropertyApplicationFormModal({
   onSave: (nextTemplates: PropertyApplicationTemplate[]) => boolean;
 }) {
   const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<PropertyLeaseTemplateKind>("room-rental");
+  const [kind, setKind] = useState<PropertyLeaseTemplateKind>("long-term");
   const [error, setError] = useState<string | null>(null);
 
   const typeMeta = useMemo(
@@ -57,7 +57,7 @@ export function PropertyApplicationFormModal({
       setKind(template.kind);
     } else {
       setLabel("");
-      setKind("room-rental");
+      setKind("long-term");
     }
     setError(null);
   }, [open, mode, template]);

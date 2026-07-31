@@ -5,17 +5,16 @@ import {
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
 
-/** Agreement use-case for a property lease template (not a duration preset). */
-export type PropertyLeaseTemplateKind =
-  | "room-rental"
-  | "month-to-month"
-  | "short-term"
-  | "sublease"
-  | "corporate-furnished"
-  | "custom";
+/** Standard PropLane lease formats — plus custom builder. */
+export type PropertyLeaseTemplateKind = "short-term" | "long-term" | "time-based" | "custom";
 
 /** Legacy stored values — normalized on read. */
-type LegacyLeaseTemplateKind = "standard";
+type LegacyLeaseTemplateKind =
+  | "standard"
+  | "room-rental"
+  | "month-to-month"
+  | "sublease"
+  | "corporate-furnished";
 
 export type StoredPropertyLeaseTemplateKind = PropertyLeaseTemplateKind | LegacyLeaseTemplateKind;
 
@@ -39,7 +38,7 @@ export type PropertyLeaseTemplate = {
   /** Application lease-term choices that route applicants to this template. */
   applicationLeaseTerms?: string[];
   leaseConfigMode: "standard" | "custom";
-  leaseCustomKind: "terms" | "document";
+  leaseCustomKind: "terms" | "document" | "builder";
   customLeaseTerms: string;
   leaseTemplateDocUrl: string | null;
   leaseTemplateDocName: string;
@@ -56,39 +55,27 @@ export const PROPERTY_LEASE_TYPE_OPTIONS: readonly {
   defaultLabel: string;
 }[] = [
   {
-    id: "room-rental",
-    label: "Room rental",
-    description: "Standard shared-housing lease generated from the approved application.",
-    defaultLabel: "Room rental lease",
-  },
-  {
-    id: "month-to-month",
-    label: "Month-to-month",
-    description: "Rolling monthly tenancy with notice terms suited to flexible stays.",
-    defaultLabel: "Month-to-month lease",
-  },
-  {
     id: "short-term",
-    label: "Short-term stay",
-    description: "Guest or furnished short stay with check-in/out and house rules.",
-    defaultLabel: "Short-term stay lease",
+    label: "Short-term",
+    description: "Guest or furnished stay with check-in/out dates and nightly or stay-total rent.",
+    defaultLabel: "Short-term lease",
   },
   {
-    id: "sublease",
-    label: "Sublease",
-    description: "Approved tenant sublease or roommate transfer agreement.",
-    defaultLabel: "Sublease agreement",
+    id: "long-term",
+    label: "Long-term",
+    description: "Standard fixed-term or month-to-month tenancy generated from the approved application.",
+    defaultLabel: "Long-term lease",
   },
   {
-    id: "corporate-furnished",
-    label: "Corporate / furnished",
-    description: "Company placement, relocation, or furnished rental arrangement.",
-    defaultLabel: "Corporate lease",
+    id: "time-based",
+    label: "Time-based",
+    description: "Hourly or shift-based occupancy with time-metered rent and flexible schedules.",
+    defaultLabel: "Time-based lease",
   },
   {
     id: "custom",
-    label: "Custom",
-    description: "Any other arrangement — give it a name your team will recognize.",
+    label: "Custom builder",
+    description: "Build your own lease from a blank PropLane shell — add sections and clauses yourself.",
     defaultLabel: "Custom lease",
   },
 ] as const;
@@ -96,17 +83,26 @@ export const PROPERTY_LEASE_TYPE_OPTIONS: readonly {
 /** @deprecated Use PROPERTY_LEASE_TYPE_OPTIONS */
 export const PROPERTY_LEASE_TEMPLATE_KIND_OPTIONS = PROPERTY_LEASE_TYPE_OPTIONS;
 
+const LEGACY_LEASE_KIND_MAP: Record<LegacyLeaseTemplateKind, PropertyLeaseTemplateKind> = {
+  standard: "long-term",
+  "room-rental": "long-term",
+  "month-to-month": "long-term",
+  sublease: "long-term",
+  "corporate-furnished": "long-term",
+};
+
 export function normalizeLeaseTemplateKind(kind: string | undefined | null): PropertyLeaseTemplateKind {
-  if (kind === "standard") return "room-rental";
+  if (!kind) return "long-term";
+  if (kind in LEGACY_LEASE_KIND_MAP) return LEGACY_LEASE_KIND_MAP[kind as LegacyLeaseTemplateKind];
   if (PROPERTY_LEASE_TYPE_OPTIONS.some((o) => o.id === kind)) {
     return kind as PropertyLeaseTemplateKind;
   }
-  return "room-rental";
+  return "long-term";
 }
 
 export function propertyLeaseTypeLabel(kind: string | undefined | null): string {
   const normalized = normalizeLeaseTemplateKind(kind);
-  return PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === normalized)?.label ?? "Room rental";
+  return PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === normalized)?.label ?? "Long-term";
 }
 
 export function makePropertyLeaseTemplateId(): string {
@@ -189,10 +185,15 @@ export function readPropertyLeaseTemplates(
   return [
     {
       id: "lease-tpl-default",
-      kind: "room-rental",
+      kind: "long-term",
       label: "Primary lease",
       leaseConfigMode: sub.leaseConfigMode === "custom" ? "custom" : "standard",
-      leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : "terms",
+      leaseCustomKind:
+        sub.leaseCustomKind === "document"
+          ? "document"
+          : sub.leaseCustomKind === "builder"
+            ? "builder"
+            : "terms",
       customLeaseTerms: typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms : "",
       leaseTemplateDocUrl:
         typeof sub.leaseTemplateDocUrl === "string" && sub.leaseTemplateDocUrl.trim()
@@ -236,7 +237,6 @@ export function syncLegacyLeaseFieldsFromTemplates(
 
 /** Application lease-term hint when this template is selected. */
 export function templateKindLeaseTermHint(kind: PropertyLeaseTemplateKind): string | null {
-  if (kind === "month-to-month") return "Month-to-Month";
   return null;
 }
 

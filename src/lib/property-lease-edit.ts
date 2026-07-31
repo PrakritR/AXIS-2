@@ -1,6 +1,7 @@
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
 import type { PropertyLeaseTemplate } from "@/lib/property-lease-templates";
+import { buildCustomBuilderLeaseHtml } from "@/lib/lease-pdf-parse";
 import { prependLeaseHtmlSection } from "@/lib/lease-html-sections";
 import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 
@@ -13,9 +14,13 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** UI-facing document source — legacy custom_comments maps to PropLane default editing. */
-export function normalizePropertyLeaseDocumentSource(source: PropertyLeaseSource): "axis_default" | "custom_format" {
-  return source === "custom_format" ? "custom_format" : "axis_default";
+/** UI-facing document source — uploaded PDF vs everything else editable as HTML. */
+export function normalizePropertyLeaseDocumentSource(
+  source: PropertyLeaseSource,
+): "axis_default" | "custom_format" | "custom_builder" {
+  if (source === "custom_format") return "custom_format";
+  if (source === "custom_builder") return "custom_builder";
+  return "axis_default";
 }
 
 function submissionFromTemplate(
@@ -105,6 +110,10 @@ export function resolvePropertyLeaseEditHtml(args: {
     const docUrl = args.draft.leaseTemplateDocUrl?.trim();
     if (!docUrl) return "";
     return buildUploadedLeaseEditableHtml(docUrl, args.draft.leaseTemplateDocName ?? "Uploaded lease");
+  }
+
+  if (normalizedSource === "custom_builder") {
+    return buildCustomBuilderLeaseHtml(args.draft.leaseTemplateDocName ?? "Custom lease");
   }
 
   const previewSub = submissionFromTemplate(args.sub, args.draft);

@@ -102,7 +102,7 @@ export function ManagerLeaseEditorModal({
   showToast: (m: string) => void;
 }) {
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFromSubmission(sub));
-  const [leaseKind, setLeaseKind] = useState<PropertyLeaseTemplateKind>("room-rental");
+  const [leaseKind, setLeaseKind] = useState<PropertyLeaseTemplateKind>("long-term");
   const [templateLabel, setTemplateLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   // The template picker uploads to the private bucket before it returns a URL;

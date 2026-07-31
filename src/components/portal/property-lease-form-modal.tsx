@@ -27,11 +27,12 @@ import {
   leaseSourceFromDraft,
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
+import { parseUploadedLeasePdf } from "@/lib/lease-template-parse.client";
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
 function validateLeaseDraft(draft: LeaseConfigDraft, source: PropertyLeaseSource): string | null {
-  if (source === "axis_default") return null;
+  if (source === "axis_default" || source === "custom_builder") return null;
   if (source === "custom_format") {
     return draft.leaseTemplateDocUrl?.trim()
       ? null
@@ -43,9 +44,15 @@ function validateLeaseDraft(draft: LeaseConfigDraft, source: PropertyLeaseSource
 }
 
 function draftFromTemplate(template: PropertyLeaseTemplate): LeaseConfigDraft {
+  const leaseCustomKind =
+    template.leaseCustomKind === "document"
+      ? "document"
+      : template.leaseCustomKind === "builder"
+        ? "builder"
+        : "terms";
   return {
     leaseConfigMode: template.leaseConfigMode,
-    leaseCustomKind: template.leaseCustomKind === "document" ? "document" : "terms",
+    leaseCustomKind,
     customLeaseTerms: template.customLeaseTerms ?? "",
     leaseTemplateDocUrl: template.leaseTemplateDocUrl ?? null,
     leaseTemplateDocName: template.leaseTemplateDocName ?? "",
@@ -79,12 +86,12 @@ export function PropertyLeaseFormModal({
   showToast: (message: string) => void;
 }) {
   const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<PropertyLeaseTemplateKind>("room-rental");
+  const [kind, setKind] = useState<PropertyLeaseTemplateKind>("long-term");
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFieldsFromLeaseSource("axis_default"));
   const [error, setError] = useState<string | null>(null);
   const [htmlOverride, setHtmlOverride] = useState("");
-  // The template picker uploads to the private bucket before it returns a URL;
   const [templateUploading, setTemplateUploading] = useState(false);
+  const [parsingLease, setParsingLease] = useState(false);
 
   const source = leaseSourceFromDraft(draft);
   const typeMeta = useMemo(
@@ -103,7 +110,12 @@ export function PropertyLeaseFormModal({
   const templateDraft = useMemo(
     () => ({
       leaseConfigMode: draft.leaseConfigMode ?? "standard",
-      leaseCustomKind: draft.leaseCustomKind === "document" ? ("document" as const) : ("terms" as const),
+      leaseCustomKind:
+        draft.leaseCustomKind === "document"
+          ? ("document" as const)
+          : draft.leaseCustomKind === "builder"
+            ? ("builder" as const)
+            : ("terms" as const),
       customLeaseTerms: draft.customLeaseTerms ?? "",
       leaseTemplateDocUrl: draft.leaseTemplateDocUrl ?? null,
       leaseTemplateDocName: draft.leaseTemplateDocName ?? "",
@@ -138,10 +150,18 @@ export function PropertyLeaseFormModal({
       return;
     }
     setLabel(PROPERTY_LEASE_TYPE_OPTIONS[0]!.defaultLabel);
-    setKind("room-rental");
+    setKind("long-term");
     setDraft(draftFieldsFromLeaseSource("axis_default"));
     setHtmlOverride("");
   }, [open, mode, template]);
+
+  const handleKindChange = (next: PropertyLeaseTemplateKind) => {
+    setKind(next);
+    if (next === "custom" && leaseSourceFromDraft(draft) === "axis_default") {
+      setDraft((d) => ({ ...d, ...draftFieldsFromLeaseSource("custom_builder") }));
+      setHtmlOverride("");
+    }
+  };
 
   useEffect(() => {
     if (!open || mode === "edit") return;
@@ -159,6 +179,26 @@ export function PropertyLeaseFormModal({
         setError(null);
         setHtmlOverride("");
         setDraft((d) => ({ ...d, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
+        if (dataUrl.startsWith("data:")) {
+          showToast("Lease uploaded. Parsing runs after save in demo mode.");
+          return;
+        }
+        setParsingLease(true);
+        void parseUploadedLeasePdf({ url: dataUrl, fileName, kind })
+          .then((result) => {
+            setHtmlOverride(result.html);
+            if (!mode || mode === "add") {
+              setKind(result.inferredKind);
+            }
+            showToast(
+              `Lease parsed into PropPlane format (${result.sectionCount} section${result.sectionCount === 1 ? "" : "s"}).`,
+            );
+          })
+          .catch((err) => {
+            console.error("property-lease-form-modal: parse failed", err);
+            showToast(err instanceof Error ? err.message : "Could not parse that lease PDF.");
+          })
+          .finally(() => setParsingLease(false));
       },
       showToast,
       setTemplateUploading,
@@ -191,7 +231,12 @@ export function PropertyLeaseFormModal({
     const trimmedLabel = label.trim() || typeMeta?.defaultLabel || "Lease";
     const leaseFields = {
       leaseConfigMode: draft.leaseConfigMode ?? "standard",
-      leaseCustomKind: draft.leaseCustomKind === "document" ? ("document" as const) : ("terms" as const),
+      leaseCustomKind:
+        draft.leaseCustomKind === "document"
+          ? ("document" as const)
+          : draft.leaseCustomKind === "builder"
+            ? ("builder" as const)
+            : ("terms" as const),
       customLeaseTerms: draft.customLeaseTerms ?? "",
       leaseTemplateDocUrl: draft.leaseTemplateDocUrl ?? null,
       leaseTemplateDocName: draft.leaseTemplateDocName ?? "",
@@ -246,11 +291,11 @@ export function PropertyLeaseFormModal({
             type="button"
             variant="primary"
             className="rounded-full"
-            disabled={templateUploading}
+            disabled={templateUploading || parsingLease}
             onClick={save}
             data-attr={mode === "add" ? "property-lease-add-save" : "property-lease-edit-save"}
           >
-            {templateUploading ? "Uploading…" : "Save lease"}
+            {templateUploading ? "Uploading…" : parsingLease ? "Parsing lease…" : "Save lease"}
           </Button>
         </ModalFooter>
       }
@@ -273,11 +318,11 @@ export function PropertyLeaseFormModal({
           source={source}
           onSourceChange={setSource}
           kind={kind}
-          onKindChange={setKind}
+          onKindChange={handleKindChange}
           dataAttrPrefix="property"
         />
 
-        {source !== "axis_default" ? (
+        {source !== "axis_default" && source !== "custom_builder" ? (
           <LeaseConfigForm
             variant="modal"
             embedded
