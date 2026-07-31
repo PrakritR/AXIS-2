@@ -6,6 +6,9 @@ import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 export const PORTAL_EMPTY_STATE_WRAP =
   "flex flex-col items-center justify-center rounded-2xl border border-border bg-accent/25 px-4 py-16 text-center sm:py-20";
 
+/** Empty state card connected below an inline unlock notice (shared top border). */
+export const PORTAL_EMPTY_STATE_STACKED_WRAP = `${PORTAL_EMPTY_STATE_WRAP} rounded-t-none border-t-0`;
+
 export type PortalEmptyIconKind =
   | "inbox"
   | "residents"
@@ -163,15 +166,17 @@ export function PortalEmptyState({
 }: {
   title: string;
   icon?: PortalEmptyIconKind | ReactNode;
-  /** `plain` drops the bordered card so copy sits on the page background. */
-  variant?: "card" | "plain";
+  /** `plain` drops the bordered card; `stacked` connects below an unlock notice. */
+  variant?: "card" | "plain" | "stacked";
 }) {
   const iconNode =
     typeof icon === "string" ? <PortalEmptyIcon kind={icon as PortalEmptyIconKind} /> : icon;
   const wrapClass =
     variant === "plain"
       ? "flex flex-col items-center justify-center px-4 py-16 text-center sm:py-20"
-      : PORTAL_EMPTY_STATE_WRAP;
+      : variant === "stacked"
+        ? PORTAL_EMPTY_STATE_STACKED_WRAP
+        : PORTAL_EMPTY_STATE_WRAP;
   return (
     <div className={wrapClass}>
       <AxisHeaderMarkTile>{iconNode}</AxisHeaderMarkTile>

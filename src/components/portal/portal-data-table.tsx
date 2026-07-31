@@ -328,11 +328,13 @@ import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 export function PortalDataTableEmpty({
   message,
   icon = "default",
+  variant = "card",
 }: {
   message: string;
   icon?: PortalEmptyIconKind;
   /** @deprecated Empty states use a single title line. */
   detail?: string;
+  variant?: "card" | "plain" | "stacked";
 }) {
-  return <PortalEmptyState title={message} icon={icon} />;
+  return <PortalEmptyState title={message} icon={icon} variant={variant} />;
 }

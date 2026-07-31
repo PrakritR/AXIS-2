@@ -14,6 +14,7 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_INLINE_UNLOCK_NOTICE_CLASS,
+  PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS,
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -1264,6 +1265,11 @@ export function ResidentServicesPanel({
     />
   );
 
+  const requestsLockedEmpty = !servicesUnlocked && activeTab === "requests" && sortedRequests.length === 0;
+  const workOrdersLockedEmpty = !servicesUnlocked && activeTab === "work-orders" && myRows.length === 0;
+  const lockedEmpty = requestsLockedEmpty || workOrdersLockedEmpty;
+  const emptyVariant = lockedEmpty ? ("stacked" as const) : ("card" as const);
+
   return (
     <ManagerPortalPageShell
       title="Services"
@@ -1276,11 +1282,18 @@ export function ResidentServicesPanel({
       compactFilterRow
       filterRow={servicesListChrome}
     >
-      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-services-mobile-actions">
+      <div
+        className={lockedEmpty ? "space-y-0" : undefined}
+        data-slot="resident-services-body"
+      >
+      <div
+        className={`md:hidden [&_button]:w-full${lockedEmpty ? "" : " mb-3"}`}
+        data-slot="resident-services-mobile-actions"
+      >
         {servicesHeaderAction}
       </div>
       {!servicesUnlocked ? (
-        <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+        <p className={lockedEmpty ? PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS : PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
           Maintenance and service requests become available once you and your manager have both signed.
         </p>
@@ -1289,7 +1302,7 @@ export function ResidentServicesPanel({
       {activeTab === "requests" ? (
         <div>
           {sortedRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No requests yet." icon="service" />
+            <PortalDataTableEmpty message="No requests yet." icon="service" variant={emptyVariant} />
           ) : filteredRequests.length === 0 ? (
             <PortalDataTableEmpty
               message={
@@ -1298,6 +1311,7 @@ export function ResidentServicesPanel({
                   : "No requests in this status yet."
               }
               icon="service"
+              variant={emptyVariant}
             />
           ) : (
         <>
@@ -1376,7 +1390,7 @@ export function ResidentServicesPanel({
       ) : (
         <div>
           {myRows.length === 0 ? (
-            <PortalDataTableEmpty icon="work-order" message="No work orders yet." />
+            <PortalDataTableEmpty icon="work-order" message="No work orders yet." variant={emptyVariant} />
           ) : searchedWorkOrderRows.length === 0 ? (
             <PortalDataTableEmpty
               icon="work-order"
@@ -1385,6 +1399,7 @@ export function ResidentServicesPanel({
                   ? "No work orders match your search."
                   : "No work orders in this status yet."
               }
+              variant={emptyVariant}
             />
           ) : (
             <>
@@ -1476,6 +1491,8 @@ export function ResidentServicesPanel({
           )}
         </div>
       )}
+
+      </div>
 
       {/* Maintenance modal — mount only while open so no file input leaks to the list page */}
       {modalMode === "maintenance" ? (

@@ -30,6 +30,9 @@ export const PORTAL_INLINE_STATUS_NOTICE_CLASS =
 
 export const PORTAL_INLINE_UNLOCK_NOTICE_CLASS = `${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-foreground`;
 
+/** Unlock notice flush against a stacked empty state below (no gap between banner and card). */
+export const PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS = `${PORTAL_INLINE_UNLOCK_NOTICE_CLASS} mb-0 rounded-b-none border-b-0`;
+
 /** Subtitle under the Dashboard heading — shared across all portal dashboards. */
 export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
   const trimmed = displayName?.trim();
