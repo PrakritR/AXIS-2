@@ -39,9 +39,19 @@ export function shouldRenderNativeOAuthBridge(request: NextRequest): boolean {
   return Boolean(code || error);
 }
 
-export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
+/** iOS Safari / SFSafariViewController user agents — never Android's Chrome Custom Tab. */
+function isIosUserAgent(userAgent: string): boolean {
+  return /iPad|iPhone|iPod/.test(userAgent) && !/Android/.test(userAgent);
+}
+
+export function nativeOAuthBridgeResponse(callbackUrl: URL, opts?: { isIos?: boolean }): NextResponse {
   const schemeUrl = httpsCallbackToNativeSchemeUrl(callbackUrl);
   const webFallbackUrl = httpsCallbackWithoutBridgeParam(callbackUrl);
+  // On iOS the bridge only ever renders inside SFSafariViewController (a legacy build
+  // that predates WebAuthSession). Auto-navigating to the web fallback there loads the
+  // whole portal inside in-app Safari — the exact "it's a website" defect. So iOS gets
+  // the deep-link attempt + a MANUAL "continue" link only, never the timed fallback.
+  const allowAutoWebFallback = opts?.isIos !== true;
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,9 +105,11 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
         }
       }
       openDeepLink();
-      setTimeout(function () {
-        if (!leftPage && document.visibilityState === "visible") continueInBrowser();
-      }, 1500);
+      if (${JSON.stringify(allowAutoWebFallback)}) {
+        setTimeout(function () {
+          if (!leftPage && document.visibilityState === "visible") continueInBrowser();
+        }, 1500);
+      }
     })();
   </script>
 </body>
@@ -114,5 +126,6 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
 
 export function maybeNativeOAuthBridgeResponse(request: NextRequest): NextResponse | null {
   if (!shouldRenderNativeOAuthBridge(request)) return null;
-  return nativeOAuthBridgeResponse(request.nextUrl);
+  const isIos = isIosUserAgent(request.headers.get("user-agent") ?? "");
+  return nativeOAuthBridgeResponse(request.nextUrl, { isIos });
 }

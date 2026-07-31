@@ -14,9 +14,33 @@ import {
 } from "@/lib/auth/native-oauth-callback";
 import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
 import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { WebAuthSession } from "@/lib/native/web-auth-session";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
+
+/**
+ * Shown when an iOS build predates the WebAuthSession plugin. Such a build has no
+ * chrome-free path for Google sign-in — the only alternative is SFSafariViewController,
+ * which renders the PropLane portal inside an in-app Safari browser (URL bar, share
+ * icon, Safari toolbar). We refuse that and ask the user to update instead.
+ */
+export const NATIVE_IOS_OAUTH_REBUILD_MESSAGE =
+  "Google sign-in needs the latest version of the PropLane app. Please update PropLane from TestFlight or the App Store, then try again. You can also continue with Apple.";
+
+/**
+ * iOS or Android? Prefers the live Capacitor bridge, then the `data-native` tag set in
+ * <head>. Unknown-but-native resolves to null so callers can pick the safer (iOS) path.
+ */
+function resolveNativeOAuthPlatform(): "ios" | "android" | null {
+  const platform = detectNativePlatformSync();
+  if (platform === "ios" || platform === "android") return platform;
+  if (typeof document !== "undefined") {
+    const tagged = document.documentElement.getAttribute("data-native");
+    if (tagged === "ios" || tagged === "android") return tagged;
+  }
+  return null;
+}
 const NATIVE_OAUTH_CALLBACK_CODE_KEY = "axis_oauth_callback_code";
 
 const PORTAL_PATH_PREFIXES = ["/portal", "/resident", "/admin", "/auth/choose-portal"] as const;
@@ -178,7 +202,11 @@ function finishNativeOAuthFromRawUrl(rawUrl: string): boolean {
 
 /**
  * Google OAuth in the native shell — WKWebView is blocked (403 disallowed_useragent).
- * iOS: ASWebAuthenticationSession intercepts the custom-scheme callback natively.
+ * iOS: ASWebAuthenticationSession intercepts the custom-scheme callback natively — a
+ *   system-managed sheet, NOT SFSafariViewController. SFSafariViewController is never
+ *   used for OAuth on iOS: it renders PropLane's own pages inside an in-app Safari
+ *   browser (URL bar + Safari toolbar), which is exactly the "it's a website, not an
+ *   app" defect we are eliminating.
  * Android: Chrome Custom Tab + HTTPS bridge redirect back to the app.
  */
 export async function openOAuthUrl(url: string): Promise<void> {
@@ -188,8 +216,16 @@ export async function openOAuthUrl(url: string): Promise<void> {
     return;
   }
 
-  if (usesIosAsWebAuthenticationSession()) {
-    await openOAuthUrlWithWebAuthSession(url);
+  // Anything not positively identified as Android takes the iOS path — the stricter
+  // one, which never opens SFSafariViewController.
+  if (resolveNativeOAuthPlatform() !== "android") {
+    if (usesIosAsWebAuthenticationSession()) {
+      await openOAuthUrlWithWebAuthSession(url);
+      return;
+    }
+    // Plugin absent = this iOS binary predates WebAuthSession. Do NOT fall back to
+    // SFSafariViewController; fail with an update hint instead.
+    navigateToNativeOAuthFailure(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
     return;
   }
 
@@ -222,6 +258,11 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
   }
 }
 
+/**
+ * ANDROID ONLY. Opens the OAuth URL in the system browser (Chrome Custom Tabs) and
+ * deep-links back via the HTTPS bridge. Never call this on iOS — `@capacitor/browser`
+ * there is SFSafariViewController, the in-app Safari that must never render PropLane.
+ */
 async function openOAuthUrlWithSystemBrowser(url: string): Promise<void> {
   markNativeOAuthInProgress();
   const { Browser } = await import("@capacitor/browser");

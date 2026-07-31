@@ -7,15 +7,8 @@ vi.mock("@capacitor/core", () => ({
     isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
   },
 }));
-import {
-  NATIVE_OAUTH_BRIDGE_PARAM,
-  appendNativeOAuthBridgeParam,
-} from "@/lib/auth/native-oauth-bridge";
-import {
-  NATIVE_OAUTH_CALLBACK_URL,
-  nativeOAuthCallbackUrl,
-  resolveOAuthCallbackRedirectUrl,
-} from "@/lib/auth/native-oauth-callback";
+import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 
 /** Stub a native shell (no Capacitor global) tagged via the `data-native` attribute. */
 function stubNativeShell(): void {
@@ -51,16 +44,24 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
     vi.resetModules();
   });
 
-  it("returns custom scheme callback for iOS native when WebAuthSession is linked", async () => {
+  // iOS (ASWebAuthenticationSession) and Android both use the same-origin HTTPS bridge.
+  // The raw custom scheme is deliberately NOT used as redirect_to: Supabase does not
+  // allowlist it, silently drops it, and falls back to the project Site URL — so the user
+  // lands on the marketing homepage inside the in-app browser instead of returning to the
+  // app. The HTTPS callback is the origin Supabase already allowlists; the bridge page then
+  // redirects to the custom scheme, which ASWebAuthenticationSession intercepts.
+  it("returns the same-origin https bridge callback for iOS native when WebAuthSession is linked", async () => {
     stubIosNativeShell();
     const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");
-    expect(resolve("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
+    expect(resolve("https://prop-lane.space")).toBe(
+      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback"),
+    );
     expect(resolve("https://prop-lane.space", "/auth/callback/partner-pricing")).toBe(
-      nativeOAuthCallbackUrl("/auth/callback/partner-pricing"),
+      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback/partner-pricing"),
     );
   });
 
-  it("returns https callback with native_bridge for iOS native without WebAuthSession", async () => {
+  it("returns the same https bridge for iOS native regardless of WebAuthSession linkage", async () => {
     stubIosNativeShell();
     isPluginAvailableMock.mockReturnValue(false);
     const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");

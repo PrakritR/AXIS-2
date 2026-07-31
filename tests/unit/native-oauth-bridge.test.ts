@@ -3,6 +3,7 @@ import {
   appendNativeOAuthBridgeParam,
   httpsCallbackToNativeSchemeUrl,
   httpsCallbackWithoutBridgeParam,
+  maybeNativeOAuthBridgeResponse,
   nativeOAuthBridgeResponse,
   NATIVE_OAUTH_BRIDGE_PARAM,
   shouldRenderNativeOAuthBridge,
@@ -79,6 +80,43 @@ describe("native OAuth bridge", () => {
     expect(html).toContain('id="continue-browser"');
     expect(html).toContain("visibilitychange");
     expect(html).toContain("1500");
+  });
+
+  it("omits the timed web-fallback auto-navigation for iOS (SFSafariViewController)", async () => {
+    const callbackUrl = new URL(
+      "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
+    );
+    const response = nativeOAuthBridgeResponse(callbackUrl, { isIos: true });
+    const html = await response.text();
+
+    // Deep-link attempt + manual continue link stay; the timed fallback that would
+    // dump the portal into in-app Safari must be gated off.
+    expect(html).toContain("Open PropLane");
+    expect(html).toContain("Continue in your browser");
+    expect(html).toContain("if (false)");
+    expect(html).not.toContain("if (true)");
+  });
+
+  it("keeps the timed web-fallback auto-navigation for Android (Chrome Custom Tab)", async () => {
+    const callbackUrl = new URL(
+      "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
+    );
+    const response = nativeOAuthBridgeResponse(callbackUrl, { isIos: false });
+    const html = await response.text();
+
+    expect(html).toContain("if (true)");
+    expect(html).toContain("1500");
+  });
+
+  it("gates the auto-navigation off when the request comes from an iOS user agent", async () => {
+    const req = new NextRequest(
+      "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
+      { headers: { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile Safari" } },
+    );
+    const response = maybeNativeOAuthBridgeResponse(req);
+    expect(response).not.toBeNull();
+    const html = await response!.text();
+    expect(html).toContain("if (false)");
   });
 
   it("does not render bridge HTML inside the Capacitor WebView", () => {
