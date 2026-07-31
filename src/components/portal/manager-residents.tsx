@@ -2455,7 +2455,6 @@ export function ManagerResidents({
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilters])}
         compactPanel
-        desktopPresentation="panel"
         className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
         onReset={() => setPropertyFilters([])}
         dataAttr="residents-filter-sheet-open"

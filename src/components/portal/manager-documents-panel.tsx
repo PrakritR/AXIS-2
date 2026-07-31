@@ -388,7 +388,7 @@ export function ManagerDocumentsPanel({
         libraryPropertyFilter,
         libraryExpiryFilter,
       ])}
-      desktopPresentation="panel"
+      compactPanel={false}
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
       onReset={resetLibraryFilters}
       dataAttr="documents-filter-sheet-open"

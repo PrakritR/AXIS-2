@@ -234,7 +234,7 @@ export function ManagerCommunication({
   const communicationFilterSheet = (
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
-      desktopPresentation="dropdown"
+      compactPanel
       className="min-w-0 shrink-0"
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);

@@ -1065,7 +1065,6 @@ export function ManagerApplications({
       compactPanel
       onReset={() => setPropertyFilters([])}
       dataAttr="applications-filter-sheet-open"
-      desktopPresentation="dropdown"
       className="min-w-0 shrink-0"
     >
       <ApplicationFilterSortFields

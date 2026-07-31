@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FilterFieldsAccordion,
   FilterMultiSelectDropdown,
   FilterSingleSelectDropdown,
 } from "@/components/portal/filter-field-lists";
@@ -55,8 +56,9 @@ export function CommunicationFilterSortFields({
   const residentOptions = residentOptionsFromContacts(residentPool);
 
   return (
-    <>
+    <FilterFieldsAccordion>
       <FilterMultiSelectDropdown
+        sectionId="house"
         label="House"
         options={propertyOptions}
         selected={filters.propertyIds}
@@ -67,6 +69,7 @@ export function CommunicationFilterSortFields({
       />
 
       <FilterMultiSelectDropdown
+        sectionId="role"
         label="Role"
         options={roleOptions}
         selected={filters.roles}
@@ -83,6 +86,7 @@ export function CommunicationFilterSortFields({
       />
 
       <FilterMultiSelectDropdown
+        sectionId="resident"
         label="Resident"
         options={residentOptions}
         selected={filters.contactIds}
@@ -93,6 +97,7 @@ export function CommunicationFilterSortFields({
       />
 
       <FilterSingleSelectDropdown
+        sectionId="sort"
         label="Sort"
         options={SORT_OPTIONS}
         value={listSort}
@@ -100,6 +105,6 @@ export function CommunicationFilterSortFields({
         placeholder="Most recent"
         dataAttr="communication-filter-sort"
       />
-    </>
+    </FilterFieldsAccordion>
   );
 }

@@ -206,7 +206,7 @@ export function ManagerLeases({
   const leasesFilterSheet = (
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
-      desktopPresentation="panel"
+      compactPanel
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={() => setPropertyFilters([])}
       dataAttr="leases-filter-sheet-open"

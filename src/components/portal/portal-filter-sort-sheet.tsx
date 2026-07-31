@@ -114,8 +114,8 @@ export function PortalFilterSortSheet({
   dataAttr = "portal-filter-sheet-open",
   extraModalContent,
   className,
-  desktopPresentation = "inline",
-  compactPanel = false,
+  desktopPresentation = "dropdown",
+  compactPanel = true,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -182,7 +182,7 @@ export function PortalFilterSortSheet({
               className={cn(
                 panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "absolute right-0 top-[calc(100%+0.5rem)] z-50 flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+                "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 flex -translate-x-1/2 flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
               data-attr="portal-filter-dropdown-panel"
             >

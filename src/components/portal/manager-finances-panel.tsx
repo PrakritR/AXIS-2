@@ -8,7 +8,7 @@ import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import { FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
+import { FilterFieldsAccordion, FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -305,8 +305,9 @@ function FinancesRowFilters({
   if (!report || rows.length === 0) return null;
 
   return tabId === "income" ? (
-    <>
+    <FilterFieldsAccordion>
       <FilterSingleSelectDropdown
+        sectionId="resident"
         label="Resident"
         options={[{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))]}
         value={rowFilters.resident}
@@ -315,6 +316,7 @@ function FinancesRowFilters({
         dataAttr="finances-filter-resident"
       />
       <FilterSingleSelectDropdown
+        sectionId="type"
         label="Type"
         options={[{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))]}
         value={rowFilters.type}
@@ -322,10 +324,11 @@ function FinancesRowFilters({
         placeholder="All types"
         dataAttr="finances-filter-type"
       />
-    </>
+    </FilterFieldsAccordion>
   ) : (
-    <>
+    <FilterFieldsAccordion>
       <FilterSingleSelectDropdown
+        sectionId="category"
         label="Category"
         options={[{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))]}
         value={rowFilters.category}
@@ -334,6 +337,7 @@ function FinancesRowFilters({
         dataAttr="finances-filter-category"
       />
       <FilterSingleSelectDropdown
+        sectionId="vendor"
         label="Vendor"
         options={[{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))]}
         value={rowFilters.vendor}
@@ -341,7 +345,7 @@ function FinancesRowFilters({
         placeholder="All vendors"
         dataAttr="finances-filter-vendor"
       />
-    </>
+    </FilterFieldsAccordion>
   );
 }
 
@@ -748,7 +752,7 @@ export function ManagerFinancesPanel({
         rowFilters.category,
         rowFilters.vendor,
       ])}
-      desktopPresentation="panel"
+      compactPanel={false}
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={resetFinanceFilters}
       dataAttr="finances-filter-sheet-open"

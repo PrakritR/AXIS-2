@@ -19,7 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export const FILTER_FIELD_LABEL_CLASS =
-  "mb-1.5 block px-4 text-xs font-semibold uppercase tracking-wide text-muted lg:px-0";
+  "mb-1.5 block px-4 text-xs font-semibold uppercase tracking-wide text-muted";
 
 /** One source of the "5 rows visible, scroll for the rest" number — shared with all field-select menus. */
 export const FILTER_LIST_VISIBLE_ROWS = FIELD_SELECT_MENU_VISIBLE_ITEMS;

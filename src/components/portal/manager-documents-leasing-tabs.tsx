@@ -13,7 +13,7 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PortalMobileSummaryCard,
   PortalTableInlineExpand,
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
@@ -222,13 +222,16 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
     <div className="space-y-4">
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilter])}
+        compactPanel
         onReset={() => setPropertyFilter("")}
         dataAttr="documents-applications-filter-sheet-open"
       >
-        <PortalPropertyFilterPill
+        <ApplicationFilterSortFields
           propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={setPropertyFilter}
+          propertyFilters={propertyFilter ? [propertyFilter] : []}
+          onPropertyFiltersChange={(ids) => setPropertyFilter(ids[0] ?? "")}
+          selectionMode="single"
+          dataAttr="documents-applications-filter-property"
         />
       </PortalFilterSortSheet>
 
@@ -362,13 +365,16 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
     <div className="space-y-4">
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilter])}
+        compactPanel
         onReset={() => setPropertyFilter("")}
         dataAttr="documents-leases-filter-sheet-open"
       >
-        <PortalPropertyFilterPill
+        <ApplicationFilterSortFields
           propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={setPropertyFilter}
+          propertyFilters={propertyFilter ? [propertyFilter] : []}
+          onPropertyFiltersChange={(ids) => setPropertyFilter(ids[0] ?? "")}
+          selectionMode="single"
+          dataAttr="documents-leases-filter-property"
         />
       </PortalFilterSortSheet>
 

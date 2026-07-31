@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FilterFieldsAccordion,
   FilterMultiSelectDropdown,
   FilterSingleSelectDropdown,
 } from "@/components/portal/filter-field-lists";
@@ -35,8 +36,9 @@ export function PaymentFilterSortFields({
   const sortListOptions = sortOptions.map((opt) => ({ value: opt.value, label: opt.label }));
 
   return (
-    <>
+    <FilterFieldsAccordion>
       <FilterMultiSelectDropdown
+        sectionId="property"
         label="Property"
         options={propertyListOptions}
         selected={propertyFilters}
@@ -48,6 +50,7 @@ export function PaymentFilterSortFields({
 
       {personOptions.length > 0 ? (
         <FilterMultiSelectDropdown
+          sectionId="resident"
           label={personLabel}
           options={personListOptions}
           selected={residentFilters}
@@ -63,6 +66,7 @@ export function PaymentFilterSortFields({
       ) : null}
 
       <FilterSingleSelectDropdown
+        sectionId="sort"
         label="Sort"
         options={sortListOptions}
         value={listSort}
@@ -70,6 +74,6 @@ export function PaymentFilterSortFields({
         placeholder="Default sort"
         dataAttr="payments-filter-sort"
       />
-    </>
+    </FilterFieldsAccordion>
   );
 }

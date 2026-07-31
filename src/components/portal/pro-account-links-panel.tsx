@@ -1423,7 +1423,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const teamFilterSheet = (
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([teamPropertyFilters])}
-      desktopPresentation="panel"
+      compactPanel
       className="min-w-0 shrink-0"
       onReset={() => setTeamPropertyFilters([])}
       dataAttr="team-links-filter-sheet-open"

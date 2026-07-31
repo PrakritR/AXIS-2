@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import {
   deleteAmenityOffer,
@@ -122,14 +122,17 @@ export function ManagerServicesPanel() {
             <ManagerPortalFilterRow>
               <PortalFilterSortSheet
                 activeCount={portalFilterActiveCount([resolvedPropertyId])}
+                compactPanel
                 onReset={() => setSelectedPropertyId("")}
                 dataAttr="services-catalog-filter-sheet-open"
               >
-                <PortalPropertyFilterPill
+                <ApplicationFilterSortFields
                   propertyOptions={propertyOptions}
-                  propertyValue={resolvedPropertyId}
-                  onPropertyChange={setSelectedPropertyId}
-                  propertyPlaceholder="Select a property"
+                  propertyFilters={resolvedPropertyId ? [resolvedPropertyId] : []}
+                  onPropertyFiltersChange={(ids) => setSelectedPropertyId(ids[0] ?? "")}
+                  allLabel="Select a property"
+                  selectionMode="single"
+                  dataAttr="services-catalog-filter-property"
                 />
               </PortalFilterSortSheet>
             </ManagerPortalFilterRow>

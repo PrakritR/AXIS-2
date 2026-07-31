@@ -659,7 +659,7 @@ export function ManagerPromotion({
   const promotionFilterSheet = (
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
-      desktopPresentation="panel"
+      compactPanel
       className="min-w-0 shrink-0"
       onReset={() => setPropertyFilters([])}
       dataAttr="promotion-filter-sheet-open"

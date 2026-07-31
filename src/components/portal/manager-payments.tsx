@@ -198,7 +198,6 @@ function PaymentsFilterSheet({
     <PortalFilterSortSheet
       activeCount={activeCount}
       compactPanel
-      desktopPresentation="panel"
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
