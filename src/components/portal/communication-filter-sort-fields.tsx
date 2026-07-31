@@ -1,13 +1,8 @@
 "use client";
 
 import {
-  FilterCheckboxList,
-  FilterCollapsibleSection,
-  FilterFieldsAccordion,
-  FilterSingleSelectList,
-  filterMultiSelectSummary,
-  filterSingleSelectSummary,
-  useFilterAccordionClose,
+  FilterMultiSelectDropdown,
+  FilterSingleSelectDropdown,
 } from "@/components/portal/filter-field-lists";
 import {
   contactsForSelectedRoles,
@@ -37,23 +32,7 @@ function residentOptionsFromContacts(contacts: InboxScopedContact[]) {
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 }
 
-export function CommunicationFilterSortFields(props: {
-  propertyOptions: { value: string; label: string }[];
-  roleOptions: { value: CommunicationFilterRole; label: string }[];
-  filterContacts: InboxScopedContact[];
-  filters: CommunicationThreadFilters;
-  onFiltersChange: (next: CommunicationThreadFilters) => void;
-  listSort: CommunicationListSort;
-  onListSortChange: (next: CommunicationListSort) => void;
-}) {
-  return (
-    <FilterFieldsAccordion>
-      <CommunicationFilterSortFieldsBody {...props} />
-    </FilterFieldsAccordion>
-  );
-}
-
-function CommunicationFilterSortFieldsBody({
+export function CommunicationFilterSortFields({
   propertyOptions,
   roleOptions,
   filterContacts,
@@ -70,7 +49,6 @@ function CommunicationFilterSortFieldsBody({
   listSort: CommunicationListSort;
   onListSortChange: (next: CommunicationListSort) => void;
 }) {
-  const closeDropdown = useFilterAccordionClose();
   const residentPool = contactsForSelectedRoles(filterContacts, filters.roles).filter(
     (contact) => contact.role === "resident",
   );
@@ -78,71 +56,50 @@ function CommunicationFilterSortFieldsBody({
 
   return (
     <>
-      <FilterCollapsibleSection
-        sectionId="house"
+      <FilterMultiSelectDropdown
         label="House"
-        summary={filterMultiSelectSummary(filters.propertyIds, propertyOptions, "All houses")}
-        dataAttr="communication-filter-house-trigger"
-      >
-        <FilterCheckboxList
-          options={propertyOptions}
-          selected={filters.propertyIds}
-          onChange={(propertyIds) => onFiltersChange({ ...filters, propertyIds })}
-          emptyMenuText="No houses"
-          dataAttr="communication-filter-house"
-        />
-      </FilterCollapsibleSection>
+        options={propertyOptions}
+        selected={filters.propertyIds}
+        onChange={(propertyIds) => onFiltersChange({ ...filters, propertyIds })}
+        allLabel="All houses"
+        emptyMenuText="No houses"
+        dataAttr="communication-filter-house"
+      />
 
-      <FilterCollapsibleSection
-        sectionId="role"
+      <FilterMultiSelectDropdown
         label="Role"
-        summary={filterMultiSelectSummary(filters.roles, roleOptions, "All roles")}
-        dataAttr="communication-filter-role-trigger"
-      >
-        <FilterCheckboxList
-          options={roleOptions}
-          selected={filters.roles}
-          onChange={(roles) =>
-            onFiltersChange({
-              ...filters,
-              roles: roles as CommunicationFilterRole[],
-              contactIds: [],
-            })
-          }
-          emptyMenuText="No roles"
-          dataAttr="communication-filter-role"
-        />
-      </FilterCollapsibleSection>
+        options={roleOptions}
+        selected={filters.roles}
+        onChange={(roles) =>
+          onFiltersChange({
+            ...filters,
+            roles: roles as CommunicationFilterRole[],
+            contactIds: [],
+          })
+        }
+        allLabel="All roles"
+        emptyMenuText="No roles"
+        dataAttr="communication-filter-role"
+      />
 
-      <FilterCollapsibleSection
-        sectionId="resident"
+      <FilterMultiSelectDropdown
         label="Resident"
-        summary={filterMultiSelectSummary(filters.contactIds, residentOptions, "All residents")}
-        dataAttr="communication-filter-resident-trigger"
-      >
-        <FilterCheckboxList
-          options={residentOptions}
-          selected={filters.contactIds}
-          onChange={(contactIds) => onFiltersChange({ ...filters, contactIds })}
-          emptyMenuText="No residents match the current filters"
-          dataAttr="communication-filter-resident"
-        />
-      </FilterCollapsibleSection>
+        options={residentOptions}
+        selected={filters.contactIds}
+        onChange={(contactIds) => onFiltersChange({ ...filters, contactIds })}
+        allLabel="All residents"
+        emptyMenuText="No residents match the current filters"
+        dataAttr="communication-filter-resident"
+      />
 
-      <FilterCollapsibleSection
-        sectionId="sort"
+      <FilterSingleSelectDropdown
         label="Sort"
-        summary={filterSingleSelectSummary(listSort, SORT_OPTIONS, "Most recent")}
-        dataAttr="communication-filter-sort-trigger"
-      >
-        <FilterSingleSelectList
-          options={SORT_OPTIONS}
-          value={listSort}
-          onChange={(value) => onListSortChange(value as CommunicationListSort)}
-          onPick={closeDropdown}
-          dataAttr="communication-filter-sort"
-        />
-      </FilterCollapsibleSection>
+        options={SORT_OPTIONS}
+        value={listSort}
+        onChange={(value) => onListSortChange(value as CommunicationListSort)}
+        placeholder="Most recent"
+        dataAttr="communication-filter-sort"
+      />
     </>
   );
 }

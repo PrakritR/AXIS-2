@@ -7,6 +7,7 @@ import { Input, Select } from "@/components/ui/input";
 import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
@@ -94,6 +95,8 @@ export function ShareLeadLinkModal({
   preselectedPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
+  const { isNative } = useIsNativeApp();
+  const useFullPageModal = isNative === true;
   const multiEnabled = properties.length > 1;
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [roomChoice, setRoomChoice] = useState("");
@@ -344,7 +347,15 @@ export function ShareLeadLinkModal({
 
   return (
     <>
-      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-lg" footer={actionFooter}>
+      <Modal
+        open={open}
+        title={title}
+        onClose={onClose}
+        panelClassName="max-w-lg"
+        fullPage={useFullPageModal}
+        fullScreenMobile={useFullPageModal}
+        footer={actionFooter}
+      >
         <div className="space-y-4">
           {properties.length === 0 ? (
             <p className="text-sm text-muted">

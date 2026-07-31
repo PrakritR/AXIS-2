@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { FilterCollapsibleSection, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
+import { FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 
 export type ReportFilterState = {
@@ -149,27 +149,20 @@ function ReportPropertyFilterDropdown({
   value: string;
   onChange: (propertyId: string) => void;
 }) {
-  const closeDropdown = useFilterAccordionClose();
   const options = [
     { value: "", label: "All properties" },
     ...propertyOptions.map((p) => ({ value: p.id, label: p.label })),
   ];
 
   return (
-    <FilterCollapsibleSection
-      sectionId="property"
+    <FilterSingleSelectDropdown
       label="Property"
-      summary={filterSingleSelectSummary(value, options, "All properties")}
-      dataAttr="report-filter-property-trigger"
-    >
-      <FilterSingleSelectList
-        options={options}
-        value={value}
-        onChange={onChange}
-        onPick={closeDropdown}
-        dataAttr="report-filter-property"
-      />
-    </FilterCollapsibleSection>
+      options={options}
+      value={value}
+      onChange={onChange}
+      placeholder="All properties"
+      dataAttr="report-filter-property"
+    />
   );
 }
 

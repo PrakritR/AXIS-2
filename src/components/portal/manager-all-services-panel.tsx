@@ -16,11 +16,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import {
-  FilterCollapsibleSection,
-  FilterSingleSelectList,
-  filterSingleSelectSummary,
-} from "@/components/portal/filter-field-lists";
+import { FilterMultiSelectDropdown } from "@/components/portal/filter-field-lists";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -94,7 +90,7 @@ export function ManagerAllServicesPanel({
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [residentFilter, setResidentFilter] = useState("");
+  const [residentFilters, setResidentFilters] = useState<string[]>([]);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
   const [prevWoBucketProp, setPrevWoBucketProp] = useState(workOrderBucketProp);
   if (workOrderBucketProp !== prevWoBucketProp) {
@@ -204,14 +200,14 @@ export function ManagerAllServicesPanel({
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [typeFilter, serviceRequests, workOrders, propertyFilters]);
 
-  const activeResidentFilter = residentOptions.some((option) => option.id === residentFilter)
-    ? residentFilter
-    : "";
+  const activeResidentFilters = residentFilters.filter((name) =>
+    residentOptions.some((option) => option.id === name),
+  );
 
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
     if (propertyFilters.length > 0) rows = rows.filter((r) => propertyFilters.some((id) => r.propertyId === id || r.assignedPropertyId === id));
-    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
+    if (activeResidentFilters.length > 0) rows = rows.filter((r) => (r.residentName ? activeResidentFilters.includes(r.residentName) : false));
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
@@ -221,7 +217,7 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [workOrders, propertyFilters, activeResidentFilter, searchQuery]);
+  }, [workOrders, propertyFilters, activeResidentFilters, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
@@ -230,7 +226,7 @@ export function ManagerAllServicesPanel({
         (r) => propertyFilters.some((id) => samePropertyId(r.propertyId, id)) || !r.propertyId?.trim(),
       );
     }
-    if (activeResidentFilter) rows = rows.filter((r) => r.residentName === activeResidentFilter);
+    if (activeResidentFilters.length > 0) rows = rows.filter((r) => (r.residentName ? activeResidentFilters.includes(r.residentName) : false));
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
@@ -240,7 +236,7 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [serviceRequests, propertyFilters, activeResidentFilter, searchQuery]);
+  }, [serviceRequests, propertyFilters, activeResidentFilters, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -322,13 +318,13 @@ export function ManagerAllServicesPanel({
 
   const resetServicesFilters = () => {
     setPropertyFilters([]);
-    setResidentFilter("");
+    setResidentFilters([]);
   };
 
   const servicesFilterSheet =
     typeFilter !== "vendors" ? (
       <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilter])}
+        activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilters])}
         compactPanel
         desktopPresentation="panel"
         className="min-w-0 shrink-0"
@@ -341,17 +337,15 @@ export function ManagerAllServicesPanel({
             propertyFilters={propertyFilters}
             onPropertyFiltersChange={(nextProperties) => {
               setPropertyFilters(nextProperties);
-              setResidentFilter("");
+              setResidentFilters([]);
             }}
             dataAttr="services-filter-property"
           />
-          {residentOptions.length > 0 ? (
-            <ServicesResidentFilterDropdown
+          <ServicesResidentFilterDropdown
               residentOptions={residentOptions}
-              value={activeResidentFilter}
-              onChange={setResidentFilter}
+              selected={activeResidentFilters}
+              onChange={setResidentFilters}
             />
-          ) : null}
         </div>
       </PortalFilterSortSheet>
     ) : null;
@@ -365,19 +359,22 @@ export function ManagerAllServicesPanel({
         label: `Property: ${propertyFilterLabel}`,
         onRemove: () => {
           setPropertyFilters([]);
-          setResidentFilter("");
+          setResidentFilters([]);
         },
       });
     }
-    if (activeResidentFilter) {
+    if (activeResidentFilters) {
       chips.push({
         id: "resident",
-        label: `Resident: ${activeResidentFilter}`,
-        onRemove: () => setResidentFilter(""),
+        label:
+          activeResidentFilters.length === 1
+            ? `Resident: ${activeResidentFilters[0]}`
+            : `Residents: ${activeResidentFilters.length}`,
+        onRemove: () => setResidentFilters([]),
       });
     }
     return chips;
-  }, [typeFilter, propertyFilters, propertyFilterLabel, activeResidentFilter]);
+  }, [typeFilter, propertyFilters, propertyFilterLabel, activeResidentFilters]);
 
   const servicesTypeNav = (
     <DestinationNav
@@ -649,30 +646,24 @@ export function ManagerAllServicesPanel({
 
 function ServicesResidentFilterDropdown({
   residentOptions,
-  value,
+  selected,
   onChange,
 }: {
   residentOptions: { id: string; label: string }[];
-  value: string;
-  onChange: (next: string) => void;
+  selected: string[];
+  onChange: (next: string[]) => void;
 }) {
-  const options = [
-    { value: "", label: "All residents" },
-    ...residentOptions.map((option) => ({ value: option.id, label: option.label })),
-  ];
+  const options = residentOptions.map((option) => ({ value: option.id, label: option.label }));
 
   return (
-    <FilterCollapsibleSection
+    <FilterMultiSelectDropdown
       label="Resident"
-      summary={filterSingleSelectSummary(value, options, "All residents")}
-      dataAttr="services-filter-resident-trigger"
-    >
-      <FilterSingleSelectList
-        options={options}
-        value={value}
-        onChange={onChange}
-        dataAttr="services-filter-resident"
-      />
-    </FilterCollapsibleSection>
+      options={options}
+      selected={selected}
+      onChange={onChange}
+      allLabel="All residents"
+      emptyMenuText="No residents match the current filters"
+      dataAttr="services-filter-resident"
+    />
   );
 }

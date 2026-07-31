@@ -16,6 +16,7 @@ import type { MockProperty } from "@/data/types";
 import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
 import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 import { cn } from "@/lib/utils";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
 /**
  * Full listing UI exactly as renters see on /rent/listings/[id], in a scrollable overlay.
@@ -41,6 +42,9 @@ export function ListingPublicPreviewModal({
     enabled: open && Boolean(property),
   });
 
+  const { isNative } = useIsNativeApp();
+  const useFullPageModal = isNative === true;
+
   if (!open || !property) return null;
 
   const previewProperty = withListingContactSmsPhone(property, contactSmsPhone);
@@ -51,8 +55,8 @@ export function ListingPublicPreviewModal({
       open={open}
       onClose={onClose}
       presentation="dialog"
-      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
-      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
+      stackClassName={useFullPageModal ? MODAL_FULL_PAGE_STACK_CLASS : undefined}
+      centerClassName={useFullPageModal ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
       panelClassName={cn(MODAL_FULL_PAGE_PANEL_CLASS, "px-0")}
       ariaLabelledBy="listing-preview-title"
     >

@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
+import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,70 @@ export function filterMultiSelectSummary(
 export function filterSingleSelectSummary(value: string, options: Option[], allLabel = "All"): string {
   if (!value) return allLabel;
   return options.find((o) => o.value === value)?.label ?? value;
+}
+
+/** Portaled multi-select — filter panel stays fixed height; options scroll in the menu. */
+export function FilterMultiSelectDropdown({
+  label,
+  options,
+  selected,
+  onChange,
+  allLabel = "All",
+  emptyMenuText = "No options",
+  dataAttr,
+  hideLabel = false,
+}: {
+  label: string;
+  options: Option[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  allLabel?: string;
+  emptyMenuText?: string;
+  dataAttr?: string;
+  hideLabel?: boolean;
+}) {
+  return (
+    <CheckboxMultiSelect
+      label={label}
+      hideLabel={hideLabel}
+      labelClassName={FILTER_FIELD_LABEL_CLASS}
+      options={options}
+      selected={selected}
+      onChange={onChange}
+      emptyLabel={allLabel}
+      emptyMenuText={emptyMenuText}
+      dataAttr={dataAttr}
+    />
+  );
+}
+
+/** Portaled single-select — same static panel behavior as {@link FilterMultiSelectDropdown}. */
+export function FilterSingleSelectDropdown({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder = "All",
+  dataAttr,
+}: {
+  label: string;
+  options: Option[];
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  dataAttr?: string;
+}) {
+  return (
+    <FieldSingleSelect
+      label={label}
+      labelClassName={FILTER_FIELD_LABEL_CLASS}
+      options={options}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      dataAttr={dataAttr}
+    />
+  );
 }
 
 /** Excel-style in-cell dropdown: one text box; click to reveal inline options. */
