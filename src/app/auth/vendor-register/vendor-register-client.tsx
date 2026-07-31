@@ -2,20 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AuthBrandHeader } from "@/components/auth/auth-mobile-primitives";
 import { AuthCard } from "@/components/auth/auth-card";
+import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
-import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 
-/** Vendor account creation — invite link (?token=…) or public self-serve signup via NativeAuthHub. */
+/** Vendor account creation — invite link (?token=…) or redirect to unified create-account. */
 export default function VendorRegisterClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isNative } = useIsNativeApp();
   const inviteToken = useMemo(() => (searchParams.get("token") ?? "").trim(), [searchParams]);
 
   const [checkingInvite, setCheckingInvite] = useState(Boolean(inviteToken));
   const [inviteInvalid, setInviteInvalid] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFullName, setInviteFullName] = useState("");
+
+  useEffect(() => {
+    if (inviteToken) return;
+    router.replace("/auth/create-account");
+  }, [inviteToken, router]);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -44,6 +52,14 @@ export default function VendorRegisterClient() {
     };
   }, [inviteToken]);
 
+  if (!inviteToken) {
+    return (
+      <AuthCard>
+        <p className="text-center text-sm text-muted">Loading…</p>
+      </AuthCard>
+    );
+  }
+
   if (checkingInvite) {
     return (
       <AuthCard>
@@ -63,20 +79,28 @@ export default function VendorRegisterClient() {
         <Button
           type="button"
           className="mt-6 w-full rounded-full py-2.5 text-[15px] font-semibold"
-          onClick={() => router.push("/auth/create-account?mode=create&role=vendor")}
+          onClick={() => router.push("/auth/create-account")}
         >
-          Sign up as a vendor
+          Create your account
         </Button>
       </AuthCard>
     );
   }
 
   return (
-    <NativeAuthHub
-      defaultMode="create"
-      inviteToken={inviteToken || undefined}
-      inviteEmail={inviteEmail}
-      inviteFullName={inviteFullName}
-    />
+    <AuthCard variant="blend" wide>
+      {isNative ? (
+        <div className="auth-brand-header-wrap mb-4">
+          <AuthBrandHeader homeLink />
+        </div>
+      ) : null}
+      <VendorSignupForm
+        variant="compact"
+        hideLegalFooter
+        inviteToken={inviteToken}
+        initialEmail={inviteEmail}
+        initialFullName={inviteFullName}
+      />
+    </AuthCard>
   );
 }

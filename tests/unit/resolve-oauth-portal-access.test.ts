@@ -68,7 +68,7 @@ describe("resolveOAuthPortalRedirect", () => {
     vi.clearAllMocks();
   });
 
-  it("never auto-provisions a free manager; unknown manager-intent goes to unified create-account", async () => {
+  it("never auto-provisions a free manager; unknown manager-intent goes to the role chooser", async () => {
     const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
 
     const user = { id: "user-1", email: "new@test.com" } as User;
@@ -78,7 +78,7 @@ describe("resolveOAuthPortalRedirect", () => {
     });
 
     expect(ensureFreeManagerPortalAccess).not.toHaveBeenCalled();
-    expect(path).toBe("/auth/create-account?mode=create&role=manager");
+    expect(path).toBe("/auth/get-started");
   });
 
   it("routes an unknown, no-intent account to the get-started role chooser", async () => {
