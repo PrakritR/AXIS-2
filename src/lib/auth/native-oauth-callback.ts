@@ -1,7 +1,6 @@
 import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
-import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
 export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
@@ -22,8 +21,14 @@ export function isNativeOAuthShell(): boolean {
 
 /**
  * Supabase OAuth redirectTo.
- * iOS native: custom scheme — ASWebAuthenticationSession intercepts the callback natively.
- * Android native: same-origin HTTPS callback with `native_bridge=1` (Custom Tabs + server 302).
+ * Native shell (iOS ASWebAuthenticationSession + Android Custom Tabs): the same-origin HTTPS
+ *   bridge with `native_bridge=1`. The bridge page redirects to the app custom scheme, which
+ *   iOS ASWebAuthenticationSession intercepts (Android deep-links back), handing control back
+ *   to the app's own WebView. We deliberately do NOT use the raw custom scheme as redirectTo:
+ *   Supabase does not allowlist a custom scheme by default, so it silently drops the
+ *   redirect_to and falls back to the project Site URL — the user then lands on the marketing
+ *   homepage inside the in-app browser instead of returning to the app. The HTTPS callback,
+ *   by contrast, is the one Supabase already allowlists (its own Site URL / Redirect URLs).
  * Web: same-origin /auth/callback.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
@@ -32,9 +37,6 @@ export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPat
     ? `${base}${fixedCallbackPath}`
     : bareAuthCallbackUrl(origin);
   if (isNativeOAuthShell()) {
-    if (usesIosAsWebAuthenticationSession()) {
-      return nativeOAuthCallbackUrl(fixedCallbackPath);
-    }
     return appendNativeOAuthBridgeParam(httpsCallback);
   }
   return httpsCallback;
