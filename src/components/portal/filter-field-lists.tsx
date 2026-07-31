@@ -352,3 +352,87 @@ export function FilterSingleSelectList({
     </>
   );
 }
+
+/** Convenience wrapper: label + portaled multi-select dropdown. */
+export function FilterMultiSelectDropdown({
+  label,
+  options,
+  selected,
+  onChange,
+  allLabel = "All",
+  emptyMenuText = "No options",
+  dataAttr,
+  sectionId,
+}: {
+  label: string;
+  options: Option[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  allLabel?: string;
+  emptyMenuText?: string;
+  dataAttr?: string;
+  sectionId?: string;
+}) {
+  return (
+    <FilterCollapsibleSection
+      sectionId={sectionId}
+      label={label}
+      summary={filterMultiSelectSummary(selected, options, allLabel)}
+      empty={selected.length === 0}
+      dataAttr={dataAttr ? `${dataAttr}-trigger` : undefined}
+    >
+      <FilterCheckboxList
+        options={options}
+        selected={selected}
+        onChange={onChange}
+        emptyMenuText={emptyMenuText}
+        dataAttr={dataAttr}
+      />
+    </FilterCollapsibleSection>
+  );
+}
+
+/** Convenience wrapper: label + portaled single-select dropdown. */
+export function FilterSingleSelectDropdown({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder = "All",
+  dataAttr,
+  sectionId,
+}: {
+  label: string;
+  options: Option[];
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  dataAttr?: string;
+  sectionId?: string;
+}) {
+  const closeDropdown = useFilterAccordionClose();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <FilterCollapsibleSection
+      sectionId={sectionId}
+      label={label}
+      summary={filterSingleSelectSummary(value, options, placeholder)}
+      empty={!value}
+      dataAttr={dataAttr ? `${dataAttr}-trigger` : undefined}
+      open={sectionId ? undefined : open}
+      onOpenChange={sectionId ? undefined : setOpen}
+    >
+      <FilterSingleSelectList
+        options={options}
+        value={value}
+        onChange={onChange}
+        onPick={() => {
+          closeDropdown();
+          setOpen(false);
+        }}
+        dataAttr={dataAttr}
+      />
+    </FilterCollapsibleSection>
+  );
+}
