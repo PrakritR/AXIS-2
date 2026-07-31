@@ -18,6 +18,12 @@ export const MODAL_FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking
 
 export const MODAL_OVERLAY_BACKDROP_CLASS = "modal-overlay fixed inset-0";
 
+/** Large centered dialog — previews, editors, multi-section forms. */
+export const MODAL_LARGE_PANEL_CLASS = "max-w-4xl w-full";
+
+/** Extra-wide centered dialog — listing preview, lease editor. */
+export const MODAL_XL_PANEL_CLASS = "max-w-5xl w-full";
+
 /** Full-viewport modal shell — opt in with `fullPage` for rare immersive flows. */
 export const MODAL_FULL_PAGE_STACK_CLASS = "fixed inset-0 z-[70] overflow-hidden";
 export const MODAL_FULL_PAGE_CENTER_CLASS =

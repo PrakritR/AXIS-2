@@ -82,6 +82,9 @@ export function ManagerEditLeasesModal({
         title="Edit lease settings"
         description="Choose a property to view, add, or edit its lease templates."
         onClose={closeAll}
+        dense
+        assistantStrip={false}
+        panelClassName="max-w-md"
         footer={
           <ModalFooter>
             <Button
@@ -97,9 +100,7 @@ export function ManagerEditLeasesModal({
           </ModalFooter>
         }
       >
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div
-            className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-xl border border-border p-2"
+        <div className="max-h-[min(40vh,16rem)] space-y-1 overflow-y-auto rounded-xl border border-border p-2"
           role="radiogroup"
           aria-label="Property"
         >
@@ -124,7 +125,6 @@ export function ManagerEditLeasesModal({
             ))
           )}
         </div>
-        </div>
       </Modal>
 
       {resolved && managerUserId && syncedSub && editingPropertyId ? (
@@ -133,6 +133,7 @@ export function ManagerEditLeasesModal({
           title={editorTitle}
           description="Add a lease or edit an existing template. Open a lease to set document source, clauses, PDF upload, and the visual editor."
           onClose={onEditorClose}
+          panelClassName="max-w-4xl"
         >
           <ManagerPropertyLeasePanel
             sub={syncedSub}

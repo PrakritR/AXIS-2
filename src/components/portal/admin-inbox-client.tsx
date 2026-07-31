@@ -13,12 +13,8 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/p
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { ModalShell } from "@/components/ui/modal";
-import {
-  MODAL_FULL_PAGE_CENTER_CLASS,
-  MODAL_FULL_PAGE_PANEL_CLASS,
-  MODAL_FULL_PAGE_STACK_CLASS,
-} from "@/components/ui/modal-styles";
+import { Modal, ModalFooter } from "@/components/ui/modal";
+import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { AdminInboxSchedulePanel } from "@/components/portal/admin-inbox-schedule-panel";
@@ -298,24 +294,22 @@ function ComposeModal({
   };
 
   return (
-    <ModalShell
+    <Modal
       open={open}
       onClose={onClose}
-      presentation="dialog"
-      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
-      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
-      panelClassName={MODAL_FULL_PAGE_PANEL_CLASS}
-      ariaLabelledBy="admin-inbox-compose-title"
-      ariaDescribedBy="admin-inbox-compose-description"
+      title="New message"
+      description="Broadcast to a group or choose specific managers or residents."
+      assistantStrip={false}
+      panelClassName={MODAL_LARGE_PANEL_CLASS}
+      footer={
+        <ModalFooter>
+          <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
+            {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
+          </Button>
+        </ModalFooter>
+      }
     >
-      <h2 id="admin-inbox-compose-title" className="text-lg font-semibold text-foreground">
-        New message
-      </h2>
-      <p id="admin-inbox-compose-description" className="mt-1 text-sm text-muted">
-        Broadcast to a group or choose specific managers or residents.
-      </p>
-
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3">
           <div>
             <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send to</label>
             <Select
@@ -423,13 +417,7 @@ function ComposeModal({
             ) : null}
           </div>
         </div>
-
-      <div className="mt-5 flex flex-wrap justify-start gap-2">
-        <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
-          {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
-        </Button>
-      </div>
-    </ModalShell>
+    </Modal>
   );
 }
 

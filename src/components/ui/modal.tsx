@@ -344,7 +344,7 @@ export function Modal({
   panelClassName,
   stackClassName,
   dense = false,
-  assistantStrip = true,
+  assistantStrip = false,
   assistantContext,
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
@@ -375,7 +375,7 @@ export function Modal({
 }) {
   const presentation = useModalPresentation();
   const portalAssistant = usePortalAssistantConfig();
-  const showAssistantStrip = assistantStrip && portalAssistant != null;
+  const showAssistantStrip = (assistantStrip ?? Boolean(assistantContext)) && portalAssistant != null;
   const assistantHint =
     assistantContext?.trim() ||
     (typeof title === "string" ? title.trim() : "") ||

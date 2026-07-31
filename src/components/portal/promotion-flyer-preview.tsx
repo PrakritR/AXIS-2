@@ -2,12 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
-import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
-import {
-  MODAL_FULL_PAGE_CENTER_CLASS,
-  MODAL_FULL_PAGE_PANEL_CLASS,
-  MODAL_FULL_PAGE_STACK_CLASS,
-} from "@/components/ui/modal-styles";
+import { Modal, ModalFooter } from "@/components/ui/modal";
+import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { X } from "lucide-react";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
@@ -168,19 +164,15 @@ export function PromotionFlyerPreview({
   if (!onClose) return null;
 
   return (
-    <ModalShell
+    <Modal
       open
       onClose={onClose}
-      presentation="dialog"
-      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
-      overlayClassName="fixed inset-0 bg-black/60 backdrop-blur-sm"
-      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
-      panelClassName={cn(MODAL_FULL_PAGE_PANEL_CLASS, "px-4")}
-      ariaLabel="Flyer preview"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-        <p className="min-w-0 truncate text-sm font-semibold text-white">{promotion.title || "Flyer preview"}</p>
-        <div className="flex flex-wrap items-center gap-2">
+      title={promotion.title || "Flyer preview"}
+      assistantStrip={false}
+      scrollableContent={false}
+      panelClassName={cn(MODAL_LARGE_PANEL_CLASS, "bg-slate-950 text-white")}
+      footer={
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -199,14 +191,12 @@ export function PromotionFlyerPreview({
           >
             Print / Save PDF
           </Button>
-          <button type="button" onClick={onClose} aria-label="Close" className={MODAL_HEADER_CLOSE_CLASS}>
-            <X className="h-5 w-5 text-white" aria-hidden />
-          </button>
-          </div>
-      </div>
+        </div>
+      }
+    >
       <div
         ref={scrollRef}
-        className={`min-h-0 flex-1 rounded-xl bg-white shadow-2xl ${FLYER_SCROLLER_CLASS}`}
+        className={`max-h-[min(65vh,36rem)] min-h-[min(50vh,24rem)] rounded-xl bg-white shadow-2xl ${FLYER_SCROLLER_CLASS}`}
       >
         <FlyerFrame
           iframeRef={iframeRef}
@@ -215,6 +205,6 @@ export function PromotionFlyerPreview({
           sandbox="allow-same-origin allow-modals"
         />
       </div>
-    </ModalShell>
+    </Modal>
   );
 }

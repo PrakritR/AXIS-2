@@ -9,6 +9,8 @@ import {
   MODAL_FULL_PAGE_CENTER_CLASS,
   MODAL_FULL_PAGE_PANEL_CLASS,
   MODAL_FULL_PAGE_STACK_CLASS,
+  MODAL_PANEL_CLASS,
+  MODAL_XL_PANEL_CLASS,
 } from "@/components/ui/modal-styles";
 import { X } from "lucide-react";
 import { getListingRichContent } from "@/data/listing-rich-content";
@@ -57,7 +59,11 @@ export function ListingPublicPreviewModal({
       presentation="dialog"
       stackClassName={useFullPageModal ? MODAL_FULL_PAGE_STACK_CLASS : undefined}
       centerClassName={useFullPageModal ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
-      panelClassName={cn(MODAL_FULL_PAGE_PANEL_CLASS, "px-0")}
+      panelClassName={cn(
+        useFullPageModal ? MODAL_FULL_PAGE_PANEL_CLASS : MODAL_PANEL_CLASS,
+        useFullPageModal ? "px-0" : MODAL_XL_PANEL_CLASS,
+        "px-0",
+      )}
       ariaLabelledBy="listing-preview-title"
     >
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3 sm:px-5">
@@ -89,7 +95,7 @@ export function ListingPublicPreviewModal({
           </button>
         </div>
       </div>
-      <ListingPreviewScrollShell className="min-h-0 flex-1">
+      <ListingPreviewScrollShell className="max-h-[min(70vh,40rem)] min-h-0 flex-1">
         <ListingDetailSections property={previewProperty} rich={rich} previewModal hidePreviewSubnav />
       </ListingPreviewScrollShell>
       {footer ? (

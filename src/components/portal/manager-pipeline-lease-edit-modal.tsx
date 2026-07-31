@@ -86,8 +86,9 @@ export function ManagerPipelineLeaseEditModal({
       assistantStrip={false}
       scrollableContent={false}
       dense
+      panelClassName="max-w-6xl w-full"
     >
-      <div className="flex h-[calc(100dvh-12rem)] min-h-0 flex-col gap-3">
+      <div className="flex max-h-[min(72vh,42rem)] min-h-[min(50vh,24rem)] flex-col gap-3">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {editableHtml && draftHtml ? (
             <LeaseDocumentDirectEditor

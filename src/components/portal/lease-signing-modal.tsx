@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { useIsClient } from "@/hooks/use-is-client";
-import { usePortalContainer } from "@/components/ui/portal-container-context";
+import { Modal, ModalFooter } from "@/components/ui/modal";
+import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { DEMO_LEASE_SIGN_PREPARE_EVENT } from "@/lib/demo/demo-playback";
 import { LEASE_ESIGN_CONSENT_TEXT, LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lease-execution-evidence";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
@@ -24,8 +23,6 @@ export function LeaseSigningModal({
   onSign: (signatureName: string, consentVersion: string) => boolean | Promise<boolean>;
   onClose: () => void;
 }) {
-  const isClient = useIsClient();
-  const portalContainer = usePortalContainer();
   const [sigName, setSigName] = useState(signerName);
   const [agreed, setAgreed] = useState(false);
   const [signed, setSigned] = useState(false);
@@ -41,10 +38,7 @@ export function LeaseSigningModal({
     return () => window.removeEventListener(DEMO_LEASE_SIGN_PREPARE_EVENT, onPrepare as EventListener);
   }, []);
 
-  const now = useMemo(
-    () => formatPacificDateTime(new Date()),
-    [],
-  );
+  const now = useMemo(() => formatPacificDateTime(new Date()), []);
 
   const canSign = sigName.trim().length >= 2 && agreed;
 
@@ -58,124 +52,96 @@ export function LeaseSigningModal({
     window.setTimeout(() => onClose(), 700);
   };
 
-  if (!isClient) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[200] flex flex-col">
-      <button type="button" aria-label="Close" className="modal-overlay fixed inset-0" onClick={onClose} />
-      <div className="modal-panel relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 shadow-none">
-        <div className="shrink-0 border-b border-border px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-tight text-foreground">
-              Sign lease agreement
-            </h2>
-            <button
+  return (
+    <Modal
+      open
+      title="Sign lease agreement"
+      description={`${row.unit} · ${row.residentName}`}
+      onClose={onClose}
+      assistantStrip={false}
+      panelClassName={MODAL_LARGE_PANEL_CLASS}
+      footer={
+        signed ? undefined : (
+          <ModalFooter>
+            <Button
               type="button"
-              onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/30 text-lg leading-none text-muted hover:bg-accent/40"
-              aria-label="Close"
+              className="rounded-full"
+              data-attr="lease-sign-confirm"
+              disabled={!canSign || submitting}
+              onClick={handleSign}
             >
-              ×
-            </button>
-          </div>
-          <p className="mt-1 truncate text-sm text-muted">
-            {row.unit} · {row.residentName}
-          </p>
+              {submitting ? "Signing..." : "Sign lease"}
+            </Button>
+          </ModalFooter>
+        )
+      }
+    >
+      {(row.generatedHtml || row.managerUploadedPdf?.dataUrl) ? (
+        <div className="mb-4 overflow-hidden rounded-xl border border-border">
+          {row.managerUploadedPdf?.dataUrl ? (
+            <iframe
+              title="Lease document"
+              src={row.managerUploadedPdf.dataUrl}
+              className="h-[min(24vh,220px)] w-full bg-card"
+            />
+          ) : (
+            <iframe
+              title="Lease document"
+              srcDoc={row.generatedHtml!}
+              sandbox="allow-same-origin"
+              className="h-[min(24vh,220px)] w-full bg-card"
+            />
+          )}
         </div>
+      ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {(row.generatedHtml || row.managerUploadedPdf?.dataUrl) ? (
-            <div className="border-b border-border">
-              {row.managerUploadedPdf?.dataUrl ? (
-                <iframe
-                  title="Lease document"
-                  src={row.managerUploadedPdf.dataUrl}
-                  className="h-[min(24vh,220px)] w-full bg-card"
-                />
-              ) : (
-                <iframe
-                  title="Lease document"
-                  srcDoc={row.generatedHtml!}
-                  sandbox="allow-same-origin"
-                  className="h-[min(24vh,220px)] w-full bg-card"
-                />
-              )}
-            </div>
-          ) : null}
-
-          <div className="space-y-4 px-5 py-4">
-            {signed ? (
-              <div className="rounded-2xl border px-5 py-5 text-center portal-banner-success">
-                <p className="text-2xl font-black text-emerald-700">✓ Signed</p>
-                <p className="mt-2 text-sm text-muted">
-                  Your electronic signature has been recorded. Closing this window…
-                </p>
-              </div>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted">{signerRoleLabel}</label>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Type exactly as it should appear on the signed document.
-                  </p>
-                  <input
-                    type="text"
-                    value={sigName}
-                    onChange={(e) => setSigName(e.target.value)}
-                    disabled={submitting}
-                    data-attr="lease-sign-name"
-                    placeholder={signerName || signerRoleLabel}
-                    className="mt-2 w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-                  />
-                  {sigName.trim().length >= 2 ? (
-                    <p
-                      className="mt-2 text-center text-xl text-foreground"
-                      style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                    >
-                      {sigName}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-xs text-muted">
-                  <p className="font-semibold text-muted">Signing date & time</p>
-                  <p className="mt-0.5">{now}</p>
-                </div>
-
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm text-muted shadow-sm">
-                  <input
-                    type="checkbox"
-                    checked={agreed}
-                    onChange={(e) => setAgreed(e.target.checked)}
-                    disabled={submitting}
-                    data-attr="lease-sign-agree"
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary"
-                  />
-                  {/* Recorded verbatim on the signature (consentVersion) and quoted on the certificate. */}
-                  <span>{LEASE_ESIGN_CONSENT_TEXT}</span>
-                </label>
-              </>
-            )}
-          </div>
+      {signed ? (
+        <div className="rounded-2xl border px-5 py-5 text-center portal-banner-success">
+          <p className="text-2xl font-black text-emerald-700">✓ Signed</p>
+          <p className="mt-2 text-sm text-muted">Your electronic signature has been recorded. Closing this window…</p>
         </div>
-
-        {!signed ? (
-          <div className="shrink-0 border-t border-border px-5 py-3">
-            <div className="flex flex-wrap justify-start gap-3">
-              <Button
-                type="button"
-                className="rounded-full"
-                data-attr="lease-sign-confirm"
-                disabled={!canSign || submitting}
-                onClick={handleSign}
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted">{signerRoleLabel}</label>
+            <p className="mt-0.5 text-xs text-muted">Type exactly as it should appear on the signed document.</p>
+            <input
+              type="text"
+              value={sigName}
+              onChange={(e) => setSigName(e.target.value)}
+              disabled={submitting}
+              data-attr="lease-sign-name"
+              placeholder={signerName || signerRoleLabel}
+              className="mt-2 w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            />
+            {sigName.trim().length >= 2 ? (
+              <p
+                className="mt-2 text-center text-xl text-foreground"
+                style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
               >
-                {submitting ? "Signing..." : "Sign lease"}
-              </Button>
-            </div>
+                {sigName}
+              </p>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-    </div>,
-    portalContainer ?? document.body,
+
+          <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-xs text-muted">
+            <p className="font-semibold text-muted">Signing date & time</p>
+            <p className="mt-0.5">{now}</p>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 text-sm text-muted shadow-sm">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              disabled={submitting}
+              data-attr="lease-sign-agree"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary"
+            />
+            <span>{LEASE_ESIGN_CONSENT_TEXT}</span>
+          </label>
+        </div>
+      )}
+    </Modal>
   );
 }
