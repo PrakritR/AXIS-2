@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { GoogleCalendarConnectPanel } from "@/components/portal/google-calendar-connect-panel";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
 export function GoogleCalendarConnectDialog({
   onConnectionChange,
@@ -14,6 +15,8 @@ export function GoogleCalendarConnectDialog({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const { isNative } = useIsNativeApp();
+  const useFullPageModal = isNative === true;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -32,7 +35,14 @@ export function GoogleCalendarConnectDialog({
       >
         Google Calendar
       </Button>
-      <Modal open={open} title="Google Calendar" onClose={() => setOpen(false)}>
+      <Modal
+        open={open}
+        title="Google Calendar"
+        onClose={() => setOpen(false)}
+        panelClassName="max-w-md"
+        fullPage={useFullPageModal}
+        fullScreenMobile={useFullPageModal}
+      >
         <GoogleCalendarConnectPanel
           presentation="dialog"
           onConnectionChange={() => {

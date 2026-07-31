@@ -8,7 +8,7 @@ import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import { FilterCollapsibleSection, FilterFieldsAccordion, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
+import { FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -301,87 +301,46 @@ function FinancesRowFilters({
   const types = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
   const categories = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
   const vendors = useMemo(() => uniqueRowValues(rows, "vendor"), [rows]);
-  const closeDropdown = useFilterAccordionClose();
 
   if (!report || rows.length === 0) return null;
 
   return tabId === "income" ? (
     <>
-      <FilterCollapsibleSection
-        sectionId="resident"
+      <FilterSingleSelectDropdown
         label="Resident"
-        summary={filterSingleSelectSummary(
-          rowFilters.resident,
-          [{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))],
-          "All residents",
-        )}
-        dataAttr="finances-filter-resident-trigger"
-      >
-        <FilterSingleSelectList
-          options={[{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))]}
-          value={rowFilters.resident}
-          onChange={(resident) => onChange({ resident })}
-          onPick={closeDropdown}
-          dataAttr="finances-filter-resident"
-        />
-      </FilterCollapsibleSection>
-      <FilterCollapsibleSection
-        sectionId="type"
+        options={[{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))]}
+        value={rowFilters.resident}
+        onChange={(resident) => onChange({ resident })}
+        placeholder="All residents"
+        dataAttr="finances-filter-resident"
+      />
+      <FilterSingleSelectDropdown
         label="Type"
-        summary={filterSingleSelectSummary(
-          rowFilters.type,
-          [{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))],
-          "All types",
-        )}
-        dataAttr="finances-filter-type-trigger"
-      >
-        <FilterSingleSelectList
-          options={[{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))]}
-          value={rowFilters.type}
-          onChange={(type) => onChange({ type })}
-          onPick={closeDropdown}
-          dataAttr="finances-filter-type"
-        />
-      </FilterCollapsibleSection>
+        options={[{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))]}
+        value={rowFilters.type}
+        onChange={(type) => onChange({ type })}
+        placeholder="All types"
+        dataAttr="finances-filter-type"
+      />
     </>
   ) : (
     <>
-      <FilterCollapsibleSection
-        sectionId="category"
+      <FilterSingleSelectDropdown
         label="Category"
-        summary={filterSingleSelectSummary(
-          rowFilters.category,
-          [{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))],
-          "All categories",
-        )}
-        dataAttr="finances-filter-category-trigger"
-      >
-        <FilterSingleSelectList
-          options={[{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))]}
-          value={rowFilters.category}
-          onChange={(category) => onChange({ category })}
-          onPick={closeDropdown}
-          dataAttr="finances-filter-category"
-        />
-      </FilterCollapsibleSection>
-      <FilterCollapsibleSection
-        sectionId="vendor"
+        options={[{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))]}
+        value={rowFilters.category}
+        onChange={(category) => onChange({ category })}
+        placeholder="All categories"
+        dataAttr="finances-filter-category"
+      />
+      <FilterSingleSelectDropdown
         label="Vendor"
-        summary={filterSingleSelectSummary(
-          rowFilters.vendor,
-          [{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))],
-          "All vendors",
-        )}
-        dataAttr="finances-filter-vendor-trigger"
-      >
-        <FilterSingleSelectList
-          options={[{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))]}
-          value={rowFilters.vendor}
-          onChange={(vendor) => onChange({ vendor })}
-          onPick={closeDropdown}
-          dataAttr="finances-filter-vendor"
-        />
-      </FilterCollapsibleSection>
+        options={[{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))]}
+        value={rowFilters.vendor}
+        onChange={(vendor) => onChange({ vendor })}
+        placeholder="All vendors"
+        dataAttr="finances-filter-vendor"
+      />
     </>
   );
 }
@@ -748,7 +707,7 @@ export function ManagerFinancesPanel({
   const showScopedReportFilters = !specialFinancePanels.has(tabId);
 
   const financeFilterControls = (
-    <FilterFieldsAccordion>
+    <>
       <ReportFilterBar
         showProperty
         showDateRange
@@ -772,7 +731,7 @@ export function ManagerFinancesPanel({
           )
         }
       />
-    </FilterFieldsAccordion>
+    </>
   );
 
   const resetFinanceFilters = () => {

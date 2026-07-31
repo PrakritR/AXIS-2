@@ -36,6 +36,7 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
   '[data-slot="modal-vaul-drawer"][data-state="open"]',
   '[data-slot="modal-radix-dialog"][data-state="open"]',
   '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+  '[data-slot="portal-filter-dropdown-panel"]',
 ];
 
 /**
@@ -76,11 +77,9 @@ export function fieldSelectMenuContentPx(count: number, extraPx = 0): number {
 export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,
-  portalHost: HTMLElement,
+  _portalHost: HTMLElement,
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
-  const hostRect = portalHost.getBoundingClientRect();
-  const inModal = portalHost !== document.body;
   const viewportH = window.innerHeight;
   const viewportPadding = 12;
   const contentHeight = contentPx;
@@ -92,19 +91,15 @@ export function computeFieldSelectMenuRect(
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
   const maxHeight = Math.min(contentHeight, viewportCap);
-  const top = inModal
-    ? openUp
-      ? Math.max(4, rect.top - hostRect.top - maxHeight - 4)
-      : rect.bottom - hostRect.top + 4
-    : openUp
-      ? Math.max(viewportPadding, rect.top - maxHeight - 4)
-      : rect.bottom + 4;
+  const top = openUp
+    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
+    : rect.bottom + 4;
   return {
     top,
-    left: inModal ? rect.left - hostRect.left : rect.left,
+    left: rect.left,
     width: rect.width,
     maxHeight,
-    position: inModal ? "absolute" : "fixed",
+    position: "fixed",
   };
 }
 
