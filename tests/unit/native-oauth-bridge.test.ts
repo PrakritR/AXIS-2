@@ -60,18 +60,28 @@ describe("native OAuth bridge", () => {
     );
   });
 
-  it("redirects system-browser OAuth returns to the custom scheme via HTTP 302", async () => {
+  it("returns HTML (not a redirect) with scheme link, web fallback, and visible anchors", async () => {
     const callbackUrl = new URL(
-      "https://www.axis-seattle-housing.com/auth/callback?native_bridge=1&code=abc123",
+      "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
     );
     const response = nativeOAuthBridgeResponse(callbackUrl);
+    const html = await response.text();
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${NATIVE_OAUTH_CALLBACK_URL}?code=abc123`);
-    expect(await response.text()).toBe("");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain(`${NATIVE_OAUTH_CALLBACK_URL}?code=abc123`);
+    expect(html).toContain("https://prop-lane.space/auth/callback?code=abc123");
+    expect(html).not.toContain("native_bridge");
+    expect(html).toContain("Open PropLane");
+    expect(html).toContain("Continue in your browser");
+    expect(html).toContain('id="open-app"');
+    expect(html).toContain('id="continue-browser"');
+    expect(html).toContain("visibilitychange");
+    expect(html).toContain("1500");
   });
 
-  it("bridge is for Android Custom Tabs — iOS uses ASWebAuthenticationSession with a direct scheme redirect", () => {
+  it("does not render bridge HTML inside the Capacitor WebView", () => {
     const req = new NextRequest(
       "https://www.axis-seattle-housing.com/auth/callback?native_bridge=1&code=abc123",
       { headers: { "user-agent": "Mozilla/5.0 Capacitor iOS" } },
