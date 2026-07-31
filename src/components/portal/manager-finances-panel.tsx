@@ -501,6 +501,13 @@ export function ManagerFinancesPanel({
   const [propertyTick, setPropertyTick] = useState(0);
   const [vendorTick, setVendorTick] = useState(0);
   const [cashflowChartTick, setCashflowChartTick] = useState(0);
+  // The chart window is "the last 24 months from now", but reading the clock DURING
+  // render makes the render impure: two renders in the same tick could produce different
+  // windows. Stamp it once per mount and re-stamp whenever the chart is asked to refresh.
+  const [cashflowNowMs, setCashflowNowMs] = useState(0);
+  useEffect(() => {
+    setCashflowNowMs(Date.now());
+  }, [cashflowChartTick]);
   const [filters, setFilters] = useState(defaultFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -537,8 +544,8 @@ export function ManagerFinancesPanel({
 
   const monthlyProfitPoints = useMemo(() => {
     void cashflowChartTick;
-    if (!userId || tabId !== "cash-flow-statement") return [];
-    const months = lastNMonths(Date.now(), 24);
+    if (!userId || tabId !== "cash-flow-statement" || !cashflowNowMs) return [];
+    const months = lastNMonths(cashflowNowMs, 24);
     const charges = readChargesForManager(userId, {
       linkedPropertyIds: collectLinkedPropertyIdsForModule(userId, "payments"),
     }).filter((c) => c.status === "paid");
@@ -561,7 +568,7 @@ export function ManagerFinancesPanel({
       (e) => e.amountCents / 100,
     );
     return mergeMonthlyCashflow(paymentsByMonth, expensesByMonth);
-  }, [userId, tabId, cashflowChartTick, filters.propertyId]);
+  }, [userId, tabId, cashflowChartTick, cashflowNowMs, filters.propertyId]);
 
   useEffect(() => {
     if (!ready || tabId !== "cash-flow-statement") return;

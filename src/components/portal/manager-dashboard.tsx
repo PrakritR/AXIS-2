@@ -680,7 +680,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
         subtitle: [w.propertyName, w.unit].filter(Boolean).join(" · ") || "—",
         rowTone: (w.bucket === "open" ? "danger" : "pending") as AttentionTone,
         pillLabel: w.bucket === "open" ? "Open" : "Scheduled",
-        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : Date.now(),
+        // Undated work sorts first (the list is descending by sortKey). This used to be
+        // `Date.now()`, which put it first only incidentally and made the render impure,
+        // so two renders in the same tick could order the list differently.
+        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : Number.MAX_SAFE_INTEGER,
       })),
     ].sort((a, b) => b.sortKey - a.sortKey);
     const pendingServiceCount = serviceItems.length;

@@ -115,6 +115,10 @@ function ResidentDirectChatPane({
     setDraft("");
   }, [email, smsAvailable, emailAvailable]);
 
+  // The compiler declines to re-memoize this one and reports the bailout as an error. It is
+  // an optimization notice, not a correctness problem: the explicit useCallback below still
+  // does the memoizing, exactly as it did before the compiler was introduced.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const sendMessage = useCallback(async () => {
     const text = draft.trim();
     if (!text) return;
