@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
-import { FilterCollapsibleSection, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
+import { Input } from "@/components/ui/input";
+import { FilterCollapsibleSection, FilterFieldsAccordion, FilterSingleSelectList, filterSingleSelectSummary, useFilterAccordionClose } from "@/components/portal/filter-field-lists";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
 
 export type ReportFilterState = {
@@ -76,30 +76,12 @@ export function ReportFilterBar({
       ) : null}
 
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
-        stacked ? (
-          <ReportPropertyFilterDropdown
-            propertyOptions={propertyOptions}
-            value={filters.propertyId}
-            onChange={(propertyId) => onChange({ propertyId })}
-          />
-        ) : (
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
-            Property
-            <Select
-              className="h-10 w-full min-w-[12rem] sm:w-auto"
-              value={filters.propertyId}
-              onChange={(e) => onChange({ propertyId: e.target.value })}
-              data-attr="report-filter-property"
-            >
-              <option value="">All properties</option>
-              {propertyOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-        )
+        <ReportPropertyFilterDropdown
+          propertyOptions={propertyOptions}
+          value={filters.propertyId}
+          onChange={(propertyId) => onChange({ propertyId })}
+          className={stacked ? undefined : "min-w-[12rem] sm:w-auto"}
+        />
       ) : null}
 
       {showDaysAhead ? (
@@ -144,6 +126,29 @@ function ReportPropertyFilterDropdown({
   propertyOptions,
   value,
   onChange,
+  className,
+}: {
+  propertyOptions: { id: string; label: string }[];
+  value: string;
+  onChange: (propertyId: string) => void;
+  /** Extra width constraint for the inline (toolbar) variant. */
+  className?: string;
+}) {
+  // Wrap in an accordion so the single-select menu closes on pick
+  // (useFilterAccordionClose is a no-op without a provider above it).
+  const field = (
+    <FilterFieldsAccordion>
+      <ReportPropertyFilterField propertyOptions={propertyOptions} value={value} onChange={onChange} />
+    </FilterFieldsAccordion>
+  );
+
+  return className ? <div className={className}>{field}</div> : field;
+}
+
+function ReportPropertyFilterField({
+  propertyOptions,
+  value,
+  onChange,
 }: {
   propertyOptions: { id: string; label: string }[];
   value: string;
@@ -160,6 +165,7 @@ function ReportPropertyFilterDropdown({
       sectionId="property"
       label="Property"
       summary={filterSingleSelectSummary(value, options, "All properties")}
+      empty={!value}
       dataAttr="report-filter-property-trigger"
     >
       <FilterSingleSelectList

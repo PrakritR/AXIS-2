@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DocumentScope } from "@/lib/reports/types";
-import { Select } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 
 export type FormalDocumentFilterState = {
   scope: DocumentScope;
@@ -40,92 +40,74 @@ export function FormalDocumentScopeBar({
       .catch(() => setOptions({ properties: [], tenants: [], rooms: [] }));
   }, [filters.propertyId]);
 
-  // Match the shared portal filter-row control styling used by ReportFilterBar.
-  const labelClass = inline
-    ? stacked
-      ? "flex w-full flex-col gap-1.5 text-xs font-medium text-muted"
-      : "flex flex-col gap-1.5 text-xs font-medium text-muted"
-    : "flex flex-col gap-1 text-xs font-medium text-muted";
-  const selectClass = "w-full";
-
-  const fieldClass = (minWidth: string) =>
-    stacked ? labelClass : `${minWidth} ${labelClass}`;
+  const fieldWrapClass = (minWidth: string) => (stacked ? "w-full" : `${minWidth} w-full`);
 
   const controls = (
     <>
-      <label className={fieldClass("min-w-[9rem]")}>
-        Scope
-        <Select
-          className={selectClass}
-          value={filters.scope}
-          onChange={(e) =>
-            onChange({
-              scope: e.target.value as DocumentScope,
-              propertyId: "",
-              residentEmail: "",
-              roomLabel: "",
-            })
-          }
-        >
-          <option value="portfolio">All properties</option>
-          <option value="property">Per property</option>
-          <option value="tenant">Per tenant</option>
-          <option value="room">Per room</option>
-        </Select>
-      </label>
+      <FieldSingleSelect
+        label="Scope"
+        wrapperClassName={fieldWrapClass("min-w-[9rem]")}
+        dataAttr="formal-document-scope"
+        value={filters.scope}
+        onChange={(next) =>
+          onChange({
+            scope: next as DocumentScope,
+            propertyId: "",
+            residentEmail: "",
+            roomLabel: "",
+          })
+        }
+        options={[
+          { value: "portfolio", label: "All properties" },
+          { value: "property", label: "Per property" },
+          { value: "tenant", label: "Per tenant" },
+          { value: "room", label: "Per room" },
+        ]}
+      />
 
       {filters.scope === "property" || filters.scope === "tenant" || filters.scope === "room" ? (
-        <label className={fieldClass("min-w-[10rem]")}>
-          Property
-          <Select
-            className={selectClass}
-            value={filters.propertyId}
-            onChange={(e) => onChange({ propertyId: e.target.value, residentEmail: "", roomLabel: "" })}
-          >
-            <option value="">Select property</option>
-            {options.properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <FieldSingleSelect
+          label="Property"
+          wrapperClassName={fieldWrapClass("min-w-[10rem]")}
+          dataAttr="formal-document-property"
+          placeholder="Select property"
+          value={filters.propertyId}
+          onChange={(next) => onChange({ propertyId: next, residentEmail: "", roomLabel: "" })}
+          options={[
+            { value: "", label: "Select property" },
+            ...options.properties.map((p) => ({ value: p.id, label: p.label })),
+          ]}
+        />
       ) : null}
 
       {filters.scope === "tenant" ? (
-        <label className={fieldClass("min-w-[10rem]")}>
-          Tenant
-          <Select
-            className={selectClass}
-            value={filters.residentEmail}
-            onChange={(e) => onChange({ residentEmail: e.target.value })}
-          >
-            <option value="">Select tenant</option>
-            {options.tenants.map((t) => (
-              <option key={t.email} value={t.email}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <FieldSingleSelect
+          label="Tenant"
+          wrapperClassName={fieldWrapClass("min-w-[10rem]")}
+          dataAttr="formal-document-tenant"
+          placeholder="Select tenant"
+          value={filters.residentEmail}
+          onChange={(next) => onChange({ residentEmail: next })}
+          options={[
+            { value: "", label: "Select tenant" },
+            ...options.tenants.map((t) => ({ value: t.email, label: t.name })),
+          ]}
+        />
       ) : null}
 
       {filters.scope === "room" ? (
-        <label className={fieldClass("min-w-[9rem]")}>
-          Room / unit
-          <Select
-            className={selectClass}
-            value={filters.roomLabel}
-            onChange={(e) => onChange({ roomLabel: e.target.value })}
-          >
-            <option value="">Select room</option>
-            {options.rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.label}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <FieldSingleSelect
+          label="Room / unit"
+          wrapperClassName={fieldWrapClass("min-w-[9rem]")}
+          dataAttr="formal-document-room"
+          placeholder="Select room"
+          value={filters.roomLabel}
+          onChange={(next) => onChange({ roomLabel: next })}
+          options={[
+            { value: "", label: "Select room" },
+            ...options.rooms.map((r) => ({ value: r.id, label: r.label })),
+          ]}
+        />
       ) : null}
     </>
   );

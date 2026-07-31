@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
-import { useIsClient } from "@/hooks/use-is-client";
 import {
   FIELD_SELECT_CHEVRON_CLASS,
   FIELD_SELECT_LABEL_CLASS,
-  FIELD_SELECT_MENU_CLASS,
   FIELD_SELECT_MENU_OPTION_CLASS,
   FIELD_SELECT_TRIGGER_CLASS,
-  FIELD_SELECT_TRIGGER_COMPACT_CLASS,
   FIELD_SELECT_TRIGGER_PILL_CLASS,
   FIELD_SELECT_TRIGGER_INLINE_CLASS,
   partitionFieldSelectClasses,
@@ -19,82 +16,21 @@ import {
   FIELD_SELECT_MENU_DATA_ATTR,
   handlePortaledFieldSelectOptionPointerDown,
 } from "@/components/ui/field-select-portal-interaction";
+import {
+  FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
+  FIELD_SELECT_MENU_SEARCH_PX,
+  FIELD_SELECT_MENU_SHELL_CLASS,
+  FIELD_SELECT_MENU_VISIBLE_ITEMS,
+  FieldSelectMenuSearch,
+  fieldSelectMenuContentPx,
+  fieldSelectMenuMatches,
+  fieldSelectMenuZIndex,
+  useFieldSelectMenu,
+} from "@/components/ui/field-select-menu";
 
+export { FIELD_SELECT_MENU_VISIBLE_ITEMS };
 
-export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
-const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
-
-const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
-  '[data-slot="modal-vaul-drawer"][data-state="open"]',
-  '[data-slot="modal-radix-dialog"][data-state="open"]',
-  '[data-slot="vaul-bottom-sheet"][data-state="open"]',
-];
-
-/**
- * Portal menus into an open modal/drawer shell when present. Radix `hideOthers` and Vaul
- * mark every `document.body` sibling outside the dialog tree as aria-hidden, so body-
- * portaled menus look correct but cannot receive clicks. Body fallback keeps viewport
- * `fixed` coords for non-modal surfaces (filters, tables, etc.).
- */
-function resolveFieldSelectMenuPortal(): HTMLElement {
-  for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
-    const host = document.querySelector<HTMLElement>(selector);
-    if (host) return host;
-  }
-  return document.body;
-}
-
-function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
-  return portalHost === document.body ? 10000 : 80;
-}
-
-type FieldSelectMenuRect = {
-  top: number;
-  left: number;
-  width: number;
-  maxHeight: number;
-  position: "fixed" | "absolute";
-};
-
-function computeFieldSelectMenuRect(
-  button: HTMLButtonElement,
-  optionCount: number,
-  portalHost: HTMLElement,
-): FieldSelectMenuRect {
-  const rect = button.getBoundingClientRect();
-  const hostRect = portalHost.getBoundingClientRect();
-  const inModal = portalHost !== document.body;
-  const viewportH = window.innerHeight;
-  const viewportPadding = 12;
-  const fiveItemCap =
-    FIELD_SELECT_MENU_VISIBLE_ITEMS * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12;
-  const contentHeight = Math.min(
-    Math.max(optionCount, 1) * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
-    fiveItemCap,
-  );
-  const spaceBelow = viewportH - rect.bottom - viewportPadding;
-  const spaceAbove = rect.top - viewportPadding;
-  const openUp = spaceBelow < contentHeight && spaceAbove > spaceBelow;
-  const viewportCap = Math.max(
-    FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
-    openUp ? spaceAbove - 8 : spaceBelow - 8,
-  );
-  const maxHeight = Math.min(contentHeight, viewportCap);
-  const top = inModal
-    ? openUp
-      ? Math.max(4, rect.top - hostRect.top - maxHeight - 4)
-      : rect.bottom - hostRect.top + 4
-    : openUp
-      ? Math.max(viewportPadding, rect.top - maxHeight - 4)
-      : rect.bottom + 4;
-  return {
-    top,
-    left: inModal ? rect.left - hostRect.left : rect.left,
-    width: rect.width,
-    maxHeight,
-    position: inModal ? "absolute" : "fixed",
-  };
-}
+const matchesQuery = fieldSelectMenuMatches;
 
 export type CheckboxMultiSelectOption = { value: string; label: string };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
@@ -139,6 +75,7 @@ export function CheckboxMultiSelect({
   emptyLabel = "None selected",
   /** When set and `selected` is non-empty, shown on the trigger instead of summarizing selected labels. */
   selectionTriggerLabel,
+  searchPlaceholder = "Search…",
   dataAttr,
   className,
   labelClassName,
@@ -156,6 +93,7 @@ export function CheckboxMultiSelect({
   emptyMenuText?: string;
   emptyLabel?: string;
   selectionTriggerLabel?: string;
+  searchPlaceholder?: string;
   dataAttr?: string;
   className?: string;
   labelClassName?: string;
@@ -163,12 +101,8 @@ export function CheckboxMultiSelect({
   variant?: "field" | "pill";
   menuFooter?: React.ReactNode;
 }) {
-  const listId = useId();
-  const isClient = useIsClient();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
+  const [query, setQuery] = useState("");
   const pill = variant === "pill";
   const { wrapperClassName, triggerClassName } = partitionFieldSelectClasses(className);
 
@@ -177,52 +111,43 @@ export function CheckboxMultiSelect({
     return options ?? [];
   }, [groups, options]);
 
-  const updateMenuRect = () => {
-    const button = buttonRef.current;
-    if (!button) return;
-    setMenuRect(
-      computeFieldSelectMenuRect(button, flatOptions.length, resolveFieldSelectMenuPortal()),
-    );
+  const showSearch = flatOptions.length > FIELD_SELECT_MENU_VISIBLE_ITEMS;
+  const contentPx = fieldSelectMenuContentPx(
+    flatOptions.length,
+    showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+  );
+
+  const setOpenAndReset = (next: boolean) => {
+    setOpen(next);
+    if (!next) setQuery("");
   };
 
-  useLayoutEffect(() => {
-    if (!open) {
-      setMenuRect(null);
-      return;
-    }
-    updateMenuRect();
-    window.addEventListener("resize", updateMenuRect);
-    window.addEventListener("scroll", updateMenuRect, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuRect);
-      window.removeEventListener("scroll", updateMenuRect, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDownOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (wrapRef.current?.contains(target)) return;
-      if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
-      if (document.getElementById(listId)?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDownOutside, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDownOutside, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [listId, open]);
+  const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
+    open,
+    onOpenChange: setOpenAndReset,
+    contentPx,
+  });
 
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
+
+  // Filtering only hides rows from view; the `selected` array is never mutated, so a
+  // search never drops an already-selected option from the selection.
+  const filteredGroups = useMemo(() => {
+    if (!groups?.length) return null;
+    if (!query.trim()) return groups;
+    return groups
+      .map((g) => ({ ...g, options: g.options.filter((o) => matchesQuery(o.label, query)) }))
+      .filter((g) => g.options.length > 0);
+  }, [groups, query]);
+
+  const filteredOptions = useMemo(() => {
+    if (groups?.length) return [];
+    const base = options ?? [];
+    if (!query.trim()) return base;
+    return base.filter((o) => matchesQuery(o.label, query));
+  }, [groups, options, query]);
 
   const renderCheckboxOption = (opt: CheckboxMultiSelectOption) => {
     const checked = selected.includes(opt.value);
@@ -252,47 +177,64 @@ export function CheckboxMultiSelect({
       ? selectionTriggerLabel
       : summarizeSelection(selected, flatOptions, emptyLabel);
 
-  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+  const hasVisibleOptions = groups?.length
+    ? (filteredGroups?.length ?? 0) > 0
+    : filteredOptions.length > 0;
 
   const menu =
     open && menuRect && isClient && portalHost ? (
       <div
         id={listId}
-        role="listbox"
-        aria-multiselectable="true"
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
-        className={`${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`${FIELD_SELECT_MENU_SHELL_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
-          overflowY: "auto",
-          overscrollBehavior: "contain",
-          WebkitOverflowScrolling: "touch",
-          touchAction: "pan-y",
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        {flatOptions.length === 0 ? (
-          <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
-        ) : groups?.length ? (
-          groups.map((group) => (
-            <div key={group.label}>
-              <p className="field-dropdown-menu-option sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
-                {group.label}
-              </p>
-              {group.options.map((opt) => renderCheckboxOption(opt))}
-            </div>
-          ))
-        ) : (
-          (options ?? []).map((opt) => renderCheckboxOption(opt))
-        )}
+        {showSearch ? (
+          <FieldSelectMenuSearch
+            query={query}
+            onQueryChange={setQuery}
+            placeholder={searchPlaceholder}
+            dataAttr={dataAttr ? `${dataAttr}-search` : undefined}
+          />
+        ) : null}
+        <div
+          role="listbox"
+          aria-multiselectable="true"
+          aria-label={label}
+          className="overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]"
+          style={{
+            maxHeight: FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
+            touchAction: "pan-y",
+          }}
+        >
+          {flatOptions.length === 0 ? (
+            <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
+          ) : !hasVisibleOptions ? (
+            <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">No matches</p>
+          ) : groups?.length ? (
+            (filteredGroups ?? []).map((group) => (
+              <div key={group.label}>
+                <p className="field-dropdown-menu-option sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+                  {group.label}
+                </p>
+                {group.options.map((opt) => renderCheckboxOption(opt))}
+              </div>
+            ))
+          ) : (
+            filteredOptions.map((opt) => renderCheckboxOption(opt))
+          )}
+        </div>
         {menuFooter ? (
-          <div className={`border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
+          <div className={`shrink-0 border-t border-border ${FIELD_SELECT_MENU_OPTION_CLASS}`}>{menuFooter}</div>
         ) : null}
       </div>
     ) : null;
@@ -312,7 +254,7 @@ export function CheckboxMultiSelect({
         aria-controls={listId}
         data-attr={dataAttr}
         className={triggerClassForVariant(variant, pill || hideLabel, triggerClassName)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpenAndReset(!open)}
       >
         <span className={`min-w-0 truncate ${selected.length === 0 ? "text-muted" : ""}`}>{buttonLabel}</span>
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />
@@ -331,6 +273,7 @@ export function FieldSingleSelect({
   onChange,
   disabled,
   placeholder = "Select…",
+  searchPlaceholder = "Search…",
   dataAttr,
   className,
   wrapperClassName: wrapperClassNameProp,
@@ -345,6 +288,7 @@ export function FieldSingleSelect({
   onChange: (next: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  searchPlaceholder?: string;
   dataAttr?: string;
   /** @deprecated Prefer wrapperClassName + triggerClassName */
   className?: string;
@@ -354,73 +298,42 @@ export function FieldSingleSelect({
   hideLabel?: boolean;
   variant?: "field" | "pill";
 }) {
-  const listId = useId();
-  const isClient = useIsClient();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
+  const [query, setQuery] = useState("");
   const pill = variant === "pill";
   const partitioned = partitionFieldSelectClasses(className);
   const wrapperClassName = wrapperClassNameProp ?? partitioned.wrapperClassName;
   const triggerClassName = triggerClassNameProp ?? partitioned.triggerClassName;
 
   const buttonLabel = options.find((o) => o.value === value)?.label ?? placeholder;
+  const showSearch = options.length > FIELD_SELECT_MENU_VISIBLE_ITEMS;
+  const contentPx = fieldSelectMenuContentPx(
+    options.length,
+    showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+  );
 
-  const updateMenuRect = () => {
-    const button = buttonRef.current;
-    if (!button) return;
-    setMenuRect(
-      computeFieldSelectMenuRect(button, options.length, resolveFieldSelectMenuPortal()),
-    );
+  const setOpenAndReset = (next: boolean) => {
+    setOpen(next);
+    if (!next) setQuery("");
   };
 
-  useLayoutEffect(() => {
-    if (!open) {
-      setMenuRect(null);
-      return;
-    }
-    updateMenuRect();
-    window.addEventListener("resize", updateMenuRect);
-    window.addEventListener("scroll", updateMenuRect, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuRect);
-      window.removeEventListener("scroll", updateMenuRect, true);
-    };
-  }, [open]);
+  const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
+    open,
+    onOpenChange: setOpenAndReset,
+    contentPx,
+  });
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDownOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (wrapRef.current?.contains(target)) return;
-      if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
-      if (document.getElementById(listId)?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDownOutside, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDownOutside, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [listId, open]);
-
-  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return options;
+    return options.filter((o) => matchesQuery(o.label, query));
+  }, [options, query]);
 
   const menu =
     open && menuRect && isClient && portalHost ? (
       <div
         id={listId}
-        role="listbox"
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
-        className={`${FIELD_SELECT_MENU_CLASS} ${
-          pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
-        }`}
+        className={`${FIELD_SELECT_MENU_SHELL_CLASS} ${pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           position: menuRect.position,
           top: menuRect.top,
@@ -428,40 +341,56 @@ export function FieldSingleSelect({
           minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
-          overflowY: "auto",
-          overscrollBehavior: "contain",
-          WebkitOverflowScrolling: "touch",
-          touchAction: "pan-y",
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        {options.map((opt) => {
-          const active = opt.value === value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="option"
-              aria-selected={active}
-              className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} ${
-                active ? "text-foreground" : "text-foreground"
-              }`}
-              onPointerDown={(event) => {
-                handlePortaledFieldSelectOptionPointerDown(event, () => {
-                  onChange(opt.value);
-                  setOpen(false);
-                });
-              }}
-            >
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
-                {active ? "✓" : ""}
-              </span>
-              <span className="leading-snug">{opt.label}</span>
-            </button>
-          );
-        })}
+        {showSearch ? (
+          <FieldSelectMenuSearch
+            query={query}
+            onQueryChange={setQuery}
+            placeholder={searchPlaceholder}
+            dataAttr={dataAttr ? `${dataAttr}-search` : undefined}
+          />
+        ) : null}
+        <div
+          role="listbox"
+          aria-label={label}
+          className="overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]"
+          style={{
+            maxHeight: FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
+            touchAction: "pan-y",
+          }}
+        >
+          {filteredOptions.length === 0 ? (
+            <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">No matches</p>
+          ) : (
+            filteredOptions.map((opt) => {
+              const active = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} text-foreground`}
+                  onPointerDown={(event) => {
+                    handlePortaledFieldSelectOptionPointerDown(event, () => {
+                      onChange(opt.value);
+                      setOpenAndReset(false);
+                    });
+                  }}
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
+                    {active ? "✓" : ""}
+                  </span>
+                  <span className="leading-snug">{opt.label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
     ) : null;
 
@@ -480,7 +409,7 @@ export function FieldSingleSelect({
         aria-controls={listId}
         data-attr={dataAttr}
         className={triggerClassForVariant(variant, hideLabel || pill, triggerClassName)}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpenAndReset(!open)}
       >
         <span className={`min-w-0 ${pill ? "whitespace-nowrap" : "truncate"} ${value ? "" : "text-muted"}`}>{buttonLabel}</span>
         <ChevronDown className={FIELD_SELECT_CHEVRON_CLASS} aria-hidden />

@@ -145,6 +145,30 @@ import { PortalTableDetailActions, PORTAL_DETAIL_BTN } from "@/components/portal
 
 Admin/manager tab tables use `ManagerPortalPageShell` with `filterRow` above the divider — see `admin-inbox-client.tsx` and `AGENTS.md` → Admin portal table tabs.
 
+## Filter dropdowns: one portaled-overlay pattern
+
+Every portal filter field (property / resident / status / sort / scope) is ONE
+pattern: a single-line trigger showing a summary (placeholder when empty) + a
+chevron, and an option list that opens as a PORTALED OVERLAY anchored to the
+trigger — never inline in flow. Opening a field must not push the fields below it
+or resize the panel.
+
+- **Shared machinery:** `src/components/ui/field-select-menu.tsx`
+  (`useFieldSelectMenu`, `resolveFieldSelectMenuPortal`, rect math, the 5-row
+  constants, `FieldSelectMenuSearch`). It portals into the open modal / Vaul
+  sheet shell when there is one, else `document.body` — so it works inside the
+  `PortalFilterSortSheet` modal, the mobile bottom sheet, and the desktop
+  dropdown popover alike. Do NOT fork a second positioning implementation.
+- **Filter fields:** `src/components/portal/filter-field-lists.tsx`
+  (`FilterCollapsibleSection` + `FilterCheckboxList` multi / `FilterSingleSelectList`
+  single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
+  / `FieldSingleSelect` (`checkbox-multi-select.tsx`) are the same pattern for
+  form/toolbar/scope pickers — prefer them over a bare `<select>`.
+- **5 rows, then scroll:** the option list caps at `FILTER_LIST_VISIBLE_ROWS`
+  (= `FIELD_SELECT_MENU_VISIBLE_ITEMS`, the single source of the "5"). A search
+  box appears only when a field has MORE than 5 options and never drops an
+  already-selected option. Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
+
 ## Modals scroll in ONE place
 
 The `Modal` body (`src/components/ui/modal.tsx`) is the modal's single scroll

@@ -419,7 +419,6 @@ export function PortalCalendar({
         dataAttr="calendar-filter-sheet-open"
       >
         <ApplicationFilterSortFields
-          layout="inline"
           propertyOptions={managerPropertyFilterOptions}
           propertyFilters={activeCalendarPropertyFilters}
           onPropertyFiltersChange={setCalendarPropertyFilters}
