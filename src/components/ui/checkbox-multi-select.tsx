@@ -24,13 +24,6 @@ import {
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
 const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 
-const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
-  '[data-slot="modal-vaul-drawer"][data-state="open"]',
-  '[data-slot="modal-radix-dialog"][data-state="open"]',
-  '[data-slot="vaul-bottom-sheet"][data-state="open"]',
-
-];
-
 /**
  * Always portal menus to `document.body` with viewport `fixed` coords so overflow-hidden
  * filter/modal shells never clip the list. Modal outside-click handlers ignore menu
