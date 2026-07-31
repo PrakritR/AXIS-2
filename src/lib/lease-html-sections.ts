@@ -129,17 +129,6 @@ export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
   return sections;
 }
 
-/** Insert a new `<h2>` section immediately before the first existing section heading. */
-export function prependLeaseHtmlSection(
-  html: string,
-  section: { title: string; bodyHtml: string },
-): string {
-  const block = `<h2>${section.title}</h2>${section.bodyHtml}`;
-  const firstH2 = html.search(/<h2\b/i);
-  if (firstH2 < 0) return `${html}${block}`;
-  return `${html.slice(0, firstH2)}${block}${html.slice(firstH2)}`;
-}
-
 /** Rebuild full lease HTML from the document head plus edited section bodies. */
 export function rebuildLeaseHtmlFromSections(
   originalHtml: string,

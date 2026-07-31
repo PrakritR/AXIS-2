@@ -10,9 +10,10 @@ import {
   readLeaseTemplateFile,
   type LeaseConfigDraft,
 } from "@/components/portal/lease-config-form";
-import { LeaseConfigPreview } from "@/components/portal/lease-config-preview";
+import { LeaseHtmlDirectEditor } from "@/components/portal/lease-html-direct-editor";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { buildPropertyLeasePreview, type PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
+import { resolvePropertyLeaseEditHtml } from "@/lib/property-lease-edit";
 import {
   PROPERTY_LEASE_TYPE_OPTIONS,
   createPropertyLeaseTemplate,
@@ -81,8 +82,8 @@ export function PropertyLeaseFormModal({
   const [kind, setKind] = useState<PropertyLeaseTemplateKind>("room-rental");
   const [draft, setDraft] = useState<LeaseConfigDraft>(() => draftFieldsFromLeaseSource("axis_default"));
   const [error, setError] = useState<string | null>(null);
+  const [htmlOverride, setHtmlOverride] = useState("");
   // The template picker uploads to the private bucket before it returns a URL;
-  // saving mid-upload would fail validation as if no file had been chosen.
   const [templateUploading, setTemplateUploading] = useState(false);
 
   const source = leaseSourceFromDraft(draft);
@@ -99,12 +100,32 @@ export function PropertyLeaseFormModal({
     [sub, draft],
   );
 
-  const preview = useMemo(
-    () => buildPropertyLeasePreview(previewSub, { hint: propertyHint, demo: demoMode }),
-    [previewSub, propertyHint, demoMode],
+  const templateDraft = useMemo(
+    () => ({
+      leaseConfigMode: draft.leaseConfigMode ?? "standard",
+      leaseCustomKind: draft.leaseCustomKind === "document" ? ("document" as const) : ("terms" as const),
+      customLeaseTerms: draft.customLeaseTerms ?? "",
+      leaseTemplateDocUrl: draft.leaseTemplateDocUrl ?? null,
+      leaseTemplateDocName: draft.leaseTemplateDocName ?? "",
+      leaseTemplateHtmlOverride: "",
+    }),
+    [draft],
   );
 
-  const showGeneratedPreview = source === "axis_default" || source === "custom_comments";
+  const baselineHtml = useMemo(
+    () =>
+      resolvePropertyLeaseEditHtml({
+        sub: previewSub,
+        draft: templateDraft,
+        source,
+        hint: propertyHint,
+        demo: demoMode,
+      }),
+    [previewSub, templateDraft, source, propertyHint, demoMode],
+  );
+
+  const editorHtml = htmlOverride.trim() || baselineHtml;
+  const showLeaseEditor = Boolean(editorHtml.trim());
 
   useEffect(() => {
     if (!open) return;
@@ -113,11 +134,13 @@ export function PropertyLeaseFormModal({
       setLabel(template.label);
       setKind(normalizeLeaseTemplateKind(template.kind));
       setDraft(draftFromTemplate(template));
+      setHtmlOverride(template.leaseTemplateHtmlOverride?.trim() ?? "");
       return;
     }
     setLabel(PROPERTY_LEASE_TYPE_OPTIONS[0]!.defaultLabel);
     setKind("room-rental");
     setDraft(draftFieldsFromLeaseSource("axis_default"));
+    setHtmlOverride("");
   }, [open, mode, template]);
 
   useEffect(() => {
@@ -134,6 +157,7 @@ export function PropertyLeaseFormModal({
       file,
       (dataUrl, fileName) => {
         setError(null);
+        setHtmlOverride("");
         setDraft((d) => ({ ...d, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
       },
       showToast,
@@ -143,7 +167,15 @@ export function PropertyLeaseFormModal({
 
   const setSource = (next: PropertyLeaseSource) => {
     setError(null);
+    setHtmlOverride("");
     setDraft((d) => ({ ...d, ...draftFieldsFromLeaseSource(next) }));
+  };
+
+  const resolveHtmlOverrideToSave = (): string => {
+    const trimmed = editorHtml.trim();
+    if (!trimmed) return "";
+    if (trimmed === baselineHtml.trim()) return "";
+    return trimmed;
   };
 
   const dismiss = () => onClose();
@@ -163,17 +195,21 @@ export function PropertyLeaseFormModal({
       customLeaseTerms: draft.customLeaseTerms ?? "",
       leaseTemplateDocUrl: draft.leaseTemplateDocUrl ?? null,
       leaseTemplateDocName: draft.leaseTemplateDocName ?? "",
+      leaseTemplateHtmlOverride: resolveHtmlOverrideToSave(),
     };
 
     if (mode === "add") {
-      const created = createPropertyLeaseTemplate({
-        kind,
-        label: trimmedLabel,
-        source,
-        customLeaseTerms: leaseFields.customLeaseTerms,
-        leaseTemplateDocUrl: leaseFields.leaseTemplateDocUrl,
-        leaseTemplateDocName: leaseFields.leaseTemplateDocName,
-      });
+      const created = {
+        ...createPropertyLeaseTemplate({
+          kind,
+          label: trimmedLabel,
+          source,
+          customLeaseTerms: leaseFields.customLeaseTerms,
+          leaseTemplateDocUrl: leaseFields.leaseTemplateDocUrl,
+          leaseTemplateDocName: leaseFields.leaseTemplateDocName,
+        }),
+        leaseTemplateHtmlOverride: leaseFields.leaseTemplateHtmlOverride,
+      };
       const next = [...(templates ?? []), created];
       if (!onSave(next)) return;
       showToast("Lease added.");
@@ -202,7 +238,7 @@ export function PropertyLeaseFormModal({
       title={mode === "add" ? "New lease" : "Edit lease"}
       description="Set the agreement type and how the lease document is produced for this property."
       onClose={dismiss}
-      panelClassName="max-w-2xl"
+      panelClassName="max-w-4xl"
       assistantContext="Lease — agreement type, PropLane default, custom clauses, or uploaded PDF"
       footer={
         <ModalFooter>
@@ -249,10 +285,16 @@ export function PropertyLeaseFormModal({
             draft={draft}
             onDraftChange={(patch) => {
               setError(null);
+              if ("customLeaseTerms" in patch || "leaseTemplateDocUrl" in patch) {
+                setHtmlOverride("");
+              }
               setDraft((d) => ({ ...d, ...patch }));
             }}
             onStandardToggle={() => setError(null)}
-            onCustomTermsChange={() => setError(null)}
+            onCustomTermsChange={() => {
+              setError(null);
+              setHtmlOverride("");
+            }}
             onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
             customTermsError={customTermsError}
             leaseTemplateError={leaseTemplateError}
@@ -261,11 +303,19 @@ export function PropertyLeaseFormModal({
           />
         ) : null}
 
-        {showGeneratedPreview ? (
-          <div>
-            <p className={fieldLabelClass}>Lease preview</p>
-            <LeaseConfigPreview preview={preview} />
+        {showLeaseEditor ? (
+          <div className="flex min-h-[min(420px,55vh)] flex-col">
+            <p className={fieldLabelClass}>Lease editor</p>
+            <LeaseHtmlDirectEditor
+              className="min-h-[min(380px,50vh)] flex-1"
+              html={editorHtml}
+              baselineHtml={baselineHtml}
+              onChange={setHtmlOverride}
+              showPersistBar={false}
+            />
           </div>
+        ) : source === "custom_format" && !draft.leaseTemplateDocUrl ? (
+          <p className="text-sm text-muted">Upload a PDF above to preview and edit the lease shell.</p>
         ) : null}
       </div>
     </Modal>
