@@ -650,12 +650,15 @@ export function listingFeeRowsForLeaseBasicsSection(
   sub: ManagerListingSubmissionV1,
   section: LeaseBasicsFeeSection,
   formatPrice: (raw: string) => string,
+  opts?: { excludePresetIds?: ListingFeePresetId[] },
 ): ListingFeeDisplayRow[] {
   const shortTermOn = Boolean(sub.shortTermRentalsAllowed);
+  const exclude = new Set(opts?.excludePresetIds ?? []);
   const fees = resolveListingFees(sub).filter((f) => feeMeaningfulForPublicListing(f.amount));
   const rows: ListingFeeDisplayRow[] = [];
 
   for (const fee of fees) {
+    if (fee.presetId && exclude.has(fee.presetId as ListingFeePresetId)) continue;
     if (!feeBelongsInLeaseBasicsSection(fee, section, shortTermOn)) continue;
     const row = listingFeeToDisplayRow(fee, formatPrice);
     if (row) rows.push(row);

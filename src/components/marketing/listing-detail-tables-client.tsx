@@ -1034,7 +1034,9 @@ export function LeaseBasicsTableInteractive({
       <div className="space-y-5 md:hidden">
         {sectionGroups.map((group) => (
           <div key={group.key} className="space-y-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{group.label}</p>
+            {sectionGroups.length > 1 ? (
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{group.label}</p>
+            ) : null}
             {renderMobileRows(group.rows)}
           </div>
         ))}

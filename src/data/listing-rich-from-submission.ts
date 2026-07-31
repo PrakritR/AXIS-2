@@ -548,7 +548,7 @@ function entireHomeShortTermRentRow(
   sub: ManagerListingSubmissionV1,
   rooms: ManagerRoomSubmission[],
 ): LeaseBasicRow | null {
-  if (!sub.shortTermRentalsAllowed) return null;
+  if (!sub.shortTermRentalsAllowed || !isEntireHomeListing(sub)) return null;
   const named = rooms.filter((r) => r.name.trim());
   const daily = sub.shortTermDailyCost?.trim();
   if (!daily) return null;
@@ -562,6 +562,13 @@ function entireHomeShortTermRentRow(
     status: "Nightly",
     body: shortTermStayDetailBody(sub),
   };
+}
+
+function listingShortTermNightlyFeeRowNeeded(sub: ManagerListingSubmissionV1): boolean {
+  if (isEntireHomeListing(sub) && sub.shortTermDailyCost?.trim()) return false;
+  const wholeHouse = preferredWholeHouseBundle(sub, sub.rooms);
+  if (wholeHouse?.shortTermEnabled && bundleShortTermPriceLabel(wholeHouse, sub)) return false;
+  return true;
 }
 
 function shortTermBundleRentRows(
@@ -652,10 +659,11 @@ function buildLeaseBasicsRows(
     const entireSt = entireHomeShortTermRentRow(sub, rooms);
     if (entireSt) rows.push(entireSt);
     rows.push(...shortTermBundleRentRows(sub, rooms));
+    const skipNightlyPreset = !listingShortTermNightlyFeeRowNeeded(sub);
     rows.push(
-      ...listingFeeRowsForLeaseBasicsSection(sub, "short-term", formatListingFeeDisplay).map((r) =>
-        listingFeeDisplayToLeaseBasicRow(r, "short-term"),
-      ),
+      ...listingFeeRowsForLeaseBasicsSection(sub, "short-term", formatListingFeeDisplay, {
+        excludePresetIds: skipNightlyPreset ? ["short_term_nightly"] : undefined,
+      }).map((r) => listingFeeDisplayToLeaseBasicRow(r, "short-term")),
     );
   }
 
