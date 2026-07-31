@@ -1276,6 +1276,7 @@ function residentNegotiatedMonthlyRent(row: DemoApplicantRow): number {
   return 0;
 }
 
+/** Short-term nightly rate: manager override / signed rent beat room and listing defaults. */
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;

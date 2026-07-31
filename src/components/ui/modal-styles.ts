@@ -17,3 +17,10 @@ export const MODAL_WARNING_BOX_CLASS =
 export const MODAL_FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking-wide text-muted";
 
 export const MODAL_OVERLAY_BACKDROP_CLASS = "modal-overlay fixed inset-0";
+
+/** Full-viewport modal shell — manager edit flows and other multi-step portal overlays. */
+export const MODAL_FULL_PAGE_STACK_CLASS = "fixed inset-0 z-[70] overflow-hidden";
+export const MODAL_FULL_PAGE_CENTER_CLASS =
+  "relative z-[71] flex min-h-full items-stretch justify-stretch p-0";
+export const MODAL_FULL_PAGE_PANEL_CLASS =
+  "modal-panel fixed inset-0 z-[71] flex !h-[100dvh] !max-h-[100dvh] !w-full !max-w-none flex-col overflow-hidden !rounded-none border-0 shadow-none outline-none pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]";

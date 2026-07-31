@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_INLINE_STATUS_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_CLASS, formatCompactChargeLine } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_INLINE_STATUS_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS, formatCompactChargeLine } from "@/components/portal/portal-metrics";
 import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -946,10 +946,12 @@ export function ResidentPaymentsPanel({
     </>
   ) : null;
 
+  const paymentsLockedEmpty = Boolean(email) && !paymentsUnlocked;
+
   const paymentsMobileActionsRow =
     paymentsHeaderActions ? (
       <div
-        className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0"
+        className={`grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0${paymentsLockedEmpty ? "" : " mb-3"}`}
         data-slot="resident-payments-mobile-actions"
       >
         {paymentsHeaderActions}
@@ -1008,9 +1010,9 @@ export function ResidentPaymentsPanel({
   );
 
   const paymentsBody = (
-    <>
+    <div className={paymentsLockedEmpty ? "space-y-0" : undefined}>
       {!paymentsUnlocked ? (
-        <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
+        <p className={paymentsLockedEmpty ? PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS : PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Payments unlock after your lease is fully signed.</span>{" "}
           Rent, deposits, and online pay become available once you and your manager have both signed.
         </p>
@@ -1019,7 +1021,7 @@ export function ResidentPaymentsPanel({
       {!email ? (
         <p className="text-sm text-muted">Sign in to see your application fees, rent, and deposits.</p>
       ) : !paymentsUnlocked ? (
-        <PortalDataTableEmpty icon="payment" message="No charges yet." />
+        <PortalDataTableEmpty icon="payment" message="No charges yet." variant="stacked" />
       ) : (
         <>
           {showBulkCheckoutBar && checkout ? (
@@ -1054,7 +1056,7 @@ export function ResidentPaymentsPanel({
           )}
         </>
       )}
-    </>
+    </div>
   );
 
   const paymentModals = (
@@ -1339,7 +1341,7 @@ export function ResidentPaymentsPanel({
       >
         {paymentsMobileActionsRow}
         <PortalListControlStack
-          className="mb-3 max-lg:mb-4"
+          className={paymentsLockedEmpty ? "mb-0" : "mb-3 max-lg:mb-4"}
           destinationInset
           destinations={statusTabs.map((t) => ({
             id: t.id,

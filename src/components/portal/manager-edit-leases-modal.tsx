@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { ManagerLeaseEditorModal } from "@/components/portal/manager-lease-editor-modal";
+import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
+import { syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 
-/** Pick one property, then edit its lease settings. */
+/** Pick a property, then manage every lease template on that listing. */
 export function ManagerEditLeasesModal({
   open,
   onClose,
@@ -72,20 +73,15 @@ export function ManagerEditLeasesModal({
     setEditingPropertyId(null);
   };
 
-  const onEditorSaved = () => {
-    onSaved();
-    setEditingPropertyId(null);
-    closeAll();
-  };
+  const syncedSub = resolved ? syncPropertyLeaseTemplatesFromListing(resolved.sub) : null;
 
   return (
     <>
       <Modal
         open={open && !editingPropertyId}
         title="Edit lease settings"
-        description="Choose which property's lease document you want to edit."
+        description="Choose a property to view, add, or edit its lease templates."
         onClose={closeAll}
-        panelClassName="max-w-md"
         footer={
           <ModalFooter>
             <Button
@@ -101,8 +97,9 @@ export function ManagerEditLeasesModal({
           </ModalFooter>
         }
       >
-        <div
-          className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2"
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div
+            className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-xl border border-border p-2"
           role="radiogroup"
           aria-label="Property"
         >
@@ -127,24 +124,27 @@ export function ManagerEditLeasesModal({
             ))
           )}
         </div>
+        </div>
       </Modal>
 
-      {resolved && managerUserId && editingPropertyId ? (
-        <ManagerLeaseEditorModal
+      {resolved && managerUserId && syncedSub && editingPropertyId ? (
+        <Modal
           open
           title={editorTitle}
-          sub={resolved.sub}
-          saveTarget={resolved.saveTarget}
-          propertyId={editingPropertyId}
-          propertyLabel={propertyOptions.find((o) => o.id === editingPropertyId)?.label}
-          propertyHint={{
-            buildingName: propertyOptions.find((o) => o.id === editingPropertyId)?.label,
-          }}
-          managerUserId={managerUserId}
+          description="Add a lease or edit an existing template. Open a lease to set document source, clauses, PDF upload, and the visual editor."
           onClose={onEditorClose}
-          onSaved={onEditorSaved}
-          showToast={showToast}
-        />
+        >
+          <ManagerPropertyLeasePanel
+            sub={syncedSub}
+            saveTarget={resolved.saveTarget}
+            managerUserId={managerUserId}
+            propertyHint={{ buildingName: propertyOptions.find((o) => o.id === editingPropertyId)?.label }}
+            propertyId={editingPropertyId}
+            propertyLabel={propertyOptions.find((o) => o.id === editingPropertyId)?.label}
+            onUpdated={onSaved}
+            showToast={showToast}
+          />
+        </Modal>
       ) : null}
     </>
   );

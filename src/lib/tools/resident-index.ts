@@ -65,7 +65,7 @@ const ALL_RESIDENT_TOOLS: ResidentTool[] = [
 
 /**
  * Which portal section a tool belongs to, for tier gating (a free-tier manager
- * hides services + inbox, mirroring residentSectionAllowedForManagerTier).
+ * hides services + documents; communication stays available).
  * Tools without an entry are available on every tier.
  */
 const TOOL_SECTION: Record<string, string> = {
@@ -75,15 +75,22 @@ const TOOL_SECTION: Record<string, string> = {
   [addServiceRequestNoteTool.name]: "services",
   [reportMaintenanceIssueTool.name]: "services",
   [listMySharedDocumentsTool.name]: "documents",
-  [listMyInboxThreadsTool.name]: "inbox",
-  [getMyScheduledMessagesTool.name]: "inbox",
-  [sendMessageToManagerTool.name]: "inbox",
-  [scheduleMessageTool.name]: "inbox",
-  [cancelScheduledMessageTool.name]: "inbox",
+  [listMyInboxThreadsTool.name]: "communication",
+  [getMyScheduledMessagesTool.name]: "communication",
+  [sendMessageToManagerTool.name]: "communication",
+  [scheduleMessageTool.name]: "communication",
+  [cancelScheduledMessageTool.name]: "communication",
 };
 
 /** Tools available while the resident is still in the application phase. */
-const APPLICATION_PHASE_TOOLS = new Set(["get_my_application_status", "send_message_to_manager"]);
+const APPLICATION_PHASE_TOOLS = new Set([
+  "get_my_application_status",
+  "list_my_inbox_threads",
+  "get_my_scheduled_messages",
+  "send_message_to_manager",
+  "schedule_message",
+  "cancel_scheduled_message",
+]);
 
 /**
  * Full registry (every resident tool), unfiltered by phase/tier. The chat route
@@ -94,7 +101,7 @@ export const residentAgentRegistry: ToolRegistry<ResidentAgentContext> = buildRe
 
 /**
  * The per-request registry: application-phase residents get application status
- * + messaging only; a free-tier manager hides services/inbox tools.
+ * + messaging; a free-tier manager hides services/documents tools.
  */
 export function buildResidentRegistry(ctx: ResidentAgentContext): ToolRegistry<ResidentAgentContext> {
   const tools = ALL_RESIDENT_TOOLS.filter((tool) => {

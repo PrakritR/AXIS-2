@@ -191,17 +191,8 @@ export async function resolveOAuthPortalRedirect(
     return finish(`/auth/create-account?${params.toString()}`);
   }
 
-  // Unknown account: no role, no purchase, no application. Do NOT silently create a free
-  // manager. Honor an explicit intent; otherwise send the user to the quick role chooser.
-  if (intent === "manager") {
-    return finish("/auth/create-account?mode=create&role=manager");
-  }
-  if (intent === "resident") {
-    return finish("/auth/create-account?role=resident");
-  }
-  if (intent === "vendor") {
-    return finish("/auth/create-account?role=vendor");
-  }
+  // Unknown account: no role, no purchase, no application. Do NOT silently provision —
+  // send the signed-in user to the role chooser (explicit OAuth intent included).
   return finish(GET_STARTED_PATH);
 }
 

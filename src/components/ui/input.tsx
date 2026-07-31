@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
+import { ChevronDown } from "lucide-react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import type { CheckboxMultiSelectOption } from "@/components/ui/checkbox-multi-select";
 import { partitionFieldSelectClasses } from "@/components/ui/field-select-styles";
@@ -39,6 +40,24 @@ export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInpu
 
 export function Textarea({ className = "", ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`${textareaBase} ${className}`} {...props} />;
+}
+
+/** Real `<select>` — reliable inside modals where portaled custom menus can fight dismiss handlers. */
+export function NativeSelect({ className = "", children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative w-full">
+      <select
+        className={`${fieldBase} appearance-none pr-10 ${className}`.trim()}
+        {...props}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+        aria-hidden
+      />
+    </div>
+  );
 }
 
 /** Native-select API backed by the shared custom field dropdown (opaque portaled menu). */

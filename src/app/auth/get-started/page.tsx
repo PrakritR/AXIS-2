@@ -5,6 +5,7 @@ import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import {
   AUTH_PORTAL_PICKER_OPTIONS,
   type AuthPortalPickerId,
@@ -24,9 +25,11 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 function GetStartedContent() {
   const router = useRouter();
   const { showToast } = useAppUi();
+  const { isNative } = useIsNativeApp();
   const [busy, setBusy] = useState<string | null>(null);
   const [resolving, setResolving] = useState(true);
   useAuthWelcomeChrome(true);
+  const cardVariant = isNative ? "blend" : "card";
 
   const stackOptions = useMemo(
     () =>
@@ -86,14 +89,14 @@ function GetStartedContent() {
 
   if (resolving) {
     return (
-      <AuthCard>
+      <AuthCard variant={cardVariant}>
         <AuthOAuthLoading label="Loading your account" />
       </AuthCard>
     );
   }
 
   return (
-    <AuthCard>
+    <AuthCard variant={cardVariant}>
       <AuthPageHeader
         showLogo
         title="How do you want to use PropLane?"
@@ -112,14 +115,19 @@ function GetStartedContent() {
   );
 }
 
+function GetStartedFallback() {
+  const { isNative } = useIsNativeApp();
+  return (
+    <AuthCard variant={isNative ? "blend" : "card"}>
+      <p className="text-center text-sm text-muted">Loading…</p>
+    </AuthCard>
+  );
+}
+
 export default function GetStartedPage() {
   return (
     <Suspense
-      fallback={
-        <AuthCard>
-          <p className="text-center text-sm text-muted">Loading…</p>
-        </AuthCard>
-      }
+      fallback={<GetStartedFallback />}
     >
       <GetStartedContent />
     </Suspense>

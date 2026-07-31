@@ -111,6 +111,8 @@ export const ResidentInboxPanel = forwardRef<
     suppressListPane?: boolean;
     controlledExpandedId?: string | null;
     onControlledExpandedIdChange?: (id: string | null) => void;
+    /** Let #portal-main-content scroll the thread (native-safe; matches manager embedded chat). */
+    pageScroll?: boolean;
   }
 >(function ResidentInboxPanel(
   {
@@ -121,6 +123,7 @@ export const ResidentInboxPanel = forwardRef<
     suppressListPane = false,
     controlledExpandedId,
     onControlledExpandedIdChange,
+    pageScroll = false,
   },
   ref,
 ) {
@@ -964,9 +967,10 @@ export const ResidentInboxPanel = forwardRef<
           </div>
         )
       ) : suppressListPane ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
           {activeThread ? (
             <InboxThreadView
+              scrollMode={pageScroll ? "page" : "pane"}
               title={
                 activeIsSent
                   ? activeThread.email || "Unknown recipient"
@@ -1100,6 +1104,7 @@ export const ResidentInboxPanel = forwardRef<
           thread={
             activeThread ? (
               <InboxThreadView
+                scrollMode={pageScroll ? "page" : "pane"}
                 title={
                   activeIsSent
                     ? activeThread.email || "Unknown recipient"

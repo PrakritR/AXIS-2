@@ -50,15 +50,27 @@ const UNGATED_TOOLS = [
 ];
 
 describe("resident registry gating", () => {
-  it("application-phase residents get exactly the two allowed tools", () => {
+  it("application-phase residents get application status and inbox tools", () => {
     const registry = buildResidentRegistry(gatingCtx("application", "paid"));
-    expect([...registry.keys()].sort()).toEqual(["get_my_application_status", "send_message_to_manager"]);
+    expect([...registry.keys()].sort()).toEqual(
+      [
+        "get_my_application_status",
+        "list_my_inbox_threads",
+        "get_my_scheduled_messages",
+        "send_message_to_manager",
+        "schedule_message",
+        "cancel_scheduled_message",
+      ].sort(),
+    );
   });
 
-  it("a free-tier manager hides services and inbox tools but keeps the rest", () => {
+  it("a free-tier manager hides services and documents tools but keeps communication", () => {
     const registry = buildResidentRegistry(gatingCtx("approved", "free"));
-    for (const name of [...SERVICES_TOOLS, ...INBOX_TOOLS, ...DOCUMENTS_TOOLS]) {
+    for (const name of [...SERVICES_TOOLS, ...DOCUMENTS_TOOLS]) {
       expect(registry.has(name), `${name} should be tier-gated`).toBe(false);
+    }
+    for (const name of INBOX_TOOLS) {
+      expect(registry.has(name), `${name} should stay available`).toBe(true);
     }
     for (const name of UNGATED_TOOLS) {
       expect(registry.has(name), `${name} should stay available`).toBe(true);

@@ -14,6 +14,11 @@ import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal";
+import {
+  MODAL_FULL_PAGE_CENTER_CLASS,
+  MODAL_FULL_PAGE_PANEL_CLASS,
+  MODAL_FULL_PAGE_STACK_CLASS,
+} from "@/components/ui/modal-styles";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { AdminInboxSchedulePanel } from "@/components/portal/admin-inbox-schedule-panel";
@@ -297,9 +302,9 @@ function ComposeModal({
       open={open}
       onClose={onClose}
       presentation="dialog"
-      stackClassName="fixed inset-0 z-40 overflow-y-auto overscroll-contain"
-      centerClassName="relative z-50 flex min-h-full items-center justify-center p-3"
-      panelClassName="modal-panel flex max-h-[min(100%-2rem,90vh)] w-[min(100%-1.5rem,28rem)] flex-col overflow-y-auto rounded-2xl border border-border p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
+      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
+      panelClassName={MODAL_FULL_PAGE_PANEL_CLASS}
       ariaLabelledBy="admin-inbox-compose-title"
       ariaDescribedBy="admin-inbox-compose-description"
     >

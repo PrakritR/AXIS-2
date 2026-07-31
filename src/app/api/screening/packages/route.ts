@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backgroundCheckConfigured } from "@/lib/checkr/config";
+import { backgroundCheckConfigured, checkrSimulate } from "@/lib/checkr/config";
 import { checkrAddOnCatalog, checkrPackageCatalog } from "@/lib/checkr/packages";
 import { managerScreeningAllowedForTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
@@ -17,10 +17,11 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const tier = await getManagerSubscriptionTier(user.id);
+    const simulate = checkrSimulate();
 
     return NextResponse.json({
       configured: backgroundCheckConfigured(),
-      screeningAllowed: managerScreeningAllowedForTier(tier),
+      screeningAllowed: managerScreeningAllowedForTier(tier) || simulate,
       packages: checkrPackageCatalog(),
       addOns: checkrAddOnCatalog(),
     });

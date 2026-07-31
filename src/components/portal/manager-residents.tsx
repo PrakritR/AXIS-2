@@ -7,7 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
-import {Input, Textarea, Select} from "@/components/ui/input";
+import {Input, Textarea, Select, NativeSelect} from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -76,7 +76,6 @@ import {
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
-  updatePendingRentAmountForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -1515,15 +1514,12 @@ export function ManagerResidents({
     writeManagerApplicationRows(next);
     upsertApplicationRowToServer(nextRow);
 
-    // Update pending recurring rent charge amounts immediately, then refresh all one-time charges
-    // (security deposit, move-in fee, prorated first month, application fee) and the recurring profile.
-    const residentEmail = nextRow.email ?? "";
-    if (propId && residentEmail && rent != null && Number.isFinite(rent)) {
-      updatePendingRentAmountForResident(residentEmail, propId, rent, userId ?? null);
-    }
+    // Refresh all pending move-in charges (rent, stay total, deposit, fees, proration) from the
+    // updated resident row. force=true wipes stale pending rows so edited amounts always win.
     recordApprovedApplicationCharges(nextRow, userId ?? null, true);
 
-    // Auto-regenerate any unsigned leases so room/rent/rules changes are reflected immediately
+    // Regenerate leases only while still in manager-side review (Draft / Manager Review).
+    const residentEmail = nextRow.email ?? "";
     if (residentEmail && nextRow.application) {
       regenerateEditableLeasesForResident(residentEmail, userId, nextRow.application);
     }
@@ -2875,6 +2871,8 @@ export function ManagerResidents({
         open={editResidentOpen}
         title="Edit resident"
         onClose={() => setEditResidentOpen(false)}
+        assistantStrip={false}
+        scrollableContent
         footer={
           <ModalFooter>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveEditedResident}>
@@ -2883,7 +2881,7 @@ export function ManagerResidents({
           </ModalFooter>
         }
       >
-        <div className="space-y-3">
+        <div className="space-y-3 pb-1">
           <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -2896,13 +2894,12 @@ export function ManagerResidents({
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Property</span>
-              <Select
+              <NativeSelect
                 value={erPropertyId}
                 onChange={(e) => {
                   setErPropertyId(e.target.value);
                   setErRoomId("");
                 }}
-               
               >
                 <option value="">Select property…</option>
                 {propertyOptions.map((p) => (
@@ -2910,11 +2907,11 @@ export function ManagerResidents({
                     {p.label}
                   </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Lease term</span>
-              <Select
+              <NativeSelect
                 value={erLeaseTermSelectValue}
                 onChange={(e) => {
                   const selected = e.target.value;
@@ -2928,7 +2925,6 @@ export function ManagerResidents({
                   setErLeaseTermCustomMode(false);
                   setErLeaseTerm(selected);
                 }}
-               
               >
                 <option value="">Select…</option>
                 {erLeaseTermOptions.map((opt) => (
@@ -2937,7 +2933,7 @@ export function ManagerResidents({
                   </option>
                 ))}
                 <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
-              </Select>
+              </NativeSelect>
               {erLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
                   className="mt-2"
@@ -2950,13 +2946,12 @@ export function ManagerResidents({
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Room</span>
               {erRoomOptions.length > 0 ? (
-                <Select
+                <NativeSelect
                   value={erRoomId}
                   onChange={(e) => {
                     const roomId = e.target.value;
                     setErRoomId(roomId);
                   }}
-                 
                 >
                   <option value="">Select room…</option>
                   {erRoomOptions.map((r) => (
@@ -2965,7 +2960,7 @@ export function ManagerResidents({
                       {r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
                     </option>
                   ))}
-                </Select>
+                </NativeSelect>
               ) : (
                 <p className="rounded-xl border border-dashed border-border bg-accent/30 px-3 py-2 text-xs text-muted">
                   Add rooms to this property in listing setup to assign a resident room here.

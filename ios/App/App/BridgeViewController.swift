@@ -3,6 +3,11 @@ import Capacitor
 
 /// Disables WKWebView pinch-zoom so the app only scrolls vertically.
 class BridgeViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        bridge?.registerPluginInstance(WebAuthSessionPlugin())
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         disableWebViewZoom()

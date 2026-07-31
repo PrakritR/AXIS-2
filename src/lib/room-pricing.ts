@@ -259,7 +259,22 @@ export function resolveStayPricing(input: StayPricingInput): StayPricing {
       positiveMoney(sub?.securityDeposit));
 
   if (isShortTermApplication) {
-    // Precedence, most specific first: the booked room's own short-term rate, then the room's
+    // A rate negotiated for THIS resident outranks every listing figure, on a short stay
+    // exactly as on a long one. The ledger has always applied it here, so the resolver must
+    // too, or the agreement quotes the listing rate while the guest is billed the negotiated
+    // one. It is the stay's nightly rate, since a short stay bills by the night.
+    const negotiatedNightly = negotiatedMonthlyRent(app);
+    if (negotiatedNightly !== undefined) {
+      return {
+        stayKind: "short",
+        basis: "daily",
+        dailyRate: negotiatedNightly,
+        monthlyRate: undefined,
+        deposit,
+        source: "application_override",
+      };
+    }
+    // Then most specific first: the booked room's own short-term rate, then the room's
     // daily basis, then the listing-level nightly cost. The room's short-term rate leads
     // because it is the rate the manager set FOR a short stay on that exact room.
     const roomShortTerm = shortTermNightlyRate(room?.shortTermRent) || undefined;

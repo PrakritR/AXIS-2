@@ -84,9 +84,11 @@ describe("resolveStayPricing", () => {
     expect(stay.source).toBe("application_override");
   });
 
-  it("does NOT let a negotiated monthly rent convert an explicit short stay to monthly", () => {
-    // The short-term charge branch ignores managerRentOverride, so the document must too,
-    // or the two disagree about what the guest owes.
+  it("lets a negotiated rate win on an explicit short stay, without converting it to monthly", () => {
+    // The short-term charge branch applies the negotiated rate ahead of every listing figure
+    // (see resolvedShortTermNightlyRate, which this resolver replaced), so the document has to
+    // as well or the two disagree about what the guest owes. The stay stays DAILY: a
+    // negotiated figure changes the rate, never the basis or which document is generated.
     const stay = resolveStayPricing({
       room: DAILY_ROOM,
       submission: SUB,
@@ -94,7 +96,8 @@ describe("resolveStayPricing", () => {
     });
     expect(stay.stayKind).toBe("short");
     expect(stay.basis).toBe("daily");
-    expect(stay.dailyRate).toBe(55);
+    expect(stay.dailyRate).toBe(1500);
+    expect(stay.source).toBe("application_override");
   });
 
   it("REGRESSION: a monthly room is a long stay on the monthly basis", () => {

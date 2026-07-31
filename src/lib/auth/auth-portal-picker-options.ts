@@ -31,7 +31,7 @@ export const AUTH_PORTAL_PICKER_OPTIONS: AuthPortalPickerOption[] = [
     chooserLabel: "I'm applying to rent",
     chooserHint: "Apply to a home, then continue from your email setup link",
     icon: "resident",
-    tone: "steel",
+    tone: "blue",
   },
   {
     id: "vendor",

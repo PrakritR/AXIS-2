@@ -75,7 +75,6 @@ export function DashboardCustomizeModal({
       open={open}
       onClose={onClose}
       title="Customize dashboard"
-      panelClassName="max-w-md"
       footer={
         <div className="flex items-center justify-between gap-3">
           <button

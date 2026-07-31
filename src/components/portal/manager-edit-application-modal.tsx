@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
+import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
+import { syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
 
-/** Pick one or more properties, then edit application questions in bulk. */
+/** Pick properties, then manage application templates (single or bulk). */
 export function ManagerEditApplicationModal({
   open,
   onClose,
@@ -93,11 +94,8 @@ export function ManagerEditApplicationModal({
     setEditingPropertyIds([]);
   };
 
-  const onEditorSaved = () => {
-    onSaved();
-    setEditingPropertyIds([]);
-    closeAll();
-  };
+  const syncedSub = resolved ? syncPropertyApplicationTemplatesFromListing(resolved.sub) : null;
+  const isBulkEdit = editingPropertyIds.length > 1;
 
   return (
     <>
@@ -106,7 +104,6 @@ export function ManagerEditApplicationModal({
         title="Edit application settings"
         description="Choose which properties' rental applications you want to edit. When you select multiple, the same questions apply to all."
         onClose={closeAll}
-        panelClassName="max-w-md"
         footer={
           <ModalFooter>
             <Button
@@ -122,7 +119,7 @@ export function ManagerEditApplicationModal({
           </ModalFooter>
         }
       >
-        <div className="space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col space-y-3">
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-accent/20 px-3 py-2.5">
             <input
               type="checkbox"
@@ -135,7 +132,7 @@ export function ManagerEditApplicationModal({
             <span className="text-sm font-semibold text-foreground">All properties</span>
           </label>
 
-          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
             {propertyOptions.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted">No properties in portfolio yet.</p>
             ) : (
@@ -159,18 +156,26 @@ export function ManagerEditApplicationModal({
         </div>
       </Modal>
 
-      {resolved && managerUserId ? (
-        <ManagerApplicationQuestionsEditorModal
-          open={editingPropertyIds.length > 0}
+      {resolved && managerUserId && syncedSub && editingPropertyIds.length > 0 ? (
+        <Modal
+          open
           title={editorTitle}
-          sub={resolved.sub}
-          saveTarget={resolved.saveTarget}
-          propertyIds={editingPropertyIds.length > 1 ? editingPropertyIds : undefined}
-          managerUserId={managerUserId}
+          description={
+            isBulkEdit
+              ? "These settings apply to all selected properties. Add an application or edit questions for each stay type."
+              : "Add an application or edit questions for each stay type."
+          }
           onClose={onEditorClose}
-          onSaved={onEditorSaved}
-          showToast={showToast}
-        />
+        >
+          <ManagerPropertyApplicationQuestionsPanel
+            sub={syncedSub}
+            saveTarget={resolved.saveTarget}
+            managerUserId={managerUserId}
+            propertyIds={isBulkEdit ? editingPropertyIds : undefined}
+            onUpdated={onSaved}
+            showToast={showToast}
+          />
+        </Modal>
       ) : null}
     </>
   );

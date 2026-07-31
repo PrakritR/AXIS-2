@@ -5,7 +5,7 @@ export const RESIDENT_PORTAL_BASE_PATH = "/resident";
 
 /**
  * Resident sections available when the linked manager is on a free subscription.
- * Single source of truth — also drives manager-access tier gating.
+ * Communication is always available; single source of truth — also drives manager-access tier gating.
  */
 export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "dashboard",
@@ -13,6 +13,7 @@ export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "applications",
   "payments",
   "move-in",
+  "communication",
   "profile",
 ] as const;
 
@@ -67,45 +68,40 @@ export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { status?: string } |
     charges: {},
   });
 
-/** Sidebar during application phase (before lease is approved): Application + Settings only. */
+/** Sidebar during application phase: Application, Communication, and Settings. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Application", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
-/** Pre-lease workspace: booked a tour or submitted an application, not yet approved. */
+/** Pre-lease workspace: application submitted or approved, lease not yet fully signed. */
 export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
-  { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
+  { section: "lease", label: "Lease", tabs: [] },
+  { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
 /** @deprecated Use RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS */
 export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS = RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS;
 
-/** Sections shown before lease access is fully unlocked. */
+/** Sections shown before the lease is fully signed (pre-lease resident workspace). */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
-  { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "applications", label: "Applications", tabs: [] },
-  { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
-  { section: "move-in", label: "House details", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
-  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
-  { section: "profile", label: "Settings", tabs: [] },
+  ...RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
 ];
 
-/** Full resident workspace after lease approval. */
+/** Full resident workspace after both parties sign the lease. */
 export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
+  { section: "payments", label: "Payments", tabs: [] },
   { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
-  { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];

@@ -23,13 +23,20 @@ export function shouldRequestGoogleCalendarOnSignIn(
   return isManagerOAuthPath(intent, nextPath);
 }
 
+export type GoogleSignInOAuthOptions = {
+  scopes?: string;
+  queryParams: { prompt: string; access_type?: string };
+};
+
 export function googleSignInOAuthOptions(
   intent: OAuthSignInIntent | null | undefined,
   nextPath: string,
-): { scopes?: string; queryParams?: { access_type: string; prompt: string } } {
-  if (!shouldRequestGoogleCalendarOnSignIn(intent, nextPath)) return {};
+): GoogleSignInOAuthOptions {
+  if (!shouldRequestGoogleCalendarOnSignIn(intent, nextPath)) {
+    return { queryParams: { prompt: "select_account" } };
+  }
   return {
     scopes: GOOGLE_CALENDAR_OAUTH_SCOPES,
-    queryParams: { access_type: "offline", prompt: "consent" },
+    queryParams: { access_type: "offline", prompt: "select_account consent" },
   };
 }

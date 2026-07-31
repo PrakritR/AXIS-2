@@ -365,6 +365,7 @@ function servicePreviewItems(
 
 export function ResidentDashboard({
   applicationApproved = false,
+  leaseSigned = false,
   initialApplicationId = null,
   displayName = "Resident",
   residentEmail = "",
@@ -372,6 +373,7 @@ export function ResidentDashboard({
   managerSubscriptionTier = null,
 }: {
   applicationApproved?: boolean;
+  leaseSigned?: boolean;
   initialApplicationId?: string | null;
   displayName?: string;
   residentEmail?: string;
@@ -383,7 +385,7 @@ export function ResidentDashboard({
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
-  const canUseFullPortal = applicationApproved;
+  const canUseFullPortal = leaseSigned;
   const userId = session.userId ?? residentUserId;
   const { visibility, setVisible, reset } = useResidentDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -574,7 +576,7 @@ export function ResidentDashboard({
 
 
   const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
-  const leaseUnlocked = appStatus === "approved";
+  const leaseUnlocked = applicationApproved;
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
     ? `${leaseRow.application.leaseStart}${leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}`
@@ -591,7 +593,7 @@ export function ResidentDashboard({
 
   const openServiceCount = canUseFullPortal ? serviceItems.length : 0;
   const openCount =
-    (visibility.payments ? pendingCharges.length : 0) +
+    (canUseFullPortal && visibility.payments ? pendingCharges.length : 0) +
     (visibility.services && canUseFullPortal ? openServiceCount : 0) +
     (visibility.communication ? inboxThreads.length : 0) +
     (visibility.applications ? pendingApplicationCount : 0) +
@@ -605,6 +607,7 @@ export function ResidentDashboard({
     >
       <div className={`min-w-0 ${PORTAL_DASHBOARD_STACK}`}>
         <PortalDashboardKpiRow>
+            {canUseFullPortal ? (
             <PortalDashboardKpiTile
               label="Balance due"
               value={formatUsd(totalBalanceDue)}
@@ -613,6 +616,7 @@ export function ResidentDashboard({
               href={`${BASE}/payments`}
               dataAttr="resident-dashboard-kpi-balance"
             />
+            ) : null}
             {canUseFullPortal ? (
             <PortalDashboardKpiTile
               label="Services"
@@ -663,7 +667,7 @@ export function ResidentDashboard({
             </button>
           </div>
 
-          {visibility.payments ? (
+          {canUseFullPortal && visibility.payments ? (
           <AttentionGroup
             title="Pending & overdue payments"
             href={`${BASE}/payments`}

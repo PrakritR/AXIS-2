@@ -62,6 +62,30 @@ function slugifySectionTitle(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function escapeLeaseHeadingText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Insert a new `<h2>` section immediately before the first existing heading. */
+export function prependLeaseHtmlSection(
+  html: string,
+  { title, bodyHtml }: { title: string; bodyHtml: string },
+): string {
+  const trimmedTitle = title.trim();
+  if (!html.trim() || !trimmedTitle) return html;
+
+  const sectionHtml = `<h2>${escapeLeaseHeadingText(trimmedTitle)}</h2>${bodyHtml}`;
+  const firstHeadingIndex = html.search(/<h2\b/i);
+  if (firstHeadingIndex < 0) return `${html}${sectionHtml}`;
+
+  return `${html.slice(0, firstHeadingIndex)}${sectionHtml}${html.slice(firstHeadingIndex)}`;
+}
+
 /** Split generated lease HTML into editable sections (preamble + each `<h2>` block). */
 export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
   if (!html.trim()) return [];
@@ -103,17 +127,6 @@ export function parseLeaseHtmlSections(html: string): LeaseHtmlSection[] {
     });
   });
   return sections;
-}
-
-/** Insert a new `<h2>` section immediately before the first existing section heading. */
-export function prependLeaseHtmlSection(
-  html: string,
-  section: { title: string; bodyHtml: string },
-): string {
-  const block = `<h2>${section.title}</h2>${section.bodyHtml}`;
-  const firstH2 = html.search(/<h2\b/i);
-  if (firstH2 < 0) return `${html}${block}`;
-  return `${html.slice(0, firstH2)}${block}${html.slice(firstH2)}`;
 }
 
 /** Rebuild full lease HTML from the document head plus edited section bodies. */

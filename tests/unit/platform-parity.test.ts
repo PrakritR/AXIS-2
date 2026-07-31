@@ -98,7 +98,7 @@ describe("platform parity (web + native WebView)", () => {
     }
   });
 
-  it("application-phase resident bottom bar uses the applications tab only", () => {
+  it("application-phase resident bottom bar uses application and communication tabs", () => {
     const items = RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((section) => ({ section: section.section }));
     const split = splitNativeBottomNavItems(items, "resident");
     expect(split.primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY]);

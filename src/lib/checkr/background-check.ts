@@ -10,7 +10,7 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
 import { createBackgroundCheck, fetchBackgroundCheckReport } from "@/lib/checkr/client";
-import { backgroundCheckConfigured, checkrSkipsManagerCardCharge } from "@/lib/checkr/config";
+import { backgroundCheckConfigured, checkrSimulate, checkrSkipsManagerCardCharge } from "@/lib/checkr/config";
 import type { CheckrPackage } from "@/lib/checkr/config";
 import { checkrOrderCostCents, isCheckrAddOn, isCheckrPackage, type CheckrAddOnSlug } from "@/lib/checkr/packages";
 import type {
@@ -160,7 +160,7 @@ export async function precheckBackgroundCheckOrder(opts: {
   }
 
   const tier = await getManagerSubscriptionTier(opts.managerUserId);
-  if (!managerScreeningAllowedForTier(tier)) {
+  if (!managerScreeningAllowedForTier(tier) && !checkrSimulate()) {
     return {
       ok: false,
       status: 403,
