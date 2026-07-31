@@ -1,6 +1,7 @@
 import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
 export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
@@ -21,9 +22,8 @@ export function isNativeOAuthShell(): boolean {
 
 /**
  * Supabase OAuth redirectTo.
- * Native: same-origin HTTPS callback with `native_bridge=1` — Supabase allowlists https,
- * SFSafariViewController loads a valid page, then the server 302s into the app scheme.
- * Direct custom-scheme redirectTo breaks iOS with "address is invalid" in the system browser.
+ * iOS native: custom scheme — ASWebAuthenticationSession intercepts the callback natively.
+ * Android native: same-origin HTTPS callback with `native_bridge=1` (Custom Tabs + server 302).
  * Web: same-origin /auth/callback.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
@@ -32,6 +32,9 @@ export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPat
     ? `${base}${fixedCallbackPath}`
     : bareAuthCallbackUrl(origin);
   if (isNativeOAuthShell()) {
+    if (usesIosAsWebAuthenticationSession()) {
+      return nativeOAuthCallbackUrl(fixedCallbackPath);
+    }
     return appendNativeOAuthBridgeParam(httpsCallback);
   }
   return httpsCallback;

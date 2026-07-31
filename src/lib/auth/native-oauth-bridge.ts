@@ -41,9 +41,8 @@ export function shouldRenderNativeOAuthBridge(request: NextRequest): boolean {
 
 export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
   const schemeUrl = httpsCallbackToNativeSchemeUrl(callbackUrl);
-  // Server redirect — iOS hands custom schemes to the app from HTTP 302s. JS navigation
-  // (window.location / programmatic link.click) in SFSafariViewController shows
-  // "Safari cannot open the page because the address is invalid."
+  // Server redirect for Android Custom Tabs — SFSafariViewController cannot follow
+  // custom-scheme navigations. iOS OAuth uses ASWebAuthenticationSession instead.
   return NextResponse.redirect(schemeUrl, {
     status: 302,
     headers: {
