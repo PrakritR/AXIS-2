@@ -28,42 +28,32 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
   '[data-slot="modal-vaul-drawer"][data-state="open"]',
   '[data-slot="modal-radix-dialog"][data-state="open"]',
   '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+
 ];
 
 /**
- * Portal menus into an open modal/drawer shell when present. Radix `hideOthers` and Vaul
- * mark every `document.body` sibling outside the dialog tree as aria-hidden, so body-
- * portaled menus look correct but cannot receive clicks. Body fallback keeps viewport
- * `fixed` coords for non-modal surfaces (filters, tables, etc.).
+ * Always portal menus to `document.body` with viewport `fixed` coords so overflow-hidden
+ * filter/modal shells never clip the list. Modal outside-click handlers ignore menu
+ * targets via `field-select-portal-interaction`.
  */
 function resolveFieldSelectMenuPortal(): HTMLElement {
-  for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
-    const host = document.querySelector<HTMLElement>(selector);
-    if (host) return host;
-  }
   return document.body;
 }
 
-function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
-  return portalHost === document.body ? 10000 : 80;
-}
+const FIELD_SELECT_MENU_Z_INDEX = 10000;
 
 type FieldSelectMenuRect = {
   top: number;
   left: number;
   width: number;
   maxHeight: number;
-  position: "fixed" | "absolute";
 };
 
 function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   optionCount: number,
-  portalHost: HTMLElement,
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
-  const hostRect = portalHost.getBoundingClientRect();
-  const inModal = portalHost !== document.body;
   const viewportH = window.innerHeight;
   const viewportPadding = 12;
   const fiveItemCap =
@@ -80,19 +70,14 @@ function computeFieldSelectMenuRect(
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
   const maxHeight = Math.min(contentHeight, viewportCap);
-  const top = inModal
-    ? openUp
-      ? Math.max(4, rect.top - hostRect.top - maxHeight - 4)
-      : rect.bottom - hostRect.top + 4
-    : openUp
-      ? Math.max(viewportPadding, rect.top - maxHeight - 4)
-      : rect.bottom + 4;
+  const top = openUp
+    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
+    : rect.bottom + 4;
   return {
     top,
-    left: inModal ? rect.left - hostRect.left : rect.left,
+    left: rect.left,
     width: rect.width,
     maxHeight,
-    position: inModal ? "absolute" : "fixed",
   };
 }
 
@@ -181,7 +166,7 @@ export function CheckboxMultiSelect({
     const button = buttonRef.current;
     if (!button) return;
     setMenuRect(
-      computeFieldSelectMenuRect(button, flatOptions.length, resolveFieldSelectMenuPortal()),
+      computeFieldSelectMenuRect(button, flatOptions.length),
     );
   };
 
@@ -263,7 +248,7 @@ export function CheckboxMultiSelect({
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
         className={`${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
-          position: menuRect.position,
+          position: "fixed",
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
@@ -273,7 +258,7 @@ export function CheckboxMultiSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
-          zIndex: fieldSelectMenuZIndex(portalHost),
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -371,7 +356,7 @@ export function FieldSingleSelect({
     const button = buttonRef.current;
     if (!button) return;
     setMenuRect(
-      computeFieldSelectMenuRect(button, options.length, resolveFieldSelectMenuPortal()),
+      computeFieldSelectMenuRect(button, options.length),
     );
   };
 
@@ -422,7 +407,7 @@ export function FieldSingleSelect({
           pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
         }`}
         style={{
-          position: menuRect.position,
+          position: "fixed",
           top: menuRect.top,
           left: menuRect.left,
           minWidth: pill ? menuRect.width : undefined,
@@ -433,7 +418,7 @@ export function FieldSingleSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
-          zIndex: fieldSelectMenuZIndex(portalHost),
+          zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >

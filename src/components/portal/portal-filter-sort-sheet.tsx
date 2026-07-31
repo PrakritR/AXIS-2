@@ -177,10 +177,11 @@ export function PortalFilterSortSheet({
             <div
               role="dialog"
               aria-label="Filter"
+              data-slot="portal-filter-dropdown-panel"
               className={cn(
                 panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "absolute right-0 top-[calc(100%+0.5rem)] z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+                "absolute right-0 top-[calc(100%+0.5rem)] z-50 flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
               data-attr="portal-filter-dropdown-panel"
             >
