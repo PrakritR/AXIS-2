@@ -223,6 +223,7 @@ export function buildTourNotificationContext(input: {
   notes?: string | null;
   managerLabel?: string | null;
   instructions?: string | null;
+  tourInquiryId?: string | null;
 }): TourNotificationContext {
   const origin = input.origin.replace(/\/$/, "");
   const nextPath = input.propertyId?.trim()
@@ -231,10 +232,14 @@ export function buildTourNotificationContext(input: {
   const createAccountParams = new URLSearchParams({ role: "resident", next: nextPath });
   const email = input.guestEmail?.trim().toLowerCase();
   if (email) createAccountParams.set("email", email);
+  const guestPhone = input.guestPhone?.trim();
+  if (guestPhone) createAccountParams.set("phone", guestPhone);
+  const tourInquiryId = input.tourInquiryId?.trim();
+  if (tourInquiryId) createAccountParams.set("tour_inquiry", tourInquiryId);
   return {
     guestName: input.guestName.trim(),
     guestEmail: input.guestEmail.trim(),
-    guestPhone: input.guestPhone?.trim() || undefined,
+    guestPhone: guestPhone || undefined,
     propertyTitle: input.propertyTitle?.trim() || "Property",
     propertyAddress: input.propertyAddress?.trim() || undefined,
     roomLabel: input.roomLabel?.trim() || undefined,

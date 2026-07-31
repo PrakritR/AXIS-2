@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
-import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
+import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -353,6 +353,25 @@ export function ShareLeadLinkModal({
           ) : (
             <>
               {multiEnabled ? (
+                kind === "tour" ? (
+                  <div>
+                    <label htmlFor="share-lead-property-tour" className={FIELD_LABEL_CLASS}>
+                      Property
+                    </label>
+                    <FieldSingleSelect
+                      label="Property"
+                      hideLabel
+                      dataAttr="share-lead-property-tour"
+                      options={properties.map((p) => ({ value: p.id, label: p.label }))}
+                      value={singlePropertyId}
+                      onChange={(next) => {
+                        setPropertyIds(next ? [next] : []);
+                        setRoomChoice("");
+                      }}
+                      placeholder="Select a property"
+                    />
+                  </div>
+                ) : (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between gap-2">
                     <label htmlFor="share-lead-property-multi" className={FIELD_LABEL_CLASS}>
@@ -387,6 +406,7 @@ export function ShareLeadLinkModal({
                   </div>
                   <CheckboxMultiSelect
                     label="Properties"
+                    hideLabel
                     dataAttr="share-lead-property-multi"
                     emptyLabel="Select properties"
                     emptyMenuText="No properties"
@@ -398,6 +418,7 @@ export function ShareLeadLinkModal({
                     }}
                   />
                 </div>
+                )
               ) : (
                 <div
                   className={

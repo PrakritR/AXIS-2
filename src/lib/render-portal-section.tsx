@@ -900,8 +900,9 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "tour") {
-    if (tabParts?.length) notFound();
-    return <ResidentTourPanel />;
+    if (tabParts && tabParts.length > 1) notFound();
+    const inquiryId = tabParts?.length === 1 ? decodeURIComponent(tabParts[0]!) : undefined;
+    return <ResidentTourPanel basePath={def.basePath} inquiryId={inquiryId} />;
   }
 
   if (kind === "resident" && section === "profile") {

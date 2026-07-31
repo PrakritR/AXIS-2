@@ -212,6 +212,7 @@ export async function notifyManagerTourRequest(
     tourEndIso,
     notes: textField(inquiry as Record<string, unknown>, "notes") || null,
     managerLabel: textField(inquiry as Record<string, unknown>, "adminLabel") || managerProfile?.full_name || null,
+    tourInquiryId: textField(inquiry as Record<string, unknown>, "id") || null,
   });
 
   const subject = TOUR_REQUEST_MANAGER_SUBJECT;
@@ -308,6 +309,7 @@ export async function notifyTenantTourRequestReceived(
     tourEndIso,
     notes: textField(inquiry as Record<string, unknown>, "notes") || null,
     managerLabel: textField(inquiry as Record<string, unknown>, "adminLabel") || null,
+    tourInquiryId: textField(inquiry as Record<string, unknown>, "id") || null,
   });
 
   const subject = TOUR_REQUEST_TENANT_SUBJECT;
@@ -364,6 +366,7 @@ export async function notifyTenantTourConfirmed(
     notes: textField(inquiry as Record<string, unknown>, "notes") || null,
     managerLabel: window.adminLabel || textField(inquiry as Record<string, unknown>, "adminLabel") || null,
     instructions: instructions || null,
+    tourInquiryId: textField(inquiry as Record<string, unknown>, "id") || null,
   });
 
   const subject = TOUR_CONFIRMED_TENANT_SUBJECT;

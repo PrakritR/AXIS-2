@@ -77,9 +77,10 @@ export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
 
 /** Pre-lease workspace: application submitted or approved, lease not yet fully signed. */
 export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
@@ -141,6 +142,7 @@ export const RESIDENT_RENDERED_SECTION_IDS = [
 /** Default smoke-test paths for web + native WebView (limited resident workspace). */
 export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: `${RESIDENT_PORTAL_BASE_PATH}/dashboard` },
+  { label: "Tour", path: `${RESIDENT_PORTAL_BASE_PATH}/tour` },
   { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },

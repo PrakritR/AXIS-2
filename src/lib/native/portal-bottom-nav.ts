@@ -96,6 +96,7 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications
 
 /** Pre-lease (application approved / submitted, lease not signed). */
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY = [
+  "tour",
   "applications",
   "lease",
   "dashboard",

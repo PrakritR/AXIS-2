@@ -46,7 +46,7 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
-  { id: "home", label: null, sections: ["dashboard", "applications"] },
+  { id: "home", label: null, sections: ["dashboard", "tour", "applications"] },
   { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
   { id: "finances", label: "Finances", sections: ["payments", "documents"] },
   { id: "messages", label: "Messages", sections: ["communication"] },
@@ -83,8 +83,10 @@ export function groupNavItems<T extends { section: string }>(
   // Application phase: Application + Communication in the sidebar; Settings → account menu.
   if (kind === "resident" && byId.has("applications") && !byId.has("lease")) {
     const homeItems: T[] = [];
+    const tour = byId.get("tour");
     const applications = byId.get("applications");
     const communication = byId.get("communication");
+    if (tour) homeItems.push(tour);
     if (applications) homeItems.push(applications);
     if (communication) homeItems.push(communication);
     if (homeItems.length > 0 && byId.has("profile")) {

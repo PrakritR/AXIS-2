@@ -30,6 +30,7 @@ describe("tour-notifications", () => {
     const body = buildTourRequestManagerBody(baseCtx);
     expect(body).toContain("Alex Chen");
     expect(body).toContain("alex@example.com");
+    expect(body).toContain("(206) 555-0100");
     expect(body).toContain("Sunset House");
     expect(body).toContain("123 Main St");
     expect(body).toContain("Room 2A");
@@ -53,5 +54,22 @@ describe("tour-notifications", () => {
 
   it("builds apply url with property id", () => {
     expect(buildTourApplyUrl("https://example.com", "prop_demo_1", "Room 2A")).toContain("propertyId=prop_demo_1");
+  });
+
+  it("includes phone and tour inquiry in create-account handoff url", () => {
+    const ctx = buildTourNotificationContext({
+      origin: "https://example.com",
+      guestName: "Alex Chen",
+      guestEmail: "alex@example.com",
+      guestPhone: "(206) 555-0100",
+      propertyId: "prop_demo_1",
+      propertyTitle: "Sunset House",
+      tourStartIso: "2026-06-22T18:00:00.000Z",
+      tourEndIso: "2026-06-22T18:30:00.000Z",
+      tourInquiryId: "inq-123",
+    });
+    expect(ctx.createAccountUrl).toContain("tour_inquiry=inq-123");
+    expect(ctx.createAccountUrl).toContain("phone=");
+    expect(ctx.createAccountUrl).toContain("email=alex%40example.com");
   });
 });

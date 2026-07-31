@@ -191,6 +191,11 @@ export type ResidentTourView = {
   roomLabel: string | null;
   managerUserId: string | null;
   managerLabel: string | null;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  notes: string | null;
+  instructions: string | null;
   proposedStart: string | null;
   proposedEnd: string | null;
   requestedWindows: Array<{ start: string; end: string }>;
@@ -260,6 +265,11 @@ export async function loadResidentTourViews(db: Db, userId: string): Promise<Res
       roomLabel: textField(inquiry, "roomLabel") || null,
       managerUserId: textField(inquiry, "managerUserId") || link.manager_user_id,
       managerLabel: textField(inquiry, "adminLabel") || null,
+      guestName: textField(inquiry, "name") || null,
+      guestEmail: textField(inquiry, "email") || link.attendee_email || null,
+      guestPhone: textField(inquiry, "phone") || null,
+      notes: textField(inquiry, "notes") || null,
+      instructions: confirmedEvent ? textField(confirmedEvent, "instructions") || null : null,
       proposedStart: textField(inquiry, "proposedStart") || requestedWindows[0]?.start || null,
       proposedEnd: textField(inquiry, "proposedEnd") || requestedWindows[0]?.end || null,
       requestedWindows,

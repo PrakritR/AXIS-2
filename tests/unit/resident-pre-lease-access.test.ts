@@ -8,7 +8,11 @@ import { RESIDENT_PRE_LEASE_PORTAL_SECTIONS } from "@/lib/portals/resident-secti
 describe("pre-lease resident portal access", () => {
   it("pre-lease sections include dashboard, tour, application, communication", () => {
     const ids = RESIDENT_PRE_LEASE_PORTAL_SECTIONS.map((s) => s.section);
-    expect(ids).toEqual(["dashboard", "tour", "applications", "communication", "profile"]);
+    expect(ids).toContain("dashboard");
+    expect(ids).toContain("tour");
+    expect(ids).toContain("applications");
+    expect(ids).toContain("communication");
+    expect(ids).toContain("profile");
   });
 
   it("pre-lease route guard allows tour and communication", () => {

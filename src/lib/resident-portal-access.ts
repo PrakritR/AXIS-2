@@ -268,6 +268,7 @@ export function residentPortalHomePath(
   >,
 ): string {
   if (access.leaseSigned || access.leaseAccessUnlocked) return "/resident/dashboard";
+  if (access.hasTourLink && !access.hasSubmittedApplication) return "/resident/tour";
   if (access.isPreLeaseResident || access.hasTourLink) return "/resident/dashboard";
   return "/resident/applications/apply";
 }

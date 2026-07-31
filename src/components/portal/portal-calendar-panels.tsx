@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input, Select } from "@/components/ui/input";
+import { Input, NativeSelect, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { X } from "lucide-react";
@@ -17,6 +17,7 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate } from "@/lib/pacific-time";
+import { formatTourContactPhoneDisplay } from "@/lib/tour-contact-quality";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -1017,7 +1018,9 @@ export function PortalCalendarPanels({
             {selectedBlock.meeting.phone ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Phone</p>
-                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.phone}</p>
+                <p className="mt-1 font-medium text-foreground">
+                  {formatTourContactPhoneDisplay(selectedBlock.meeting.phone)}
+                </p>
               </div>
             ) : null}
             {selectedBlock.meeting.propertyTitle ? (
@@ -1258,7 +1261,6 @@ export function PortalCalendarPanels({
 
             <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2">
               {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-              {saveStatus === "saved" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
               {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
               {vendorMode ? (
                 <Button
@@ -1616,7 +1618,7 @@ export function PortalCalendarPanels({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Start time</label>
-                <Select
+                <NativeSelect
                   value={String(blockStartSlot)}
                   onChange={(e) => {
                     const nextStart = Number.parseInt(e.target.value, 10);
@@ -1632,11 +1634,11 @@ export function PortalCalendarPanels({
                       {formatAvailabilitySlotLabel(slot)}
                     </option>
                   ))}
-                </Select>
+                </NativeSelect>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">End time</label>
-                <Select
+                <NativeSelect
                   value={String(blockEndSlotExclusive)}
                   onChange={(e) => {
                     const nextEnd = Number.parseInt(e.target.value, 10);
@@ -1653,19 +1655,19 @@ export function PortalCalendarPanels({
                         {formatSlotEndLabel(slot)}
                       </option>
                     ))}
-                </Select>
+                </NativeSelect>
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Repeat</label>
-                <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
+                <NativeSelect value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
                   <option value="once">Once</option>
                   <option value="weekly">Weekly</option>
                   <option value="biweekly">Biweekly</option>
                   <option value="monthly">Monthly</option>
-                </Select>
+                </NativeSelect>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Occurrences</label>
@@ -1974,7 +1976,6 @@ export function PortalCalendarPanels({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-          {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
           {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
           <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open slots</div>
         </div>
@@ -2109,7 +2110,7 @@ export function PortalCalendarPanels({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Start time</label>
-              <Select
+              <NativeSelect
                 value={String(blockStartSlot)}
                 onChange={(e) => {
                   const nextStart = Number.parseInt(e.target.value, 10);
@@ -2123,11 +2124,11 @@ export function PortalCalendarPanels({
                     {formatAvailabilitySlotLabel(slot)}
                   </option>
                 ))}
-              </Select>
+              </NativeSelect>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">End time</label>
-              <Select
+              <NativeSelect
                 value={String(blockEndSlotExclusive)}
                 onChange={(e) => {
                   const nextEnd = Number.parseInt(e.target.value, 10);
@@ -2144,19 +2145,19 @@ export function PortalCalendarPanels({
                       {formatSlotEndLabel(slot)}
                     </option>
                   ))}
-              </Select>
+              </NativeSelect>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_140px]">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Repeat</label>
-              <Select value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
+              <NativeSelect value={blockCadence} onChange={(e) => setBlockCadence(e.target.value as RecurrenceCadence)}>
                 <option value="once">Once</option>
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Biweekly</option>
                 <option value="monthly">Monthly</option>
-              </Select>
+              </NativeSelect>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground">Occurrences</label>

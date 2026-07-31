@@ -17,12 +17,14 @@ export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLI
 
 export function residentCreateAccountHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
-  opts?: { email?: string; tourInquiryId?: string },
+  opts?: { email?: string; phone?: string; tourInquiryId?: string },
 ): string {
   const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
   const q = new URLSearchParams({ role: "resident", next });
   const email = opts?.email?.trim().toLowerCase();
   if (email) q.set("email", email);
+  const phone = opts?.phone?.trim();
+  if (phone) q.set("phone", phone);
   const tourInquiryId = opts?.tourInquiryId?.trim();
   if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
   return `/auth/create-account?${q.toString()}`;

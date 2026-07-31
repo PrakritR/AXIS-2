@@ -44,6 +44,12 @@ import {
   wizardFieldErrorClass,
   wizardSectionErrorClass,
 } from "@/lib/wizard-field-errors";
+import {
+  formatTourContactPhoneDisplay,
+  normalizeTourContactPhone,
+  validateTourContactFields,
+} from "@/lib/tour-contact-quality";
+import { Modal } from "@/components/ui/modal";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -307,7 +313,14 @@ function TourFlow({
   const [step, setStep] = useState<TourStep>(1);
   const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
-  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string; inquiryId: string } | null>(null);
+  const [submittedContact, setSubmittedContact] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    inquiryId: string;
+  } | null>(null);
+  const [accountPromptOpen, setAccountPromptOpen] = useState(false);
+  const [signedInUserId, setSignedInUserId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -326,6 +339,18 @@ function TourFlow({
   const [availabilityLoading, setAvailabilityLoading] = useState(true);
   const [bookingTour, setBookingTour] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      if (cancelled) return;
+      setSignedInUserId(result.data.session?.user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const sync = () => setTick((n) => n + 1);
@@ -391,6 +416,7 @@ function TourFlow({
     const createAccountHref = submittedContact?.email
       ? residentCreateAccountHref(returnAfterAuth, {
           email: submittedContact.email,
+          phone: submittedContact.phone,
           tourInquiryId: submittedContact.inquiryId,
         })
       : residentCreateAccountHref(returnAfterAuth);
@@ -399,6 +425,38 @@ function TourFlow({
     });
 
     return (
+      <>
+        <Modal
+          open={accountPromptOpen}
+          title="Save your tour in PropLane"
+          onClose={() => setAccountPromptOpen(false)}
+          assistantStrip={false}
+          fullPage={false}
+          footer={
+            <div className="flex w-full flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAccountPromptOpen(false)}
+                className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
+              >
+                Maybe later
+              </button>
+              <Link
+                href={createAccountHref}
+                data-attr="tour-success-create-account-modal"
+                className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+              >
+                Create account
+              </Link>
+            </div>
+          }
+        >
+          <p className="text-sm leading-relaxed text-muted">
+            Create a free resident account to track this tour, message your manager, and apply when you are ready. We
+            prefilled your email and phone from this request.
+          </p>
+        </Modal>
+
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
         <div className="rounded-2xl border px-5 py-5 portal-banner-success">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
@@ -445,6 +503,7 @@ function TourFlow({
             onClick={() => {
               setSubmitted(false);
               setSubmittedContact(null);
+              setAccountPromptOpen(false);
               setStep(1);
               setMaxStepReached(1);
               setSelectedRoomKey(null);
@@ -464,6 +523,7 @@ function TourFlow({
           </Link>
         </div>
       </div>
+      </>
     );
   }
 
@@ -597,13 +657,19 @@ function TourFlow({
             }
             onSubmit={async ({ name, email, phone, notes, smsConsent }) => {
               if (bookingTour) return;
-              const errs: Record<string, string> = {};
-              if (!name.trim()) errs.name = "Name is required.";
-              if (!email.trim()) errs.email = "Email is required.";
+              const errs = validateTourContactFields({ name, email, phone });
               if (Object.keys(errs).length > 0) {
                 setFieldErrors(errs);
                 showToast("Please fix the highlighted fields before continuing.");
                 queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[3] ?? [], errs));
+                return;
+              }
+              const normalizedPhone = normalizeTourContactPhone(phone);
+              if (!normalizedPhone) {
+                const phoneErr = { phone: "Phone number must be 10 digits." };
+                setFieldErrors(phoneErr);
+                showToast("Please fix the highlighted fields before continuing.");
+                queueMicrotask(() => scrollToFirstWizardFieldError(TOUR_STEP_FIELD_ORDER[3] ?? [], phoneErr));
                 return;
               }
               if (selectedDay == null || selectedSlotIndex == null) return;
@@ -628,7 +694,7 @@ function TourFlow({
                   appendPartnerInquiryToServer({
                     name: name.trim(),
                     email: email.trim(),
-                    phone: phone.trim(),
+                    phone: normalizedPhone,
                     smsConsent,
                     smsConsentAt: smsConsent ? new Date().toISOString() : undefined,
                     kind: "tour",
@@ -675,7 +741,13 @@ function TourFlow({
               }
               setSubmitted(true);
               const firstInquiryId = results.find((item) => item.row?.id)?.row?.id ?? "";
-              setSubmittedContact({ name: name.trim(), email: email.trim(), inquiryId: firstInquiryId });
+              setSubmittedContact({
+                name: name.trim(),
+                email: email.trim(),
+                phone: formatTourContactPhoneDisplay(normalizedPhone),
+                inquiryId: firstInquiryId,
+              });
+              setAccountPromptOpen(!signedInUserId);
               onSuccess();
             }}
           />
@@ -1006,8 +1078,18 @@ function Step3({
           />
         </Field>
       </div>
-      <Field label="Phone" fieldKey="phone">
-        <input id="tour-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(206) 555-0100" className={inputCls} />
+      <Field label="Phone *" fieldKey="phone" error={fieldErrors.phone}>
+        <input
+          id="tour-phone"
+          type="tel"
+          value={phone}
+          onChange={(e) => {
+            onFieldChange("phone");
+            setPhone(e.target.value);
+          }}
+          placeholder="(206) 555-0100"
+          className={wizardFieldErrorClass(Boolean(fieldErrors.phone), inputCls)}
+        />
       </Field>
       <Field label="Notes (optional)">
         <textarea id="tour-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything we should prepare in advance?" className={`${inputCls} resize-none`} />

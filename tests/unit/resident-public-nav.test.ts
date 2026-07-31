@@ -31,6 +31,32 @@ describe("residentSignInHref", () => {
   });
 });
 
+describe("residentCreateAccountHref", () => {
+  it("includes tour inquiry and phone prefill params", () => {
+    expect(
+      residentCreateAccountHref("/resident/tour", {
+        email: "alex@example.com",
+        phone: "(206) 555-0100",
+        tourInquiryId: "inq-1",
+      }),
+    ).toContain("email=alex%40example.com");
+    expect(
+      residentCreateAccountHref("/resident/tour", {
+        email: "alex@example.com",
+        phone: "(206) 555-0100",
+        tourInquiryId: "inq-1",
+      }),
+    ).toContain("phone=%28206%29+555-0100");
+    expect(
+      residentCreateAccountHref("/resident/tour", {
+        email: "alex@example.com",
+        phone: "(206) 555-0100",
+        tourInquiryId: "inq-1",
+      }),
+    ).toContain("tour_inquiry=inq-1");
+  });
+});
+
 describe("residentPortalPublicHref", () => {
   it("sends signed-in residents to the portal", () => {
     expect(

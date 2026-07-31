@@ -33,6 +33,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   leases: ScrollText,
   lease: ScrollText,
   calendar: Calendar,
+  tour: Calendar,
   events: Calendar,
   applications: ClipboardList,
   payments: CreditCard,

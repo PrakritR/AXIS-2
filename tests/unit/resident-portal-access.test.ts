@@ -100,6 +100,31 @@ describe("resident portal access state", () => {
     expect(residentPortalHomePath(access)).toBe("/resident/applications/apply");
   });
 
+  it("sends tour-only residents to the tour workspace", async () => {
+    const db = makeDbMock({ applicationRows: [] });
+    vi.mocked(db.from).mockImplementation((table: string) => {
+      if (table === "resident_tour_links") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+          }),
+        } as never;
+      }
+      return makeDbMock({ applicationRows: [] }).from(table);
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(db as never);
+
+    const access = await loadResidentPortalAccessState({
+      userId: "user-1",
+      role: "resident",
+      email: "resident@example.com",
+    });
+
+    expect(access.hasTourLink).toBe(true);
+    expect(access.isPreLeaseResident).toBe(true);
+    expect(residentPortalHomePath(access)).toBe("/resident/tour");
+  });
+
   it("keeps application-phase home while application is pending approval", async () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
       makeDbMock({

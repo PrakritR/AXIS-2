@@ -65,6 +65,10 @@ export default function CreateAccountClient() {
     () => searchParams.get("tour_inquiry")?.trim() || "",
     [searchParams],
   );
+  const phoneFromUrl = useMemo(
+    () => searchParams.get("phone")?.trim() || "",
+    [searchParams],
+  );
   const nextFromUrl = useMemo(
     () => searchParams.get("next")?.trim() || "",
     [searchParams],
@@ -106,6 +110,10 @@ export default function CreateAccountClient() {
 
   if (emailFromUrl && email !== emailFromUrl && role === "resident") {
     setEmail(emailFromUrl);
+  }
+
+  if (phoneFromUrl && phone !== phoneFromUrl && role === "resident") {
+    setPhone(phoneFromUrl);
   }
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import { recordOptIn } from "@/lib/sms-consent";
 import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib/tour-notification-delivery.server";
 import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
 import { proposeTourConfirmation } from "@/lib/tour-proposal.server";
+import { normalizeTourContactPhone, validateTourContactFields } from "@/lib/tour-contact-quality";
 
 export const runtime = "nodejs";
 
@@ -166,6 +167,23 @@ export async function POST(req: Request) {
     const proposedStart = typeof row["proposedStart"] === "string" ? row["proposedStart"] : null;
     const proposedEnd = typeof row["proposedEnd"] === "string" ? row["proposedEnd"] : null;
     const requestedWindows = requestedWindowsFromRow(row);
+
+    if (textValue(row.kind) === "tour") {
+      const contactErrors = validateTourContactFields({
+        name: textValue(row.name),
+        email: textValue(row.email),
+        phone: textValue(row.phone),
+      });
+      if (Object.keys(contactErrors).length > 0) {
+        const firstError = contactErrors.name || contactErrors.email || contactErrors.phone || "Invalid contact details.";
+        return NextResponse.json({ error: firstError }, { status: 400 });
+      }
+      const normalizedPhone = normalizeTourContactPhone(textValue(row.phone));
+      if (!normalizedPhone) {
+        return NextResponse.json({ error: "Phone number must be 10 digits." }, { status: 400 });
+      }
+      row.phone = normalizedPhone;
+    }
 
     const db = createSupabaseServiceRoleClient();
     if (textValue(row.kind) === "tour") {

@@ -169,8 +169,10 @@ export function CheckboxMultiSelect({
   useEffect(() => {
     if (!open) return;
     const onPointerDownOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
       if (wrapRef.current?.contains(target)) return;
+      if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
       if (document.getElementById(listId)?.contains(target)) return;
       setOpen(false);
     };
@@ -354,8 +356,10 @@ export function FieldSingleSelect({
   useEffect(() => {
     if (!open) return;
     const onPointerDownOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
       if (wrapRef.current?.contains(target)) return;
+      if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
       if (document.getElementById(listId)?.contains(target)) return;
       setOpen(false);
     };
