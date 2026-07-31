@@ -9,6 +9,7 @@ import {
   PORTAL_FILTER_PANEL_COMPACT_CLASS,
   PORTAL_FILTER_PANEL_SIZE_CLASS,
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
+  PORTAL_FILTER_BODY_CLASS,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { cn } from "@/lib/utils";
@@ -186,7 +187,7 @@ export function PortalFilterSortSheet({
               data-attr="portal-filter-dropdown-panel"
             >
               <FilterDropdownHeader onReset={onReset} onClose={close} />
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">{fields}</div>
+              <div className={cn(PORTAL_FILTER_BODY_CLASS, "flex-1")}>{fields}</div>
             </div>
           </>
         ) : null}
@@ -208,7 +209,7 @@ export function PortalFilterSortSheet({
           fullPage={false}
           panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-hidden")}
           dense
-          scrollableContent={compactPanel}
+          scrollableContent
           assistantStrip={false}
           footer={
             compactPanel ? (
