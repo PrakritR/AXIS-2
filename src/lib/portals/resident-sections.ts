@@ -75,39 +75,33 @@ export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
-/** Pre-lease workspace: booked a tour or submitted an application, not yet approved. */
+/** Pre-lease workspace: application submitted or approved, lease not yet fully signed. */
 export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
-  { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
+  { section: "lease", label: "Lease", tabs: [] },
+  { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
 /** @deprecated Use RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS */
 export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS = RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS;
 
-/** Sections shown before lease access is fully unlocked. */
+/** Sections shown before the lease is fully signed (pre-lease resident workspace). */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
-  { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "applications", label: "Applications", tabs: [] },
-  { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
-  { section: "move-in", label: "House details", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
-  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
-  { section: "profile", label: "Settings", tabs: [] },
+  ...RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
 ];
 
-/** Full resident workspace after lease approval. */
+/** Full resident workspace after both parties sign the lease. */
 export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
+  { section: "payments", label: "Payments", tabs: [] },
   { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
-  { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];

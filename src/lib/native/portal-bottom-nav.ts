@@ -35,13 +35,13 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
  * Keep in sync with `src/lib/portals/resident-sections.ts`.
  */
 export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
+  "services",
+  "payments",
   "dashboard",
+  "communication",
   "applications",
   "lease",
-  "payments",
   "move-in",
-  "services",
-  "communication",
   "documents",
 ] as const;
 
@@ -94,8 +94,17 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications", "communication"] as const;
 
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
+/** Pre-lease (application approved / submitted, lease not signed). */
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY = [
+  "applications",
   "lease",
+  "dashboard",
+  "communication",
+] as const;
+
+/** Post-lease (both parties signed). */
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
+  "services",
   "payments",
   "dashboard",
   "communication",
@@ -149,6 +158,9 @@ function primaryOrderFor(
       !navSections.has("dashboard")
     ) {
       return NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY;
+    }
+    if (navSections.has("lease") && !navSections.has("services")) {
+      return NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY;
     }
   }
   switch (kind) {

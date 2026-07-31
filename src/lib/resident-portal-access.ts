@@ -19,6 +19,9 @@ export type ResidentPortalAccessState = {
   applicationId: string | null;
   applicationStage: string | null;
   applicationProperty: string | null;
+  /** Both manager and resident have signed the active lease. */
+  leaseSigned: boolean;
+  /** Full workspace (services, payments, move-in) — requires a signed lease. */
   leaseAccessUnlocked: boolean;
   fullPortalAccess: boolean;
   managerSubscriptionTier: ManagerSubscriptionTier;
@@ -36,6 +39,7 @@ function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): Res
     applicationId: null,
     applicationStage: null,
     applicationProperty: null,
+    leaseSigned: false,
     leaseAccessUnlocked: false,
     fullPortalAccess: false,
     managerSubscriptionTier,
@@ -97,6 +101,35 @@ function readLatestApplication(
     stage: latest.stage,
     property: latest.property,
   };
+}
+
+/** Server-side: returns true when the resident has a lease that both manager and resident signed. */
+export async function loadResidentLeaseSignedStatus(email: string): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  const db = createSupabaseServiceRoleClient();
+  const { data } = await db
+    .from("portal_lease_pipeline_records")
+    .select("row_data")
+    .eq("resident_email", normalizedEmail)
+    .order("updated_at", { ascending: false });
+  if (!data?.length) return false;
+  return data.some((record) => {
+    const row = record.row_data as Record<string, unknown> | null;
+    if (!row) return false;
+    if (row.externallySignedLease === true) {
+      const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
+      const res = row.residentSignature as Record<string, unknown> | null | undefined;
+      return Boolean(mgr?.name && mgr?.signedAtIso && res?.name && res?.signedAtIso);
+    }
+    const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
+    const res = row.residentSignature as Record<string, unknown> | null | undefined;
+    const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;
+    const legacyAt = typeof row.signedAtIso === "string" ? row.signedAtIso : null;
+    const managerSigned = Boolean(mgr?.name && mgr?.signedAtIso);
+    const residentSigned = Boolean((res?.name && res?.signedAtIso) || (legacyName && legacyAt));
+    return managerSigned && residentSigned;
+  });
 }
 
 const loadResidentPortalAccessStateCached = cache(
@@ -179,7 +212,8 @@ const loadResidentPortalAccessStateCached = cache(
       }
     }
 
-    const leaseAccessUnlocked = applicationApproved;
+    const leaseSigned = await loadResidentLeaseSignedStatus(email);
+    const leaseAccessUnlocked = leaseSigned;
     let hasTourLink = false;
     if (userId) {
       const { count: tourLinkCount } = await db
@@ -188,7 +222,8 @@ const loadResidentPortalAccessStateCached = cache(
         .eq("resident_user_id", userId);
       hasTourLink = (tourLinkCount ?? 0) > 0;
     }
-    const isPreLeaseResident = roleOk && !leaseAccessUnlocked && (hasTourLink || hasSubmittedApplication);
+    const isPreLeaseResident =
+      roleOk && !leaseSigned && (hasTourLink || hasSubmittedApplication || applicationApproved);
 
     return {
       roleOk,
@@ -201,8 +236,9 @@ const loadResidentPortalAccessStateCached = cache(
       applicationId: latestApplication.id,
       applicationStage: latestApplication.stage,
       applicationProperty: latestApplication.property,
+      leaseSigned,
       leaseAccessUnlocked,
-      fullPortalAccess: applicationApproved,
+      fullPortalAccess: leaseSigned,
       managerSubscriptionTier,
     };
   },
@@ -224,50 +260,26 @@ export async function loadResidentPortalAccessState(params: {
   );
 }
 
-/** Server-side: returns true when the resident has a lease that both manager and resident signed. */
-export async function loadResidentLeaseSignedStatus(email: string): Promise<boolean> {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) return false;
-  const db = createSupabaseServiceRoleClient();
-  const { data } = await db
-    .from("portal_lease_pipeline_records")
-    .select("row_data")
-    .eq("resident_email", normalizedEmail)
-    .order("updated_at", { ascending: false });
-  if (!data?.length) return false;
-  return data.some((record) => {
-    const row = record.row_data as Record<string, unknown> | null;
-    if (!row) return false;
-    if (row.externallySignedLease === true) {
-      const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
-      const res = row.residentSignature as Record<string, unknown> | null | undefined;
-      return Boolean(mgr?.name && mgr?.signedAtIso && res?.name && res?.signedAtIso);
-    }
-    const mgr = row.managerSignature as Record<string, unknown> | null | undefined;
-    const res = row.residentSignature as Record<string, unknown> | null | undefined;
-    const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;
-    const legacyAt = typeof row.signedAtIso === "string" ? row.signedAtIso : null;
-    const managerSigned = Boolean(mgr?.name && mgr?.signedAtIso);
-    const residentSigned = Boolean((res?.name && res?.signedAtIso) || (legacyName && legacyAt));
-    return managerSigned && residentSigned;
-  });
-}
-
 /** Default resident landing route after sign-in / account creation. */
 export function residentPortalHomePath(
-  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked" | "isPreLeaseResident" | "hasTourLink">,
+  access: Pick<
+    ResidentPortalAccessState,
+    "leaseSigned" | "leaseAccessUnlocked" | "isPreLeaseResident" | "hasTourLink"
+  >,
 ): string {
-  if (access.leaseAccessUnlocked) return "/resident/dashboard";
+  if (access.leaseSigned || access.leaseAccessUnlocked) return "/resident/dashboard";
   if (access.isPreLeaseResident || access.hasTourLink) return "/resident/dashboard";
   return "/resident/applications/apply";
 }
 
 export function residentHasFullPortalAccess(params: {
   applicationApproved: boolean;
+  leaseSigned?: boolean;
   role: string | null | undefined;
   email: string | null | undefined;
   managerSubscriptionTier?: ManagerSubscriptionTier;
 }): boolean {
   if (params.role && params.role !== "resident") return false;
-  return params.applicationApproved;
+  if (params.leaseSigned === true) return true;
+  return false;
 }

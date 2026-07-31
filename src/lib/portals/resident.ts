@@ -4,7 +4,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 import {
   RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS,
   RESIDENT_APPROVED_PORTAL_SECTIONS,
-  RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
+  RESIDENT_LIMITED_PORTAL_SECTIONS,
   RESIDENT_PORTAL_BASE_PATH,
 } from "@/lib/portals/resident-sections";
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
@@ -23,7 +23,7 @@ const residentPortalPreLease: PortalDefinition = {
   basePath: RESIDENT_PORTAL_BASE_PATH,
   title: "Resident Portal",
   accent: "blue",
-  sections: RESIDENT_PRE_LEASE_PORTAL_SECTIONS,
+  sections: RESIDENT_LIMITED_PORTAL_SECTIONS,
 };
 
 const residentPortalApproved: PortalDefinition = {

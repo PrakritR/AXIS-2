@@ -274,6 +274,7 @@ export async function renderPortalSection(
     kind === "resident"
       ? residentHasFullPortalAccess({
           applicationApproved: residentAccess?.applicationApproved ?? false,
+          leaseSigned: residentAccess?.leaseSigned ?? false,
           role: residentCtx?.profile?.role,
           email: residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null,
           managerSubscriptionTier: residentManagerTier,
@@ -309,7 +310,9 @@ export async function renderPortalSection(
         section === "dashboard" ||
         section === "tour" ||
         section === "applications" ||
+        section === "lease" ||
         section === "communication" ||
+        section === "documents" ||
         section === "profile";
       if (!preLeaseAllowed) {
         redirect(residentPortalHomePath(residentAccess));
@@ -886,6 +889,7 @@ export async function renderPortalSection(
     return (
       <ResidentDashboard
         applicationApproved={residentAccess?.applicationApproved ?? false}
+        leaseSigned={residentAccess?.leaseSigned ?? false}
         initialApplicationId={residentAccess?.applicationId ?? null}
         displayName={profile?.full_name ?? profile?.email ?? "Resident"}
         residentEmail={profile?.email ?? residentCtx?.user?.email ?? ""}

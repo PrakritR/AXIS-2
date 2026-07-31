@@ -63,6 +63,15 @@ function makeDbMock(options: {
           }),
         };
       }
+      if (table === "portal_lease_pipeline_records") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
+        };
+      }
       return {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -120,7 +129,9 @@ describe("resident portal access state", () => {
     expect(access.hasCompletedApplicationSubmission).toBe(true);
     expect(access.isPreApplicationResident).toBe(false);
     expect(access.applicationApproved).toBe(false);
+    expect(access.leaseSigned).toBe(false);
     expect(access.leaseAccessUnlocked).toBe(false);
+    expect(access.fullPortalAccess).toBe(false);
     expect(access.isPreLeaseResident).toBe(true);
     expect(residentPortalHomePath(access)).toBe("/resident/dashboard");
   });
