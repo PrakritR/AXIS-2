@@ -1,4 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const isPluginAvailableMock = vi.fn();
+
+vi.mock("@capacitor/core", () => ({
+  Capacitor: {
+    isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
+  },
+}));
 import {
   NATIVE_OAUTH_BRIDGE_PARAM,
   appendNativeOAuthBridgeParam,
@@ -34,16 +42,34 @@ function stubIosNativeShell(): void {
 }
 
 describe("resolveOAuthCallbackRedirectUrl", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+  beforeEach(() => {
+    isPluginAvailableMock.mockImplementation((name: string) => name === "WebAuthSession");
   });
 
-  it("returns custom scheme callback for iOS native (ASWebAuthenticationSession)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("returns custom scheme callback for iOS native when WebAuthSession is linked", async () => {
     stubIosNativeShell();
-    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
-    expect(
-      resolveOAuthCallbackRedirectUrl("https://prop-lane.space", "/auth/callback/partner-pricing"),
-    ).toBe(nativeOAuthCallbackUrl("/auth/callback/partner-pricing"));
+    const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");
+    expect(resolve("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
+    expect(resolve("https://prop-lane.space", "/auth/callback/partner-pricing")).toBe(
+      nativeOAuthCallbackUrl("/auth/callback/partner-pricing"),
+    );
+  });
+
+  it("returns https callback with native_bridge for iOS native without WebAuthSession", async () => {
+    stubIosNativeShell();
+    isPluginAvailableMock.mockReturnValue(false);
+    const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");
+    expect(resolve("https://prop-lane.space")).toBe(
+      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback"),
+    );
+    expect(resolve("https://prop-lane.space", "/auth/callback/partner-pricing")).toBe(
+      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback/partner-pricing"),
+    );
   });
 
   it("returns https callback with native_bridge for Android native shell", () => {

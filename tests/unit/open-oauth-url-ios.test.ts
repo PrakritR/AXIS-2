@@ -1,6 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const authenticateMock = vi.fn();
+const isPluginAvailableMock = vi.fn();
+const browserOpenMock = vi.fn();
+
+vi.mock("@capacitor/core", () => ({
+  Capacitor: {
+    isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
+  },
+}));
+
+vi.mock("@capacitor/browser", () => ({
+  Browser: {
+    open: (...args: unknown[]) => browserOpenMock(...args),
+    close: vi.fn(),
+    addListener: vi.fn(async () => ({ remove: vi.fn() })),
+  },
+}));
+
+vi.mock("@capacitor/app", () => ({
+  App: {
+    addListener: vi.fn(async () => ({ remove: vi.fn() })),
+    getLaunchUrl: vi.fn(async () => undefined),
+  },
+}));
 
 vi.mock("@/lib/native/web-auth-session", () => ({
   WebAuthSession: {
@@ -25,6 +48,10 @@ function stubIosNativeShell(): void {
       isNativePlatform: () => true,
       getPlatform: () => "ios",
     },
+    setTimeout: (fn: () => void) => {
+      fn();
+      return 0;
+    },
   });
   vi.stubGlobal("document", {
     documentElement: {
@@ -33,9 +60,35 @@ function stubIosNativeShell(): void {
   });
 }
 
+describe("usesIosAsWebAuthenticationSession", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("returns true on iOS when the WebAuthSession plugin is linked", async () => {
+    stubIosNativeShell();
+    isPluginAvailableMock.mockImplementation((name: string) => name === "WebAuthSession");
+
+    const { usesIosAsWebAuthenticationSession } = await import("@/lib/native/ios-oauth");
+    expect(usesIosAsWebAuthenticationSession()).toBe(true);
+    expect(isPluginAvailableMock).toHaveBeenCalledWith("WebAuthSession");
+  });
+
+  it("returns false on iOS when the WebAuthSession plugin is absent", async () => {
+    stubIosNativeShell();
+    isPluginAvailableMock.mockReturnValue(false);
+
+    const { usesIosAsWebAuthenticationSession } = await import("@/lib/native/ios-oauth");
+    expect(usesIosAsWebAuthenticationSession()).toBe(false);
+  });
+});
+
 describe("openOAuthUrl on iOS", () => {
   beforeEach(() => {
     authenticateMock.mockReset();
+    browserOpenMock.mockReset();
+    isPluginAvailableMock.mockImplementation((name: string) => name === "WebAuthSession");
   });
 
   afterEach(() => {
@@ -43,7 +96,7 @@ describe("openOAuthUrl on iOS", () => {
     vi.resetModules();
   });
 
-  it("uses ASWebAuthenticationSession and completes via the custom-scheme callback", async () => {
+  it("uses ASWebAuthenticationSession when the plugin is present", async () => {
     stubIosNativeShell();
     authenticateMock.mockResolvedValue({
       url: "space.proplane.app://auth/callback?code=test-code",
@@ -56,7 +109,22 @@ describe("openOAuthUrl on iOS", () => {
       url: "https://accounts.google.com/o/oauth2/auth?client_id=test",
       callbackScheme: "space.proplane.app",
     });
+    expect(browserOpenMock).not.toHaveBeenCalled();
     expect(window.location.replace).toHaveBeenCalledWith("/auth/continue");
+  });
+
+  it("falls back to the system browser when the WebAuthSession plugin is absent", async () => {
+    stubIosNativeShell();
+    isPluginAvailableMock.mockReturnValue(false);
+
+    const { openOAuthUrl } = await import("@/lib/native/open-url");
+    await openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test");
+
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(browserOpenMock).toHaveBeenCalledWith({
+      url: "https://accounts.google.com/o/oauth2/auth?client_id=test",
+      presentationStyle: "fullscreen",
+    });
   });
 
   it("clears in-progress state when the user cancels the auth sheet", async () => {
