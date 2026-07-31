@@ -466,12 +466,7 @@ export function ManagerLeasesPipelinePanel({
         disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
         onClick={() => openSendLeasePreview(row)}
       >
-        {sendingToResidentRowId === row.id ? "Sending…" : (
-          <>
-            <span className="max-md:hidden">Send to resident</span>
-            <span className="md:hidden">Send</span>
-          </>
-        )}
+        {sendingToResidentRowId === row.id ? "Sending…" : "Send"}
       </Button>
     ) : null;
 

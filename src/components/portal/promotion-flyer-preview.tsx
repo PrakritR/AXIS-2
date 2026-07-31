@@ -3,10 +3,16 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import {
+  MODAL_FULL_PAGE_CENTER_CLASS,
+  MODAL_FULL_PAGE_PANEL_CLASS,
+  MODAL_FULL_PAGE_STACK_CLASS,
+} from "@/components/ui/modal-styles";
 import { X } from "lucide-react";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
 import { computeFlyerFit, type FlyerFit } from "@/lib/promotion-flyer-fit";
+import { cn } from "@/lib/utils";
 
 /**
  * Save the promotion's standalone flyer document. Web: `.html` download.
@@ -166,10 +172,10 @@ export function PromotionFlyerPreview({
       open
       onClose={onClose}
       presentation="dialog"
-      stackClassName="fixed inset-0 z-[200] flex flex-col"
+      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
       overlayClassName="fixed inset-0 bg-black/60 backdrop-blur-sm"
-      centerClassName="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-      panelClassName="flex h-full w-full flex-col outline-none"
+      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
+      panelClassName={cn(MODAL_FULL_PAGE_PANEL_CLASS, "px-4")}
       ariaLabel="Flyer preview"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">

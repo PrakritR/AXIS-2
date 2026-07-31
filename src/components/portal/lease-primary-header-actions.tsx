@@ -16,7 +16,9 @@ import { residentHasSignedLease } from "@/lib/lease-pipeline-storage";
 import { cn } from "@/lib/utils";
 
 const FOOTER_ACTION_ROW = "flex w-full min-w-0 flex-nowrap items-stretch gap-2";
-const FOOTER_ACTION_BTN = "h-10 shrink-0 whitespace-nowrap px-2.5 text-xs sm:px-3";
+const FOOTER_ACTION_BTN = "h-10 min-w-0 whitespace-nowrap px-2.5 text-xs sm:px-3";
+const FOOTER_ACTION_CELL = "flex min-w-0 flex-1 [&_button]:w-full [&_label]:w-full [&_button]:justify-center [&_label]:justify-center";
+const FOOTER_FLAT_MAX_INLINE = 4;
 const FOOTER_MORE_BTN =
   "inline-flex h-10 min-h-0 w-10 min-w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card/80 p-0 text-base font-bold leading-none text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card [html[data-theme=dark]_&]:portal-outline-control";
 
@@ -159,6 +161,47 @@ function LeaseFitActionRow({ actions }: { actions: LeaseFooterAction[] }) {
   );
 }
 
+/** Full-width resident lease dock — up to four equal buttons, overflow in ⋯. */
+function LeaseFlatFooterActionRow({ actions }: { actions: LeaseFooterAction[] }) {
+  if (actions.length === 0) return null;
+
+  const inline = actions.slice(0, FOOTER_FLAT_MAX_INLINE);
+  const overflow = actions.slice(FOOTER_FLAT_MAX_INLINE);
+
+  return (
+    <div className={FOOTER_ACTION_ROW}>
+      {inline.map((action) => (
+        <div key={action.id} className={FOOTER_ACTION_CELL}>
+          {action.button}
+        </div>
+      ))}
+      {overflow.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <LeaseFooterMoreTrigger />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="z-[60] min-w-[12rem]">
+            {overflow
+              .filter((action) => action.id !== "delete")
+              .map((action) => (
+                <div key={action.id}>{action.menuItem}</div>
+              ))}
+            {overflow.some((action) => action.id !== "delete") &&
+            overflow.some((action) => action.id === "delete") ? (
+              <DropdownMenuSeparator />
+            ) : null}
+            {overflow
+              .filter((action) => action.id === "delete")
+              .map((action) => (
+                <div key={action.id}>{action.menuItem}</div>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  );
+}
+
 type LeasePrimaryHeaderActionsProps = {
   row: LeasePipelineRow;
   btnClass?: string;
@@ -277,7 +320,7 @@ export function LeasePrimaryHeaderActions({
             disabled={sendToResidentBusy || sendToResidentDisabled}
             onClick={onSendToResident}
           >
-            {sendToResidentBusy ? "Sending…" : "Send to resident"}
+            {sendToResidentBusy ? "Sending…" : "Send"}
           </Button>
         ),
         menuItem: (
@@ -286,7 +329,33 @@ export function LeasePrimaryHeaderActions({
             disabled={sendToResidentBusy || sendToResidentDisabled}
             onClick={onSendToResident}
           >
-            {sendToResidentBusy ? "Sending…" : "Send to resident"}
+            {sendToResidentBusy ? "Sending…" : "Send"}
+          </DropdownMenuItem>
+        ),
+      });
+    }
+
+    if (onDelete && hasDocument) {
+      actions.push({
+        id: "delete",
+        button: (
+          <Button
+            type="button"
+            variant="outline"
+            className={deleteBtnClass}
+            data-attr={deleteDataAttr}
+            onClick={onDelete}
+          >
+            {deleteLabel}
+          </Button>
+        ),
+        menuItem: (
+          <DropdownMenuItem
+            className="text-rose-800 focus:text-rose-800"
+            data-attr={deleteDataAttr}
+            onClick={onDelete}
+          >
+            {deleteLabel}
           </DropdownMenuItem>
         ),
       });
@@ -410,7 +479,7 @@ export function LeasePrimaryHeaderActions({
       });
     }
 
-    if (onDelete) {
+    if (onDelete && !hasDocument) {
       actions.push({
         id: "delete",
         button: (
@@ -504,7 +573,9 @@ export function LeasePrimaryHeaderActions({
     if (flatFooter) {
       return (
         <>
-          {fitFooter}
+          <div className="relative w-full min-w-0">
+            <LeaseFlatFooterActionRow actions={footerActions} />
+          </div>
           {uploadInput}
         </>
       );

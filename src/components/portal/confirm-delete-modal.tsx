@@ -32,7 +32,7 @@ export function ConfirmDeleteModal({
       open={open}
       title={title}
       dense
-      panelClassName="max-w-md"
+      fullPage={false}
       onClose={() => {
         if (!busy) onClose();
       }}

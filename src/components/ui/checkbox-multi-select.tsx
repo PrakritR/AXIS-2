@@ -231,6 +231,9 @@ export function CheckboxMultiSelect({
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-y",
           backgroundColor: "#ffffff",
           zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}
@@ -383,6 +386,9 @@ export function FieldSingleSelect({
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
           overflowY: "auto",
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-y",
           backgroundColor: "#ffffff",
           zIndex: FIELD_SELECT_MENU_Z_INDEX,
         }}

@@ -46,10 +46,9 @@ function FilterResetLink({ onReset }: { onReset: () => void }) {
 
 function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClose: () => void }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <p className="text-sm font-semibold text-foreground">Filter</p>
-      <div className="flex items-center gap-2">
-        <FilterResetLink onReset={onReset} />
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">Filter</p>
         <button
           type="button"
           className={MODAL_HEADER_CLOSE_CLASS}
@@ -60,7 +59,10 @@ function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClo
           <X className="h-4 w-4" strokeWidth={2.25} />
         </button>
       </div>
-    </div>
+      <div className="flex shrink-0 justify-end border-b border-border px-4 py-2">
+        <FilterResetLink onReset={onReset} />
+      </div>
+    </>
   );
 }
 
@@ -202,6 +204,7 @@ export function PortalFilterSortSheet({
           open={open}
           onClose={close}
           title="Filter"
+          fullPage={false}
           panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-hidden")}
           dense
           scrollableContent={compactPanel}

@@ -133,6 +133,37 @@ describe("short-term approved-application charges", () => {
     expect(charges.find((c) => c.kind === "security_deposit")?.amountLabel).toBe("$100.00");
     expect(charges.find((c) => c.kind === "move_in_fee")?.amountLabel).toBe("$40.00");
   });
+
+  it("uses manager rent override as nightly rate when regenerating stay total", () => {
+    const email = "short-override@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-short-term-override";
+    seedShortTermListing(propertyId);
+
+    const base = shortTermApplicant(propertyId, email);
+    recordApprovedApplicationCharges(base, MANAGER_ID, true);
+    expect(
+      readHouseholdCharges()
+        .filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase())
+        .find((c) => c.kind === "stay_total")?.amountLabel,
+    ).toBe("$595.00");
+
+    const edited = {
+      ...base,
+      signedMonthlyRent: 225,
+      application: {
+        ...base.application!,
+        managerRentOverride: "225",
+      },
+    } as DemoApplicantRow;
+    recordApprovedApplicationCharges(edited, MANAGER_ID, true);
+
+    const stay = readHouseholdCharges()
+      .filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase())
+      .find((c) => c.kind === "stay_total");
+    expect(stay?.amountLabel).toBe("$1,575.00");
+    expect(stay?.title).toBe("Stay total (7 nights × $225)");
+  });
 });
 
 describe("long-term path unchanged", () => {

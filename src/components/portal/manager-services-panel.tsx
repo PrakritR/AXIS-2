@@ -220,7 +220,6 @@ export function ManagerServicesPanel() {
         open={modalOpen}
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
-        panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
         footer={
           <ModalFooter>
             <Button type="button" variant="primary" className="rounded-full" onClick={handleSave}>

@@ -26,13 +26,13 @@ export function StripeCheckoutModal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex flex-col"
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
       <button type="button" aria-label="Close checkout" className="modal-overlay fixed inset-0" onClick={onClose} />
-      <div className="modal-panel relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-border shadow-2xl">
+      <div className="modal-panel relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 shadow-none">
         <button
           type="button"
           onClick={onClose}
@@ -44,7 +44,7 @@ export function StripeCheckoutModal({
             <line x1="13" y1="1" x2="1" y2="13" />
           </svg>
         </button>
-        <div className="max-h-[88vh] overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
             <EmbeddedCheckout />
           </EmbeddedCheckoutProvider>

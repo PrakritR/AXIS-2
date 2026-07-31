@@ -5,11 +5,17 @@ import type { ReactNode } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import {
+  MODAL_FULL_PAGE_CENTER_CLASS,
+  MODAL_FULL_PAGE_PANEL_CLASS,
+  MODAL_FULL_PAGE_STACK_CLASS,
+} from "@/components/ui/modal-styles";
 import { X } from "lucide-react";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 import { useListingContactSmsPhone } from "@/hooks/use-listing-contact-sms-phone";
 import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
+import { cn } from "@/lib/utils";
 
 /**
  * Full listing UI exactly as renters see on /rent/listings/[id], in a scrollable overlay.
@@ -45,9 +51,9 @@ export function ListingPublicPreviewModal({
       open={open}
       onClose={onClose}
       presentation="dialog"
-      stackClassName="fixed inset-0 z-[75] overflow-y-auto overscroll-contain"
-      centerClassName="relative z-[76] flex min-h-full items-center justify-center p-2"
-      panelClassName="modal-panel flex max-h-[calc(100vh-1.5rem)] w-[min(100%-1rem,72rem)] flex-col overflow-hidden rounded-2xl border border-border shadow-[0_24px_80px_-20px_rgba(15,23,42,0.35)]"
+      stackClassName={MODAL_FULL_PAGE_STACK_CLASS}
+      centerClassName={MODAL_FULL_PAGE_CENTER_CLASS}
+      panelClassName={cn(MODAL_FULL_PAGE_PANEL_CLASS, "px-0")}
       ariaLabelledBy="listing-preview-title"
     >
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3 sm:px-5">

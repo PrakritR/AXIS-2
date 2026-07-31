@@ -61,9 +61,9 @@ export function LeaseSigningModal({
   if (!isClient) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end justify-center p-2 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-[200] flex flex-col">
       <button type="button" aria-label="Close" className="modal-overlay fixed inset-0" onClick={onClose} />
-      <div className="modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border shadow-2xl">
+      <div className="modal-panel relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 shadow-none">
         <div className="shrink-0 border-b border-border px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-tight text-foreground">

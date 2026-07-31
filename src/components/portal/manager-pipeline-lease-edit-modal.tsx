@@ -84,18 +84,10 @@ export function ManagerPipelineLeaseEditModal({
       title="Edit lease"
       onClose={handleClose}
       assistantStrip={false}
-      fullScreenMobile
       scrollableContent={false}
       dense
-      panelClassName="flex w-full max-w-5xl flex-col overflow-hidden md:max-h-[min(92dvh,52rem)]"
     >
-      <div
-        className={cn(
-          "flex flex-col gap-3",
-          "h-[calc(100dvh-12rem)] max-md:min-h-0",
-          "md:h-[min(calc(92dvh-10rem),46rem)]",
-        )}
-      >
+      <div className="flex h-[calc(100dvh-12rem)] min-h-0 flex-col gap-3">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {editableHtml && draftHtml ? (
             <LeaseDocumentDirectEditor

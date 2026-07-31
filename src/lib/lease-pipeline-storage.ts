@@ -196,6 +196,12 @@ export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean 
   return row.bucket === "manager";
 }
 
+/** True when editing a resident should refresh the lease document (manager-side review only). */
+export function leaseSyncsFromResidentEdit(row: LeasePipelineRow): boolean {
+  if (!leaseAllowsManagerDocumentEdits(row)) return false;
+  return row.status === "Draft" || row.status === "Manager Review";
+}
+
 /**
  * A row carrying a signature IS the evidence of what was signed, so its
  * document body can never be replaced in place. Returns `next` with any such
@@ -1679,7 +1685,7 @@ export function regenerateEditableLeasesForResident(
   let updated = 0;
   for (const lr of readLeasePipeline(managerUserId)) {
     if (lr.residentEmail.trim().toLowerCase() !== email) continue;
-    if (!leaseAllowsManagerDocumentEdits(lr)) continue;
+    if (!leaseSyncsFromResidentEdit(lr)) continue;
     if (!leaseGenerationSupportedForRow(lr).ok) continue;
     if (applicationPatch) {
       updateLeasePipelineRow(

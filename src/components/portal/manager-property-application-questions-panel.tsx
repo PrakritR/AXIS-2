@@ -18,7 +18,10 @@ import {
   normalizeCustomApplicationFields,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
+import {
+  persistManagerListingSubmission,
+  resolveManagerListingSubmissionForPropertyId,
+} from "@/lib/manager-property-save-target";
 import {
   propertyApplicationTypeLabel,
   readPropertyApplicationTemplates,
@@ -57,6 +60,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
   sub,
   saveTarget,
   managerUserId,
+  propertyIds,
   onUpdated,
   showToast,
   onRegisterAddApplication,
@@ -64,6 +68,8 @@ export function ManagerPropertyApplicationQuestionsPanel({
   sub: ManagerListingSubmissionV1;
   saveTarget: QuestionsSaveTarget;
   managerUserId: string | null;
+  /** When set, template changes apply to every listed property (bulk edit). */
+  propertyIds?: string[];
   onUpdated: () => void;
   showToast: (m: string) => void;
   onRegisterAddApplication?: (openAdd: (() => void) | null) => void;
@@ -77,10 +83,72 @@ export function ManagerPropertyApplicationQuestionsPanel({
   const syncedSub = useMemo(() => syncPropertyApplicationTemplatesFromListing(sub), [sub]);
   const templates = useMemo(() => readPropertyApplicationTemplates(syncedSub), [syncedSub]);
 
+  const bulkPropertyIds = propertyIds?.filter((id) => id.trim()) ?? [];
+
   const persistTemplates = (nextTemplates: PropertyApplicationTemplate[]) => {
-    if (!saveTarget || !managerUserId) return false;
+    if (!managerUserId) return false;
+
+    if (bulkPropertyIds.length > 0) {
+      let saved = 0;
+      let failed = 0;
+      for (const propertyId of bulkPropertyIds) {
+        const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+        if (!hit) {
+          failed += 1;
+          continue;
+        }
+        const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const next = syncLegacyApplicationFieldsFromTemplates(base, nextTemplates);
+        if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
+        else failed += 1;
+      }
+      if (saved === 0) {
+        showToast("Could not save application settings.");
+        return false;
+      }
+      if (failed > 0) {
+        showToast(`Updated application for ${saved} properties (${failed} could not be saved).`);
+      } else if (saved > 1) {
+        showToast(`Updated application for ${saved} properties.`);
+      }
+      return true;
+    }
+
+    if (!saveTarget) return false;
     const next = syncLegacyApplicationFieldsFromTemplates(syncedSub, nextTemplates);
     return persistManagerListingSubmission(saveTarget, managerUserId, next);
+  };
+
+  const persistRemoval = (nextTemplates: PropertyApplicationTemplate[]) => {
+    if (!managerUserId) return false;
+
+    if (bulkPropertyIds.length > 0) {
+      let saved = 0;
+      let failed = 0;
+      for (const propertyId of bulkPropertyIds) {
+        const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+        if (!hit) {
+          failed += 1;
+          continue;
+        }
+        const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const persisted = persistManagerListingSubmission(
+          hit.saveTarget,
+          managerUserId,
+          submissionAfterRemovingApplicationTemplate(base, nextTemplates),
+        );
+        if (persisted) saved += 1;
+        else failed += 1;
+      }
+      return saved > 0;
+    }
+
+    if (!saveTarget) return false;
+    return persistManagerListingSubmission(
+      saveTarget,
+      managerUserId,
+      submissionAfterRemovingApplicationTemplate(syncedSub, nextTemplates),
+    );
   };
 
   const openAdd = useCallback(() => {
@@ -106,11 +174,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
     }
     if (!window.confirm("Remove this application?")) return;
     const next = removePropertyApplicationTemplate(templates, templateId);
-    const persisted = persistManagerListingSubmission(
-      saveTarget!,
-      managerUserId!,
-      submissionAfterRemovingApplicationTemplate(syncedSub, next),
-    );
+    const persisted = persistRemoval(next);
     if (!persisted) {
       showToast("Could not remove application.");
       return;
@@ -119,7 +183,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
     showToast("Application removed.");
   };
 
-  if (!saveTarget || !managerUserId) return null;
+  if (!managerUserId || (!saveTarget && bulkPropertyIds.length === 0)) return null;
 
   const editingTemplate = templates.find((t) => t.id === editingTemplateId) ?? null;
 
@@ -198,7 +262,8 @@ export function ManagerPropertyApplicationQuestionsPanel({
         initialVariant={questionsVariant}
         lockVariant
         sub={syncedSub}
-        saveTarget={saveTarget}
+        saveTarget={saveTarget ?? undefined}
+        propertyIds={bulkPropertyIds.length > 0 ? bulkPropertyIds : undefined}
         managerUserId={managerUserId}
         onClose={() => setQuestionsModalOpen(false)}
         onSaved={onUpdated}

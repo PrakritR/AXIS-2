@@ -7,7 +7,13 @@ import { Drawer } from "vaul";
 import { X } from "lucide-react";
 import { useIsClient } from "@/hooks/use-is-client";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
-import { MODAL_PANEL_CLASS, MODAL_OVERLAY_BACKDROP_CLASS } from "@/components/ui/modal-styles";
+import {
+  MODAL_FULL_PAGE_CENTER_CLASS,
+  MODAL_FULL_PAGE_PANEL_CLASS,
+  MODAL_FULL_PAGE_STACK_CLASS,
+  MODAL_PANEL_CLASS,
+  MODAL_OVERLAY_BACKDROP_CLASS,
+} from "@/components/ui/modal-styles";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
@@ -344,6 +350,8 @@ export function Modal({
   assistantDefaultExpanded = false,
   /** Drawer fills the viewport below portal `lg` (no partial sheet). */
   fullScreenMobile = true,
+  /** Fill the viewport on every breakpoint (not only mobile drawer). */
+  fullPage = true,
   /** When false, modal body does not scroll — children own internal overflow. */
   scrollableContent = true,
 }: {
@@ -362,6 +370,7 @@ export function Modal({
   /** Open the assistant strip expanded when the modal opens. */
   assistantDefaultExpanded?: boolean;
   fullScreenMobile?: boolean;
+  fullPage?: boolean;
   scrollableContent?: boolean;
 }) {
   const presentation = useModalPresentation();
@@ -402,20 +411,22 @@ export function Modal({
 
   if (!open) return null;
 
+  const useFullViewport = fullPage || fullScreenMobile;
+
   if (presentation === "drawer") {
     return (
       <ModalShell
         open={open}
         onClose={onClose}
         presentation="drawer"
-        showDrawerHandle={!fullScreenMobile}
+        showDrawerHandle={!useFullViewport}
         ariaDescribedBy={description ? "modal-description" : undefined}
         panelClassName={cn(
-          fullScreenMobile
-            ? "modal-panel fixed inset-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 shadow-none outline-none pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
+          useFullViewport
+            ? cn(dense ? "px-4" : "px-5", panelClassName, MODAL_FULL_PAGE_PANEL_CLASS)
             : "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3 motion-reduce:transition-none",
-          dense ? "px-4" : "px-5",
-          panelClassName,
+          !useFullViewport && (dense ? "px-4" : "px-5"),
+          !useFullViewport && panelClassName,
         )}
       >
         <ModalPanelInner
@@ -433,9 +444,14 @@ export function Modal({
       open={open}
       onClose={onClose}
       presentation="dialog"
-      stackClassName={stackClassName}
+      stackClassName={fullPage ? MODAL_FULL_PAGE_STACK_CLASS : stackClassName}
+      centerClassName={fullPage ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
       ariaDescribedBy={description ? "modal-description" : undefined}
-      panelClassName={cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName)}
+      panelClassName={cn(
+        fullPage
+          ? cn(dense ? "px-4" : "px-5", panelClassName, MODAL_FULL_PAGE_PANEL_CLASS)
+          : cn(MODAL_PANEL_CLASS, "min-h-0 @container", panelClassName),
+      )}
     >
       <ModalPanelInner
         {...panelInnerProps}

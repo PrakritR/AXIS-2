@@ -3,19 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
-import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 import { syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
-import type { ApplicationFormVariant } from "@/lib/rental-application/application-field-catalog";
 
-const BULK_APPLICATION_VARIANTS: ReadonlyArray<{ id: ApplicationFormVariant; label: string; hint: string }> = [
-  { id: "standard", label: "Long-term lease", hint: "The full application for standard leases." },
-  { id: "short_term", label: "Short-term stay", hint: "Guest application for short-term stays." },
-];
-
-/** Pick properties, then manage application templates or bulk-edit questions. */
+/** Pick properties, then manage application templates (single or bulk). */
 export function ManagerEditApplicationModal({
   open,
   onClose,
@@ -33,7 +26,6 @@ export function ManagerEditApplicationModal({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [editingPropertyIds, setEditingPropertyIds] = useState<string[]>([]);
-  const [bulkQuestionsVariant, setBulkQuestionsVariant] = useState<ApplicationFormVariant | null>(null);
 
   const allSelected = propertyOptions.length > 0 && selectedIds.size === propertyOptions.length;
 
@@ -41,7 +33,6 @@ export function ManagerEditApplicationModal({
     if (!open) {
       setSelectedIds(new Set());
       setEditingPropertyIds([]);
-      setBulkQuestionsVariant(null);
     }
   }, [open]);
 
@@ -65,7 +56,6 @@ export function ManagerEditApplicationModal({
   const closeAll = () => {
     setSelectedIds(new Set());
     setEditingPropertyIds([]);
-    setBulkQuestionsVariant(null);
     onClose();
   };
 
@@ -102,18 +92,10 @@ export function ManagerEditApplicationModal({
 
   const onEditorClose = () => {
     setEditingPropertyIds([]);
-    setBulkQuestionsVariant(null);
-  };
-
-  const onEditorSaved = () => {
-    onSaved();
-    setEditingPropertyIds([]);
-    setBulkQuestionsVariant(null);
-    closeAll();
   };
 
   const syncedSub = resolved ? syncPropertyApplicationTemplatesFromListing(resolved.sub) : null;
-  const isSingleProperty = editingPropertyIds.length === 1;
+  const isBulkEdit = editingPropertyIds.length > 1;
 
   return (
     <>
@@ -122,7 +104,6 @@ export function ManagerEditApplicationModal({
         title="Edit application settings"
         description="Choose which properties' rental applications you want to edit. When you select multiple, the same questions apply to all."
         onClose={closeAll}
-        panelClassName="max-w-md"
         footer={
           <ModalFooter>
             <Button
@@ -138,7 +119,7 @@ export function ManagerEditApplicationModal({
           </ModalFooter>
         }
       >
-        <div className="space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col space-y-3">
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-accent/20 px-3 py-2.5">
             <input
               type="checkbox"
@@ -151,7 +132,7 @@ export function ManagerEditApplicationModal({
             <span className="text-sm font-semibold text-foreground">All properties</span>
           </label>
 
-          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
             {propertyOptions.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted">No properties in portfolio yet.</p>
             ) : (
@@ -175,63 +156,26 @@ export function ManagerEditApplicationModal({
         </div>
       </Modal>
 
-      {isSingleProperty && resolved && managerUserId && syncedSub ? (
+      {resolved && managerUserId && syncedSub && editingPropertyIds.length > 0 ? (
         <Modal
-          open={editingPropertyIds.length === 1 && bulkQuestionsVariant === null}
+          open
           title={editorTitle}
-          description="Add an application or edit questions for each stay type."
+          description={
+            isBulkEdit
+              ? "These settings apply to all selected properties. Add an application or edit questions for each stay type."
+              : "Add an application or edit questions for each stay type."
+          }
           onClose={onEditorClose}
-          panelClassName="max-w-3xl"
         >
           <ManagerPropertyApplicationQuestionsPanel
             sub={syncedSub}
             saveTarget={resolved.saveTarget}
             managerUserId={managerUserId}
+            propertyIds={isBulkEdit ? editingPropertyIds : undefined}
             onUpdated={onSaved}
             showToast={showToast}
           />
         </Modal>
-      ) : null}
-
-      {editingPropertyIds.length > 1 && bulkQuestionsVariant === null ? (
-        <Modal
-          open
-          title={editorTitle}
-          description="These settings apply to all selected properties. Pick which application form to edit."
-          onClose={onEditorClose}
-          panelClassName="max-w-lg"
-        >
-          <div className="space-y-2">
-            {BULK_APPLICATION_VARIANTS.map((variant) => (
-              <button
-                key={variant.id}
-                type="button"
-                data-attr={`applications-bulk-edit-${variant.id}`}
-                className="flex w-full flex-col rounded-xl border border-border bg-card px-3.5 py-3 text-left transition hover:border-primary/30"
-                onClick={() => setBulkQuestionsVariant(variant.id)}
-              >
-                <span className="text-sm font-semibold text-foreground">{variant.label}</span>
-                <span className="mt-0.5 text-xs leading-relaxed text-muted">{variant.hint}</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      ) : null}
-
-      {resolved && managerUserId && bulkQuestionsVariant ? (
-        <ManagerApplicationQuestionsEditorModal
-          open
-          title={editorTitle}
-          initialVariant={bulkQuestionsVariant}
-          lockVariant
-          sub={syncedSub ?? resolved.sub}
-          saveTarget={resolved.saveTarget}
-          propertyIds={editingPropertyIds.length > 1 ? editingPropertyIds : undefined}
-          managerUserId={managerUserId}
-          onClose={() => setBulkQuestionsVariant(null)}
-          onSaved={onEditorSaved}
-          showToast={showToast}
-        />
       ) : null}
     </>
   );

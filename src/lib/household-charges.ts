@@ -1296,6 +1296,29 @@ function residentNegotiatedMonthlyRent(row: DemoApplicantRow): number {
   return 0;
 }
 
+/** Short-term nightly rate: manager override / signed rent beat room and listing defaults. */
+function resolvedShortTermNightlyRate(
+  row: DemoApplicantRow,
+  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
+): number {
+  const negotiated = residentNegotiatedMonthlyRent(row);
+  if (negotiated > 0) return negotiated;
+  const stRoom = (() => {
+    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
+      const trimmed = c?.trim();
+      if (!trimmed) continue;
+      const { listingRoomId } = parseRoomChoiceValue(trimmed);
+      if (listingRoomId) {
+        const byId = sub.rooms.find((r) => r.id === listingRoomId);
+        if (byId) return byId;
+      }
+    }
+    return sub.rooms.length === 1 ? (sub.rooms[0] ?? null) : null;
+  })();
+  const stRent = (stRoom?.shortTermRent ?? "").trim() || sub.shortTermDailyCost;
+  return shortTermNightlyRate(stRent);
+}
+
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;
@@ -2741,7 +2764,7 @@ function syncPendingApprovedChargesFromListing(
             return parseMoneyAmount(fallback ?? "");
           };
           const out: ApprovedChargeDraft[] = [];
-          const nightlyRate = shortTermNightlyRate(sub.shortTermDailyCost);
+          const nightlyRate = resolvedShortTermNightlyRate(row, sub);
           const nights = shortTermStayNightCount(leaseStart, leaseEnd);
           if (nightlyRate > 0 && nights) {
             out.push({
@@ -2968,8 +2991,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
       }
       return sub.rooms.length === 1 ? (sub.rooms[0] ?? null) : null;
     })();
-    const stRent = (stRoom?.shortTermRent ?? "").trim() || sub?.shortTermDailyCost;
-    const nightlyRate = shortTermNightlyRate(stRent);
+    const nightlyRate = sub ? resolvedShortTermNightlyRate(row, sub) : 0;
     const nights = shortTermStayNightCount(leaseStart, leaseEnd);
     if (nightlyRate > 0 && nights) {
       pushCharge(

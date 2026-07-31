@@ -20,7 +20,7 @@ export function LeaseRegenerateConfirmModal({
       open={open}
       title="Regenerate lease"
       onClose={onClose}
-      panelClassName="max-w-md"
+      fullPage={false}
       footer={
         <ModalFooter>
           <Button type="button" variant="primary" className="rounded-full" onClick={onConfirm} disabled={busy}>
