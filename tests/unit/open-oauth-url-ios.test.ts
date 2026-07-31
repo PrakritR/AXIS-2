@@ -84,6 +84,57 @@ describe("usesIosAsWebAuthenticationSession", () => {
   });
 });
 
+function stubAndroidNativeShell(): void {
+  vi.stubGlobal("window", {
+    location: { origin: "https://prop-lane.space", pathname: "/auth/sign-in", replace: vi.fn(), href: "" },
+    sessionStorage: {
+      getItem: () => null,
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    },
+    Capacitor: {
+      isNativePlatform: () => true,
+      getPlatform: () => "android",
+    },
+    setTimeout: (fn: () => void) => {
+      fn();
+      return 0;
+    },
+  });
+  vi.stubGlobal("document", {
+    documentElement: {
+      hasAttribute: (name: string) => name === "data-native",
+      getAttribute: (name: string) => (name === "data-native" ? "android" : null),
+    },
+  });
+}
+
+describe("openOAuthUrl on Android", () => {
+  beforeEach(() => {
+    authenticateMock.mockReset();
+    browserOpenMock.mockReset();
+    isPluginAvailableMock.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("still uses the system browser (Chrome Custom Tabs) — not affected by the iOS guard", async () => {
+    stubAndroidNativeShell();
+
+    const { openOAuthUrl } = await import("@/lib/native/open-url");
+    await openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test");
+
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(browserOpenMock).toHaveBeenCalledWith({
+      url: "https://accounts.google.com/o/oauth2/auth?client_id=test",
+      presentationStyle: "fullscreen",
+    });
+  });
+});
+
 describe("openOAuthUrl on iOS", () => {
   beforeEach(() => {
     authenticateMock.mockReset();
@@ -113,7 +164,10 @@ describe("openOAuthUrl on iOS", () => {
     expect(window.location.replace).toHaveBeenCalledWith("/auth/continue");
   });
 
-  it("falls back to the system browser when the WebAuthSession plugin is absent", async () => {
+  it("refuses SFSafariViewController and shows an update hint when the plugin is absent", async () => {
+    // A legacy iOS binary predates WebAuthSession. It must NOT fall back to
+    // SFSafariViewController (@capacitor/browser) — that renders the portal inside
+    // in-app Safari. It fails with a rebuild hint instead.
     stubIosNativeShell();
     isPluginAvailableMock.mockReturnValue(false);
 
@@ -121,10 +175,9 @@ describe("openOAuthUrl on iOS", () => {
     await openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test");
 
     expect(authenticateMock).not.toHaveBeenCalled();
-    expect(browserOpenMock).toHaveBeenCalledWith({
-      url: "https://accounts.google.com/o/oauth2/auth?client_id=test",
-      presentationStyle: "fullscreen",
-    });
+    expect(browserOpenMock).not.toHaveBeenCalled();
+    expect(window.location.href).toContain("/auth/sign-in?error=oauth");
+    expect(window.location.href).toContain("TestFlight");
   });
 
   it("clears in-progress state when the user cancels the auth sheet", async () => {
