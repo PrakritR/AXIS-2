@@ -2353,6 +2353,17 @@ html[data-communication-surface] .portal-inbox-composer-row {
   html[data-communication-surface] .portal-resident-detail-inbox .portal-inbox-two-pane {
     border-radius: 0.75rem;
   }
+
+  /* Resident Communication: page-level thread scroll (no thread-reading lock). */
+  html[data-native][data-communication-surface]:not([data-communication-thread-reading])
+    .portal-inbox-thread-body {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-native][data-communication-surface]:not([data-communication-thread-reading])
+    .portal-inbox-composer {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
 }
 
 html[data-native] h1.text-\[1\.35rem\] {

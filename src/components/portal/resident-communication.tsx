@@ -268,6 +268,7 @@ function ResidentUnifiedInbox({
           embeddedInCommunication
           externalTitleActions
           suppressListPane
+          pageScroll
           controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
           onControlledExpandedIdChange={(id) => {
             if (!id) setSelectedKey(null);
@@ -279,7 +280,13 @@ function ResidentUnifiedInbox({
 
   const threadOpen = Boolean(selection);
   return (
-    <InboxTwoPane fillViewport={threadOpen} threadOpen={threadOpen} list={listPane} thread={threadPane} />
+    <InboxTwoPane
+      heightMode="flow"
+      fillViewport={false}
+      threadOpen={threadOpen}
+      list={listPane}
+      thread={threadPane}
+    />
   );
 }
 
@@ -327,7 +334,6 @@ export function ResidentCommunication({
       titleAside={titleAside}
       mobileActionsRow={mobileActionsRow}
       hideMobileFilterRow={threadOpen}
-      mobileThreadReading={threadOpen}
     >
       <ResidentUnifiedInbox
         inboxRef={inboxRef}
