@@ -790,9 +790,13 @@ export function effectiveApplicationForRow(row: Pick<DemoApplicantRow, "applicat
   return next;
 }
 
-export function signedRentLabelForRow(row: Pick<DemoApplicantRow, "signedMonthlyRent">): string | null {
+export function signedRentLabelForRow(
+  row: Pick<DemoApplicantRow, "signedMonthlyRent" | "application">,
+): string | null {
   if (!Number.isFinite(row.signedMonthlyRent ?? NaN) || (row.signedMonthlyRent ?? 0) <= 0) return null;
-  return `$${Number(row.signedMonthlyRent).toFixed(2)} / month`;
+  const amount = `$${Number(row.signedMonthlyRent).toFixed(2)}`;
+  if (row.application?.rentalType === "short_term") return amount;
+  return `${amount} / month`;
 }
 
 export { enrichApplicationForLease, resolveApplicationPersonalFields } from "@/lib/application-personal-fields";

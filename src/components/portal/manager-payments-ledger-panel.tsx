@@ -25,6 +25,10 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, legacyChargeIdAliases, markHouseholdChargePaid, markHouseholdChargePending, publicChargeIdForUrl, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import {
+  syncResidentAfterStayPaymentEdit,
+  syncResidentBillingAndLeases,
+} from "@/lib/resident-lease-billing-sync";
+import {
   parseShortTermStayChargeTitle,
   shortTermStayChargeTitle,
   shortTermStayTotalAmount,
@@ -324,7 +328,29 @@ export function ManagerPaymentsLedgerPanel({
       return;
     }
     if (updateHouseholdChargeAmount(row.householdChargeId, amt, managerUserId, title, dueLabel)) {
-      showToast("Payment updated.");
+      const email = row.residentEmail?.trim();
+      if (email) {
+        if (isStayTotalRow(row) && title) {
+          const parsed = parseShortTermStayChargeTitle(title);
+          if (parsed) {
+            const leases = syncResidentAfterStayPaymentEdit({
+              residentEmail: email,
+              managerUserId,
+              nights: parsed.nights,
+              nightlyRate: parsed.nightlyRate,
+            });
+            showToast(leases > 0 ? "Payment and lease updated." : "Payment updated.");
+          } else {
+            syncResidentBillingAndLeases({ residentEmail: email, managerUserId });
+            showToast("Payment updated.");
+          }
+        } else {
+          syncResidentBillingAndLeases({ residentEmail: email, managerUserId });
+          showToast("Payment updated.");
+        }
+      } else {
+        showToast("Payment updated.");
+      }
       onRowsChanged?.();
       onScheduleChanged?.();
     }

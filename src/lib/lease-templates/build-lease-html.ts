@@ -22,7 +22,11 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
-import { shortTermStayNightCount } from "@/lib/short-term-stay-pricing";
+import {
+  shortTermNightlyRate,
+  shortTermStayNightCount,
+  shortTermStayTotalAmount,
+} from "@/lib/short-term-stay-pricing";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
@@ -451,17 +455,31 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   });
 
   if (a.rentalType === "short_term") {
+    const nightlyFromOverride = shortTermNightlyRate(a.managerRentOverride);
+    const nightlyFromSigned = shortTermNightlyRate(signedRentLabel);
     const roomDaily = specificRoom ? roomDailyRentPrice(specificRoom) : undefined;
-    const dailyCostRaw =
-      roomDaily != null
-        ? fmtUsd(roomDaily)
-        : subNorm?.shortTermDailyCost?.trim() || "—";
-    const shortDepositRaw =
-      specificRoom?.shortTermDeposit?.trim() || subNorm?.shortTermDeposit?.trim() || "—";
-    const dailyCost = parseAmount(dailyCostRaw);
+    const nightlyRate =
+      nightlyFromOverride > 0
+        ? nightlyFromOverride
+        : nightlyFromSigned > 0
+          ? nightlyFromSigned
+          : roomDaily != null && roomDaily > 0
+            ? roomDaily
+            : shortTermNightlyRate(subNorm?.shortTermDailyCost);
+    const dailyCostRaw = nightlyRate > 0 ? fmtUsd(nightlyRate) : "—";
+    const shortDepositRaw = overrideFeeLabel(
+      a.managerSecurityDepositOverride,
+      specificRoom?.shortTermDeposit?.trim() || subNorm?.shortTermDeposit?.trim() || "—",
+    );
+    const shortMoveInRaw = overrideFeeLabel(
+      a.managerMoveInFeeOverride,
+      specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee?.trim() || "—",
+    );
     const stayNights = shortTermStayNightCount(a.leaseStart, a.leaseEnd);
-    const totalRent = dailyCost && stayNights ? fmtUsd(dailyCost * stayNights) : "—";
+    const totalRent =
+      nightlyRate > 0 && stayNights ? fmtUsd(shortTermStayTotalAmount(nightlyRate, stayNights)) : "—";
     const depositAmount = parseAmount(shortDepositRaw);
+    const moveInAmount = parseAmount(shortMoveInRaw);
     // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
     // they must appear in the stay's Payment table and count toward the total due.
     const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
@@ -478,8 +496,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       )
       .join("\n");
     const totalDue =
-      dailyCost && stayNights
-        ? fmtUsd(dailyCost * stayNights + (depositAmount ?? 0) + stCustomFeesTotal)
+      nightlyRate > 0 && stayNights
+        ? fmtUsd(
+            shortTermStayTotalAmount(nightlyRate, stayNights) +
+              (depositAmount ?? 0) +
+              (moveInAmount ?? 0) +
+              stCustomFeesTotal,
+          )
         : "—";
     const requirements = escapeHtml(
       subNorm?.shortTermRequirements?.trim() ||
@@ -516,7 +539,8 @@ ${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" s
 <table>
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
   <tr><th>Total rent for stay</th><td>${totalRent}</td></tr>
-  <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
+  <tr><th>Move-in fee</th><td>${escapeHtml(shortMoveInRaw)}</td></tr>
+  <tr><th>Deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
 ${stCustomFeeRows}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>

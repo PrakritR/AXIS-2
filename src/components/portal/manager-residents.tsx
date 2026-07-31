@@ -210,6 +210,25 @@ import {
   type ManagerServiceResidentOption,
 } from "@/components/portal/manager-create-service-request-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
+import {
+  syncResidentBillingAndLeases,
+} from "@/lib/resident-lease-billing-sync";
+import {
+  shortTermNightlyRate,
+  shortTermStayChargeTitle,
+  shortTermStayNightCount,
+} from "@/lib/short-term-stay-pricing";
+
+function residentRoomRentSuffix(
+  room: { monthlyRent?: number; shortTermRent?: string },
+  isShortTerm: boolean,
+): string {
+  if (isShortTerm) {
+    const nightly = shortTermNightlyRate(room.shortTermRent);
+    return nightly > 0 ? ` · $${nightly % 1 === 0 ? nightly : nightly.toFixed(2)}/night` : "";
+  }
+  return room.monthlyRent ? ` · $${room.monthlyRent}/mo` : "";
+}
 
 /**
  * Routed resident detail tab panel — flat content (no collapsible chevron stack).
@@ -382,6 +401,7 @@ export function ManagerResidents({
   const [arSaving, setArSaving] = useState(false);
 
   // Edit resident
+  const erSkipPricingFillRef = useRef(false);
   const [editResidentOpen, setEditResidentOpen] = useState(false);
   const [erName, setErName] = useState("");
   const [erEmail, setErEmail] = useState("");
@@ -630,7 +650,12 @@ export function ManagerResidents({
     const listing = readExtraListingsForUser(userId).find((p) => p.id === arPropertyId);
     if (!listing?.listingSubmission) return [];
     const sub = normalizeManagerListingSubmissionV1(listing.listingSubmission);
-    return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
+    return sub.rooms.map((r) => ({
+      id: r.id,
+      name: r.name || r.id,
+      monthlyRent: r.monthlyRent,
+      shortTermRent: r.shortTermRent,
+    }));
   }, [arPropertyId, userId, propertyTick]);
 
   const erRoomOptions = useMemo(() => {
@@ -639,7 +664,12 @@ export function ManagerResidents({
     const listing = readExtraListingsForUser(userId).find((p) => p.id === erPropertyId);
     if (!listing?.listingSubmission) return [];
     const sub = normalizeManagerListingSubmissionV1(listing.listingSubmission);
-    return sub.rooms.map((r) => ({ id: r.id, name: r.name || r.id, monthlyRent: r.monthlyRent }));
+    return sub.rooms.map((r) => ({
+      id: r.id,
+      name: r.name || r.id,
+      monthlyRent: r.monthlyRent,
+      shortTermRent: r.shortTermRent,
+    }));
   }, [erPropertyId, userId, propertyTick]);
 
   const arLeaseTermOptions = useMemo(
@@ -672,6 +702,36 @@ export function ManagerResidents({
   );
   const arIsShortTermStay = arManualLeaseFields.rentalType === "short_term";
 
+  const erManualLeaseFields = useMemo(
+    () => residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode),
+    [erLeaseTerm, erLeaseTermCustomMode],
+  );
+  const erIsShortTermStay = erManualLeaseFields.rentalType === "short_term";
+
+  const arStayPreview = useMemo(() => {
+    if (!arIsShortTermStay) return null;
+    const nights = shortTermStayNightCount(arMoveInDate, arMoveOutDate);
+    const nightly = shortTermNightlyRate(arRent);
+    if (!nights || !nightly) return null;
+    return shortTermStayChargeTitle(nights, nightly);
+  }, [arIsShortTermStay, arMoveInDate, arMoveOutDate, arRent]);
+
+  const erStayPreview = useMemo(() => {
+    if (!erIsShortTermStay) return null;
+    const nights = shortTermStayNightCount(erMoveInDate, erMoveOutDate);
+    const nightly = shortTermNightlyRate(erRent);
+    if (!nights || !nightly) return null;
+    return shortTermStayChargeTitle(nights, nightly);
+  }, [erIsShortTermStay, erMoveInDate, erMoveOutDate, erRent]);
+
+  useEffect(() => {
+    if (arIsShortTermStay) setArUtilities("0");
+  }, [arIsShortTermStay]);
+
+  useEffect(() => {
+    if (erIsShortTermStay) setErUtilities("0");
+  }, [erIsShortTermStay]);
+
   useEffect(() => {
     if (!addResidentOpen) return;
     if (!arPropertyId.trim() || !arLeaseTerm.trim()) return;
@@ -696,6 +756,26 @@ export function ManagerResidents({
     const end = computeLeaseEndDate(arMoveInDate, term);
     if (end) setArMoveOutDate(end);
   }, [addResidentOpen, arMoveInDate, arLeaseTerm, arLeaseTermCustomMode, arManualLeaseFields.leaseTerm, arManualLeaseFields.rentalType]);
+
+  useEffect(() => {
+    if (!editResidentOpen) return;
+    if (erSkipPricingFillRef.current) {
+      erSkipPricingFillRef.current = false;
+      return;
+    }
+    if (!erPropertyId.trim() || !erLeaseTerm.trim()) return;
+    const pricing = resolveManualResidentPlacementValues({
+      propertyId: erPropertyId,
+      roomId: erRoomId,
+      leaseTerm: erLeaseTerm,
+      leaseTermCustomMode: erLeaseTermCustomMode,
+    });
+    if (!pricing) return;
+    setErRent(pricing.rent);
+    setErUtilities(pricing.utilities);
+    setErMoveInFee(pricing.moveInFee);
+    setErSecurityDeposit(pricing.securityDeposit);
+  }, [editResidentOpen, erPropertyId, erRoomId, erLeaseTerm, erLeaseTermCustomMode, propertyTick]);
 
   const erLeaseTermSelectValue = useMemo(
     () => residentLeaseTermSelectValue(erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues),
@@ -1317,7 +1397,13 @@ export function ManagerResidents({
       if (!arName.trim()) { showToast("Enter the resident's name."); return; }
       if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
       const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-      const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
+      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
+      const arSavingShortTerm = arAppLeaseFields.rentalType === "short_term";
+      const utilities = arSavingShortTerm
+        ? null
+        : arUtilities.trim()
+          ? Number(arUtilities.replace(/[^\d.]/g, ""))
+          : null;
       const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
       const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
       const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
@@ -1325,7 +1411,6 @@ export function ManagerResidents({
         ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
         : "—";
       const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
-      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
       const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
       const hasUploadedLeasePdf = Boolean(arSignedLeaseDataUrl.trim());
       const nextRow: DemoApplicantRow = {
@@ -1447,6 +1532,7 @@ export function ManagerResidents({
     const savedDeposit = row.manualResidentDetails?.securityDeposit != null ? String(row.manualResidentDetails.securityDeposit) : "";
     setErSecurityDeposit(savedDeposit || app?.managerSecurityDepositOverride?.trim() || "");
     setErNotes(row.manualResidentDetails?.notes || "");
+    erSkipPricingFillRef.current = true;
     setEditResidentOpen(true);
   }
 
@@ -1463,14 +1549,18 @@ export function ManagerResidents({
       return;
     }
     const rent = erRent.trim() ? Number(erRent.replace(/[^\d.]/g, "")) : null;
-    const utilities = erUtilities.trim() ? Number(erUtilities.replace(/[^\d.]/g, "")) : null;
+    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode);
+    const erSavingShortTerm = appLeaseFields.rentalType === "short_term";
+    const utilities = erSavingShortTerm
+      ? null
+      : erUtilities.trim()
+        ? Number(erUtilities.replace(/[^\d.]/g, ""))
+        : null;
     const moveInFee = erMoveInFee.trim() ? Number(erMoveInFee.replace(/[^\d.]/g, "")) : null;
     const secDeposit = erSecurityDeposit.trim() ? Number(erSecurityDeposit.replace(/[^\d.]/g, "")) : null;
     const propId = erPropertyId.trim();
     const propLabel = propId ? propertyOptions.find((p) => p.id === propId)?.label ?? rows[idx]!.property : rows[idx]!.property;
     const selectedRoomLabel = erRoomId ? erRoomOptions.find((room) => room.id === erRoomId)?.name?.trim() ?? "" : "";
-
-    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode);
     const existing = rows[idx]!;
     const newRoomChoice = propId && erRoomId ? `${propId}${LISTING_ROOM_CHOICE_SEP}${erRoomId}` : undefined;
     const nextRow: DemoApplicantRow = {
@@ -1505,7 +1595,9 @@ export function ManagerResidents({
             leaseStart: erMoveInDate || existing.application.leaseStart,
             leaseEnd: erMoveOutDate || existing.application.leaseEnd,
             managerRentOverride: erRent.trim() || existing.application.managerRentOverride,
-            managerUtilitiesOverride: erUtilities.trim() || existing.application.managerUtilitiesOverride,
+            managerUtilitiesOverride: erSavingShortTerm
+              ? undefined
+              : erUtilities.trim() || existing.application.managerUtilitiesOverride,
             managerMoveInFeeOverride: erMoveInFee.trim() || existing.application.managerMoveInFeeOverride,
             managerSecurityDepositOverride: erSecurityDeposit.trim() || existing.application.managerSecurityDepositOverride,
           }
@@ -2169,7 +2261,10 @@ export function ManagerResidents({
                                 reminderScheduleSummary={residentReminderScheduleSummary}
                                 onOpenReminderSettings={() => setResidentReminderSettingsOpen(true)}
                                 onScheduleChanged={() => void reloadResidentPaymentSchedule()}
-                                onRowsChanged={() => setHcTick((n) => n + 1)}
+                                onRowsChanged={() => {
+                                  setHcTick((n) => n + 1);
+                                  setLeaseTick((n) => n + 1);
+                                }}
                                 paymentId={paymentIdProp}
                                 listBasePath={residentPaymentsListHref}
                                 embeddedInResident
@@ -2774,7 +2869,8 @@ export function ManagerResidents({
                   <option value="">Select room…</option>
                   {arRoomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name}{r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
+                      {r.name}
+                      {residentRoomRentSuffix(r, arIsShortTermStay)}
                     </option>
                   ))}
                 </Select>
@@ -2785,26 +2881,29 @@ export function ManagerResidents({
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">{arIsShortTermStay ? "Daily rate ($)" : "Monthly rent ($)"}</span>
+              <span className="font-medium text-muted">{arIsShortTermStay ? "Rent / night ($)" : "Monthly rent ($)"}</span>
               <Input
                 type="number"
                 min={0}
                 step={0.01}
                 value={arRent}
                 onChange={(e) => setArRent(e.target.value)}
-                placeholder={arIsShortTermStay ? "225.00" : "875.00"}
+                placeholder={arIsShortTermStay ? "85.00" : "875.00"}
               />
+              {arStayPreview ? <span className="text-xs text-muted">{arStayPreview}</span> : null}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Monthly utilities ($)</span>
-              <Input type="number" min={0} step={0.01} value={arUtilities} onChange={(e) => setArUtilities(e.target.value)} placeholder="175.00" />
-            </label>
+            {!arIsShortTermStay ? (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-muted">Monthly utilities ($)</span>
+                <Input type="number" min={0} step={0.01} value={arUtilities} onChange={(e) => setArUtilities(e.target.value)} placeholder="175.00" />
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={arMoveInFee} onChange={(e) => setArMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Security deposit ($)</span>
+              <span className="font-medium text-muted">{arIsShortTermStay ? "Deposit ($)" : "Security deposit ($)"}</span>
               <Input type="number" min={0} step={0.01} value={arSecurityDeposit} onChange={(e) => setArSecurityDeposit(e.target.value)} placeholder="875.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -2886,6 +2985,9 @@ export function ManagerResidents({
       >
         <div className="space-y-3 pb-1">
           <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
+          {erIsShortTermStay ? (
+            <p className="text-xs text-muted">Short-term stays use an all-in nightly rate — no separate utilities.</p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -2960,7 +3062,7 @@ export function ManagerResidents({
                   {erRoomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
-                      {r.monthlyRent ? ` · $${r.monthlyRent}/mo` : ""}
+                      {residentRoomRentSuffix(r, erIsShortTermStay)}
                     </option>
                   ))}
                 </NativeSelect>
@@ -2971,19 +3073,29 @@ export function ManagerResidents({
               )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Monthly rent ($)</span>
-              <Input type="number" min={0} step={0.01} value={erRent} onChange={(e) => setErRent(e.target.value)} placeholder="875.00" />
+              <span className="font-medium text-muted">{erIsShortTermStay ? "Rent / night ($)" : "Monthly rent ($)"}</span>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={erRent}
+                onChange={(e) => setErRent(e.target.value)}
+                placeholder={erIsShortTermStay ? "85.00" : "875.00"}
+              />
+              {erStayPreview ? <span className="text-xs text-muted">{erStayPreview}</span> : null}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Monthly utilities ($)</span>
-              <Input type="number" min={0} step={0.01} value={erUtilities} onChange={(e) => setErUtilities(e.target.value)} placeholder="175.00" />
-            </label>
+            {!erIsShortTermStay ? (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-muted">Monthly utilities ($)</span>
+                <Input type="number" min={0} step={0.01} value={erUtilities} onChange={(e) => setErUtilities(e.target.value)} placeholder="175.00" />
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={erMoveInFee} onChange={(e) => setErMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-muted">Security deposit ($)</span>
+              <span className="font-medium text-muted">{erIsShortTermStay ? "Deposit ($)" : "Security deposit ($)"}</span>
               <Input
                 type="number"
                 min={0}
@@ -3035,6 +3147,11 @@ export function ManagerResidents({
             onSaved={() => {
               setApplicationEditOpen(false);
               setHcTick((n) => n + 1);
+              const email = (selectedApplicationRow.email ?? selected?.email ?? "").trim().toLowerCase();
+              if (email) {
+                syncResidentBillingAndLeases({ residentEmail: email, managerUserId: userId ?? null });
+                setLeaseTick((n) => n + 1);
+              }
             }}
           />
         ) : null}

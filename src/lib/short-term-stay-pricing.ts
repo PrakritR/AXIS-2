@@ -1,7 +1,15 @@
-import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
+import { formatIsoDateInput, parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 /** Checkout-exclusive night count (check-out morning is not billed). */
+/** Check-out date for a stay that bills `nights` checkout-exclusive nights from check-in. */
+export function shortTermCheckoutDate(leaseStart: string | undefined | null, nights: number): string | null {
+  const start = parseFlexibleLocalDate(leaseStart);
+  if (!start || !(nights > 0)) return null;
+  const checkout = new Date(start.getFullYear(), start.getMonth(), start.getDate() + nights);
+  return formatIsoDateInput(checkout);
+}
+
 export function shortTermStayNightCount(
   leaseStart: string | undefined | null,
   leaseEnd: string | undefined | null,
