@@ -62,16 +62,19 @@ end
 
 def refresh_profile_via_api(api_key, fallback_path)
   UI.message("Refreshing App Store provisioning profile via App Store Connect API…")
-  refreshed_path = sigh(
+  sigh(
     api_key: api_key,
     app_identifier: APP_IDENTIFIER,
     force: true,
     skip_install: false,
     adhoc: false,
   )
-  path = refreshed_path.to_s.strip
-  path = fallback_path if path.empty?
-  install_profile_from_path(path)
+  path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
+  raise "sigh did not return a profile path" unless path && File.exist?(path)
+
+  data = profile_plist(path)
+  assert_app_store_profile!(data)
+  Actions.lane_context[SharedValues::SIGH_NAME] || data.fetch("Name")
 rescue StandardError => e
   UI.important("sigh profile refresh failed (#{e.message}); using APPLE_PROFILE_BASE64")
   install_profile_from_path(fallback_path)
