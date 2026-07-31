@@ -90,8 +90,8 @@ describe("Modal Radix / Vaul shell", () => {
     );
     const drawer = document.querySelector('[data-slot="modal-vaul-drawer"]');
     expect(drawer).toBeTruthy();
-    expect(drawer?.className).toContain("inset-0");
-    expect(drawer?.className).toContain("h-[100dvh]");
+    expect(drawer?.className).toContain("max-h-[min(92dvh,56rem)]");
+    expect(drawer?.className).not.toContain("h-[100dvh]");
   });
 
   it("renders Radix dialog on large portal viewports", () => {

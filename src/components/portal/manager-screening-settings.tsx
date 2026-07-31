@@ -167,7 +167,7 @@ export function ManagerScreeningSettingsModal({
   }, [open]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Applicant screening">
+    <Modal open={open} onClose={onClose} title="Applicant screening" dense assistantStrip={false}>
       {settings ? (
         <>
           {loadError ? <p className="mb-3 text-sm text-[var(--status-overdue-fg)]">{loadError}</p> : null}

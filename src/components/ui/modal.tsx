@@ -349,9 +349,9 @@ export function Modal({
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
   /** Drawer fills the viewport below portal `lg` (no partial sheet). */
-  fullScreenMobile = true,
+  fullScreenMobile = false,
   /** Fill the viewport on every breakpoint (not only mobile drawer). */
-  fullPage = true,
+  fullPage = false,
   /** When false, modal body does not scroll — children own internal overflow. */
   scrollableContent = true,
 }: {

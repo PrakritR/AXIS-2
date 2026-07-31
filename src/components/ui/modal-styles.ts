@@ -18,7 +18,7 @@ export const MODAL_FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking
 
 export const MODAL_OVERLAY_BACKDROP_CLASS = "modal-overlay fixed inset-0";
 
-/** Full-viewport modal shell — manager edit flows and other multi-step portal overlays. */
+/** Full-viewport modal shell — opt in with `fullPage` for rare immersive flows. */
 export const MODAL_FULL_PAGE_STACK_CLASS = "fixed inset-0 z-[70] overflow-hidden";
 export const MODAL_FULL_PAGE_CENTER_CLASS =
   "relative z-[71] flex min-h-full items-stretch justify-stretch p-0";

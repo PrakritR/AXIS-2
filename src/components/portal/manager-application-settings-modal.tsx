@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -89,29 +89,35 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Promo code">
-      <div className="space-y-4">
-        <Input
-          aria-label="Promo code"
-          value={waiverCode}
-          onChange={(e) => setWaiverCode(e.target.value)}
-          placeholder="E.G. WELCOME50"
-          data-attr="manager-application-waiver-code-input"
-          disabled={loading || saving}
-          className="max-w-[220px] font-mono uppercase"
-        />
-        <div className="flex justify-end gap-2 pt-1">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Promo code"
+      dense
+      assistantStrip={false}
+      footer={
+        <ModalFooter>
           <Button
             type="button"
-            className="px-4 text-[13px]"
+            className="rounded-full px-4 text-[13px]"
             onClick={() => void save()}
             disabled={loading || saving}
             data-attr="manager-application-fee-save"
           >
             {saving ? "Saving…" : "Save"}
           </Button>
-        </div>
-      </div>
+        </ModalFooter>
+      }
+    >
+      <Input
+        aria-label="Promo code"
+        value={waiverCode}
+        onChange={(e) => setWaiverCode(e.target.value)}
+        placeholder="E.G. WELCOME50"
+        data-attr="manager-application-waiver-code-input"
+        disabled={loading || saving}
+        className="w-full font-mono uppercase"
+      />
     </Modal>
   );
 }
