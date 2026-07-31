@@ -405,6 +405,7 @@ export function ShareLeadLinkModal({
                     </div>
                   </div>
                   <CheckboxMultiSelect
+                    hideLabel
                     label="Properties"
                     hideLabel
                     dataAttr="share-lead-property-multi"

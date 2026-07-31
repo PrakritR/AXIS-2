@@ -24,22 +24,46 @@ import {
 export const FIELD_SELECT_MENU_VISIBLE_ITEMS = 5;
 const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 
-/** Always portal to body — viewport `fixed` coords break inside transformed Vaul/Radix shells. */
+const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
+  '[data-slot="modal-vaul-drawer"][data-state="open"]',
+  '[data-slot="modal-radix-dialog"][data-state="open"]',
+  '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+];
+
+/**
+ * Portal menus into an open modal/drawer shell when present. Radix `hideOthers` and Vaul
+ * mark every `document.body` sibling outside the dialog tree as aria-hidden, so body-
+ * portaled menus look correct but cannot receive clicks. Body fallback keeps viewport
+ * `fixed` coords for non-modal surfaces (filters, tables, etc.).
+ */
 function resolveFieldSelectMenuPortal(): HTMLElement {
+  for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
+    const host = document.querySelector<HTMLElement>(selector);
+    if (host) return host;
+  }
   return document.body;
 }
 
-const FIELD_SELECT_MENU_Z_INDEX = 10000;
+function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
+  return portalHost === document.body ? 10000 : 80;
+}
 
 type FieldSelectMenuRect = {
   top: number;
   left: number;
   width: number;
   maxHeight: number;
+  position: "fixed" | "absolute";
 };
 
-function computeFieldSelectMenuRect(button: HTMLButtonElement, optionCount: number): FieldSelectMenuRect {
+function computeFieldSelectMenuRect(
+  button: HTMLButtonElement,
+  optionCount: number,
+  portalHost: HTMLElement,
+): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
+  const hostRect = portalHost.getBoundingClientRect();
+  const inModal = portalHost !== document.body;
   const viewportH = window.innerHeight;
   const viewportPadding = 12;
   const fiveItemCap =
@@ -56,12 +80,19 @@ function computeFieldSelectMenuRect(button: HTMLButtonElement, optionCount: numb
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
   const maxHeight = Math.min(contentHeight, viewportCap);
-  const top = openUp ? Math.max(viewportPadding, rect.top - maxHeight - 4) : rect.bottom + 4;
+  const top = inModal
+    ? openUp
+      ? Math.max(4, rect.top - hostRect.top - maxHeight - 4)
+      : rect.bottom - hostRect.top + 4
+    : openUp
+      ? Math.max(viewportPadding, rect.top - maxHeight - 4)
+      : rect.bottom + 4;
   return {
     top,
-    left: rect.left,
+    left: inModal ? rect.left - hostRect.left : rect.left,
     width: rect.width,
     maxHeight,
+    position: inModal ? "absolute" : "fixed",
   };
 }
 
@@ -149,7 +180,9 @@ export function CheckboxMultiSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    setMenuRect(computeFieldSelectMenuRect(button, flatOptions.length));
+    setMenuRect(
+      computeFieldSelectMenuRect(button, flatOptions.length, resolveFieldSelectMenuPortal()),
+    );
   };
 
   useLayoutEffect(() => {
@@ -219,15 +252,18 @@ export function CheckboxMultiSelect({
       ? selectionTriggerLabel
       : summarizeSelection(selected, flatOptions, emptyLabel);
 
+  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+
   const menu =
-    open && menuRect && isClient ? (
+    open && menuRect && isClient && portalHost ? (
       <div
         id={listId}
         role="listbox"
         aria-multiselectable="true"
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
-        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`${FIELD_SELECT_MENU_CLASS} ${pill ? "w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
+          position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
@@ -237,7 +273,7 @@ export function CheckboxMultiSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
-          zIndex: FIELD_SELECT_MENU_Z_INDEX,
+          zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -260,8 +296,6 @@ export function CheckboxMultiSelect({
         ) : null}
       </div>
     ) : null;
-
-  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>
@@ -336,7 +370,9 @@ export function FieldSingleSelect({
   const updateMenuRect = () => {
     const button = buttonRef.current;
     if (!button) return;
-    setMenuRect(computeFieldSelectMenuRect(button, options.length));
+    setMenuRect(
+      computeFieldSelectMenuRect(button, options.length, resolveFieldSelectMenuPortal()),
+    );
   };
 
   useLayoutEffect(() => {
@@ -374,16 +410,19 @@ export function FieldSingleSelect({
     };
   }, [listId, open]);
 
+  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+
   const menu =
-    open && menuRect && isClient ? (
+    open && menuRect && isClient && portalHost ? (
       <div
         id={listId}
         role="listbox"
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
-        className={`fixed ${FIELD_SELECT_MENU_CLASS} ${
+        className={`${FIELD_SELECT_MENU_CLASS} ${
           pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""
         }`}
         style={{
+          position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           minWidth: pill ? menuRect.width : undefined,
@@ -394,7 +433,7 @@ export function FieldSingleSelect({
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           backgroundColor: "#ffffff",
-          zIndex: FIELD_SELECT_MENU_Z_INDEX,
+          zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -425,8 +464,6 @@ export function FieldSingleSelect({
         })}
       </div>
     ) : null;
-
-  const portalHost = menu ? resolveFieldSelectMenuPortal() : null;
 
   return (
     <div ref={wrapRef} className={`relative ${pill ? "w-auto shrink-0" : "w-full"} ${wrapperClassName}`.trim()}>

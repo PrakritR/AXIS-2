@@ -14,7 +14,7 @@ export function handlePortaledFieldSelectOptionPointerDown(
   action();
 }
 
-/** Menu roots portaled to `document.body` — modal outside-click handlers must ignore these. */
+/** Menu roots portaled into open modal shells or `document.body` — modal outside-click handlers must ignore these. */
 export const FIELD_SELECT_MENU_DATA_ATTR = "data-field-select-menu";
 
 export function isPortaledFieldSelectMenuTarget(target: EventTarget | null): boolean {
