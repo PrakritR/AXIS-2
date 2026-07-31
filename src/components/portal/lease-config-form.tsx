@@ -113,6 +113,43 @@ type LeaseConfigFormProps = {
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
+/** Large tap targets — avoids portaled select menus fighting modal dismiss handlers. */
+export function LeaseDocumentSourcePicker({
+  source,
+  onSourceChange,
+  dataAttrPrefix = "property",
+}: {
+  source: PropertyLeaseSource;
+  onSourceChange: (source: PropertyLeaseSource) => void;
+  dataAttrPrefix?: "listing" | "property";
+}) {
+  return (
+    <div className="flex flex-col gap-2" role="radiogroup" aria-label="Lease document">
+      {PROPERTY_LEASE_SOURCE_OPTIONS.map((option) => {
+        const active = source === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            data-attr={`${dataAttrPrefix}-lease-document-${option.id}`}
+            className={`rounded-xl border px-3.5 py-3 text-left transition ${
+              active
+                ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                : "border-border bg-card hover:border-primary/30"
+            }`}
+            onClick={() => onSourceChange(option.id)}
+          >
+            <span className="block text-sm font-semibold text-foreground">{option.label}</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">{option.detail}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Lease document source (left) and agreement type (right) — shared by lease modals. */
 export function LeaseDocumentAndTypeFields({
   source,
@@ -127,28 +164,17 @@ export function LeaseDocumentAndTypeFields({
   onKindChange: (kind: PropertyLeaseTemplateKind) => void;
   dataAttrPrefix?: "listing" | "property";
 }) {
-  const documentMeta = PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === source);
   const typeMeta = PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === kind);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-4 sm:grid-cols-2">
       <div>
-        <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-document`}>
-          Lease document
-        </label>
-        <Select
-          id={`${dataAttrPrefix}-lease-document`}
-          value={source}
-          onChange={(e) => onSourceChange(e.target.value as PropertyLeaseSource)}
-          data-attr={`${dataAttrPrefix}-lease-document`}
-        >
-          {PROPERTY_LEASE_SOURCE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-        {documentMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{documentMeta.detail}</p> : null}
+        <p className={fieldLabelClass}>Lease document</p>
+        <LeaseDocumentSourcePicker
+          source={source}
+          onSourceChange={onSourceChange}
+          dataAttrPrefix={dataAttrPrefix}
+        />
       </div>
       <div>
         <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-type`}>
