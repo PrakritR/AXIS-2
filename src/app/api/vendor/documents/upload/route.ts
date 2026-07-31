@@ -4,6 +4,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { isVendorDocumentKind, type VendorDocumentKind, type VendorDocumentRecord } from "@/lib/vendor-documents";
 import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
+import { VENDOR_DOCUMENTS_BUCKET } from "@/lib/vendor-documents-storage";
 
 export const runtime = "nodejs";
 
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
         : `${kind}.${ext}`;
     const storagePath = `vendor-documents/${auth.userId}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const { error: uploadError } = await db.storage.from("listing-photos").upload(storagePath, bytes, {
+    const { error: uploadError } = await db.storage.from(VENDOR_DOCUMENTS_BUCKET).upload(storagePath, bytes, {
       contentType: mime,
       cacheControl: "31536000",
       upsert: false,

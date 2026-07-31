@@ -3,10 +3,11 @@ import { resolveVendorPortalUserId } from "@/lib/auth/vendor-api-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { findVendorDocument, isVendorDocumentKind } from "@/lib/vendor-documents";
 import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
+import { VENDOR_DOCUMENTS_BUCKET } from "@/lib/vendor-documents-storage";
 
 export const runtime = "nodejs";
 
-/** Streams a vendor-owned compliance file — auth required; storage paths are never public. */
+/** Streams a vendor-owned compliance file from the private bucket — auth required. */
 export async function GET(req: Request) {
   try {
     const auth = await resolveVendorPortalUserId();
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Document not found." }, { status: 404 });
     }
 
-    const { data, error } = await db.storage.from("listing-photos").download(storagePath);
+    const { data, error } = await db.storage.from(VENDOR_DOCUMENTS_BUCKET).download(storagePath);
     if (error || !data) return NextResponse.json({ error: error?.message ?? "Download failed." }, { status: 500 });
 
     const bytes = Buffer.from(await data.arrayBuffer());
