@@ -69,6 +69,16 @@ for pkg in \
   fi
 done
 
+if ! grep -q 'RevenuecatPurchasesCapacitor' ios/App/CapApp-SPM/Package.swift; then
+  echo "✗ CapApp-SPM/Package.swift missing RevenueCat after cap sync" >&2
+  missing=1
+fi
+
+if ! grep -q 'purchases-hybrid-common' ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved; then
+  echo "✗ Package.resolved missing purchases-hybrid-common — run xcodebuild -resolvePackageDependencies and commit" >&2
+  missing=1
+fi
+
 if [ "$missing" -ne 0 ]; then
   echo "✗ ci_post_clone: required Capacitor packages missing after npm ci" >&2
   exit 1

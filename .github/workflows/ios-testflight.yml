@@ -57,6 +57,12 @@ jobs:
         env:
           CAP_SERVER_URL: https://prop-lane.space
 
+      - name: Verify SPM lockfile matches CapApp-SPM
+        run: |
+          xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
+          git diff --exit-code ios/App/CapApp-SPM/Package.swift \
+            ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
       - name: Verify Release config points at production
         run: CONFIGURATION=Release bash scripts/verify-cap-prod-config.sh
 
