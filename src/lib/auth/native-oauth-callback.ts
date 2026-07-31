@@ -1,3 +1,4 @@
+import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
@@ -20,18 +21,20 @@ export function isNativeOAuthShell(): boolean {
 
 /**
  * Supabase OAuth redirectTo.
- * Native: custom scheme directly — Supabase 302s into the app. A JS bridge page in
- * SFSafariViewController often fails on iOS ("invalid address") when opening the scheme.
+ * Native: same-origin HTTPS callback with `native_bridge=1` — Supabase allowlists https,
+ * SFSafariViewController loads a valid page, then the server 302s into the app scheme.
+ * Direct custom-scheme redirectTo breaks iOS with "address is invalid" in the system browser.
  * Web: same-origin /auth/callback.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
+  const base = origin.replace(/\/$/, "");
+  const httpsCallback = fixedCallbackPath?.startsWith("/")
+    ? `${base}${fixedCallbackPath}`
+    : bareAuthCallbackUrl(origin);
   if (isNativeOAuthShell()) {
-    return nativeOAuthCallbackUrl(fixedCallbackPath);
+    return appendNativeOAuthBridgeParam(httpsCallback);
   }
-  if (fixedCallbackPath?.startsWith("/")) {
-    return `${origin.replace(/\/$/, "")}${fixedCallbackPath}`;
-  }
-  return bareAuthCallbackUrl(origin);
+  return httpsCallback;
 }
 
 /** Map app deep link (custom scheme) back to a same-origin path in the WebView. */

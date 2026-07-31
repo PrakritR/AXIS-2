@@ -41,72 +41,12 @@ export function shouldRenderNativeOAuthBridge(request: NextRequest): boolean {
 
 export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
   const schemeUrl = httpsCallbackToNativeSchemeUrl(callbackUrl);
-  const webFallbackUrl = httpsCallbackWithoutBridgeParam(callbackUrl);
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Returning to PropLane</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-height: 100vh; margin: 0; padding: 1.5rem; background: #080b14; color: #e2e8f0; text-align: center; }
-    a { color: #8fb4ff; font-weight: 600; text-decoration: none; }
-    a:active { opacity: 0.85; }
-    .hint { color: #94a3b8; font-size: 0.95rem; max-width: 20rem; }
-  </style>
-</head>
-<body>
-  <p>Returning to PropLane…</p>
-  <p class="hint">If the app does not open automatically, continue in your browser below.</p>
-  <p><a id="open-app" href="${schemeUrl.replace(/"/g, "&quot;")}">Open PropLane</a></p>
-  <p><a id="continue-browser" href="${webFallbackUrl.replace(/"/g, "&quot;")}">Continue in your browser</a></p>
-  <script>
-    (function () {
-      var schemeTarget = ${JSON.stringify(schemeUrl)};
-      var webFallback = ${JSON.stringify(webFallbackUrl)};
-      var leftPage = false;
-      function markLeft() { leftPage = true; }
-      document.addEventListener("visibilitychange", function () {
-        if (document.visibilityState === "hidden") markLeft();
-      });
-      window.addEventListener("pagehide", markLeft);
-      window.addEventListener("blur", markLeft);
-      function openDeepLink() {
-        try {
-          var link = document.getElementById("open-app");
-          if (link) {
-            link.click();
-            return;
-          }
-        } catch (e) {}
-        try {
-          var a = document.createElement("a");
-          a.href = schemeTarget;
-          a.style.display = "none";
-          document.body.appendChild(a);
-          a.click();
-        } catch (e2) {
-          try { window.location.href = schemeTarget; } catch (e3) {}
-        }
-      }
-      function continueInBrowser() {
-        try { window.location.replace(webFallback); } catch (e) {
-          try { window.location.href = webFallback; } catch (e2) {}
-        }
-      }
-      openDeepLink();
-      setTimeout(function () {
-        if (!leftPage && document.visibilityState === "visible") continueInBrowser();
-      }, 1500);
-    })();
-  </script>
-</body>
-</html>`;
-
-  return new NextResponse(html, {
-    status: 200,
+  // Server redirect — iOS hands custom schemes to the app from HTTP 302s. JS navigation
+  // (window.location / programmatic link.click) in SFSafariViewController shows
+  // "Safari cannot open the page because the address is invalid."
+  return NextResponse.redirect(schemeUrl, {
+    status: 302,
     headers: {
-      "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     },
   });
