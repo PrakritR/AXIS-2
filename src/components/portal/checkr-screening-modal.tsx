@@ -102,6 +102,15 @@ export function CheckrScreeningModal({
   const demoResolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!open) return;
+    setBg(row?.backgroundCheck);
+    setError(null);
+    setBusy(false);
+    setSelectedPackage("essential");
+    setSelectedAddOns([]);
+  }, [open, row?.id, row?.backgroundCheck]);
+
+  useEffect(() => {
     if (!open || isDemo) return;
     void fetch("/api/screening/packages", { credentials: "include" })
       .then(async (res) => {
@@ -215,7 +224,9 @@ export function CheckrScreeningModal({
         backgroundCheck?: ApplicationBackgroundCheck;
       };
       if (!res.ok) {
-        setError(body.error ?? "Could not start screening.");
+        const message = body.error ?? "Could not start screening.";
+        setError(message);
+        showToast(message);
         return;
       }
       // Simulate-only environments run immediately with no payment.
@@ -233,7 +244,9 @@ export function CheckrScreeningModal({
       window.location.assign(body.url);
       return;
     } catch {
-      setError("Network error starting screening.");
+      const message = "Network error starting screening.";
+      setError(message);
+      showToast(message);
     } finally {
       setBusy(false);
     }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getManagerScreeningSettings, updateManagerScreeningSettings } from "@/lib/screening/settings";
 import type { ScreeningMode } from "@/lib/screening/types";
 import { screeningConfigured, screeningCostCents } from "@/lib/screening/config";
-import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
+import { backgroundCheckConfigured, checkrScreeningCostCents, checkrSimulate } from "@/lib/checkr/config";
 import { managerScreeningAllowedForTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,13 +25,14 @@ export async function GET() {
     const db = createSupabaseServiceRoleClient();
     const settings = await getManagerScreeningSettings(db, user.id);
     const tier = await getManagerSubscriptionTier(user.id);
+    const simulate = checkrSimulate();
     return NextResponse.json({
       settings,
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
       checkrCostCents: checkrScreeningCostCents(),
-      screeningAllowed: managerScreeningAllowedForTier(tier),
+      screeningAllowed: managerScreeningAllowedForTier(tier) || simulate,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load screening settings.";
@@ -55,13 +56,14 @@ export async function PATCH(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const settings = await updateManagerScreeningSettings(db, user.id, { mode: body.mode });
     const tier = await getManagerSubscriptionTier(user.id);
+    const simulate = checkrSimulate();
     return NextResponse.json({
       settings,
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
       checkrCostCents: checkrScreeningCostCents(),
-      screeningAllowed: managerScreeningAllowedForTier(tier),
+      screeningAllowed: managerScreeningAllowedForTier(tier) || simulate,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save screening settings.";

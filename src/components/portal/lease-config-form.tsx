@@ -288,7 +288,7 @@ export function LeaseConfigForm({
                   {option.label}
                 </option>
               ))}
-            </Select>
+            </NativeSelect>
             {formatMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{formatMeta.detail}</p> : null}
           </div>
         )}
