@@ -22,6 +22,7 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
+import { shortTermStayNightCount } from "@/lib/short-term-stay-pricing";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
@@ -458,14 +459,8 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const shortDepositRaw =
       specificRoom?.shortTermDeposit?.trim() || subNorm?.shortTermDeposit?.trim() || "—";
     const dailyCost = parseAmount(dailyCostRaw);
-    const startDate = new Date(a.leaseStart ?? "");
-    const endDate = new Date(a.leaseEnd ?? "");
-    const startOk = startDate && !Number.isNaN(startDate.getTime());
-    const endOk = endDate && !Number.isNaN(endDate.getTime());
-    const durationDays = startOk && endOk
-      ? Math.max(1, Math.ceil((endDate!.getTime() - startDate!.getTime()) / (24 * 60 * 60 * 1000)) + 1)
-      : null;
-    const totalRent = dailyCost && durationDays ? fmtUsd(dailyCost * durationDays) : "—";
+    const stayNights = shortTermStayNightCount(a.leaseStart, a.leaseEnd);
+    const totalRent = dailyCost && stayNights ? fmtUsd(dailyCost * stayNights) : "—";
     const depositAmount = parseAmount(shortDepositRaw);
     // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
     // they must appear in the stay's Payment table and count toward the total due.
@@ -483,8 +478,8 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       )
       .join("\n");
     const totalDue =
-      dailyCost && durationDays
-        ? fmtUsd(dailyCost * durationDays + (depositAmount ?? 0) + stCustomFeesTotal)
+      dailyCost && stayNights
+        ? fmtUsd(dailyCost * stayNights + (depositAmount ?? 0) + stCustomFeesTotal)
         : "—";
     const requirements = escapeHtml(
       subNorm?.shortTermRequirements?.trim() ||
@@ -495,7 +490,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
 ${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" style="font-weight:700;margin-bottom:0.15rem">SHORT-TERM ROOM STAY AGREEMENT</p>` : `<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>`}
-<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
+<p class="sub">${stayNights ? `${stayNights}-Night Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -514,13 +509,13 @@ ${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" s
 <table>
   <tr><th width="35%">Check-in date &amp; time</th><td>${leaseStart} @ ${checkInTime}</td></tr>
   <tr><th>Check-out date &amp; time</th><td>${dash(a.leaseEnd)} @ ${checkOutTime}</td></tr>
-  <tr><th>Total duration</th><td>${durationDays ? `${durationDays} day${durationDays === 1 ? "" : "s"}` : "—"}</td></tr>
+  <tr><th>Total duration</th><td>${stayNights ? `${stayNights} night${stayNights === 1 ? "" : "s"}` : "—"}</td></tr>
 </table>
 
 <h2>4. Payment</h2>
 <table>
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
-  <tr><th>Total rent for days</th><td>${totalRent}</td></tr>
+  <tr><th>Total rent for stay</th><td>${totalRent}</td></tr>
   <tr><th>Security deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
 ${stCustomFeeRows}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>

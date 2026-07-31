@@ -268,6 +268,33 @@ describe("mergeHouseholdChargesWithServer", () => {
     expect(merged[0]?.id).toBe("hc_app_fee_app123");
     expect(duplicateHouseholdChargeIds([fallback, canonical])).toEqual(["hc_app_fee_res@test.com_prop1"]);
   });
+
+  it("dedupes duplicate stay_total rows to one canonical charge id", () => {
+    const legacy = makeCharge({
+      id: "hc_app_proplane_ms5v4juh_stay_total",
+      kind: "stay_total",
+      applicationId: "PROPLANE-MS5V4JUH",
+      residentEmail: "guest@example.com",
+      amountLabel: "$250.00",
+      balanceLabel: "$250.00",
+      title: "Stay total (5 nights × $50)",
+    });
+    const canonical = makeCharge({
+      id: "hc_app_pl_ms5v4juh_stay_total",
+      kind: "stay_total",
+      applicationId: "PROPLANE-MS5V4JUH",
+      residentEmail: "guest@example.com",
+      amountLabel: "$200.00",
+      balanceLabel: "$200.00",
+      title: "Stay total (4 nights × $50)",
+      createdAt: "2026-07-30T00:00:00.000Z",
+    });
+
+    const merged = dedupeHouseholdCharges([legacy, canonical]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe("hc_app_pl_ms5v4juh_stay_total");
+    expect(duplicateHouseholdChargeIds([legacy, canonical])).toEqual(["hc_app_proplane_ms5v4juh_stay_total"]);
+  });
 });
 
 describe("isManagerAddedOneOffCharge", () => {

@@ -1,7 +1,7 @@
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
-/** Inclusive night count for a short-term stay (matches generated lease HTML). */
+/** Checkout-exclusive night count (check-out morning is not billed). */
 export function shortTermStayNightCount(
   leaseStart: string | undefined | null,
   leaseEnd: string | undefined | null,
@@ -11,7 +11,7 @@ export function shortTermStayNightCount(
   if (!start || !end) return null;
   const nights = Math.max(
     1,
-    Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+    Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)),
   );
   return Number.isFinite(nights) && nights > 0 ? nights : null;
 }

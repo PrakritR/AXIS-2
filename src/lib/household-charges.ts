@@ -475,13 +475,27 @@ function chargeKeyPart(raw: string): string {
   return cleaned || "unknown";
 }
 
-/** Legacy charge URLs used `axis_` slug segments; new ones use `pl_`. */
+/** Legacy charge URLs used `axis_` / `proplane_` slug segments; new ones use `pl_`. */
 export function legacyChargeIdAliases(id: string): string[] {
   const trimmed = id.trim();
   if (!trimmed) return [];
   const variants = new Set<string>([trimmed]);
   if (trimmed.includes("_axis_")) variants.add(trimmed.replace(/_axis_/g, "_pl_"));
   if (trimmed.includes("_pl_")) variants.add(trimmed.replace(/_pl_/g, "_axis_"));
+  if (trimmed.includes("_proplane_")) variants.add(trimmed.replace(/_proplane_/g, "_pl_"));
+  if (trimmed.includes("_pl_")) variants.add(trimmed.replace(/_pl_/g, "_proplane_"));
+  return [...variants];
+}
+
+function approvedChargeIdAliases(applicationId: string, kind: HouseholdChargeKind): string[] {
+  const canonical = approvedChargeId(applicationId, kind);
+  const variants = new Set<string>([canonical, ...legacyChargeIdAliases(canonical)]);
+  const trimmed = applicationId.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper.startsWith("PROPLANE-") || upper.startsWith("AXIS-")) {
+    const legacySlug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    variants.add(`hc_app_${legacySlug}_${kind}`);
+  }
   return [...variants];
 }
 
@@ -595,7 +609,8 @@ function chargeBusinessKey(charge: HouseholdCharge): string {
     charge.kind === "prorated_last_month_utilities" ||
     charge.kind === "security_deposit" ||
     charge.kind === "move_in_fee" ||
-    charge.kind === "other_cost"
+    charge.kind === "other_cost" ||
+    charge.kind === "stay_total"
   )) {
     return `${charge.kind}|${charge.applicationId}`;
   }
@@ -634,6 +649,41 @@ function mergeHouseholdApplicationFeeRows(a: HouseholdCharge, b: HouseholdCharge
   };
 }
 
+function mergeApprovedApplicationChargeRows(
+  a: HouseholdCharge,
+  b: HouseholdCharge,
+  canonicalId: string,
+): HouseholdCharge {
+  const aPaid = a.status === "paid";
+  const bPaid = b.status === "paid";
+  const [primary, secondary] =
+    aPaid && !bPaid
+      ? [a, b]
+      : bPaid && !aPaid
+        ? [b, a]
+        : ((): [HouseholdCharge, HouseholdCharge] => {
+            const ta = new Date(a.createdAt).getTime();
+            const tb = new Date(b.createdAt).getTime();
+            if (Number.isFinite(ta) && Number.isFinite(tb) && ta >= tb) return [a, b];
+            return [b, a];
+          })();
+  const paid = aPaid || bPaid;
+  return {
+    ...primary,
+    id: canonicalId,
+    applicationId: primary.applicationId?.trim() || secondary.applicationId?.trim() || undefined,
+    residentUserId: primary.residentUserId ?? secondary.residentUserId ?? null,
+    residentName: primary.residentName?.trim() ? primary.residentName : secondary.residentName,
+    status: paid ? "paid" : primary.status,
+    paidAt: paid ? primary.paidAt || secondary.paidAt : undefined,
+    balanceLabel: paid ? "$0.00" : primary.balanceLabel,
+    amountLabel: primary.amountLabel?.trim() ? primary.amountLabel : secondary.amountLabel,
+    title: primary.title?.trim() ? primary.title : secondary.title,
+    zelleContactSnapshot: primary.zelleContactSnapshot ?? secondary.zelleContactSnapshot,
+    venmoContactSnapshot: primary.venmoContactSnapshot ?? secondary.venmoContactSnapshot,
+  };
+}
+
 function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
   const byKey = new Map<string, HouseholdCharge>();
   for (const raw of rows) {
@@ -662,6 +712,16 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
     }
     if (existing.kind === "application_fee" && charge.kind === "application_fee") {
       byKey.set(key, mergeHouseholdApplicationFeeRows(existing, charge));
+      continue;
+    }
+    if (
+      existing.applicationId &&
+      charge.applicationId &&
+      existing.kind === charge.kind &&
+      existing.kind === "stay_total"
+    ) {
+      const canonicalId = approvedChargeId(existing.applicationId, existing.kind);
+      byKey.set(key, mergeApprovedApplicationChargeRows(existing, charge, canonicalId));
       continue;
     }
     if (existing.status !== "paid" && charge.status === "paid") {
@@ -2542,18 +2602,32 @@ type ApprovedChargeDraft = {
 
 function patchPendingApprovedChargeAmount(applicationId: string, draft: ApprovedChargeDraft): boolean {
   if (!(draft.amount > 0)) return false;
-  const id = approvedChargeId(applicationId, draft.kind);
+  const aliasIds = new Set(approvedChargeIdAliases(applicationId, draft.kind));
   const rows = readAll();
-  const idx = rows.findIndex((charge) => charge.id === id && charge.status === "pending");
+  const idx = rows.findIndex(
+    (charge) =>
+      charge.status === "pending" &&
+      charge.kind === draft.kind &&
+      (aliasIds.has(charge.id) ||
+        (charge.applicationId === applicationId && charge.kind === draft.kind)),
+  );
   if (idx === -1) return false;
   const label = moneyAmountLabel(Number(draft.amount.toFixed(2)));
   const current = rows[idx]!;
-  if (current.amountLabel === label && current.title === draft.title && current.dueDateLabel === draft.dueDateLabel) {
+  const canonicalId = approvedChargeId(applicationId, draft.kind);
+  if (
+    current.id === canonicalId &&
+    current.amountLabel === label &&
+    current.title === draft.title &&
+    current.dueDateLabel === draft.dueDateLabel
+  ) {
     return false;
   }
   const next = [...rows];
   next[idx] = {
     ...current,
+    id: canonicalId,
+    applicationId,
     amountLabel: label,
     balanceLabel: label,
     title: draft.title,

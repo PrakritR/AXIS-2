@@ -116,8 +116,8 @@ describe("per-room short-term set drives the booking", () => {
     );
     // Stay total uses the ROOM's $120/night (7 nights), not the listing's $85 fallback.
     const stay = charges.find((c) => c.kind === "stay_total");
-    expect(stay?.amountLabel).toBe("$840.00");
-    expect(stay?.title).toBe("Stay total (7 nights × $120)");
+    expect(stay?.amountLabel).toBe("$720.00");
+    expect(stay?.title).toBe("Stay total (6 nights × $120)");
     // Deposit / move-in come from the room's short-term set, not the listing fallback.
     expect(charges.find((c) => c.kind === "security_deposit")?.amountLabel).toBe("$300.00");
     expect(charges.find((c) => c.kind === "move_in_fee")?.amountLabel).toBe("$150.00");
@@ -140,7 +140,7 @@ describe("per-room short-term set drives the booking", () => {
       (c) => c.residentEmail.toLowerCase() === email.toLowerCase(),
     );
     const stay = charges.find((c) => c.kind === "stay_total");
-    expect(stay?.amountLabel).toBe("$595.00"); // 7 × $85 listing fallback
+    expect(stay?.amountLabel).toBe("$510.00"); // 6 × $85 listing fallback
     expect(charges.find((c) => c.kind === "security_deposit")?.amountLabel).toBe("$100.00");
     expect(charges.find((c) => c.kind === "move_in_fee")?.amountLabel).toBe("$40.00");
     expect(charges.some((c) => c.kind === "utilities")).toBe(false);

@@ -23,9 +23,16 @@ describe("publicChargeIdForUrl", () => {
     );
   });
 
-  it("legacyChargeIdAliases resolves both forms", () => {
+  it("legacyChargeIdAliases resolves axis and pl forms", () => {
     const legacy = "hc_app_axis_demosofid_prorated_rent";
     const branded = "hc_app_pl_demosofid_prorated_rent";
+    expect(legacyChargeIdAliases(legacy)).toEqual(expect.arrayContaining([legacy, branded]));
+    expect(legacyChargeIdAliases(branded)).toEqual(expect.arrayContaining([legacy, branded]));
+  });
+
+  it("legacyChargeIdAliases resolves proplane and pl forms", () => {
+    const legacy = "hc_app_proplane_ms5v4juh_stay_total";
+    const branded = "hc_app_pl_ms5v4juh_stay_total";
     expect(legacyChargeIdAliases(legacy)).toEqual(expect.arrayContaining([legacy, branded]));
     expect(legacyChargeIdAliases(branded)).toEqual(expect.arrayContaining([legacy, branded]));
   });

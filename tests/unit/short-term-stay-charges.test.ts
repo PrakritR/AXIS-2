@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  HOUSEHOLD_CHARGES_SESSION_KEY,
   readHouseholdCharges,
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -101,8 +102,8 @@ describe("short-term approved-application charges", () => {
 
     const charges = readHouseholdCharges().filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase());
     const stay = charges.find((c) => c.kind === "stay_total");
-    expect(stay?.amountLabel).toBe("$595.00");
-    expect(stay?.title).toBe("Stay total (7 nights × $85)");
+    expect(stay?.amountLabel).toBe("$510.00");
+    expect(stay?.title).toBe("Stay total (6 nights × $85)");
     expect(stay?.dueDateLabel).toBe("Before check-in");
     expect(charges.some((c) => c.kind === "first_month_rent" || c.kind === "prorated_rent")).toBe(false);
     expect(charges.some((c) => c.kind === "rent" && c.recurringRentProfileId)).toBe(false);
@@ -146,7 +147,7 @@ describe("short-term approved-application charges", () => {
       readHouseholdCharges()
         .filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase())
         .find((c) => c.kind === "stay_total")?.amountLabel,
-    ).toBe("$595.00");
+    ).toBe("$510.00");
 
     const edited = {
       ...base,
@@ -161,8 +162,112 @@ describe("short-term approved-application charges", () => {
     const stay = readHouseholdCharges()
       .filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase())
       .find((c) => c.kind === "stay_total");
-    expect(stay?.amountLabel).toBe("$1,575.00");
-    expect(stay?.title).toBe("Stay total (7 nights × $225)");
+    expect(stay?.amountLabel).toBe("$1,350.00");
+    expect(stay?.title).toBe("Stay total (6 nights × $225)");
+  });
+
+  it("bills checkout-exclusive nights for PROPLANE-MS5V4JUH dates", () => {
+    const email = "proplane-stay@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-proplane-stay";
+    const sub = createDefaultListingSubmission();
+    sub.shortTermRentalsAllowed = true;
+    sub.shortTermDailyCost = "50";
+    sub.applicationFee = "";
+    sub.rooms = [room({ monthlyRent: 1200 })];
+    sub.allowedLeaseTerms = ["12-Month"];
+    cachePublicExtraListings(
+      [
+        {
+          id: propertyId,
+          title: "4709A Guest Room",
+          tagline: "Nightly",
+          address: "4709A 8th Ave NE, Seattle, WA",
+          zip: "98115",
+          neighborhood: "U District",
+          beds: 1,
+          baths: 1,
+          rentLabel: "$50/night",
+          available: "Now",
+          petFriendly: false,
+          buildingId: "b1",
+          buildingName: "4709A",
+          unitLabel: "Room",
+          adminPublishLive: true,
+          managerUserId: MANAGER_ID,
+          listingSubmission: normalizeManagerListingSubmissionV1(sub),
+        } as MockProperty,
+      ],
+      { silent: true },
+    );
+
+    const row = {
+      id: "PROPLANE-MS5V4JUH",
+      name: "SIVA NARENDRA CHERUKU",
+      email,
+      property: "4709A Guest Room",
+      propertyId,
+      assignedPropertyId: propertyId,
+      assignedRoomChoice: `${propertyId}${LISTING_ROOM_CHOICE_SEP}room-1`,
+      managerUserId: MANAGER_ID,
+      manuallyAdded: true,
+      application: {
+        propertyId,
+        roomChoice1: `${propertyId}${LISTING_ROOM_CHOICE_SEP}room-1`,
+        rentalType: "short_term",
+        leaseStart: "2026-07-31",
+        leaseEnd: "2026-08-04",
+        fullLegalName: "SIVA NARENDRA CHERUKU",
+      },
+    } as unknown as DemoApplicantRow;
+
+    recordApprovedApplicationCharges(row, MANAGER_ID, true);
+
+    const charges = readHouseholdCharges().filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase());
+    const stay = charges.find((c) => c.kind === "stay_total");
+    expect(stay?.amountLabel).toBe("$200.00");
+    expect(stay?.title).toBe("Stay total (4 nights × $50)");
+    expect(stay?.id).toBe("hc_app_pl_ms5v4juh_stay_total");
+  });
+
+  it("does not create a second stay_total when a legacy proplane charge id already exists", () => {
+    const email = "legacy-dup-stay@example.com";
+    removeResidentHouseholdPaymentData(email);
+    const propertyId = "prop-legacy-dup-stay";
+    seedShortTermListing(propertyId);
+
+    const row = {
+      ...shortTermApplicant(propertyId, email),
+      id: "PROPLANE-DUPTEST01",
+    } as DemoApplicantRow;
+
+    const legacyCharge = {
+      id: "hc_app_proplane_duptest01_stay_total",
+      createdAt: "2026-07-29T00:00:00.000Z",
+      applicationId: "PROPLANE-DUPTEST01",
+      residentEmail: email,
+      residentName: "Guest Tenant",
+      residentUserId: null,
+      propertyId,
+      propertyLabel: "Oak Street Guest Room",
+      managerUserId: MANAGER_ID,
+      kind: "stay_total",
+      title: "Stay total (5 nights × $85)",
+      amountLabel: "$425.00",
+      balanceLabel: "$425.00",
+      status: "pending",
+      blocksLeaseUntilPaid: true,
+      dueDateLabel: "Before check-in",
+    };
+
+    window.sessionStorage.setItem(HOUSEHOLD_CHARGES_SESSION_KEY, JSON.stringify([legacyCharge]));
+    recordApprovedApplicationCharges(row, MANAGER_ID, false);
+
+    const charges = readHouseholdCharges().filter((c) => c.residentEmail.toLowerCase() === email.toLowerCase());
+    const stayCharges = charges.filter((c) => c.kind === "stay_total");
+    expect(stayCharges).toHaveLength(1);
+    expect(stayCharges[0]?.id).toBe("hc_app_pl_duptest01_stay_total");
+    expect(stayCharges[0]?.title).toBe("Stay total (6 nights × $85)");
   });
 });
 
