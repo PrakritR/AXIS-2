@@ -103,6 +103,8 @@ export type ListingSharedRow = {
   modal: ListingSharedModal;
 };
 
+export type LeaseBasicSection = "long-term" | "short-term";
+
 export type LeaseBasicRow = {
   id: string;
   icon: string;
@@ -114,6 +116,8 @@ export type LeaseBasicRow = {
   /** Status / category pill text. */
   status: string;
   body: string;
+  /** Groups rows under Long term / Short term headings on the public listing. */
+  section?: LeaseBasicSection;
 };
 
 export type AmenityItem = { id: string; icon: string; label: string };
@@ -400,16 +404,8 @@ const defaultShared: ListingSharedRow[] = [
 
 const defaultLease: LeaseBasicRow[] = [
   {
-    id: "lease-terms",
-    icon: "📋",
-    title: "Lease terms",
-    detail: "Set when listing is published",
-    price: "—",
-    status: "See details",
-    body: "Lease lengths and rent details appear here after the property manager completes the listing application. Apply online to choose your term in the rental application.",
-  },
-  {
     id: "lease-multi-room",
+    section: "long-term",
     icon: "🏘️",
     title: "Two or more rooms",
     detail: "Combine bedrooms on one lease",
@@ -419,6 +415,7 @@ const defaultLease: LeaseBasicRow[] = [
   },
   {
     id: "lease-application",
+    section: "long-term",
     icon: "📄",
     title: "Application",
     detail: "From listing setup",
@@ -428,6 +425,7 @@ const defaultLease: LeaseBasicRow[] = [
   },
   {
     id: "lease-deposit",
+    section: "long-term",
     icon: "🔒",
     title: "Security deposit",
     detail: "From listing setup",
@@ -437,6 +435,7 @@ const defaultLease: LeaseBasicRow[] = [
   },
   {
     id: "lease-movein",
+    section: "long-term",
     icon: "🧾",
     title: "Move-in charges",
     detail: "From listing setup",
@@ -446,6 +445,7 @@ const defaultLease: LeaseBasicRow[] = [
   },
   {
     id: "lease-signing",
+    section: "long-term",
     icon: "✍️",
     title: "Payment due at signing",
     detail: "Listing or lease",
@@ -455,6 +455,7 @@ const defaultLease: LeaseBasicRow[] = [
   },
   {
     id: "lease-utilities",
+    section: "long-term",
     icon: "📊",
     title: "Utilities",
     detail: "Listing or your estimate",

@@ -535,100 +535,144 @@ export type ListingFeeDisplayRow = {
   icon: string;
 };
 
+export type LeaseBasicsFeeSection = "long-term" | "short-term";
+
+/** Public display title for custom fee labels (manager-entered). */
+export function displayLeaseFeeTitle(label: string): string {
+  const t = label.trim();
+  if (/^short\s*term\s*lease$/i.test(t)) return "Custom lease";
+  return t;
+}
+
+function feeBelongsInLeaseBasicsSection(
+  fee: ListingFeeRow,
+  section: LeaseBasicsFeeSection,
+  shortTermOn: boolean,
+): boolean {
+  const presetId = fee.presetId && fee.presetId !== "custom" ? fee.presetId : undefined;
+  const meta = presetId ? PRESET_BY_ID.get(presetId) : undefined;
+  const isShortTermPreset =
+    fee.shortTermOnly ||
+    presetId === "short_term_nightly" ||
+    presetId === "short_term_deposit" ||
+    presetId === "short_term_move_in" ||
+    Boolean(meta?.shortTermSection);
+
+  if (section === "short-term") {
+    if (!shortTermOn) return false;
+    return isShortTermPreset;
+  }
+  return !isShortTermPreset;
+}
+
+function listingFeeToDisplayRow(fee: ListingFeeRow, formatPrice: (raw: string) => string): ListingFeeDisplayRow | null {
+  const cadence = listingFeeCadence(fee);
+  const price = formatPrice(fee.amount);
+  const title = displayLeaseFeeTitle(
+    fee.label.trim() || PRESET_BY_ID.get(fee.presetId as ListingFeePresetId)?.defaultLabel || "Fee",
+  );
+  if (fee.presetId === "holding_deposit") {
+    return {
+      id: "holding-deposit",
+      icon: "🤝",
+      title,
+      detail: "Credits toward security deposit",
+      price,
+      status: "One-time",
+      body: `${title}: ${price} (one-time, credited toward security deposit when you are approved).`,
+    };
+  }
+  if (fee.presetId === "parking_monthly") {
+    return {
+      id: "parking",
+      icon: "🅿️",
+      title: "Parking",
+      detail: "If applicable",
+      price,
+      status: "Monthly",
+      body: `Parking: ${price} per month.`,
+    };
+  }
+  if (fee.presetId === "hoa_monthly") {
+    return {
+      id: "hoa",
+      icon: "🏛️",
+      title: "HOA / community",
+      detail: "If applicable",
+      price,
+      status: "Monthly",
+      body: `HOA or community fee: ${price}.`,
+    };
+  }
+  if (fee.presetId === "other_monthly") {
+    return {
+      id: "other-fees",
+      icon: "➕",
+      title: "Other fees",
+      detail: "As submitted",
+      price,
+      status: "See notes",
+      body: price,
+    };
+  }
+  if (fee.presetId === "mtm_surcharge") {
+    return {
+      id: "mtm-surcharge",
+      icon: "📅",
+      title,
+      detail: "Month-to-month leases",
+      price,
+      status: "Monthly",
+      body: `${title}: ${price} per month when on month-to-month.`,
+    };
+  }
+
+  const status =
+    cadence === "nightly" ? "Nightly" : cadence === "monthly" ? "Monthly" : fee.dueAtSigning ? "At signing" : "One-time";
+  return {
+    id: `fee-${fee.id}`,
+    icon: "💵",
+    title,
+    detail: cadence === "nightly" ? "Short-term stays" : cadence === "monthly" ? "Additional monthly charge" : "One-time charge",
+    price: cadence === "nightly" ? `${price}/night` : price,
+    status,
+    body:
+      cadence === "nightly"
+        ? `${title}: ${price} per night.`
+        : cadence === "monthly"
+          ? `${title}: ${price} per month.`
+          : `${title}: ${price} (one-time).`,
+  };
+}
+
+/** Public listing fee rows for one lease-basics section (skips zero amounts). */
+export function listingFeeRowsForLeaseBasicsSection(
+  sub: ManagerListingSubmissionV1,
+  section: LeaseBasicsFeeSection,
+  formatPrice: (raw: string) => string,
+): ListingFeeDisplayRow[] {
+  const shortTermOn = Boolean(sub.shortTermRentalsAllowed);
+  const fees = resolveListingFees(sub).filter((f) => feeMeaningfulForPublicListing(f.amount));
+  const rows: ListingFeeDisplayRow[] = [];
+
+  for (const fee of fees) {
+    if (!feeBelongsInLeaseBasicsSection(fee, section, shortTermOn)) continue;
+    const row = listingFeeToDisplayRow(fee, formatPrice);
+    if (row) rows.push(row);
+  }
+
+  return rows;
+}
+
 /** Public listing house-cost rows from unified fees (skips zero amounts and duplicate presets). */
 export function listingFeeDisplayRows(
   sub: ManagerListingSubmissionV1,
   formatPrice: (raw: string) => string,
 ): ListingFeeDisplayRow[] {
-  const fees = resolveListingFees(sub).filter((f) => feeMeaningfulForPublicListing(f.amount));
-  const shortTermOn = Boolean(sub.shortTermRentalsAllowed);
-  const rows: ListingFeeDisplayRow[] = [];
-
-  for (const fee of fees) {
-    if (fee.shortTermOnly && !shortTermOn) continue;
-    const cadence = listingFeeCadence(fee);
-    const price = formatPrice(fee.amount);
-    const title = fee.label.trim() || PRESET_BY_ID.get(fee.presetId as ListingFeePresetId)?.defaultLabel || "Fee";
-    if (fee.presetId === "holding_deposit") {
-      rows.push({
-        id: "holding-deposit",
-        icon: "🤝",
-        title,
-        detail: "Credits toward security deposit",
-        price,
-        status: "One-time",
-        body: `${title}: ${price} (one-time, credited toward security deposit when you are approved).`,
-      });
-      continue;
-    }
-    if (fee.presetId === "parking_monthly") {
-      rows.push({
-        id: "parking",
-        icon: "🅿️",
-        title: "Parking",
-        detail: "If applicable",
-        price,
-        status: "Monthly",
-        body: `Parking: ${price} per month.`,
-      });
-      continue;
-    }
-    if (fee.presetId === "hoa_monthly") {
-      rows.push({
-        id: "hoa",
-        icon: "🏛️",
-        title: "HOA / community",
-        detail: "If applicable",
-        price,
-        status: "Monthly",
-        body: `HOA or community fee: ${price}.`,
-      });
-      continue;
-    }
-    if (fee.presetId === "other_monthly") {
-      rows.push({
-        id: "other-fees",
-        icon: "➕",
-        title: "Other fees",
-        detail: "As submitted",
-        price,
-        status: "See notes",
-        body: price,
-      });
-      continue;
-    }
-    if (fee.presetId === "mtm_surcharge") {
-      rows.push({
-        id: "mtm-surcharge",
-        icon: "📅",
-        title: title,
-        detail: "Month-to-month leases",
-        price,
-        status: "Monthly",
-        body: `${title}: ${price} per month when on month-to-month.`,
-      });
-      continue;
-    }
-
-    const status =
-      cadence === "nightly" ? "Nightly" : cadence === "monthly" ? "Monthly" : fee.dueAtSigning ? "At signing" : "One-time";
-    rows.push({
-      id: `fee-${fee.id}`,
-      icon: "💵",
-      title,
-      detail: cadence === "nightly" ? "Short-term stays" : cadence === "monthly" ? "Additional monthly charge" : "One-time charge",
-      price: cadence === "nightly" ? `${price}/night` : price,
-      status,
-      body:
-        cadence === "nightly"
-          ? `${title}: ${price} per night.`
-          : cadence === "monthly"
-            ? `${title}: ${price} per month.`
-            : `${title}: ${price} (one-time).`,
-    });
-  }
-
-  return rows;
+  return [
+    ...listingFeeRowsForLeaseBasicsSection(sub, "long-term", formatPrice),
+    ...listingFeeRowsForLeaseBasicsSection(sub, "short-term", formatPrice),
+  ];
 }
 
 export function cadenceLabel(cadence: ListingFeeCadence): string {

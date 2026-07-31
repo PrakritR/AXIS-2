@@ -977,58 +977,84 @@ export function LeaseBasicsTableInteractive({
   const [modal, setModal] = useState<ModalState>(null);
   const previewBrowse = useListingPreviewNewTab();
 
+  const sectionGroups: { key: "long-term" | "short-term"; label: string; rows: LeaseBasicRow[] }[] = [];
+  const longTerm = rows.filter((r) => r.section !== "short-term");
+  const shortTerm = rows.filter((r) => r.section === "short-term");
+  if (longTerm.length) sectionGroups.push({ key: "long-term", label: "Long term", rows: longTerm });
+  if (shortTerm.length) sectionGroups.push({ key: "short-term", label: "Short term", rows: shortTerm });
+
+  const renderMobileRows = (sectionRows: LeaseBasicRow[]) =>
+    sectionRows.map((r) => (
+      <InteractiveListingRow
+        key={r.id}
+        previewBrowse={previewBrowse}
+        onOpen={() => setModal({ kind: "lease", row: r })}
+        className={LISTING_ROW_SURFACE}
+      >
+        <div className="flex items-start gap-2">
+          <span className="text-lg leading-none" aria-hidden>
+            {r.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">{r.title}</p>
+            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
+        {!previewBrowse ? (
+          <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
+        ) : null}
+      </InteractiveListingRow>
+    ));
+
+  const renderDesktopRows = (sectionRows: LeaseBasicRow[]) =>
+    sectionRows.map((r) => (
+      <InteractiveListingRow
+        key={r.id}
+        previewBrowse={previewBrowse}
+        onOpen={() => setModal({ kind: "lease", row: r })}
+        className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="shrink-0 text-base leading-none" aria-hidden>
+            {r.icon}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{r.title}</p>
+            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
+          </div>
+        </div>
+        <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
+        {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} /> : null}
+      </InteractiveListingRow>
+    ));
+
   return (
     <>
-      <div className="space-y-2.5 md:hidden">
-        {rows.map((r) => (
-          <InteractiveListingRow
-            key={r.id}
-            previewBrowse={previewBrowse}
-            onOpen={() => setModal({ kind: "lease", row: r })}
-            className={LISTING_ROW_SURFACE}
-          >
-            <div className="flex items-start gap-2">
-              <span className="text-lg leading-none" aria-hidden>
-                {r.icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">{r.title}</p>
-                <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-              </div>
-            </div>
-            <p className="mt-2 text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-            {!previewBrowse ? (
-              <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
-            ) : null}
-          </InteractiveListingRow>
+      <div className="space-y-5 md:hidden">
+        {sectionGroups.map((group) => (
+          <div key={group.key} className="space-y-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{group.label}</p>
+            {renderMobileRows(group.rows)}
+          </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
-            <span>Item</span>
-            <span>Price</span>
-            <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
-          </div>
-          {rows.map((r) => (
-            <InteractiveListingRow
-              key={r.id}
-              previewBrowse={previewBrowse}
-              onOpen={() => setModal({ kind: "lease", row: r })}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
-            >
-              <div className="flex min-w-0 items-start gap-2">
-                <span className="shrink-0 text-base leading-none" aria-hidden>
-                  {r.icon}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{r.title}</p>
-                  <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-                </div>
+          {sectionGroups.map((group) => (
+            <div key={group.key} className={group.key === "short-term" && sectionGroups.length > 1 ? "mt-6" : ""}>
+              {sectionGroups.length > 1 ? (
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{group.label}</p>
+              ) : null}
+              <div
+                className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}
+              >
+                <span>Item</span>
+                <span>Price</span>
+                <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
               </div>
-              <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-              {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} /> : null}
-            </InteractiveListingRow>
+              {renderDesktopRows(group.rows)}
+            </div>
           ))}
         </div>
       </div>

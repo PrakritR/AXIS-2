@@ -5,7 +5,7 @@ import type {
   ManagerListingSubmissionV1,
   ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
-import { normalizeManagerListingSubmissionV1, formatListingBasicsSummary, isEntireHomeListing, entireHomeMonthlyRentAmount, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
+import { normalizeManagerListingSubmissionV1, formatListingBasicsSummary, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import {
   LEGACY_HOUSE_AMENITY_LABELS_IN_SHARED_PRESETS,
   LISTING_TOTAL_BATH_OPTIONS,
@@ -38,38 +38,72 @@ import {
   utilitiesListingEstimateDetail,
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
+import {
+  listingFeeRowsForLeaseBasicsSection,
+  type ListingFeeDisplayRow,
+} from "@/lib/listing-fees";
 
-function filterLeaseBasicsRows(
-  rows: LeaseBasicRow[],
+function normalizeLeaseRentPriceLabel(raw: string, period: "month" | "day"): string {
+  const t = raw.trim();
+  if (!t || t === "—") return "—";
+  if (/\$/.test(t) || /\/\s*(mo|month|day|night)/i.test(t)) return t;
+  const n = parseMoneyAmount(t);
+  if (n > 0) {
+    const label = formatListingFeeDisplay(String(n));
+    return period === "day" ? `${label}/day` : `${label}/mo`;
+  }
+  return formatListingFeeDisplay(t) || t;
+}
+
+function bundleRoomsDetailLine(roomIds: string[], rooms: ManagerRoomSubmission[]): string {
+  const names = roomIds
+    .map((id) => rooms.find((r) => r.id === id))
+    .filter(Boolean)
+    .map((room) => room!.name.trim())
+    .filter(Boolean);
+  if (names.length === 0) return "";
+  return names.length === rooms.length ? `Whole house - ${names.length} rooms` : names.join(", ");
+}
+
+function preferredWholeHouseBundle(
   sub: ManagerListingSubmissionV1,
   rooms: ManagerRoomSubmission[],
-): LeaseBasicRow[] {
-  return rows.filter((row) => {
-    switch (row.id) {
-      case "lease-multi-room":
-        return !isEntireHomeListing(sub) && twoOrMoreRoomPriceLabel(rooms) !== null;
-      case "lease-terms":
-        return resolveAllowedLeaseTerms(sub).length > 0 || Boolean(sub.leaseTermsBody.trim());
-      case "lease-application":
-        return feeMeaningfulForListing(sub.applicationFee);
-      case "lease-deposit":
-        return feeMeaningfulForListing(sub.securityDeposit);
-      case "lease-movein":
-        return feeMeaningfulForListing(sub.moveInFee);
-      case "lease-signing":
-        return (sub.paymentAtSigningIncludes?.length ?? 0) > 0;
-      case "lease-utilities":
-        if (utilitiesListingSummaryLabel(sub) !== "—") return true;
-        return rooms.some(
-          (r) =>
-            r.name.trim() &&
-            (Boolean((r.utilitiesEstimate ?? "").trim()) ||
-              resolveRoomUtilitiesPaymentModel(r) !== "manager_billed"),
-        );
-      default:
-        return true;
-    }
+): ManagerBundleRow | undefined {
+  const named = rooms.filter((r) => r.name.trim());
+  if (named.length === 0) return undefined;
+  const allIds = new Set(named.map((r) => r.id));
+  const fromBundles = (sub.bundles ?? []).filter(bundleRowHasContent);
+  const coveringAll = fromBundles.find((b) => {
+    const ids = b.includedRoomIds ?? [];
+    return ids.length >= 2 && ids.length === allIds.size && ids.every((id) => allIds.has(id));
   });
+  if (coveringAll) return coveringAll;
+  return fromBundles.find((b) => /whole\s*house/i.test(b.label.trim()));
+}
+
+function listingFeeDisplayToLeaseBasicRow(
+  row: ListingFeeDisplayRow,
+  section: "long-term" | "short-term",
+): LeaseBasicRow {
+  return {
+    id: row.id,
+    section,
+    icon: row.icon,
+    title: row.title,
+    detail: row.detail,
+    price: row.price,
+    status: row.status,
+    body: row.body,
+  };
+}
+
+function shouldShowLeaseUtilitiesRow(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSubmission[]): boolean {
+  if (utilitiesListingSummaryLabel(sub) !== "—") return true;
+  return rooms.some(
+    (r) =>
+      r.name.trim() &&
+      (Boolean((r.utilitiesEstimate ?? "").trim()) || resolveRoomUtilitiesPaymentModel(r) !== "manager_billed"),
+  );
 }
 
 function shortTermStayPriceLabel(sub: ManagerListingSubmissionV1): string {
@@ -474,18 +508,158 @@ function multiRoomLeaseBasicRow(
   if (isEntireHomeListing(sub)) return null;
   const autoPrice = twoOrMoreRoomPriceLabel(rooms);
   if (!autoPrice) return null;
-  const bundle = preferredMultiRoomBundle(sub);
+  const bundle = preferredWholeHouseBundle(sub, rooms) ?? preferredMultiRoomBundle(sub);
+  const rawPrice = bundle?.price.trim() || autoPrice;
   return {
     id: "lease-multi-room",
+    section: "long-term",
     icon: "🏘️",
     title: bundle?.label.trim() || "Two or more rooms",
-    detail: bundle?.roomsLine.trim() || "Combine bedrooms on one lease",
-    price: bundle?.price.trim() || autoPrice,
+    detail: bundle?.roomsLine.trim() || bundleRoomsDetailLine(bundle?.includedRoomIds ?? [], rooms) || "Combine bedrooms on one lease",
+    price: normalizeLeaseRentPriceLabel(rawPrice, "month"),
     status: "Monthly rent",
     body: bundle?.roomsLine.trim()
       ? `${bundle.roomsLine.trim()}.`
       : twoOrMoreRoomDetailBody(rooms),
   };
+}
+
+function entireHomeLongTermRentRow(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): LeaseBasicRow | null {
+  if (!isEntireHomeListing(sub)) return null;
+  const rent = entireHomeMonthlyRentAmount(sub);
+  if (rent <= 0) return null;
+  const named = rooms.filter((r) => r.name.trim());
+  return {
+    id: "lease-entire-home",
+    section: "long-term",
+    icon: "🏠",
+    title: "Whole house lease",
+    detail: named.length ? `Whole house - ${named.length} rooms` : "Entire home",
+    price: `$${rent}/mo`,
+    status: "Monthly rent",
+    body: `Lease the entire home for $${rent} per month.`,
+  };
+}
+
+function entireHomeShortTermRentRow(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): LeaseBasicRow | null {
+  if (!sub.shortTermRentalsAllowed) return null;
+  const named = rooms.filter((r) => r.name.trim());
+  const daily = sub.shortTermDailyCost?.trim();
+  if (!daily) return null;
+  return {
+    id: "lease-entire-home-st",
+    section: "short-term",
+    icon: "🛏️",
+    title: "Whole house lease",
+    detail: named.length ? `Whole house - ${named.length} rooms` : "Short-term stay",
+    price: shortTermStayPriceLabel(sub),
+    status: "Nightly",
+    body: shortTermStayDetailBody(sub),
+  };
+}
+
+function shortTermBundleRentRows(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): LeaseBasicRow[] {
+  if (!sub.shortTermRentalsAllowed) return [];
+  const rows: LeaseBasicRow[] = [];
+  const wholeHouse = preferredWholeHouseBundle(sub, rooms);
+  if (wholeHouse?.shortTermEnabled) {
+    const price = bundleShortTermPriceLabel(wholeHouse, sub);
+    if (price) {
+      rows.push({
+        id: `lease-bundle-st-${wholeHouse.id}`,
+        section: "short-term",
+        icon: "🛏️",
+        title: wholeHouse.label.trim() || "Whole house lease",
+        detail:
+          wholeHouse.roomsLine.trim() ||
+          bundleRoomsDetailLine(wholeHouse.includedRoomIds ?? [], rooms) ||
+          "Short-term stay",
+        price,
+        status: "Nightly",
+        body: `Short-term stay on ${wholeHouse.label.trim() || "this package"}: ${price}. ${shortTermStayDetailBody(sub)}`,
+      });
+    }
+  }
+  return rows;
+}
+
+function buildLeaseBasicsRows(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): LeaseBasicRow[] {
+  const rows: LeaseBasicRow[] = [];
+
+  const entireLt = entireHomeLongTermRentRow(sub, rooms);
+  if (entireLt) rows.push(entireLt);
+  const multiLt = multiRoomLeaseBasicRow(rooms, sub);
+  if (multiLt) rows.push(multiLt);
+
+  if (feeMeaningfulForListing(sub.applicationFee)) {
+    rows.push({
+      id: "lease-application",
+      section: "long-term",
+      icon: "📄",
+      title: "Application",
+      detail: "Processing",
+      price: formatListingFeeDisplay(sub.applicationFee),
+      status: "Due with app",
+      body: `Application fee: ${formatListingFeeDisplay(sub.applicationFee)} (from submission).`,
+    });
+  }
+
+  rows.push(
+    ...listingFeeRowsForLeaseBasicsSection(sub, "long-term", formatListingFeeDisplay).map((r) =>
+      listingFeeDisplayToLeaseBasicRow(r, "long-term"),
+    ),
+  );
+
+  if (shouldShowLeaseUtilitiesRow(sub, rooms)) {
+    rows.push({
+      id: "lease-utilities",
+      section: "long-term",
+      icon: "📊",
+      title: "Utilities",
+      detail: "Per room",
+      price: utilitiesListingEstimateLabel(sub),
+      status: "Estimated",
+      body: utilitiesListingEstimateDetail(sub),
+    });
+  }
+
+  if ((sub.paymentAtSigningIncludes?.length ?? 0) > 0) {
+    rows.push({
+      id: "lease-signing",
+      section: "long-term",
+      icon: "✍️",
+      title: "Payment due at signing",
+      detail: sub.paymentAtSigningIncludes?.length ? "Selected charges" : "None selected",
+      price: paymentAtSigningPriceLabel(sub),
+      status: "At signing",
+      body: paymentAtSigningDetailBody(sub),
+    });
+  }
+
+  if (sub.shortTermRentalsAllowed) {
+    const entireSt = entireHomeShortTermRentRow(sub, rooms);
+    if (entireSt) rows.push(entireSt);
+    rows.push(...shortTermBundleRentRows(sub, rooms));
+    rows.push(
+      ...listingFeeRowsForLeaseBasicsSection(sub, "short-term", formatListingFeeDisplay).map((r) =>
+        listingFeeDisplayToLeaseBasicRow(r, "short-term"),
+      ),
+    );
+  }
+
+  return rows;
 }
 
 function buildDefaultMultiRoomBundleCard(
@@ -758,144 +932,7 @@ export function listingRichFromManagerSubmission(
           },
         ];
 
-  const leaseBasics: LeaseBasicRow[] = [
-    {
-      id: "lease-terms",
-      icon: "📋",
-      title: "Lease terms",
-      detail: "As submitted",
-      price: "—",
-      status: "See details",
-      body: (() => {
-        const terms = resolveAllowedLeaseTerms(sub);
-        if (terms.length > 0) return `Available lease lengths: ${terms.join(", ")}.`;
-        return sub.leaseTermsBody.trim() || "Lease terms will be confirmed with applicants.";
-      })(),
-    },
-    ...(multiRoomLeaseBasicRow(rooms, sub) ? [multiRoomLeaseBasicRow(rooms, sub)!] : []),
-    ...(sub.shortTermRentalsAllowed
-      ? [
-          {
-            id: "lease-short-term",
-            icon: "🛏️",
-            title: "Short-term stay",
-            detail: sub.shortTermDeposit?.trim()
-              ? `Deposit ${formatListingFeeDisplay(sub.shortTermDeposit)}`
-              : "Temporary room stay",
-            price: shortTermStayPriceLabel(sub),
-            status: "Optional",
-            body: shortTermStayDetailBody(sub),
-          },
-        ]
-      : []),
-    {
-      id: "lease-application",
-      icon: "📄",
-      title: "Application",
-      detail: "Processing",
-      price: formatListingFeeDisplay(sub.applicationFee),
-      status: "Due with app",
-      body: `Application fee: ${formatListingFeeDisplay(sub.applicationFee)} (from submission).`,
-    },
-    {
-      id: "lease-deposit",
-      icon: "🔒",
-      title: "Security deposit",
-      detail: "As submitted",
-      price: formatListingFeeDisplay(sub.securityDeposit),
-      status: "At signing",
-      body: `Security deposit: ${formatListingFeeDisplay(sub.securityDeposit)}.`,
-    },
-    {
-      id: "lease-movein",
-      icon: "🧾",
-      title: "Move-in charges",
-      detail: "At signing",
-      price: formatListingFeeDisplay(sub.moveInFee),
-      status: "At signing",
-      body: `Move-in charges due at signing: ${formatListingFeeDisplay(sub.moveInFee)}.`,
-    },
-    {
-      id: "lease-signing",
-      icon: "✍️",
-      title: "Payment due at signing",
-      detail: sub.paymentAtSigningIncludes?.length ? "Selected charges" : "None selected",
-      price: paymentAtSigningPriceLabel(sub),
-      status: "At signing",
-      body: paymentAtSigningDetailBody(sub),
-    },
-    {
-      id: "lease-utilities",
-      icon: "📊",
-      title: "Utilities",
-      detail: "Per room",
-      price: utilitiesListingEstimateLabel(sub),
-      status: "Estimated",
-      body: utilitiesListingEstimateDetail(sub),
-    },
-  ];
-
-  const houseCostRows: LeaseBasicRow[] = [];
-  if (sub.houseCostsDetail.trim()) {
-    houseCostRows.push({
-      id: "house-costs-overview",
-      icon: "🏠",
-      title: "House costs overview",
-      detail: "All-in summary",
-      price: "—",
-      status: "Info",
-      body: sub.houseCostsDetail.trim(),
-    });
-  }
-  if (feeMeaningfulForListing(sub.parkingMonthly)) {
-    houseCostRows.push({
-      id: "parking",
-      icon: "🅿️",
-      title: "Parking",
-      detail: "If applicable",
-      price: sub.parkingMonthly.trim(),
-      status: "Monthly",
-      body: `Parking: ${sub.parkingMonthly.trim()} per month.`,
-    });
-  }
-  if (feeMeaningfulForListing(sub.hoaMonthly)) {
-    houseCostRows.push({
-      id: "hoa",
-      icon: "🏛️",
-      title: "HOA / community",
-      detail: "If applicable",
-      price: sub.hoaMonthly.trim(),
-      status: "Monthly",
-      body: `HOA or community fee: ${sub.hoaMonthly.trim()}.`,
-    });
-  }
-  if (feeMeaningfulForListing(sub.otherMonthlyFees)) {
-    houseCostRows.push({
-      id: "other-fees",
-      icon: "➕",
-      title: "Other fees",
-      detail: "As submitted",
-      price: sub.otherMonthlyFees.trim(),
-      status: "See notes",
-      body: sub.otherMonthlyFees.trim(),
-    });
-  }
-  for (const fee of sub.customFees ?? []) {
-    if (!fee.label.trim() || !feeMeaningfulForListing(fee.amount)) continue;
-    const price = formatListingFeeDisplay(fee.amount);
-    const monthly = fee.frequency !== "one-time";
-    houseCostRows.push({
-      id: `custom-fee-${fee.id}`,
-      icon: "💵",
-      title: fee.label.trim(),
-      detail: monthly ? "Additional monthly charge" : "One-time charge",
-      price,
-      status: monthly ? "Monthly" : "One-time",
-      body: monthly
-        ? `${fee.label.trim()}: ${price} per month.`
-        : `${fee.label.trim()}: ${price} (one-time).`,
-    });
-  }
+  const leaseBasics = buildLeaseBasicsRows(sub, rooms);
 
   const amenities = houseWideAmenityItems(sub.amenitiesText);
 
@@ -975,7 +1012,7 @@ export function listingRichFromManagerSubmission(
           ],
     bathrooms: bathrooms.length ? bathrooms : [],
     sharedSpaces,
-    leaseBasics: [...filterLeaseBasicsRows(leaseBasics, sub, rooms), ...houseCostRows],
+    leaseBasics,
     amenities,
     bundlesText:
       sub.leaseTermsBody.trim() ||
