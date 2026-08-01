@@ -36,10 +36,10 @@ export {
  * `WebAuthSessionPlugin` rejection codes that mean nothing was ever presented, mapped to the
  * user-facing copy shown for each.
  */
-const NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES: Record<string, string> = {
-  NO_ANCHOR: NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
-  START_FAILED: NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
-};
+const NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES = new Map<string, string>([
+  ["NO_ANCHOR", NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE],
+  ["START_FAILED", NATIVE_IOS_OAUTH_START_FAILED_MESSAGE],
+]);
 
 /**
  * The native shell cannot run this OAuth flow at all — nothing was opened and the WebView is
@@ -289,8 +289,8 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
     // are PRE-FLIGHT failures like the missing-plugin case: throw them back for the caller to
     // render in place instead of reloading the WebView, and never surface the plugin's own
     // developer-phrased reason. A new plugin rejection is pre-flight only by being listed here.
-    const preflightMessage = NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES[code];
-    if (preflightMessage) {
+    const preflightMessage = NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES.get(code);
+    if (typeof preflightMessage === "string") {
       clearNativeOAuthInProgress();
       throw new NativeOAuthUnavailableError(preflightMessage);
     }

@@ -259,6 +259,18 @@ describe("openOAuthUrl on iOS", () => {
     expect(isNativeOAuthInProgress()).toBe(false);
   });
 
+  it("does not treat an Object.prototype member name as a pre-flight code", async () => {
+    // The code is a dynamically derived string. If it were looked up on an object literal,
+    // "constructor" would resolve to a function and be thrown as the user-facing message.
+    stubIosNativeShell();
+    authenticateMock.mockRejectedValue({ code: "constructor", message: "boom" });
+
+    const { openOAuthUrl } = await import("@/lib/native/open-url");
+    await openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test");
+
+    expect(window.location.href).toContain("/auth/sign-in?error=oauth");
+  });
+
   it("still navigates for a POST-flight failure — the sheet was already presented", async () => {
     // The session opened and came back with an error, so the caller's promise may be gone;
     // that failure still travels by navigation. Only pre-flight codes take the throw path.

@@ -25,7 +25,8 @@ vi.mock("@/lib/auth/start-apple-sign-in", () => ({
 }));
 
 // Native Apple sign-in short-circuits the component's web OAuth probe effect.
-vi.mock("@/lib/auth/native-apple-sign-in", () => ({
+vi.mock("@/lib/auth/native-apple-sign-in", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/native-apple-sign-in")>()),
   canUseNativeAppleSignIn: () => true,
 }));
 
@@ -67,5 +68,54 @@ describe("AppleSignInButton inline error", () => {
     // The toast stays deduped, but the screen must still explain itself.
     await waitFor(() => expect(inlineError).toBe(FAILURE));
     expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no inline error when the user dismisses the Apple sheet", async () => {
+    // Cancelling is not a failure. `openOAuthUrl` already treats the WebAuthSession CANCELED
+    // code as a silent no-op, so leaving red text under the form here would have one branch
+    // answering the same question two opposite ways.
+    const { AppleSignInButton } = await import("@/components/auth/apple-sign-in-button");
+    const { APPLE_SIGN_IN_CANCELLED_MESSAGE } = await import("@/lib/auth/native-apple-sign-in");
+
+    startAppleSignIn.mockResolvedValue({
+      ok: false,
+      message: APPLE_SIGN_IN_CANCELLED_MESSAGE,
+      cancelled: true,
+    });
+
+    const inlineErrors: string[] = [];
+    render(<AppleSignInButton onError={(message) => inlineErrors.push(message)} />);
+
+    fireEvent.click(screen.getByText("Continue with Apple"));
+    await waitFor(() => expect(startAppleSignIn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("Continue with Apple")).toBeTruthy());
+
+    // The only call is the pre-attempt clear, never the cancellation copy.
+    expect(inlineErrors.filter(Boolean)).toEqual([]);
+  });
+
+  it("still clears a stale inline error when the next attempt is cancelled", async () => {
+    const { AppleSignInButton } = await import("@/components/auth/apple-sign-in-button");
+    const { APPLE_SIGN_IN_CANCELLED_MESSAGE } = await import("@/lib/auth/native-apple-sign-in");
+
+    let inlineError = "";
+    render(
+      <AppleSignInButton
+        onError={(message) => {
+          inlineError = message;
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Continue with Apple"));
+    await waitFor(() => expect(inlineError).toBe(FAILURE));
+
+    startAppleSignIn.mockResolvedValue({
+      ok: false,
+      message: APPLE_SIGN_IN_CANCELLED_MESSAGE,
+      cancelled: true,
+    });
+    fireEvent.click(screen.getByText("Continue with Apple"));
+    await waitFor(() => expect(inlineError).toBe(""));
   });
 });
