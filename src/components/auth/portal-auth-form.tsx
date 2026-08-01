@@ -4,6 +4,7 @@ import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthBrandHeader, AuthDivider, AuthLegalConsent, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
 import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
+import { oauthErrorFromParams } from "@/lib/auth/oauth-error-params";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
@@ -113,15 +114,9 @@ export function PortalAuthForm({
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   // Surface any OAuth callback error passed back via ?error=oauth&message=...
-  const [errorText, setErrorText] = useState<string | null>(() => {
-    const authError = searchParams.get("error");
-    const oauthMessage = searchParams.get("message");
-    if (authError === "oauth" && oauthMessage) return oauthMessage;
-    if (authError === "auth" || authError === "oauth") {
-      return "Sign-in could not be completed. Try again or use email and password.";
-    }
-    return null;
-  });
+  const [errorText, setErrorText] = useState<string | null>(() =>
+    oauthErrorFromParams(searchParams),
+  );
 
   useEffect(() => {
     if (!isCreate) return;
@@ -409,7 +404,11 @@ export function PortalAuthForm({
             ) : null}
 
             <div className="space-y-3">
-              <OAuthSocialStack nextPath={nextPath} disabled={busy} />
+              <OAuthSocialStack
+                nextPath={nextPath}
+                disabled={busy}
+                onError={(message) => setErrorText(message || null)}
+              />
               <AuthDivider label="or enter your details" />
               {hubFields}
               {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
@@ -459,7 +458,11 @@ export function PortalAuthForm({
       />
 
       <div className="mt-5 sm:mt-6">
-        <OAuthSocialStack nextPath={nextPath} disabled={busy} />
+        <OAuthSocialStack
+          nextPath={nextPath}
+          disabled={busy}
+          onError={(message) => setErrorText(message || null)}
+        />
       </div>
 
       <div className="my-4 sm:my-5">
