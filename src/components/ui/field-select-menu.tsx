@@ -27,7 +27,11 @@ export const FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX =
 
 /** Portaled surface (border/shadow/opaque bg) that overlays the trigger. */
 export const FIELD_SELECT_MENU_SHELL_CLASS =
-  "field-dropdown-menu flex flex-col overflow-hidden rounded-2xl border border-border shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
+  "field-dropdown-menu flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
+
+/** Scrollable option list — flex child so it shrinks inside a viewport-capped shell. */
+export const FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS =
+  "min-h-0 flex-1 overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]";
 
 const FIELD_SELECT_MENU_SEARCH_INPUT_CLASS =
   "h-9 w-full rounded-xl border border-border bg-auth-input-bg pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/10";

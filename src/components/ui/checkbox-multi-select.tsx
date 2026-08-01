@@ -17,9 +17,9 @@ import {
   handlePortaledFieldSelectOptionPointerDown,
 } from "@/components/ui/field-select-portal-interaction";
 import {
-  FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   FIELD_SELECT_MENU_SHELL_CLASS,
+  FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS,
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
@@ -193,6 +193,7 @@ export function CheckboxMultiSelect({
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
+          height: Math.min(contentPx, menuRect.maxHeight),
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
@@ -210,11 +211,8 @@ export function CheckboxMultiSelect({
           role="listbox"
           aria-multiselectable="true"
           aria-label={label}
-          className="overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]"
-          style={{
-            maxHeight: FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
-            touchAction: "pan-y",
-          }}
+          className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
+          style={{ touchAction: "pan-y" }}
         >
           {flatOptions.length === 0 ? (
             <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -341,6 +339,7 @@ export function FieldSingleSelect({
           minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
+          height: Math.min(contentPx, menuRect.maxHeight),
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
@@ -357,11 +356,8 @@ export function FieldSingleSelect({
         <div
           role="listbox"
           aria-label={label}
-          className="overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]"
-          style={{
-            maxHeight: FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
-            touchAction: "pan-y",
-          }}
+          className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
+          style={{ touchAction: "pan-y" }}
         >
           {filteredOptions.length === 0 ? (
             <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">No matches</p>
