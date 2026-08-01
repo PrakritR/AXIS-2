@@ -40,6 +40,50 @@ vi.mock("@capacitor/app", () => ({
   App: { addListener: vi.fn(async () => ({ remove: vi.fn() })), getLaunchUrl: vi.fn(async () => undefined) },
 }));
 
+/**
+ * Record every navigation instead of letting jsdom swallow it.
+ *
+ * jsdom leaves `location.href` unchanged on a cross-document assignment (it only logs "Not
+ * implemented: navigation"), so asserting the href is unchanged passes even against code that
+ * navigates. Replacing `window.location` with a recorder is what makes "never navigates" a real
+ * assertion.
+ */
+function recordNavigations(): string[] {
+  const navigations: string[] = [];
+  const real = window.location;
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: {
+      get origin() {
+        return real.origin;
+      },
+      get pathname() {
+        return real.pathname;
+      },
+      get search() {
+        return real.search;
+      },
+      get hash() {
+        return real.hash;
+      },
+      get href() {
+        return real.href;
+      },
+      set href(value: string) {
+        navigations.push(value);
+      },
+      assign: (value: string) => void navigations.push(value),
+      replace: (value: string) => void navigations.push(value),
+    },
+  });
+  return navigations;
+}
+
+function restoreLocation(real: Location): void {
+  Object.defineProperty(window, "location", { configurable: true, writable: true, value: real });
+}
+
 /** An iOS Capacitor shell whose binary predates the WebAuthSession plugin. */
 function stubLegacyIosShell(): void {
   (window as unknown as { Capacitor: unknown }).Capacitor = {
@@ -51,6 +95,9 @@ function stubLegacyIosShell(): void {
 }
 
 describe("native shell cannot run Google sign-in", () => {
+  let realLocation: Location;
+  let navigations: string[];
+
   beforeEach(() => {
     signInWithOAuth.mockReset();
     showToast.mockReset();
@@ -59,9 +106,12 @@ describe("native shell cannot run Google sign-in", () => {
       error: null,
     });
     stubLegacyIosShell();
+    realLocation = window.location;
+    navigations = recordNavigations();
   });
 
   afterEach(() => {
+    restoreLocation(realLocation);
     cleanup();
     delete (window as unknown as { Capacitor?: unknown }).Capacitor;
     document.documentElement.removeAttribute("data-native");
@@ -73,7 +123,6 @@ describe("native shell cannot run Google sign-in", () => {
     const { NATIVE_IOS_OAUTH_REBUILD_MESSAGE } = await import("@/lib/native/open-url");
 
     const errors: string[] = [];
-    const before = window.location.href;
 
     render(<GoogleSignInButton onError={(message) => errors.push(message)} />);
     fireEvent.click(screen.getByText("Continue with Google"));
@@ -83,7 +132,7 @@ describe("native shell cannot run Google sign-in", () => {
     // The message the user is shown must be the actionable one, not silence.
     expect(showToast).toHaveBeenCalledWith(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
     // …and the page must still be the page: no reload, nothing typed thrown away.
-    expect(window.location.href).toBe(before);
+    expect(navigations).toEqual([]);
     // The button has to come back, or the screen is stuck on "Redirecting…" forever.
     await waitFor(() => expect(screen.getByText("Continue with Google")).toBeTruthy());
   });

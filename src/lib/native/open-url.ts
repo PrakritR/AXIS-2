@@ -12,21 +12,20 @@ import {
   webPathFromNativeOAuthUrl,
   isNativeOAuthShell,
 } from "@/lib/auth/native-oauth-callback";
-import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
+import {
+  NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+  NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE,
+  nativeOAuthNoReturnMessage,
+  nativeOAuthUnexpectedCallbackMessage,
+} from "@/lib/auth/oauth-failure-messages";
 import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { WebAuthSession } from "@/lib/native/web-auth-session";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 
-/**
- * Shown when an iOS build predates the WebAuthSession plugin. Such a build has no
- * chrome-free path for Google sign-in — the only alternative is SFSafariViewController,
- * which renders the PropLane portal inside an in-app Safari browser (URL bar, share
- * icon, Safari toolbar). We refuse that and ask the user to update instead.
- */
-export const NATIVE_IOS_OAUTH_REBUILD_MESSAGE =
-  "Google sign-in needs the latest version of the PropLane app. Please update PropLane from TestFlight or the App Store, then try again. You can also continue with Apple.";
+export { NATIVE_IOS_OAUTH_REBUILD_MESSAGE, NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE };
 
 /**
  * The native shell cannot run this OAuth flow at all — nothing was opened and the WebView is
@@ -210,7 +209,7 @@ function finishNativeOAuthFromRawUrl(rawUrl: string): boolean {
   if (parsed.searchParams.get("error")) {
     const message =
       parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
-      "Google sign-in could not be completed.";
+      NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE;
     navigateToNativeOAuthFailure(message);
     return true;
   }
@@ -260,9 +259,7 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
       callbackScheme: NATIVE_OAUTH_SCHEME,
     });
     if (!finishNativeOAuthFromRawUrl(callbackUrl)) {
-      navigateToNativeOAuthFailure(
-        `Google sign-in returned an unexpected URL. ${nativeOAuthSetupHint()}`,
-      );
+      navigateToNativeOAuthFailure(nativeOAuthUnexpectedCallbackMessage());
     }
   } catch (error) {
     const code =
@@ -273,7 +270,15 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
       clearNativeOAuthInProgress();
       return;
     }
-    const message = error instanceof Error ? error.message : "Google sign-in could not be completed.";
+    // NO_ANCHOR means the plugin found no window to anchor the sheet to, so nothing was ever
+    // presented. That is a PRE-FLIGHT failure like the missing-plugin case: throw it back for
+    // the caller to render in place instead of reloading the WebView, and never surface the
+    // plugin's own developer-phrased reason.
+    if (code === "NO_ANCHOR") {
+      clearNativeOAuthInProgress();
+      throw new NativeOAuthUnavailableError(NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE);
+    }
+    const message = error instanceof Error ? error.message : NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE;
     navigateToNativeOAuthFailure(message);
   }
 }
@@ -380,9 +385,7 @@ async function openOAuthUrlWithSystemBrowser(url: string): Promise<void> {
 
       settled = true;
       cleanups.forEach((fn) => fn());
-      navigateToNativeOAuthFailure(
-        `Google sign-in did not return to the app. ${nativeOAuthSetupHint()}`,
-      );
+      navigateToNativeOAuthFailure(nativeOAuthNoReturnMessage());
     })();
   });
   cleanups.push(() => void finished.remove());

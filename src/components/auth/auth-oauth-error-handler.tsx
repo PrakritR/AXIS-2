@@ -18,6 +18,12 @@ export function AuthOAuthErrorHandler() {
     const oauthError = parseOAuthErrorFromUrl(window.location.href);
     if (!oauthError) return;
 
+    // `?error=oauth&message=…` is OUR OWN shape — `nativeOAuthSignInFailureUrl` emits it and the
+    // `message` is already user-facing copy. This handler only knows how to turn genuine
+    // Supabase/Google params (server_error, access_denied, …) into copy, so re-running it here
+    // would replace an actionable hint with the generic string and throw away the reason.
+    if (oauthError.error === "oauth") return;
+
     handledRef.current = true;
     const message = friendlyOAuthErrorMessage(oauthError);
     const params = new URLSearchParams({ error: "oauth", message });

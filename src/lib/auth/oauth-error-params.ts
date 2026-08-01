@@ -7,7 +7,16 @@
  * which is exactly how the native shell's "it just refreshes and goes back" was experienced.
  *
  * One implementation, used by every auth screen that route can land on.
+ *
+ * `message` is echoed ONLY when it is copy this codebase authored
+ * (`isAuthoredOAuthFailureMessage`). `/auth/sign-in` is a credential-entry screen, so rendering
+ * arbitrary query text there would let a crafted link put attacker-written copy — "your account
+ * is locked, call this number" — above a real password field on the real domain. Genuinely
+ * dynamic third-party text (a raw Google `error_description`, an ASWebAuthenticationSession
+ * `localizedDescription`) degrades to the generic message; that is the intended trade.
  */
+import { isAuthoredOAuthFailureMessage } from "@/lib/auth/oauth-failure-messages";
+
 export type OAuthErrorParams = Pick<URLSearchParams, "get">;
 
 export const OAUTH_GENERIC_FAILURE_MESSAGE =
@@ -18,6 +27,6 @@ export function oauthErrorFromParams(params: OAuthErrorParams | null | undefined
   const authError = params.get("error");
   if (authError !== "oauth" && authError !== "auth") return null;
   const message = params.get("message")?.trim();
-  if (authError === "oauth" && message) return message;
+  if (authError === "oauth" && message && isAuthoredOAuthFailureMessage(message)) return message;
   return OAUTH_GENERIC_FAILURE_MESSAGE;
 }

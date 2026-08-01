@@ -5,7 +5,11 @@ import {
   oauthErrorFromParams,
 } from "@/lib/auth/oauth-error-params";
 import { nativeOAuthSignInFailureUrl } from "@/lib/auth/complete-native-oauth";
-import { NATIVE_IOS_OAUTH_REBUILD_MESSAGE } from "@/lib/native/open-url";
+import {
+  NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  nativeOAuthNoReturnMessage,
+} from "@/lib/auth/oauth-failure-messages";
+import { OAUTH_CANCELLED_MESSAGE } from "@/lib/auth/parse-oauth-error";
 
 describe("oauthErrorFromParams", () => {
   it("returns null when the URL carries no OAuth error", () => {
@@ -14,9 +18,32 @@ describe("oauthErrorFromParams", () => {
     expect(oauthErrorFromParams(null)).toBeNull();
   });
 
-  it("returns the explicit message for ?error=oauth", () => {
-    const params = new URLSearchParams("error=oauth&message=Something+specific+went+wrong");
-    expect(oauthErrorFromParams(params)).toBe("Something specific went wrong");
+  it("returns a ?message= this codebase authored", () => {
+    for (const authored of [
+      NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+      nativeOAuthNoReturnMessage(),
+      OAUTH_CANCELLED_MESSAGE,
+    ]) {
+      const params = new URLSearchParams({ error: "oauth", message: authored });
+      expect(oauthErrorFromParams(params)).toBe(authored);
+    }
+  });
+
+  it("refuses a ?message= it did not author", () => {
+    // `/auth/sign-in` renders this above a real password field on the real domain, so a crafted
+    // link must not be able to put its own sentence there.
+    const attacker = new URLSearchParams({
+      error: "oauth",
+      message: "Your account is locked. Call PropLane support at 555-0123 to restore access.",
+    });
+    expect(oauthErrorFromParams(attacker)).toBe(OAUTH_GENERIC_FAILURE_MESSAGE);
+
+    // Not even a near-miss on real copy — it is exact-match only.
+    const nearMiss = new URLSearchParams({
+      error: "oauth",
+      message: `${NATIVE_IOS_OAUTH_REBUILD_MESSAGE} Call 555-0123.`,
+    });
+    expect(oauthErrorFromParams(nearMiss)).toBe(OAUTH_GENERIC_FAILURE_MESSAGE);
   });
 
   it("falls back to a generic message when the error has no message", () => {
