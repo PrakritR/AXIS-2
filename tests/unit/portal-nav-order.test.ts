@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FREE_SUBSCRIPTION_SECTIONS, managerSectionAllowedForTier } from "@/lib/manager-access";
-import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import {
+  NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
+  orderNativeBottomNavItems,
+} from "@/lib/native/portal-bottom-nav";
 import { adminPortal } from "@/lib/portals/admin";
 import { proPortal } from "@/lib/portals/pro";
 import {
@@ -45,12 +48,14 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
     expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("resident approved native order matches property-management pattern", () => {
+  it("resident approved native order leads with the post-lease primary tabs", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
     expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
-    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
-    expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("communication"));
+    expect(ordered.slice(0, NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.length)).toEqual([
+      ...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
+    ]);
+    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("documents"));
     expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("profile"));
   });
 });
@@ -106,22 +111,25 @@ describe("pro portal nav grouping (leasing → tenancy → operations → market
 describe("resident portal nav grouping", () => {
   const freeIds = new Set<string>(RESIDENT_FREE_TIER_SECTION_IDS);
 
-  it("limited: groups locked sections after move-in", () => {
+  it("limited: groups the locked documents section after lease, before settings", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["communication", "documents"], "move-in", "profile");
+    expectContiguousBlock(sections, ["communication", "documents"], "lease", "profile");
     for (const id of ["communication", "documents"]) {
       expect(freeIds.has(id)).toBe(id === "communication");
     }
+    // Services / Payments unlock only once both parties sign the lease.
+    expect(sections).not.toContain("services");
+    expect(sections).not.toContain("payments");
   });
 
-  it("approved: follows property-management block order after move-in", () => {
+  it("approved: keeps the reference sections contiguous after the primary tabs", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["services", "communication", "documents"], "move-in", "profile");
+    expectContiguousBlock(sections, ["applications", "lease", "move-in", "documents"], "communication", "profile");
   });
 
-  it("approved: mirrors pro free block then paid workspace pattern", () => {
+  it("approved: leads with the post-lease primary tabs and ends with settings", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 5)).toEqual(["dashboard", "applications", "lease", "payments", "move-in"]);
+    expect(sections.slice(0, 4)).toEqual(["services", "payments", "dashboard", "communication"]);
     expect(sections.slice(-1)).toEqual(["profile"]);
   });
 });

@@ -12,12 +12,13 @@ import {
  * redirects to the bare `/resident/payments` URL.
  */
 describe("resident payments is charges-only", () => {
-  it("declares no sub-tabs in either resident section registry", () => {
-    for (const sections of [RESIDENT_LIMITED_PORTAL_SECTIONS, RESIDENT_APPROVED_PORTAL_SECTIONS]) {
-      const payments = sections.find((s) => s.section === "payments");
-      expect(payments).toBeDefined();
-      expect(payments!.tabs).toEqual([]);
-    }
+  it("declares no sub-tabs wherever the section appears", () => {
+    const payments = RESIDENT_APPROVED_PORTAL_SECTIONS.find((s) => s.section === "payments");
+    expect(payments).toBeDefined();
+    expect(payments!.tabs).toEqual([]);
+    // Payments unlocks at lease signing, so the pre-lease registry has no such
+    // section at all — see RESIDENT_LIMITED_PORTAL_SECTIONS.
+    expect(RESIDENT_LIMITED_PORTAL_SECTIONS.find((s) => s.section === "payments")).toBeUndefined();
   });
 
   it("links the sidebar/smoke path at the bare payments URL", () => {
