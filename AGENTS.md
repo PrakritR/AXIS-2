@@ -777,9 +777,17 @@ The rules that follow from it:
   self-serve vendor signup (`/api/auth/vendor-register`).
 - **`/auth/confirm` derives its destination from `type` alone**, never a `next` param,
   so an emailed link can't be rewritten into a redirect somewhere else.
-- **The route answers `{ok:true}` for unknown addresses and for throttled requests**, so
-  it is not an account-existence oracle, and the token is never written to a log —
-  it is a live credential until it is used.
+- **The route answers `{ok:true}` for unknown addresses, for throttled requests, and for
+  a failed send**, so it is not an account-existence oracle, and the token is never
+  written to a log — it is a live credential until it is used. The one distinguishable
+  reply is the `503` for an unconfigured mailer, which is a deployment fact rather than a
+  per-address signal.
+- **`RESEND_API_KEY` is now load-bearing for password reset.** Recovery mail used to go
+  through Supabase's own mailer, so reset worked on a deployment with no email provider
+  configured; it no longer does — without that key the route answers `503` and reset is
+  dead. Confirm it is set before pointing a new environment at this flow. (`.env.example`
+  still describes the old, optional-mailer world; env files are unreadable to agent
+  sessions here, so it needs a human pass.)
 - **`/auth/callback` is OAuth-shaped end to end** — on failure it renders a *Google
   sign-in* error, and on success `resolveOAuthPortalRedirect` reroutes by role. Any
   non-OAuth destination sent through it inherits both. `/auth/reset-password` is in
