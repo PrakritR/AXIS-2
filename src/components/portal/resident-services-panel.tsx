@@ -511,13 +511,8 @@ export function ResidentServicesPanel({
 
   const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
-  const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const activeTab = tabId;
-
-  useEffect(() => {
-    setSearchQuery("");
-  }, [activeTab]);
 
   // modal state
   const [modalMode, setModalMode] = useState<"none" | "maintenance" | "service">("none");
@@ -757,29 +752,9 @@ export function ResidentServicesPanel({
   }, [sortedRequests]);
 
   const filteredRequests = useMemo(
-    () => {
-      const bucketed = sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter);
-      const q = searchQuery.trim().toLowerCase();
-      if (!q) return bucketed;
-      return bucketed.filter((req) => {
-        const haystack = [req.offerName, req.notes, req.status].filter(Boolean).join(" ").toLowerCase();
-        return haystack.includes(q);
-      });
-    },
-    [sortedRequests, requestsFilter, searchQuery],
+    () => sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter),
+    [sortedRequests, requestsFilter],
   );
-
-  const searchedWorkOrderRows = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => {
-      const haystack = [row.title, row.description, row.propertyName, row.unit, row.priority]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [rows, searchQuery]);
 
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
@@ -1256,12 +1231,6 @@ export function ResidentServicesPanel({
           />
         )
       }
-      search={{
-        value: searchQuery,
-        onChange: setSearchQuery,
-        placeholder: activeTab === "requests" ? "Search requests" : "Search work orders",
-        dataAttr: "resident-services-search",
-      }}
     />
   );
 
@@ -1273,25 +1242,18 @@ export function ResidentServicesPanel({
   return (
     <ManagerPortalPageShell
       title="Services"
-      hideTitleOnMobileNav
       titleAside={
-        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
+        <PortalSectionActionRow variant="header" className="gap-2">
           {servicesHeaderAction}
         </PortalSectionActionRow>
       }
       compactFilterRow
-      filterRow={servicesListChrome}
     >
+      <div className="mb-3 max-lg:mb-4">{servicesListChrome}</div>
       <div
         className={lockedEmpty ? "space-y-0" : undefined}
         data-slot="resident-services-body"
       >
-      <div
-        className={`md:hidden [&_button]:w-full${lockedEmpty ? "" : " mb-3"}`}
-        data-slot="resident-services-mobile-actions"
-      >
-        {servicesHeaderAction}
-      </div>
       {!servicesUnlocked ? (
         <p className={lockedEmpty ? PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS : PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
           <span className="font-semibold">Services unlock after your lease is fully signed.</span>{" "}
@@ -1305,11 +1267,7 @@ export function ResidentServicesPanel({
             <PortalDataTableEmpty message="No requests yet." icon="service" variant={emptyVariant} />
           ) : filteredRequests.length === 0 ? (
             <PortalDataTableEmpty
-              message={
-                searchQuery.trim()
-                  ? "No requests match your search."
-                  : "No requests in this status yet."
-              }
+              message="No requests in this status yet."
               icon="service"
               variant={emptyVariant}
             />
@@ -1391,20 +1349,16 @@ export function ResidentServicesPanel({
         <div>
           {myRows.length === 0 ? (
             <PortalDataTableEmpty icon="work-order" message="No work orders yet." variant={emptyVariant} />
-          ) : searchedWorkOrderRows.length === 0 ? (
+          ) : rows.length === 0 ? (
             <PortalDataTableEmpty
               icon="work-order"
-              message={
-                searchQuery.trim()
-                  ? "No work orders match your search."
-                  : "No work orders in this status yet."
-              }
+              message="No work orders in this status yet."
               variant={emptyVariant}
             />
           ) : (
             <>
             <div className="space-y-2 lg:hidden">
-              {searchedWorkOrderRows.map((row) => {
+              {rows.map((row) => {
                 const expanded = expandedId === row.id;
                 return (
                   <PortalMobileSummaryCard
@@ -1445,7 +1399,7 @@ export function ResidentServicesPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {searchedWorkOrderRows.map((row) => {
+                    {rows.map((row) => {
                       const isExpanded = expandedId === row.id;
                       return (
                       <Fragment key={row.id}>

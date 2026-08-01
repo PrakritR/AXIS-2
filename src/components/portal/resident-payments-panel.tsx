@@ -169,7 +169,6 @@ export function ResidentPaymentsPanel({
     setPrevBucketProp(resolvedBucketProp);
     setBucket(resolvedBucketProp);
   }
-  const [searchQuery, setSearchQuery] = useState("");
   const [bucketTouched, setBucketTouched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
@@ -414,17 +413,6 @@ export function ResidentPaymentsPanel({
     if (bucket === "pending") return upcomingPendingRows;
     return paidRows;
   }, [bucket, overdueRows, upcomingPendingRows, paidRows]);
-
-  const filteredRowsForBucket = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return rowsForBucket;
-    return rowsForBucket.filter((row) => {
-      const hay = [row.title, row.propertyLabel, row.balanceLabel, chargeDueLabel(row)]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }, [rowsForBucket, searchQuery]);
 
   const detailCharge = chargeIdProp ? charges.find((c) => c.id === chargeIdProp) : undefined;
 
@@ -962,7 +950,7 @@ export function ResidentPaymentsPanel({
     <div className={PORTAL_LIST_PAGE_BODY}>
       <DataList
         selectable={showSelectCol}
-        rows={filteredRowsForBucket.map((row) => ({
+        rows={rowsForBucket.map((row) => ({
           id: row.id,
           data: row,
           primary: row.title || "Charge",
@@ -995,13 +983,11 @@ export function ResidentPaymentsPanel({
           <PortalDataTableEmpty
             icon="payment"
             message={
-              searchQuery.trim()
-                ? "No charges match your search."
-                : bucket === "overdue"
-                  ? "No overdue charges."
-                  : bucket === "pending"
-                    ? "No upcoming charges."
-                    : "No payments in this tab yet."
+              bucket === "overdue"
+                ? "No overdue charges."
+                : bucket === "pending"
+                  ? "No upcoming charges."
+                  : "No payments in this tab yet."
             }
           />
         }
@@ -1353,12 +1339,6 @@ export function ResidentPaymentsPanel({
           }))}
           activeDestinationId={bucket}
           destinationAriaLabel="Payment status"
-          search={{
-            value: searchQuery,
-            onChange: setSearchQuery,
-            placeholder: "Search charges",
-            dataAttr: "resident-payments-search",
-          }}
         />
         {paymentsBody}
       </ManagerPortalPageShell>

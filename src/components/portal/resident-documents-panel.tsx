@@ -36,6 +36,11 @@ import {
   resolveResidentPortalAxisId,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import {
+  isWithdrawnApplicationRow,
+  sortResidentApplicationRows,
+} from "@/lib/rental-application/resident-application-list";
+import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   LEASE_PIPELINE_EVENT,
@@ -74,12 +79,13 @@ function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
 function ApplicationDocumentsTable() {
   const session = usePortalSession();
   const email = session.email?.trim().toLowerCase() ?? "";
+  const userId = session.userId;
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
-    void syncManagerApplicationsFromServer().then(on);
+    void syncManagerApplicationsFromServer({ selfScope: true }).then(on);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
     return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
   }, []);
@@ -87,8 +93,13 @@ function ApplicationDocumentsTable() {
   const rows = useMemo<DemoApplicantRow[]>(() => {
     void tick;
     if (!email) return [];
-    return readManagerApplicationRows().filter((row) => (row.email ?? "").trim().toLowerCase() === email);
-  }, [email, tick]);
+    return sortResidentApplicationRows(
+      readManagerApplicationRows().filter(
+        (row) =>
+          residentOwnsApplicationRow(row, { email, userId }) && !isWithdrawnApplicationRow(row),
+      ),
+    );
+  }, [email, userId, tick]);
 
   if (rows.length === 0) {
     return <PortalDataTableEmpty icon="application" message="No applications are linked to your account yet." />;
