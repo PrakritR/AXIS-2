@@ -39,7 +39,7 @@ const FILTER_TRIGGER_CLASS =
   "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
 
 /** Estimated menu height (search row + 5 option rows) for open-up/positioning math. */
-const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
+export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
   FIELD_SELECT_MENU_SEARCH_PX,
 );
@@ -151,7 +151,6 @@ export function FilterCollapsibleSection({
           left: menuRect.left,
           width: menuRect.width,
           maxHeight: menuRect.maxHeight,
-          height: Math.min(FILTER_MENU_CONTENT_PX, menuRect.maxHeight),
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
@@ -188,9 +187,6 @@ export function FilterCollapsibleSection({
   );
 }
 
-/** Scrollable option list — flex child inside the portaled menu shell. */
-const FILTER_LIST_SCROLL_CLASS = FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS;
-
 /** Multi-select checkbox list for filter menus — search appears once there are more than 5 options. */
 export function FilterCheckboxList({
   options,
@@ -222,7 +218,7 @@ export function FilterCheckboxList({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -235,7 +231,7 @@ export function FilterCheckboxList({
         role="listbox"
         aria-multiselectable="true"
         data-attr={dataAttr}
-        className={FILTER_LIST_SCROLL_CLASS}
+        className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
         style={{ touchAction: "pan-y" }}
       >
         {options.length === 0 ? (
@@ -303,7 +299,7 @@ export function FilterSingleSelectList({
   }, [options, query]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -315,7 +311,7 @@ export function FilterSingleSelectList({
       <div
         role="listbox"
         data-attr={dataAttr}
-        className={FILTER_LIST_SCROLL_CLASS}
+        className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
         style={{ touchAction: "pan-y" }}
       >
         {visibleOptions.length === 0 ? (

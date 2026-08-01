@@ -11,6 +11,7 @@ import { useState } from "react";
 import {
   FILTER_LIST_MAX_HEIGHT_PX,
   FILTER_LIST_VISIBLE_ROWS,
+  FILTER_MENU_CONTENT_PX,
   FilterCheckboxList,
   FilterCollapsibleSection,
   FilterFieldsAccordion,
@@ -107,8 +108,16 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     render(<Harness optionCount={30} />);
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
     const listbox = screen.getByRole("listbox");
-    expect(listbox.style.maxHeight).toBe(`${FILTER_LIST_MAX_HEIGHT_PX}px`);
+    // The 5-row cap lives on the portaled shell (search row + 5 option rows); the
+    // listbox is the scrollable flex child that shrinks under it.
+    const shell = listbox.closest("[data-field-select-menu]") as HTMLElement;
+    expect(shell.style.maxHeight).toBe(`${FILTER_MENU_CONTENT_PX}px`);
+    expect(FILTER_MENU_CONTENT_PX).toBe(FILTER_LIST_MAX_HEIGHT_PX + 12 + 52);
     expect(FILTER_LIST_MAX_HEIGHT_PX).toBe(FILTER_LIST_VISIBLE_ROWS * 40);
+    expect(listbox.className).toContain("overflow-y-auto");
+    // The shell sizes to content instead of a fixed height, so it never leaves
+    // empty space below a short/filtered list.
+    expect(shell.style.height).toBe("");
     // All 30 options are still rendered (scrolled), not truncated.
     expect(within(listbox).getAllByRole("option")).toHaveLength(30);
   });

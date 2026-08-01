@@ -193,7 +193,6 @@ export function CheckboxMultiSelect({
           left: menuRect.left,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
-          height: Math.min(contentPx, menuRect.maxHeight),
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
@@ -339,7 +338,6 @@ export function FieldSingleSelect({
           minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
           maxHeight: menuRect.maxHeight,
-          height: Math.min(contentPx, menuRect.maxHeight),
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
