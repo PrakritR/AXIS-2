@@ -536,9 +536,14 @@ skips the wait, because assignment requires Apple to have finished processing.
 So the lane uploads, and a separate workflow step
 (`scripts/ios-testflight-distribute.mjs`) does the part that makes it
 installable: bounded wait for `processingState = VALID`, assign to the internal
-group, then **re-read `betaGroups/<id>/builds` to prove the assignment stuck**
-and fail the run if it did not. Rules:
+group, then **re-read `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`
+to prove the assignment stuck** and fail the run if it did not. Rules:
 
+- **Verification is a FRESH read after the POST, and the exit code reflects that
+  read — never the POST's status code.** That is the whole point: the old failure
+  was trusting a success signal that did not mean the build was installable. The
+  filtered query is exact, so a group that has accumulated hundreds of builds can
+  never report a correctly-assigned build as missing.
 - **The group name is matched exactly** (`Internal — PropLane team`, em dash) and
   read from the API. No match, or a match that is an *external* group → hard
   failure. Never fall back to "the first internal group"; never enable external

@@ -288,9 +288,12 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    logging elapsed time and state each tick, bounded by
    `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS` (default 1500). `FAILED`/`INVALID`
    fails immediately.
-4. Assign the build to the group, then **re-read `betaGroups/<id>/builds`** and
-   fail unless the build is present. The exit code reflects a fresh API read, not
-   the POST's status code — a failed assignment can never look green.
+4. Assign the build to the group, then **re-read
+   `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless
+   the build is present. The exit code reflects a fresh API read, not the POST's
+   status code — a failed assignment can never look green. The query is exact
+   rather than a page of the group's builds, so a group with hundreds of
+   accumulated builds can never report a correctly-assigned build as missing.
 5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and fail
    on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION`.
 
