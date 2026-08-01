@@ -344,7 +344,8 @@ Google OAuth must **not** run in the main WebView (`disallowed_useragent`). Plat
   intercepts that callback natively. Do **not** use `@capacitor/browser` (SFSafariViewController) for
   OAuth on iOS — it cannot follow custom-scheme redirects.
 - **Android** — Chrome Custom Tab (`@capacitor/browser`) + HTTPS callback with `native_bridge=1`
-  (server 302 into the custom scheme).
+  (an HTML bridge page that deep-links into the custom scheme). `native_bridge=1` is the Android
+  path only — current iOS builds never route through it.
 
 After you pick an account, Supabase must redirect back into the Axis app — not the marketing homepage.
 
@@ -363,7 +364,7 @@ space.proplane.app://auth/callback/**
 
 Android uses the HTTPS callbacks (bridge page). iOS OAuth uses the custom-scheme entries directly.
 
-If the HTTPS callback is missing, Supabase falls back to the **Site URL** and Google sign-in opens the marketing homepage in the system browser instead of the portal.
+Both kinds of entry are required. If the one for the platform in use is missing, Supabase drops `redirect_to`, falls back to the **Site URL**, and sign-in opens the marketing homepage in the system browser instead of returning to the app.
 
 **2. Universal / app links (https fallback)** — committed in `public/.well-known/`:
 
