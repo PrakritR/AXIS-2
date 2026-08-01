@@ -714,8 +714,8 @@ model and workflow: [`docs/database-environments.md`](docs/database-environments
 
 # Portal routing precedence (a section can be silently unreachable)
 
-A portal section is only reachable if **both** layers above it let the request
-through. Two classes of bug have shipped here, each making a live nav item dead
+A portal section is only reachable if **every** layer above it lets the request
+through. Three classes of bug have shipped here, each making a live nav item dead
 while the section's component still compiled and its tests still passed:
 
 1. **`next.config.ts` `redirects()` outranks the app router.** A legacy entry
@@ -729,9 +729,51 @@ while the section's component still compiled and its tests still passed:
    portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →
    Communication rewrite checks `findSection(def, "communication")`, so it can
    only fire for a portal that actually has a Communication section to land in.
+3. **The resident stage guard must run AFTER those rewrites, and the CLIENT
+   guard must agree with it.** `isResidentPathAllowedForAccess`
+   (`src/lib/resident-portal-nav.ts`) is enforced twice: by
+   `renderPortalSection` on the server and by `ResidentPreApplicationGuard` in
+   the layout, which judges the **original** pathname while the server redirect
+   is still in flight and `router.replace()`s the home page if it disagrees. So
+   a legacy alias is only reachable when it is (a) rewritten *before* the server
+   guard and (b) allow-listed inside the shared guard —
+   `RESIDENT_LEGACY_SECTION_ALIASES` (`inbox`, `financials`, `finances`,
+   `bugs-feedback`, plus post-approval `applications`). Allow-listing is not a
+   hole: those paths always redirect, and the guard re-judges the destination.
+   Fixing only (a) makes the unit tests pass while the browser still bounces.
+   Coverage: `tests/unit/resident-legacy-section-redirects.test.ts` drives the
+   real `renderPortalSection`.
 
-Neither layer is covered by the unit suite. After adding or renaming a section,
-load its URL in the browser — a passing build is not evidence it resolves.
+None of these layers is covered by a build. After adding or renaming a section,
+load its URL in the browser — a passing build, and a passing unit test of the
+server layer alone, are not evidence it resolves.
+
+## Portal nav locks: a lock is not a dead click
+
+`portalNavLockKind` (`src/lib/portals/nav-locks.ts`) is the single decision for
+every locked-nav surface (desktop list, collapsed rail, mobile strip, native
+bottom bar, More sheet). Locks apply to managers **and** residents; the kind only
+decides what a click does:
+
+- **`upsell`** — manager / pro free tier. Stays a live `<Link>`, because the
+  destination renders `PortalTierPaywall` and the sidebar row is the ONLY entry
+  point to the upgrade page anywhere in the product. Rendering it as a `<span>`
+  deletes a revenue path.
+- **`inert`** — every resident lock (stage locks and the linked manager's
+  free-tier locks alike). Nothing for the resident to buy, so the row is a
+  no-op and `aria-disabled`.
+
+A locked row must never be a live link to a path the server then redirects home
+— that reads as a broken tab. Coverage: `tests/unit/portal-nav-locks.test.ts`,
+`tests/unit/portal-nav-lock-surfaces.test.tsx`.
+
+**An approved resident's submitted application lives under Documents.** The
+`applications` nav entry stays locked past `pre_approval`, but
+`/resident/applications` (a `REGISTERED_PUSH_DEEP_LINKS` entry — the approval
+notification lands there) redirects to `/resident/documents/application`, which
+renders it read-only. That tab is deliberately exempt from the resident
+Documents tier gate, because `applications` is a `RESIDENT_FREE_TIER_SECTION_ID`
+and relocating the content must not take it from a free-tier household.
 
 ## Inbox panels: the standalone page shell is a /demo-only path
 
