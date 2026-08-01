@@ -538,7 +538,7 @@ function entireHomeLongTermRentRow(
     icon: "🏠",
     title: "Whole house lease",
     detail: named.length ? `Whole house - ${named.length} rooms` : "Entire home",
-    price: `$${rent}/mo`,
+    price: `${formatListingFeeDisplay(String(rent))}/mo`,
     status: "Monthly rent",
     body: `Lease the entire home for $${rent} per month.`,
   };
@@ -564,9 +564,12 @@ function entireHomeShortTermRentRow(
   };
 }
 
-function listingShortTermNightlyFeeRowNeeded(sub: ManagerListingSubmissionV1): boolean {
+function listingShortTermNightlyFeeRowNeeded(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): boolean {
   if (isEntireHomeListing(sub) && sub.shortTermDailyCost?.trim()) return false;
-  const wholeHouse = preferredWholeHouseBundle(sub, sub.rooms);
+  const wholeHouse = preferredWholeHouseBundle(sub, rooms);
   if (wholeHouse?.shortTermEnabled && bundleShortTermPriceLabel(wholeHouse, sub)) return false;
   return true;
 }
@@ -659,7 +662,7 @@ function buildLeaseBasicsRows(
     const entireSt = entireHomeShortTermRentRow(sub, rooms);
     if (entireSt) rows.push(entireSt);
     rows.push(...shortTermBundleRentRows(sub, rooms));
-    const skipNightlyPreset = !listingShortTermNightlyFeeRowNeeded(sub);
+    const skipNightlyPreset = !listingShortTermNightlyFeeRowNeeded(sub, rooms);
     rows.push(
       ...listingFeeRowsForLeaseBasicsSection(sub, "short-term", formatListingFeeDisplay, {
         excludePresetIds: skipNightlyPreset ? ["short_term_nightly"] : undefined,

@@ -115,7 +115,7 @@ test.describe("Dark mode — property portal", () => {
     "/portal/dashboard",
     "/portal/properties",
     "/portal/applications",
-    "/portal/calendar",
+    "/portal/calendar/all",
     "/portal/profile",
   ] as const;
 

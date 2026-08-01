@@ -7,8 +7,8 @@ const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 const PAID_MANAGER_NAV = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Calendar", path: "/portal/calendar" },
-  { label: "Applications", path: "/portal/applications" },
+  { label: "Calendar", path: "/portal/calendar/all" },
+  { label: "Applications", path: "/portal/applications/pending" },
   { label: "Leases", path: "/portal/leases" },
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
@@ -56,7 +56,7 @@ test.describe("Manager portal", () => {
     await page.goto("/portal/properties");
     await expect(page.getByRole("heading").first()).toBeVisible();
     // A "Create" or "Add" button should be present for new listings
-    const createBtn = page.getByRole("button", { name: /create|add listing|new listing/i }).first();
+    const createBtn = page.getByRole("button", { name: /add property|create|add listing|new listing/i }).first();
     await expect(createBtn).toBeVisible({ timeout: 10_000 });
   });
 
@@ -130,10 +130,12 @@ test.describe("Manager portal", () => {
   });
 
   test("calendar tab loads and a house week view exposes navigation", async ({ page }) => {
-    await page.goto("/portal/calendar", { waitUntil: "domcontentloaded" });
+    await page.goto("/portal/calendar/all", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/portal\/calendar\/all/);
     await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible({ timeout: 20_000 });
-    const calControls = page.getByRole("button", { name: /today|month|week|day/i }).first();
-    await expect(calControls).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Previous week" }).first()).toBeVisible({
+      timeout: 15_000,
+    });
     const propertyFilter = page.getByRole("button", { name: /^properties$/i });
     if (await propertyFilter.isVisible().catch(() => false)) {
       await propertyFilter.click();

@@ -88,8 +88,8 @@ export const proPortal: PortalDefinition = {
 export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Calendar", path: "/portal/calendar" },
-  { label: "Applications", path: "/portal/applications" },
+  { label: "Calendar", path: "/portal/calendar/all" },
+  { label: "Applications", path: "/portal/applications/pending" },
   { label: "Leases", path: "/portal/leases" },
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },

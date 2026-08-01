@@ -76,8 +76,9 @@ test.describe("Resident portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("finances summary tab loads", async ({ page }) => {
+  test("legacy finances path redirects to payments", async ({ page }) => {
     await page.goto("/resident/finances/summary");
+    await expect(page).toHaveURL(/\/resident\/payments/, { timeout: 15_000 });
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
