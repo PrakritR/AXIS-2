@@ -4,12 +4,6 @@ const authenticateMock = vi.fn();
 const isPluginAvailableMock = vi.fn();
 const browserOpenMock = vi.fn();
 
-vi.mock("@capacitor/core", () => ({
-  Capacitor: {
-    isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
-  },
-}));
-
 vi.mock("@capacitor/browser", () => ({
   Browser: {
     open: (...args: unknown[]) => browserOpenMock(...args),
@@ -47,6 +41,7 @@ function stubIosNativeShell(): void {
     Capacitor: {
       isNativePlatform: () => true,
       getPlatform: () => "ios",
+      isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
     },
     setTimeout: (fn: () => void) => {
       fn();
@@ -95,6 +90,7 @@ function stubAndroidNativeShell(): void {
     Capacitor: {
       isNativePlatform: () => true,
       getPlatform: () => "android",
+      isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
     },
     setTimeout: (fn: () => void) => {
       fn();
