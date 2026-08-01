@@ -443,9 +443,17 @@ explicit request.
 
 # Branching & deployment (Vercel)
 
-The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
-**Production Branch is `main`**. There is **no `production` branch** — it was
-deleted after the production branch was migrated to `main`; don't recreate it.
+The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) builds **only**
+`main` and `production` (`vercel.json` → `git.deploymentEnabled`, plus
+`scripts/vercel-should-build.sh`); every other branch is skipped.
+
+⚠️ **A `production` branch exists and is load-bearing.** It is the branch
+`.github/workflows/ios-testflight.yml` watches, so deleting it silently ends every
+iOS build. The branch roles in the prose below are stale and disagree with
+[`docs/ship-gate.md`](docs/ship-gate.md), which says the live site deploys from
+`production` while `main` builds Preview. For what a push actually deploys, trust
+`docs/ship-gate.md`, `vercel.json`, and the workflow file — not this section.
+
 Two branches, two roles:
 
 - **`main` — the live site.** Every push here triggers a **production deploy** to
@@ -485,7 +493,8 @@ promotion target. Don't add a separate Vercel project for staging — the branch
 model above already gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `main`; don't change it.
+Git**. Read it there rather than trusting a value copied into a doc, and don't
+change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
@@ -494,16 +503,18 @@ pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
-   runs on `push` to `main`: `npx cap sync ios` with
-   `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
-   `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
-   workflow also exposes `workflow_dispatch` for an on-demand build.
+   runs on `push` to `production`: `npx cap sync ios` with
+   `CAP_SERVER_URL=https://prop-lane.space`, then `bundle exec fastlane beta`
+   builds and uploads to **TestFlight**, and finally
+   `scripts/ios-testflight-distribute.mjs` assigns the build to the internal
+   tester group. The workflow also exposes `workflow_dispatch` for an on-demand
+   build.
 
 Agents promoting to production **must**:
 
 - Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
   macOS job does not self-skip.
-- After `git push origin main`, watch the **iOS TestFlight** workflow until green
+- After the promote push, watch the **iOS TestFlight** workflow until green
   (or report the failure). Do not treat “web deployed” as done.
 - If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
   permissions), call out that TestFlight + App Store review may be required
@@ -513,6 +524,55 @@ Agents promoting to production **must**:
 Portal UI/API changes reach the installed app via the production WebView URL
 without waiting for App Store review; the TestFlight build keeps the native
 shell (plugins, splash, push, deep links) in sync with the repo.
+
+### Uploading is not shipping — a build must be assigned to a tester group
+
+`upload_to_testflight` succeeding means nothing on its own. Builds 33-37 all
+uploaded "successfully" and sat in App Store Connect with an **empty Groups
+column**: no invites, no installs, green CI. `skip_waiting_for_build_processing`
+is why — pilot cannot assign a build to a tester group in the same call that
+skips the wait, because assignment requires Apple to have finished processing.
+
+So the lane uploads, and a separate workflow step
+(`scripts/ios-testflight-distribute.mjs`) does the part that makes it
+installable: bounded wait for `processingState = VALID`, assign to the internal
+group, then **re-read `betaGroups/<id>/builds` to prove the assignment stuck**
+and fail the run if it did not. Rules:
+
+- **The group name is matched exactly** (`Internal — PropLane team`, em dash) and
+  read from the API. No match, or a match that is an *external* group → hard
+  failure. Never fall back to "the first internal group"; never enable external
+  distribution (that would need App Review).
+- **Export compliance is declarative**: `ITSAppUsesNonExemptEncryption` in
+  `ios/App/App/Info.plist`. Without it a build is stuck on "Missing Compliance"
+  and stays un-installable no matter what the group column says. If a `cap sync`
+  ever drops that key, the distribute step fails on `MISSING_EXPORT_COMPLIANCE`.
+- **A green workflow is now real evidence** — that is the point of the extra
+  step. Backfill a stranded older build with
+  `node scripts/ios-testflight-distribute.mjs --build=<n>` (needs `ASC_KEY_ID` /
+  `ASC_ISSUER_ID` / `ASC_KEY_P8` or `ASC_KEY_P8_PATH`); add `--verify-only` to
+  report state without changing anything.
+
+### Two iOS app records — build numbers are NOT comparable across them
+
+| | Bundle id | App ID | State |
+| --- | --- | --- | --- |
+| **Canonical** | `space.proplane.app` | **6795707576** | the only record CI ships to |
+| Legacy | `com.axisseattlehousing.app` | shown as "PropLane Legacy" | dead, **still installable**, do not touch |
+
+The legacy record's build numbers are **higher** (49 vs 37), because it kept
+shipping before the rebrand. Comparing build numbers across the two records
+concludes backwards — an evening was lost testing legacy build 49, believing it
+was newer than the current app. The distribute script pins bundle id → app id and
+refuses to run against anything else, so a build can never land on the dead
+record by accident.
+
+Check which record a machine actually has installed:
+
+```
+/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
+  /Applications/PropLane.app/Wrapper/*.app/Info.plist
+```
 
 Full mobile model: [`docs/mobile-app.md`](docs/mobile-app.md).
 Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).

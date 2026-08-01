@@ -38,10 +38,26 @@ Per-surface pay methods come from `residentPaymentMethodsForSurface()` (`src/lib
 
 ## App identity (iOS rebranded to PropLane; Android deferred)
 
-The **iOS** bundle identifier is `space.proplane.app` (Team `8FH3GVHCZ9`) — rebranded
-from the legacy `com.axisseattlehousing.app`. The old App Store Connect record is
-abandoned deliberately (the app is TestFlight-only, never publicly launched), so there
-are no compatibility shims. The identity lives in `capacitor.config.ts` (`appId`),
+The **iOS** bundle identifier is `space.proplane.app` (Team `8FH3GVHCZ9`, App Store
+Connect **App ID 6795707576**) — rebranded from the legacy
+`com.axisseattlehousing.app`. The old App Store Connect record is abandoned
+deliberately (the app is TestFlight-only, never publicly launched), so there
+are no compatibility shims.
+
+⚠️ **The legacy record is still live and still installable, and its build numbers
+are HIGHER** (49 vs the canonical record's 37) because it kept shipping until the
+rebrand. It now displays as "PropLane Legacy". Build numbers across the two records
+are **not comparable** — a higher number on the legacy record is an *older*,
+orphaned app, and reading it as "newer" cost a full evening of testing the wrong
+binary. Never ship to or modify the legacy record. To see which one a device
+actually has installed:
+
+```
+/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
+  /Applications/PropLane.app/Wrapper/*.app/Info.plist
+```
+
+The identity lives in `capacitor.config.ts` (`appId`),
 `ios/App/App.xcodeproj/project.pbxproj` (`PRODUCT_BUNDLE_IDENTIFIER`, both configs),
 `ios/App/App/Info.plist` (the custom URL scheme), `ios/App/fastlane/{Appfile,Fastfile}`,
 `public/.well-known/apple-app-site-association` (`8FH3GVHCZ9.space.proplane.app`), and
@@ -247,8 +263,51 @@ GitHub Actions workflow
 [`.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml),
 which on every push to `production` (and on `workflow_dispatch`) runs `npm ci`,
 `npx cap sync ios` at the production `CAP_SERVER_URL`, the
-`scripts/verify-cap-prod-config.sh` Release guard, and `fastlane beta` to upload
-to TestFlight. It self-skips until the `ASC_*` secrets exist.
+`scripts/verify-cap-prod-config.sh` Release guard, `fastlane beta` to upload
+to TestFlight, and `scripts/ios-testflight-distribute.mjs` to make the build
+installable. It self-skips until the `ASC_*` secrets exist.
+
+#### The distribute step is what makes a build installable
+
+`fastlane beta` uses `skip_waiting_for_build_processing: true` so the macOS job
+isn't billed for Apple's processing queue. That option is mutually exclusive with
+tester-group assignment (pilot needs a processed build to assign one), which is
+how builds 33-37 shipped as green runs that no tester could install — uploaded,
+"Complete", **empty Groups column**, zero invites.
+
+`scripts/ios-testflight-distribute.mjs` closes it, talking to the App Store
+Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
+
+1. Resolve `space.proplane.app` → app id and **assert it is 6795707576**. Bundle
+   id → app id is pinned so a build can never land on the abandoned legacy record.
+2. Resolve the beta group by **exact name** (`Internal — PropLane team`, em dash,
+   override with `TESTFLIGHT_INTERNAL_GROUP`). No match → fail and print every
+   group that does exist. Matched an *external* group → fail; external testing
+   needs App Review and is never enabled here.
+3. Poll `builds?filter[version]=<n>` every 20s until `processingState = VALID`,
+   logging elapsed time and state each tick, bounded by
+   `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS` (default 1500). `FAILED`/`INVALID`
+   fails immediately.
+4. Assign the build to the group, then **re-read `betaGroups/<id>/builds`** and
+   fail unless the build is present. The exit code reflects a fresh API read, not
+   the POST's status code — a failed assignment can never look green.
+5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and fail
+   on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION`.
+
+The build number comes from the fastlane step's `build_number` output, not from
+"latest build", so a concurrent upload can't cause the wrong build to be
+distributed. Export compliance is answered declaratively by
+`ITSAppUsesNonExemptEncryption` in `ios/App/App/Info.plist` — a build missing that
+key stays un-installable regardless of group assignment, and step 5 catches it.
+
+Rerunning is safe and idempotent (already-assigned builds are detected and left
+alone). To backfill a stranded build or just inspect state:
+
+```
+export ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_P8_PATH=~/AuthKey_XXXX.p8
+node scripts/ios-testflight-distribute.mjs --build=37
+node scripts/ios-testflight-distribute.mjs --build=37 --verify-only   # read-only
+```
 
 Xcode Cloud was a redundant second pipeline that did the same thing. It failed
 continuously (builds 54–97) because Apple only runs `ci_scripts/ci_post_clone.sh`

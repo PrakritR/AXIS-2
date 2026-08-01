@@ -4,6 +4,11 @@ name: iOS TestFlight
 # branch — main is the dev branch), and on demand. The macOS job self-skips
 # until the App Store Connect API key secrets exist, so adding this file never
 # produces a red run.
+#
+# "Ship" means INSTALLABLE, not merely uploaded: the run is only green once the
+# build has been assigned to the internal tester group and that assignment has
+# been read back from the App Store Connect API. See the distribute step below
+# and docs/mobile-app.md.
 on:
   push:
     branches: [production]
@@ -31,7 +36,9 @@ jobs:
     # macos-26 → Xcode 26 / iOS 26 SDK, which Apple now requires for uploads.
     # Public repo → free macOS minutes.
     runs-on: macos-26
-    timeout-minutes: 45
+    # Build + upload runs ~4 min; the rest of the budget is the bounded wait for
+    # Apple's build processing before the build can be assigned to a group.
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +80,7 @@ jobs:
           working-directory: ios/App
 
       - name: Build + upload to TestFlight
+        id: upload
         working-directory: ios/App
         run: bundle exec fastlane beta
         env:
@@ -82,3 +90,17 @@ jobs:
           APPLE_DIST_P12_BASE64: ${{ secrets.APPLE_DIST_P12_BASE64 }}
           APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
           APPLE_PROFILE_BASE64: ${{ secrets.APPLE_PROFILE_BASE64 }}
+
+      # An uploaded build with an empty Groups column is not installable by
+      # anyone. This step is the real ship gate: it waits for Apple's processing,
+      # assigns the build to the internal group, and then re-reads the App Store
+      # Connect API to prove the assignment stuck. It fails the run otherwise, so
+      # a green "iOS TestFlight" now means a tester can actually install it.
+      - name: Distribute build to internal TestFlight group
+        timeout-minutes: 30
+        run: node scripts/ios-testflight-distribute.mjs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          TESTFLIGHT_BUILD_NUMBER: ${{ steps.upload.outputs.build_number }}
