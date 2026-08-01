@@ -344,11 +344,17 @@ export function ApplicationScreeningPanel({
     ],
   );
 
+  // Assigned in a LAYOUT effect, not during render: a render-phase ref write is unsafe under
+  // concurrent rendering. It has to be `useLayoutEffect` rather than `useEffect` because the
+  // consumer below is one too, and layout effects run in declaration order — a plain effect
+  // here would land after the consumer and feed it the previous render's values.
   const headerActionsRef = useRef(headerActions);
-  headerActionsRef.current = headerActions;
   const publishedHeaderActionsSignatureRef = useRef<string | null>(null);
   const onHeaderActionsChangeRef = useRef(onHeaderActionsChange);
-  onHeaderActionsChangeRef.current = onHeaderActionsChange;
+  useLayoutEffect(() => {
+    headerActionsRef.current = headerActions;
+    onHeaderActionsChangeRef.current = onHeaderActionsChange;
+  });
 
   useLayoutEffect(() => {
     const notify = onHeaderActionsChangeRef.current;

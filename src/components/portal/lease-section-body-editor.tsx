@@ -78,6 +78,10 @@ export function LeaseSectionBodyEditor({ sectionId, title, value, documentStyles
     if (mode !== "visual") return;
     const body = iframeRef.current?.contentDocument?.body;
     if (!body || body.innerHTML === value) return;
+    // The compiler cannot model writing into a same-origin iframe document. This is the
+    // whole point of a contentEditable editor: push the external value into the document
+    // only when it differs, which the guard above already ensures.
+    // eslint-disable-next-line react-hooks/immutability
     body.innerHTML = value;
     localValueRef.current = value;
   }, [mode, sectionId, value]);

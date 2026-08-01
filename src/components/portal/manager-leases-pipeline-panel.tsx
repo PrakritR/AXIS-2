@@ -429,6 +429,9 @@ export function ManagerLeasesPipelinePanel({
     const uploadLabel = pendingRowId === row.id ? "Uploading…" : hasDocument ? "Upload" : "Upload PDF";
 
     const triggerUpload = () => {
+      // Not a render-phase write: triggerUpload is only ever passed as onClick/onSelect.
+      // The compiler flags it because the closure is created during render.
+      // eslint-disable-next-line react-hooks/refs
       uploadTargetRowIdRef.current = row.id;
       uploadRef.current?.click();
     };

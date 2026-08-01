@@ -310,7 +310,6 @@ function ManagerPropertyInlineDetails({
     [listingId, propertyShareLabel],
   );
 
-  if (!row || !mock || !managerSubmission) return null;
 
   const actionBtnClass = "rounded-full";
   const sectionHeaderBtn = PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS;
@@ -535,6 +534,7 @@ function ManagerPropertyInlineDetails({
               onClick={(e) => {
                 e.stopPropagation();
                 deferCatalogMutation(() => {
+                  if (!row) return;
                   const id = listAdminRow(row, managerUserId);
                   if (!id) {
                     showToast("Could not relist.");
@@ -620,7 +620,7 @@ function ManagerPropertyInlineDetails({
       sectionHeaderBtn,
       dangerBtnClass,
       onSendToProspect,
-      row.adminRefId,
+      row?.adminRefId,
       managerUserId,
       showToast,
       onUpdated,
@@ -668,13 +668,15 @@ function ManagerPropertyInlineDetails({
           propCountBeforeSubmit: propCount,
           initialSubmission: managerSubmission,
           noteKey,
-          editDraftId: row.adminRefId,
-          initialStepIndex: row.draftStepIndex ?? null,
-          initialMaxStepReached: row.draftMaxStepReached ?? null,
+          editDraftId: row?.adminRefId,
+          initialStepIndex: row?.draftStepIndex ?? null,
+          initialMaxStepReached: row?.draftMaxStepReached ?? null,
         }
       : null;
 
-  const propertyRouteKey = stablePropertyId || row.adminRefId;
+  // Falls back to "" only in the render that returns null below (no row), where it is
+  // never read. Keeps the type a plain string for every href builder downstream.
+  const propertyRouteKey = stablePropertyId || row?.adminRefId || "";
   const availableTabs: PropertyDetailTabId[] =
     bucket === 3 || bucket === 5
       ? ["preview"]
@@ -722,16 +724,24 @@ function ManagerPropertyInlineDetails({
   const showDetailSectionNav =
     activeTopNavId === "details" && detailSectionTabs.length > 1;
 
+  // These refs exist so the effect below can read the CURRENT header nodes without listing
+  // them as dependencies (they are fresh JSX every render, so it would re-fire constantly).
+  // They are assigned in an effect rather than during render: a render-phase ref write is
+  // unsafe under concurrent rendering, where a render can be thrown away or replayed. Effects
+  // run in declaration order, so this one lands before the consumer below and the refs always
+  // hold the committed render's values by the time it reads them.
   const previewHeaderActionsRef = useRef(previewHeaderActions);
-  previewHeaderActionsRef.current = previewHeaderActions;
   const applicationHeaderExtraRef = useRef(applicationHeaderExtra);
-  applicationHeaderExtraRef.current = applicationHeaderExtra;
   const leaseHeaderExtraRef = useRef(leaseHeaderExtra);
-  leaseHeaderExtraRef.current = leaseHeaderExtra;
   const tourHeaderExtraRef = useRef(tourHeaderExtra);
-  tourHeaderExtraRef.current = tourHeaderExtra;
   const promotionHeaderExtraRef = useRef(promotionHeaderExtra);
-  promotionHeaderExtraRef.current = promotionHeaderExtra;
+  useEffect(() => {
+    previewHeaderActionsRef.current = previewHeaderActions;
+    applicationHeaderExtraRef.current = applicationHeaderExtra;
+    leaseHeaderExtraRef.current = leaseHeaderExtra;
+    tourHeaderExtraRef.current = tourHeaderExtra;
+    promotionHeaderExtraRef.current = promotionHeaderExtra;
+  });
 
   const detailHeaderKey = useMemo(() => {
     if (activeDetailTab === "preview" && previewHasToolbar) {
@@ -783,6 +793,12 @@ function ManagerPropertyInlineDetails({
     if (!onDetailHeaderActions) return;
     return () => onDetailHeaderActions("none", null);
   }, [onDetailHeaderActions]);
+
+  // Every hook above runs unconditionally. This guard used to sit ~470 lines earlier, so a
+  // row/mock/submission flipping between renders changed the hook COUNT, which is the
+  // rules-of-hooks violation React throws "rendered more hooks than during the previous
+  // render" on. It gates rendering only.
+  if (!row || !mock || !managerSubmission) return null;
 
   return (
     <div className="space-y-0">

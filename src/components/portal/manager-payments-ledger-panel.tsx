@@ -1021,11 +1021,17 @@ export function ManagerPaymentsLedgerPanel({
       </>
     ) : null;
 
+  // Assigned in a LAYOUT effect, not during render: a render-phase ref write is unsafe under
+  // concurrent rendering. It has to be `useLayoutEffect` rather than `useEffect` because the
+  // consumer below is one too, and layout effects run in declaration order — a plain effect
+  // here would land after the consumer and feed it the previous render's values.
   const bulkSelectionActionsRef = useRef<ReactNode>(null);
-  bulkSelectionActionsRef.current = bulkSelectionActions;
   const publishedBulkSignatureRef = useRef<string | null>(null);
   const onEmbeddedBulkActionsRef = useRef(onEmbeddedBulkActions);
-  onEmbeddedBulkActionsRef.current = onEmbeddedBulkActions;
+  useLayoutEffect(() => {
+    bulkSelectionActionsRef.current = bulkSelectionActions;
+    onEmbeddedBulkActionsRef.current = onEmbeddedBulkActions;
+  });
 
   useLayoutEffect(() => {
     const notify = onEmbeddedBulkActionsRef.current;

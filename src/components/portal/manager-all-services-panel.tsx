@@ -486,6 +486,29 @@ export function ManagerAllServicesPanel({
     <PortalPageHeaderMobileActionsRow filter={servicesFilterSheet} actions={servicesAddButton} />
   );
 
+  // Hoisted above the early returns below. It sat after them, so on a render that took an
+  // early return this hook did not run and the hook COUNT changed between renders, which
+  // is the rules-of-hooks violation. Its deps are all resolved by this point.
+  const bucketDestinations = useMemo(() => {
+    if (typeFilter === "work-orders") {
+      return woTabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${basePath}/services/work-orders/${t.id}`,
+        count: t.count,
+      }));
+    }
+    if (typeFilter === "requests") {
+      return reqTabs.map((t) => ({
+        id: t.id,
+        label: t.label,
+        href: `${basePath}/services/requests/${t.id}`,
+        count: t.count,
+      }));
+    }
+    return undefined;
+  }, [typeFilter, woTabs, reqTabs, basePath]);
+
   if (serviceRequestIdProp && detailRequest) {
     return (
       <>
@@ -548,25 +571,6 @@ export function ManagerAllServicesPanel({
     );
   }
 
-  const bucketDestinations = useMemo(() => {
-    if (typeFilter === "work-orders") {
-      return woTabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${basePath}/services/work-orders/${t.id}`,
-        count: t.count,
-      }));
-    }
-    if (typeFilter === "requests") {
-      return reqTabs.map((t) => ({
-        id: t.id,
-        label: t.label,
-        href: `${basePath}/services/requests/${t.id}`,
-        count: t.count,
-      }));
-    }
-    return undefined;
-  }, [typeFilter, woTabs, reqTabs, basePath]);
 
   const activeBucketId =
     typeFilter === "work-orders" ? woBucket : typeFilter === "requests" ? reqBucket : undefined;
