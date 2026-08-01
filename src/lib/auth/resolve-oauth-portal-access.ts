@@ -2,6 +2,7 @@ import type { AuthRole } from "@/components/auth/portal-switcher";
 import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { PASSWORD_RESET_NEXT_PATH } from "@/lib/auth/password-reset-url";
 import { normalizePortalRoles } from "@/lib/auth/portal-access";
 import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import {
@@ -31,6 +32,10 @@ function isAuthRole(value: string): value is AuthRole {
 
 function isBypassOAuthGatePath(path: string): boolean {
   return (
+    // A recovery session must land on the reset form, whatever role the account has.
+    // Routing it through the portal gate sent residents to /resident/… and role-less
+    // accounts to Get started, so the user was signed in but never shown the form.
+    path === PASSWORD_RESET_NEXT_PATH ||
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
     path.startsWith("/auth/vendor-") ||

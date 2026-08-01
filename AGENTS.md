@@ -754,6 +754,50 @@ Schedule tab bar. Manager + resident use the chat two-pane
   `tests/unit/inbox-thread-omnichannel.test.tsx`,
   `tests/unit/sms-comm-ui-flag.test.ts`.
 
+# Emailed auth links are `token_hash`, never a PKCE `code`
+
+The browser client is `@supabase/ssr`, which is **PKCE-only**. A PKCE `code` can be
+exchanged only by the browser that started the flow, because the `code_verifier` lives
+in that browser's storage. So any link that is *emailed* — and therefore opened
+wherever the person reads mail, usually a different browser or device — must carry a
+`token_hash` and be verified with `verifyOtp`, which is not bound to any storage.
+
+Get the shape wrong and the failure is invisible rather than loud: a link of the form
+`/auth/callback?next=%2Fauth%2Freset-password&code=…` fails every cross-browser click
+with `PKCE code verifier not found in storage`, on a page whose error copy is about
+something else entirely.
+
+The rules that follow from it:
+
+- **PropLane mints and mails these links itself.** `POST /api/auth/password-reset` uses
+  service-role `admin.generateLink({ type: "recovery" })` and mails
+  `passwordResetConfirmUrl` (`/auth/confirm?token_hash=…&type=recovery`) through Resend.
+  `requestPasswordReset` is the one client entry point; never call
+  `supabase.auth.resetPasswordForEmail` from a component again. Same pattern as
+  self-serve vendor signup (`/api/auth/vendor-register`).
+- **`/auth/confirm` derives its destination from `type` alone**, never a `next` param,
+  so an emailed link can't be rewritten into a redirect somewhere else.
+- **The route answers `{ok:true}` for unknown addresses, for throttled requests, and for
+  a failed send**, so it is not an account-existence oracle, and the token is never
+  written to a log — it is a live credential until it is used. The one distinguishable
+  reply is the `503` for an unconfigured mailer, which is a deployment fact rather than a
+  per-address signal.
+- **`RESEND_API_KEY` is now load-bearing for password reset.** Recovery mail used to go
+  through Supabase's own mailer, so reset worked on a deployment with no email provider
+  configured; it no longer does — without that key the route answers `503` and reset is
+  dead. Confirm it is set before pointing a new environment at this flow. (`.env.example`
+  still describes the old, optional-mailer world; env files are unreadable to agent
+  sessions here, so it needs a human pass.)
+- **`/auth/callback` is OAuth-shaped end to end** — on failure it renders a *Google
+  sign-in* error, and on success `resolveOAuthPortalRedirect` reroutes by role. Any
+  non-OAuth destination sent through it inherits both. `/auth/reset-password` is in
+  `isBypassOAuthGatePath` for that reason, and the callback fails reset targets onto the
+  reset page; both exist only for legacy links minted before `/auth/confirm` took over
+  recovery, and are safe to drop once none can still be in an inbox.
+- Coverage: `tests/unit/password-reset-url.test.ts`,
+  `password-reset-request-route.test.ts`, `password-reset-confirm-page.test.tsx`,
+  `password-reset-legacy-callback.test.ts`.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.

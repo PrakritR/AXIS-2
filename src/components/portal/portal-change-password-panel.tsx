@@ -9,7 +9,7 @@ import {
   PortalSettingsSection,
 } from "@/components/portal/portal-settings-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { passwordResetCallbackUrl, resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
+import { requestPasswordReset } from "@/lib/auth/request-password-reset";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: string }) {
@@ -79,16 +79,12 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
     }
     setResetBusy(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const redirectTo = passwordResetCallbackUrl(resolveBrowserAppOrigin());
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-      if (error) {
-        showToast(error.message || "Could not send reset link.");
+      const result = await requestPasswordReset(email);
+      if (!result.ok) {
+        showToast(result.message);
         return;
       }
       showToast(`Reset link sent to ${email}. Check your inbox.`);
-    } catch {
-      showToast("Could not send reset link.");
     } finally {
       setResetBusy(false);
     }

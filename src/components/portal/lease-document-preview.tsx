@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { getLeaseDocumentHtml, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { injectLeasePreviewSectionMarkers } from "@/lib/lease-html-sections";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
@@ -117,9 +118,13 @@ export function LeaseDocumentPreview({
               Signature certificate page appended to this PDF.
             </p>
           ) : null}
-          <div className={flexibleHeight ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
-            <iframe title="Lease PDF preview" src={pdfSrc} scrolling={frameScroll} className={frameClass} />
-          </div>
+          <UploadedLeasePdfPreview
+            dataUrl={pdfSrc}
+            title="Lease PDF preview"
+            fileName={row.managerUploadedPdf?.fileName}
+            embeddedInFlex={flexibleHeight}
+            className={flexibleHeight ? "flex min-h-0 flex-1 flex-col" : undefined}
+          />
         </div>
       ) : previewHtml ? (
         <div className={flexibleHeight ? "relative flex min-h-0 flex-1 flex-col" : undefined}>

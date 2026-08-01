@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { PASSWORD_RESET_NEXT_PATH } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import Link from "next/link";
@@ -14,19 +15,32 @@ function parseEmailOtpType(raw: string | null): EmailOtpType | null {
 }
 
 /**
+ * Where a verified token lands. Derived from `type` alone — deliberately NOT from a
+ * `next` query param, so an emailed confirm link can never be rewritten into a
+ * redirect somewhere else.
+ */
+function destinationForType(type: EmailOtpType): string {
+  return type === "recovery" ? PASSWORD_RESET_NEXT_PATH : "/auth/continue";
+}
+
+/**
  * Exchanges an emailed confirmation token for a session via `verifyOtp` — this app's
  * browser client is PKCE-only, so it can't pick up Supabase's hosted verify redirect
  * (which appends session tokens as an implicit-flow URL hash). Works regardless of flow type.
+ *
+ * A `token_hash` is also NOT bound to the browser that requested it, unlike a PKCE
+ * `code`, so a link mailed to a phone opens fine on a laptop. That is why password
+ * recovery routes here rather than through `/auth/callback` (see `password-reset-url.ts`).
  */
 function ConfirmContent() {
   const searchParams = useSearchParams();
-  const [errorText, setErrorText] = useState<string | null>(null);
+  const [failedType, setFailedType] = useState<EmailOtpType | "unknown" | null>(null);
 
   useEffect(() => {
     const tokenHash = searchParams.get("token_hash");
     const type = parseEmailOtpType(searchParams.get("type"));
     if (!tokenHash || !type) {
-      setErrorText("This confirmation link is invalid or has expired.");
+      setFailedType(type ?? "unknown");
       return;
     }
     let cancelled = false;
@@ -35,26 +49,33 @@ function ConfirmContent() {
       const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
       if (cancelled) return;
       if (error) {
-        setErrorText("This confirmation link is invalid or has expired.");
+        setFailedType(type);
         return;
       }
-      window.location.replace("/auth/continue");
+      window.location.replace(destinationForType(type));
     })();
     return () => {
       cancelled = true;
     };
   }, [searchParams]);
 
-  if (errorText) {
+  if (failedType) {
+    const isRecovery = failedType === "recovery";
     return (
       <AuthCard>
-        <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Link invalid</h1>
-        <p className="mt-2 text-center text-sm text-muted">{errorText}</p>
+        <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">
+          {isRecovery ? "This reset link no longer works" : "Link invalid"}
+        </h1>
+        <p className="mt-2 text-center text-sm text-muted">
+          {isRecovery
+            ? "Password reset links expire after about an hour and can only be used once. Request a new one — it will work on any device."
+            : "This confirmation link is invalid or has expired."}
+        </p>
         <Link
           className="mt-8 flex w-full justify-center text-sm font-semibold text-primary hover:opacity-90"
-          href="/auth/sign-in"
+          href={isRecovery ? "/auth/forgot-password" : "/auth/sign-in"}
         >
-          ← Back to sign in
+          {isRecovery ? "Request a new reset link →" : "← Back to sign in"}
         </Link>
       </AuthCard>
     );

@@ -2,6 +2,7 @@ import { resolveRequestOrigin } from "@/lib/app-url";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthNextPathFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
+import { PASSWORD_RESET_NEXT_PATH } from "@/lib/auth/password-reset-url";
 import { maybeLinkGoogleCalendarFromOAuthSession, shouldRedirectToGoogleCalendarConnect, signedInWithGoogle } from "@/lib/google-calendar/link-from-auth.server";
 import { buildGoogleCalendarConnectPath } from "@/lib/google-calendar/link-after-manager-provision.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
@@ -32,6 +33,20 @@ function authFailureRedirect(requestOrigin: string, reason: string): NextRespons
   return NextResponse.redirect(new URL(`/auth/sign-in?${params.toString()}`, requestOrigin));
 }
 
+/**
+ * Password-reset links minted before the `/auth/confirm` flow shipped still land here
+ * carrying a PKCE `code`, and that code can only be exchanged in the browser that
+ * requested the reset. Failing those into the sign-in page's OAuth error banner told
+ * the user their *Google sign-in* broke. Send them to the reset page instead, which
+ * explains the expired link and offers a new one.
+ */
+function callbackFailureRedirect(requestOrigin: string, reason: string, targetPath: string): NextResponse {
+  if (targetPath === PASSWORD_RESET_NEXT_PATH) {
+    return NextResponse.redirect(new URL(PASSWORD_RESET_NEXT_PATH, requestOrigin));
+  }
+  return authFailureRedirect(requestOrigin, reason);
+}
+
 /** Exchange Supabase OAuth code for a session, then redirect to a same-origin path. */
 export async function handleOAuthCallback(
   request: NextRequest,
@@ -53,19 +68,23 @@ export async function handleOAuthCallback(
   const code = requestUrl.searchParams.get("code");
   const oauthError = requestUrl.searchParams.get("error");
   const oauthDescription = requestUrl.searchParams.get("error_description");
+  const safePath = redirectPath.startsWith("/") ? redirectPath : "/auth/continue";
 
   if (oauthError) {
     const message =
       oauthDescription?.replace(/\+/g, " ").trim() ||
       "Google sign-in could not be completed. Try again or use email and password.";
-    return authFailureRedirect(requestOrigin, message);
+    return callbackFailureRedirect(requestOrigin, message, safePath);
   }
 
   if (!code) {
-    return authFailureRedirect(requestOrigin, "Google sign-in did not return an authorization code.");
+    return callbackFailureRedirect(
+      requestOrigin,
+      "Google sign-in did not return an authorization code.",
+      safePath,
+    );
   }
 
-  const safePath = redirectPath.startsWith("/") ? redirectPath : "/auth/continue";
   const redirectTarget = new URL(safePath, requestOrigin);
   const pendingCookies: PendingCookie[] = [];
   let response = NextResponse.redirect(redirectTarget);
@@ -94,9 +113,10 @@ export async function handleOAuthCallback(
   const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     console.error("OAuth callback exchange failed:", error.message);
-    return authFailureRedirect(
+    return callbackFailureRedirect(
       requestOrigin,
       error.message || "Google sign-in session could not be established.",
+      safePath,
     );
   }
 
