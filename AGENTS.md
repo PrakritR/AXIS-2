@@ -798,6 +798,31 @@ The rules that follow from it:
   `password-reset-request-route.test.ts`, `password-reset-confirm-page.test.tsx`,
   `password-reset-legacy-callback.test.ts`.
 
+## "Does this account have a password?" — `identities` is NOT the answer
+
+A Google/Apple-only account has no password, so the portal's Login & security panel asks
+it to **Set password** with no Current password field. Deciding that from the provider
+list is wrong, and the wrong answer is invisible in testing:
+
+- The GoTrue **admin API returns no password field at all** (`id, aud, role, email,
+  email_confirmed_at, …, identities` and nothing more), so the server cannot read it there.
+- **`identities` / `app_metadata.providers` say which providers are LINKED, never whether
+  a password exists.** A passwordless account can carry an `email` identity — verified
+  against the dev project, where an admin-created user shows `provider: "email"` either way.
+
+The only authoritative signal is `auth.users.encrypted_password`, which PostgREST does not
+expose. Read it through `current_user_has_password()`
+(`…_current_user_has_password.sql`) — `SECURITY DEFINER`, keyed on `auth.uid()` so it can
+only ever answer for the caller, returning one boolean, with no `anon` grant.
+`fetchCurrentUserHasPassword` wraps it and **fails closed to `true`**, the state that still
+demands the current-password confirmation.
+
+Note what the current-password field is and isn't: `updateUser({ password })` succeeds for
+any authenticated session (`secure_password_change = false`), so that field is a UX
+confirmation, not a server-enforced gate — it always was. Hiding it for an account that
+has no password removes nothing the server was enforcing. Coverage:
+`tests/unit/portal-set-password-panel.test.tsx`.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.
