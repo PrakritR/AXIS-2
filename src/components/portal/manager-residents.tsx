@@ -1596,7 +1596,7 @@ export function ManagerResidents({
             leaseEnd: erMoveOutDate || existing.application.leaseEnd,
             managerRentOverride: erRent.trim() || existing.application.managerRentOverride,
             managerUtilitiesOverride: erSavingShortTerm
-              ? undefined
+              ? ""
               : erUtilities.trim() || existing.application.managerUtilitiesOverride,
             managerMoveInFeeOverride: erMoveInFee.trim() || existing.application.managerMoveInFeeOverride,
             managerSecurityDepositOverride: erSecurityDeposit.trim() || existing.application.managerSecurityDepositOverride,
