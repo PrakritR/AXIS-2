@@ -21,7 +21,11 @@ export const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 /** Height reserved for the in-menu search row (input + padding). */
 export const FIELD_SELECT_MENU_SEARCH_PX = 52;
 
-/** Max height of the scrollable option list: exactly 5 rows. */
+/**
+ * Height of exactly 5 option rows. The cap is applied to the portaled SHELL (via
+ * {@link fieldSelectMenuContentPx} → `menuRect.maxHeight`), not to the list itself,
+ * so a short list keeps the menu sized to its real content.
+ */
 export const FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX =
   FIELD_SELECT_MENU_VISIBLE_ITEMS * FIELD_SELECT_MENU_ITEM_HEIGHT_PX;
 

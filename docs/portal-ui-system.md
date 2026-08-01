@@ -164,10 +164,16 @@ or resize the panel.
   single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
   / `FieldSingleSelect` (`checkbox-multi-select.tsx`) are the same pattern for
   form/toolbar/scope pickers — prefer them over a bare `<select>`.
-- **5 rows, then scroll:** the option list caps at `FILTER_LIST_VISIBLE_ROWS`
-  (= `FIELD_SELECT_MENU_VISIBLE_ITEMS`, the single source of the "5"). A search
-  box appears only when a field has MORE than 5 options and never drops an
-  already-selected option. Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
+- **5 rows, then scroll:** the cap lives on the portaled SHELL — its `maxHeight`
+  is `fieldSelectMenuContentPx(FIELD_SELECT_MENU_VISIBLE_ITEMS, …)`, and
+  `FIELD_SELECT_MENU_VISIBLE_ITEMS` (aliased as `FILTER_LIST_VISIBLE_ROWS`) stays
+  the single source of the "5" — and the option list is a shrinkable flex child
+  (`FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS`, which also carries the touch-scroll
+  affordances) that scrolls under it. The menu otherwise sizes to its real content, so a short or
+  filtered list leaves no empty space below it; never give the listbox a fixed
+  height or `flex-1`, both of which break that. A search box appears only when a
+  field has MORE than 5 options and never drops an already-selected option.
+  Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
 
 ## Modals scroll in ONE place
 

@@ -91,8 +91,10 @@ export function filterSingleSelectSummary(value: string, options: Option[], allL
  * Filter field trigger + portaled overlay menu. Closed by default (single-line
  * summary + chevron); opening portals the option list over the trigger so the
  * fields below keep their exact position and the panel keeps its exact height.
- * The child list (`FilterCheckboxList` / `FilterSingleSelectList`) caps itself at
- * 5 rows and supplies its own search box when there are more than 5 options.
+ * The shell caps at {@link FILTER_MENU_CONTENT_PX} (search row + 5 option rows) and
+ * otherwise sizes to its content; the child list (`FilterCheckboxList` /
+ * `FilterSingleSelectList`) scrolls under that cap and supplies its own search box
+ * when there are more than 5 options.
  */
 export function FilterCollapsibleSection({
   label,
