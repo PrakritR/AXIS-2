@@ -1001,11 +1001,25 @@ export async function renderPortalSection(
     // RESIDENT_FREE_TIER_SECTION_ID. Relocating that content under Documents
     // must not take it away from a resident whose manager is on Free — it is
     // the destination of the post-approval `/resident/applications` redirect.
+    //
+    // The exemption is the TAB, not the section: every other Documents tab
+    // still gates here, and `applicationOnly` strips the chrome that would
+    // otherwise lead a free-tier resident nowhere (tab links into the upgrade
+    // notice, and an Add button whose success handler navigates to
+    // `documents/other` — stranding the file they just uploaded).
+    const documentsFreeTier = !residentSectionAllowedForManagerTier("documents", residentManagerTier);
     if (docTab !== "application") {
       const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
       if (tierGate) return tierGate;
     }
-    return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
+    return (
+      <ResidentDocumentsPanel
+        tabId={docTab}
+        basePath={def.basePath}
+        tabs={meta.tabs}
+        applicationOnly={documentsFreeTier}
+      />
+    );
   }
 
   if (kind === "resident" && section === "lease") {
