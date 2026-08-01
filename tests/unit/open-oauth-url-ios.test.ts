@@ -197,6 +197,37 @@ describe("openOAuthUrl on iOS", () => {
     expect(isNativeOAuthInProgress()).toBe(false);
   });
 
+  it("treats NO_ANCHOR as a pre-flight failure — thrown, not navigated", async () => {
+    // The plugin found no window to anchor the sheet to, so nothing was presented. Navigating
+    // to /auth/sign-in?error=oauth&message=… would reload the WebView for nothing AND show the
+    // plugin's developer string; the caller renders user-facing copy in place instead.
+    stubIosNativeShell();
+    authenticateMock.mockRejectedValue({
+      code: "NO_ANCHOR",
+      message: "No app window is available to present sign-in",
+    });
+
+    const {
+      openOAuthUrl,
+      isNativeOAuthInProgress,
+      NativeOAuthUnavailableError,
+      NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+    } = await import("@/lib/native/open-url");
+
+    await expect(
+      openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test"),
+    ).rejects.toBeInstanceOf(NativeOAuthUnavailableError);
+
+    expect(NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE).not.toContain("No app window is available");
+    await expect(
+      openOAuthUrl("https://accounts.google.com/o/oauth2/auth?client_id=test"),
+    ).rejects.toThrow(NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE);
+
+    expect(window.location.href).toBe("");
+    expect(window.location.replace).not.toHaveBeenCalled();
+    expect(isNativeOAuthInProgress()).toBe(false);
+  });
+
   it("clears in-progress state when the user cancels the auth sheet", async () => {
     stubIosNativeShell();
     authenticateMock.mockRejectedValue({ code: "CANCELED", message: "User canceled" });

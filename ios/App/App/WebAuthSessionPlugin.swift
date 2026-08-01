@@ -25,7 +25,7 @@ public class WebAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.main.async {
             guard let anchor = self.presentationAnchorWindow() else {
-                call.reject("No app window is available to present sign-in")
+                call.reject("No app window is available to present sign-in", "NO_ANCHOR")
                 return
             }
             let context = WebAuthPresentationContext(anchor: anchor)

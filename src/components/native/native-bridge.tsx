@@ -6,7 +6,7 @@ import { loadPublicExtraListingsFromServer } from "@/lib/demo-property-pipeline"
 import { detectNativePlatformSync, tagHtmlNativePlatform } from "@/lib/native/detect-native";
 import { installNativeZoomLock } from "@/lib/native/disable-native-zoom";
 import { handleNativeOAuthReturnUrl, isNativeOAuthInProgress } from "@/lib/native/open-url";
-import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
+import { nativeOAuthMarketingSiteMessage } from "@/lib/auth/oauth-failure-messages";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getNativeInfo, registerPushIfGranted, resendCachedToken } from "@/lib/native/push-client";
 import { useEffect } from "react";
@@ -33,9 +33,7 @@ async function recoverFromMarketingDuringOAuth(): Promise<void> {
   }
 
   window.location.replace(
-    `/auth/sign-in?error=oauth&message=${encodeURIComponent(
-      `Google sign-in opened the marketing site instead of the portal. ${nativeOAuthSetupHint()}`,
-    )}`,
+    `/auth/sign-in?error=oauth&message=${encodeURIComponent(nativeOAuthMarketingSiteMessage())}`,
   );
 }
 
