@@ -12,7 +12,6 @@ import {
 } from "@/lib/manager-listing-submission";
 import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
-import { formatListingFeeDisplay } from "@/lib/rental-application/listing-fees-display";
 import { resolvePropertyLeaseSource, type PropertyLeaseSource } from "@/lib/property-lease-source";
 
 export type PropertyLeasePreviewHint = {
@@ -275,7 +274,7 @@ export function buildPropertyLeasePreview(
 
   if (!supported) {
     const plainText =
-      "PropLane default lease applies at placement. Full preview is available for Seattle and San Francisco properties, or upload a custom PDF for other locations.";
+      "PropLane default lease applies at placement. Full preview is available for California and Washington properties, or upload a custom PDF for other locations.";
     return {
       source,
       html: null,

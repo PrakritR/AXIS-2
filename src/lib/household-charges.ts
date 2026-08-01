@@ -4,7 +4,7 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import {
@@ -13,9 +13,11 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
+  type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
 import { listingPresetFeeAmount } from "@/lib/listing-fees";
-import { formatRoomPriceAmount, roomDailyRentPrice } from "@/lib/room-pricing";
+import { formatRoomPriceAmount, resolveStayPricing, roomDailyRentPrice } from "@/lib/room-pricing";
+import { resolveSubmissionRoom } from "@/lib/listing-room-resolution";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
@@ -32,7 +34,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { generatePaymentReference } from "@/lib/payment-reference";
 import {
-  shortTermNightlyRate,
+  intraMonthStaySpan,
   shortTermStayChargeTitle,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
@@ -1136,28 +1138,6 @@ function leaseEndProration(leaseEnd: string | undefined): LeaseBoundaryProration
 }
 
 /**
- * Billable span of a lease that both starts AND ends inside one calendar month, or
- * null when it does not (or when it covers the whole month, which needs no proration).
- * Such a lease is a SINGLE billing span: the first-month charge covers all of it, so
- * the caller must skip the last-month charge or the same days get billed twice.
- */
-function intraMonthLeaseSpan(
-  leaseStart: string | undefined,
-  leaseEnd: string | undefined,
-): { billableDays: number; daysInMonth: number } | null {
-  if (!leaseStart?.trim() || !leaseEnd?.trim()) return null;
-  const [startYear, startMonth, startDay] = leaseStart.split("-").map(Number);
-  const [endYear, endMonth, endDay] = leaseEnd.split("-").map(Number);
-  if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) return null;
-  if (startYear !== endYear || startMonth !== endMonth) return null;
-  const daysInMonth = new Date(startYear, startMonth, 0).getDate();
-  if (!Number.isFinite(daysInMonth) || daysInMonth <= 0) return null;
-  const billableDays = Math.min(daysInMonth, endDay) - startDay + 1;
-  if (billableDays <= 0 || billableDays >= daysInMonth) return null;
-  return { billableDays, daysInMonth };
-}
-
-/**
  * Proration for the FIRST billed period. Normally that is the partial month from the
  * lease start; for a lease that also ends in the same month it is the whole lease term.
  *
@@ -1170,7 +1150,7 @@ function leaseFirstPeriodProration(
   leaseEnd: string | undefined,
   collapseIntraMonth: boolean,
 ): ReturnType<typeof leaseStartProration> {
-  const span = collapseIntraMonth ? intraMonthLeaseSpan(leaseStart, leaseEnd) : null;
+  const span = collapseIntraMonth ? intraMonthStaySpan(leaseStart, leaseEnd) : null;
   if (!span) return leaseStartProration(leaseStart);
   return {
     prorated: true,
@@ -1273,22 +1253,41 @@ function lastMonthChargeForLeaseEnd(
   };
 }
 
-function findRoomInSub(
+/**
+ * The row's listing submission and its resolved room, both derived ONCE through the shared
+ * chain in `listing-room-resolution.ts` that the lease document also uses.
+ *
+ * Every rent/utilities/deposit figure on this side must come from the SAME room the document
+ * priced, so this is the only place the ledger is allowed to pick one. Resolving it per
+ * call site is what let a single approval bill off one room while its lease quoted another.
+ */
+function resolveRowSubmissionRoom(
+  row: Pick<
+    DemoApplicantRow,
+    "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "signedMonthlyRent"
+  >,
+): { sub: ReturnType<typeof normalizeManagerListingSubmissionV1> | null; room: ManagerRoomSubmission | null } {
+  const propertyId =
+    row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const prop = getPropertyById(propertyId);
+  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  if (!sub) return { sub: null, room: null };
+  return { sub, room: roomForRow(sub, row, prop?.unitLabel) };
+}
+
+/** Shared room lookup for a row. Every caller must pass the same inputs (see the module doc). */
+function roomForRow(
   sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
-  choice: string,
-  signedRent?: number | null,
-) {
-  const { listingRoomId } = parseRoomChoiceValue(choice);
-  if (listingRoomId) {
-    const byId = sub.rooms.find((r) => r.id === listingRoomId);
-    if (byId) return byId;
-  }
-  if (signedRent && signedRent > 0) {
-    const byRent = sub.rooms.filter((r) => r.monthlyRent === signedRent);
-    if (byRent.length === 1) return byRent[0]!;
-  }
-  if (sub.rooms.length === 1) return sub.rooms[0]!;
-  return null;
+  row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "manualResidentDetails" | "signedMonthlyRent">,
+  unitLabel: string | null | undefined,
+): ManagerRoomSubmission | null {
+  return (
+    resolveSubmissionRoom(sub, {
+      roomChoices: [row.assignedRoomChoice, row.application?.roomChoice1],
+      unitLabel: unitLabel ?? row.manualResidentDetails?.roomNumber,
+      signedMonthlyRent: row.signedMonthlyRent,
+    }) ?? null
+  );
 }
 
 function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" | "application" | "propertyId" | "assignedPropertyId" | "manualResidentDetails" | "manuallyAdded" | "signedMonthlyRent">): {
@@ -1300,11 +1299,9 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
   const manualUtils = row.manualResidentDetails?.monthlyUtilities;
   if (manualUtils != null && manualUtils > 0) return { raw: String(manualUtils), amount: manualUtils };
   if (row.manuallyAdded) return { raw: "", amount: 0 };
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  const { sub, room } = resolveRowSubmissionRoom(row);
   if (!sub) return { raw: "", amount: 0 };
+  // A bundle prices the whole group, so its total outranks any single room's estimate.
   const bundleId = bundleIdForApplication(row.application);
   if (bundleId) {
     const totals = resolveBundleFinancialTotals(sub, bundleId);
@@ -1312,30 +1309,13 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
       return { raw: String(totals.monthlyUtilities), amount: totals.monthlyUtilities };
     }
   }
-  // Try both assignedRoomChoice and roomChoice1 for ID lookup before falling back
-  let room = null;
-  for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-    const t = c?.trim();
-    if (!t) continue;
-    const { listingRoomId } = parseRoomChoiceValue(t);
-    if (listingRoomId) {
-      const byId = sub.rooms.find((r) => r.id === listingRoomId);
-      if (byId) { room = byId; break; }
-    }
-  }
-  if (!room) room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   const amount = utilitiesBillableMonthlyAmount(sub, room);
   const raw = amount > 0 ? String(amount) : room?.utilitiesEstimate?.trim() || "";
   return { raw, amount };
 }
 
 function selectedRoom(row: DemoApplicantRow) {
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
-  if (!sub) return null;
-  return findRoomInSub(sub, choice, row.signedMonthlyRent);
+  return resolveRowSubmissionRoom(row).room;
 }
 
 /**
@@ -1357,35 +1337,13 @@ function residentNegotiatedMonthlyRent(row: DemoApplicantRow): number {
 }
 
 /** Short-term nightly rate: manager override / signed rent beat room and listing defaults. */
-function resolvedShortTermNightlyRate(
-  row: DemoApplicantRow,
-  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
-): number {
-  const negotiated = residentNegotiatedMonthlyRent(row);
-  if (negotiated > 0) return negotiated;
-  const stRoom = (() => {
-    for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-      const trimmed = c?.trim();
-      if (!trimmed) continue;
-      const { listingRoomId } = parseRoomChoiceValue(trimmed);
-      if (listingRoomId) {
-        const byId = sub.rooms.find((r) => r.id === listingRoomId);
-        if (byId) return byId;
-      }
-    }
-    return sub.rooms.length === 1 ? (sub.rooms[0] ?? null) : null;
-  })();
-  const stRent = (stRoom?.shortTermRent ?? "").trim() || sub.shortTermDailyCost;
-  return shortTermNightlyRate(stRent);
-}
-
 function selectedRoomRentAmount(row: DemoApplicantRow): number {
   const negotiated = residentNegotiatedMonthlyRent(row);
   if (negotiated > 0) return negotiated;
   if (row.manuallyAdded) return 0;
-  const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
-  const prop = getPropertyById(propertyId);
-  const sub = prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
+  // One shared room lookup, so the rent this bills and the room the lease quotes cannot
+  // resolve differently. Bundle and entire-home pricing still outrank a single room.
+  const { sub, room } = resolveRowSubmissionRoom(row);
   if (!sub) return 0;
   const bundleId = bundleIdForApplication(row.application);
   if (bundleId) {
@@ -1396,8 +1354,6 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
     const entireHomeRent = entireHomeMonthlyRentAmount(sub);
     if (entireHomeRent > 0) return entireHomeRent;
   }
-  const choice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const room = findRoomInSub(sub, choice, row.signedMonthlyRent);
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 
@@ -1885,7 +1841,12 @@ function syncAllRecurringRentCharges(): boolean {
     const currentMonth = monthKeyFromDate(now);
     const nextMonth = addMonthsToMonthKey(currentMonth, 1);
     const monthsToGenerate = new Set<string>(monthsBetweenInclusive(profileStartMonth, currentMonth));
-    monthsToGenerate.add(nextMonth);
+    // Look one month ahead so next month's rent is visible early — but NEVER before the
+    // profile's own start month. `startMonth` is deliberately the month AFTER move-in
+    // (`firstRecurringMonthAfterLeaseStart`) because the move-in month is already billed by the
+    // upfront first-month/prorated charges. Adding `nextMonth` unconditionally re-billed that
+    // same month for any lease starting in the future, on top of the upfront charge.
+    if (nextMonth >= profileStartMonth) monthsToGenerate.add(nextMonth);
 
     for (const rentMonth of [...monthsToGenerate].sort()) {
       const [candidateYear, candidateMonthNum] = rentMonth.split("-").map(Number);
@@ -2637,36 +2598,6 @@ function patchPendingApprovedChargeAmount(applicationId: string, draft: Approved
   return true;
 }
 
-function resolveApprovedLeaseRoom(
-  row: DemoApplicantRow,
-  sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
-) {
-  if (isEntireHomeListing(sub)) {
-    const named = sub.rooms.find((room) => room.name.trim());
-    if (named) return named;
-  }
-  for (const choice of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-    const trimmed = choice?.trim();
-    if (!trimmed) continue;
-    const { listingRoomId } = parseRoomChoiceValue(trimmed);
-    if (listingRoomId) {
-      const byId = sub.rooms.find((room) => room.id === listingRoomId);
-      if (byId) return byId;
-    }
-  }
-  const signedRent = Number(row.signedMonthlyRent ?? 0);
-  if (signedRent > 0) {
-    const byRent = sub.rooms.filter((room) => room.monthlyRent === signedRent);
-    if (byRent.length === 1) return byRent[0] ?? null;
-  }
-  if (sub.rooms.length === 1) return sub.rooms[0] ?? null;
-  const dailyRooms = sub.rooms.filter(
-    (room) => room.prorateMethod === "daily_rate" && room.dailyRentRate && room.dailyRentRate > 0,
-  );
-  if (dailyRooms.length === 1) return dailyRooms[0] ?? null;
-  return null;
-}
-
 function buildApprovedStandardChargeDrafts(
   row: DemoApplicantRow,
   sub: ReturnType<typeof normalizeManagerListingSubmissionV1>,
@@ -2696,7 +2627,11 @@ function buildApprovedStandardChargeDrafts(
     });
   };
 
-  const room = resolveApprovedLeaseRoom(row, sub);
+  // Resolved through resolveRowSubmissionRoom, NOT roomForRow with a hand-picked label.
+  // `selectedRoomRentAmount` and `selectedRoomUtilities` below go through that same
+  // function, and it passes the PROPERTY's unitLabel. Passing anything else here made this
+  // one function price rent off one room and prorate off another.
+  const room = resolveRowSubmissionRoom(row).room;
   const entireHome = isEntireHomeListing(sub);
   const prorateMethod =
     entireHome && sub.entireHomeProrateMethod === "daily_rate"
@@ -2709,7 +2644,7 @@ function buildApprovedStandardChargeDrafts(
   const dailyBasisRate =
     residentNegotiatedMonthlyRent(row) > 0 ? undefined : roomDailyRentPrice(room);
   const endsInsideFirstMonth =
-    (dailyBasisRate ?? 0) > 0 && intraMonthLeaseSpan(opts.leaseStart, opts.leaseEnd) !== null;
+    (dailyBasisRate ?? 0) > 0 && intraMonthStaySpan(opts.leaseStart, opts.leaseEnd) !== null;
 
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {
@@ -2838,7 +2773,24 @@ function syncPendingApprovedChargesFromListing(
             return parseMoneyAmount(fallback ?? "");
           };
           const out: ApprovedChargeDraft[] = [];
-          const nightlyRate = resolvedShortTermNightlyRate(row, sub);
+          // Same room-first resolution the CREATION branch and the lease document use. This
+          // path patches the amounts of an already-created pending charge on every Payments
+          // mount, so reading listing-level fields here quietly rewrote a room-priced stay
+          // back down to the listing's nightly rate minutes after it was billed correctly.
+          const stayRoom = resolveRowSubmissionRoom(row).room;
+          const nightlyRate =
+            resolveStayPricing({
+              room: stayRoom,
+              submission: sub,
+              application: {
+                rentalType: row.application?.rentalType,
+                leaseStart,
+                leaseEnd,
+                managerRentOverride: row.application?.managerRentOverride,
+                managerSecurityDepositOverride: row.application?.managerSecurityDepositOverride,
+                signedMonthlyRent: row.signedMonthlyRent,
+              },
+            }).dailyRate ?? 0;
           const nights = shortTermStayNightCount(leaseStart, leaseEnd);
           if (nightlyRate > 0 && nights) {
             out.push({
@@ -2853,7 +2805,8 @@ function syncPendingApprovedChargesFromListing(
             row.manualResidentDetails?.securityDeposit != null
               ? String(row.manualResidentDetails.securityDeposit)
               : allowListingDefaults
-                ? String(
+                ? (stayRoom?.shortTermDeposit ?? "").trim() ||
+                  String(
                     listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? ""),
                   )
                 : undefined,
@@ -2871,7 +2824,8 @@ function syncPendingApprovedChargesFromListing(
             row.manualResidentDetails?.moveInFee != null
               ? String(row.manualResidentDetails.moveInFee)
               : allowListingDefaults
-                ? String(
+                ? (stayRoom?.shortTermMoveInFee ?? "").trim() ||
+                  String(
                     listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? ""),
                   )
                 : undefined,
@@ -3045,27 +2999,35 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     created.push(charge);
   };
 
+  // Resolve room for proration through the SHARED chain the lease document also uses, so the
+  // same application can never be priced off two different rooms. Uses the sub already
+  // resolved above to avoid a second property lookup and to catch stale room IDs in
+  // assignedRoomChoice.
+  // Resolved BEFORE the short-term branch: that branch prices the stay from the room the
+  // applicant selected, so it cannot be resolved after the branch returns.
+  const room = sub ? roomForRow(sub, row, prop?.unitLabel) : selectedRoom(row);
+
   const isShortTermStay = row.application?.rentalType === "short_term";
 
   if (isShortTermStay) {
-    // The short-term set is now per rent row (round 20): when the booked room carries its
-    // own short-term rent/deposit/move-in, those win over the listing-level fields. A stay
-    // is still ALL-IN — this branch never bills a utilities line — so preferring the room's
-    // figures changes which short-term amounts bill, never whether utilities are added.
-    const stRoom = (() => {
-      if (!sub) return null;
-      for (const c of [row.assignedRoomChoice, row.application?.roomChoice1]) {
-        const trimmed = c?.trim();
-        if (!trimmed) continue;
-        const { listingRoomId } = parseRoomChoiceValue(trimmed);
-        if (listingRoomId) {
-          const byId = sub.rooms.find((r) => r.id === listingRoomId);
-          if (byId) return byId;
-        }
-      }
-      return sub.rooms.length === 1 ? (sub.rooms[0] ?? null) : null;
-    })();
-    const nightlyRate = sub ? resolvedShortTermNightlyRate(row, sub) : 0;
+    // The room the applicant selected is the authority for the nightly rate: its own
+    // short-term rate first (the per-rent-row short-term set), then its daily basis, then the
+    // listing's shortTermDailyCost. That precedence lives in resolveStayPricing, the same
+    // resolver the lease document reads, so the stay total charged here always matches the
+    // figure the agreement states. A stay is still ALL-IN: this branch bills no utilities line.
+    const nightlyRate =
+      resolveStayPricing({
+        room,
+        submission: sub,
+        application: {
+          rentalType: row.application?.rentalType,
+          leaseStart,
+          leaseEnd,
+          managerRentOverride: row.application?.managerRentOverride,
+          managerSecurityDepositOverride: row.application?.managerSecurityDepositOverride,
+          signedMonthlyRent: row.signedMonthlyRent,
+        },
+      }).dailyRate ?? 0;
     const nights = shortTermStayNightCount(leaseStart, leaseEnd);
     if (nightlyRate > 0 && nights) {
       pushCharge(
@@ -3083,7 +3045,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         ? String(row.manualResidentDetails.securityDeposit)
         : allowListingDefaults
           ? // per-room short-term deposit wins; else the listing's short-term deposit (unified fee → legacy)
-            (stRoom?.shortTermDeposit ?? "").trim() ||
+            (room?.shortTermDeposit ?? "").trim() ||
             (sub ? String(listingPresetFeeAmount(sub, "short_term_deposit") || parseMoneyAmount(sub.shortTermDeposit ?? "")) : "")
           : undefined,
     );
@@ -3097,7 +3059,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
         ? String(row.manualResidentDetails.moveInFee)
         : allowListingDefaults
           ? // per-room short-term move-in wins; else the listing's short-term move-in
-            (stRoom?.shortTermMoveInFee ?? "").trim() ||
+            (room?.shortTermMoveInFee ?? "").trim() ||
             (sub ? String(listingPresetFeeAmount(sub, "short_term_move_in") || parseMoneyAmount(sub.shortTermMoveInFee ?? "")) : "")
           : undefined,
     );
@@ -3126,13 +3088,11 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
     return changed;
   }
 
-  // Resolve room for proration — entire-home listings use whole-unit settings when room
-  // choice is absent (resolveApprovedLeaseRoom is the shared resolver: id lookup, rent
-  // match, single room, single daily-rate room, plus the entire-home named room).
+  // `room` is already resolved once above, through the shared chain the lease document uses.
+  // Entire-home listings still take their whole-unit proration settings here.
   // A MISSING per-day utilities rate stays undefined and reads as zero on purpose — a
   // listing briefly folded (rent baked-in, no util rate) bills the same total, never a
   // double-charge; do NOT derive a utilities figure from the rate.
-  const room = sub ? resolveApprovedLeaseRoom(row, sub) : selectedRoom(row);
   const entireHome = Boolean(sub && isEntireHomeListing(sub));
   const prorateMethod =
     entireHome && sub?.entireHomeProrateMethod === "daily_rate"
@@ -3152,7 +3112,7 @@ export function recordApprovedApplicationCharges(row: DemoApplicantRow, managerU
   // first-period charges below; its last-month charges would re-bill the same days. Monthly
   // rooms are left on their legacy two-charge path so their billing is unchanged.
   const endsInsideFirstMonth =
-    (dailyBasisRate ?? 0) > 0 && intraMonthLeaseSpan(leaseStart, leaseEnd) !== null;
+    (dailyBasisRate ?? 0) > 0 && intraMonthStaySpan(leaseStart, leaseEnd) !== null;
 
   const rentAmount = selectedRoomRentAmount(row);
   if (rentAmount > 0 || (dailyBasisRate && dailyBasisRate > 0)) {

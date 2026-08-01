@@ -9,7 +9,7 @@
  */
 
 import type { MockProperty } from "@/data/types";
-import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
+import { getPropertyById } from "@/lib/rental-application/data";
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { resolvePlacementLeaseDates } from "@/lib/rental-application/lease-dates";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
@@ -21,19 +21,19 @@ import {
 import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
 import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms";
 import { leaseCss } from "@/lib/lease-templates/types";
-import { roomDailyRentPrice } from "@/lib/room-pricing";
+import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
+import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
 import { buildSeattleLeaseHtml } from "@/lib/lease-templates/seattle";
 import type { JointLeaseMember } from "@/lib/bundle-group/types";
+import { buildCaliforniaLeaseHtml } from "@/lib/lease-templates/california";
+import { buildWashingtonLeaseHtml } from "@/lib/lease-templates/washington";
 import type { LeaseBillingSnapshot } from "@/lib/lease-billing-snapshot";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
 };
-
-const MONTH_TO_MONTH_RENT_SURCHARGE = 25;
 
 function escapeHtml(s: string): string {
   return s
@@ -70,58 +70,6 @@ function submissionFor(prop: MockProperty | undefined): ManagerListingSubmission
   return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
 }
 
-function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined): string {
-  if (!raw?.v) return "Common kitchen, bath, and living areas as shared among residents.";
-  const sub = normalizeManagerListingSubmissionV1(raw);
-  const entries = sub.sharedSpaces?.filter((s) => s.name.trim()) ?? [];
-  if (!entries.length) return "Common kitchen, bath, and living areas as shared among residents.";
-  return entries
-    .map((s) => {
-      const names = (s.roomAccessIds ?? [])
-        .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
-        .filter(Boolean)
-        .join(", ");
-      const head = names.length
-        ? `${s.name.trim()} — access includes: ${names}.`
-        : `${s.name.trim()}.`;
-      const d = s.detail.trim();
-      return d ? `${head} ${d}` : head;
-    })
-    .join(" ");
-}
-
-function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
-  if (!sub?.rooms?.length) return undefined;
-  const u = unitLabel.trim().toLowerCase();
-  const hit = sub.rooms.find((r) => {
-    const rn = (r.name ?? "").trim().toLowerCase();
-    if (!rn) return false;
-    return rn.includes(u) || u.includes(rn);
-  });
-  if (hit) {
-    const daily = roomDailyRentPrice(hit);
-    if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
-    if (hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
-  }
-  return undefined;
-}
-
-function submissionRoomRentFromChoice(
-  sub: ManagerListingSubmissionV1 | undefined,
-  roomChoice1: string | undefined | null,
-): string | undefined {
-  if (!sub?.rooms?.length || !roomChoice1) return undefined;
-  const { listingRoomId } = parseRoomChoiceValue(String(roomChoice1));
-  if (!listingRoomId) return undefined;
-  const normalized = normalizeManagerListingSubmissionV1(sub);
-  const hit = normalized.rooms.find((r) => r.id === listingRoomId);
-  if (!hit) return undefined;
-  const daily = roomDailyRentPrice(hit);
-  if (daily !== undefined) return `$${daily.toFixed(2)} / day`;
-  if (hit.monthlyRent <= 0) return undefined;
-  return `$${hit.monthlyRent.toFixed(2)} / month`;
-}
-
 export type LeaseGenerationContext = {
   application: Partial<RentalWizardFormState>;
   leasedRoom: MockProperty | undefined;
@@ -135,7 +83,9 @@ export type LeaseGenerationContext = {
   leaseBilling?: LeaseBillingSnapshot;
 };
 
-export function leaseContextFromApplication(application: Partial<RentalWizardFormState>): LeaseGenerationContext {
+export function leaseContextFromApplication(
+  application: Partial<RentalWizardFormState>,
+): LeaseGenerationContext {
   const dates = resolvePlacementLeaseDates({
     leaseTerm: application.leaseTerm,
     leaseStart: application.leaseStart,
@@ -181,8 +131,12 @@ export function rentSummaryFromApplication(application: Partial<RentalWizardForm
     const room = ctx.leasedRoom;
     const list = ctx.listingProperty;
     const monthlyRent =
-      submissionRoomRentFromChoice(ctx.submission, application.roomChoice1) ??
-      (room && findSubmissionRoomRent(ctx.submission, room.unitLabel)) ??
+      submissionRoomRentLabel(
+        resolveSubmissionRoom(ctx.submission, {
+          roomChoices: [application.roomChoice1],
+          unitLabel: room?.unitLabel,
+        }),
+      ) ??
       room?.rentLabel ??
       list?.rentLabel ??
       null;
@@ -222,6 +176,11 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
   const cityZip = dash([prop?.neighborhood ?? sub?.neighborhood, prop?.zip ?? sub?.zip].filter(Boolean).join(", "));
   const roomLabel = dash(prop?.unitLabel);
   const rent = rentSummaryFromApplication(a) ?? "As set forth in the lease document below";
+  // The value is already period-aware ("$55.00 / day" for a daily-priced room), so the label
+  // is derived from the rendered string itself. A second resolver run cannot be kept in step
+  // with it: the resolver honours rentalType and overrides that `rentSummaryFromApplication`
+  // ignores, so a short-term row would print "Daily rent" above "$1200.00 / month".
+  const rentLabel = /\/\s*day\b/i.test(rent) ? "Daily rent" : "Monthly rent";
   const leaseEnd = a.leaseTerm === "Month-to-Month" ? dash(a.leaseEnd || "N/A (month-to-month)") : dash(a.leaseEnd);
   const isPdf = /\.pdf(\?|$)/i.test(doc.url) || doc.url.startsWith("data:application/pdf") || /\.pdf$/i.test(doc.name);
   const docUrl = escapeHtml(doc.url);
@@ -242,7 +201,7 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
   <tr><th>Lease term</th><td>${dash(a.leaseTerm)}</td></tr>
   <tr><th>Lease start</th><td>${dash(a.leaseStart)}</td></tr>
   <tr><th>Lease end</th><td>${leaseEnd}</td></tr>
-  <tr><th>Monthly rent</th><td>${escapeHtml(rent)}</td></tr>
+  <tr><th>${rentLabel}</th><td>${escapeHtml(rent)}</td></tr>
 </table>
 
 <h2>2. Lease Document (Manager Template)</h2>
@@ -262,7 +221,9 @@ export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   if (jurisdiction === "san_francisco") return buildSanFranciscoLeaseHtml(ctx);
   if (jurisdiction === "seattle") return buildSeattleLeaseHtml(ctx);
-  throw new Error("Lease generation is only available for Seattle and San Francisco properties.");
+  if (jurisdiction === "california") return buildCaliforniaLeaseHtml(ctx);
+  if (jurisdiction === "washington") return buildWashingtonLeaseHtml(ctx);
+  throw new Error(unsupportedJurisdictionMessage(jurisdiction));
 }
 
 export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): void {

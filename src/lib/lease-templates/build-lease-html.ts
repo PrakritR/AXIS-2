@@ -1,4 +1,3 @@
-import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import {
   activeCustomLeaseTerms,
@@ -21,19 +20,31 @@ import {
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
-import { roomDailyRentPrice } from "@/lib/room-pricing";
+import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
+import { resolveStayPricing } from "@/lib/room-pricing";
+import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
 import {
-  shortTermNightlyRate,
+  intraMonthStaySpan,
   shortTermStayNightCount,
   shortTermStayTotalAmount,
 } from "@/lib/short-term-stay-pricing";
-import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 
 type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
   __signedRentLabel?: string;
 };
 
 const MONTH_TO_MONTH_RENT_SURCHARGE = 25;
+
+/**
+ * The document states the DEPOSIT OBLIGATION, which is fixed at signing, never the resident's
+ * running balance, which is not. A holding deposit can be paid before or after the lease is
+ * generated, and an executed lease cannot be rebuilt once it carries a signature, so quoting a
+ * net figure would permanently over- or understate the deposit depending on that ordering. This
+ * sentence is true whether or not a credit exists; the charge ledger and the Payments surface
+ * remain the authority for what is actually owed.
+ */
+const HOLDING_DEPOSIT_CREDIT_NOTE =
+  "Any holding deposit already paid for this placement is credited against the security deposit stated above. The charge ledger in the PropLane portal reflects the resulting balance.";
 
 function escapeHtml(s: string): string {
   return s
@@ -124,31 +135,6 @@ function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined)
     .join(" ");
 }
 
-function findSubmissionRoomRent(sub: ManagerListingSubmissionV1 | undefined, unitLabel: string): string | undefined {
-  if (!sub?.rooms?.length) return undefined;
-  const u = unitLabel.trim().toLowerCase();
-  const hit = sub.rooms.find((r) => {
-    const rn = (r.name ?? "").trim().toLowerCase();
-    if (!rn) return false;
-    return rn.includes(u) || u.includes(rn);
-  });
-  if (hit && hit.monthlyRent > 0) return `$${hit.monthlyRent.toFixed(2)} / month`;
-  return undefined;
-}
-
-function submissionRoomRentFromChoice(
-  sub: ManagerListingSubmissionV1 | undefined,
-  roomChoice1: string | undefined | null,
-): string | undefined {
-  if (!sub?.rooms?.length || !roomChoice1) return undefined;
-  const { listingRoomId } = parseRoomChoiceValue(String(roomChoice1));
-  if (!listingRoomId) return undefined;
-  const normalized = normalizeManagerListingSubmissionV1(sub);
-  const hit = normalized.rooms.find((r) => r.id === listingRoomId);
-  if (!hit || hit.monthlyRent <= 0) return undefined;
-  return `$${hit.monthlyRent.toFixed(2)} / month`;
-}
-
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
@@ -202,44 +188,85 @@ type ProrateOptions = {
   method?: "auto" | "daily_rate";
   dailyRentRate?: number;
   dailyUtilitiesRate?: number;
+  /**
+   * Daily-basis mode. Rent already bills each month by its real day count, so prorating it
+   * would misread the day rate as a monthly figure — but utilities are still a monthly
+   * estimate and the ledger still prorates them, so the section renders utilities only.
+   * The amount is passed explicitly (the ledger's billable monthly utilities), never parsed
+   * back out of the display label.
+   */
+  utilitiesOnly?: boolean;
+  utilitiesAmount?: number;
 };
 
-function proratedBlock(monthlyRentStr: string, utilitiesStr: string, leaseStartStr: string, prorate?: ProrateOptions): string {
+function proratedBlock(
+  monthlyRentStr: string,
+  utilitiesStr: string,
+  leaseStartStr: string,
+  leaseEndStr: string,
+  prorate?: ProrateOptions,
+): string {
+  const utilitiesOnly = prorate?.utilitiesOnly === true;
   const rent = parseAmount(monthlyRentStr);
-  if (!rent || !leaseStartStr || leaseStartStr === "—") return "";
+  if ((!rent && !utilitiesOnly) || !leaseStartStr || leaseStartStr === "—") return "";
   try {
     const start = parseFlexibleLocalDate(leaseStartStr);
     if (!start || isNaN(start.getTime())) return "";
+    const utils = utilitiesOnly ? (prorate?.utilitiesAmount ?? 0) : parseAmount(utilitiesStr);
+    if (utilitiesOnly && !(utils && utils > 0)) return "";
+    // Mirrors the ledger's `leaseFirstPeriodProration`: a daily-basis lease that starts AND
+    // ends inside one calendar month is billed as ONE span, so its utilities prorate across
+    // the whole term rather than from the lease start to month end.
+    const span = utilitiesOnly ? intraMonthStaySpan(leaseStartStr, leaseEndStr) : null;
     const day = start.getDate();
-    if (day === 1) return "";
-    const year = start.getFullYear();
-    const month = start.getMonth();
-    const dim = new Date(year, month + 1, 0).getDate();
-    const remaining = dim - day + 1;
+    if (!span && day === 1) return "";
+    const dim = span ? span.daysInMonth : new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    const remaining = span ? span.billableDays : dim - day + 1;
     const useManual = prorate?.method === "daily_rate" && prorate.dailyRentRate && prorate.dailyRentRate > 0;
-    const proratedRent = useManual
-      ? Math.round(prorate!.dailyRentRate! * remaining * 100) / 100
-      : Math.round((rent / dim) * remaining * 100) / 100;
-    const utils = parseAmount(utilitiesStr);
-    const proratedUtils = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
-      ? Math.round(prorate!.dailyUtilitiesRate * remaining * 100) / 100
+    // The ledger gates the daily utilities rate on `prorateMethod === "daily_rate"`, and a
+    // positive `dailyUtilitiesRate` survives on the room after the manager switches proration
+    // back to "auto" (the wizard only rewrites `prorateMethod`). Dropping that condition here
+    // would prorate off a stale rate the ledger ignores, so the same gate applies on both sides.
+    const useManualUtils =
+      prorate?.method === "daily_rate" && prorate.dailyUtilitiesRate && prorate.dailyUtilitiesRate > 0;
+    const proratedRent =
+      utilitiesOnly || !rent
+        ? 0
+        : useManual
+          ? Math.round(prorate!.dailyRentRate! * remaining * 100) / 100
+          : Math.round((rent / dim) * remaining * 100) / 100;
+    const proratedUtils = useManualUtils
+      ? Math.round(prorate!.dailyUtilitiesRate! * remaining * 100) / 100
       : utils ? Math.round((utils / dim) * remaining * 100) / 100 : null;
     const total = proratedRent + (proratedUtils ?? 0);
-    const rateCol = useManual ? "Daily rate" : "Monthly rate";
-    const rentRateDisplay = useManual ? fmtUsd(prorate!.dailyRentRate!) + "/day" : fmtUsd(rent);
-    const utilRateDisplay = useManual && prorate!.dailyUtilitiesRate && prorate!.dailyUtilitiesRate > 0
-      ? fmtUsd(prorate!.dailyUtilitiesRate) + "/day"
+    // The header must describe the figure actually printed in the column: a room with no
+    // dailyUtilitiesRate shows its MONTHLY estimate even in utilities-only mode.
+    const rateCol = (utilitiesOnly ? useManualUtils : useManual) ? "Daily rate" : "Monthly rate";
+    const rentRateDisplay = useManual ? fmtUsd(prorate!.dailyRentRate!) + "/day" : rent ? fmtUsd(rent) : "—";
+    const utilRateDisplay = useManualUtils
+      ? fmtUsd(prorate!.dailyUtilitiesRate!) + "/day"
       : utils ? fmtUsd(utils) : null;
+    const heading = utilitiesOnly ? "Prorated Utilities" : "Prorated First Month";
+    const intro = utilitiesOnly
+      ? span
+        ? `Because the term begins and ends within one calendar month, the utilities estimate is prorated across the term as follows (${remaining} of ${dim} days). Rent is not prorated: it is billed by the day, as stated in Section 4.`
+        : `Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month's utilities estimate is prorated as follows (${remaining} of ${dim} days). Rent is not prorated: it is billed by the day, as stated in Section 4.`
+      : `Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month is prorated as follows (${remaining} of ${dim} days):`;
+    const closing = utilitiesOnly
+      ? span
+        ? ""
+        : `<p>Beginning the first full month, the full monthly utilities estimate stated in Section 4 applies.</p>`
+      : `<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>`;
     return `
-<h2>5. Prorated First Month</h2>
-<p>Because the Lease commences on the <strong>${ordinal(day)}</strong> of the month, the first partial month is prorated as follows (${remaining} of ${dim} days):</p>
+<h2>5. ${heading}</h2>
+<p>${intro}</p>
 <table>
-  <tr><th>Item</th><th>${rateCol}</th><th>Days remaining</th><th>Prorated amount</th></tr>
-  <tr><td>Rent</td><td>${rentRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>
+  <tr><th>Item</th><th>${rateCol}</th><th>${utilitiesOnly ? "Days billed" : "Days remaining"}</th><th>Prorated amount</th></tr>
+  ${utilitiesOnly ? "" : `<tr><td>Rent</td><td>${rentRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedRent)}</td></tr>`}
   ${proratedUtils != null && utilRateDisplay != null ? `<tr><td>Utilities estimate</td><td>${utilRateDisplay}</td><td>${remaining} / ${dim}</td><td>${fmtUsd(proratedUtils)}</td></tr>` : ""}
-  <tr class="total-row"><td colspan="3"><strong>Prorated total due first month</strong></td><td><strong>${fmtUsd(total)}</strong></td></tr>
+  <tr class="total-row"><td colspan="3"><strong>${utilitiesOnly ? "Prorated utilities due" : "Prorated total due first month"}</strong></td><td><strong>${fmtUsd(total)}</strong></td></tr>
 </table>
-<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>
+${closing}
 `;
   } catch {
     return "";
@@ -280,16 +307,14 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const landlordMailing = address + (cityZip ? `, ${escapeHtml(cityZip)}` : "");
 
   // ── Room / premises ───────────────────────────────────────────────────────
-  const { listingRoomId } = parseRoomChoiceValue(String(a.roomChoice1 ?? ""));
   const subNorm = sub ? normalizeManagerListingSubmissionV1(sub) : undefined;
-  const specificRoom = subNorm?.rooms.find((r) => r.id === listingRoomId) ??
-    // Fallback: match by room label when listingRoomId is absent (legacy / manual assignments)
-    (() => {
-      const label = room?.unitLabel?.trim().toLowerCase();
-      if (!label || !subNorm?.rooms.length) return undefined;
-      return subNorm.rooms.find((r) => r.name.trim().toLowerCase() === label) ??
-        subNorm.rooms.find((r) => r.name.trim().toLowerCase().includes(label) || label.includes(r.name.trim().toLowerCase()));
-    })();
+  // The SAME chain the charge ledger uses, so this document can never be priced off a
+  // different room than the one the resident is billed for.
+  const specificRoom = resolveSubmissionRoom(subNorm, {
+    roomChoices: [a.roomChoice1],
+    unitLabel: room?.unitLabel,
+    signedMonthlyRent: parseAmount(signedRentLabel ?? "") ?? undefined,
+  });
 
   // Bundle application: the leased premises are the bundle's rooms, not one room.
   const leasedBundle = a.bundleId?.trim()
@@ -307,41 +332,79 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
         .join(" — ")
     : "";
 
-  // Whole-home application: the premises are the entire unit (no specific room).
-  const wholeHome = !leasedBundle && !specificRoom && Boolean(subNorm) && (isEntireHomeListing(subNorm!) || !subNorm!.rooms.some((r) => r.name.trim()));
+  // Whole-home application: the premises are the entire unit. Derived from the LISTING, not
+  // from whether a room record resolved — the shared resolver can now match a single unnamed
+  // room record on an entire-home listing, which is still a whole-home placement.
+  // The unnamed-rooms clause stays gated on `!specificRoom`: a plain SHARED-home listing whose
+  // rooms simply have no names would otherwise describe a single-room letting as "Entire home"
+  // on an executed lease. An entire-home LISTING is whole-home regardless of what resolved.
+  const wholeHome =
+    !leasedBundle &&
+    Boolean(subNorm) &&
+    (isEntireHomeListing(subNorm!) || (!specificRoom && !subNorm!.rooms.some((r) => r.name.trim())));
 
   const roomLabel = escapeHtml(
     bundlePremisesLabel ||
-    specificRoom?.name?.trim() ||
     (wholeHome ? "Entire home" : "") ||
+    specificRoom?.name?.trim() ||
     room?.unitLabel?.trim() ||
     "[ROOM NUMBER]"
   );
   const fullPremises = escapeHtml(
     [
       sub?.buildingName ?? list?.buildingName ?? room?.buildingName,
-      bundlePremisesLabel || specificRoom?.name || (wholeHome ? "entire home" : room?.unitLabel),
+      bundlePremisesLabel || (wholeHome ? "entire home" : "") || specificRoom?.name || room?.unitLabel,
     ]
       .filter(Boolean)
       .join(" — ") || "the Premises described herein"
   );
 
+  // ── Stay pricing ──────────────────────────────────────────────────────────
+  // One resolver decides the stay's kind, rate, and deposit, so this document and the
+  // charge ledger can never quote different numbers — on EITHER branch. It is resolved
+  // before the rent block because the long-form lease has to quote the daily rate too.
+  const stay = resolveStayPricing({
+    // A bundle application leases the bundle's rooms, not one room, so a stray roomChoice1
+    // must not let one member room's daily price decide the whole document's type.
+    room: leasedBundle ? undefined : specificRoom,
+    submission: subNorm,
+    application: {
+      rentalType: a.rentalType,
+      leaseStart: a.leaseStart,
+      leaseEnd: a.leaseEnd,
+      managerRentOverride: a.managerRentOverride,
+      managerSecurityDepositOverride: a.managerSecurityDepositOverride,
+      signedMonthlyRent: parseAmount(signedRentLabel ?? "") ?? undefined,
+    },
+  });
+  const dailyBasisRate = stay.basis === "daily" ? stay.dailyRate : undefined;
+  const isDailyBasis = dailyBasisRate !== undefined;
+
   // ── Rent & financials ─────────────────────────────────────────────────────
   const bundleRentLabel = leasedBundle?.price.trim() || "";
   const entireHomeRent = wholeHome && subNorm ? entireHomeMonthlyRentAmount(subNorm) : 0;
   const monthlyRentBaseStr =
+    // A daily basis outranks every monthly label below it: the resolver already applied the
+    // override / signed-rent precedence, so reaching here on "daily" means the day rate IS
+    // the active rate and the ledger bills days × this figure.
+    (isDailyBasis ? `${fmtUsd(dailyBasisRate!)} / day` : "") ||
     overrideFeeLabel(a.managerRentOverride, "") ||
     signedRentLabel ||
     bundleRentLabel ||
-    submissionRoomRentFromChoice(sub, a.roomChoice1) ||
     (entireHomeRent > 0 ? `$${entireHomeRent.toFixed(2)} / month` : "") ||
-    (room && findSubmissionRoomRent(sub, room.unitLabel)) ||
+    submissionRoomRentLabel(specificRoom) ||
     room?.rentLabel ||
     list?.rentLabel ||
     "As set forth in the Rent Schedule";
+  // A per-day figure never sits under a "Monthly" label.
+  const rentRowLabel = isDailyBasis ? "Daily base rent" : "Monthly base rent";
   const monthToMonthSurcharge = isMonthToMonthLease(a) ? MONTH_TO_MONTH_RENT_SURCHARGE : 0;
+  // Folding a monthly surcharge into a per-day rate would print a daily rate that is $25 too
+  // high; on a daily basis the surcharge stays its own monthly line.
   const monthlyRentStr =
-    monthToMonthSurcharge > 0 ? rentLabelWithMonthlySurcharge(monthlyRentBaseStr, monthToMonthSurcharge) : monthlyRentBaseStr;
+    monthToMonthSurcharge > 0 && !isDailyBasis
+      ? rentLabelWithMonthlySurcharge(monthlyRentBaseStr, monthToMonthSurcharge)
+      : monthlyRentBaseStr;
 
   const rentNum = parseAmount(monthlyRentStr);
   const utilitiesModel = resolveListingUtilitiesPaymentModel(sub ?? undefined, specificRoom ?? undefined);
@@ -358,14 +421,28 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
         : utilitiesModel === "manager_billed"
           ? parseAmount(utilitiesBase)
           : 0;
+  // Adding a per-day rate to a monthly utilities figure is meaningless arithmetic, and a
+  // 30-day estimate is display-only and must never appear in a lease. A daily basis states
+  // the billing rule in prose instead of a fabricated monthly total.
   const totalMonthly =
-    rentNum != null
+    rentNum != null && !isDailyBasis
       ? fmtUsd(rentNum + (utilitiesNum != null && utilitiesNum > 0 ? utilitiesNum : 0))
       : null;
 
   const appFee = escapeHtml(sub?.applicationFee ?? "—");
-  const secDep = escapeHtml(overrideFeeLabel(a.managerSecurityDepositOverride, sub?.securityDeposit ?? "—"));
-  const moveInFee = escapeHtml(overrideFeeLabel(a.managerMoveInFeeOverride, sub?.moveInFee ?? "—"));
+  // One derivation for the deposit, exactly as for the rate: `resolveStayPricing` already
+  // picked the field the ledger will charge (override, then shortTermDeposit or
+  // securityDeposit keyed on rentalType). Recomputing it here let the document and the ledger
+  // drift the moment either rule changed.
+  const secDep = escapeHtml(stay.deposit !== undefined ? fmtUsd(stay.deposit) : "—");
+  // Room-first, then the listing, matching the ledger. A room carrying its own move-in fee
+  // is charged that fee, so a lease quoting the listing's figure understates what is owed.
+  const moveInFee = escapeHtml(
+    overrideFeeLabel(
+      a.managerMoveInFeeOverride,
+      specificRoom?.moveInFee?.trim() || sub?.moveInFee || "—",
+    ),
+  );
   const rawOtherCostLabel = a.managerOtherCostLabel?.trim() || "Other costs";
   const otherCostIsMonthToMonth = isMonthToMonthOtherCost(rawOtherCostLabel);
   const otherCostLabel = escapeHtml(rawOtherCostLabel);
@@ -448,59 +525,108 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the PropLane portal or by a method agreed in writing with Landlord.";
 
-  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", {
+  // A daily basis suppresses only the RENT half: rent already bills each month by its real day
+  // count. Utilities stay a monthly estimate that the ledger prorates for a partial first month
+  // (or across the whole term for an intra-month lease), so that half must still be disclosed.
+  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", a.leaseEnd ?? "", {
     method: specificRoom?.prorateMethod,
     dailyRentRate: specificRoom?.dailyRentRate,
     dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
+    utilitiesOnly: isDailyBasis,
+    utilitiesAmount: utilitiesNum ?? 0,
   });
 
-  if (a.rentalType === "short_term") {
-    const nightlyFromOverride = shortTermNightlyRate(a.managerRentOverride);
-    const nightlyFromSigned = shortTermNightlyRate(signedRentLabel);
-    const roomDaily = specificRoom ? roomDailyRentPrice(specificRoom) : undefined;
-    const nightlyRate =
-      nightlyFromOverride > 0
-        ? nightlyFromOverride
-        : nightlyFromSigned > 0
-          ? nightlyFromSigned
-          : roomDaily != null && roomDaily > 0
-            ? roomDaily
-            : shortTermNightlyRate(subNorm?.shortTermDailyCost);
-    const dailyCostRaw = nightlyRate > 0 ? fmtUsd(nightlyRate) : "—";
-    const shortDepositRaw = overrideFeeLabel(
-      a.managerSecurityDepositOverride,
-      specificRoom?.shortTermDeposit?.trim() || subNorm?.shortTermDeposit?.trim() || "—",
-    );
-    const shortMoveInRaw = overrideFeeLabel(
-      a.managerMoveInFeeOverride,
-      specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee?.trim() || "—",
-    );
-    const stayNights = shortTermStayNightCount(a.leaseStart, a.leaseEnd);
+  if (stay.stayKind === "short") {
+    const dailyCost = stay.dailyRate;
+    // Same night count the ledger bills from. The previous inline math parsed
+    // "YYYY-MM-DD" as UTC, which could land a day off from the charges.
+    // Two ledger paths bill a "short" stay and they count days differently, so the document
+    // has to follow whichever one applies. An EXPLICIT short-term application bills one
+    // stay_total over checkout-exclusive nights. A daily-basis room on a standard application
+    // bills first-month rent over intraMonthStaySpan's INCLUSIVE billable days. Using one
+    // count for both put the agreement a night off from the charges.
+    const stayNights =
+      a.rentalType === "short_term"
+        ? shortTermStayNightCount(a.leaseStart, a.leaseEnd)
+        : (intraMonthStaySpan(a.leaseStart, a.leaseEnd)?.billableDays ??
+          shortTermStayNightCount(a.leaseStart, a.leaseEnd));
+    const stayUnitNoun = a.rentalType === "short_term" ? "Night" : "Day";
+    const dailyCostRaw = dailyCost !== undefined ? fmtUsd(dailyCost) : "—";
+    const depositAmount = stay.deposit;
+    const shortDepositRaw = depositAmount !== undefined ? fmtUsd(depositAmount) : "—";
     const totalRent =
-      nightlyRate > 0 && stayNights ? fmtUsd(shortTermStayTotalAmount(nightlyRate, stayNights)) : "—";
-    const depositAmount = parseAmount(shortDepositRaw);
-    const moveInAmount = parseAmount(shortMoveInRaw);
-    // Short-term custom fees bill once before check-in (recordApprovedApplicationCharges), so
-    // they must appear in the stay's Payment table and count toward the total due.
+      dailyCost && stayNights ? fmtUsd(shortTermStayTotalAmount(dailyCost, stayNights)) : "—";
+    // The ledger bills more than rent + deposit on a stay, so the document has to list the
+    // rest or its "Total due" understates what the guest owes. Which move-in field applies
+    // follows rentalType, exactly as the ledger's two branches do.
+    // Room-first, then the listing, matching the ledger. A room carrying its own short-term
+    // move-in fee is charged that fee, so the agreement has to quote the same one.
+    const stayMoveInLabel = overrideFeeLabel(
+      a.managerMoveInFeeOverride,
+      (a.rentalType === "short_term"
+        ? (specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee)
+        : (specificRoom?.moveInFee?.trim() || subNorm?.moveInFee)) ?? "",
+    );
+    const stayMoveInNum = parseAmount(stayMoveInLabel) ?? 0;
+    const stayOtherNum = showOtherSigningCost ? (otherCostNum ?? 0) : 0;
+    // Utilities are billed alongside a standard-application stay but never on an explicit
+    // short-term stay, whose nightly rate is all-in. The ledger PRORATES them across the
+    // stay's span, so quoting the full monthly estimate here would overstate the total.
+    // `rentBasis: "daily"` and `prorateMethod: "daily_rate"` are independent per-room fields
+    // that can coexist, and the ledger prorates utilities by the room's own daily utilities
+    // rate whenever it has one. Same two branches here, or the two totals diverge.
+    const stayUtilitiesSpan = intraMonthStaySpan(a.leaseStart, a.leaseEnd);
+    const stayUtilitiesBase = a.rentalType === "short_term" ? 0 : (utilitiesNum ?? 0);
+    // The ledger only credits a paid holding deposit on its STANDARD branch; the explicit
+    // short-term branch charges the full shortTermDeposit and returns before that code. So
+    // the credit sentence is only true for a standard application, and printing it on an
+    // explicit short-term agreement would assert a credit the resident never receives.
+    // Keyed on rentalType, not stayKind, for exactly the same reason the deposit is.
+    const holdingCreditApplies = a.rentalType !== "short_term";
+    const stayDailyUtilitiesRate =
+      specificRoom?.prorateMethod === "daily_rate" && (specificRoom.dailyUtilitiesRate ?? 0) > 0
+        ? specificRoom.dailyUtilitiesRate!
+        : 0;
+    // A daily_rate room with NO per-day utilities rate bills ZERO utilities, not the monthly
+    // estimate prorated: its listing folds utilities into the daily rent, so quoting the
+    // estimate here would state a charge the resident never receives. The ledger has these
+    // same three cases; collapsing them to two is what made the document disagree.
+    const stayUtilitiesFolded =
+      specificRoom?.prorateMethod === "daily_rate" && stayDailyUtilitiesRate <= 0;
+    const stayUtilitiesNum =
+      stayUtilitiesBase > 0 && stayUtilitiesSpan && !stayUtilitiesFolded
+        ? stayDailyUtilitiesRate > 0
+          ? Number((stayUtilitiesSpan.billableDays * stayDailyUtilitiesRate).toFixed(2))
+          : Number((stayUtilitiesBase * (stayUtilitiesSpan.billableDays / stayUtilitiesSpan.daysInMonth)).toFixed(2))
+        : 0;
+    // Custom fees bill once before check-in, so they belong in the stay's Payment table.
+    // WHICH amount is keyed on rentalType, exactly like the move-in fee, the utilities and
+    // the deposit above: a stay can be "short" here while the application is standard (a
+    // daily-priced room on a short-stay listing), and the ledger then bills the one-time
+    // `amount`, never `shortTermAmount`. Reading the wrong one understates the total.
+    const stayFeeAmount = (fee: { amount?: string; shortTermAmount?: string }) =>
+      a.rentalType === "short_term" ? fee.shortTermAmount : fee.amount;
     const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
       const presetId = (fee as { presetId?: string }).presetId;
       if (presetId && presetId !== "custom") return false;
-      const n = parseAmount(fee.shortTermAmount);
+      const n = parseAmount(stayFeeAmount(fee));
       return n != null && n > 0;
     });
-    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(f.shortTermAmount) ?? 0), 0);
+    const stCustomFeesTotal = stCustomFees.reduce((s, f) => s + (parseAmount(stayFeeAmount(f)) ?? 0), 0);
     const stCustomFeeRows = stCustomFees
       .map(
         (f) =>
-          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(f.shortTermAmount) ?? 0))}</td></tr>`,
+          `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(stayFeeAmount(f)) ?? 0))}</td></tr>`,
       )
       .join("\n");
     const totalDue =
-      nightlyRate > 0 && stayNights
+      dailyCost && stayNights
         ? fmtUsd(
-            shortTermStayTotalAmount(nightlyRate, stayNights) +
+            shortTermStayTotalAmount(dailyCost, stayNights) +
               (depositAmount ?? 0) +
-              (moveInAmount ?? 0) +
+              stayMoveInNum +
+              stayOtherNum +
+              stayUtilitiesNum +
               stCustomFeesTotal,
           )
         : "—";
@@ -512,8 +638,13 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
-${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" style="font-weight:700;margin-bottom:0.15rem">SHORT-TERM ROOM STAY AGREEMENT</p>` : `<h1>SHORT-TERM ROOM STAY AGREEMENT</h1>`}
-<p class="sub">${stayNights ? `${stayNights}-Night Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
+${
+  config.brandTitle
+    ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" style="font-weight:700;margin-bottom:0.15rem">SHORT-TERM ROOM STAY AGREEMENT${stayNights ? ` (${stayNights}-${stayUnitNoun} Stay)` : ""}</p>`
+    : `<h1>SHORT-TERM ROOM STAY AGREEMENT${stayNights ? ` (${stayNights}-${stayUnitNoun} Stay)` : ""}</h1>`
+}
+<p class="sub">Owner-Occupied Residence · ${config.headerSubtitle}</p>
+<p class="generated">Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -532,20 +663,23 @@ ${config.brandTitle ? `<h1>${escapeHtml(config.brandTitle)}</h1><p class="sub" s
 <table>
   <tr><th width="35%">Check-in date &amp; time</th><td>${leaseStart} @ ${checkInTime}</td></tr>
   <tr><th>Check-out date &amp; time</th><td>${dash(a.leaseEnd)} @ ${checkOutTime}</td></tr>
-  <tr><th>Total duration</th><td>${stayNights ? `${stayNights} night${stayNights === 1 ? "" : "s"}` : "—"}</td></tr>
+  <tr><th>Total duration</th><td>${stayNights ? `${stayNights} ${stayUnitNoun.toLowerCase()}${stayNights === 1 ? "" : "s"}` : "—"}</td></tr>
 </table>
 
 <h2>4. Payment</h2>
 <table>
   <tr><th width="35%">Daily rent</th><td>${escapeHtml(dailyCostRaw)} per day</td></tr>
   <tr><th>Total rent for stay</th><td>${totalRent}</td></tr>
-  <tr><th>Move-in fee</th><td>${escapeHtml(shortMoveInRaw)}</td></tr>
   <tr><th>Deposit</th><td>${escapeHtml(shortDepositRaw)}</td></tr>
+  ${stayUtilitiesNum > 0 && stayUtilitiesSpan ? `<tr><th>Utilities estimate (${stayUtilitiesSpan.billableDays}/${stayUtilitiesSpan.daysInMonth} days)</th><td>${fmtUsd(stayUtilitiesNum)}</td></tr>` : ""}
+  ${stayMoveInLabel ? `<tr><th>Move-in fee</th><td>${escapeHtml(stayMoveInLabel)}</td></tr>` : ""}
+  ${stayOtherNum > 0 ? `<tr><th>${otherCostLabel}</th><td>${fmtUsd(stayOtherNum)}</td></tr>` : ""}
 ${stCustomFeeRows}
   <tr class="total-row"><th>Total due</th><td><strong>${totalDue}</strong></td></tr>
 </table>
+${holdingCreditApplies ? `<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>` : ""}
 
-<h2>5. Purpose of Stay</h2>
+<h2>5. Lodger Status</h2>
 <p>${config.shortTermPurposeParagraph}</p>
 
 <h2>6. House Rules &amp; Short-Term Requirements</h2>
@@ -555,16 +689,24 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 <h2>7. No Right to Remain After Check-Out</h2>
 <p>Guest must vacate the room and property by the check-out date and time. If Guest refuses to leave, Guest may be treated as a trespasser to the fullest extent permitted by law.</p>
 
-<h2>8. Shared Residence</h2>
+<h2>8. Revocation of Permission</h2>
+<p>Guest occupies the room by permission of the Owner/Host, not under a tenancy. To the extent permitted by applicable law, Owner/Host may revoke that permission for conduct that endangers persons or property, violates the house rules, or breaches this agreement, and Guest must then leave the property.</p>
+<p>If Guest does not leave after permission is revoked or after the check-out time, Owner/Host may contact law enforcement to remove Guest, to the fullest extent permitted by applicable law. Nothing in this section waives any right Guest may have under law that applies to this stay.</p>
+
+<h2>9. Damages and Liability</h2>
+<p>Guest is responsible for any loss or damage to the room, shared areas, furnishings, or the property caused by Guest or by anyone Guest permits on the property, beyond ordinary wear from the agreed use. To the extent permitted by applicable law, Owner/Host may recover the cost of repair, replacement, or cleaning.</p>
+<p>Guest is responsible for insuring Guest's own belongings. To the extent permitted by applicable law, Owner/Host is not liable for loss, theft, or damage to Guest's personal property except to the extent caused by Owner/Host's own negligence or as otherwise required by law. Nothing in this section waives any right Guest may have under law that applies to this stay.</p>
+
+<h2>10. Shared Residence</h2>
 <p>Owner/Host lives on or controls the property. Guest is renting a room only and receives only temporary shared-area access as approved by Owner/Host.</p>
 
-<h2>9. No Mail / No Residency</h2>
+<h2>11. No Mail / No Residency</h2>
 <p>Guest may not receive mail, declare residency, or claim tenancy at the property. Guest may not use the property address for government ID, voter registration, banking, employment, delivery accounts, or similar residency purposes.</p>
 
-<h2>10. Condition of Room</h2>
+<h2>12. Condition of Room</h2>
 <p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
 
-<h2>11. Electronic Signature</h2>
+<h2>13. Electronic Signature</h2>
 <p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
 ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
@@ -632,15 +774,16 @@ ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplia
 
 <h2>3. Lease Term</h2>
 <p>The initial term is <strong>${leaseTerm}</strong>, beginning <strong>${leaseStart}</strong> and ending <strong>${leaseEnd}</strong>. ${leaseTermsBody}</p>
-<p>At the conclusion of the initial term, the tenancy shall convert to a month-to-month tenancy under the same terms unless either party provides written notice to terminate at least 20 days before the end of any monthly rental period.</p>
+<p>At the conclusion of the initial term, the tenancy shall convert to a month-to-month tenancy under the same terms unless either party provides written notice to terminate ${config.monthToMonthTerminationNotice ?? "within the period required by applicable law"}.</p>
 
 <h2>4. Rent</h2>
 <table>
-  <tr><th width="50%">Monthly base rent</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
+  <tr><th width="50%">${rentRowLabel}</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
   ${monthToMonthSurcharge > 0 ? `<tr><th>Month-to-month surcharge</th><td><strong>+${fmtUsd(monthToMonthSurcharge)} / month (non-refundable)</strong></td></tr>` : ""}
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
   ${totalMonthly ? `<tr class="total-row"><th>Total monthly payment</th><td><strong>${totalMonthly}</strong></td></tr>` : ""}
 </table>
+${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</strong>. Each month's rent is the actual number of days of the term falling in that month multiplied by the daily base rent above. No fixed monthly rent total applies. The utilities estimate is billed monthly and is prorated for any partial month.</p>` : ""}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 <p><strong>Late fee:</strong> If rent is not received by the <strong>5th of the month</strong>, a late fee of <strong>${fmtUsd(lateFeeUsd)}</strong> (non-refundable) may be assessed. Acceptance of late payment does not waive Landlord&apos;s right to enforce late fees or pursue other remedies under this Agreement or applicable law.</p>
 
@@ -655,8 +798,9 @@ ${proratedSection || ""}
 ${customFeeSigningRows}
   <tr><th>Total due at signing</th><td><strong>${paySigning}</strong></td></tr>
 </table>
+<p>${HOLDING_DEPOSIT_CREDIT_NOTE}</p>
 <p>Resident shall pay a security deposit of <strong>${secDep}</strong> at lease signing. The deposit shall be held in accordance with ${config.depositStatuteRef} and secures Resident&apos;s full performance under this Agreement. Resident&apos;s liability is not limited to the deposit amount, and the deposit may not be applied toward rent or other charges during the tenancy.</p>
-<p>Within 30 days after termination of the tenancy and vacancy of the Premises, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
+<p>${config.depositReturnWindow ?? "Within the period required by applicable law after termination of the tenancy and vacancy of the Premises"}, Landlord shall return any refundable portion of the deposit or provide a written itemized statement of deductions, as required by law. Resident shall provide a forwarding address for delivery of the deposit accounting and any refund. Any refund may be issued as a single check payable to all Residents.</p>
 <p>Deductions from the deposit may include, to the extent permitted by law:</p>
 <ul>
   <li>Unpaid rent, utilities, or other charges.</li>
@@ -705,10 +849,10 @@ ${houseRules
 <p>Pet disclosure on application: <strong>${pets}</strong>.</p>
 
 <h2>${proratedSection ? "13" : "12"}. Maintenance &amp; Repairs</h2>
-<h3>Landlord responsibilities (RCW 59.18.060):</h3>
+<h3>Landlord responsibilities${config.landlordMaintenanceStatuteRef ? ` (${config.landlordMaintenanceStatuteRef})` : ""}:</h3>
 <ul>
   <li>Maintain the dwelling in a structurally sound, weathertight, and sanitary condition.</li>
-  <li>Provide adequate heating capable of maintaining 68°F and functioning plumbing and hot water.</li>
+  <li>Provide adequate heating capable of maintaining ${config.minimumHeatTemperature ?? "the minimum temperature required by applicable law"} and functioning plumbing and hot water.</li>
   <li>Keep common areas clean, sanitary, and reasonably free from pests.</li>
   <li>Maintain all electrical, plumbing, heating, and mechanical systems in good working order.</li>
   <li>Respond to emergency repair requests (no heat, water, major leak) within 24 hours; non-emergency repairs within a reasonable timeframe, generally 10 business days.</li>
@@ -782,7 +926,7 @@ ${houseRules
 <h2>${proratedSection ? "25" : "24"}. Rent &amp; Fees Schedule (Exhibit A)</h2>
 <table>
   <tr><th>Item</th><th>Amount</th><th>Frequency</th></tr>
-  <tr><td>Monthly base rent</td><td><strong>${escapeHtml(typeof monthlyRentStr === "string" ? monthlyRentStr : String(monthlyRentStr))}</strong></td><td>Monthly, due 1st</td></tr>
+  <tr><td>${rentRowLabel}</td><td><strong>${escapeHtml(typeof monthlyRentStr === "string" ? monthlyRentStr : String(monthlyRentStr))}</strong></td><td>${isDailyBasis ? "Per day, billed each month by actual days" : "Monthly, due 1st"}</td></tr>
   <tr><td>Utilities / services estimate</td><td>${utilitiesStr}</td><td>Monthly</td></tr>
   ${totalMonthly ? `<tr class="total-row"><td><strong>Total monthly payment</strong></td><td><strong>${totalMonthly}</strong></td><td>Monthly</td></tr>` : ""}
   <tr><td>Application fee</td><td>${appFee}</td><td>One-time</td></tr>
@@ -823,7 +967,7 @@ ${customFeeExhibitRows}
 
 <div class="addendum">
 <h2>Addendum C — Mold &amp; Moisture Policy</h2>
-<p>Resident agrees to maintain adequate ventilation in the room and bathroom (open windows when possible, use exhaust fans). Resident shall promptly report visible mold, moisture intrusion, or condensation to Landlord in writing. Resident shall wipe down surfaces subject to moisture (shower walls, windowsills) regularly. Resident shall not dry laundry inside the room or any space without adequate ventilation. Failure to report mold or moisture conditions within 24 hours of discovery may result in Resident being held liable for resulting damage (RCW 59.18.130).</p>
+<p>Resident agrees to maintain adequate ventilation in the room and bathroom (open windows when possible, use exhaust fans). Resident shall promptly report visible mold, moisture intrusion, or condensation to Landlord in writing. Resident shall wipe down surfaces subject to moisture (shower walls, windowsills) regularly. Resident shall not dry laundry inside the room or any space without adequate ventilation. Failure to report mold or moisture conditions within 24 hours of discovery may result in Resident being held liable for resulting damage (${escapeHtml(config.residentMaintenanceStatuteRef)}).</p>
 </div>
 
 <div class="addendum">
