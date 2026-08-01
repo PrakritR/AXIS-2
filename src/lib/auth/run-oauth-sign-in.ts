@@ -28,7 +28,21 @@ const PROVIDER_LABEL: Record<OAuthProviderId, string> = {
   apple: "Apple",
 };
 
-export async function runOAuthSignIn({
+export async function runOAuthSignIn(
+  params: RunOAuthSignInParams,
+): Promise<RunOAuthSignInResult> {
+  try {
+    return await runOAuthSignInUnguarded(params);
+  } catch (e) {
+    // `openOAuthUrl` throws NativeOAuthUnavailableError when the native shell cannot run the
+    // flow at all. Return it so the caller renders it in place rather than letting it escape
+    // as an unhandled rejection and leaving the button silently stuck.
+    const label = PROVIDER_LABEL[params.provider];
+    return { ok: false, message: e instanceof Error ? e.message : `Could not start ${label} sign-in.` };
+  }
+}
+
+async function runOAuthSignInUnguarded({
   provider,
   nextPath = "",
   viaContinue = true,

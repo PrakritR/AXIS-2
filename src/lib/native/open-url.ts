@@ -29,6 +29,25 @@ export const NATIVE_IOS_OAUTH_REBUILD_MESSAGE =
   "Google sign-in needs the latest version of the PropLane app. Please update PropLane from TestFlight or the App Store, then try again. You can also continue with Apple.";
 
 /**
+ * The native shell cannot run this OAuth flow at all — nothing was opened and the WebView is
+ * still sitting on the sign-in screen.
+ *
+ * This is a PRE-FLIGHT failure, so it is thrown back to the caller to render in place rather
+ * than delivered by navigating to `/auth/sign-in?error=oauth&message=…`. That navigation is
+ * what a user experiences as the page "just refreshing and going back": it reloads the screen,
+ * throws away anything typed, and — because `/auth/sign-in` renders `NativeAuthHub`, which did
+ * not read those params — dropped the explanation entirely. Post-flight failures (the OAuth
+ * sheet came back with an error, a deep link arrived while the app was backgrounded) still
+ * travel by navigation; see `navigateToNativeOAuthFailure`.
+ */
+export class NativeOAuthUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NativeOAuthUnavailableError";
+  }
+}
+
+/**
  * iOS or Android? Prefers the live Capacitor bridge, then the `data-native` tag set in
  * <head>. Unknown-but-native resolves to null so callers can pick the safer (iOS) path.
  */
@@ -224,9 +243,10 @@ export async function openOAuthUrl(url: string): Promise<void> {
       return;
     }
     // Plugin absent = this iOS binary predates WebAuthSession. Do NOT fall back to
-    // SFSafariViewController; fail with an update hint instead.
-    navigateToNativeOAuthFailure(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
-    return;
+    // SFSafariViewController; report the update hint to the caller so the sign-in screen can
+    // show it in place, instead of reloading the page and losing the message.
+    clearNativeOAuthInProgress();
+    throw new NativeOAuthUnavailableError(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
   }
 
   await openOAuthUrlWithSystemBrowser(url);
