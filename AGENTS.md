@@ -762,10 +762,10 @@ in that browser's storage. So any link that is *emailed* — and therefore opene
 wherever the person reads mail, usually a different browser or device — must carry a
 `token_hash` and be verified with `verifyOtp`, which is not bound to any storage.
 
-Password reset shipped the wrong shape and was dead in production: the link pointed at
-`/auth/callback?next=%2Fauth%2Freset-password&code=…`, so every cross-browser click
-failed with `PKCE code verifier not found in storage` and the user was redirected to
-`/auth/sign-in` as an **OAuth** error — nothing on screen mentioned the reset.
+Get the shape wrong and the failure is invisible rather than loud: a link of the form
+`/auth/callback?next=%2Fauth%2Freset-password&code=…` fails every cross-browser click
+with `PKCE code verifier not found in storage`, on a page whose error copy is about
+something else entirely.
 
 The rules that follow from it:
 
@@ -784,7 +784,8 @@ The rules that follow from it:
   sign-in* error, and on success `resolveOAuthPortalRedirect` reroutes by role. Any
   non-OAuth destination sent through it inherits both. `/auth/reset-password` is in
   `isBypassOAuthGatePath` for that reason, and the callback fails reset targets onto the
-  reset page; both exist only for links minted before this changed.
+  reset page; both exist only for legacy links minted before `/auth/confirm` took over
+  recovery, and are safe to drop once none can still be in an inbox.
 - Coverage: `tests/unit/password-reset-url.test.ts`,
   `password-reset-request-route.test.ts`, `password-reset-confirm-page.test.tsx`,
   `password-reset-legacy-callback.test.ts`.
