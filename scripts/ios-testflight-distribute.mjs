@@ -148,6 +148,38 @@ function requireEnv(name) {
   return value;
 }
 
+/** The workflow caps the distribute step at 30 minutes; waiting past that is unreachable. */
+export const DEFAULT_PROCESSING_TIMEOUT_SECONDS = 1500;
+export const MAX_PROCESSING_TIMEOUT_SECONDS = 1740;
+
+/**
+ * Reject a timeout that cannot do what it claims.
+ *
+ * An unvalidated `Number("abc")` yields NaN, `Date.now() >= NaN` is never true, and
+ * the poll loop then runs until the workflow's step cap kills the job — replacing a
+ * clear timeout message and its `--build=` remediation hint with an opaque
+ * cancellation. A value above the step cap fails the same way.
+ */
+export function parseTimeoutSeconds(raw, { max = MAX_PROCESSING_TIMEOUT_SECONDS } = {}) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return DEFAULT_PROCESSING_TIMEOUT_SECONDS;
+  }
+  const parsed = Number(String(raw).trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(
+      `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS must be a positive number of seconds, got ${JSON.stringify(raw)}.`,
+    );
+  }
+  if (parsed > max) {
+    throw new Error(
+      `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS=${parsed} exceeds the ${max}s the workflow step allows, ` +
+        "so the job would be cancelled mid-wait instead of reporting a timeout. Lower it, or raise the " +
+        "step's timeout-minutes in .github/workflows/ios-testflight.yml first.",
+    );
+  }
+  return parsed;
+}
+
 function describeApiError(body) {
   const errors = body?.errors;
   if (!Array.isArray(errors) || errors.length === 0) return JSON.stringify(body);
@@ -321,11 +353,36 @@ async function isBuildAssignedToGroup(client, buildId, groupId) {
   return (body?.data ?? []).some((build) => build.id === buildId);
 }
 
+/**
+ * Confirm membership by re-reading the API, retrying briefly before giving up.
+ *
+ * `filter[betaGroups]` is served by a search index that can lag the relationship
+ * write by a few seconds, so a single read would occasionally fail a promote for
+ * a build that is genuinely assigned and installable. Re-polling keeps the API
+ * read as the SOLE gate — it never softens the verdict, it only stops a false red.
+ */
+async function confirmAssignment(client, buildId, groupId, { attempts = 5, intervalMs = 12_000 } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (await isBuildAssignedToGroup(client, buildId, groupId)) return true;
+    if (attempt === attempts) return false;
+    console.log(`  not visible in the group yet (read ${attempt}/${attempts}); re-reading in ${intervalMs / 1000}s`);
+    await sleep(intervalMs);
+  }
+  return false;
+}
+
+/**
+ * POST the relationship. Returns the failure reason instead of throwing, so the
+ * verification read — not a status code — decides the outcome.
+ *
+ * That matters concretely: a POST retried after a transient 5xx can come back 409
+ * "already exists", and throwing there would fail a run whose build is assigned
+ * and installable.
+ */
 async function assignBuildToGroup(client, buildId, groupId) {
   // Apple documents both directions of this relationship. Try the canonical
   // "Add Builds to a Beta Group" first; if Apple rejects the shape, try the
-  // inverse before giving up. Either way the verification pass below is the gate,
-  // so a fallback can never turn a failed assignment into a green run.
+  // inverse before giving up.
   const attempts = [
     { path: `betaGroups/${groupId}/relationships/builds`, body: { data: [{ type: "builds", id: buildId }] } },
     { path: `builds/${buildId}/relationships/betaGroups`, body: { data: [{ type: "betaGroups", id: groupId }] } },
@@ -336,34 +393,41 @@ async function assignBuildToGroup(client, buildId, groupId) {
     try {
       await client.post(attempt.path, attempt.body);
       console.log(`  ✓ POST ${attempt.path} accepted`);
-      return;
+      return null;
     } catch (error) {
       failures.push(`${attempt.path}: ${error.message}`);
       console.log(`  ✗ POST ${attempt.path} failed: ${error.message}`);
     }
   }
-  throw new Error(`Could not add the build to the beta group.\n${failures.join("\n")}`);
+  return `Both relationship writes were rejected:\n${failures.join("\n")}`;
 }
 
+/**
+ * Log the beta states and return them. Reporting is separate from asserting so the
+ * diagnostics still print when the run is about to fail for a different reason —
+ * a failure with no state in the log is a failure someone has to reproduce by hand.
+ */
 async function reportBetaDetail(client, buildId) {
   let detail = null;
   try {
     detail = await client.get(`builds/${buildId}/buildBetaDetail`);
   } catch (error) {
     console.log(`  (buildBetaDetail unavailable: ${error.message})`);
-    return;
+    return null;
   }
   const attributes = detail?.data?.attributes ?? {};
   console.log(`  internalBuildState: ${attributes.internalBuildState ?? "unknown"}`);
   console.log(`  externalBuildState: ${attributes.externalBuildState ?? "unknown"}`);
+  return attributes;
+}
 
-  if (FATAL_INTERNAL_BUILD_STATES.has(attributes.internalBuildState)) {
-    throw new Error(
-      `Build is assigned to the group but its internalBuildState is ${attributes.internalBuildState}, ` +
-        "so testers still cannot install it. Export compliance is declared via " +
-        "ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key survived the last cap sync.",
-    );
-  }
+function assertInstallableBetaState(attributes) {
+  if (!attributes || !FATAL_INTERNAL_BUILD_STATES.has(attributes.internalBuildState)) return;
+  throw new Error(
+    `Build is assigned to the group but its internalBuildState is ${attributes.internalBuildState}, ` +
+      "so testers still cannot install it. Export compliance is declared via " +
+      "ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key survived the last cap sync.",
+  );
 }
 
 async function main() {
@@ -379,9 +443,12 @@ async function main() {
   }
 
   const bundleId = process.env.TESTFLIGHT_BUNDLE_ID || DEFAULT_BUNDLE_ID;
-  const expectedAppId = (process.env.TESTFLIGHT_APP_ID ?? DEFAULT_APP_ID).trim();
+  // `||`, not `??`: an empty-string override (a `${{ vars.X }}` on an unset repo
+  // variable) must fall back to the default rather than silently disabling the
+  // app-id pin, which is the guard against shipping onto the legacy record.
+  const expectedAppId = (process.env.TESTFLIGHT_APP_ID || DEFAULT_APP_ID).trim();
   const groupName = process.env.TESTFLIGHT_INTERNAL_GROUP || DEFAULT_GROUP_NAME;
-  const timeoutSeconds = Number(process.env.TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS || 1500);
+  const timeoutSeconds = parseTimeoutSeconds(process.env.TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS);
 
   const client = new AscClient();
 
@@ -405,28 +472,38 @@ async function main() {
   }
 
   const alreadyAssigned = await isBuildAssignedToGroup(client, build.id, group.id);
+  let assignError = null;
   if (alreadyAssigned) {
     console.log("Build is already assigned to the group; nothing to change.");
   } else if (verifyOnly) {
     console.log("--verify-only: build is NOT assigned to the group. Not changing anything.");
   } else {
     console.log("Assigning build to the internal group…");
-    await assignBuildToGroup(client, build.id, group.id);
+    // Deliberately does not throw: the verification read decides, so a 409
+    // "already exists" cannot fail a run whose build really is installable.
+    assignError = await assignBuildToGroup(client, build.id, group.id);
   }
 
   // Verification is a fresh read, not a restatement of the POST's status code.
-  const assigned = await isBuildAssignedToGroup(client, build.id, group.id);
   console.log("");
   console.log("Verification (fresh read of builds?filter[id]=…&filter[betaGroups]=…):");
+  const assigned = verifyOnly
+    ? alreadyAssigned
+    : await confirmAssignment(client, build.id, group.id);
   console.log(`  build ${buildNumber} (${build.id}) in ${JSON.stringify(group.attributes.name)}: ${assigned}`);
-  await reportBetaDetail(client, build.id);
+  const betaDetail = await reportBetaDetail(client, build.id);
 
   if (!assigned) {
     throw new Error(
       `Build ${buildNumber} is NOT in ${JSON.stringify(group.attributes.name)}. ` +
-        "The upload is useless to testers — failing so this does not read as a successful ship.",
+        "The upload is useless to testers — failing so this does not read as a successful ship." +
+        (assignError ? `\nAssignment attempts: ${assignError}` : ""),
     );
   }
+  if (assignError) {
+    console.log(`  (assignment POST reported an error, but the API says the build IS assigned: ${assignError})`);
+  }
+  assertInstallableBetaState(betaDetail);
 
   console.log("");
   console.log(`✅ Build ${buildNumber} is distributed to ${group.attributes.name} and installable by internal testers.`);

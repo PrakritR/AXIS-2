@@ -447,50 +447,38 @@ The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) builds **only**
 `main` and `production` (`vercel.json` → `git.deploymentEnabled`, plus
 `scripts/vercel-should-build.sh`); every other branch is skipped.
 
-⚠️ **A `production` branch exists and is load-bearing.** It is the branch
-`.github/workflows/ios-testflight.yml` watches, so deleting it silently ends every
-iOS build. The branch roles in the prose below are stale and disagree with
-[`docs/ship-gate.md`](docs/ship-gate.md), which says the live site deploys from
-`production` while `main` builds Preview. For what a push actually deploys, trust
-`docs/ship-gate.md`, `vercel.json`, and the workflow file — not this section.
+Three rungs above the keeper branch — `claude-2` → `prakrit` → `main` →
+`production` (see [`docs/ship-gate.md`](docs/ship-gate.md) for the gated
+promotion of each):
 
-Two branches, two roles:
+- **`prakrit` — integration.** Day-to-day work merges here; feature branches and
+  `prakrit` itself get preview URLs.
+- **`main` — staging.** Promoted from `prakrit` and verified on its Vercel Preview
+  deployment before going live.
+- **`production` — the live site.** Deploys to the canonical `prop-lane.space` /
+  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
+  `www.axis-seattle-housing.com` (still live, still recognized as production by
+  `isProductionAxisHost`), and `axis-2.vercel.app`. A push here **also** ships an
+  iOS TestFlight build — `.github/workflows/ios-testflight.yml` triggers on
+  `push: branches: [production]`, so **deleting this branch silently ends every
+  iOS build.** Outbound email/SMS and shareable links use the canonical origin
+  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Never commit straight to it.
 
-- **`main` — the live site.** Every push here triggers a **production deploy** to
-  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
-  legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
-  still recognized as production by `isProductionAxisHost`), and
-  `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
-  (see below). Outbound email/SMS and shareable links use the canonical origin
-  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
-  this branch. Never commit straight to it.
-- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
-  produces a **preview deploy**, and Vercel keeps a stable branch alias that
-  always points at the latest `prakrit` build —
-  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
-  the staging preview the ship gate asks you to verify. Feature branches also get
-  their own preview URLs.
-
-**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
-you want it live:
+**Promote `main` → `production` to ship**, fast-forward only:
 
 ```
-git checkout main
-git pull
-git merge --ff-only prakrit   # main should stay a fast-forward of prakrit
-git push origin main          # Vercel auto-deploys web + triggers iOS TestFlight
-git checkout prakrit
+bash scripts/promote-main-to-production.sh
 ```
 
-Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
-`main`); this keeps history linear and makes rollbacks obvious. To roll back,
-point `main` at the previous known-good commit and push, or use Vercel's
-**Instant Rollback** in the dashboard.
+The script refuses a non-fast-forward (`origin/production` must be an ancestor of
+`origin/main`) and is a no-op when the two already match, so `production` stays a
+strict fast-forward of `main` and rollbacks stay obvious. To roll back, point
+`production` at the previous known-good commit and push, or use Vercel's
+**Instant Rollback** in the dashboard. Full checklist:
+[`docs/ship-gate.md`](docs/ship-gate.md).
 
-Deploying `prakrit` as a staging step is standard practice on Vercel: its
-preview/branch alias is your staging environment, and `main` is the gated
-promotion target. Don't add a separate Vercel project for staging — the branch
-model above already gives you prod + staging from one project.
+Don't add a separate Vercel project for staging — `main` plus `production` already
+gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. Read it there rather than trusting a value copied into a doc, and don't
@@ -498,8 +486,8 @@ change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
-Every push to `main` must update **both** the live website **and** the mobile app
-pipeline:
+Every push to `production` must update **both** the live website **and** the
+mobile app pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
@@ -541,9 +529,12 @@ to prove the assignment stuck** and fail the run if it did not. Rules:
 
 - **Verification is a FRESH read after the POST, and the exit code reflects that
   read — never the POST's status code.** That is the whole point: the old failure
-  was trusting a success signal that did not mean the build was installable. The
-  filtered query is exact, so a group that has accumulated hundreds of builds can
-  never report a correctly-assigned build as missing.
+  was trusting a success signal that did not mean the build was installable. It
+  cuts both ways — a POST that errors (a retry landing on 409 "already exists")
+  must not fail a build the API says *is* assigned. The filtered query is exact,
+  so a group that has accumulated hundreds of builds can never report a
+  correctly-assigned build as missing; it is re-polled briefly because that
+  filter is search-index-backed and can lag the write.
 - **The group name is matched exactly** (`Internal — PropLane team`, em dash) and
   read from the API. No match, or a match that is an *external* group → hard
   failure. Never fall back to "the first internal group"; never enable external
@@ -567,10 +558,10 @@ to prove the assignment stuck** and fail the run if it did not. Rules:
 
 The legacy record's build numbers are **higher** (49 vs 37), because it kept
 shipping before the rebrand. Comparing build numbers across the two records
-concludes backwards — an evening was lost testing legacy build 49, believing it
-was newer than the current app. The distribute script pins bundle id → app id and
-refuses to run against anything else, so a build can never land on the dead
-record by accident.
+therefore concludes backwards: a higher number on the legacy record is an
+*older*, orphaned app. The distribute script pins bundle id → app id and refuses
+to run against anything else, so a build can never land on the dead record by
+accident.
 
 Check which record a machine actually has installed:
 
@@ -627,9 +618,11 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
 [ ] prakrit verified on staging preview
-[ ] ff-only merge prakrit → main + push
+[ ] ff-only merge prakrit → main + push; main verified on its Preview deploy
+[ ] ff-only promote main → production (scripts/promote-main-to-production.sh)
 [ ] Vercel production deploy healthy
-[ ] iOS TestFlight workflow green (or secrets gap reported)
+[ ] iOS TestFlight workflow green — its distribute step is what proves the build
+    is installable, not the upload (or secrets gap reported)
 ```
 
 # The PostgREST surface is public — RLS row predicates are not a column gate

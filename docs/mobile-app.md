@@ -48,8 +48,7 @@ are no compatibility shims.
 are HIGHER** (49 vs the canonical record's 37) because it kept shipping until the
 rebrand. It now displays as "PropLane Legacy". Build numbers across the two records
 are **not comparable** — a higher number on the legacy record is an *older*,
-orphaned app, and reading it as "newer" cost a full evening of testing the wrong
-binary. Never ship to or modify the legacy record. To see which one a device
+orphaned app. Never ship to or modify the legacy record. To see which one a device
 actually has installed:
 
 ```
@@ -291,9 +290,13 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
 4. Assign the build to the group, then **re-read
    `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless
    the build is present. The exit code reflects a fresh API read, not the POST's
-   status code — a failed assignment can never look green. The query is exact
-   rather than a page of the group's builds, so a group with hundreds of
-   accumulated builds can never report a correctly-assigned build as missing.
+   status code — a failed assignment can never look green, and conversely a POST
+   that errors (a retry landing on 409 "already exists") does not fail a build the
+   API says *is* assigned. The read is re-polled a few times over ~1 min because
+   that filter is search-index-backed and can lag the write; re-polling only
+   prevents a false red, it never softens the verdict. The query is exact rather
+   than a page of the group's builds, so a group with hundreds of accumulated
+   builds can never report a correctly-assigned build as missing.
 5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and fail
    on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION`.
 

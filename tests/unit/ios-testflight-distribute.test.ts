@@ -4,7 +4,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_PROCESSING_TIMEOUT_SECONDS,
+  MAX_PROCESSING_TIMEOUT_SECONDS,
   normalizeGroupName,
+  parseTimeoutSeconds,
   selectBetaGroup,
   tokenIsUsable,
 } from "../../scripts/ios-testflight-distribute.mjs";
@@ -72,6 +75,35 @@ describe("tokenIsUsable", () => {
     expect(tokenIsUsable(now + 120, now)).toBe(false);
     expect(tokenIsUsable(now - 1, now)).toBe(false);
     expect(tokenIsUsable(undefined, now)).toBe(false);
+  });
+});
+
+describe("parseTimeoutSeconds", () => {
+  it("defaults when unset or blank", () => {
+    expect(parseTimeoutSeconds(undefined)).toBe(DEFAULT_PROCESSING_TIMEOUT_SECONDS);
+    expect(parseTimeoutSeconds("")).toBe(DEFAULT_PROCESSING_TIMEOUT_SECONDS);
+    expect(parseTimeoutSeconds("   ")).toBe(DEFAULT_PROCESSING_TIMEOUT_SECONDS);
+  });
+
+  it("accepts a positive number", () => {
+    expect(parseTimeoutSeconds("600")).toBe(600);
+    expect(parseTimeoutSeconds(" 900 ")).toBe(900);
+  });
+
+  it("rejects a non-numeric value instead of polling forever on NaN", () => {
+    // Number("abc") -> NaN makes `Date.now() >= deadline` never true, so the
+    // wait would run until the workflow step cap killed the job with no
+    // diagnostic — replacing the timeout message and its --build= hint.
+    expect(() => parseTimeoutSeconds("abc")).toThrow(/positive number of seconds/);
+    expect(() => parseTimeoutSeconds("0")).toThrow(/positive number of seconds/);
+    expect(() => parseTimeoutSeconds("-30")).toThrow(/positive number of seconds/);
+  });
+
+  it("rejects a value that would outlive the workflow step cap", () => {
+    expect(() => parseTimeoutSeconds(String(MAX_PROCESSING_TIMEOUT_SECONDS + 1))).toThrow(
+      /exceeds the .* the workflow step allows/,
+    );
+    expect(parseTimeoutSeconds(String(MAX_PROCESSING_TIMEOUT_SECONDS))).toBe(MAX_PROCESSING_TIMEOUT_SECONDS);
   });
 });
 
