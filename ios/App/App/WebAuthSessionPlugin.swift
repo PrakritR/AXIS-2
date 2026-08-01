@@ -19,7 +19,7 @@ public class WebAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let urlString = call.getString("url"),
               let url = URL(string: urlString),
               let scheme = call.getString("callbackScheme") else {
-            call.reject("url and callbackScheme are required")
+            call.reject("url and callbackScheme are required", "START_FAILED")
             return
         }
 
@@ -61,7 +61,7 @@ public class WebAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             if !session.start() {
                 self.session = nil
                 self.presentationContext = nil
-                call.reject("Failed to start authentication session")
+                call.reject("Failed to start authentication session", "START_FAILED")
             }
         }
     }

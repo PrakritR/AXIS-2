@@ -15,6 +15,7 @@ import {
 import {
   NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
   NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
   NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE,
   nativeOAuthNoReturnMessage,
   nativeOAuthUnexpectedCallbackMessage,
@@ -25,7 +26,20 @@ import { WebAuthSession } from "@/lib/native/web-auth-session";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 
-export { NATIVE_IOS_OAUTH_REBUILD_MESSAGE, NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE };
+export {
+  NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+  NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
+};
+
+/**
+ * `WebAuthSessionPlugin` rejection codes that mean nothing was ever presented, mapped to the
+ * user-facing copy shown for each.
+ */
+const NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES: Record<string, string> = {
+  NO_ANCHOR: NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+  START_FAILED: NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
+};
 
 /**
  * The native shell cannot run this OAuth flow at all — nothing was opened and the WebView is
@@ -270,13 +284,15 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
       clearNativeOAuthInProgress();
       return;
     }
-    // NO_ANCHOR means the plugin found no window to anchor the sheet to, so nothing was ever
-    // presented. That is a PRE-FLIGHT failure like the missing-plugin case: throw it back for
-    // the caller to render in place instead of reloading the WebView, and never surface the
-    // plugin's own developer-phrased reason.
-    if (code === "NO_ANCHOR") {
+    // Every code in this map means the plugin never presented anything — no window to anchor
+    // to (NO_ANCHOR), bad arguments or `session.start()` returning false (START_FAILED). Those
+    // are PRE-FLIGHT failures like the missing-plugin case: throw them back for the caller to
+    // render in place instead of reloading the WebView, and never surface the plugin's own
+    // developer-phrased reason. A new plugin rejection is pre-flight only by being listed here.
+    const preflightMessage = NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES[code];
+    if (preflightMessage) {
       clearNativeOAuthInProgress();
-      throw new NativeOAuthUnavailableError(NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE);
+      throw new NativeOAuthUnavailableError(preflightMessage);
     }
     const message = error instanceof Error ? error.message : NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE;
     navigateToNativeOAuthFailure(message);

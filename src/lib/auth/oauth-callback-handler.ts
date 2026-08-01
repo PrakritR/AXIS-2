@@ -2,6 +2,11 @@ import { resolveRequestOrigin } from "@/lib/app-url";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthNextPathFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
+import {
+  OAUTH_CALLBACK_MISSING_CODE_MESSAGE,
+  OAUTH_CALLBACK_SESSION_FAILED_MESSAGE,
+  OAUTH_NOT_COMPLETED_MESSAGE,
+} from "@/lib/auth/oauth-failure-messages";
 import { PASSWORD_RESET_NEXT_PATH } from "@/lib/auth/password-reset-url";
 import { maybeLinkGoogleCalendarFromOAuthSession, shouldRedirectToGoogleCalendarConnect, signedInWithGoogle } from "@/lib/google-calendar/link-from-auth.server";
 import { buildGoogleCalendarConnectPath } from "@/lib/google-calendar/link-after-manager-provision.server";
@@ -71,18 +76,14 @@ export async function handleOAuthCallback(
   const safePath = redirectPath.startsWith("/") ? redirectPath : "/auth/continue";
 
   if (oauthError) {
-    const message =
-      oauthDescription?.replace(/\+/g, " ").trim() ||
-      "Google sign-in could not be completed. Try again or use email and password.";
+    // Keep the caller's redirect path (theirs) AND the allow-listed copy (ours): a message that
+    // is not in `oauth-failure-messages.ts` degrades to the generic one at render time.
+    const message = oauthDescription?.replace(/\+/g, " ").trim() || OAUTH_NOT_COMPLETED_MESSAGE;
     return callbackFailureRedirect(requestOrigin, message, safePath);
   }
 
   if (!code) {
-    return callbackFailureRedirect(
-      requestOrigin,
-      "Google sign-in did not return an authorization code.",
-      safePath,
-    );
+    return callbackFailureRedirect(requestOrigin, OAUTH_CALLBACK_MISSING_CODE_MESSAGE, safePath);
   }
 
   const redirectTarget = new URL(safePath, requestOrigin);
@@ -115,7 +116,7 @@ export async function handleOAuthCallback(
     console.error("OAuth callback exchange failed:", error.message);
     return callbackFailureRedirect(
       requestOrigin,
-      error.message || "Google sign-in session could not be established.",
+      error.message || OAUTH_CALLBACK_SESSION_FAILED_MESSAGE,
       safePath,
     );
   }
