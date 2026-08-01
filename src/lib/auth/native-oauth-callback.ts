@@ -1,6 +1,7 @@
 import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
 export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
@@ -20,16 +21,18 @@ export function isNativeOAuthShell(): boolean {
 }
 
 /**
- * Supabase OAuth redirectTo.
- * Native shell (iOS ASWebAuthenticationSession + Android Custom Tabs): the same-origin HTTPS
- *   bridge with `native_bridge=1`. The bridge page redirects to the app custom scheme, which
- *   iOS ASWebAuthenticationSession intercepts (Android deep-links back), handing control back
- *   to the app's own WebView. We deliberately do NOT use the raw custom scheme as redirectTo:
- *   Supabase does not allowlist a custom scheme by default, so it silently drops the
- *   redirect_to and falls back to the project Site URL — the user then lands on the marketing
- *   homepage inside the in-app browser instead of returning to the app. The HTTPS callback,
- *   by contrast, is the one Supabase already allowlists (its own Site URL / Redirect URLs).
- * Web: same-origin /auth/callback.
+ * Supabase OAuth redirectTo — how control returns to the app after auth:
+ *   - iOS (ASWebAuthenticationSession): the app custom scheme DIRECTLY,
+ *     `space.proplane.app://auth/callback`. The session is started with
+ *     `callbackURLScheme: "space.proplane.app"`, so Supabase's 302 to this URL is intercepted
+ *     by the session, which dismisses itself with NO HTML page and NO JavaScript in the loop;
+ *     the WebView then completes the code exchange via `finishNativeOAuthFromRawUrl`. Both the
+ *     dev and production Supabase projects allowlist `space.proplane.app://auth/callback(/**)`,
+ *     so `redirect_to` is honored and NOT dropped to the project Site URL. (This is why the old
+ *     HTTPS-bridge indirection on iOS is no longer needed.)
+ *   - Android (Chrome Custom Tab): the same-origin HTTPS bridge with `native_bridge=1`; the
+ *     bridge page deep-links back to the app custom scheme.
+ * Web: same-origin /auth/callback, no flag.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
   const base = origin.replace(/\/$/, "");
@@ -37,6 +40,9 @@ export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPat
     ? `${base}${fixedCallbackPath}`
     : bareAuthCallbackUrl(origin);
   if (isNativeOAuthShell()) {
+    if (usesIosAsWebAuthenticationSession()) {
+      return nativeOAuthCallbackUrl(fixedCallbackPath);
+    }
     return appendNativeOAuthBridgeParam(httpsCallback);
   }
   return httpsCallback;
