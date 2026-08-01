@@ -331,7 +331,10 @@ export async function renderPortalSection(
     const isApplyPath = tabParts?.[0] === "apply";
     const stage = resolveResidentPortalNavStage(residentAccess);
     if (!isApplyPath && stage !== "pre_approval") {
-      redirect(`${def.basePath}/documents/application`);
+      // Carry the query string, like the legacy redirects above: this is a
+      // REGISTERED_PUSH_DEEP_LINKS entry, so a notification's params would
+      // otherwise be dropped on the hop into Documents.
+      redirect(`${def.basePath}/documents/application${searchSuffix(searchParams)}`);
     }
   }
 
@@ -1007,10 +1010,13 @@ export async function renderPortalSection(
     // otherwise lead a free-tier resident nowhere (tab links into the upgrade
     // notice, and an Add button whose success handler navigates to
     // `documents/other` — stranding the file they just uploaded).
+    //
+    // ONE evaluation of the predicate drives both branches. Computing it twice
+    // let `applicationOnly` and the gate drift apart, and `applicationOnly` is
+    // only ever safe BECAUSE the gate returns first for every other tab.
     const documentsFreeTier = !residentSectionAllowedForManagerTier("documents", residentManagerTier);
-    if (docTab !== "application") {
-      const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
-      if (tierGate) return tierGate;
+    if (documentsFreeTier && docTab !== "application") {
+      return <ResidentFreeTierFeatureNotice title={meta.label} />;
     }
     return (
       <ResidentDocumentsPanel

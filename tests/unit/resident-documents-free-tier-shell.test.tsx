@@ -29,7 +29,10 @@ vi.mock("@/lib/manager-applications-storage", () => ({
   syncManagerApplicationsFromServer: () => Promise.resolve(),
   isWithdrawnApplicationRow: () => false,
 }));
-vi.mock("@/lib/uploaded-own-lease-storage", () => ({
+// The panel imports these from `resident-lease-upload`; mocking any other path
+// leaves the real loader in place, and its mount effect then fires a live
+// fetch("/api/portal-resident-lease-uploads") inside jsdom.
+vi.mock("@/lib/resident-lease-upload", () => ({
   readUploadedOwnLeases: () => [],
   removeUploadedOwnLease: vi.fn(),
   syncUploadedOwnLeasesFromServer: () => Promise.resolve([]),
