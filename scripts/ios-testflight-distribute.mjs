@@ -29,7 +29,8 @@
 //   TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS   bound on the processing wait (default 1500)
 
 import { createPrivateKey, sign } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 const ASC_BASE = "https://api.appstoreconnect.apple.com/v1";
 
@@ -103,23 +104,42 @@ function base64url(input) {
   return Buffer.from(input).toString("base64url");
 }
 
+// 20 minutes is Apple's maximum for a team-scoped key.
+const TOKEN_TTL_SECONDS = 20 * 60;
+// Re-mint this far before expiry so a request can never be sent with a token
+// that dies in flight.
+const TOKEN_REFRESH_MARGIN_SECONDS = 120;
+
+/**
+ * A cached token is reused only while it stays valid past the refresh margin.
+ *
+ * The processing wait is bounded by TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS, which
+ * can exceed the token's 20-minute life; a single up-front mint would 401 the
+ * assign + verify calls and leave the build undistributed — the exact failure
+ * this script exists to catch.
+ */
+export function tokenIsUsable(expiresAtSeconds, nowSeconds) {
+  if (!Number.isFinite(expiresAtSeconds)) return false;
+  return expiresAtSeconds - nowSeconds > TOKEN_REFRESH_MARGIN_SECONDS;
+}
+
 function mintToken() {
   const keyId = requireEnv("ASC_KEY_ID");
   const issuerId = requireEnv("ASC_ISSUER_ID");
   const key = createPrivateKey(loadPrivateKeyPem());
 
   const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = issuedAt + TOKEN_TTL_SECONDS;
   const header = base64url(JSON.stringify({ alg: "ES256", kid: keyId, typ: "JWT" }));
   const payload = base64url(
-    // 20 minutes is Apple's maximum for a team-scoped key.
-    JSON.stringify({ iss: issuerId, iat: issuedAt, exp: issuedAt + 20 * 60, aud: "appstoreconnect-v1" }),
+    JSON.stringify({ iss: issuerId, iat: issuedAt, exp: expiresAt, aud: "appstoreconnect-v1" }),
   );
   // JWS wants the raw r||s pair, not the DER sequence node emits by default.
   const signature = sign("sha256", Buffer.from(`${header}.${payload}`), {
     key,
     dsaEncoding: "ieee-p1363",
   }).toString("base64url");
-  return `${header}.${payload}.${signature}`;
+  return { token: `${header}.${payload}.${signature}`, expiresAt };
 }
 
 function requireEnv(name) {
@@ -137,20 +157,30 @@ function describeApiError(body) {
 }
 
 class AscClient {
-  constructor(token) {
-    this.token = token;
+  constructor(mint = mintToken) {
+    this.mint = mint;
+    this.cached = null;
+  }
+
+  authToken() {
+    const now = Math.floor(Date.now() / 1000);
+    if (!this.cached || !tokenIsUsable(this.cached.expiresAt, now)) {
+      this.cached = this.mint();
+    }
+    return this.cached.token;
   }
 
   async request(method, path, body) {
     const url = path.startsWith("http") ? path : `${ASC_BASE}/${path.replace(/^\/+/, "")}`;
     let lastError;
     // Apple's API 429s and 5xxs under load; a bounded retry keeps a whole build
-    // cycle from being wasted on a transient blip.
+    // cycle from being wasted on a transient blip. 401 is deliberately NOT
+    // retryable — a genuinely bad credential must fail fast and loudly.
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const response = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          Authorization: `Bearer ${this.authToken()}`,
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -272,9 +302,23 @@ async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds)
   }
 }
 
-async function listGroupBuildIds(client, groupId) {
-  const body = await client.get(`betaGroups/${groupId}/builds?limit=200`);
-  return new Set((body?.data ?? []).map((build) => build.id));
+/**
+ * Ask Apple directly whether THIS build is in THIS group.
+ *
+ * Deliberately an exact filtered query rather than a page of the group's builds:
+ * a beta group accumulates every build ever assigned to it, so a paged read
+ * would eventually report a correctly-assigned build as missing. Every call is a
+ * fresh request — the final verification must reflect the API, never a cached
+ * pre-check or the POST's status code.
+ */
+async function isBuildAssignedToGroup(client, buildId, groupId) {
+  const query = new URLSearchParams({
+    "filter[id]": buildId,
+    "filter[betaGroups]": groupId,
+    limit: "1",
+  });
+  const body = await client.get(`builds?${query}`);
+  return (body?.data ?? []).some((build) => build.id === buildId);
 }
 
 async function assignBuildToGroup(client, buildId, groupId) {
@@ -339,7 +383,7 @@ async function main() {
   const groupName = process.env.TESTFLIGHT_INTERNAL_GROUP || DEFAULT_GROUP_NAME;
   const timeoutSeconds = Number(process.env.TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS || 1500);
 
-  const client = new AscClient(mintToken());
+  const client = new AscClient();
 
   const app = await resolveApp(client, bundleId, expectedAppId);
   console.log(`App: ${app.attributes?.name ?? "?"} (${bundleId}, id ${app.id})`);
@@ -360,7 +404,7 @@ async function main() {
     throw new Error(`Build ${buildNumber} is already expired; it cannot be distributed.`);
   }
 
-  const alreadyAssigned = (await listGroupBuildIds(client, group.id)).has(build.id);
+  const alreadyAssigned = await isBuildAssignedToGroup(client, build.id, group.id);
   if (alreadyAssigned) {
     console.log("Build is already assigned to the group; nothing to change.");
   } else if (verifyOnly) {
@@ -371,9 +415,9 @@ async function main() {
   }
 
   // Verification is a fresh read, not a restatement of the POST's status code.
-  const assigned = (await listGroupBuildIds(client, group.id)).has(build.id);
+  const assigned = await isBuildAssignedToGroup(client, build.id, group.id);
   console.log("");
-  console.log("Verification (fresh read of betaGroups/<id>/builds):");
+  console.log("Verification (fresh read of builds?filter[id]=…&filter[betaGroups]=…):");
   console.log(`  build ${buildNumber} (${build.id}) in ${JSON.stringify(group.attributes.name)}: ${assigned}`);
   await reportBetaDetail(client, build.id);
 
@@ -389,7 +433,21 @@ async function main() {
 }
 
 // `import`ed by tests for the pure helpers; only run as a CLI.
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+//
+// Both sides must be built the same way node builds import.meta.url: percent
+// encoded (a checkout path with a space would otherwise never match) and
+// realpath'd (node resolves module specifiers through symlinks). A guard that
+// silently mismatches exits 0 having done nothing, which is the worst possible
+// outcome for a script whose entire job is failing loudly.
+function entryHref(argvPath) {
+  try {
+    return pathToFileURL(realpathSync(argvPath)).href;
+  } catch {
+    return pathToFileURL(argvPath).href;
+  }
+}
+
+const invokedDirectly = Boolean(process.argv[1]) && import.meta.url === entryHref(process.argv[1]);
 if (invokedDirectly) {
   main().catch((error) => {
     console.error("");

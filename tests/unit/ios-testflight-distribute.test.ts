@@ -3,7 +3,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { normalizeGroupName, selectBetaGroup } from "../../scripts/ios-testflight-distribute.mjs";
+import {
+  normalizeGroupName,
+  selectBetaGroup,
+  tokenIsUsable,
+} from "../../scripts/ios-testflight-distribute.mjs";
 
 const repoRoot = path.resolve(__dirname, "../..");
 const readRepoFile = (relative: string) => readFileSync(path.join(repoRoot, relative), "utf8");
@@ -52,6 +56,22 @@ describe("normalizeGroupName", () => {
   it("is total over nullish input", () => {
     expect(normalizeGroupName(undefined)).toBe("");
     expect(normalizeGroupName(null)).toBe("");
+  });
+});
+
+describe("tokenIsUsable", () => {
+  const now = 1_700_000_000;
+
+  it("keeps a token that outlives the refresh margin", () => {
+    expect(tokenIsUsable(now + 20 * 60, now)).toBe(true);
+  });
+
+  it("re-mints before expiry rather than sending a token that dies in flight", () => {
+    // A processing wait longer than the 20-minute token life used to 401 the
+    // assign + verify calls and leave the build undistributed.
+    expect(tokenIsUsable(now + 120, now)).toBe(false);
+    expect(tokenIsUsable(now - 1, now)).toBe(false);
+    expect(tokenIsUsable(undefined, now)).toBe(false);
   });
 });
 
