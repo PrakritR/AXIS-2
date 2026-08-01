@@ -1,0 +1,60 @@
+import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import type { PortalKind } from "@/lib/portal-types";
+import { residentSectionLockedForStage, type ResidentPortalNavStage } from "@/lib/resident-portal-nav";
+
+/**
+ * What a locked nav row DOES when you click it.
+ *
+ * - `"none"`   — not locked.
+ * - `"upsell"` — locked, but still navigates. The manager / pro free-tier case:
+ *   the destination route renders `PortalTierPaywall`, and the sidebar row is
+ *   the ONLY entry point to that upgrade page anywhere in the product. Rendering
+ *   it as a non-navigating `<span>` deletes the upgrade CTA — a revenue path —
+ *   which is exactly what shipped in the resident redesign.
+ * - `"inert"`  — locked and dead. Every RESIDENT lock:
+ *     * a stage lock ("available after your lease is signed") has nothing to buy;
+ *     * a resident free-tier lock is the MANAGER's plan, so
+ *       `ResidentFreeTierFeatureNotice` can only say "ask your manager", which
+ *       the row's own lock label already says.
+ *   Both resident cases behave identically so a lock reads one way to a resident.
+ *
+ * Locks apply to managers AND residents — this only decides what a click does.
+ *
+ * Every locked-nav surface must honour the same split: desktop list, collapsed
+ * rail, mobile top strip, native bottom bar, and the native More sheet. A live
+ * link into a section the server then redirects home reads as a broken tab.
+ */
+export type PortalNavLockKind = "none" | "upsell" | "inert";
+
+export function portalNavLockKind(params: {
+  kind: PortalKind;
+  section: string;
+  /** The viewer's own plan for manager/pro; the linked MANAGER's plan for a resident. */
+  subscriptionTier: "free" | "paid" | null | undefined;
+  residentNavStage?: ResidentPortalNavStage | null;
+}): PortalNavLockKind {
+  const { kind, section, subscriptionTier, residentNavStage } = params;
+
+  if (kind === "resident") {
+    if (residentNavStage && residentSectionLockedForStage(section, residentNavStage)) return "inert";
+    if (subscriptionTier === "free" && residentSectionLockedForManagerTier(section, subscriptionTier)) {
+      return "inert";
+    }
+    return "none";
+  }
+
+  if ((kind === "manager" || kind === "pro") && subscriptionTier === "free") {
+    return managerSectionLockedForTier(section, subscriptionTier) ? "upsell" : "none";
+  }
+
+  return "none";
+}
+
+export function portalNavSectionLocked(params: Parameters<typeof portalNavLockKind>[0]): boolean {
+  return portalNavLockKind(params) !== "none";
+}
+
+/** True when a locked row must still navigate (to the upgrade paywall page). */
+export function portalNavLockNavigable(params: Parameters<typeof portalNavLockKind>[0]): boolean {
+  return portalNavLockKind(params) === "upsell";
+}
