@@ -81,14 +81,16 @@ function ResidentTourDetail({
       }
     >
       <div className="space-y-5 px-1 pb-8">
-        <PortalListControlStack>
-          <LocalDestinationNav
-            items={TOUR_DETAIL_TABS.map((tab) => ({ id: tab.id, label: tab.label }))}
-            activeId={detailTab}
-            onChange={(id) => onDetailTabChange(id as TourDetailTabId)}
-            ariaLabel="Tour detail sections"
-          />
-        </PortalListControlStack>
+        <PortalListControlStack
+          destinationRow={
+            <LocalDestinationNav
+              items={TOUR_DETAIL_TABS.map((tab) => ({ id: tab.id, label: tab.label }))}
+              activeId={detailTab}
+              onChange={(id) => onDetailTabChange(id as TourDetailTabId)}
+              ariaLabel="Tour detail sections"
+            />
+          }
+        />
 
         {detailTab === "details" ? (
           <div className="space-y-5">
