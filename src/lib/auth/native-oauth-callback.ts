@@ -1,7 +1,6 @@
 import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
-import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 
 /** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
 export const NATIVE_OAUTH_SCHEME = "space.proplane.app";
@@ -18,6 +17,26 @@ export function isNativeOAuthShell(): boolean {
   if (typeof window === "undefined") return false;
   if (detectNativePlatformSync()) return true;
   return document.documentElement.hasAttribute("data-native");
+}
+
+/**
+ * True on an iOS shell whose binary links the `WebAuthSession` plugin
+ * (ASWebAuthenticationSession). Reads the injected `window.Capacitor` global the same way
+ * `detectNativePlatformSync` does rather than importing `@capacitor/core`: this module is in the
+ * import graph of the `/auth/callback*` server route handlers, which must not pull the
+ * browser-only Capacitor SDK into the server bundle.
+ */
+function iosWebAuthSessionAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  if (detectNativePlatformSync() !== "ios") return false;
+  try {
+    const cap = (
+      window as Window & { Capacitor?: { isPluginAvailable?: (name: string) => boolean } }
+    ).Capacitor;
+    return cap?.isPluginAvailable?.("WebAuthSession") === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -40,7 +59,7 @@ export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPat
     ? `${base}${fixedCallbackPath}`
     : bareAuthCallbackUrl(origin);
   if (isNativeOAuthShell()) {
-    if (usesIosAsWebAuthenticationSession()) {
+    if (iosWebAuthSessionAvailable()) {
       return nativeOAuthCallbackUrl(fixedCallbackPath);
     }
     return appendNativeOAuthBridgeParam(httpsCallback);

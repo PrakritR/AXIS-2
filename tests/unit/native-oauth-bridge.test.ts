@@ -90,7 +90,12 @@ describe("native OAuth bridge", () => {
     expect(html).toContain("1500");
   });
 
-  it("omits the timed web-fallback auto-navigation for iOS (SFSafariViewController)", async () => {
+  // Fix 3 (defense in depth for an OLDER iOS binary that still reaches the HTML bridge): the
+  // ASWebAuthenticationSession / SFSafariViewController sheet only dismisses on a navigation
+  // matching the custom callback scheme, and a synthesized anchor click with no user gesture
+  // is unreliable inside it. So the iOS branch performs a TOP-LEVEL navigation to the scheme
+  // immediately, and never the timed web fallback (which would dump the portal into the sheet).
+  it("deep-links top-level and omits the timed web fallback for iOS", async () => {
     const callbackUrl = new URL(
       "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
     );
@@ -101,19 +106,39 @@ describe("native OAuth bridge", () => {
     // dump the portal into in-app Safari must be gated off.
     expect(html).toContain("Open PropLane");
     expect(html).toContain("Continue in your browser");
+    expect(html).toContain("var isIos = true");
+    expect(html).toContain("window.location.replace(schemeTarget)");
     expect(html).toContain("if (false)");
     expect(html).not.toContain("if (true)");
   });
 
-  it("keeps the timed web-fallback auto-navigation for Android (Chrome Custom Tab)", async () => {
+  it("keeps the anchor-click deep link and timed web fallback for Android (Chrome Custom Tab)", async () => {
     const callbackUrl = new URL(
       "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
     );
     const response = nativeOAuthBridgeResponse(callbackUrl, { isIos: false });
     const html = await response.text();
 
+    expect(html).toContain("var isIos = false");
+    expect(html).toContain('getElementById("open-app")');
     expect(html).toContain("if (true)");
     expect(html).toContain("1500");
+  });
+
+  it("routes an Android native_bridge=1 request to the HTML bridge, never a redirect", async () => {
+    const req = new NextRequest(
+      "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
+      {
+        headers: {
+          "user-agent": "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari",
+        },
+      },
+    );
+    const response = maybeNativeOAuthBridgeResponse(req);
+    expect(response).not.toBeNull();
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get("location")).toBeNull();
+    expect(await response!.text()).toContain("Open PropLane");
   });
 
   it("gates the auto-navigation off when the request comes from an iOS user agent", async () => {
@@ -133,50 +158,5 @@ describe("native OAuth bridge", () => {
       { headers: { "user-agent": "Mozilla/5.0 Capacitor iOS" } },
     );
     expect(shouldRenderNativeOAuthBridge(req)).toBe(false);
-  });
-
-  // Fix 3 (defense in depth for an OLDER iOS binary that still reaches the HTML bridge): the
-  // ASWebAuthenticationSession / SFSafariViewController sheet only dismisses on a navigation
-  // matching the custom callback scheme, and a synthesized anchor click with no user gesture
-  // is unreliable inside it. So the iOS branch performs a TOP-LEVEL navigation to the scheme
-  // immediately, and never the timed web fallback (which would dump the portal into the sheet).
-  describe("iOS bridge hardening (fix 3)", () => {
-    it("does a top-level window.location navigation to the scheme on iOS", async () => {
-      const callbackUrl = new URL(
-        "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
-      );
-      const html = await nativeOAuthBridgeResponse(callbackUrl, { isIos: true }).text();
-      expect(html).toContain("var isIos = true");
-      expect(html).toContain("window.location.replace(schemeTarget)");
-      // Timed web fallback stays gated off on iOS.
-      expect(html).toContain("if (false)");
-    });
-
-    it("keeps the anchor-click deep link and timed fallback for Android", async () => {
-      const callbackUrl = new URL(
-        "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
-      );
-      const html = await nativeOAuthBridgeResponse(callbackUrl, { isIos: false }).text();
-      expect(html).toContain("var isIos = false");
-      expect(html).toContain('getElementById("open-app")');
-      expect(html).toContain("if (true)");
-      expect(html).toContain("1500");
-    });
-
-    it("routes an Android native_bridge=1 request to the HTML bridge, never a redirect", async () => {
-      const req = new NextRequest(
-        "https://prop-lane.space/auth/callback?native_bridge=1&code=abc123",
-        {
-          headers: {
-            "user-agent": "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari",
-          },
-        },
-      );
-      const response = maybeNativeOAuthBridgeResponse(req);
-      expect(response).not.toBeNull();
-      expect(response!.status).toBe(200);
-      expect(response!.headers.get("location")).toBeNull();
-      expect(await response!.text()).toContain("Open PropLane");
-    });
   });
 });

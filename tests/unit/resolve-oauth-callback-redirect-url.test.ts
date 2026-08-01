@@ -1,12 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const isPluginAvailableMock = vi.fn();
-
-vi.mock("@capacitor/core", () => ({
-  Capacitor: {
-    isPluginAvailable: (...args: unknown[]) => isPluginAvailableMock(...args),
-  },
-}));
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import {
   resolveOAuthCallbackRedirectUrl,
@@ -23,11 +15,17 @@ function stubNativeShell(): void {
   });
 }
 
-function stubIosNativeShell(): void {
+/**
+ * Stub the real Capacitor runtime shape: the shell injects `window.Capacitor`, which is what
+ * the redirect resolver reads (it must not import `@capacitor/core` — this module is in the
+ * server route handlers' import graph).
+ */
+function stubCapacitorShell(platform: "ios" | "android", webAuthSession: boolean): void {
   vi.stubGlobal("window", {
     Capacitor: {
       isNativePlatform: () => true,
-      getPlatform: () => "ios",
+      getPlatform: () => platform,
+      isPluginAvailable: (name: string) => webAuthSession && name === "WebAuthSession",
     },
   });
   vi.stubGlobal("document", {
@@ -38,13 +36,8 @@ function stubIosNativeShell(): void {
 }
 
 describe("resolveOAuthCallbackRedirectUrl", () => {
-  beforeEach(() => {
-    isPluginAvailableMock.mockImplementation((name: string) => name === "WebAuthSession");
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.resetModules();
   });
 
   // iOS ASWebAuthenticationSession gets the app custom scheme DIRECTLY as redirect_to. The
@@ -52,30 +45,41 @@ describe("resolveOAuthCallbackRedirectUrl", () => {
   // no HTML page and no JavaScript. Both Supabase projects allowlist
   // space.proplane.app://auth/callback(/**), so redirect_to is honored (not dropped to the
   // Site URL). Android keeps the HTTPS bridge.
-  it("returns the custom scheme directly on iOS when WebAuthSession is linked", async () => {
-    stubIosNativeShell();
-    const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");
-    expect(resolve("https://prop-lane.space")).toBe(NATIVE_OAUTH_CALLBACK_URL);
-    expect(resolve("https://prop-lane.space", "/auth/callback/partner-pricing")).toBe(
-      "space.proplane.app://auth/callback/partner-pricing",
+  it("returns the custom scheme directly on iOS when WebAuthSession is linked", () => {
+    stubCapacitorShell("ios", true);
+    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(
+      NATIVE_OAUTH_CALLBACK_URL,
     );
+    expect(
+      resolveOAuthCallbackRedirectUrl("https://prop-lane.space", "/auth/callback/partner-pricing"),
+    ).toBe("space.proplane.app://auth/callback/partner-pricing");
   });
 
-  it("falls back to the HTTPS bridge on iOS when WebAuthSession is absent", async () => {
+  it("falls back to the HTTPS bridge on iOS when WebAuthSession is absent", () => {
     // Such an iOS binary cannot run ASWebAuthenticationSession, so openOAuthUrl never reaches
     // OAuth (it shows a rebuild hint) — the redirect_to value is moot, so keep the legacy one.
-    stubIosNativeShell();
-    isPluginAvailableMock.mockReturnValue(false);
-    const { resolveOAuthCallbackRedirectUrl: resolve } = await import("@/lib/auth/native-oauth-callback");
-    expect(resolve("https://prop-lane.space")).toBe(
+    stubCapacitorShell("ios", false);
+    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(
       appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback"),
     );
-    expect(resolve("https://prop-lane.space", "/auth/callback/partner-pricing")).toBe(
-      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback/partner-pricing"),
-    );
+    expect(
+      resolveOAuthCallbackRedirectUrl("https://prop-lane.space", "/auth/callback/partner-pricing"),
+    ).toBe(appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback/partner-pricing"));
   });
 
-  it("returns https callback with native_bridge for Android native shell", () => {
+  // Load-bearing invariant: Android MUST NOT move onto the custom scheme. It reports
+  // WebAuthSession as available in some shells, so the platform check has to gate first.
+  it("keeps the HTTPS bridge on a real Android Capacitor shell even with WebAuthSession available", () => {
+    stubCapacitorShell("android", true);
+    expect(resolveOAuthCallbackRedirectUrl("https://prop-lane.space")).toBe(
+      appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback"),
+    );
+    expect(
+      resolveOAuthCallbackRedirectUrl("https://prop-lane.space", "/auth/callback/partner-pricing"),
+    ).toBe(appendNativeOAuthBridgeParam("https://prop-lane.space/auth/callback/partner-pricing"));
+  });
+
+  it("returns https callback with native_bridge for a data-native shell of unknown platform", () => {
     stubNativeShell();
     expect(resolveOAuthCallbackRedirectUrl("http://192.168.5.121:3000")).toBe(
       appendNativeOAuthBridgeParam("http://192.168.5.121:3000/auth/callback"),

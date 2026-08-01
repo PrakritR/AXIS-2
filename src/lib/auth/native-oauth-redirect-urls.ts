@@ -29,8 +29,10 @@ export function nativeOAuthSetupHint(): string {
   const https = httpsOAuthCallbackUrls()[0];
   const native = nativeSupabaseRedirectUrls()[0];
   return (
-    `In Supabase → Authentication → URL configuration → Redirect URLs, add ${https} ` +
-    `(required). Optionally add ${native} for direct scheme returns. ` +
-    `Without the HTTPS callback, Google sign-in opens the marketing homepage instead of the portal.`
+    `In Supabase → Authentication → URL configuration → Redirect URLs, add ${native} ` +
+    `(required for iOS — ASWebAuthenticationSession returns through the app scheme) and ` +
+    `${https} (required for Android, which returns through the HTTPS bridge). ` +
+    `If the scheme entry is missing, Supabase drops redirect_to to the Site URL and sign-in ` +
+    `opens the marketing homepage instead of returning to the app.`
   );
 }
