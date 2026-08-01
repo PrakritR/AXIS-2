@@ -487,10 +487,16 @@ export function PortalSidebar({
       </>
     );
     if (locked && !isSectionLockNavigable(s.section)) {
+      // `title` as well as `aria-label`: an inert row has no destination and no
+      // visible reason text, so without a tooltip a SIGHTED user taps a dead
+      // row and learns nothing — the lock reason ("Approved — now read-only in
+      // Documents", "Available after your lease is signed") only ever reached
+      // assistive tech. Applies to every resident lock, not one string.
       return (
         <span
           key={s.section}
           className={cn(navLinkClass(false, true), "cursor-not-allowed")}
+          title={lockAriaLabel(s.label, true, s.section)}
           aria-label={lockAriaLabel(s.label, true, s.section)}
           role="link"
           aria-disabled="true"
@@ -546,7 +552,9 @@ export function PortalSidebar({
       return (
         <span
           key={s.section}
-          title={s.label}
+          // The collapsed rail is icon-only, so `title={s.label}` dropped the
+          // reason entirely — carry the same tooltip the expanded row shows.
+          title={lockAriaLabel(s.label, true, s.section)}
           aria-label={lockAriaLabel(s.label, true, s.section)}
           aria-disabled="true"
           className={railClass}
