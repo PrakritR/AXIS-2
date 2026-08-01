@@ -70,17 +70,37 @@ export const RESIDENT_PAYMENTS_LEGACY_TABS: Record<string, { status?: string } |
 
 /** Sidebar during application phase: Application, Communication, and Settings. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
+  { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
-/** Pre-lease workspace: application submitted or approved, lease not yet fully signed. */
+/**
+ * Full resident nav catalog — always registered so web sidebar and mobile More
+ * can list every section with stage-based locks.
+ */
+export const RESIDENT_UNIFIED_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "tour", label: "Tour", tabs: [] },
+  { section: "applications", label: "Application", tabs: [] },
+  { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "lease", label: "Lease", tabs: [] },
+  { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
+  { section: "payments", label: "Payments", tabs: [] },
+  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "move-in", label: "House details", tabs: [] },
+  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
+  { section: "profile", label: "Settings", tabs: [] },
+];
+
+/** Pre-lease workspace: application approved, lease not yet fully signed. */
 export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
+  { section: "payments", label: "Payments", tabs: [] },
   { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
@@ -110,6 +130,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
 /** Every resident nav section id (union of limited + approved definitions). */
 export const RESIDENT_PORTAL_SECTION_IDS = [
   ...new Set([
+    ...RESIDENT_UNIFIED_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_PRE_LEASE_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),

@@ -20,9 +20,11 @@ function sectionIds(sections: { section: string }[]): string[] {
 
 describe("resident portal redesign completeness", () => {
   describe("three access-state section catalogs", () => {
-    it("application phase exposes Application, Communication, and Settings", () => {
+    it("application phase exposes tour, application, dashboard, and communication", () => {
       expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).toEqual([
+        "tour",
         "applications",
+        "dashboard",
         "communication",
         "profile",
       ]);
@@ -43,19 +45,19 @@ describe("resident portal redesign completeness", () => {
       expect(ids).toContain("communication");
     });
 
-    it("pre-lease workspace omits services and payments", () => {
+    it("pre-lease workspace includes payments and omits services", () => {
       const ids = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
       expect(ids).not.toContain("services");
-      expect(ids).not.toContain("payments");
+      expect(ids).toContain("payments");
       expect(ids).toContain("applications");
       expect(ids).toContain("lease");
       expect(ids).toContain("dashboard");
     });
 
-    it("application-phase route guard allows communication and blocks lease", () => {
+    it("application-phase route guard allows communication and dashboard", () => {
       expect(isResidentApplicationPhaseAllowedPath("/resident/communication/inbox/unopened")).toBe(true);
-      expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(false);
-      expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard", { allowDashboard: true })).toBe(true);
+      expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(true);
+      expect(isResidentApplicationPhaseAllowedPath("/resident/tour")).toBe(true);
       expect(isResidentApplicationPhaseAllowedPath("/resident/profile")).toBe(true);
       expect(isResidentApplicationPhaseAllowedPath("/resident/lease")).toBe(false);
     });
@@ -192,8 +194,8 @@ describe("resident portal redesign completeness", () => {
       expect(lease).toMatch(/leaseMobileActionsRow|md:hidden/);
     });
 
-    it("application phase dashboard is route-guarded; limited omits services; approved adds it", () => {
-      expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).not.toContain("dashboard");
+    it("application phase includes dashboard; limited omits services; approved adds it", () => {
+      expect(sectionIds(RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS)).toContain("dashboard");
       expect(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS)).toContain("dashboard");
       expect(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS)).not.toContain("services");
       expect(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS)).toContain("services");

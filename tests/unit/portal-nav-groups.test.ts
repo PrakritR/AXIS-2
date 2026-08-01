@@ -117,15 +117,18 @@ describe("groupNavItems", () => {
     expect(last?.items.some((i) => i.section === "mystery")).toBe(true);
   });
 
-  it("shows Application and Communication in the sidebar during application phase (Settings in account menu)", () => {
+  it("shows all resident sections in sidebar groups (locks are stage-based)", () => {
     const items = [
+      { section: "tour", label: "Tour", href: "/resident/tour" },
       { section: "applications", label: "Application", href: "/resident/applications" },
+      { section: "dashboard", label: "Dashboard", href: "/resident/dashboard" },
+      { section: "lease", label: "Lease", href: "/resident/lease" },
       { section: "communication", label: "Communication", href: "/resident/communication/inbox/unopened" },
       { section: "profile", label: "Settings", href: "/resident/profile" },
     ];
     const result = groupNavItems("resident", items);
-    expect(result.map((g) => g.id)).toEqual(["home"]);
-    expect(result[0]?.items.map((i) => i.section)).toEqual(["applications", "communication"]);
+    expect(result.map((g) => g.id)).toEqual(["home", "my-home", "messages"]);
+    expect(result[0]?.items.map((i) => i.section)).toEqual(["dashboard", "tour", "applications"]);
     expect(result.flatMap((g) => g.items).map((i) => i.section)).not.toContain("profile");
   });
 });

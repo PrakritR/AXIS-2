@@ -4,7 +4,8 @@ import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
-  NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY,
+  NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
   NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
   nativeBottomBarEnabledForKind,
@@ -16,8 +17,10 @@ import {
 import { adminPortal } from "@/lib/portals/admin";
 import { proPortal } from "@/lib/portals/pro";
 import {
+  RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS,
   RESIDENT_APPROVED_PORTAL_SECTIONS,
   RESIDENT_LIMITED_PORTAL_SECTIONS,
+  RESIDENT_UNIFIED_PORTAL_SECTIONS,
 } from "@/lib/portals/resident-sections";
 
 function sectionIds(sections: { section: string }[]): string[] {
@@ -54,20 +57,22 @@ describe("orderNativeBottomNavItems", () => {
     ]);
   });
 
-  it("preserves resident approved registry order (property-management pattern)", () => {
-    const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
+  it("preserves resident unified catalog order for the More sheet", () => {
+    const items = RESIDENT_UNIFIED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
-    expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
-    expect(ordered.indexOf("communication")).toBeLessThan(ordered.indexOf("documents"));
-    expect(ordered.slice(0, NATIVE_BOTTOM_NAV_RESIDENT_ORDER.length)).toEqual([
-      ...NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
-    ]);
+    expect(ordered.filter((id) => id !== "profile")).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_ORDER]);
+    expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("preserves resident limited registry order", () => {
+  it("preserves resident limited registry order (known sections follow unified order)", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
-    expect(ordered).toEqual(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS));
+    const expected = orderNativeBottomNavItems(
+      RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label })),
+      "resident",
+    ).map((item) => item.section);
+    expect(ordered).toEqual(expected);
+    expect(ordered.at(-1)).toBe("profile");
   });
 
   it("preserves admin registry order", () => {
@@ -90,17 +95,24 @@ describe("splitNativeBottomNavItems", () => {
     expect(primary.length + overflow.length).toBe(items.length - 2);
   });
 
-  it("curates the resident bar (pre-lease) to the pre-lease primary set", () => {
+  it("curates the resident bar (post-approval) to the post-approval primary set", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY]);
+    const { primary, overflow } = splitNativeBottomNavItems(items, "resident", "post_approval_pre_lease");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toContain("tour");
     expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
+  it("curates the resident bar (pre-approval) to the pre-approval primary set", () => {
+    const items = RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
+    const { primary } = splitNativeBottomNavItems(items, "resident", "pre_approval");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY]);
+  });
+
   it("curates the resident bar (post-lease) to the primary set and overflows the rest", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
+    const { primary, overflow } = splitNativeBottomNavItems(items, "resident", "post_lease");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
     expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length - 1);

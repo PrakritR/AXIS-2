@@ -21,6 +21,7 @@ import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
+import { resolveResidentPortalNavStage } from "@/lib/resident-portal-nav";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 import { getAssistantDockCollapsed, getAssistantDocked } from "@/lib/assistant-dock-state";
@@ -45,6 +46,8 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     getAssistantDocked(),
   ]);
 
+  const residentNavStage = resolveResidentPortalNavStage(access);
+
   return (
     <AxisAssistant endpoint="/api/agent/resident-chat" managerName={profile?.full_name ?? null}>
     <div className={PORTAL_SHELL_ROOT_CLASS}>
@@ -59,6 +62,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
           subscriptionTier={managerSubscriptionTier}
           subtitle="Resident"
           initialCollapsed={sidebarCollapsed}
+          residentNavStage={residentNavStage}
         />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <PortalTopBar
@@ -77,11 +81,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
               <Suspense fallback={null}>
                 <ResidentTourLinkOnMount />
               </Suspense>
-              <ResidentPreApplicationGuard
-                leaseAccessUnlocked={access.leaseAccessUnlocked}
-                isPreLeaseResident={access.isPreLeaseResident}
-                hasCompletedApplicationSubmission={access.hasCompletedApplicationSubmission}
-              >
+              <ResidentPreApplicationGuard access={access}>
                 {children}
               </ResidentPreApplicationGuard>
             </div>

@@ -98,11 +98,11 @@ describe("platform parity (web + native WebView)", () => {
     }
   });
 
-  it("application-phase resident bottom bar uses application and communication tabs", () => {
+  it("pre-approval resident bottom bar uses tour, application, dashboard, and communication", () => {
     const items = RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((section) => ({ section: section.section }));
-    const split = splitNativeBottomNavItems(items, "resident");
+    const split = splitNativeBottomNavItems(items, "resident", "pre_approval");
     expect(split.primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY]);
-    expect(split.overflow).toEqual([]);
+    expect(split.overflow.map((item) => item.section)).not.toContain("profile");
   });
 
   it("resident native bottom bar primary items are real resident sections", () => {

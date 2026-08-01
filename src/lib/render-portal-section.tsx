@@ -57,6 +57,7 @@ import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { managerSectionAllowedForTier, residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { loadResidentLeaseSignedStatus, loadResidentPortalAccessState, residentHasFullPortalAccess, residentPortalHomePath } from "@/lib/resident-portal-access";
+import { isResidentPathAllowedForAccess } from "@/lib/resident-portal-nav";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
@@ -270,6 +271,14 @@ export async function renderPortalSection(
           managerSubscriptionTier: residentManagerTier,
         })
       : null;
+  if (kind === "resident" && residentAccess) {
+    const residentPath = tabParts?.length
+      ? `${def.basePath}/${section}/${tabParts.join("/")}`
+      : `${def.basePath}/${section}`;
+    if (!isResidentPathAllowedForAccess(residentPath, residentAccess)) {
+      redirect(residentPortalHomePath(residentAccess));
+    }
+  }
   const residentWorkspaceUnlocked =
     kind === "resident"
       ? residentHasFullPortalAccess({
@@ -303,27 +312,6 @@ export async function renderPortalSection(
         applicationId={applicationId}
       />
     );
-  }
-  if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
-    if (residentAccess.isPreLeaseResident) {
-      const preLeaseAllowed =
-        section === "dashboard" ||
-        section === "tour" ||
-        section === "applications" ||
-        section === "lease" ||
-        section === "communication" ||
-        section === "documents" ||
-        section === "profile";
-      if (!preLeaseAllowed) {
-        redirect(residentPortalHomePath(residentAccess));
-      }
-    } else {
-      const allowDashboard =
-        section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
-      if (!allowDashboard && section !== "applications" && section !== "profile") {
-        redirect(residentPortalHomePath(residentAccess));
-      }
-    }
   }
   // Legacy path support: work-orders moved under Services tabs.
   if (

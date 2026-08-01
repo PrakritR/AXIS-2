@@ -1,4 +1,8 @@
 import type { PortalDefinition } from "@/lib/portal-types";
+import {
+  residentBottomNavPrimarySections,
+  type ResidentPortalNavStage,
+} from "@/lib/resident-portal-nav";
 
 /** Settings tab — always pinned to the end of the native bottom bar. */
 const SETTINGS_SECTION = "profile";
@@ -35,12 +39,13 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
  * Keep in sync with `src/lib/portals/resident-sections.ts`.
  */
 export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
+  "tour",
+  "applications",
+  "dashboard",
+  "lease",
   "services",
   "payments",
-  "dashboard",
   "communication",
-  "applications",
-  "lease",
   "move-in",
   "documents",
 ] as const;
@@ -65,12 +70,24 @@ export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = [
  */
 export function orderNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  _kind?: PortalDefinition["kind"],
+  kind?: PortalDefinition["kind"],
 ): T[] {
   if (items.length === 0) return [];
 
   const settings = items.find((item) => item.section === SETTINGS_SECTION);
   const rest = items.filter((item) => item.section !== SETTINGS_SECTION);
+
+  if (kind === "resident") {
+    const bySection = new Map(rest.map((item) => [item.section, item]));
+    const ordered = NATIVE_BOTTOM_NAV_RESIDENT_ORDER.map((section) => bySection.get(section)).filter(
+      (item): item is T => Boolean(item),
+    );
+    const orderedSet = new Set(ordered.map((item) => item.section));
+    const trailing = rest.filter((item) => !orderedSet.has(item.section));
+    const body = [...ordered, ...trailing];
+    if (settings) return [...body, settings];
+    return body;
+  }
 
   if (settings) return [...rest, settings];
   return [...items];
@@ -92,16 +109,26 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "communication",
 ] as const;
 
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications", "communication"] as const;
-
-/** Pre-lease (application approved / submitted, lease not signed). */
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY = [
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY = [
   "tour",
   "applications",
-  "lease",
   "dashboard",
   "communication",
 ] as const;
+
+/** @deprecated Use NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY */
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY;
+
+/** Application approved — lease not yet fully signed. */
+export const NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY = [
+  "lease",
+  "payments",
+  "dashboard",
+  "communication",
+] as const;
+
+/** @deprecated Use NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY */
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY = NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY;
 
 /** Post-lease (both parties signed). */
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
@@ -132,37 +159,18 @@ export function nativeBottomBarEnabledForKind(_kind?: PortalDefinition["kind"]):
  */
 export function nativeBottomNavShowMoreTab(
   kind?: PortalDefinition["kind"],
-  items?: { section: string }[],
+  _items?: { section: string }[],
 ): boolean {
-  if (kind === "resident" && items) {
-    const navSections = items.filter((item) => item.section !== "profile").map((item) => item.section);
-    if (
-      navSections.includes("applications") &&
-      !navSections.includes("lease") &&
-      !navSections.includes("dashboard")
-    ) {
-      return false;
-    }
-  }
-  return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor";
+  if (kind === "resident") return true;
+  return kind === "pro" || kind === "manager" || kind === "vendor";
 }
 
 function primaryOrderFor(
   kind?: PortalDefinition["kind"],
-  items?: { section: string }[],
+  residentNavStage?: ResidentPortalNavStage,
 ): readonly string[] {
-  if (kind === "resident" && items) {
-    const navSections = new Set(items.filter((item) => item.section !== "profile").map((item) => item.section));
-    if (
-      navSections.has("applications") &&
-      !navSections.has("lease") &&
-      !navSections.has("dashboard")
-    ) {
-      return NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY;
-    }
-    if (navSections.has("lease") && !navSections.has("services")) {
-      return NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY;
-    }
+  if (kind === "resident" && residentNavStage) {
+    return residentBottomNavPrimarySections(residentNavStage);
   }
   switch (kind) {
     case "pro":
@@ -186,9 +194,10 @@ function primaryOrderFor(
 export function splitNativeBottomNavItems<T extends { section: string }>(
   items: T[],
   kind?: PortalDefinition["kind"],
+  residentNavStage?: ResidentPortalNavStage,
 ): { primary: T[]; overflow: T[] } {
   const ordered = orderNativeBottomNavItems(items, kind);
-  const primaryOrder = primaryOrderFor(kind, items);
+  const primaryOrder = primaryOrderFor(kind, residentNavStage);
   // Fail closed: an unrecognized role with no curated primary set must not dump
   // every section onto the fixed bar — everything goes to the More sheet instead.
   if (primaryOrder.length === 0) return { primary: [], overflow: ordered };

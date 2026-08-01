@@ -27,6 +27,10 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
 import { Select } from "@/components/ui/input";
+import {
+  PortalFilterSortSheet,
+  portalFilterActiveCount,
+} from "@/components/portal/portal-filter-sort-sheet";
 
 const SORT_OPTIONS: { id: BrowseSortId; label: string }[] = [
   { id: "price-asc", label: "Price · lowest first" },
@@ -50,10 +54,6 @@ function formatRent(card: PropertyBrowseCard): string {
 
 function periodSuffix(card: PropertyBrowseCard): string {
   return card.pricePeriod === "day" ? " / day" : " / month";
-}
-
-function sortLabel(sort: BrowseSortId): string {
-  return SORT_OPTIONS.find((o) => o.id === sort)?.label ?? "Price · lowest first";
 }
 
 function BrowseSkeleton() {
@@ -320,7 +320,9 @@ function BrowseManualFilters({
   );
 }
 
-function BrowseFiltersInline({
+function BrowseFilterPanel({
+  sort,
+  setSort,
   moveIn,
   setMoveIn,
   moveOut,
@@ -335,6 +337,8 @@ function BrowseFiltersInline({
   onClear,
   onApplyChatFilters,
 }: {
+  sort: BrowseSortId;
+  setSort: (v: BrowseSortId) => void;
   moveIn: string;
   setMoveIn: (v: string) => void;
   moveOut: string;
@@ -350,11 +354,27 @@ function BrowseFiltersInline({
   onApplyChatFilters: (filters: HousingChatAppliedFilters) => void;
 }) {
   return (
-    <div className="mt-4 space-y-4 border-t border-border/40 pt-4">
+    <div className="space-y-4">
+      <ResidentHousingFieldBlock label="Sort">
+        <Select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as BrowseSortId)}
+          aria-label="Sort homes"
+          data-attr="resident-browse-sort"
+          className={RESIDENT_HOUSING_INPUT_CLS}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </ResidentHousingFieldBlock>
+
       <ResidentHousingChat
         onApplyFilters={onApplyChatFilters}
         title="What would you like in your next home?"
-        subtitle="Tell PropLane your move-in dates, budget, neighborhood, room type, or bathroom setup, and we'll filter the homes below."
+        subtitle="Describe the type of home you want: room setup, budget, neighborhood, or move-in dates."
         placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
         showMatchListings={false}
       />
@@ -437,7 +457,18 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
     setBathroom("any");
     setRoomType("any");
     setNeighborhood(undefined);
+    setSort("price-asc");
   }
+
+  const filterActiveCount = portalFilterActiveCount([
+    sort !== "price-asc" ? sort : "",
+    moveIn,
+    moveOut,
+    budgetActive,
+    bathroom !== "any" ? bathroom : "",
+    roomType !== "any" ? roomType : "",
+    neighborhood,
+  ]);
 
   return (
     <div className="w-full">
@@ -455,64 +486,19 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           </a>
         </div>
       ) : null}
-      <div className="mb-6 min-w-0 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 sm:mb-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">
-              {loading ? "Loading homes…" : `${cards.length} homes available`}
-            </p>
-            <p className="text-xs text-muted">Sorted by {sortLabel(sort).toLowerCase()}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="sr-only" htmlFor="browse-sort">
-              Sort homes
-            </label>
-            <Select
-              id="browse-sort"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as BrowseSortId)}
-              data-attr="resident-browse-sort"
-              className="min-h-[36px] rounded-xl border border-border/60 bg-card/50 px-2.5 text-xs font-semibold text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-            {activeFilterCount > 0 ? (
-              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="mt-4 space-y-4 border-t border-border/40 pt-4 lg:hidden">
-          <ResidentHousingChat
-            onApplyFilters={applyChatFilters}
-            title="What would you like in your next home?"
-            subtitle="Describe the type of home you want: room setup, budget, neighborhood, or move-in dates."
-            placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
-            showMatchListings={false}
-          />
-          <div className="h-px w-full bg-border/50" />
-          <BrowseManualFilters
-            moveIn={moveIn}
-            setMoveIn={setMoveIn}
-            moveOut={moveOut}
-            setMoveOut={setMoveOut}
-            budget={budget}
-            setBudget={setBudget}
-            bathroom={bathroom}
-            setBathroom={setBathroom}
-            roomType={roomType}
-            setRoomType={setRoomType}
-            activeCount={activeFilterCount}
-            onClear={clearFilters}
-          />
-        </div>
-        <div className="hidden lg:block">
-          <BrowseFiltersInline
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
+        <p className="text-sm font-semibold text-foreground">
+          {loading ? "Loading homes…" : `${cards.length} homes available`}
+        </p>
+        <PortalFilterSortSheet
+          activeCount={filterActiveCount}
+          className="shrink-0"
+          dataAttr="resident-browse-filter-open"
+          onReset={clearFilters}
+        >
+          <BrowseFilterPanel
+            sort={sort}
+            setSort={setSort}
             moveIn={moveIn}
             setMoveIn={setMoveIn}
             moveOut={moveOut}
@@ -527,7 +513,7 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
             onClear={clearFilters}
             onApplyChatFilters={applyChatFilters}
           />
-        </div>
+        </PortalFilterSortSheet>
       </div>
 
       {loading ? (

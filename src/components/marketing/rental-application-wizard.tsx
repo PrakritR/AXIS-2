@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
   loadPublicExtraListingsFromServer,
@@ -1776,7 +1777,7 @@ function RentalApplicationWizardInner({
           <div
             className={
               embedded
-                ? "rental-wizard-shell rounded-2xl border border-border bg-card p-4 sm:p-6"
+                ? "rental-wizard-shell"
                 : "rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11 [html[data-theme=dark]_&]:shadow-[0_24px_80px_-32px_rgba(0,0,0,0.55)] [html[data-theme=dark]_&]:ring-1 [html[data-theme=dark]_&]:ring-white/8"
             }
           >
@@ -1853,11 +1854,17 @@ function RentalApplicationWizardInner({
               </p>
             ) : null}
 
-            <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
+            <div
+              className={
+                embedded
+                  ? "rental-wizard-actions mt-6 flex flex-wrap items-center justify-between gap-3"
+                  : "rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8"
+              }
+            >
               <Button
                 type="button"
                 variant="outline"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
+                className={embedded ? PORTAL_DETAIL_BTN : "w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"}
                 onClick={handleBack}
               >
                 {step <= 1
@@ -1870,7 +1877,8 @@ function RentalApplicationWizardInner({
               </Button>
               <Button
                 type="button"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                variant="primary"
+                className={embedded ? undefined : "w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"}
                 data-attr="rental-wizard-continue"
                 onClick={handleContinue}
                 disabled={submitting}

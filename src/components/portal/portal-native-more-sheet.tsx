@@ -70,9 +70,13 @@ function MoreNavRow({
 
   return (
     <Link
-      href={item.href}
-      prefetch={portalMobileLinkPrefetchEnabled()}
+      href={item.locked ? "#" : item.href}
+      prefetch={item.locked ? false : portalMobileLinkPrefetchEnabled()}
       onClick={(e) => {
+        if (item.locked) {
+          e.preventDefault();
+          return;
+        }
         portalNavClick(router, item.href, {
           preferFullNavigation: nativeChrome && isCrossPortalNavigation(pathname, item.href),
         })(e);
@@ -82,10 +86,11 @@ function MoreNavRow({
         active
           ? "bg-primary/10 text-primary"
           : item.locked
-            ? "text-muted/80"
+            ? "cursor-not-allowed text-muted/80"
             : "text-foreground hover:bg-accent/70"
       }`}
       aria-label={item.locked ? `${item.label} (locked)` : item.label}
+      aria-disabled={item.locked ? true : undefined}
     >
       {showNavIcons ? (
         <span className={`shrink-0 ${item.locked ? "opacity-60" : ""}`} aria-hidden>

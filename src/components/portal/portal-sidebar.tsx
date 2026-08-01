@@ -13,6 +13,11 @@ import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import {
+  residentSectionLockedForStage,
+  residentNavLockReason,
+  type ResidentPortalNavStage,
+} from "@/lib/resident-portal-nav";
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
 import {
   nativeBottomBarEnabledForKind,
@@ -55,9 +60,6 @@ function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
   if (!meta) return def.basePath;
   if (section === "communication") {
-    if (def.kind === "resident" || def.kind === "vendor" || def.kind === "admin") {
-      return `${def.basePath}/communication/email/unopened`;
-    }
     return `${def.basePath}/communication/inbox/unopened`;
   }
   if (!meta.tabs.length) return `${def.basePath}/${section}`;
@@ -111,12 +113,15 @@ export function PortalSidebar({
   subscriptionTier,
   subtitle,
   initialCollapsed = false,
+  residentNavStage,
 }: {
   definition: PortalDefinition;
   subscriptionTier?: "free" | "paid" | null;
   /** Header badge under "Axis": manager plan (Free/Pro/Business) or portal role. */
   subtitle?: string;
   initialCollapsed?: boolean;
+  /** Resident lifecycle stage — drives bottom bar tabs and section locks. */
+  residentNavStage?: ResidentPortalNavStage;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -191,6 +196,9 @@ export function PortalSidebar({
 
   const isSectionLocked = useCallback(
     (section: string) => {
+      if (definition.kind === "resident" && residentNavStage) {
+        if (residentSectionLockedForStage(section, residentNavStage)) return true;
+      }
       if (showResidentTierLocks) {
         return residentSectionLockedForManagerTier(section, subscriptionTier);
       }
@@ -199,15 +207,15 @@ export function PortalSidebar({
       }
       return false;
     },
-    [showResidentTierLocks, showManagerTierLocks, subscriptionTier],
+    [definition.kind, residentNavStage, showResidentTierLocks, showManagerTierLocks, subscriptionTier],
   );
 
   const nativeBottomNavSplit = useMemo(
     () =>
       showMobileNav && nativeBottomBarEnabledForKind(definition.kind)
-        ? splitNativeBottomNavItems(navItems, definition.kind)
+        ? splitNativeBottomNavItems(navItems, definition.kind, residentNavStage)
         : { primary: [], overflow: [] },
-    [definition.kind, navItems, showMobileNav],
+    [definition.kind, navItems, residentNavStage, showMobileNav],
   );
 
   const nativeBottomNavItems = useMemo(
@@ -333,12 +341,16 @@ export function PortalSidebar({
     [navItems, definition.kind],
   );
 
-  const lockAriaLabel = (label: string, locked: boolean) =>
-    locked
-      ? definition.kind === "resident"
-        ? `${label}: unavailable on your property's Free plan`
-        : `${label}: locked on Pro or Business`
-      : label;
+  const lockAriaLabel = (label: string, locked: boolean, section?: string) => {
+    if (!locked) return label;
+    if (definition.kind === "resident" && residentNavStage && section) {
+      const reason = residentNavLockReason(section, residentNavStage);
+      if (reason) return `${label}: ${reason}`;
+    }
+    return definition.kind === "resident"
+      ? `${label}: unavailable on your property's Free plan`
+      : `${label}: locked on Pro or Business`;
+  };
 
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
@@ -362,7 +374,7 @@ export function PortalSidebar({
           className={`${PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS} ${
             active ? "text-primary" : "text-muted"
           }`}
-          aria-label={lockAriaLabel(s.label, locked)}
+          aria-label={lockAriaLabel(s.label, locked, s.section)}
           aria-current={active ? "page" : undefined}
         >
           {active ? (
@@ -413,7 +425,7 @@ export function PortalSidebar({
               ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
               : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
         }`}
-        aria-label={lockAriaLabel(s.label, locked)}
+        aria-label={lockAriaLabel(s.label, locked, s.section)}
       >
         {showNavIcons ? (
           <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
@@ -431,6 +443,35 @@ export function PortalSidebar({
     const active = activeSection === s.section;
     const locked = isSectionLocked(s.section);
     const count = navCounts[s.section] ?? 0;
+    const body = (
+      <>
+        <span className="flex min-w-0 flex-1 items-center gap-2.5">
+          {showNavIcons ? (
+            <span className={active ? "text-primary" : locked ? "opacity-60" : "opacity-80"} aria-hidden>
+              <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate">{s.label}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {!locked ? <PortalNavCountBadge count={count} /> : null}
+          {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
+        </span>
+      </>
+    );
+    if (locked) {
+      return (
+        <span
+          key={s.section}
+          className={cn(navLinkClass(false, true), "cursor-not-allowed")}
+          aria-label={lockAriaLabel(s.label, true, s.section)}
+          role="link"
+          aria-disabled="true"
+        >
+          {body}
+        </span>
+      );
+    }
     return (
       <Link
         key={s.section}
@@ -445,21 +486,10 @@ export function PortalSidebar({
             : undefined
         }
         className={navLinkClass(active, locked)}
-        aria-label={lockAriaLabel(s.label, locked)}
+        aria-label={lockAriaLabel(s.label, locked, s.section)}
         aria-current={active ? "page" : undefined}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-2.5">
-          {showNavIcons ? (
-            <span className={active ? "text-primary" : locked ? "opacity-60" : "opacity-80"} aria-hidden>
-              <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
-            </span>
-          ) : null}
-          <span className="min-w-0 truncate">{s.label}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {!locked ? <PortalNavCountBadge count={count} /> : null}
-          {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
-        </span>
+        {body}
       </Link>
     );
   };
@@ -468,6 +498,36 @@ export function PortalSidebar({
     const active = activeSection === s.section;
     const locked = isSectionLocked(s.section);
     const count = navCounts[s.section] ?? 0;
+    const railClass = cn(
+      "relative grid h-9 w-9 place-items-center rounded-[8px] transition-colors duration-150",
+      active
+        ? "bg-[var(--secondary)] text-primary"
+        : locked
+          ? "cursor-not-allowed text-muted/60"
+          : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
+    );
+    const icon = (
+      <>
+        <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
+        {!locked && count > 0 ? (
+          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+        ) : null}
+        {locked ? <NavLockIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-muted" /> : null}
+      </>
+    );
+    if (locked) {
+      return (
+        <span
+          key={s.section}
+          title={s.label}
+          aria-label={lockAriaLabel(s.label, true, s.section)}
+          aria-disabled="true"
+          className={railClass}
+        >
+          {icon}
+        </span>
+      );
+    }
     return (
       <Link
         key={s.section}
@@ -482,22 +542,11 @@ export function PortalSidebar({
             : undefined
         }
         title={s.label}
-        aria-label={lockAriaLabel(s.label, locked)}
+        aria-label={lockAriaLabel(s.label, locked, s.section)}
         aria-current={active ? "page" : undefined}
-        className={cn(
-          "relative grid h-9 w-9 place-items-center rounded-[8px] transition-colors duration-150",
-          active
-            ? "bg-[var(--secondary)] text-primary"
-            : locked
-              ? "text-muted/60 hover:bg-[var(--secondary)]/60"
-              : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
-        )}
+        className={railClass}
       >
-        <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" active={active} />
-        {!locked && count > 0 ? (
-          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-        ) : null}
-        {locked ? <NavLockIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-muted" /> : null}
+        {icon}
       </Link>
     );
   };

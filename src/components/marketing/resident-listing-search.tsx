@@ -9,6 +9,7 @@ import { filterRoomListings } from "@/lib/room-listings-catalog";
 import { parseUSZip } from "@/lib/listings-search";
 import { track } from "@/lib/analytics/track-client";
 import { Select } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const ZIP_RADIUS_MILES = 50;
 
@@ -372,14 +373,15 @@ export function ResidentHousingChat({
           data-attr="resident-search-ai-chat-input"
           className={`${inputCls} flex-1`}
         />
-        <button
+        <Button
           type="submit"
+          variant="primary"
           disabled={status === "loading" || !query.trim()}
           data-attr="resident-search-ai-chat-submit"
-          className="min-h-[44px] shrink-0 rounded-xl bg-primary px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0"
         >
           {status === "loading" ? "Searching…" : "Search"}
-        </button>
+        </Button>
       </form>
 
       {summary && (

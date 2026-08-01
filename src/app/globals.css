@@ -1921,6 +1921,17 @@ html[data-native] .rental-wizard-shell {
   box-shadow: none !important;
 }
 
+html[data-native] .rental-wizard--embedded .rental-wizard-shell {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+html[data-native] .rental-wizard--embedded .rental-wizard-step-header {
+  border-bottom-color: color-mix(in srgb, var(--border) 55%, transparent);
+}
+
 html[data-native] .rental-wizard-step-header {
   padding-bottom: 0.75rem;
 }
