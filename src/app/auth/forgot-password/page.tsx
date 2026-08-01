@@ -4,8 +4,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { passwordResetCallbackUrl, resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { requestPasswordReset } from "@/lib/auth/request-password-reset";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -23,17 +22,13 @@ export default function ForgotPasswordPage() {
     }
     setBusy(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const redirectTo = passwordResetCallbackUrl(resolveBrowserAppOrigin());
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo });
-      if (error) {
-        showToast(error.message || "Could not send reset link.");
+      const result = await requestPasswordReset(trimmed);
+      if (!result.ok) {
+        showToast(result.message);
         return;
       }
       setSent(true);
       showToast("If an account exists for that email, a reset link is on its way.");
-    } catch {
-      showToast("Could not send reset link.");
     } finally {
       setBusy(false);
     }
@@ -63,7 +58,7 @@ export default function ForgotPasswordPage() {
 
       {sent ? (
         <p className="mt-4 text-center text-sm text-emerald-700">
-          Check your inbox for a reset link. It may take a minute to arrive.
+          Check your inbox for a reset link. It may take a minute to arrive, and it works on any device.
         </p>
       ) : null}
 

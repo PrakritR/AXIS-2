@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+//
+// `/auth/confirm` is where a reset link now lands. It verifies a `token_hash`, which —
+// unlike the PKCE `code` the old link carried — is NOT bound to the browser that asked
+// for the reset. So this page is the cross-browser path: a link mailed to a phone and
+// opened on a laptop has no prior auth storage at all, and must still work.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+
+const verifyOtp = vi.fn();
+let search = "";
+
+vi.mock("@/lib/supabase/browser", () => ({
+  createSupabaseBrowserClient: () => ({ auth: { verifyOtp } }),
+}));
+
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(search),
+}));
+
+import ConfirmPage from "@/app/auth/confirm/page";
+
+const TOKEN = "recovery-token-hash";
+let replaced: string[] = [];
+
+beforeEach(() => {
+  verifyOtp.mockReset();
+  replaced = [];
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: { replace: (url: string) => void replaced.push(url) },
+  });
+});
+
+afterEach(cleanup);
+
+describe("/auth/confirm for a recovery link", () => {
+  it("verifies the token with no pre-existing browser state and lands on the reset form", async () => {
+    verifyOtp.mockResolvedValue({ error: null });
+    search = `token_hash=${TOKEN}&type=recovery`;
+
+    render(<ConfirmPage />);
+
+    await waitFor(() => expect(verifyOtp).toHaveBeenCalledWith({ token_hash: TOKEN, type: "recovery" }));
+    await waitFor(() => expect(replaced).toEqual(["/auth/reset-password"]));
+  });
+
+  it("explains an expired or already-used link and offers a new one", async () => {
+    verifyOtp.mockResolvedValue({ error: { message: "Token has expired or is invalid" } });
+    search = `token_hash=${TOKEN}&type=recovery`;
+
+    render(<ConfirmPage />);
+
+    expect(await screen.findByText(/this reset link no longer works/i)).toBeTruthy();
+    expect(screen.getByText(/expire after about an hour and can only be used once/i)).toBeTruthy();
+    const cta = screen.getByRole("link", { name: /request a new reset link/i });
+    expect(cta.getAttribute("href")).toBe("/auth/forgot-password");
+    expect(replaced).toEqual([]);
+  });
+
+  it("explains a malformed recovery link rather than hanging on the spinner", async () => {
+    search = "type=recovery";
+
+    render(<ConfirmPage />);
+
+    expect(await screen.findByText(/this reset link no longer works/i)).toBeTruthy();
+    expect(verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("leaves non-recovery confirmations on their own copy and destination", async () => {
+    verifyOtp.mockResolvedValue({ error: null });
+    search = `token_hash=${TOKEN}&type=signup`;
+
+    render(<ConfirmPage />);
+
+    await waitFor(() => expect(replaced).toEqual(["/auth/continue"]));
+  });
+
+  it("never takes its destination from a query param", async () => {
+    verifyOtp.mockResolvedValue({ error: null });
+    search = `token_hash=${TOKEN}&type=recovery&next=https://evil.example.com`;
+
+    render(<ConfirmPage />);
+
+    await waitFor(() => expect(replaced).toEqual(["/auth/reset-password"]));
+  });
+});

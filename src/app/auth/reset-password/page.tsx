@@ -75,12 +75,18 @@ export default function ResetPasswordPage() {
     );
   }
 
+  // No session means the recovery token was never verified — expired, already used,
+  // or the page was opened directly. Say which, and hand them a way forward; a blank
+  // "nothing happens" screen is what made the old PKCE failure look like a dead site.
   if (!hasSession) {
     return (
       <AuthCard>
-        <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Reset link expired</h1>
+        <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">
+          This reset link no longer works
+        </h1>
         <p className="mt-2 text-center text-sm text-muted">
-          Request a new password reset link and open it from the same browser.
+          Password reset links expire after about an hour and can only be used once. Request a new one — it will work
+          on any device.
         </p>
         <Link
           className="mt-8 flex w-full justify-center text-sm font-semibold text-primary hover:opacity-90"

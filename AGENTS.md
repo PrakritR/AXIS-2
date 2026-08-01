@@ -754,6 +754,41 @@ Schedule tab bar. Manager + resident use the chat two-pane
   `tests/unit/inbox-thread-omnichannel.test.tsx`,
   `tests/unit/sms-comm-ui-flag.test.ts`.
 
+# Emailed auth links are `token_hash`, never a PKCE `code`
+
+The browser client is `@supabase/ssr`, which is **PKCE-only**. A PKCE `code` can be
+exchanged only by the browser that started the flow, because the `code_verifier` lives
+in that browser's storage. So any link that is *emailed* — and therefore opened
+wherever the person reads mail, usually a different browser or device — must carry a
+`token_hash` and be verified with `verifyOtp`, which is not bound to any storage.
+
+Password reset shipped the wrong shape and was dead in production: the link pointed at
+`/auth/callback?next=%2Fauth%2Freset-password&code=…`, so every cross-browser click
+failed with `PKCE code verifier not found in storage` and the user was redirected to
+`/auth/sign-in` as an **OAuth** error — nothing on screen mentioned the reset.
+
+The rules that follow from it:
+
+- **PropLane mints and mails these links itself.** `POST /api/auth/password-reset` uses
+  service-role `admin.generateLink({ type: "recovery" })` and mails
+  `passwordResetConfirmUrl` (`/auth/confirm?token_hash=…&type=recovery`) through Resend.
+  `requestPasswordReset` is the one client entry point; never call
+  `supabase.auth.resetPasswordForEmail` from a component again. Same pattern as
+  self-serve vendor signup (`/api/auth/vendor-register`).
+- **`/auth/confirm` derives its destination from `type` alone**, never a `next` param,
+  so an emailed link can't be rewritten into a redirect somewhere else.
+- **The route answers `{ok:true}` for unknown addresses and for throttled requests**, so
+  it is not an account-existence oracle, and the token is never written to a log —
+  it is a live credential until it is used.
+- **`/auth/callback` is OAuth-shaped end to end** — on failure it renders a *Google
+  sign-in* error, and on success `resolveOAuthPortalRedirect` reroutes by role. Any
+  non-OAuth destination sent through it inherits both. `/auth/reset-password` is in
+  `isBypassOAuthGatePath` for that reason, and the callback fails reset targets onto the
+  reset page; both exist only for links minted before this changed.
+- Coverage: `tests/unit/password-reset-url.test.ts`,
+  `password-reset-request-route.test.ts`, `password-reset-confirm-page.test.tsx`,
+  `password-reset-legacy-callback.test.ts`.
+
 # Feature architecture notes (mandatory pre-reads)
 
 The deep per-feature history lives in `docs/agents/` — one file per area.
