@@ -13,7 +13,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type NativeAppleSignInResult =
   | { ok: true }
-  | { ok: false; message: string };
+  | { ok: false; message: string; cancelled?: boolean };
+
+/**
+ * A deliberate dismissal of the Apple sheet, not a failure. `openOAuthUrl` already treats the
+ * WebAuthSession `CANCELED` code as a silent no-op; callers branch on the `cancelled` flag so
+ * this path answers the same question the same way, without matching on the copy.
+ */
+export const APPLE_SIGN_IN_CANCELLED_MESSAGE = "Apple sign-in was cancelled.";
 
 function randomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -139,7 +146,7 @@ export async function runNativeAppleSignIn(
   } catch (e) {
     const message = e instanceof Error ? e.message : "Apple sign-in failed.";
     if (message.toLowerCase().includes("cancel")) {
-      return { ok: false, message: "Apple sign-in was cancelled." };
+      return { ok: false, message: APPLE_SIGN_IN_CANCELLED_MESSAGE, cancelled: true };
     }
     if (message.toLowerCase().includes("not implemented")) {
       return { ok: false, message: NATIVE_APPLE_REBUILD_MESSAGE };

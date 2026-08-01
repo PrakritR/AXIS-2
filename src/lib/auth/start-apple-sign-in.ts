@@ -26,7 +26,7 @@ export async function startAppleSignIn(params: StartOAuthSignInParams): Promise<
       fixedCallbackPath: params.fixedCallbackPath,
       intent: params.intent,
     });
-    if (!result.ok) return { ok: false, message: result.message };
+    if (!result.ok) return { ok: false, message: result.message, cancelled: result.cancelled };
     return { ok: true };
   }
 

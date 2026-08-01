@@ -21,7 +21,7 @@ export type StartOAuthSignInParams = {
 
 export type StartOAuthSignInResult =
   | { ok: true }
-  | { ok: false; message: string };
+  | { ok: false; message: string; cancelled?: boolean };
 
 function providerLabel(provider: Provider): string {
   if (provider === "apple") return "Apple";

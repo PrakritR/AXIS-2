@@ -103,7 +103,7 @@ export function AppleSignInButton({
         onBeforeRedirect,
       });
       if (!result.ok) {
-        onError?.(result.message);
+        if (!result.cancelled) onError?.(result.message);
         if (shouldShowAppleSignInErrorToast(result.message)) {
           showToast(result.message);
         }
