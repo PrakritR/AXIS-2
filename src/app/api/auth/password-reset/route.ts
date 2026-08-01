@@ -1,4 +1,4 @@
-import { resolveAppOrigin } from "@/lib/app-url";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import {
   buildPasswordResetEmailBody,
   buildPasswordResetEmailHtml,
@@ -45,6 +45,11 @@ export async function POST(req: Request) {
   // Two buckets: one stops an attacker walking a list of addresses, the other stops
   // a victim's inbox being flooded from many IPs. Both fail closed with the generic
   // reply so neither doubles as an account-existence oracle.
+  //
+  // Known gap (follow-up axis-durable-reset-throttle): these buckets are per-process
+  // in-memory, so on Vercel concurrent requests land on separate instances with fresh
+  // buckets and the per-address cap can be multiplied. Blast radius is unwanted mail
+  // and burnt Resend quota; the fix belongs in the shared limiter, not here.
   const ipOk = rateLimit(`password-reset:ip:${clientIpFrom(req)}`, 10, 10 * 60_000).ok;
   const emailOk = rateLimit(`password-reset:email:${email}`, 3, 10 * 60_000).ok;
   if (!ipOk || !emailOk) {
@@ -59,16 +64,24 @@ export async function POST(req: Request) {
     );
   }
 
-  const supabase = createSupabaseServiceRoleClient();
-  const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email });
-  const tokenHash = data?.properties?.hashed_token;
-  if (error || !tokenHash) {
+  let tokenHash: string | undefined;
+  try {
+    const supabase = createSupabaseServiceRoleClient();
+    const { data } = await supabase.auth.admin.generateLink({ type: "recovery", email });
+    tokenHash = data?.properties?.hashed_token;
+  } catch {
+    // Missing/malformed service-role env or a transport error. Answering with the
+    // generic reply keeps this from becoming a health/existence oracle.
+    console.error("Password reset link minting failed");
+    return NextResponse.json(GENERIC_OK);
+  }
+  if (!tokenHash) {
     // Unknown address is the common case here and must look identical to success.
     // The token itself is never logged — it is a live credential until it is used.
     return NextResponse.json(GENERIC_OK);
   }
 
-  const resetLink = passwordResetConfirmUrl(resolveAppOrigin(req), tokenHash);
+  const resetLink = passwordResetConfirmUrl(resolveEmailLinkBaseUrl(), tokenHash);
   const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -84,12 +97,15 @@ export async function POST(req: Request) {
     });
     if (!res.ok) {
       // Log the status only — the body can echo the recipient, and the link (which
-      // carries the token) must never reach a log line.
+      // carries the token) must never reach a log line. The caller still gets the
+      // generic reply: a distinguishable failure would only ever be reachable for an
+      // address that exists, which is exactly the oracle this route must not be.
       console.error("Password reset email send failed with status", res.status);
-      return NextResponse.json({ error: "Could not send the reset email. Try again shortly." }, { status: 502 });
+      return NextResponse.json(GENERIC_OK);
     }
   } catch {
-    return NextResponse.json({ error: "Could not send the reset email. Try again shortly." }, { status: 502 });
+    console.error("Password reset email send failed before a response was received");
+    return NextResponse.json(GENERIC_OK);
   }
 
   return NextResponse.json(GENERIC_OK);

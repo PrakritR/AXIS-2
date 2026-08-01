@@ -20,7 +20,7 @@ import { POST } from "@/app/api/auth/password-reset/route";
 
 const TOKEN = "pkce-free-recovery-token-hash";
 
-function req(email: unknown, ip = "203.0.113.9") {
+function req(email: unknown, ip = freshIp()) {
   return new Request("http://localhost:3000/api/auth/password-reset", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": ip },
@@ -33,6 +33,14 @@ let seq = 0;
 function freshEmail() {
   seq += 1;
   return `reset-user-${seq}@example.com`;
+}
+
+/** Distinct IP per request — the IP bucket persists per module too, so a shared default
+ * would silently trip once the suite grew and make assertions fail for the wrong reason. */
+let ipSeq = 0;
+function freshIp() {
+  ipSeq += 1;
+  return `203.0.113.${ipSeq % 256}`;
 }
 
 let sent: { body: Record<string, unknown> }[] = [];
@@ -76,6 +84,25 @@ describe("POST /api/auth/password-reset", () => {
     expect(html).not.toContain("/auth/callback");
   });
 
+  it("mints the link on the canonical email origin, not the requesting host", async () => {
+    const previousCanonical = process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+    process.env.NEXT_PUBLIC_CANONICAL_APP_URL = "https://prop-lane.space";
+
+    // The request arrives on localhost here, and in production it can arrive on a
+    // *.vercel.app preview or the legacy domain — the emailed link must not follow it.
+    await POST(req(freshEmail()));
+
+    const text = String(sent[0].body.text);
+    const html = String(sent[0].body.html);
+    expect(text).toContain(`https://prop-lane.space/auth/confirm?token_hash=${TOKEN}`);
+    expect(html).toContain(`https://prop-lane.space/auth/confirm?token_hash=${TOKEN}`);
+    expect(text).not.toContain("localhost:3000");
+    expect(html).not.toContain("localhost:3000");
+
+    if (previousCanonical === undefined) delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+    else process.env.NEXT_PUBLIC_CANONICAL_APP_URL = previousCanonical;
+  });
+
   it("lower-cases and trims the address before minting a token", async () => {
     const email = freshEmail();
     await POST(req(`  ${email.toUpperCase()} `));
@@ -98,17 +125,44 @@ describe("POST /api/auth/password-reset", () => {
     expect(generateLink).not.toHaveBeenCalled();
   });
 
-  it("reports a real failure instead of silently claiming success", async () => {
+  it("reports a misconfigured mailer, which is not a per-address signal", async () => {
     delete process.env.RESEND_API_KEY;
     const res = await POST(req(freshEmail()));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toMatch(/not configured/i);
-
     process.env.RESEND_API_KEY = "re_test_key";
+  });
+
+  it("answers a failed send exactly like an unknown address", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     fetchSpy.mockResolvedValue(new Response("nope", { status: 422 }));
-    const failed = await POST(req(freshEmail()));
-    expect(failed.status).toBe(502);
-    expect((await failed.json()).error).toMatch(/could not send/i);
+    const sendFailed = await POST(req(freshEmail()));
+
+    generateLink.mockResolvedValue({ data: null, error: { message: "User not found" } });
+    const unknown = await POST(req(freshEmail()));
+
+    // Send failure only ever happens for an address that EXISTS, so any difference
+    // between these two replies is an account-existence oracle.
+    expect(sendFailed.status).toBe(unknown.status);
+    expect(sendFailed.status).toBe(200);
+    const sendFailedBody = await sendFailed.json();
+    expect(sendFailedBody).toEqual({ ok: true });
+    expect(sendFailedBody).toEqual(await unknown.json());
+
+    errorSpy.mockRestore();
+  });
+
+  it("answers the generic reply when the recovery token cannot be minted at all", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateLink.mockRejectedValue(new Error("SUPABASE_SERVICE_ROLE_KEY is not set"));
+
+    const res = await POST(req(freshEmail()));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sent).toHaveLength(0);
+    errorSpy.mockRestore();
   });
 
   it("throttles repeat requests for one address without leaking that it throttled", async () => {
