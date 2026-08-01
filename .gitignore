@@ -87,3 +87,6 @@ playwright.config.ts
 
 # E2E get-started test screenshots (local evidence output)
 .get-started-evidence/
+
+# OAuth verification screenshots — evidence only, never committed (contains account picker frame)
+native-oauth-verification/

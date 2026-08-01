@@ -1,7 +1,12 @@
 import { NATIVE_OAUTH_SCHEME } from "@/lib/auth/native-oauth-callback";
 import { NextResponse, type NextRequest } from "next/server";
 
-/** Query flag on HTTPS OAuth callbacks opened in the system browser during native sign-in. */
+/**
+ * Query flag on HTTPS OAuth callbacks opened in the system browser during native sign-in.
+ * ANDROID ONLY now: the iOS WebAuthSession path hands Supabase the custom scheme directly and
+ * never routes through this HTTPS bridge (see `resolveOAuthCallbackRedirectUrl`). The bridge
+ * still runs for older iOS binaries whose stale WebView JS predates that change.
+ */
 export const NATIVE_OAUTH_BRIDGE_PARAM = "native_bridge";
 
 export function appendNativeOAuthBridgeParam(url: string): string {
@@ -44,14 +49,28 @@ function isIosUserAgent(userAgent: string): boolean {
   return /iPad|iPhone|iPod/.test(userAgent) && !/Android/.test(userAgent);
 }
 
+/**
+ * The HTML+JS bridge. This is the ANDROID path (Chrome Custom Tab): it deep-links to the
+ * app and, if that fails, offers/auto-loads the web fallback.
+ *
+ * It is NOT the primary iOS path anymore — the iOS WebAuthSession hands Supabase the custom
+ * scheme DIRECTLY, so `ASWebAuthenticationSession` dismisses on Supabase's own 302 and this
+ * HTML never renders in that sheet. It still reaches iOS only through an OLDER binary whose
+ * stale WebView JS predates that change (or a legacy SFSafariViewController build). For that
+ * residual iOS case (defense in depth, per the fix's fix-3): attempt a TOP-LEVEL navigation to
+ * the scheme immediately — more reliable than a synthesized anchor click inside the sheet —
+ * and NEVER auto-navigate to the web fallback (the `isIos` gate), so the portal is never
+ * dumped into in-app Safari.
+ */
 export function nativeOAuthBridgeResponse(callbackUrl: URL, opts?: { isIos?: boolean }): NextResponse {
   const schemeUrl = httpsCallbackToNativeSchemeUrl(callbackUrl);
   const webFallbackUrl = httpsCallbackWithoutBridgeParam(callbackUrl);
-  // On iOS the bridge only ever renders inside SFSafariViewController (a legacy build
-  // that predates WebAuthSession). Auto-navigating to the web fallback there loads the
-  // whole portal inside in-app Safari — the exact "it's a website" defect. So iOS gets
-  // the deep-link attempt + a MANUAL "continue" link only, never the timed fallback.
-  const allowAutoWebFallback = opts?.isIos !== true;
+  const isIos = opts?.isIos === true;
+  // On iOS the bridge only ever renders inside a legacy build (SFSafariViewController, or a
+  // stale WebView bundle). Auto-navigating to the web fallback there loads the whole portal
+  // inside in-app Safari — the exact "it's a website" defect. So iOS gets the deep-link
+  // attempt + a MANUAL "continue" link only, never the timed fallback.
+  const allowAutoWebFallback = !isIos;
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,6 +93,7 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL, opts?: { isIos?: boo
     (function () {
       var schemeTarget = ${JSON.stringify(schemeUrl)};
       var webFallback = ${JSON.stringify(webFallbackUrl)};
+      var isIos = ${JSON.stringify(isIos)};
       var leftPage = false;
       function markLeft() { leftPage = true; }
       document.addEventListener("visibilitychange", function () {
@@ -82,6 +102,13 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL, opts?: { isIos?: boo
       window.addEventListener("pagehide", markLeft);
       window.addEventListener("blur", markLeft);
       function openDeepLink() {
+        // iOS (legacy binary reaching the bridge): a TOP-LEVEL navigation to the scheme is
+        // what ASWebAuthenticationSession intercepts to dismiss the sheet — a synthesized
+        // anchor click with no user gesture is unreliable inside it.
+        if (isIos) {
+          try { window.location.replace(schemeTarget); return; } catch (e0) {}
+          try { window.location.href = schemeTarget; return; } catch (e1) {}
+        }
         try {
           var link = document.getElementById("open-app");
           if (link) {
