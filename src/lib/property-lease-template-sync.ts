@@ -1,5 +1,4 @@
 import {
-  isEntireHomeListing,
   resolveAllowedLeaseTerms,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
@@ -15,8 +14,6 @@ import {
   type PropertyLeaseTemplateKind,
 } from "@/lib/property-lease-templates";
 
-const FIXED_LEASE_TERMS = ["3-Month", "9-Month", "12-Month"] as const;
-
 type LeaseTemplateSeed = {
   seedKey: PropertyLeaseListingSeedKey;
   kind: PropertyLeaseTemplateKind;
@@ -24,39 +21,31 @@ type LeaseTemplateSeed = {
   applicationLeaseTerms: string[];
 };
 
+const LONG_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "primary";
+const SHORT_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "short-term";
 
-function listingSeedKeyForFixedLeaseTerm(term: (typeof FIXED_LEASE_TERMS)[number]): PropertyLeaseListingSeedKey {
-  if (term === "3-Month") return "fixed-3-month";
-  if (term === "9-Month") return "fixed-9-month";
-  if (term === "12-Month") return "fixed-12-month";
-  return "fixed-term";
-}
-
-function adoptLegacyCombinedFixedTermTemplate(
-  existing: PropertyLeaseTemplate[],
-  seed: LeaseTemplateSeed,
-): PropertyLeaseTemplate | null {
-  if (!seed.seedKey.startsWith("fixed-") || seed.seedKey === "fixed-term") return null;
-  const term = seed.applicationLeaseTerms[0];
-  if (!term) return null;
-  const legacy = existing.find((t) => t.listingSeedKey === "fixed-term");
-  if (!legacy) return null;
-  if (!(legacy.applicationLeaseTerms ?? []).includes(term)) return null;
-  return {
-    ...legacy,
-    id: legacy.id,
-    listingSeedKey: seed.seedKey,
-    applicationLeaseTerms: [term],
-    label: seed.label,
-    updatedAt: nowIso(),
-  };
-}
+/** Legacy per-term seed keys collapsed into the single long-term default. */
+const LEGACY_LONG_TERM_SEED_KEYS: PropertyLeaseListingSeedKey[] = [
+  "fixed-term",
+  "fixed-3-month",
+  "fixed-9-month",
+  "fixed-12-month",
+  "month-to-month",
+  "custom-term",
+];
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Derive which per-property lease templates should exist from listing offered terms. */
+function longTermApplicationLeaseTerms(
+  sub: Pick<ManagerListingSubmissionV1, "allowedLeaseTerms" | "leaseTermsBody" | "shortTermRentalsAllowed">,
+): string[] {
+  const allowed = resolveAllowedLeaseTerms(sub).filter((t) => t !== SHORT_TERM_LEASE_TERM);
+  return allowed.length > 0 ? allowed : ["12-Month"];
+}
+
+/** Every property keeps exactly two auto-seeded templates: long-term and short-term. */
 export function buildLeaseTemplateSeeds(
   sub: Pick<
     ManagerListingSubmissionV1,
@@ -68,86 +57,47 @@ export function buildLeaseTemplateSeeds(
     | "listingPlaceCategoryId"
   >,
 ): LeaseTemplateSeed[] {
-  const allowed = resolveAllowedLeaseTerms(sub);
-  const seeds: LeaseTemplateSeed[] = [];
-
-  const fixed = allowed.filter((t): t is (typeof FIXED_LEASE_TERMS)[number] =>
-    (FIXED_LEASE_TERMS as readonly string[]).includes(t),
-  );
-  const fixedKind: PropertyLeaseTemplateKind = "long-term";
-  for (const term of fixed) {
-    seeds.push({
-      seedKey: listingSeedKeyForFixedLeaseTerm(term),
-      kind: fixedKind,
-      label: `${term} lease`,
-      applicationLeaseTerms: [term],
-    });
-  }
-
-  if (allowed.includes("Month-to-Month")) {
-    seeds.push({
-      seedKey: "month-to-month",
+  return [
+    {
+      seedKey: LONG_TERM_SEED_KEY,
       kind: "long-term",
-      label: "Month-to-month lease",
-      applicationLeaseTerms: ["Month-to-Month"],
-    });
-  }
-
-  if (allowed.includes(SHORT_TERM_LEASE_TERM)) {
-    seeds.push({
-      seedKey: "short-term",
+      label: "Long-term lease",
+      applicationLeaseTerms: longTermApplicationLeaseTerms(sub),
+    },
+    {
+      seedKey: SHORT_TERM_SEED_KEY,
       kind: "short-term",
-      label: "Short-term stay",
+      label: "Short-term lease",
       applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
-    });
-  }
-
-  if (allowed.includes("Custom")) {
-    seeds.push({
-      seedKey: "custom-term",
-      kind: "custom",
-      label: "Custom lease",
-      applicationLeaseTerms: ["Custom"],
-    });
-  }
-
-  if (seeds.length === 0) {
-    seeds.push({
-      seedKey: "primary",
-      kind: isEntireHomeListing(sub) ? "long-term" : "long-term",
-      label: "Primary lease",
-      applicationLeaseTerms: allowed.length > 0 ? [...allowed] : [],
-    });
-  }
-
-  return appendDefaultHouseLeaseSeeds(seeds, sub);
+    },
+  ];
 }
 
-/** Every house keeps a 12-month and short-term lease template for generation. */
-function appendDefaultHouseLeaseSeeds(
-  seeds: LeaseTemplateSeed[],
-  sub: Pick<ManagerListingSubmissionV1, "rooms" | "entireHomeMonthlyRent" | "listingPlaceCategoryId">,
-): LeaseTemplateSeed[] {
-  const out = [...seeds];
-  const keys = new Set(out.map((s) => s.seedKey));
-  const fixedKind: PropertyLeaseTemplateKind = "long-term";
-  if (!keys.has("fixed-12-month")) {
-    out.push({
-      seedKey: "fixed-12-month",
-      kind: fixedKind,
-      label: "12-Month lease",
-      applicationLeaseTerms: ["12-Month"],
-    });
+function templateHasManagerEdits(template: PropertyLeaseTemplate): boolean {
+  return (
+    template.leaseConfigMode === "custom" ||
+    Boolean(template.customLeaseTerms?.trim()) ||
+    Boolean(template.leaseTemplateHtmlOverride?.trim()) ||
+    Boolean(template.leaseTemplateDocUrl?.trim())
+  );
+}
+
+/** When collapsing legacy per-term seeds, keep the richest long-term row. */
+function adoptPreviousLongTermTemplate(existing: PropertyLeaseTemplate[]): PropertyLeaseTemplate | null {
+  const candidates = existing.filter(
+    (t) => t.listingSeedKey && t.listingSeedKey !== SHORT_TERM_SEED_KEY,
+  );
+  if (candidates.length === 0) return null;
+
+  const edited = candidates.find(templateHasManagerEdits);
+  if (edited) return edited;
+
+  for (const key of [LONG_TERM_SEED_KEY, ...LEGACY_LONG_TERM_SEED_KEYS]) {
+    const hit = candidates.find((t) => t.listingSeedKey === key);
+    if (hit) return hit;
   }
-  if (!keys.has("short-term")) {
-    out.push({
-      seedKey: "short-term",
-      kind: "short-term",
-      label: "Short-term stay",
-      applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
-    });
-  }
-  return out;
+
+  return candidates[0] ?? null;
 }
 
 function defaultLabelForSeed(seed: LeaseTemplateSeed): string {
@@ -172,6 +122,24 @@ function adoptLegacyDefaultTemplate(
   };
 }
 
+function adoptPreviousSeededTemplate(
+  existing: PropertyLeaseTemplate[],
+  seededExisting: PropertyLeaseTemplate[],
+  seed: LeaseTemplateSeed,
+): PropertyLeaseTemplate | null {
+  const direct = seededExisting.find((t) => t.listingSeedKey === seed.seedKey);
+  if (direct) return direct;
+
+  if (seed.seedKey === LONG_TERM_SEED_KEY) {
+    return adoptPreviousLongTermTemplate(existing);
+  }
+  if (seed.seedKey === SHORT_TERM_SEED_KEY) {
+    return seededExisting.find((t) => t.listingSeedKey === SHORT_TERM_SEED_KEY) ?? null;
+  }
+
+  return null;
+}
+
 /**
  * Merge auto-seeded lease templates from listing offered terms with manager-owned templates.
  * Seeded rows are matched by `listingSeedKey`; manual rows (no key) are preserved.
@@ -192,9 +160,7 @@ export function syncPropertyLeaseTemplatesFromListing(
         ? adoptLegacyDefaultTemplate(existing, seed)
         : null;
     const prev =
-      seededExisting.find((t) => t.listingSeedKey === seed.seedKey) ??
-      adoptLegacyCombinedFixedTermTemplate(existing, seed) ??
-      legacyAdopted;
+      adoptPreviousSeededTemplate(existing, seededExisting, seed) ?? legacyAdopted;
 
     if (prev) {
       if (legacyAdopted) adoptedLegacyIds.add(legacyAdopted.id);
@@ -240,55 +206,33 @@ export function resolvePropertyLeaseTemplateForApplication(
   const templates = readPropertyLeaseTemplates(sub);
   if (templates.length === 0) return null;
 
-  const term =
-    application.rentalType === "short_term"
-      ? SHORT_TERM_LEASE_TERM
-      : normalizeApplicationLeaseTerm(application.leaseTerm ?? "");
-  if (!term) return templates[0] ?? null;
+  const shortTermTemplate =
+    templates.find((t) => t.listingSeedKey === SHORT_TERM_SEED_KEY) ??
+    templates.find((t) => t.kind === "short-term");
+  const longTermTemplate =
+    templates.find((t) => t.listingSeedKey === LONG_TERM_SEED_KEY) ??
+    templates.find((t) => t.kind === "long-term") ??
+    templates[0]!;
 
-  const explicit = templates.filter((t) => (t.applicationLeaseTerms ?? []).includes(term));
-  if (explicit.length === 1) return explicit[0]!;
-  if (explicit.length > 1) {
-    return [...explicit].sort((a, b) => a.label.localeCompare(b.label))[0]!;
+  if (application.rentalType === "short_term") {
+    return shortTermTemplate ?? longTermTemplate;
   }
 
-  if (term === "Month-to-Month") {
-    return (
-      templates.find((t) => t.listingSeedKey === "month-to-month") ??
-      templates.find((t) => t.kind === "long-term") ??
-      templates[0]!
-    );
-  }
+  const term = normalizeApplicationLeaseTerm(application.leaseTerm ?? "");
+
   if (term === SHORT_TERM_LEASE_TERM) {
-    return (
-      templates.find((t) => t.listingSeedKey === "short-term") ??
-      templates.find((t) => t.kind === "short-term") ??
-      templates[0]!
-    );
-  }
-  if ((FIXED_LEASE_TERMS as readonly string[]).includes(term)) {
-    const fixedKey = listingSeedKeyForFixedLeaseTerm(term as (typeof FIXED_LEASE_TERMS)[number]);
-    return (
-      templates.find((t) => t.listingSeedKey === fixedKey) ??
-      templates.find((t) => (t.applicationLeaseTerms ?? []).includes(term)) ??
-      templates.find((t) => t.listingSeedKey === "fixed-term" && (t.applicationLeaseTerms ?? []).includes(term)) ??
-      templates.find((t) => t.kind === "long-term") ??
-      templates[0]!
-    );
-  }
-  if (term === "Custom") {
-    return (
-      templates.find((t) => t.listingSeedKey === "custom-term") ??
-      templates.find((t) => t.kind === "custom") ??
-      templates[0]!
-    );
+    return shortTermTemplate ?? longTermTemplate;
   }
 
-  const customTemplate =
-    templates.find((t) => t.listingSeedKey === "custom-term") ??
-    templates.find((t) => t.kind === "custom");
+  if (term) {
+    const explicit = templates.filter((t) => (t.applicationLeaseTerms ?? []).includes(term));
+    if (explicit.length === 1) return explicit[0]!;
+    if (explicit.length > 1) {
+      return [...explicit].sort((a, b) => a.label.localeCompare(b.label))[0]!;
+    }
+  }
 
-  return customTemplate ?? templates[0] ?? null;
+  return longTermTemplate;
 }
 
 /** Overlay the matched lease template onto legacy top-level lease fields for generation. */

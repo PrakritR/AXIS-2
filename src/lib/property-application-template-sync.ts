@@ -6,14 +6,16 @@ import {
   syncLegacyApplicationFieldsFromTemplates,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
+import type { PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
 import { buildLeaseTemplateSeeds } from "@/lib/property-lease-template-sync";
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-function defaultLabelForSeed(seed: { label: string }): string {
-  return seed.label.replace(/\blease\b/i, "application").trim() || "Application";
+function defaultLabelForSeed(seed: { label: string; kind: PropertyLeaseTemplateKind }): string {
+  if (seed.kind === "short-term") return "Short-term application";
+  return "Long-term application";
 }
 
 function adoptLegacyDefaultTemplate(
