@@ -20,7 +20,12 @@ import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PortalTableDetailActions,
   PortalTableInlineExpand,} from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
+import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { safeFormatDateTime } from "@/lib/pacific-time";
+
+function isPdfDocumentSrc(src: string): boolean {
+  return src.startsWith("data:application/pdf") || /\.pdf(\?|$)/i.test(src);
+}
 
 const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
 
@@ -113,15 +118,18 @@ export function DocumentInlineViewer({
       <div className={`overflow-hidden rounded-2xl border border-border bg-white shadow-sm${embedded ? " mt-4" : ""}`}>
         {children ? (
           children
+        ) : src && isPdfDocumentSrc(src) ? (
+          <UploadedLeasePdfPreview dataUrl={src} title={title} />
         ) : src ? (
-          <iframe src={src} title={title} className="h-[720px] w-full border-0 bg-white" />
+          <iframe src={src} title={title} scrolling="yes" className="h-[min(80dvh,900px)] min-h-[22rem] w-full border-0 bg-white" />
         ) : srcDoc ? (
           <iframe
             srcDoc={srcDoc}
             title={title}
             sandbox="allow-same-origin"
             loading="lazy"
-            className="h-[720px] w-full border-0 bg-white"
+            scrolling="yes"
+            className="h-[min(80dvh,900px)] min-h-[22rem] w-full border-0 bg-white"
           />
         ) : (
           <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
