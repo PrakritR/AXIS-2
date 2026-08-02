@@ -103,9 +103,15 @@ export function AppleSignInButton({
         onBeforeRedirect,
       });
       if (!result.ok) {
-        if (!result.cancelled) onError?.(result.message);
-        if (shouldShowAppleSignInErrorToast(result.message)) {
-          showToast(result.message);
+        // Cancellation is silent — no inline text AND no toast. Dismissing a sheet is not a
+        // problem, and telling the user something broke when nothing did is wrong. This is the
+        // same answer `openOAuthUrl` gives for the WebAuthSession `CANCELED` code; Apple and
+        // Google must not answer the same question two different ways on the same screen.
+        if (!result.cancelled) {
+          onError?.(result.message);
+          if (shouldShowAppleSignInErrorToast(result.message)) {
+            showToast(result.message);
+          }
         }
         setBusy(false);
         return;
