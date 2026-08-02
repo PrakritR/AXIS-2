@@ -28,6 +28,9 @@ vi.mock("@/lib/auth/request-password-reset", () => ({
   requestPasswordReset: vi.fn(async () => ({ ok: true })),
 }));
 
+const demoActive = vi.fn(() => false);
+vi.mock("@/lib/demo/demo-session", () => ({ isDemoModeActive: () => demoActive() }));
+
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { fetchCurrentUserHasPassword, HAS_PASSWORD_RPC } from "@/lib/auth/current-user-has-password";
 
@@ -46,6 +49,7 @@ beforeEach(() => {
   rpc.mockReset();
   updateUser.mockReset();
   signInWithPassword.mockReset();
+  demoActive.mockReturnValue(false);
   toasts.length = 0;
   updateUser.mockResolvedValue({ error: null });
   signInWithPassword.mockResolvedValue({ error: null });
@@ -156,6 +160,21 @@ describe("Login & security for an account that already HAS a password", () => {
       expect(signInWithPassword).toHaveBeenCalledWith({ email: EMAIL, password: "the-old-password" }),
     );
     expect(updateUser).toHaveBeenCalledWith({ password: "brand-new-password" });
+  });
+});
+
+describe("on /demo", () => {
+  it("shows the ordinary update form without an authed round trip", async () => {
+    demoActive.mockReturnValue(true);
+    rpc.mockResolvedValue({ data: false, error: null });
+
+    render(<PortalChangePasswordPanel accountEmail={EMAIL} />);
+
+    expect(await screen.findByRole("button", { name: "Update password" })).toBeTruthy();
+    expect(currentPasswordField()).not.toBeNull();
+    // The demo sandbox never makes the authed call at all.
+    expect(rpc).not.toHaveBeenCalled();
+    expect(screen.queryByText("Loading…")).toBeNull();
   });
 });
 

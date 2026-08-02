@@ -165,6 +165,40 @@ describe("POST /api/auth/password-reset", () => {
     errorSpy.mockRestore();
   });
 
+  /**
+   * supabase-js reports API failures by RETURNING `{ data: null, error }` rather than
+   * throwing. Dropping that `error` let a revoked service-role key or a paused project
+   * look exactly like an unknown address — reset dead in production while every call
+   * answered {ok:true} and nothing was logged.
+   */
+  it("logs a broken mint even though the caller still gets the generic reply", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateLink.mockResolvedValue({ data: null, error: { message: "Invalid API key", status: 401 } });
+
+    const res = await POST(req(freshEmail()));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(sent).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalled();
+    const logged = errorSpy.mock.calls.flat().join(" ");
+    expect(logged).toMatch(/Invalid API key/);
+    expect(logged).not.toContain(TOKEN);
+    errorSpy.mockRestore();
+  });
+
+  it("stays quiet for an unknown address, which is routine rather than an incident", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    generateLink.mockResolvedValue({ data: null, error: { message: "User not found", status: 404 } });
+
+    const res = await POST(req(freshEmail()));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("throttles repeat requests for one address without leaking that it throttled", async () => {
     const email = freshEmail();
     // Same address from different IPs, so only the per-email bucket can trip.

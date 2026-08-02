@@ -10,6 +10,7 @@ import {
 } from "@/components/portal/portal-settings-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { fetchCurrentUserHasPassword } from "@/lib/auth/current-user-has-password";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { requestPasswordReset } from "@/lib/auth/request-password-reset";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -28,6 +29,14 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // /demo renders both profile panels with no real session, and every authed fetch
+    // from a demo surface is gated (see the demo-sandbox invariant in AGENTS.md). The
+    // RPC would be refused there anyway and fail closed to the same state, so this
+    // costs the sandbox nothing but a round trip and a "Loading…" flash.
+    if (isDemoModeActive()) {
+      setHasPassword(true);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       const resolved = await fetchCurrentUserHasPassword(createSupabaseBrowserClient());
