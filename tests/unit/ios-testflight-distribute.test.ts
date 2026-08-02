@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertInstallableBetaState,
   DEFAULT_PROCESSING_TIMEOUT_SECONDS,
   MAX_PROCESSING_TIMEOUT_SECONDS,
   normalizeGroupName,
@@ -104,6 +105,41 @@ describe("parseTimeoutSeconds", () => {
       /exceeds the .* the workflow step allows/,
     );
     expect(parseTimeoutSeconds(String(MAX_PROCESSING_TIMEOUT_SECONDS))).toBe(MAX_PROCESSING_TIMEOUT_SECONDS);
+  });
+});
+
+describe("beta-state gate fails closed", () => {
+  // The whole point of the distribute step is that a green run means a tester can
+  // install the build. An unreadable compliance state is not evidence of that, so
+  // it must not pass — that is the failure mode this branch exists to remove.
+  it("refuses to report success when the beta state could not be read", () => {
+    expect(() => assertInstallableBetaState(null, "38")).toThrow(/UNKNOWN/);
+    expect(() => assertInstallableBetaState(null, "38")).toThrow(/--verify-only/);
+    expect(() => assertInstallableBetaState(null, "38")).toThrow(/build 38|Build 38/);
+  });
+
+  it("fails on a state that blocks installation", () => {
+    expect(() => assertInstallableBetaState({ internalBuildState: "MISSING_EXPORT_COMPLIANCE" }, "38")).toThrow(
+      /ITSAppUsesNonExemptEncryption/,
+    );
+    expect(() => assertInstallableBetaState({ internalBuildState: "PROCESSING_EXCEPTION" }, "38")).toThrow();
+  });
+
+  it("passes an installable state", () => {
+    expect(() => assertInstallableBetaState({ internalBuildState: "IN_BETA_TESTING" }, "38")).not.toThrow();
+    expect(() => assertInstallableBetaState({ internalBuildState: "READY_FOR_BETA_TESTING" }, "38")).not.toThrow();
+  });
+});
+
+describe("timeout budget leaves room to verify", () => {
+  // Setting the advertised maximum must not reproduce the opaque mid-verification
+  // cancellation that parseTimeoutSeconds exists to prevent.
+  it("reserves time after the wait for assignment + confirmation + the detail read", () => {
+    const stepBudgetSeconds = 30 * 60;
+    expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeLessThan(stepBudgetSeconds);
+    // At least the confirm re-poll sleeps (4 x 12s) must fit in what is left.
+    expect(stepBudgetSeconds - MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThanOrEqual(48);
+    expect(DEFAULT_PROCESSING_TIMEOUT_SECONDS).toBeLessThanOrEqual(MAX_PROCESSING_TIMEOUT_SECONDS);
   });
 });
 

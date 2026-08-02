@@ -539,6 +539,12 @@ to prove the assignment stuck** and fail the run if it did not. Rules:
   read from the API. No match, or a match that is an *external* group → hard
   failure. Never fall back to "the first internal group"; never enable external
   distribution (that would need App Review).
+- **The gate fails CLOSED on anything it cannot confirm.** If the build's
+  compliance/beta state cannot be read (after retries — transport errors and 5xx
+  are retried), the step exits non-zero saying the state is UNKNOWN rather than
+  reporting success. "Unknown" rendering as green is the exact failure being
+  removed here; a build that is genuinely fine is one `--verify-only` away from
+  confirmation.
 - **Export compliance is declarative**: `ITSAppUsesNonExemptEncryption` in
   `ios/App/App/Info.plist`. Without it a build is stuck on "Missing Compliance"
   and stays un-installable no matter what the group column says. If a `cap sync`

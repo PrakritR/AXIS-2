@@ -298,7 +298,11 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    than a page of the group's builds, so a group with hundreds of accumulated
    builds can never report a correctly-assigned build as missing.
 5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and fail
-   on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION`.
+   on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION` — **or on not being able
+   to read that state at all.** Every request retries transport errors and 5xx
+   (node's `fetch` *rejects* on a dropped socket, so that is caught, not just
+   status codes), so an unreadable state is a real unknown, and the step fails
+   closed rather than reporting success it cannot support.
 
 The build number comes from the fastlane step's `build_number` output, not from
 "latest build", so a concurrent upload can't cause the wrong build to be

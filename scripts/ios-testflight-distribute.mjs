@@ -148,9 +148,33 @@ function requireEnv(name) {
   return value;
 }
 
-/** The workflow caps the distribute step at 30 minutes; waiting past that is unreachable. */
+// `timeout-minutes: 30` on the distribute step in
+// .github/workflows/ios-testflight.yml is the hard ceiling for everything below.
+const STEP_BUDGET_SECONDS = 30 * 60;
+
+const REQUEST_ATTEMPTS = 4;
+const REQUEST_BACKOFF_STEP_MS = 2000;
+const CONFIRM_ATTEMPTS = 5;
+const CONFIRM_INTERVAL_MS = 12_000;
+
+/**
+ * Seconds the work AFTER the processing wait can take, so the advertised maximum
+ * wait still leaves room to finish. Derived from the constants above rather than
+ * hard-coded: a second magic number would drift the moment one of them changed,
+ * and the failure it causes is the opaque mid-verification cancellation that
+ * `parseTimeoutSeconds` exists to prevent.
+ */
+const POST_WAIT_RESERVE_SECONDS = Math.ceil(
+  // confirmAssignment's sleeps between re-reads…
+  ((CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS +
+    // …plus a full retry-backoff budget for the assign POSTs, the confirm reads
+    // and the buildBetaDetail read.
+    8 * ((REQUEST_ATTEMPTS * (REQUEST_ATTEMPTS - 1)) / 2) * REQUEST_BACKOFF_STEP_MS) /
+    1000,
+);
+
+export const MAX_PROCESSING_TIMEOUT_SECONDS = STEP_BUDGET_SECONDS - POST_WAIT_RESERVE_SECONDS;
 export const DEFAULT_PROCESSING_TIMEOUT_SECONDS = 1500;
-export const MAX_PROCESSING_TIMEOUT_SECONDS = 1740;
 
 /**
  * Reject a timeout that cannot do what it claims.
@@ -208,28 +232,42 @@ class AscClient {
     // Apple's API 429s and 5xxs under load; a bounded retry keeps a whole build
     // cycle from being wasted on a transient blip. 401 is deliberately NOT
     // retryable — a genuinely bad credential must fail fast and loudly.
-    for (let attempt = 1; attempt <= 4; attempt += 1) {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.authToken()}`,
-          ...(body ? { "Content-Type": "application/json" } : {}),
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
+    //
+    // node's fetch REJECTS rather than returning a response on connection
+    // resets, DNS blips and socket hangups, so those must be caught here too.
+    // The processing wait makes ~75 requests over up to 25 minutes from a CI
+    // runner: without this, one dropped socket fails a run whose build is fine,
+    // and during confirmAssignment it produces exactly the false red the
+    // re-poll exists to prevent.
+    for (let attempt = 1; attempt <= REQUEST_ATTEMPTS; attempt += 1) {
+      let retryable = false;
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: {
+            Authorization: `Bearer ${this.authToken()}`,
+            ...(body ? { "Content-Type": "application/json" } : {}),
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
 
-      if (response.status === 204) return null;
-      const text = await response.text();
-      const parsed = text ? safeJsonParse(text) : null;
-      if (response.ok) return parsed;
+        if (response.status === 204) return null;
+        const text = await response.text();
+        const parsed = text ? safeJsonParse(text) : null;
+        if (response.ok) return parsed;
 
-      lastError = new Error(
-        `${method} ${url} → HTTP ${response.status}: ${parsed ? describeApiError(parsed) : text.slice(0, 500)}`,
-      );
-      const retryable = response.status === 429 || response.status >= 500;
-      if (!retryable || attempt === 4) throw lastError;
-      const backoffMs = 2000 * attempt;
-      console.log(`  ↻ ${response.status} from App Store Connect; retrying in ${backoffMs / 1000}s`);
+        lastError = new Error(
+          `${method} ${url} → HTTP ${response.status}: ${parsed ? describeApiError(parsed) : text.slice(0, 500)}`,
+        );
+        retryable = response.status === 429 || response.status >= 500;
+      } catch (error) {
+        lastError = new Error(`${method} ${url} → transport error: ${error.message}`);
+        retryable = true;
+      }
+
+      if (!retryable || attempt === REQUEST_ATTEMPTS) throw lastError;
+      const backoffMs = REQUEST_BACKOFF_STEP_MS * attempt;
+      console.log(`  ↻ ${lastError.message.slice(0, 160)}; retrying in ${backoffMs / 1000}s`);
       await sleep(backoffMs);
     }
     throw lastError;
@@ -361,7 +399,12 @@ async function isBuildAssignedToGroup(client, buildId, groupId) {
  * a build that is genuinely assigned and installable. Re-polling keeps the API
  * read as the SOLE gate — it never softens the verdict, it only stops a false red.
  */
-async function confirmAssignment(client, buildId, groupId, { attempts = 5, intervalMs = 12_000 } = {}) {
+async function confirmAssignment(
+  client,
+  buildId,
+  groupId,
+  { attempts = CONFIRM_ATTEMPTS, intervalMs = CONFIRM_INTERVAL_MS } = {},
+) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (await isBuildAssignedToGroup(client, buildId, groupId)) return true;
     if (attempt === attempts) return false;
@@ -403,16 +446,19 @@ async function assignBuildToGroup(client, buildId, groupId) {
 }
 
 /**
- * Log the beta states and return them. Reporting is separate from asserting so the
- * diagnostics still print when the run is about to fail for a different reason —
- * a failure with no state in the log is a failure someone has to reproduce by hand.
+ * Log the beta states and return them, or `null` if the read could not be made.
+ *
+ * Reporting is separate from asserting so the diagnostics still print when the run
+ * is about to fail for a different reason — a failure with no state in the log is
+ * one someone has to reproduce by hand. The request itself already retries
+ * transport errors and 5xx, so a `null` here means the read genuinely failed.
  */
 async function reportBetaDetail(client, buildId) {
   let detail = null;
   try {
     detail = await client.get(`builds/${buildId}/buildBetaDetail`);
   } catch (error) {
-    console.log(`  (buildBetaDetail unavailable: ${error.message})`);
+    console.log(`  buildBetaDetail could NOT be read: ${error.message}`);
     return null;
   }
   const attributes = detail?.data?.attributes ?? {};
@@ -421,12 +467,30 @@ async function reportBetaDetail(client, buildId) {
   return attributes;
 }
 
-function assertInstallableBetaState(attributes) {
-  if (!attributes || !FATAL_INTERNAL_BUILD_STATES.has(attributes.internalBuildState)) return;
+/**
+ * Fail unless the build is affirmatively in an installable state.
+ *
+ * Deliberately fails CLOSED when the state could not be read at all: this whole
+ * step exists so that a green run means a tester can install the build, and
+ * "unknown" must never render as green. A build that is actually fine is one
+ * `--verify-only` away from confirmation, which is far cheaper than shipping the
+ * belief that something installable went out when it did not.
+ */
+export function assertInstallableBetaState(attributes, buildNumber) {
+  if (!attributes) {
+    throw new Error(
+      `Build ${buildNumber} IS assigned to the internal group, but its export-compliance / beta state ` +
+        "could NOT be read after retries, so whether a tester can install it is UNKNOWN. " +
+        "Not reporting success on an unknown. Re-check with: " +
+        `node scripts/ios-testflight-distribute.mjs --build=${buildNumber} --verify-only`,
+    );
+  }
+  if (!FATAL_INTERNAL_BUILD_STATES.has(attributes.internalBuildState)) return;
   throw new Error(
-    `Build is assigned to the group but its internalBuildState is ${attributes.internalBuildState}, ` +
-      "so testers still cannot install it. Export compliance is declared via " +
-      "ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key survived the last cap sync.",
+    `Build ${buildNumber} is assigned to the group but its internalBuildState is ` +
+      `${attributes.internalBuildState}, so testers still cannot install it. Export compliance is ` +
+      "declared via ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key " +
+      "survived the last cap sync.",
   );
 }
 
@@ -503,7 +567,7 @@ async function main() {
   if (assignError) {
     console.log(`  (assignment POST reported an error, but the API says the build IS assigned: ${assignError})`);
   }
-  assertInstallableBetaState(betaDetail);
+  assertInstallableBetaState(betaDetail, buildNumber);
 
   console.log("");
   console.log(`✅ Build ${buildNumber} is distributed to ${group.attributes.name} and installable by internal testers.`);
