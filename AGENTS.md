@@ -279,10 +279,12 @@ structure rather than reinventing table/filter markup per tab.
 `ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
 Invite to apply / Share tour" surface, mounted from Properties (header **Share**
 and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
-Only the **listing** kind is multi-select (a manager can send several/all
-properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
-single-property because they target one apply/tour flow. Rules baked into the
-modal + `/api/portal/send-lead-invite`:
+**listing** and **apply** are multi-select (a manager can send several/all
+properties at once via `CheckboxMultiSelect`; a multi-property apply share links
+to `/rent/apply?ids=…` via `buildManagerPortfolioApplyUrl`, where the prospect
+picks a home before entering the wizard). **tour** stays single-property because
+the modal targets one tour flow. Rules baked into the modal +
+`/api/portal/send-lead-invite`:
 
 - **Single listing → direct listing page** (`buildManagerListingUrl` →
   `/rent/listings/{id}`). **Several listings → filtered browse link**
@@ -298,10 +300,23 @@ modal + `/api/portal/send-lead-invite`:
 - The email builder (`lead-invite-email.ts`) takes an optional `listingCount`;
   `>1` switches subject + body/html to the multi-listing "browse these N homes"
   copy instead of the single-listing summary.
+- A share goes out over **email and/or SMS** (`viaEmail` / `viaSms`; at least one,
+  else 400). SMS sends the short `buildLeadInviteSmsText` copy through
+  `sendFromManagerWorkNumber`, so it obeys the one outbound rule in
+  [`docs/agents/sms-system.md`](docs/agents/sms-system.md) — a manager with no
+  provisioned work number is refused (400), never texted from another number, and
+  the modal only offers the SMS channel once one exists.
 - The server **re-authorizes every requested id** via
   `getShareablePropertyForUser` and rejects the whole send (403) if any id is
   not owned/assigned — never silently drops one. Client sends both `propertyId`
   (first, back-compat) and `propertyIds` (full list).
+- **Email and/or SMS, chosen per send.** The modal's Send via picker sets
+  `viaEmail` / `viaSms` (+ `phone`) on the request; SMS is offered only when
+  `/api/manager/sms-conversations` reports a work number, and the route sends it
+  through `sendFromManagerWorkNumber` (`counterpartyRole: "prospect"`, so it
+  threads like any other prospect SMS — see
+  [`docs/agents/sms-system.md`](docs/agents/sms-system.md)). SMS copy is its own
+  short builder, `buildLeadInviteSmsText`, not a trimmed email body.
 
 ## Listing images: never fabricate a photo
 
@@ -434,67 +449,66 @@ explicit request.
 
 # Branching & deployment (Vercel)
 
-The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
-**Production Branch is `main`**. There is **no `production` branch** — it was
-deleted after the production branch was migrated to `main`; don't recreate it.
-Two branches, two roles:
+The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) builds **only**
+`main` and `production` (`vercel.json` → `git.deploymentEnabled`, plus
+`scripts/vercel-should-build.sh`); every other branch is skipped.
 
-- **`main` — the live site.** Every push here triggers a **production deploy** to
-  the real domains: the canonical `prop-lane.space` / `www.prop-lane.space`, the
-  legacy `axis-seattle-housing.com` / `www.axis-seattle-housing.com` (still live,
-  still recognized as production by `isProductionAxisHost`), and
-  `axis-2.vercel.app`. A push to `main` **also** ships an iOS TestFlight build
-  (see below). Outbound email/SMS and shareable links use the canonical origin
-  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Only ship-ready code reaches
-  this branch. Never commit straight to it.
-- **`prakrit` — integration / staging.** Day-to-day work merges here. Every push
-  produces a **preview deploy**, and Vercel keeps a stable branch alias that
-  always points at the latest `prakrit` build —
-  `axis-2-git-prakrit-prakritramachandran-6082s-projects.vercel.app`. That URL is
-  the staging preview the ship gate asks you to verify. Feature branches also get
-  their own preview URLs.
+Three rungs above the keeper branch — `claude-2` → `prakrit` → `main` →
+`production` (see [`docs/ship-gate.md`](docs/ship-gate.md) for the gated
+promotion of each):
 
-**Promote `prakrit` → `main` to ship.** When `prakrit` is verified on staging and
-you want it live:
+- **`prakrit` — integration.** Day-to-day work merges here; feature branches and
+  `prakrit` itself get preview URLs.
+- **`main` — staging.** Promoted from `prakrit` and verified on its Vercel Preview
+  deployment before going live.
+- **`production` — the live site.** Deploys to the canonical `prop-lane.space` /
+  `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
+  `www.axis-seattle-housing.com` (still live, still recognized as production by
+  `isProductionAxisHost`), and `axis-2.vercel.app`. A push here **also** ships an
+  iOS TestFlight build — `.github/workflows/ios-testflight.yml` triggers on
+  `push: branches: [production]`, so **deleting this branch silently ends every
+  iOS build.** Outbound email/SMS and shareable links use the canonical origin
+  (`PRODUCTION_APP_ORIGIN` in `src/lib/app-url.ts`). Never commit straight to it.
+
+**Promote `main` → `production` to ship**, fast-forward only:
 
 ```
-git checkout main
-git pull
-git merge --ff-only prakrit   # main should stay a fast-forward of prakrit
-git push origin main          # Vercel auto-deploys web + triggers iOS TestFlight
-git checkout prakrit
+bash scripts/promote-main-to-production.sh
 ```
 
-Keep `main` a strict fast-forward of `prakrit` (never commit unique work to
-`main`); this keeps history linear and makes rollbacks obvious. To roll back,
-point `main` at the previous known-good commit and push, or use Vercel's
-**Instant Rollback** in the dashboard.
+The script refuses a non-fast-forward (`origin/production` must be an ancestor of
+`origin/main`) and is a no-op when the two already match, so `production` stays a
+strict fast-forward of `main` and rollbacks stay obvious. To roll back, point
+`production` at the previous known-good commit and push, or use Vercel's
+**Instant Rollback** in the dashboard. Full checklist:
+[`docs/ship-gate.md`](docs/ship-gate.md).
 
-Deploying `prakrit` as a staging step is standard practice on Vercel: its
-preview/branch alias is your staging environment, and `main` is the gated
-promotion target. Don't add a separate Vercel project for staging — the branch
-model above already gives you prod + staging from one project.
+Don't add a separate Vercel project for staging — `main` plus `production` already
+gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
-Git**. It is `main`; don't change it.
+Git**. Read it there rather than trusting a value copied into a doc, and don't
+change it.
 
 ## Production push also ships iOS (TestFlight / Xcode)
 
-Every push to `main` must update **both** the live website **and** the mobile app
-pipeline:
+Every push to `production` must update **both** the live website **and** the
+mobile app pipeline:
 
 1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
 2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
-   runs on `push` to `main`: `npx cap sync ios` with
-   `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
-   `bundle exec fastlane beta` uploads a new build to **TestFlight**. The
-   workflow also exposes `workflow_dispatch` for an on-demand build.
+   runs on `push` to `production`: `npx cap sync ios` with
+   `CAP_SERVER_URL=https://prop-lane.space`, then `bundle exec fastlane beta`
+   builds and uploads to **TestFlight**, and finally
+   `scripts/ios-testflight-distribute.mjs` assigns the build to the internal
+   tester group. The workflow also exposes `workflow_dispatch` for an on-demand
+   build.
 
 Agents promoting to production **must**:
 
 - Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
   macOS job does not self-skip.
-- After `git push origin main`, watch the **iOS TestFlight** workflow until green
+- After the promote push, watch the **iOS TestFlight** workflow until green
   (or report the failure). Do not treat “web deployed” as done.
 - If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
   permissions), call out that TestFlight + App Store review may be required
@@ -504,6 +518,56 @@ Agents promoting to production **must**:
 Portal UI/API changes reach the installed app via the production WebView URL
 without waiting for App Store review; the TestFlight build keeps the native
 shell (plugins, splash, push, deep links) in sync with the repo.
+
+### Uploading is not shipping — a build must be assigned to a tester group
+
+`upload_to_testflight` succeeding proves nothing on its own:
+`skip_waiting_for_build_processing` is mutually exclusive with tester-group
+assignment (pilot needs a build Apple has finished processing), so uploads used to
+land in App Store Connect with an **empty Groups column** — green CI, nothing any
+tester could install. The workflow's separate distribute step
+(`scripts/ios-testflight-distribute.mjs`) is the real ship gate: bounded wait for
+processing, assign the internal group, then re-read the App Store Connect API to
+prove the assignment stuck. Mechanism, tunables and failure modes:
+[`docs/mobile-app.md`](docs/mobile-app.md#the-distribute-step-is-what-makes-a-build-installable).
+The invariants below are settled decisions, not open questions:
+
+- **The exit code reflects a FRESH read, never a POST's status code**, in both
+  directions — a POST that "succeeded" while the build is not in the group fails
+  the run, and a POST that 409s while the API says the build *is* assigned passes.
+- **The gate fails CLOSED, and the installable-state check is an ALLOWLIST**
+  (`READY_FOR_BETA_TESTING` / `IN_BETA_TESTING`). Re-polling the two transient
+  states can only prevent a false red; it never softens the verdict. Do not
+  propose fail-open or a denylist — a denylist passes every value it has not heard
+  of, which is how an absent state once shipped as green.
+- **The internal group is matched by exact name** (`Internal — PropLane team`, em
+  dash) read from the API. No match, or a match that is an *external* group → hard
+  failure. Never fall back to "the first internal group"; never enable external
+  distribution (that would need App Review).
+- **Export compliance is declarative**: `ITSAppUsesNonExemptEncryption` in
+  `ios/App/App/Info.plist`. Without it a build stays un-installable no matter what
+  the group column says; if a `cap sync` ever drops that key the distribute step
+  fails on `MISSING_EXPORT_COMPLIANCE`.
+- **A green workflow is now real evidence** — that is the point of the extra step.
+  Backfill or inspect a stranded build with
+  `node scripts/ios-testflight-distribute.mjs --build=<n> [--verify-only]` (needs
+  `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` or `ASC_KEY_P8_PATH`). Coverage:
+  `tests/unit/ios-testflight-distribute.test.ts`.
+
+### Two iOS app records — build numbers are NOT comparable across them
+
+| | Bundle id | App ID | State |
+| --- | --- | --- | --- |
+| **Canonical** | `space.proplane.app` | **6795707576** | the only record CI ships to |
+| Legacy | `com.axisseattlehousing.app` | shown as "PropLane Legacy" | dead, **still installable**, do not touch |
+
+The legacy record's build numbers are **higher** (49 vs 37), because it kept
+shipping before the rebrand. Comparing build numbers across the two records
+therefore concludes backwards: a higher number on the legacy record is an
+*older*, orphaned app. The distribute script pins bundle id → app id and refuses
+to run against anything else, so a build can never land on the dead record by
+accident. To check which record a machine actually has installed, see
+[`docs/mobile-app.md`](docs/mobile-app.md#app-identity-ios-rebranded-to-proplane-android-deferred).
 
 Full mobile model: [`docs/mobile-app.md`](docs/mobile-app.md).
 Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
@@ -553,9 +617,11 @@ Do **not** stop at unit tests. For the feature that changed:
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
 [ ] prakrit verified on staging preview
-[ ] ff-only merge prakrit → main + push
+[ ] ff-only merge prakrit → main + push; main verified on its Preview deploy
+[ ] ff-only promote main → production (scripts/promote-main-to-production.sh)
 [ ] Vercel production deploy healthy
-[ ] iOS TestFlight workflow green (or secrets gap reported)
+[ ] iOS TestFlight workflow green — its distribute step is what proves the build
+    is installable, not the upload (or secrets gap reported)
 ```
 
 # The PostgREST surface is public — RLS row predicates are not a column gate
@@ -648,8 +714,8 @@ model and workflow: [`docs/database-environments.md`](docs/database-environments
 
 # Portal routing precedence (a section can be silently unreachable)
 
-A portal section is only reachable if **both** layers above it let the request
-through. Two classes of bug have shipped here, each making a live nav item dead
+A portal section is only reachable if **every** layer above it lets the request
+through. Three classes of bug have shipped here, each making a live nav item dead
 while the section's component still compiled and its tests still passed:
 
 1. **`next.config.ts` `redirects()` outranks the app router.** A legacy entry
@@ -663,9 +729,45 @@ while the section's component still compiled and its tests still passed:
    portal. Gate on the capability, not a kind allowlist — e.g. the Inbox →
    Communication rewrite checks `findSection(def, "communication")`, so it can
    only fire for a portal that actually has a Communication section to land in.
+3. **The resident stage guard must run AFTER those rewrites, and the CLIENT
+   guard must agree with it.** `isResidentPathAllowedForAccess`
+   (`src/lib/resident-portal-nav.ts`) is enforced twice: by
+   `renderPortalSection` on the server and by `ResidentPreApplicationGuard` in
+   the layout, which judges the **original** pathname while the server redirect
+   is still in flight and `router.replace()`s the home page if it disagrees. So
+   a legacy alias is only reachable when it is (a) rewritten *before* the server
+   guard and (b) allow-listed inside the shared guard —
+   `RESIDENT_LEGACY_SECTION_ALIASES` (`inbox`, `financials`, `finances`,
+   `bugs-feedback`). Allow-listing is not a
+   hole: those paths always redirect, and the guard re-judges the destination.
+   `applications` is NOT an alias — it is a live resident nav section that stays
+   unlocked after approval, so never add a redirect off it.
+   Fixing only (a) makes the unit tests pass while the browser still bounces.
+   Coverage: `tests/unit/resident-legacy-section-redirects.test.ts` drives the
+   real `renderPortalSection`.
 
-Neither layer is covered by the unit suite. After adding or renaming a section,
-load its URL in the browser — a passing build is not evidence it resolves.
+None of these layers is covered by a build. After adding or renaming a section,
+load its URL in the browser — a passing build, and a passing unit test of the
+server layer alone, are not evidence it resolves.
+
+## Portal nav locks: a lock is not a dead click
+
+`portalNavLockKind` (`src/lib/portals/nav-locks.ts`) is the single decision for
+every locked-nav surface (desktop list, collapsed rail, mobile strip, native
+bottom bar, More sheet). Locks apply to managers **and** residents; the kind only
+decides what a click does:
+
+- **`upsell`** — manager / pro free tier. Stays a live `<Link>`, because the
+  destination renders `PortalTierPaywall` and the sidebar row is the ONLY entry
+  point to the upgrade page anywhere in the product. Rendering it as a `<span>`
+  deletes a revenue path.
+- **`inert`** — every resident lock (stage locks and the linked manager's
+  free-tier locks alike). Nothing for the resident to buy, so the row is a
+  no-op and `aria-disabled`.
+
+A locked row must never be a live link to a path the server then redirects home
+— that reads as a broken tab. Coverage: `tests/unit/portal-nav-locks.test.ts`,
+`tests/unit/portal-nav-lock-surfaces.test.tsx`.
 
 ## Inbox panels: the standalone page shell is a /demo-only path
 
@@ -697,17 +799,23 @@ inheriting it for a live inbox row destroys real mail. Coverage:
 
 Every portal's Communication (manager, resident, vendor, admin) is a single
 conversation list + threads, NOT the old Unopened / Opened / Sent / Trash /
-Schedule tab bar. Manager + resident use the chat two-pane
-(`manager-unified-inbox.tsx`, `ResidentUnifiedInbox` in `resident-communication.tsx`
-→ `ResidentInboxPanel`); vendor + admin reuse their existing panels driven by an
-`"all"` tabId (all non-trash conversations) plus the archive toggle. Invariants:
+Schedule tab bar. Manager, resident, and vendor use the chat two-pane
+(`ManagerUnifiedInbox` / `ResidentUnifiedInbox` / `VendorUnifiedInbox`, each
+mounting its portal's inbox panel with `suppressListPane` for the thread side);
+admin alone keeps its flat table driven by an `"all"` tabId (all non-trash
+conversations) plus the archive toggle. Invariants:
 
-- **No folder tabs.** The list shows ALL live conversations (inbox + sent); the
-  `tabId` route param is legacy and does not segregate the list. Archived
-  (trashed) conversations are reachable via a `*-inbox-archived-toggle` button,
-  and trash/restore live in the open thread — never re-add a top-level
-  Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone tabbed panels survive
-  only for the /demo path and legacy route redirects.
+- **No folder tabs.** The list shows ALL live conversations (inbox + sent).
+  Manager / resident / vendor route on
+  `/communication/{active|unread|archived}[/{threadId}]` — `PortalListControlStack`
+  destinations that scope that ONE list and deep-link the open thread, never
+  folders: `unread` filters it, `archived` is the trashed view. Admin still routes
+  `/communication/inbox/{tab}` and reaches archived through its
+  `admin-inbox-archived-toggle` button. Trash/restore live in the open thread —
+  never re-add a top-level Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone
+  tabbed panels survive only for the /demo path and legacy route redirects — on
+  those three portals every legacy `inbox` / `email` / `sms` path now folds into a
+  segment rather than resolving a tab.
 - **Scheduled messages render INLINE in the recipient's thread** as a COMPACT,
   collapsible "Scheduled · sends <when> · <subject>" card (`InboxScheduledCard`)
   that expands for the full body + Send now / Cancel send / Edit; Edit is an
@@ -782,6 +890,12 @@ The rules that follow from it:
   written to a log — it is a live credential until it is used. The one distinguishable
   reply is the `503` for an unconfigured mailer, which is a deployment fact rather than a
   per-address signal.
+- **Because every reply is generic, a broken mint is visible only in the logs.**
+  `admin.generateLink` reports API failures by RETURNING `{data: null, error}` rather
+  than throwing, so that `error` must be logged: drop it and a revoked service-role key
+  or a paused project looks exactly like an unknown address while reset is dead. An
+  unknown address itself stays quiet — it is routine, not an incident — and the token is
+  still never logged.
 - **`RESEND_API_KEY` is now load-bearing for password reset.** Recovery mail used to go
   through Supabase's own mailer, so reset worked on a deployment with no email provider
   configured; it no longer does — without that key the route answers `503` and reset is
@@ -797,6 +911,31 @@ The rules that follow from it:
 - Coverage: `tests/unit/password-reset-url.test.ts`,
   `password-reset-request-route.test.ts`, `password-reset-confirm-page.test.tsx`,
   `password-reset-legacy-callback.test.ts`.
+
+## "Does this account have a password?" — `identities` is NOT the answer
+
+A Google/Apple-only account has no password, so the portal's Login & security panel asks
+it to **Set password** with no Current password field. Deciding that from the provider
+list is wrong, and the wrong answer is invisible in testing:
+
+- The GoTrue **admin API returns no password field at all** (`id, aud, role, email,
+  email_confirmed_at, …, identities` and nothing more), so the server cannot read it there.
+- **`identities` / `app_metadata.providers` say which providers are LINKED, never whether
+  a password exists.** A passwordless account can carry an `email` identity — verified
+  against the dev project, where an admin-created user shows `provider: "email"` either way.
+
+The only authoritative signal is `auth.users.encrypted_password`, which PostgREST does not
+expose. Read it through `current_user_has_password()`
+(`…_current_user_has_password.sql`) — `SECURITY DEFINER`, keyed on `auth.uid()` so it can
+only ever answer for the caller, returning one boolean, with no `anon` grant.
+`fetchCurrentUserHasPassword` wraps it and **fails closed to `true`**, the state that still
+demands the current-password confirmation.
+
+Note what the current-password field is and isn't: `updateUser({ password })` succeeds for
+any authenticated session (`secure_password_change = false`), so that field is a UX
+confirmation, not a server-enforced gate — it always was. Hiding it for an account that
+has no password removes nothing the server was enforcing. Coverage:
+`tests/unit/portal-set-password-panel.test.tsx`.
 
 # Feature architecture notes (mandatory pre-reads)
 
@@ -1027,8 +1166,9 @@ in place, and the rest of the detail live in
 
 Two routing gotchas this exposed, both of which silently break a section without failing a build:
 
-- **Legacy section redirects must run before `findSection`.** `financials` is not a resident nav
-  section, so a redirect placed after `findSection` is dead code — `notFound()` fires first.
+- **Legacy section redirects run first or not at all.** `financials` is not a resident nav
+  section, so a redirect placed after `findSection` — or after the resident stage guard — is
+  dead code. Full ordering: "Portal routing precedence" above.
 - **`/demo` renders portal panels directly**, not through `render-portal-section.tsx`, and
   `src/components/demo/demo-section-renderer.tsx` has its own per-section prop list. When you add
   sub-tabs to a section wired into the demo, forward `tabId`/`basePath` there too or the demo

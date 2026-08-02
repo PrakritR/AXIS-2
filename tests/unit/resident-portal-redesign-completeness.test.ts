@@ -140,10 +140,13 @@ describe("resident portal redesign completeness", () => {
       }
     });
 
-    it("communication uses PortalCommunicationShell + mobile action row", () => {
+    // Resident Communication matches manager Communication: shell + mobile action row.
+    it("communication uses PortalCommunicationShell + PortalPageHeaderMobileActionsRow", () => {
       const src = readPanel("resident-communication.tsx");
       expect(src).toContain("PortalCommunicationShell");
       expect(src).toContain("PortalPageHeaderMobileActionsRow");
+      expect(src).toContain("@/components/portal/portal-section-action-row");
+      expect(src).not.toMatch(/pageScroll/);
     });
 
     it("dashboard uses manager-style attention groups without welcome subtitle", () => {

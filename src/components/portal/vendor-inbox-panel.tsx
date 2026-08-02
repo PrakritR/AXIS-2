@@ -795,7 +795,7 @@ export const VendorInboxPanel = forwardRef<
       /> : null}
 
       {suppressListPane ? (
-        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+        <div className={pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}>
           {activeThread ? (
             <InboxThreadView
               scrollMode={pageScroll ? "page" : "pane"}
@@ -916,7 +916,9 @@ export const VendorInboxPanel = forwardRef<
     </>
   );
 
-  if (embeddedInCommunication) return inboxBody;
+  if (embeddedInCommunication) {
+    return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{inboxBody}</div>;
+  }
 
   return (
     <ManagerPortalPageShell

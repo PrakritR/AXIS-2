@@ -664,14 +664,18 @@ export function ManagerApplications({
     [viewingIncompleteApplicationDetail],
   );
 
+  // The detail view renders full applicant PII — name, contact, income, screening
+  // results — so it resolves out of `scopedRows`, the SAME already-scoped list the
+  // table renders, rather than the raw cache. That makes it structurally impossible
+  // for the list and the detail to disagree about who may see a row: an unresolved
+  // scope leaves `scopedRows` empty, so the detail denies it too, and the caller
+  // renders a skeleton for a null row until the scope (and the property cache)
+  // resolves.
   const detailRow = useMemo(() => {
     if (!applicationIdProp) return null;
     const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
-    const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
-    if (!hit) return null;
-    if (scopeUserId && !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
-    return hit;
-  }, [applicationIdProp, rows, scopeUserId]);
+    return scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target) ?? null;
+  }, [applicationIdProp, scopedRows]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -1313,7 +1317,7 @@ export function ManagerApplications({
         key={checkrScreeningRowId ?? "none"}
         row={
           checkrScreeningRowId
-            ? rows.find((r) => r.id === checkrScreeningRowId) ??
+            ? scopedRows.find((r) => r.id === checkrScreeningRowId) ??
               (detailRow?.id === checkrScreeningRowId ? detailRow : null)
             : null
         }
@@ -1425,7 +1429,7 @@ export function ManagerApplications({
       />
       <CheckrScreeningModal
         key={checkrScreeningRowId ?? "none"}
-        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        row={scopedRows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
         showPackagePickerInitially={checkrScreeningShowPicker}
         onClose={() => {

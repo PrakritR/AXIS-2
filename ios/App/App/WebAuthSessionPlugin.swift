@@ -19,12 +19,16 @@ public class WebAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let urlString = call.getString("url"),
               let url = URL(string: urlString),
               let scheme = call.getString("callbackScheme") else {
-            call.reject("url and callbackScheme are required")
+            call.reject("url and callbackScheme are required", "START_FAILED")
             return
         }
 
         DispatchQueue.main.async {
-            let context = WebAuthPresentationContext()
+            guard let anchor = self.presentationAnchorWindow() else {
+                call.reject("No app window is available to present sign-in", "NO_ANCHOR")
+                return
+            }
+            let context = WebAuthPresentationContext(anchor: anchor)
             self.presentationContext = context
 
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { callbackURL, error in
@@ -57,20 +61,45 @@ public class WebAuthSessionPlugin: CAPPlugin, CAPBridgedPlugin {
             if !session.start() {
                 self.session = nil
                 self.presentationContext = nil
-                call.reject("Failed to start authentication session")
+                call.reject("Failed to start authentication session", "START_FAILED")
             }
         }
     }
-}
 
-private final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    /// The window the auth sheet is anchored to.
+    ///
+    /// Ask the Capacitor bridge for its own view controller's window first. Scanning
+    /// `UIApplication.shared.connectedScenes` is a guess, and it is wrong on "iPhone and iPad
+    /// Apps on Mac": that runtime gives the process an extra `NSMenuBarScene` alongside the
+    /// real app scene, so "the first scene with a key window" can resolve to something that is
+    /// not the app's window. The scene scan stays only as a fallback, and a detached
+    /// `ASPresentationAnchor()` is never returned — a session anchored to a window with no
+    /// scene silently fails to present, which is indistinguishable from the button doing
+    /// nothing. Rejecting instead lets the web layer show the user why.
+    private func presentationAnchorWindow() -> UIWindow? {
+        if let window = bridge?.viewController?.view.window {
+            return window
+        }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        for scene in scenes {
+        let active = scenes.filter { $0.activationState == .foregroundActive }
+        for scene in active + scenes {
             if let window = scene.windows.first(where: { $0.isKeyWindow }) {
                 return window
             }
         }
-        return scenes.flatMap(\.windows).first ?? ASPresentationAnchor()
+        return (active + scenes).flatMap(\.windows).first
+    }
+}
+
+private final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private let anchor: UIWindow
+
+    init(anchor: UIWindow) {
+        self.anchor = anchor
+        super.init()
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return anchor
     }
 }

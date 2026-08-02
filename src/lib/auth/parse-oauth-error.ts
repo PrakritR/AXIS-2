@@ -26,20 +26,42 @@ function readOAuthParams(params: URLSearchParams): OAuthUrlError | null {
   };
 }
 
+export const OAUTH_EXCHANGE_FAILED_MESSAGE =
+  "Google sign-in failed: Supabase could not verify your Google account. An admin must re-sync the Google Client ID and secret in Supabase → Authentication → Providers → Google, and confirm the Google Cloud redirect URI points to your Supabase project (not this website).";
+
+export const OAUTH_REDIRECT_URI_MISMATCH_MESSAGE =
+  "Google sign-in failed: redirect URI mismatch. In Google Cloud Console, add your Supabase callback URL (not your website URL) under Authorized redirect URIs.";
+
+export const OAUTH_CANCELLED_MESSAGE = "Google sign-in was cancelled.";
+
+export const OAUTH_NOT_COMPLETED_MESSAGE =
+  "Google sign-in could not be completed. Try again or use email and password.";
+
+/**
+ * The messages `friendlyOAuthErrorMessage` can return verbatim. The remaining branch
+ * interpolates a third-party `error_description`, which is never fixed copy.
+ */
+export const FIXED_OAUTH_ERROR_MESSAGES = [
+  OAUTH_EXCHANGE_FAILED_MESSAGE,
+  OAUTH_REDIRECT_URI_MISMATCH_MESSAGE,
+  OAUTH_CANCELLED_MESSAGE,
+  OAUTH_NOT_COMPLETED_MESSAGE,
+] as const;
+
 /** User-facing message for Supabase/Google OAuth failures. */
 export function friendlyOAuthErrorMessage(oauthError: OAuthUrlError): string {
   const desc = oauthError.errorDescription?.toLowerCase() ?? "";
   if (desc.includes("unable to exchange external code")) {
-    return "Google sign-in failed: Supabase could not verify your Google account. An admin must re-sync the Google Client ID and secret in Supabase → Authentication → Providers → Google, and confirm the Google Cloud redirect URI points to your Supabase project (not this website).";
+    return OAUTH_EXCHANGE_FAILED_MESSAGE;
   }
   if (desc.includes("redirect_uri_mismatch")) {
-    return "Google sign-in failed: redirect URI mismatch. In Google Cloud Console, add your Supabase callback URL (not your website URL) under Authorized redirect URIs.";
+    return OAUTH_REDIRECT_URI_MISMATCH_MESSAGE;
   }
   if (oauthError.error === "access_denied") {
-    return "Google sign-in was cancelled.";
+    return OAUTH_CANCELLED_MESSAGE;
   }
   if (oauthError.errorDescription) {
     return `Google sign-in failed: ${oauthError.errorDescription}`;
   }
-  return "Google sign-in could not be completed. Try again or use email and password.";
+  return OAUTH_NOT_COMPLETED_MESSAGE;
 }

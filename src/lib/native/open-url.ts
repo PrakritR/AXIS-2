@@ -12,21 +12,53 @@ import {
   webPathFromNativeOAuthUrl,
   isNativeOAuthShell,
 } from "@/lib/auth/native-oauth-callback";
-import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
+import {
+  NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+  NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
+  NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE,
+  nativeOAuthNoReturnMessage,
+  nativeOAuthUnexpectedCallbackMessage,
+} from "@/lib/auth/oauth-failure-messages";
 import { usesIosAsWebAuthenticationSession } from "@/lib/native/ios-oauth";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { WebAuthSession } from "@/lib/native/web-auth-session";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 
+export {
+  NATIVE_IOS_OAUTH_REBUILD_MESSAGE,
+  NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE,
+  NATIVE_IOS_OAUTH_START_FAILED_MESSAGE,
+};
+
 /**
- * Shown when an iOS build predates the WebAuthSession plugin. Such a build has no
- * chrome-free path for Google sign-in — the only alternative is SFSafariViewController,
- * which renders the PropLane portal inside an in-app Safari browser (URL bar, share
- * icon, Safari toolbar). We refuse that and ask the user to update instead.
+ * `WebAuthSessionPlugin` rejection codes that mean nothing was ever presented, mapped to the
+ * user-facing copy shown for each.
  */
-export const NATIVE_IOS_OAUTH_REBUILD_MESSAGE =
-  "Google sign-in needs the latest version of the PropLane app. Please update PropLane from TestFlight or the App Store, then try again. You can also continue with Apple.";
+const NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES = new Map<string, string>([
+  ["NO_ANCHOR", NATIVE_IOS_OAUTH_NO_WINDOW_MESSAGE],
+  ["START_FAILED", NATIVE_IOS_OAUTH_START_FAILED_MESSAGE],
+]);
+
+/**
+ * The native shell cannot run this OAuth flow at all — nothing was opened and the WebView is
+ * still sitting on the sign-in screen.
+ *
+ * This is a PRE-FLIGHT failure, so it is thrown back to the caller to render in place rather
+ * than delivered by navigating to `/auth/sign-in?error=oauth&message=…`. That navigation is
+ * what a user experiences as the page "just refreshing and going back": it reloads the screen,
+ * throws away anything typed, and — because `/auth/sign-in` renders `NativeAuthHub`, which did
+ * not read those params — dropped the explanation entirely. Post-flight failures (the OAuth
+ * sheet came back with an error, a deep link arrived while the app was backgrounded) still
+ * travel by navigation; see `navigateToNativeOAuthFailure`.
+ */
+export class NativeOAuthUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NativeOAuthUnavailableError";
+  }
+}
 
 /**
  * iOS or Android? Prefers the live Capacitor bridge, then the `data-native` tag set in
@@ -191,7 +223,7 @@ function finishNativeOAuthFromRawUrl(rawUrl: string): boolean {
   if (parsed.searchParams.get("error")) {
     const message =
       parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
-      "Google sign-in could not be completed.";
+      NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE;
     navigateToNativeOAuthFailure(message);
     return true;
   }
@@ -224,9 +256,10 @@ export async function openOAuthUrl(url: string): Promise<void> {
       return;
     }
     // Plugin absent = this iOS binary predates WebAuthSession. Do NOT fall back to
-    // SFSafariViewController; fail with an update hint instead.
-    navigateToNativeOAuthFailure(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
-    return;
+    // SFSafariViewController; report the update hint to the caller so the sign-in screen can
+    // show it in place, instead of reloading the page and losing the message.
+    clearNativeOAuthInProgress();
+    throw new NativeOAuthUnavailableError(NATIVE_IOS_OAUTH_REBUILD_MESSAGE);
   }
 
   await openOAuthUrlWithSystemBrowser(url);
@@ -240,9 +273,7 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
       callbackScheme: NATIVE_OAUTH_SCHEME,
     });
     if (!finishNativeOAuthFromRawUrl(callbackUrl)) {
-      navigateToNativeOAuthFailure(
-        `Google sign-in returned an unexpected URL. ${nativeOAuthSetupHint()}`,
-      );
+      navigateToNativeOAuthFailure(nativeOAuthUnexpectedCallbackMessage());
     }
   } catch (error) {
     const code =
@@ -253,7 +284,17 @@ async function openOAuthUrlWithWebAuthSession(oauthUrl: string): Promise<void> {
       clearNativeOAuthInProgress();
       return;
     }
-    const message = error instanceof Error ? error.message : "Google sign-in could not be completed.";
+    // Every code in this map means the plugin never presented anything — no window to anchor
+    // to (NO_ANCHOR), bad arguments or `session.start()` returning false (START_FAILED). Those
+    // are PRE-FLIGHT failures like the missing-plugin case: throw them back for the caller to
+    // render in place instead of reloading the WebView, and never surface the plugin's own
+    // developer-phrased reason. A new plugin rejection is pre-flight only by being listed here.
+    const preflightMessage = NATIVE_IOS_OAUTH_PREFLIGHT_MESSAGES.get(code);
+    if (typeof preflightMessage === "string") {
+      clearNativeOAuthInProgress();
+      throw new NativeOAuthUnavailableError(preflightMessage);
+    }
+    const message = error instanceof Error ? error.message : NATIVE_OAUTH_GENERIC_FAILURE_MESSAGE;
     navigateToNativeOAuthFailure(message);
   }
 }
@@ -360,9 +401,7 @@ async function openOAuthUrlWithSystemBrowser(url: string): Promise<void> {
 
       settled = true;
       cleanups.forEach((fn) => fn());
-      navigateToNativeOAuthFailure(
-        `Google sign-in did not return to the app. ${nativeOAuthSetupHint()}`,
-      );
+      navigateToNativeOAuthFailure(nativeOAuthNoReturnMessage());
     })();
   });
   cleanups.push(() => void finished.remove());

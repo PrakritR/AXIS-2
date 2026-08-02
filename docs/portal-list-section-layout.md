@@ -10,13 +10,23 @@ Full design tokens: [`design.md`](design.md). Implementation helpers: [`portal-l
 
 ```
 ManagerPortalPageShell          ← single PORTAL_SECTION_SURFACE (outer card)
-├── Header row                  ← title (left) · titleAside (right)
-├── filterRow (optional)        ← tabs, pills, inline filters
-├── border-b divider            ← always present
-└── Body (children)
+├── Header row                  ← title (left) · titleAside (right)   ┐
+├── filterRow (optional)        ← tabs, pills, inline filters         ├ fixed chrome
+├── border-b divider            ← always present                      ┘
+└── Body (children)             ← the only scrolling region
     ├── optional toolbar rows   ← date/property filters (flat, no nested card)
     └── PORTAL_DATA_TABLE_WRAP  ← or PortalDataTableEmpty
 ```
+
+**Chrome is pinned, the body scrolls** (`stickyPageChrome`, default on). The
+shell tags `<html data-portal-sticky-chrome>` (`usePortalStickyPageChrome`) so
+portal main becomes a flex viewport, then splits `children` at the first
+`PortalPageScrollBody` / `PORTAL_LIST_PAGE_SCROLL_BODY` element — or after the
+last `PortalListControlStack` — and wraps everything below it in the scroll body
+(`portal-page-chrome-layout.tsx`). Rows above that split stay fixed with the
+title and filters. Wrap the table yourself in `PortalPageScrollBody` when the
+inferred split is wrong; pass `stickyPageChrome={false}` for a page that should
+scroll whole.
 
 Use `PortalListSectionShell` as a thin alias when building new sections:
 

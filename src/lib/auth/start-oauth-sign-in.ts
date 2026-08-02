@@ -21,7 +21,7 @@ export type StartOAuthSignInParams = {
 
 export type StartOAuthSignInResult =
   | { ok: true }
-  | { ok: false; message: string };
+  | { ok: false; message: string; cancelled?: boolean };
 
 function providerLabel(provider: Provider): string {
   if (provider === "apple") return "Apple";
@@ -89,6 +89,8 @@ export async function startOAuthSignIn({
     }
     return { ok: false, message: `Could not start ${label} sign-in.` };
   } catch (e) {
+    // Also the landing spot for NativeOAuthUnavailableError, which `openOAuthUrl` throws when
+    // the native shell cannot run the flow. Keep returning it — the caller renders it in place.
     const message = e instanceof Error ? e.message : `Could not start ${label} sign-in.`;
     return {
       ok: false,

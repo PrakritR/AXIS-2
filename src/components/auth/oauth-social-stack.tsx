@@ -13,6 +13,8 @@ type OAuthStackProps = {
   intent?: OAuthSignInIntent | null;
   onBeforeRedirect?: () => void;
   googleLabel?: string;
+  /** Render a start-up failure in place — a toast is too transient for a multi-sentence hint. */
+  onError?: (message: string) => void;
   /** Override the default sign-in Apple button (resident/vendor/manager signup). */
   appleSlot?: ReactNode;
 };
@@ -26,6 +28,7 @@ export function OAuthSocialStack({
   intent = null,
   onBeforeRedirect,
   googleLabel = "Continue with Google",
+  onError,
   appleSlot,
 }: OAuthStackProps) {
   const shared = {
@@ -35,6 +38,7 @@ export function OAuthSocialStack({
     fixedCallbackPath,
     intent,
     onBeforeRedirect,
+    onError,
   };
 
   return (

@@ -257,6 +257,55 @@ export async function renderPortalSection(
   if (kind === "manager" || kind === "pro") {
     if (section === "stripe") redirect(`${def.basePath}/payments`);
   }
+
+  // ---------------------------------------------------------------------------
+  // Legacy section redirects run BEFORE the resident stage guard below.
+  //
+  // The guard asks `isResidentPathAllowedForAccess` about the INCOMING path, and
+  // none of these legacy ids (`inbox`, `financials`, `bugs-feedback`) is a real
+  // resident section, so the guard answers "not allowed" and bounces every one
+  // of them to the resident home page. Ordering is the whole fix: a legacy alias
+  // must resolve to its live destination first, and the guard then judges THAT
+  // path. Regression coverage: tests/unit/resident-legacy-section-redirects.test.ts.
+  // ---------------------------------------------------------------------------
+
+  // Legacy path support: Inbox became Communication. Old deep links (push
+  // notifications, bookmarks, post-send navigation) must keep resolving.
+  // Gated on the capability, not a kind allowlist: ungated, this would send a
+  // portal that still ships Inbox as a real section to a Communication section
+  // it does not have (notFound). Every portal has Communication today — the
+  // gate is what keeps that from breaking silently if one stops having it.
+  if (section === "inbox" && findSection(def, "communication")) {
+    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
+    if (kind === "manager" || kind === "pro") {
+      redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
+    }
+    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
+  }
+
+  // Legacy path support: the resident "financials" section was merged into
+  // Payments tabs. Must run BEFORE findSection — "financials" is not a resident
+  // nav section, so findSection would notFound first.
+  if (kind === "resident" && section === "financials") {
+    // The former "financials" section merged into Payments, which is now
+    // Charges-only. Any old financials sub-path lands on the bare `/payments`
+    // URL, keeping a status pill where the legacy tab mapped to one.
+    const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[tabParts?.[0] ?? ""];
+    redirect(
+      `${def.basePath}/payments${searchSuffix(
+        searchParams,
+        legacy?.status ? { status: legacy.status } : undefined,
+      )}`,
+    );
+  }
+
+  // Resident feedback has no sidebar section of its own — it lives in Settings.
+  // This must run BEFORE the findSection lookup below, which would otherwise
+  // 404 the route and leave the redirect unreachable.
+  if (kind === "resident" && section === "bugs-feedback") {
+    redirect(`${def.basePath}/profile`);
+  }
+
   const residentCtx = kind === "resident" ? await getEffectiveSessionForPortal("resident") : null;
   const residentManagerTier =
     kind === "resident" && residentCtx?.profile?.manager_id?.trim()
@@ -330,43 +379,6 @@ export async function renderPortalSection(
   // it's back to being the Services "vendors" tab (redundant otherwise).
   if ((kind === "manager" || kind === "pro") && section === "vendors") {
     redirect(`${def.basePath}/services/vendors`);
-  }
-
-  // Legacy path support: Inbox became Communication. Old deep links (push
-  // notifications, bookmarks, post-send navigation) must keep resolving.
-  // Gated on the capability, not a kind allowlist: ungated, this would send a
-  // portal that still ships Inbox as a real section to a Communication section
-  // it does not have (notFound). Every portal has Communication today — the
-  // gate is what keeps that from breaking silently if one stops having it.
-  if (section === "inbox" && findSection(def, "communication")) {
-    const legacySuffix = tabParts?.length ? tabParts.join("/") : "unopened";
-    if (kind === "manager" || kind === "pro") {
-      redirect(`${def.basePath}/communication/inbox/${legacySuffix}`);
-    }
-    redirect(`${def.basePath}/communication/email/${legacySuffix}`);
-  }
-
-  // Legacy path support: the resident "financials" section was merged into
-  // Payments tabs. Must run BEFORE findSection — "financials" is not a resident
-  // nav section, so findSection would notFound first.
-  if (kind === "resident" && section === "financials") {
-    // The former "financials" section merged into Payments, which is now
-    // Charges-only. Any old financials sub-path lands on the bare `/payments`
-    // URL, keeping a status pill where the legacy tab mapped to one.
-    const legacy = RESIDENT_PAYMENTS_LEGACY_TABS[tabParts?.[0] ?? ""];
-    redirect(
-      `${def.basePath}/payments${searchSuffix(
-        searchParams,
-        legacy?.status ? { status: legacy.status } : undefined,
-      )}`,
-    );
-  }
-
-  // Resident feedback has no sidebar section of its own — it lives in Settings.
-  // This must run BEFORE the findSection lookup below, which would otherwise
-  // 404 the route and leave the redirect unreachable.
-  if (kind === "resident" && section === "bugs-feedback") {
-    redirect(`${def.basePath}/profile`);
   }
 
   const meta = findSection(def, section);
@@ -960,8 +972,6 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "documents") {
-    const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
-    if (tierGate) return tierGate;
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "application"}`);
@@ -971,6 +981,8 @@ export async function renderPortalSection(
     // "Shared with you" was merged into "Other documents" — keep old deep links alive.
     if (docTab === "shared") redirect(`${def.basePath}/${section}/other`);
     if (!allowedTabs.includes(docTab)) notFound();
+    const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
+    if (tierGate) return tierGate;
     return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
   }
 

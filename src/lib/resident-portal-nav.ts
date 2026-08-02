@@ -71,6 +71,22 @@ function residentPathSection(pathname: string): string {
   return parts[1] ?? "";
 }
 
+/**
+ * Legacy section aliases. None of these is a resident nav section — every one is
+ * rewritten by `renderPortalSection` to a real destination (`finances` /
+ * `financials` → Payments, `inbox` → Communication, `bugs-feedback` → Settings),
+ * and the guard then judges THAT path.
+ *
+ * They must be allowed through here, in the SHARED guard, for two reasons:
+ *  - the server guard runs after the rewrites, so an alias never reaches it;
+ *  - the CLIENT guard (`ResidentPreApplicationGuard`) runs on the ORIGINAL
+ *    pathname while the server redirect is still in flight. Treating an alias
+ *    as forbidden made it `router.replace()` to the home page and the redirect
+ *    never landed — this is why the fix looked correct in unit tests and was
+ *    still broken in the browser.
+ */
+const RESIDENT_LEGACY_SECTION_ALIASES = new Set(["inbox", "financials", "finances", "bugs-feedback"]);
+
 /** Client + server route guard — whether the resident may open this path at their stage. */
 export function isResidentPathAllowedForAccess(
   pathname: string,
@@ -84,6 +100,8 @@ export function isResidentPathAllowedForAccess(
 
   const section = residentPathSection(pathname);
   if (!section) return false;
+
+  if (RESIDENT_LEGACY_SECTION_ALIASES.has(section)) return true;
 
   if (section === "communication" || pathname.startsWith("/resident/communication/")) {
     return residentSectionUnlockedForStage("communication", stage);
@@ -132,6 +150,9 @@ export function residentPortalHomePath(
   if (access.leaseAccessUnlocked) return "/resident/dashboard";
   if (access.applicationApproved) return "/resident/dashboard";
   if (access.hasTourLink && !access.hasSubmittedApplication) return "/resident/tour";
+  // A resident who has submitted nothing and has no tour signed up to APPLY.
+  // Their dashboard is empty by construction, so landing them there reads as a
+  // broken account; the apply wizard is the only thing they can act on.
   if (!access.hasSubmittedApplication) return "/resident/applications/apply";
   return "/resident/dashboard";
 }

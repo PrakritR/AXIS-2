@@ -261,7 +261,6 @@ function ResidentUnifiedInbox({
           embeddedInCommunication
           externalTitleActions
           suppressListPane
-          pageScroll
           smsUiEnabled={smsUiEnabled}
           controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
           onControlledExpandedIdChange={(id) => {

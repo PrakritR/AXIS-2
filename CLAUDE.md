@@ -28,6 +28,8 @@ Run `npm run ship:preflight` before promote.
 
 ## Production = web + mobile
 
-Pushing `main` deploys the site on Vercel and uploads an iOS build to
-TestFlight via `.github/workflows/ios-testflight.yml`. Do not treat a web-only
-deploy as complete.
+Pushing `production` deploys the site on Vercel **and** runs
+`.github/workflows/ios-testflight.yml`. An upload is not a ship — that workflow's
+distribute step is what proves the build is installable
+([`docs/mobile-app.md`](docs/mobile-app.md#the-distribute-step-is-what-makes-a-build-installable)).
+Do not treat a web-only deploy as complete.

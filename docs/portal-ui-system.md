@@ -159,6 +159,12 @@ or resize the panel.
   sheet shell when there is one, else `document.body` — so it works inside the
   `PortalFilterSortSheet` modal, the mobile bottom sheet, and the desktop
   dropdown popover alike. Do NOT fork a second positioning implementation.
+- **The filter panel itself is portaled too.** `PortalFilterSortSheet`'s desktop
+  dropdown anchors through the same `useFieldSelectMenu`, so it escapes the
+  page's scroll/overflow instead of being absolutely positioned inside the
+  toolbar. Its height comes from `portalFilterPanelSizeClass(filterFieldCount)`
+  — pass `filterFieldCount` (the number of filter rows you render, default 1) or
+  a multi-field panel opens at single-field height.
 - **Filter fields:** `src/components/portal/filter-field-lists.tsx`
   (`FilterCollapsibleSection` + `FilterCheckboxList` multi / `FilterSingleSelectList`
   single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
