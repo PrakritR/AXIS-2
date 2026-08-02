@@ -826,6 +826,23 @@ html {
   background-color: rgba(47, 107, 255, 0.22) !important;
 }
 
+/* Opaque portal filter popover — bg-card is translucent on dashboard surfaces. */
+.portal-filter-dropdown-panel,
+[data-slot="portal-filter-dropdown-panel"] {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1;
+  isolation: isolate;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme="dark"] .portal-filter-dropdown-panel,
+[data-theme="dark"] [data-slot="portal-filter-dropdown-panel"] {
+  background: #111827 !important;
+  background-color: #111827 !important;
+}
+
 /*
  * Public /demo sandbox: reused portal modals (New listing, Add payment,
  * Compose, …) render bounded inside the demo frame rather than covering the

@@ -180,7 +180,7 @@ export function PortalFilterSortSheet({
               className={cn(
                 panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+                "portal-filter-dropdown-panel absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-visible rounded-2xl border border-border shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
               data-attr="portal-filter-dropdown-panel"
             >
@@ -205,7 +205,11 @@ export function PortalFilterSortSheet({
           onClose={close}
           title="Filter"
           fullPage={false}
-          panelClassName={cn(panelSizeClass, PORTAL_FILTER_PANEL_WIDTH_CLASS, "flex flex-col overflow-visible")}
+          panelClassName={cn(
+            panelSizeClass,
+            PORTAL_FILTER_PANEL_WIDTH_CLASS,
+            "portal-filter-dropdown-panel flex flex-col overflow-visible",
+          )}
           dense
           scrollableContent
           assistantStrip={false}
