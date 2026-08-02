@@ -272,6 +272,12 @@ export function ResidentTourPanel({
     </Button>
   );
 
+  const scheduleTourHeaderActions = (
+    <PortalSectionActionRow variant="header" className="hidden md:flex">
+      {scheduleTourButton}
+    </PortalSectionActionRow>
+  );
+
   const tourList = (
     <DataList
       rows={tours.map((tour) => {
@@ -323,10 +329,19 @@ export function ResidentTourPanel({
       title="Tour"
       subtitle="Your scheduled property tours and requested times."
       hideTitleOnMobileNav
-      titleTrailing={scheduleTourButton}
+      titleAside={scheduleTourHeaderActions}
+      compactFilterRow
     >
       <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-tour-mobile-actions">
-        {scheduleTourButton}
+        <Button
+          type="button"
+          variant="primary"
+          className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="resident-tour-schedule"
+          onClick={() => navigate(browseHref)}
+        >
+          Schedule a tour
+        </Button>
       </div>
 
       {loading ? (
