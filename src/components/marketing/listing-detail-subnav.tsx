@@ -375,7 +375,7 @@ export function ListingStickySubnav({
       data-listing-subnav
       data-listing-subnav-pinned={pinned ? "" : undefined}
       data-listing-subnav-portal={portalSticky ? "" : undefined}
-      className={`z-[45] px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
+      className={`z-[45] min-w-0 max-w-full py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
         portalTabs
           ? `border-b border-border ${portalSticky ? "sticky bg-background shadow-sm [top:var(--portal-mobile-top-chrome,0px)]" : "bg-accent/30"}`
           : `border-b border-border ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
@@ -397,15 +397,11 @@ export function ListingStickySubnav({
     >
       <ul
         ref={listRef}
-        className={`-mx-1 flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
-          fadeEnd && !portalTabs
+        className={`flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain px-2 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
+          fadeEnd && !portalTabs && mode !== "portal"
             ? "[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none]"
             : ""
-        } ${
-          mode === "portal" || portalTabs
-            ? "justify-center sm:flex-wrap sm:justify-center sm:overflow-visible"
-            : "justify-start sm:flex-wrap sm:justify-center sm:overflow-visible"
-        } sm:px-0 sm:text-[13px]`}
+        } justify-start sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]`}
       >
         {nav.map((item) => {
           const active = activeId === item.id;

@@ -844,7 +844,7 @@ export function ManagerApplications({
       row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
 
     const approveButton =
-      isPending && !isWithdrawnApplicationRow(row) ? (
+      isPending && !isWithdrawnApplicationRow(row) && !isInProgressApplicationRow(row) ? (
         <Button
           type="button"
           variant="outline"
@@ -997,19 +997,20 @@ export function ManagerApplications({
       <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
           <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
-            {approveButton}
             {rejectButton}
+            {sendReminderButton}
+            {approveButton}
             {runCheckButton}
             {mobileOverflowMenu}
           </div>
           <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
-            {approveButton}
             {rejectButton}
+            {sendReminderButton}
+            {approveButton}
             {runCheckButton}
             {downloadApplicationButton}
             {downloadScreeningButton}
             {moveToPendingButton}
-            {sendReminderButton}
             {deleteButton}
           </div>
         </PortalSectionActionRow>
@@ -1208,6 +1209,18 @@ export function ManagerApplications({
         managerUserId={userId}
         onSaved={() => setPortfolioTick((n) => n + 1)}
         showToast={showToast}
+      />
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={
+          checkrScreeningRowId
+            ? rows.find((r) => r.id === checkrScreeningRowId) ??
+              (detailRow?.id === checkrScreeningRowId ? detailRow : null)
+            : null
+        }
+        open={checkrScreeningRowId !== null}
+        onClose={() => setCheckrScreeningRowId(null)}
+        onUpdated={handleScreeningUpdated}
       />
     </>
   );

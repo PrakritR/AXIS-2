@@ -59,6 +59,7 @@ import {
   isInProgressApplicationRow,
   markApplicationSubmitInitiated,
   shouldSyncInProgressDraft,
+  switchApplicationTargetProperty,
   syncInProgressApplicationRow,
   targetMatchesApplication,
   type ApplicationRequestTarget,
@@ -281,7 +282,7 @@ function RentalApplicationWizardInner({
   applyPath,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
-  const requestedTarget = mode === "portal" ? wizardTargetFromParam(searchParams) : null;
+  const requestedTarget = wizardTargetFromParam(searchParams);
   const requestedTargetSignature = wizardTargetSignature(requestedTarget);
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(() => initialWizardStepFromRequest(mode, requestedTarget, searchParams));
@@ -302,7 +303,8 @@ function RentalApplicationWizardInner({
     // than this request must never flash onto a fresh apply — start blank and
     // let the reconciliation effect resolve the real target (an existing
     // in-progress application for it, or a clean new one).
-    if (requestedTarget && !targetMatchesApplication(requestedTarget, { application: draft })) {
+    if (requestedTarget && draft && !targetMatchesApplication(requestedTarget, { application: draft })) {
+      clearRentalWizardDraft();
       return createInitialRentalWizardState();
     }
     return { ...createInitialRentalWizardState(), ...draft };
@@ -470,9 +472,9 @@ function RentalApplicationWizardInner({
   }, []);
 
   useEffect(() => {
-    if (mode !== "portal" || linkedPropertyId) return;
+    if (mode !== "portal") return;
     void loadPublicExtraListingsFromServer().then(() => setExtrasTick((n) => n + 1));
-  }, [mode, linkedPropertyId]);
+  }, [mode]);
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
@@ -580,7 +582,7 @@ function RentalApplicationWizardInner({
 
   const propertyOptions = useMemo(() => {
     void extrasTick;
-    if (mode === "portal" && !linkedPropertyId) {
+    if (mode === "portal") {
       return filterSandboxFromPublicCatalog(readExtraListingsPublic(), {
         production: isProductionPublicSite(),
       })
@@ -861,6 +863,25 @@ function RentalApplicationWizardInner({
 
     queueMicrotask(() => {
       setForm((prev) => {
+        let base: RentalWizardFormState = prev;
+        if (prev.propertyId.trim() && prev.propertyId.trim() !== pid) {
+          const email = (sessionEmail ?? prev.email).trim().toLowerCase();
+          const switched = switchApplicationTargetProperty({
+            previousPropertyId: prev.propertyId,
+            nextPropertyId: pid,
+            inProgressRows: email.includes("@")
+              ? applicationsForResidentEmail(email).filter(isInProgressApplicationRow)
+              : [],
+          });
+          if (switched?.resumedApplication) {
+            base = {
+              ...createInitialRentalWizardState(),
+              ...switched.resumedApplication,
+              email: prev.email || switched.resumedApplication.email || "",
+            };
+          }
+        }
+
         const opts = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
         // Entire-home listings apply for the whole place — never pre-select a
         // bedroom, even when the listing page passed a room id for display.
@@ -894,25 +915,47 @@ function RentalApplicationWizardInner({
             ? ""
             : prev.leaseTerm;
         return {
-          ...prev,
+          ...base,
           propertyId: pid,
           bundleId,
           phone,
           rentalType,
           leaseTerm,
-          roomChoice1: bundleReplacesRooms ? "" : room1 || prev.roomChoice1,
+          roomChoice1: bundleReplacesRooms ? "" : room1 || base.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",
           // A restored draft may hold answers for a different listing's questions.
-          ...(prev.propertyId && prev.propertyId !== pid ? { customFieldAnswers: [] } : {}),
+          ...(base.propertyId && base.propertyId !== pid ? { customFieldAnswers: [] } : {}),
         };
       });
     });
-  }, [draftReady, extrasTick, listingPrefillKey, searchParams]);
+  }, [draftReady, extrasTick, listingPrefillKey, searchParams, sessionEmail]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
-      const merged: RentalWizardFormState = { ...f, ...p };
+      let merged: RentalWizardFormState = { ...f, ...p };
+      if ("propertyId" in p) {
+        const nextPid = (p.propertyId ?? "").trim();
+        const prevPid = f.propertyId.trim();
+        if (nextPid && prevPid && nextPid !== prevPid) {
+          const email = (sessionEmail ?? f.email).trim().toLowerCase();
+          const switched = switchApplicationTargetProperty({
+            previousPropertyId: prevPid,
+            nextPropertyId: nextPid,
+            inProgressRows: email.includes("@")
+              ? applicationsForResidentEmail(email).filter(isInProgressApplicationRow)
+              : [],
+          });
+          if (switched?.resumedApplication) {
+            merged = {
+              ...createInitialRentalWizardState(),
+              ...switched.resumedApplication,
+              ...merged,
+              email: f.email || switched.resumedApplication.email || "",
+            };
+          }
+        }
+      }
       // Custom application answers belong to one listing — drop them if the property changes.
       if ("propertyId" in p && (p.propertyId ?? "") !== f.propertyId && !("customFieldAnswers" in p)) {
         merged.customFieldAnswers = [];
@@ -942,7 +985,7 @@ function RentalApplicationWizardInner({
       }
       return next;
     });
-  }, []);
+  }, [sessionEmail]);
 
   useEffect(() => {
     if (!draftReady || step !== 12) return;
@@ -1819,7 +1862,7 @@ function RentalApplicationWizardInner({
                 errors={errors}
                 mode={mode}
                 propertyOptions={propertyOptions}
-                propertyLocked={Boolean(linkedPropertyId && linkedProperty)}
+                propertyLocked={mode !== "portal" && Boolean(linkedPropertyId && linkedProperty)}
                 emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}

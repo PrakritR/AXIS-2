@@ -2460,6 +2460,11 @@ html[data-native] [data-listing-sections-root] {
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */
 [data-listing-sections-root] {
   overflow-x: clip;
+  min-width: 0;
+}
+
+[data-listing-sections-root] [data-listing-subnav] ul {
+  scroll-padding-inline: 0.5rem;
 }
 
 @media (max-width: 1023px) {

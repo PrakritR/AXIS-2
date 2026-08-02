@@ -17,7 +17,7 @@ export type ResidentApplicationWorkspaceMode =
 
 export type ResidentApplicationWorkspaceState = {
   mode: ResidentApplicationWorkspaceMode;
-  /** At most one active draft — the resident may only edit one application at a time. */
+  /** In-progress row for the current apply target, when one is named in the URL. */
   inProgressRow: DemoApplicantRow | null;
   /** Submitted applications (pending review, approved, or rejected — not drafts). */
   submittedRows: DemoApplicantRow[];
@@ -33,28 +33,29 @@ export function buildResidentApplicationWorkspaceState(
     rows.filter((row) => !isWithdrawnApplicationRow(row)),
   );
   const inProgressRows = active.filter(isInProgressApplicationRow);
-  const inProgressRow =
-    (applyTarget?.propertyId.trim()
-      ? findInProgressRowForTarget(active, applyTarget)
-      : null) ??
-    (inProgressRows.length === 1 ? inProgressRows[0]! : inProgressRows[0] ?? null);
+  const inProgressRow = applyTarget?.propertyId.trim()
+    ? findInProgressRowForTarget(active, applyTarget)
+    : inProgressRows.length === 1
+      ? inProgressRows[0]!
+      : null;
   const submittedRows = active.filter((row) => !isInProgressApplicationRow(row));
+  const canStartAnotherApplication = true;
 
-  if (inProgressRow) {
+  if (inProgressRow && applyTarget?.propertyId.trim()) {
     return {
       mode: "in_progress",
       inProgressRow,
       submittedRows,
-      canStartAnotherApplication: false,
+      canStartAnotherApplication,
     };
   }
 
-  if (submittedRows.length > 0) {
+  if (inProgressRows.length > 0 || submittedRows.length > 0) {
     return {
-      mode: "submitted",
-      inProgressRow: null,
+      mode: inProgressRows.length > 0 ? "in_progress" : "submitted",
+      inProgressRow: inProgressRows.length === 1 ? inProgressRows[0]! : null,
       submittedRows,
-      canStartAnotherApplication: true,
+      canStartAnotherApplication,
     };
   }
 
@@ -62,6 +63,6 @@ export function buildResidentApplicationWorkspaceState(
     mode: "empty",
     inProgressRow: null,
     submittedRows: [],
-    canStartAnotherApplication: true,
+    canStartAnotherApplication,
   };
 }

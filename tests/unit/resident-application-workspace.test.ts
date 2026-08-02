@@ -23,12 +23,12 @@ describe("buildResidentApplicationWorkspaceState", () => {
     expect(state.submittedRows).toEqual([]);
   });
 
-  it("returns in_progress when a draft exists and blocks another application", () => {
+  it("allows another application while a draft exists", () => {
     const draft = row({ stage: "In progress", application: { propertyId: "prop-1" } as DemoApplicantRow["application"] });
     const state = buildResidentApplicationWorkspaceState([draft], null);
     expect(state.mode).toBe("in_progress");
     expect(state.inProgressRow?.id).toBe("AXIS-1");
-    expect(state.canStartAnotherApplication).toBe(false);
+    expect(state.canStartAnotherApplication).toBe(true);
     expect(state.submittedRows).toEqual([]);
   });
 

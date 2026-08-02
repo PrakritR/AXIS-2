@@ -822,7 +822,7 @@ function ManagerPropertyInlineDetails({
         />
       ) : null}
 
-      <div className="pt-3">
+      <div className="pt-3 min-w-0 max-w-full">
       {activeDetailTab === "preview" ? (
         <div className="space-y-3">
           {hasPreview ? (

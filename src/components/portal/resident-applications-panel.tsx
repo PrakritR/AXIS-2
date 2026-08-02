@@ -60,13 +60,14 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { clearRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
+import { clearRentalWizardDraft, loadRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
   findInProgressRowForTarget,
   isInProgressApplicationRow,
+  switchApplicationTargetProperty,
   type ApplicationRequestTarget,
 } from "@/lib/rental-application/in-progress-application";
 import {
@@ -515,10 +516,27 @@ export function ResidentApplicationsPanel({
     if (!pid) return;
     setPickerOpen(false);
     setPickedPropertyId(null);
-    const inProgress = rows.find(isInProgressApplicationRow);
-    if (inProgress && inProgress.propertyId?.trim() !== pid) {
-      abandonInProgressRow(inProgress);
+
+    const inProgressRows = rows.filter(isInProgressApplicationRow);
+    const existingForProperty = findInProgressRowForTarget(inProgressRows, { propertyId: pid });
+    const draft = loadRentalWizardDraft();
+    const previousPropertyId = draft?.propertyId?.trim() || "";
+
+    if (existingForProperty?.application) {
+      saveRentalWizardDraftAxisId(existingForProperty.id);
+      saveRentalWizardDraft({
+        ...createInitialRentalWizardState(),
+        ...existingForProperty.application,
+        email: (sessionEmail ?? existingForProperty.application.email ?? existingForProperty.email ?? "").trim().toLowerCase(),
+      });
+    } else if (previousPropertyId && previousPropertyId !== pid) {
+      switchApplicationTargetProperty({
+        previousPropertyId,
+        nextPropertyId: pid,
+        inProgressRows,
+      });
     }
+
     if (demoMode) {
       setDemoApplyPropertyId(pid);
       setDemoApplyOpen(true);
@@ -845,8 +863,7 @@ export function ResidentApplicationsPanel({
     />
   );
 
-  const canOpenPropertyPicker =
-    workspace.canStartAnotherApplication || workspace.mode === "in_progress";
+  const canOpenPropertyPicker = sessionReady;
 
   const newApplicationButton =
     sessionReady && canOpenPropertyPicker ? (
