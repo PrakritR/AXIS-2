@@ -920,7 +920,7 @@ export const ResidentInboxPanel = forwardRef<
         liveContacts={eligibleContacts}
       />
 
-      {tabId !== "schedule" ? (
+      {tabId !== "schedule" && !suppressListPane ? (
         <PortalListToolbar
           search={{
             value: searchQuery,

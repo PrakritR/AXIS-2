@@ -17,16 +17,30 @@ export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLI
 
 export function residentCreateAccountHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
-  opts?: { email?: string; phone?: string; tourInquiryId?: string },
+  opts?: {
+    email?: string;
+    fullName?: string;
+    phone?: string;
+    tourInquiryId?: string;
+    /** Post-tour or post-message handoff — routes signup and inbox linking. */
+    handoff?: "message";
+  },
 ): string {
-  const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
+  const tourInquiryId = opts?.tourInquiryId?.trim();
+  const baseNext = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
+  const next =
+    tourInquiryId && !baseNext.includes("link_tour=")
+      ? `/resident/tour?link_tour=${encodeURIComponent(tourInquiryId)}`
+      : baseNext;
   const q = new URLSearchParams({ role: "resident", next });
   const email = opts?.email?.trim().toLowerCase();
   if (email) q.set("email", email);
+  const fullName = opts?.fullName?.trim();
+  if (fullName) q.set("name", fullName);
   const phone = opts?.phone?.trim();
   if (phone) q.set("phone", phone);
-  const tourInquiryId = opts?.tourInquiryId?.trim();
   if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
+  if (opts?.handoff === "message") q.set("handoff", "message");
   return `/auth/create-account?${q.toString()}`;
 }
 

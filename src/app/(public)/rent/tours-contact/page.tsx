@@ -49,7 +49,6 @@ import {
   normalizeTourContactPhone,
   validateTourContactFields,
 } from "@/lib/tour-contact-quality";
-import { Modal } from "@/components/ui/modal";
 
 type Tab = "tour" | "message";
 type TourStep = 1 | 2 | 3;
@@ -249,7 +248,6 @@ export default function ToursContactPage() {
               propertyId={linkedProperty.id}
               propertyTitle={linkedProperty.title}
               propertyAddress={linkedProperty.address}
-              onSuccess={() => showToast("Message sent.")}
             />
           )}
         </div>
@@ -319,7 +317,6 @@ function TourFlow({
     phone: string;
     inquiryId: string;
   } | null>(null);
-  const [accountPromptOpen, setAccountPromptOpen] = useState(false);
   const [signedInUserId, setSignedInUserId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
@@ -416,6 +413,7 @@ function TourFlow({
     const createAccountHref = submittedContact?.email
       ? residentCreateAccountHref(returnAfterAuth, {
           email: submittedContact.email,
+          fullName: submittedContact.name,
           phone: submittedContact.phone,
           tourInquiryId: submittedContact.inquiryId,
         })
@@ -425,39 +423,7 @@ function TourFlow({
     });
 
     return (
-      <>
-        <Modal
-          open={accountPromptOpen}
-          title="Save your tour in PropLane"
-          onClose={() => setAccountPromptOpen(false)}
-          assistantStrip={false}
-          fullPage={false}
-          footer={
-            <div className="flex w-full flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setAccountPromptOpen(false)}
-                className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-              >
-                Maybe later
-              </button>
-              <Link
-                href={createAccountHref}
-                data-attr="tour-success-create-account-modal"
-                className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-              >
-                Create account
-              </Link>
-            </div>
-          }
-        >
-          <p className="text-sm leading-relaxed text-muted">
-            Create a free resident account to track this tour, message your manager, and apply when you are ready. We
-            prefilled your email and phone from this request.
-          </p>
-        </Modal>
-
-      <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
+      <div className="mt-4 rounded-3xl border border-border bg-card p-7 shadow-sm">
         <div className="rounded-2xl border px-5 py-5 portal-banner-success">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
@@ -473,29 +439,16 @@ function TourFlow({
           </p>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-border bg-accent/25 px-5 py-4">
-          <p className="text-sm font-semibold text-foreground">Save your tour in PropLane</p>
-          <p className="mt-1 text-sm leading-relaxed text-muted">
-            Create a free resident account to track this tour, message your manager, and apply when you are ready.
-            No account is required to book a tour.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href={createAccountHref}
-              data-attr="tour-success-create-account"
-              className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-            >
-              Create account
-            </Link>
-            <Link
-              href={signInHref}
-              data-attr="tour-success-sign-in"
-              className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
+        {!signedInUserId ? (
+          <ProspectAccountHandoffCard
+            title="Create an account to see your tour in PropLane"
+            description="Track tour updates, read manager messages in Communication, and apply when you are ready."
+            createAccountHref={createAccountHref}
+            signInHref={signInHref}
+            createAccountDataAttr="tour-success-create-account"
+            signInDataAttr="tour-success-sign-in"
+          />
+        ) : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
           <button
@@ -503,7 +456,6 @@ function TourFlow({
             onClick={() => {
               setSubmitted(false);
               setSubmittedContact(null);
-              setAccountPromptOpen(false);
               setStep(1);
               setMaxStepReached(1);
               setSelectedRoomKey(null);
@@ -523,7 +475,6 @@ function TourFlow({
           </Link>
         </div>
       </div>
-      </>
     );
   }
 
@@ -747,7 +698,6 @@ function TourFlow({
                 phone: formatTourContactPhoneDisplay(normalizedPhone),
                 inquiryId: firstInquiryId,
               });
-              setAccountPromptOpen(!signedInUserId);
               onSuccess();
             }}
           />
@@ -1013,7 +963,6 @@ function Step3({
   const [notes, setNotes] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
   const signInHref = residentSignInHref(returnAfterAuth);
-  const createAccountHref = residentCreateAccountHref(returnAfterAuth);
 
   useEffect(() => {
     let cancelled = false;
@@ -1097,14 +1046,6 @@ function Step3({
 
       <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="tour-sms-consent" />
 
-      <div className="rounded-2xl border border-border bg-accent/25 px-4 py-3 text-sm text-muted">
-        <p className="font-semibold text-foreground">Tour updates by email and inbox</p>
-        <p className="mt-1 leading-relaxed">
-          We email tour confirmations and reminders. Create a free resident account to track this tour, read manager
-          messages in Communication, and apply when you are ready.
-        </p>
-      </div>
-
       <button
         type="button"
         disabled={submitting}
@@ -1115,17 +1056,6 @@ function Step3({
       >
         {submitting ? "Booking..." : "Book tour"}
       </button>
-
-      <p className="text-center text-xs text-muted">
-        Prefer to create an account first?{" "}
-        <Link
-          href={email.trim() ? residentCreateAccountHref(returnAfterAuth, { email: email.trim() }) : createAccountHref}
-          data-attr="tour-step-create-account"
-          className="font-semibold text-primary hover:underline"
-        >
-          Create a resident account
-        </Link>
-      </p>
     </div>
   );
 }
@@ -1134,14 +1064,20 @@ function MessageFlow({
   propertyId,
   propertyTitle,
   propertyAddress,
-  onSuccess,
 }: {
   propertyId: string;
   propertyTitle?: string;
   propertyAddress?: string;
-  onSuccess: () => void;
 }) {
   const { showToast } = useAppUi();
+  const [submitted, setSubmitted] = useState(false);
+  const [submittedContact, setSubmittedContact] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    topic: string;
+  } | null>(null);
+  const [signedInUserId, setSignedInUserId] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
   const [otherTopicDetail, setOtherTopicDetail] = useState("");
   const [name, setName] = useState("");
@@ -1151,6 +1087,18 @@ function MessageFlow({
   const [smsConsent, setSmsConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isOther = topic === "Other";
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      if (cancelled) return;
+      setSignedInUserId(result.data.session?.user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!topic) {
@@ -1195,18 +1143,74 @@ function MessageFlow({
         showToast(data.error ?? "Could not send message.");
         return;
       }
-      setName("");
-      setEmail("");
-      setPhone("");
-      setMessage("");
-      setSmsConsent(false);
-      setTopic("");
-      setOtherTopicDetail("");
-      onSuccess();
+      setSubmittedContact({
+        name: n,
+        email: em,
+        phone: phone.trim(),
+        topic: resolvedTopic,
+      });
+      setSubmitted(true);
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (submitted && submittedContact) {
+    const createAccountHref = residentCreateAccountHref("/resident/communication", {
+      email: submittedContact.email,
+      fullName: submittedContact.name,
+      phone: submittedContact.phone || undefined,
+      handoff: "message",
+    });
+    const signInHref = residentSignInHref("/resident/communication");
+
+    return (
+      <div className="mt-4 rounded-3xl border border-border bg-card p-7 shadow-sm">
+        <div className="rounded-2xl border px-5 py-5 portal-banner-success">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Message sent</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your message is in</h2>
+          <p className="mt-3 text-sm leading-relaxed text-foreground">
+            We sent your message to the property manager{propertyTitle ? ` about ${propertyTitle}` : ""}. You will get
+            replies by email, and you can read them in PropLane Communication once you have a resident account.
+          </p>
+          <p className="mt-3 text-sm font-medium text-foreground">
+            Topic: {submittedContact.topic}
+          </p>
+        </div>
+
+        {!signedInUserId ? (
+          <ProspectAccountHandoffCard
+            title="Create an account to read replies in PropLane"
+            description="See manager replies in Communication and keep the conversation in one place."
+            createAccountHref={createAccountHref}
+            signInHref={signInHref}
+            createAccountDataAttr="message-success-create-account"
+            signInDataAttr="message-success-sign-in"
+          />
+        ) : null}
+
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => {
+              setSubmitted(false);
+              setSubmittedContact(null);
+              setTopic("");
+              setOtherTopicDetail("");
+              setName("");
+              setEmail("");
+              setPhone("");
+              setMessage("");
+              setSmsConsent(false);
+            }}
+            className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
+          >
+            Send another message
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4 space-y-3">
@@ -1292,6 +1296,45 @@ function MessageFlow({
       >
         {submitting ? "Sending…" : "Send message"}
       </button>
+    </div>
+  );
+}
+
+function ProspectAccountHandoffCard({
+  title,
+  description,
+  createAccountHref,
+  signInHref,
+  createAccountDataAttr,
+  signInDataAttr,
+}: {
+  title: string;
+  description: string;
+  createAccountHref: string;
+  signInHref: string;
+  createAccountDataAttr: string;
+  signInDataAttr: string;
+}) {
+  return (
+    <div className="mt-5 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={createAccountHref}
+          data-attr={createAccountDataAttr}
+          className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+        >
+          Create account
+        </Link>
+        <Link
+          href={signInHref}
+          data-attr={signInDataAttr}
+          className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
+        >
+          Sign in
+        </Link>
+      </div>
     </div>
   );
 }

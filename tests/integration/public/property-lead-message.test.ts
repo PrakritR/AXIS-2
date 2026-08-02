@@ -5,6 +5,10 @@ vi.mock("@/lib/property-lead-notification.server", () => ({
   notifyManagerPropertyLeadMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tour-notification-delivery.server", () => ({
+  recordResidentProspectInboxMessage: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));

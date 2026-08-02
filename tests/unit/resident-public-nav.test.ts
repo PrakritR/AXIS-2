@@ -32,10 +32,11 @@ describe("residentSignInHref", () => {
 });
 
 describe("residentCreateAccountHref", () => {
-  it("includes tour inquiry and phone prefill params", () => {
+  it("includes tour inquiry, name, and phone prefill params", () => {
     expect(
       residentCreateAccountHref("/resident/tour", {
         email: "alex@example.com",
+        fullName: "Alex Guest",
         phone: "(206) 555-0100",
         tourInquiryId: "inq-1",
       }),
@@ -43,6 +44,15 @@ describe("residentCreateAccountHref", () => {
     expect(
       residentCreateAccountHref("/resident/tour", {
         email: "alex@example.com",
+        fullName: "Alex Guest",
+        phone: "(206) 555-0100",
+        tourInquiryId: "inq-1",
+      }),
+    ).toContain("name=Alex+Guest");
+    expect(
+      residentCreateAccountHref("/resident/tour", {
+        email: "alex@example.com",
+        fullName: "Alex Guest",
         phone: "(206) 555-0100",
         tourInquiryId: "inq-1",
       }),
@@ -50,10 +60,19 @@ describe("residentCreateAccountHref", () => {
     expect(
       residentCreateAccountHref("/resident/tour", {
         email: "alex@example.com",
+        fullName: "Alex Guest",
         phone: "(206) 555-0100",
         tourInquiryId: "inq-1",
       }),
     ).toContain("tour_inquiry=inq-1");
+    expect(
+      residentCreateAccountHref("/resident/tour", {
+        email: "alex@example.com",
+        fullName: "Alex Guest",
+        phone: "(206) 555-0100",
+        tourInquiryId: "inq-1",
+      }),
+    ).toContain(encodeURIComponent("/resident/tour?link_tour=inq-1"));
   });
 });
 

@@ -97,12 +97,19 @@ export function PortalAuthForm({
   const { isNative } = useIsNativeApp();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
+  const emailFromUrl = searchParams.get("email")?.trim().toLowerCase() ?? "";
+  const nameFromUrl = searchParams.get("name")?.trim() ?? "";
+  const phoneFromUrl = searchParams.get("phone")?.trim() ?? "";
+  const tourInquiryFromUrl = searchParams.get("tour_inquiry")?.trim() ?? "";
+  const handoffFromUrl = searchParams.get("handoff")?.trim() ?? "";
+  const prospectHandoff = Boolean(tourInquiryFromUrl) || handoffFromUrl === "message";
   const isCreate = mode === "create";
   const isHub = variant === "hub";
   useAuthWelcomeChrome(isCreate);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   // Surface any OAuth callback error passed back via ?error=oauth&message=...
@@ -115,6 +122,13 @@ export function PortalAuthForm({
     }
     return null;
   });
+
+  useEffect(() => {
+    if (!isCreate) return;
+    if (emailFromUrl) setEmail((cur) => cur || emailFromUrl);
+    if (nameFromUrl) setFullName((cur) => cur || nameFromUrl);
+    if (phoneFromUrl) setPhone((cur) => cur || phoneFromUrl);
+  }, [emailFromUrl, isCreate, nameFromUrl, phoneFromUrl]);
 
   useEffect(() => {
     if (isCreate) return;
@@ -196,10 +210,51 @@ export function PortalAuthForm({
       showToast("Enter your email and a password of at least 8 characters.");
       return;
     }
+    if (prospectHandoff && tourInquiryFromUrl && !phone.trim()) {
+      showToast("Enter the phone number you used on your tour request.");
+      return;
+    }
     setErrorText(null);
     setBusy(true);
     let didRedirect = false;
     try {
+      if (prospectHandoff) {
+        const res = await fetch("/api/auth/tour-resident-register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            fullName: fullName.trim() || undefined,
+            phone: phone.trim() || undefined,
+            tourInquiryId: tourInquiryFromUrl || undefined,
+            handoff: handoffFromUrl === "message" ? "message" : undefined,
+          }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { error?: string; redirectTo?: string };
+        if (!res.ok) {
+          const message = body.error ?? "Could not create your account.";
+          setErrorText(message);
+          showToast(message);
+          return;
+        }
+        const supabase = createSupabaseBrowserClient();
+        const { data, error } = await withTimeout(
+          supabase.auth.signInWithPassword({ email: email.trim(), password }) as PromiseLike<SignInResult>,
+          LOGIN_TIMEOUT_MS,
+          "This is taking too long. Please check your connection and try again.",
+        );
+        if (error || !data.user) {
+          showToast("Account created. Sign in to continue.");
+          window.location.replace("/auth/sign-in");
+          return;
+        }
+        posthog.identify(data.user.id);
+        didRedirect = true;
+        window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour");
+        return;
+      }
+
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -265,7 +320,18 @@ export function PortalAuthForm({
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         disabled={busy}
+        readOnly={prospectHandoff && Boolean(emailFromUrl)}
       />
+      {prospectHandoff ? (
+        <Input
+          type="tel"
+          autoComplete="tel"
+          placeholder={tourInquiryFromUrl ? "Phone from your tour request" : "Phone (optional)"}
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          disabled={busy}
+        />
+      ) : null}
       <PasswordInput
         autoComplete={isCreate ? "new-password" : "current-password"}
         placeholder={isCreate ? "Password (8+ characters)" : "Password"}

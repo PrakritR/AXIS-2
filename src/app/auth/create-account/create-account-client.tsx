@@ -61,6 +61,10 @@ export default function CreateAccountClient() {
     () => searchParams.get("email")?.trim().toLowerCase() || "",
     [searchParams],
   );
+  const nameFromUrl = useMemo(
+    () => searchParams.get("name")?.trim() || "",
+    [searchParams],
+  );
   const tourInquiryFromUrl = useMemo(
     () => searchParams.get("tour_inquiry")?.trim() || "",
     [searchParams],
@@ -110,6 +114,10 @@ export default function CreateAccountClient() {
 
   if (emailFromUrl && email !== emailFromUrl && role === "resident") {
     setEmail(emailFromUrl);
+  }
+
+  if (nameFromUrl && fullName !== nameFromUrl && role === "resident") {
+    setFullName(nameFromUrl);
   }
 
   if (phoneFromUrl && phone !== phoneFromUrl && role === "resident") {

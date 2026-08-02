@@ -8,6 +8,7 @@ import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-pa
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
+  attachInboxThreadsToResident,
   linkAllTourInquiriesForEmail,
   linkTourInquiryToResident,
   loadTourInquiryById,
@@ -24,6 +25,7 @@ type Body = {
   fullName?: string;
   phone?: string;
   tourInquiryId?: string;
+  handoff?: string;
 };
 
 function normalizeEmail(value: string): string {
@@ -46,20 +48,29 @@ export async function POST(req: Request) {
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const phone = normalizeE164(typeof body.phone === "string" ? body.phone : "");
     const tourInquiryId = typeof body.tourInquiryId === "string" ? body.tourInquiryId.trim() : "";
+    const handoff = typeof body.handoff === "string" ? body.handoff.trim() : "";
 
-    if (!email.includes("@") || password.length < 8 || !phone || !tourInquiryId) {
+    if (!email.includes("@") || password.length < 8) {
+      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
+    }
+    if (!tourInquiryId && handoff !== "message") {
+      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
+    }
+    if (tourInquiryId && !phone) {
       return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
     }
 
     const supabase = createSupabaseServiceRoleClient();
-    const inquiry = await loadTourInquiryById(supabase, tourInquiryId);
-    if (!inquiry) {
-      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
-    }
-    const inquiryEmail =
-      typeof inquiry.email === "string" ? inquiry.email.trim().toLowerCase() : "";
-    if (!inquiryEmail || inquiryEmail !== email) {
-      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
+    if (tourInquiryId) {
+      const inquiry = await loadTourInquiryById(supabase, tourInquiryId);
+      if (!inquiry) {
+        return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
+      }
+      const inquiryEmail =
+        typeof inquiry.email === "string" ? inquiry.email.trim().toLowerCase() : "";
+      if (!inquiryEmail || inquiryEmail !== email) {
+        return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
+      }
     }
 
     const { data: created, error: createErr } = await supabase.auth.admin.createUser({
@@ -107,21 +118,29 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(supabase, userId, "resident");
 
-    const linkResult = await linkTourInquiryToResident(supabase, {
-      userId,
-      inquiryId: tourInquiryId,
-      email,
-    });
-    if (!linkResult.ok) {
-      return NextResponse.json({ error: GENERIC_FAILURE }, { status: linkResult.status });
+    if (tourInquiryId) {
+      const linkResult = await linkTourInquiryToResident(supabase, {
+        userId,
+        inquiryId: tourInquiryId,
+        email,
+      });
+      if (!linkResult.ok) {
+        return NextResponse.json({ error: GENERIC_FAILURE }, { status: linkResult.status });
+      }
+      await linkAllTourInquiriesForEmail(supabase, { userId, email });
+    } else {
+      await attachInboxThreadsToResident(supabase, userId, email);
     }
-    await linkAllTourInquiriesForEmail(supabase, { userId, email });
 
-    track("resident_account_created", userId, { source: "tour_booking", inquiry_id: tourInquiryId });
+    track("resident_account_created", userId, {
+      source: tourInquiryId ? "tour_booking" : "property_message",
+      inquiry_id: tourInquiryId || undefined,
+    });
 
+    const redirectTo = handoff === "message" ? "/resident/communication" : "/resident/tour";
     const res = NextResponse.json({
       ok: true,
-      redirectTo: "/resident/tour",
+      redirectTo,
     });
     const secure = process.env.NODE_ENV === "production";
     res.cookies.set(ACTIVE_PORTAL_COOKIE, "resident", {

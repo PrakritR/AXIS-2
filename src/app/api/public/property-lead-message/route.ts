@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
+import { recordResidentProspectInboxMessage } from "@/lib/tour-notification-delivery.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { recordOptIn } from "@/lib/sms-consent";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -86,6 +87,20 @@ export async function POST(req: Request) {
       phone: phone || undefined,
       topic,
       body: message,
+    });
+
+    const db = createSupabaseServiceRoleClient();
+    await recordResidentProspectInboxMessage(db, {
+      participantEmail: email,
+      subject: `We received your message — ${topic}`,
+      body: [
+        `Thanks for reaching out about ${propertyTitle}.`,
+        "",
+        "Your message was sent to the property manager. Create a free resident account to read replies in PropLane Communication.",
+        "",
+        `Your message:`,
+        message,
+      ].join("\n"),
     });
 
     return NextResponse.json({ ok: true });
