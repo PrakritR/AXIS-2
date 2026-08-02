@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { afterAll, vi } from "vitest";
 
 process.env.FINANCIALS_TIN_ENCRYPTION_KEY ??= "test-only-tin-key-do-not-use-in-prod";
 
@@ -20,3 +20,23 @@ process.env.FINANCIALS_TIN_ENCRYPTION_KEY ??= "test-only-tin-key-do-not-use-in-p
 }
 
 vi.mock("server-only", () => ({}));
+
+// Every React commit queues a passive-effect flush on the `scheduler` package's
+// `setImmediate` task queue. `act()` (inside Testing Library's `render` /
+// `fireEvent`) flushes the effects synchronously, but the queued task itself is
+// never cancelled, and its first statement reads `window.event`. If Vitest tears
+// the jsdom environment down before that task runs — which it does whenever a
+// file's last render lands close to the end of the file, and far more often on a
+// loaded CI box — the task throws `ReferenceError: window is not defined` as an
+// unhandled error and fails the whole run even though every test passed.
+//
+// Setup-file hooks are registered before any test file's, and Vitest runs
+// `afterAll` in reverse registration order, so this is the last hook before
+// teardown: yield one macrotask there and the queued scheduler task drains while
+// the document is still alive.
+afterAll(async () => {
+  if (typeof window === "undefined") return;
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+});
