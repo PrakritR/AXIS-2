@@ -135,9 +135,18 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
-/** A pending row still being filled in by the applicant (not yet submitted). */
+/**
+ * A pending row still being filled in by the applicant (not yet submitted).
+ *
+ * Deliberately ignores `withdrawnAt`, unlike `isInProgressApplicationRow` (which
+ * drops withdrawn rows off the manager's actionable surfaces). This predicate
+ * routes WRITES: a debounced autosave that lands after the resident withdrew is
+ * still a draft write and must take the guarded conditional path — which refuses
+ * a withdrawn row — instead of the unconditional upsert reserved for submit and
+ * other genuine forward moves.
+ */
 export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
-  return isInProgressApplicationRow(row as DemoApplicantRow);
+  return isInProgressApplicationRow({ ...(row as DemoApplicantRow), withdrawnAt: null });
 }
 
 /**

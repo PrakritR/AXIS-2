@@ -140,10 +140,13 @@ describe("resident portal redesign completeness", () => {
       }
     });
 
-    it("communication uses PortalCommunicationShell + PortalSectionActionRow", () => {
+    it("communication uses PortalCommunicationShell + PortalListControlStack", () => {
+      // Resident/vendor Communication were upgraded to the manager inbox shape,
+      // so all three panels drive their band-2 controls through the shared
+      // PortalListControlStack rather than a section action row.
       const src = readPanel("resident-communication.tsx");
       expect(src).toContain("PortalCommunicationShell");
-      expect(src).toContain("PortalSectionActionRow");
+      expect(src).toContain("PortalListControlStack");
     });
 
     it("dashboard uses manager-style attention groups without welcome subtitle", () => {

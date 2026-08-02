@@ -4,6 +4,14 @@ import { jsonRequest } from "../helpers/api-request";
 vi.mock("@/lib/auth/effective-session", () => ({
   getEffectiveSessionForPortal: vi.fn(),
 }));
+vi.mock("@/lib/auth/portal-access", () => ({
+  getPortalAccessContext: vi.fn(),
+  hasAdminRole: vi.fn(() => false),
+  hasRole: vi.fn(() => false),
+}));
+vi.mock("@/lib/auth/admin-preview", () => ({
+  getAdminPreviewFromCookies: vi.fn(async () => null),
+}));
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
@@ -12,6 +20,7 @@ vi.mock("@/lib/tour-resident-link.server", () => ({
 }));
 
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { linkTourInquiryToResident } from "@/lib/tour-resident-link.server";
 import { POST as linkTourInquiry } from "@/app/api/auth/link-tour-inquiry/route";
@@ -20,6 +29,13 @@ describe("POST /api/auth/link-tour-inquiry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({} as never);
+    vi.mocked(getPortalAccessContext).mockResolvedValue({
+      user: { id: "u1" },
+      profile: null,
+      roles: [],
+      effectiveRole: null,
+    } as never);
+    vi.mocked(hasRole).mockReturnValue(false);
   });
 
   it("denies unauthenticated callers", async () => {
@@ -50,6 +66,7 @@ describe("POST /api/auth/link-tour-inquiry", () => {
   });
 
   it("links a tour for authenticated residents", async () => {
+    vi.mocked(hasRole).mockImplementation((_ctx, role) => role === "resident");
     vi.mocked(getEffectiveSessionForPortal).mockResolvedValue({
       user: { id: "res-1", email: "res@example.com" },
       profile: { role: "resident", email: "res@example.com" },
