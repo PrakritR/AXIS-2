@@ -2130,6 +2130,22 @@ export function ManagerResidents({
             {isDemoModeActive() ? "Test" : "Run background check"}
           </Button>
         ) : null}
+        {applicationShowsBackgroundCheck(selectedApplicationRow) &&
+        Boolean(selectedApplicationRow.application?.consentCredit) &&
+        selectedApplicationRow.backgroundCheck?.status === "complete" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="run-background-check-again"
+            onClick={() => {
+              setCheckrScreeningShowPicker(true);
+              setCheckrScreeningRowId(selectedApplicationRow.id);
+            }}
+          >
+            Run again
+          </Button>
+        ) : null}
         {selectedApplicationRow.backgroundCheck?.status === "complete" ||
         (isDemoModeActive() && applicationShowsBackgroundCheck(selectedApplicationRow)) ? (
           <Button

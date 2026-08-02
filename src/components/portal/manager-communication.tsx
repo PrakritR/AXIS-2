@@ -33,6 +33,7 @@ import {
 } from "@/lib/manager-sms-messages";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 export type ManagerInboxTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 /** @deprecated Legacy SMS routes redirect to unified inbox. */
@@ -84,6 +85,7 @@ export function ManagerCommunication({
 }) {
   const portalBase = usePaidPortalBasePath();
   const commBase = `${portalBase}/communication`;
+  const navigate = usePortalNavigate();
   const { userId } = useManagerUserId();
   const inboxRef = useRef<ManagerInboxHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);

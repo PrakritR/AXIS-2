@@ -50,39 +50,79 @@ export function downloadBackgroundCheckForApplication(row: DemoApplicantRow): vo
 export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { row: DemoApplicantRow; demo: boolean; bareCanvas?: boolean }) {
   const bg = row.backgroundCheck;
   const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
-  const hasHtmlReport = reportHtml.length > 0;
   const canTryOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
+  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
   const [pdfFailed, setPdfFailed] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
+    if (!canTryOfficialPdf) {
+      setPdfObjectUrl(null);
+      setPdfFailed(false);
+      setPdfLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
     setPdfFailed(false);
-  }, [row.id, bg?.reportId, bg?.completedAt, bg?.reportSnapshot]);
+    setPdfObjectUrl(null);
+    setPdfLoading(true);
 
-  // Prefer inline HTML (snapshot or synthesized report). Official Checkr PDF is a fallback when HTML is unavailable.
-  const useOfficialPdf = canTryOfficialPdf && !hasHtmlReport && !pdfFailed;
-  const pdfSrc = useOfficialPdf
-    ? `${backgroundCheckDocumentHref(row.id)}#toolbar=0&navpanes=0`
-    : null;
+    void fetch(backgroundCheckDocumentHref(row.id), { credentials: "include" })
+      .then(async (res) => {
+        if (cancelled) return;
+        const type = res.headers.get("content-type") ?? "";
+        if (!res.ok || !type.includes("pdf")) {
+          setPdfFailed(true);
+          return;
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setPdfObjectUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPdfFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setPdfLoading(false);
+      });
 
-  if (!pdfSrc && !reportHtml) {
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [canTryOfficialPdf, row.id, bg?.reportId, bg?.reportResourceId, bg?.completedAt]);
+
+  const frameClass = bareCanvas
+    ? "h-[min(70vh,720px)] w-full border-0 bg-white"
+    : "h-[min(52vh,420px)] w-full border-0 bg-white";
+
+  if (canTryOfficialPdf && !pdfFailed) {
+    if (pdfLoading || !pdfObjectUrl) {
+      return (
+        <div className={`flex items-center justify-center text-sm text-muted ${frameClass}`}>
+          Loading Checkr report…
+        </div>
+      );
+    }
+    return (
+      <iframe
+        src={`${pdfObjectUrl}#toolbar=0&navpanes=0`}
+        title="Background check report preview"
+        loading="lazy"
+        className={frameClass}
+      />
+    );
+  }
+
+  if (!reportHtml) {
     return (
       <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
         {demo
           ? "No screening report yet. Click Test to run a demo background check."
           : "No screening report yet."}
       </div>
-    );
-  }
-
-  if (pdfSrc) {
-    return (
-      <iframe
-        src={pdfSrc}
-        title="Background check report preview"
-        loading="lazy"
-        onError={() => setPdfFailed(true)}
-        className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
-      />
     );
   }
 
@@ -190,6 +230,11 @@ export function ApplicationScreeningPanel({
     },
     [demo, onUpdated, row.id],
   );
+
+  useEffect(() => {
+    if (demo || bg?.status !== "complete" || bg?.reportResourceId) return;
+    void callBackgroundCheck("refresh");
+  }, [bg?.reportResourceId, bg?.status, callBackgroundCheck, demo]);
 
   useEffect(() => {
     if (demo || bg?.status !== "pending") return;
@@ -532,20 +577,18 @@ export function ApplicationScreeningPanel({
 
       {showCompletedState ? (
         <div
-          className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          className="rounded-2xl border border-border bg-card px-4 py-3"
           data-attr="background-check-completed-banner"
         >
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold text-foreground">Background check already completed</p>
-            <p className="text-sm text-muted">
-              {statusSummary} Run again to order a new report or upgrade to a higher package.
-            </p>
-          </div>
-          {canRunBackgroundCheckAgain ? (
+          <p className="text-sm font-semibold text-foreground">Background check already completed</p>
+          <p className="mt-1 text-sm text-muted">
+            {statusSummary} Run again to order a new report or upgrade to a higher package.
+          </p>
+          {canRunBackgroundCheckAgain && headerActionsPlacement !== "parent" ? (
             <Button
               type="button"
               variant="outline"
-              className={headerActionBtnClass}
+              className={`${headerActionBtnClass} mt-3`}
               data-attr="run-background-check-again"
               onClick={() => onOpenScreeningModal?.({ showPackagePicker: true })}
             >

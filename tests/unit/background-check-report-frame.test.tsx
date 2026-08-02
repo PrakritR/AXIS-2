@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 vi.mock("@/lib/demo/demo-session", () => ({
@@ -32,6 +32,7 @@ function completeRow(): DemoApplicantRow {
       provider: "checkr",
       candidateId: "cand-1",
       reportId: "order-1",
+      reportResourceId: "rp_test_abc",
       packageSlug: "essential",
       status: "complete",
       result: "clear",
@@ -46,12 +47,44 @@ function completeRow(): DemoApplicantRow {
 }
 
 describe("BackgroundCheckReportFrame", () => {
-  it("renders inline HTML for a completed check instead of the PDF proxy iframe", () => {
+  it("loads the official Checkr PDF for a completed check", async () => {
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(pdfBytes, { status: 200, headers: { "Content-Type": "application/pdf" } }),
+    );
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:checkr-report");
+
     const { container } = render(<BackgroundCheckReportFrame row={completeRow()} demo={false} />);
-    const iframe = container.querySelector("iframe");
-    expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute("src")).toBeNull();
-    expect(iframe?.getAttribute("srcdoc") ?? "").toContain("Olivia Brooks");
-    expect(iframe?.getAttribute("srcdoc") ?? "").toContain("720");
+
+    await waitFor(() => {
+      const iframe = container.querySelector("iframe");
+      expect(iframe?.getAttribute("src")).toContain("blob:checkr-report");
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/screening/background-check/document"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+
+    fetchMock.mockRestore();
+    createObjectURL.mockRestore();
+  });
+
+  it("falls back to inline HTML when the PDF proxy fails", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "Could not retrieve the Checkr report PDF." }), {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { container } = render(<BackgroundCheckReportFrame row={completeRow()} demo={false} />);
+
+    await waitFor(() => {
+      const iframe = container.querySelector("iframe");
+      expect(iframe?.getAttribute("srcdoc") ?? "").toContain("Olivia Brooks");
+    });
+
+    fetchMock.mockRestore();
   });
 });

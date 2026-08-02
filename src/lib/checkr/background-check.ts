@@ -338,7 +338,7 @@ export async function refreshBackgroundCheck(opts: {
   if (!existing) {
     return { ok: false, status: 404, error: "No background check has been run for this applicant." };
   }
-  if (existing.status === "complete") {
+  if (existing.status === "complete" && existing.reportResourceId?.trim()) {
     return { ok: true, row, backgroundCheck: existing };
   }
 
@@ -350,7 +350,31 @@ export async function refreshBackgroundCheck(opts: {
     packageSlug: existing.packageSlug,
     addOnProducts: existing.addOnProducts,
   });
-  if (!report) return { ok: true, row, backgroundCheck: existing };
+  if (!report) {
+    return { ok: true, row, backgroundCheck: existing };
+  }
+
+  if (existing.status === "complete" && report.status === "complete") {
+    const bc: ApplicationBackgroundCheck = {
+      ...existing,
+      reportSnapshot: report.reportSnapshot ?? existing.reportSnapshot,
+      reportResourceId: report.reportResourceId ?? existing.reportResourceId,
+    };
+    if (
+      bc.reportResourceId !== existing.reportResourceId ||
+      bc.reportSnapshot !== existing.reportSnapshot
+    ) {
+      const nextRow = applyBackgroundCheck(row, bc);
+      await persistApplicationRow(opts.db, nextRow);
+      await upsertBackgroundCheckOrder(opts.db, nextRow, bc);
+      return { ok: true, row: nextRow, backgroundCheck: bc };
+    }
+    return { ok: true, row, backgroundCheck: existing };
+  }
+
+  if (existing.status === "complete") {
+    return { ok: true, row, backgroundCheck: existing };
+  }
 
   const bc: ApplicationBackgroundCheck = {
     ...existing,

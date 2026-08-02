@@ -860,6 +860,10 @@ export function ManagerApplications({
       row.backgroundCheck?.status !== "complete";
     const canDownloadScreening =
       row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
+    const showsRunAgain =
+      applicationShowsBackgroundCheck(row) &&
+      Boolean(row.application?.consentCredit) &&
+      row.backgroundCheck?.status === "complete";
 
     const approveButton =
       isPending && !isWithdrawnApplicationRow(row) && !isInProgressApplicationRow(row) ? (
@@ -895,6 +899,18 @@ export function ManagerApplications({
         onClick={() => openDetailScreeningModal(row)}
       >
         Run background check
+      </Button>
+    ) : null;
+
+    const runAgainButton = showsRunAgain ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="run-background-check-again"
+        onClick={() => openDetailScreeningModal(row, { showPackagePicker: true })}
+      >
+        Run again
       </Button>
     ) : null;
 
@@ -1019,6 +1035,7 @@ export function ManagerApplications({
             {sendReminderButton}
             {approveButton}
             {runCheckButton}
+            {runAgainButton}
             {mobileOverflowMenu}
           </div>
           <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
@@ -1026,6 +1043,7 @@ export function ManagerApplications({
             {sendReminderButton}
             {approveButton}
             {runCheckButton}
+            {runAgainButton}
             {downloadApplicationButton}
             {downloadScreeningButton}
             {moveToPendingButton}
