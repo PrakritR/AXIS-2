@@ -5,10 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DataList } from "@/components/ui/data-list";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
@@ -264,7 +264,7 @@ export function ResidentTourPanel({
     <Button
       type="button"
       variant="primary"
-      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="resident-tour-schedule"
       onClick={() => navigate(browseHref)}
     >
@@ -272,11 +272,7 @@ export function ResidentTourPanel({
     </Button>
   );
 
-  const scheduleTourHeaderActions = (
-    <PortalSectionActionRow variant="header" className="hidden md:flex">
-      {scheduleTourButton}
-    </PortalSectionActionRow>
-  );
+  const tourMobileActionsRow = <PortalPageHeaderMobileActionsRow actions={scheduleTourButton} />;
 
   const tourList = (
     <DataList
@@ -329,20 +325,10 @@ export function ResidentTourPanel({
       title="Tour"
       subtitle="Your scheduled property tours and requested times."
       hideTitleOnMobileNav
-      titleAside={scheduleTourHeaderActions}
+      titleAside={scheduleTourButton}
       compactFilterRow
     >
-      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-tour-mobile-actions">
-        <Button
-          type="button"
-          variant="primary"
-          className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="resident-tour-schedule"
-          onClick={() => navigate(browseHref)}
-        >
-          Schedule a tour
-        </Button>
-      </div>
+      {tourMobileActionsRow}
 
       {loading ? (
         <PortalEmptyState title="Loading your tours…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />

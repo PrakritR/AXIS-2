@@ -11,10 +11,11 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { DataList } from "@/components/ui/data-list";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
@@ -807,7 +808,7 @@ export function ResidentApplicationsPanel({
       <Button
         type="button"
         variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
         data-attr="resident-applications-apply"
         onClick={openPropertyPicker}
       >
@@ -820,9 +821,7 @@ export function ResidentApplicationsPanel({
     ) : null;
 
   const applicationsMobileActionsRow = newApplicationButton ? (
-    <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-applications-mobile-actions">
-      {newApplicationButton}
-    </div>
+    <PortalPageHeaderMobileActionsRow actions={newApplicationButton} />
   ) : null;
 
   const renderRoutedList = () => (
@@ -1017,13 +1016,7 @@ export function ResidentApplicationsPanel({
       <ManagerPortalPageShell
         title="Applications"
         hideTitleOnMobileNav
-        titleAside={
-          newApplicationButton ? (
-            <PortalSectionActionRow variant="header" className="hidden md:flex">
-              {newApplicationButton}
-            </PortalSectionActionRow>
-          ) : undefined
-        }
+        titleAside={newApplicationButton ?? undefined}
         compactFilterRow
       >
         {applicationsMobileActionsRow}

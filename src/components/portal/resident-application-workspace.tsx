@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_HEADER_ACTION_BTN, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { applicationHasGroup } from "@/lib/rental-application/application-groups";
@@ -146,21 +146,19 @@ export function ResidentApplicationWorkspaceActions({
 }) {
   if (!sessionReady || !canOpenPropertyPicker) return null;
   return (
-    <PortalSectionActionRow variant="header" className="hidden md:flex">
-      <Button
-        type="button"
-        variant="primary"
-        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="resident-applications-apply"
-        onClick={onApplyClick}
-      >
-        {workspace.mode === "in_progress"
-          ? "Change property"
-          : workspace.mode === "submitted"
-            ? "Apply to another property"
-            : "Apply to a property"}
-      </Button>
-    </PortalSectionActionRow>
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      data-attr="resident-applications-apply"
+      onClick={onApplyClick}
+    >
+      {workspace.mode === "in_progress"
+        ? "Change property"
+        : workspace.mode === "submitted"
+          ? "Apply to another property"
+          : "Apply to a property"}
+    </Button>
   );
 }
 
@@ -176,21 +174,20 @@ export function ResidentApplicationWorkspaceMobileApply({
   canOpenPropertyPicker: boolean;
 }) {
   if (!sessionReady || !canOpenPropertyPicker) return null;
-  return (
-    <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-applications-mobile-actions">
-      <Button
-        type="button"
-        variant="primary"
-        className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-        data-attr="resident-applications-apply"
-        onClick={onApplyClick}
-      >
-        {workspace.mode === "in_progress"
-          ? "Change property"
-          : workspace.mode === "submitted"
-            ? "Apply to another property"
-            : "Apply to a property"}
-      </Button>
-    </div>
+  const button = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      data-attr="resident-applications-apply"
+      onClick={onApplyClick}
+    >
+      {workspace.mode === "in_progress"
+        ? "Change property"
+        : workspace.mode === "submitted"
+          ? "Apply to another property"
+          : "Apply to a property"}
+    </Button>
   );
+  return <PortalPageHeaderMobileActionsRow actions={button} />;
 }
