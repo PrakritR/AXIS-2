@@ -43,7 +43,11 @@ const DEFAULT_BUNDLE_ID = "space.proplane.app";
 const DEFAULT_GROUP_NAME = "Internal — PropLane team";
 
 const TERMINAL_PROCESSING_FAILURES = new Set(["FAILED", "INVALID"]);
-const FATAL_INTERNAL_BUILD_STATES = new Set(["MISSING_EXPORT_COMPLIANCE", "PROCESSING_EXCEPTION"]);
+// An ALLOWLIST, not a denylist of fatal states: a denylist passes every value it
+// has not heard of — including `undefined` — so a body Apple changed, truncated,
+// or served as non-JSON would read as installable. Only these two states mean an
+// internal tester can actually install the build.
+const INSTALLABLE_INTERNAL_BUILD_STATES = new Set(["READY_FOR_BETA_TESTING", "IN_BETA_TESTING"]);
 
 /** Beta group names are compared exactly, after NFC + trim. */
 export function normalizeGroupName(name) {
@@ -156,20 +160,37 @@ const REQUEST_ATTEMPTS = 4;
 const REQUEST_BACKOFF_STEP_MS = 2000;
 const CONFIRM_ATTEMPTS = 5;
 const CONFIRM_INTERVAL_MS = 12_000;
+const PROCESSING_POLL_INTERVAL_MS = 20_000;
+
+/** Worst-case backoff one request can spend before it gives up or succeeds. */
+const REQUEST_BACKOFF_BUDGET_MS =
+  ((REQUEST_ATTEMPTS * (REQUEST_ATTEMPTS - 1)) / 2) * REQUEST_BACKOFF_STEP_MS;
 
 /**
- * Seconds the work AFTER the processing wait can take, so the advertised maximum
- * wait still leaves room to finish. Derived from the constants above rather than
- * hard-coded: a second magic number would drift the moment one of them changed,
- * and the failure it causes is the opaque mid-verification cancellation that
- * `parseTimeoutSeconds` exists to prevent.
+ * Every request that is NOT inside the bounded processing wait, so its retry
+ * backoff eats step budget the wait's own timeout does not cover:
+ *   2  resolveApp + the betaGroups read, before the wait even starts
+ *   1  the findBuild that lands on the deadline (the poll sleep is clamped to
+ *      the deadline, so this is the only work the wait can run past it)
+ *   1  the alreadyAssigned pre-check
+ *   2  the two assign POST shapes
+ *   +  one read per confirmAssignment attempt
+ *   1  the buildBetaDetail read
+ */
+const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + 1;
+
+/**
+ * Seconds the work outside the processing wait can take, so the advertised
+ * maximum wait still leaves room to finish. Derived from the constants above
+ * rather than hard-coded: a second magic number would drift the moment one of
+ * them changed, and the failure it causes is the opaque mid-verification
+ * cancellation that `parseTimeoutSeconds` exists to prevent.
  */
 const POST_WAIT_RESERVE_SECONDS = Math.ceil(
   // confirmAssignment's sleeps between re-reads…
   ((CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS +
-    // …plus a full retry-backoff budget for the assign POSTs, the confirm reads
-    // and the buildBetaDetail read.
-    8 * ((REQUEST_ATTEMPTS * (REQUEST_ATTEMPTS - 1)) / 2) * REQUEST_BACKOFF_STEP_MS) /
+    // …plus a full retry-backoff budget for each request outside the wait.
+    REQUESTS_OUTSIDE_PROCESSING_WAIT * REQUEST_BACKOFF_BUDGET_MS) /
     1000,
 );
 
@@ -212,7 +233,7 @@ function describeApiError(body) {
     .join("; ");
 }
 
-class AscClient {
+export class AscClient {
   constructor(mint = mintToken) {
     this.mint = mint;
     this.cached = null;
@@ -240,12 +261,18 @@ class AscClient {
     // and during confirmAssignment it produces exactly the false red the
     // re-poll exists to prevent.
     for (let attempt = 1; attempt <= REQUEST_ATTEMPTS; attempt += 1) {
+      // Minted OUTSIDE the try. A missing ASC_ISSUER_ID or an unparseable
+      // ASC_KEY_P8 is a configuration failure, not a transport blip: it must
+      // surface immediately with its own message, exactly like the 401 that a
+      // bad credential earns, instead of being retried four times behind
+      // "transport error" and blamed on the network.
+      const token = this.authToken();
       let retryable = false;
       try {
         const response = await fetch(url, {
           method,
           headers: {
-            Authorization: `Bearer ${this.authToken()}`,
+            Authorization: `Bearer ${token}`,
             ...(body ? { "Content-Type": "application/json" } : {}),
           },
           ...(body ? { body: JSON.stringify(body) } : {}),
@@ -368,7 +395,9 @@ async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds)
           `node scripts/ios-testflight-distribute.mjs --build=${buildNumber}`,
       );
     }
-    await sleep(20_000);
+    // Clamped to the deadline: an unclamped interval overshoots it by up to a
+    // full poll, which is step budget the reserve above would have to guess at.
+    await sleep(Math.min(PROCESSING_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));
   }
 }
 
@@ -446,12 +475,18 @@ async function assignBuildToGroup(client, buildId, groupId) {
 }
 
 /**
- * Log the beta states and return them, or `null` if the read could not be made.
+ * Log the beta states and return them, or `null` if no state could be read.
  *
  * Reporting is separate from asserting so the diagnostics still print when the run
  * is about to fail for a different reason — a failure with no state in the log is
  * one someone has to reproduce by hand. The request itself already retries
  * transport errors and 5xx, so a `null` here means the read genuinely failed.
+ *
+ * A body with no `internalBuildState` is `null` too, never an empty object: an
+ * empty object is truthy and would slip past the fail-closed branch below. HTTP
+ * 204, an empty 2xx body and a 200 carrying non-JSON (a proxy's HTML) all land
+ * here as "no state", which is indistinguishable from a failed read and must be
+ * treated as one.
  */
 async function reportBetaDetail(client, buildId) {
   let detail = null;
@@ -461,10 +496,10 @@ async function reportBetaDetail(client, buildId) {
     console.log(`  buildBetaDetail could NOT be read: ${error.message}`);
     return null;
   }
-  const attributes = detail?.data?.attributes ?? {};
-  console.log(`  internalBuildState: ${attributes.internalBuildState ?? "unknown"}`);
-  console.log(`  externalBuildState: ${attributes.externalBuildState ?? "unknown"}`);
-  return attributes;
+  const attributes = detail?.data?.attributes;
+  console.log(`  internalBuildState: ${attributes?.internalBuildState ?? "unknown"}`);
+  console.log(`  externalBuildState: ${attributes?.externalBuildState ?? "unknown"}`);
+  return attributes?.internalBuildState ? attributes : null;
 }
 
 /**
@@ -477,7 +512,8 @@ async function reportBetaDetail(client, buildId) {
  * belief that something installable went out when it did not.
  */
 export function assertInstallableBetaState(attributes, buildNumber) {
-  if (!attributes) {
+  const state = attributes?.internalBuildState;
+  if (!state) {
     throw new Error(
       `Build ${buildNumber} IS assigned to the internal group, but its export-compliance / beta state ` +
         "could NOT be read after retries, so whether a tester can install it is UNKNOWN. " +
@@ -485,12 +521,20 @@ export function assertInstallableBetaState(attributes, buildNumber) {
         `node scripts/ios-testflight-distribute.mjs --build=${buildNumber} --verify-only`,
     );
   }
-  if (!FATAL_INTERNAL_BUILD_STATES.has(attributes.internalBuildState)) return;
+  if (INSTALLABLE_INTERNAL_BUILD_STATES.has(state)) return;
+  if (state === "MISSING_EXPORT_COMPLIANCE") {
+    throw new Error(
+      `Build ${buildNumber} is assigned to the group but its internalBuildState is ` +
+        `${state}, so testers still cannot install it. Export compliance is ` +
+        "declared via ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key " +
+        "survived the last cap sync.",
+    );
+  }
   throw new Error(
     `Build ${buildNumber} is assigned to the group but its internalBuildState is ` +
-      `${attributes.internalBuildState}, so testers still cannot install it. Export compliance is ` +
-      "declared via ITSAppUsesNonExemptEncryption in ios/App/App/Info.plist — verify that key " +
-      "survived the last cap sync.",
+      `${state}, which is not one of the states an internal tester can install from ` +
+      `(${[...INSTALLABLE_INTERNAL_BUILD_STATES].join(", ")}). Not reporting success on a build ` +
+      "nobody can install.",
   );
 }
 

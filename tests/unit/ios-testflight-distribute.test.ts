@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AscClient,
   assertInstallableBetaState,
   DEFAULT_PROCESSING_TIMEOUT_SECONDS,
   MAX_PROCESSING_TIMEOUT_SECONDS,
@@ -118,11 +119,32 @@ describe("beta-state gate fails closed", () => {
     expect(() => assertInstallableBetaState(null, "38")).toThrow(/build 38|Build 38/);
   });
 
+  it("treats an empty payload as UNKNOWN, not as nothing-wrong", () => {
+    // `{}` is truthy, so a denylist gate would pass it: HTTP 204, an empty 2xx
+    // body and a proxy's HTML 200 all arrive as an attribute-less payload.
+    expect(() => assertInstallableBetaState({}, "38")).toThrow(/UNKNOWN/);
+    expect(() => assertInstallableBetaState({}, "38")).toThrow(/--verify-only/);
+  });
+
+  it("treats a payload missing internalBuildState as UNKNOWN", () => {
+    expect(() => assertInstallableBetaState({ externalBuildState: "READY_FOR_BETA_TESTING" }, "38")).toThrow(
+      /UNKNOWN/,
+    );
+  });
+
   it("fails on a state that blocks installation", () => {
     expect(() => assertInstallableBetaState({ internalBuildState: "MISSING_EXPORT_COMPLIANCE" }, "38")).toThrow(
       /ITSAppUsesNonExemptEncryption/,
     );
     expect(() => assertInstallableBetaState({ internalBuildState: "PROCESSING_EXCEPTION" }, "38")).toThrow();
+  });
+
+  it("fails on a state it has never heard of rather than assuming it is fine", () => {
+    expect(() => assertInstallableBetaState({ internalBuildState: "SOME_FUTURE_APPLE_STATE" }, "38")).toThrow(
+      /SOME_FUTURE_APPLE_STATE/,
+    );
+    expect(() => assertInstallableBetaState({ internalBuildState: "PROCESSING" }, "38")).toThrow();
+    expect(() => assertInstallableBetaState({ internalBuildState: "EXPIRED" }, "38")).toThrow();
   });
 
   it("passes an installable state", () => {
@@ -131,15 +153,83 @@ describe("beta-state gate fails closed", () => {
   });
 });
 
+describe("AscClient credential failures", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("surfaces a token-mint failure immediately instead of retrying it as a transport error", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const mint = vi.fn(() => {
+      throw new Error("Missing required env var ASC_ISSUER_ID.");
+    });
+
+    const client = new AscClient(mint);
+    // Its own message, unwrapped: a missing secret must not be reported as a
+    // network problem, and must not burn four attempts with backoff first.
+    await expect(client.get("apps")).rejects.toThrow("Missing required env var ASC_ISSUER_ID.");
+    expect(mint).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("still retries a genuine transport error", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("socket hang up"))
+      .mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        text: async () => JSON.stringify({ data: [] }),
+      });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const client = new AscClient(() => ({ token: "t", expiresAt: Math.floor(Date.now() / 1000) + 1200 }));
+    await expect(client.get("apps")).resolves.toEqual({ data: [] });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it("does not retry a 401", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      status: 401,
+      ok: false,
+      text: async () => JSON.stringify({ errors: [{ title: "NOT_AUTHORIZED" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const client = new AscClient(() => ({ token: "t", expiresAt: Math.floor(Date.now() / 1000) + 1200 }));
+    await expect(client.get("apps")).rejects.toThrow(/HTTP 401/);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("timeout budget leaves room to verify", () => {
   // Setting the advertised maximum must not reproduce the opaque mid-verification
-  // cancellation that parseTimeoutSeconds exists to prevent.
-  it("reserves time after the wait for assignment + confirmation + the detail read", () => {
-    const stepBudgetSeconds = 30 * 60;
-    expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeLessThan(stepBudgetSeconds);
-    // At least the confirm re-poll sleeps (4 x 12s) must fit in what is left.
-    expect(stepBudgetSeconds - MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThanOrEqual(48);
+  // cancellation that parseTimeoutSeconds exists to prevent. Asserted as the
+  // invariant rather than a literal, so tuning a constant either stays safe or
+  // fails here.
+  it("fits the maximum wait plus the worst-case work outside it inside the step cap", () => {
+    const stepBudgetSeconds = 30 * 60; // timeout-minutes: 30 on the distribute step
+    const confirmRePollSleepSeconds = 4 * 12; // (CONFIRM_ATTEMPTS - 1) x CONFIRM_INTERVAL
+    const worstCaseBackoffPerRequestSeconds = 2 + 4 + 6; // 3 retries at 2s steps
+    // resolveApp, the betaGroups read, the findBuild that lands on the deadline,
+    // the alreadyAssigned pre-check, 2 assign POSTs, 5 confirm reads, the
+    // buildBetaDetail read.
+    const requestsOutsideTheWait = 2 + 1 + 1 + 2 + 5 + 1;
+
+    const worstCaseOutsideWaitSeconds =
+      confirmRePollSleepSeconds + requestsOutsideTheWait * worstCaseBackoffPerRequestSeconds;
+
+    expect(MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseOutsideWaitSeconds).toBeLessThanOrEqual(stepBudgetSeconds);
+    expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThan(0);
     expect(DEFAULT_PROCESSING_TIMEOUT_SECONDS).toBeLessThanOrEqual(MAX_PROCESSING_TIMEOUT_SECONDS);
+  });
+
+  it("clamps the processing poll sleep to the deadline so the wait cannot overshoot it", () => {
+    const script = readRepoFile("scripts/ios-testflight-distribute.mjs");
+    expect(script).toContain(
+      "await sleep(Math.min(PROCESSING_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())));",
+    );
   });
 });
 
