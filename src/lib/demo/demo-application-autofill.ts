@@ -13,13 +13,24 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
  * an obvious placeholder — the walkthrough must never put an invented person,
  * employer, or landlord on screen as if they were a real record.
  */
+/** First day of the month after this one, as YYYY-MM-DD, so the demo never offers a past date. */
+function firstOfNextMonthIso(): string {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const month = String(next.getMonth() + 1).padStart(2, "0");
+  return `${next.getFullYear()}-${month}-01`;
+}
+
 export function buildDemoApplicationAutofill(propertyId: string): RentalWizardFormState {
   const pid = propertyId.trim();
   const rooms = getRoomOptionsForProperty(pid, { includeUnavailable: true }).filter((o) => o.value);
   const roomChoice1 = rooms[0]?.value ?? "";
   const roomChoice2 = rooms[1]?.value ?? "";
   const leaseTerm = "12-Month";
-  const leaseStart = "2026-08-01";
+  // The first of NEXT month, never a hardcoded date. A literal here silently expires: it was
+  // "2026-08-01", so from 2026-08-02 the guided demo autofilled a lease start in the past and
+  // the wizard refused to advance with "Lease start date cannot be in the past."
+  const leaseStart = firstOfNextMonthIso();
   const leaseEnd = computeLeaseEndDate(leaseStart, leaseTerm);
   const base = createInitialRentalWizardState();
 
