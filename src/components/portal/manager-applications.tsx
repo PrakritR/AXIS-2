@@ -664,27 +664,18 @@ export function ManagerApplications({
     [viewingIncompleteApplicationDetail],
   );
 
+  // The detail view renders full applicant PII — name, contact, income, screening
+  // results — so it resolves out of `scopedRows`, the SAME already-scoped list the
+  // table renders, rather than the raw cache. That makes it structurally impossible
+  // for the list and the detail to disagree about who may see a row: an unresolved
+  // scope leaves `scopedRows` empty, so the detail denies it too, and the caller
+  // renders a skeleton for a null row until the scope (and the property cache)
+  // resolves.
   const detailRow = useMemo(() => {
-    // `portfolioTick` is a cache-invalidation signal, not a value read here —
-    // same reason as `scopedRows` above: re-resolve once the property pipeline
-    // cache hydrates so a linked-property row opens without a manual refresh.
-    void portfolioTick;
     if (!applicationIdProp) return null;
-    // Fail CLOSED on an unresolved scope, exactly like `scopedRows`. `scopeUserId`
-    // is null before auth resolves (`useManagerUserId` reports null until
-    // `authReady`) and whenever `resolveManagerScopeUserId` yields nothing, and
-    // this view renders full applicant PII — name, contact, income, screening
-    // results. A guard of the form `if (scopeUserId && !visible(...))` skips the
-    // check entirely in exactly the case it exists for, so the detail must deny
-    // an unresolved scope rather than fall through to the row. The caller
-    // renders a skeleton for a null row and re-runs once the scope resolves.
-    if (!scopeUserId) return null;
     const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
-    const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
-    if (!hit) return null;
-    if (!applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
-    return hit;
-  }, [applicationIdProp, rows, scopeUserId, portfolioTick]);
+    return scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target) ?? null;
+  }, [applicationIdProp, scopedRows]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
