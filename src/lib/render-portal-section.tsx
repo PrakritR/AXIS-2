@@ -755,7 +755,7 @@ export async function renderPortalSection(
     }
 
     if (section === "applications") {
-      const APPLICATION_TABS = ["incomplete", "pending", "approved", "rejected"] as const;
+      const APPLICATION_TABS = ["incomplete", "pending", "approved", "rejected", "screenings"] as const;
       if (!tabParts?.length) {
         redirect(`${def.basePath}/applications/pending`);
       }
@@ -779,6 +779,13 @@ export async function renderPortalSection(
         "applications",
         managerOwnerSubscriptionTier,
       );
+    }
+
+    if (section === "screenings") {
+      const legacyPath = tabParts?.length
+        ? `/applications/screenings/${tabParts.map((p) => encodeURIComponent(p)).join("/")}`
+        : "/applications/screenings";
+      redirect(`${def.basePath}${legacyPath}`);
     }
 
     if (section === "properties") {

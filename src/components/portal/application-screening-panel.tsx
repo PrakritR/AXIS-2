@@ -11,6 +11,7 @@ import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isScreeningTestModeActive } from "@/lib/screening/screening-test-mode";
 import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import type { ManagerScreeningSettings } from "@/lib/screening/types";
@@ -34,7 +35,7 @@ function downloadBackgroundCheckPdf(applicationId: string): void {
 
 /** Download the background-check report PDF for an application row. */
 export function downloadBackgroundCheckForApplication(row: DemoApplicantRow): void {
-  const demo = isDemoModeActive();
+  const demo = isDemoModeActive() || isScreeningTestModeActive();
   if (demo) {
     void import("@/lib/demo/demo-document-files")
       .then(({ downloadDemoBackgroundCheckPdf }) => downloadDemoBackgroundCheckPdf(row))
@@ -48,11 +49,20 @@ export function downloadBackgroundCheckForApplication(row: DemoApplicantRow): vo
 
 export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { row: DemoApplicantRow; demo: boolean; bareCanvas?: boolean }) {
   const bg = row.backgroundCheck;
-  const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
+  const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
+  const hasHtmlReport = reportHtml.length > 0;
+  const canTryOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
+  const [pdfFailed, setPdfFailed] = useState(false);
+
+  useEffect(() => {
+    setPdfFailed(false);
+  }, [row.id, bg?.reportId, bg?.completedAt, bg?.reportSnapshot]);
+
+  // Prefer inline HTML (snapshot or synthesized report). Official Checkr PDF is a fallback when HTML is unavailable.
+  const useOfficialPdf = canTryOfficialPdf && !hasHtmlReport && !pdfFailed;
   const pdfSrc = useOfficialPdf
     ? `${backgroundCheckDocumentHref(row.id)}#toolbar=0&navpanes=0`
     : null;
-  const reportHtml = useMemo(() => (useOfficialPdf ? "" : buildBackgroundCheckReportHtml(row)), [row, useOfficialPdf]);
 
   if (!pdfSrc && !reportHtml) {
     return (
@@ -70,6 +80,7 @@ export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { 
         src={pdfSrc}
         title="Background check report preview"
         loading="lazy"
+        onError={() => setPdfFailed(true)}
         className={bareCanvas ? "h-[min(70vh,720px)] w-full border-0 bg-transparent" : "h-[min(52vh,420px)] w-full border-0 bg-white"}
       />
     );
@@ -114,7 +125,7 @@ export function ApplicationScreeningPanel({
   row: DemoApplicantRow;
   onUpdated?: () => void;
   /** Opens the cost-confirmation modal (billed to the manager) to start/re-run the Checkr check. */
-  onOpenScreeningModal?: () => void;
+  onOpenScreeningModal?: (opts?: { showPackagePicker?: boolean }) => void;
   /** When false, renders flat content (e.g. inside a review modal). */
   collapsible?: boolean;
   bareCanvas?: boolean;
@@ -124,7 +135,7 @@ export function ApplicationScreeningPanel({
   presentation?: "full" | "compact";
 }) {
   const { showToast } = useAppUi();
-  const demo = isDemoModeActive();
+  const demo = isDemoModeActive() || isScreeningTestModeActive();
   const [settings, setSettings] = useState<ManagerScreeningSettings | null>(demo ? DEMO_SCREENING_DEFAULTS : null);
   const [configured, setConfigured] = useState(demo);
   const [screeningAllowed, setScreeningAllowed] = useState(true);
@@ -241,15 +252,25 @@ export function ApplicationScreeningPanel({
     screening?.status !== "queued" &&
     screening?.status !== "complete";
 
+  const backgroundCheckComplete = bg?.status === "complete";
+  const showCompletedState =
+    showsBackgroundCheck && backgroundCheckComplete && Boolean(row.application?.consentCredit);
   const canRunBackgroundCheck =
     showsBackgroundCheck &&
     screeningAllowed &&
     bgConfigured &&
     Boolean(row.application?.consentCredit) &&
     bg?.status !== "pending" &&
+    !backgroundCheckComplete &&
     Boolean(onOpenScreeningModal);
 
-  const testButtonLabel = demo ? "Test" : bg ? "Re-run background check" : "Run background check";
+  const canRunBackgroundCheckAgain =
+    showCompletedState &&
+    screeningAllowed &&
+    bgConfigured &&
+    Boolean(onOpenScreeningModal);
+
+  const testButtonLabel = demo ? "Test" : "Run background check";
   const canViewReport = bg?.status === "complete";
   const statusSummary =
     bg?.status === "complete"
@@ -288,7 +309,7 @@ export function ApplicationScreeningPanel({
             variant="outline"
             data-attr="run-background-check"
             className={headerActionBtnClass}
-            onClick={onOpenScreeningModal}
+            onClick={() => onOpenScreeningModal?.()}
           >
             {testButtonLabel}
           </Button>
@@ -417,9 +438,20 @@ export function ApplicationScreeningPanel({
                   variant="outline"
                   className={PORTAL_HEADER_ACTION_BTN}
                   data-attr="run-background-check"
-                  onClick={onOpenScreeningModal}
+                  onClick={() => onOpenScreeningModal?.()}
                 >
                   {testButtonLabel}
+                </Button>
+              ) : null}
+              {canRunBackgroundCheckAgain ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_HEADER_ACTION_BTN}
+                  data-attr="run-background-check-again"
+                  onClick={() => onOpenScreeningModal?.({ showPackagePicker: true })}
+                >
+                  Run again
                 </Button>
               ) : null}
               {bg?.status === "complete" ? (
@@ -496,6 +528,31 @@ export function ApplicationScreeningPanel({
       ) : null}
       {screeningAllowed && !row.application?.consentCredit ? (
         <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
+      ) : null}
+
+      {showCompletedState ? (
+        <div
+          className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          data-attr="background-check-completed-banner"
+        >
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-semibold text-foreground">Background check already completed</p>
+            <p className="text-sm text-muted">
+              {statusSummary} Run again to order a new report or upgrade to a higher package.
+            </p>
+          </div>
+          {canRunBackgroundCheckAgain ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={headerActionBtnClass}
+              data-attr="run-background-check-again"
+              onClick={() => onOpenScreeningModal?.({ showPackagePicker: true })}
+            >
+              Run again
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       <BackgroundCheckReportFrame row={{ ...row, backgroundCheck: bg }} demo={demo} bareCanvas={bareCanvas} />

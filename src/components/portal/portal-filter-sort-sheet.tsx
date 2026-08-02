@@ -78,13 +78,19 @@ function FilterPanelFields({
   compact?: boolean;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={compact ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
+      <div
+        className={
+          compact
+            ? "overflow-x-hidden"
+            : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+        }
+      >
         <div className="flex min-w-0 max-w-full flex-col gap-3 max-lg:gap-2">
           {children}
           {extraModalContent}
@@ -197,7 +203,14 @@ export function PortalFilterSortSheet({
               data-attr="portal-filter-dropdown-panel"
             >
               <FilterDropdownHeader onReset={onReset} onClose={close} />
-              <div className={cn(PORTAL_FILTER_BODY_CLASS, "flex-1")}>{fields}</div>
+              <div
+                className={cn(
+                  compactPanel ? "px-3 py-2" : PORTAL_FILTER_BODY_CLASS,
+                  !compactPanel && "flex-1",
+                )}
+              >
+                {fields}
+              </div>
             </div>
           </>
         ) : null}
@@ -224,8 +237,8 @@ export function PortalFilterSortSheet({
         >
           <div
             className={cn(
-              "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-hidden",
-              mobileSheetClassName ?? "h-[min(14rem,45vh)]",
+              "flex w-full max-w-full flex-col overflow-x-hidden",
+              mobileSheetClassName ?? "h-auto max-h-[min(14rem,45vh)]",
             )}
           >
             {fields}

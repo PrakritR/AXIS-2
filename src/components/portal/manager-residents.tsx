@@ -348,6 +348,7 @@ export function ManagerResidents({
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [checkrScreeningShowPicker, setCheckrScreeningShowPicker] = useState(false);
   const [applicationReviewView, setApplicationReviewView] = useState<ApplicationReviewView>("application");
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [applicationReminderPreview, setApplicationReminderPreview] = useState<{
@@ -2114,19 +2115,19 @@ export function ManagerResidents({
       <>
         {applicationShowsBackgroundCheck(selectedApplicationRow) &&
         Boolean(selectedApplicationRow.application?.consentCredit) &&
-        selectedApplicationRow.backgroundCheck?.status !== "pending" ? (
+        selectedApplicationRow.backgroundCheck?.status !== "pending" &&
+        selectedApplicationRow.backgroundCheck?.status !== "complete" ? (
           <Button
             type="button"
             variant="outline"
             className={PORTAL_DETAIL_BTN}
             data-attr="run-background-check"
-            onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+            onClick={() => {
+              setCheckrScreeningShowPicker(false);
+              setCheckrScreeningRowId(selectedApplicationRow.id);
+            }}
           >
-            {isDemoModeActive()
-              ? "Test"
-              : selectedApplicationRow.backgroundCheck
-                ? "Re-run background check"
-                : "Run background check"}
+            {isDemoModeActive() ? "Test" : "Run background check"}
           </Button>
         ) : null}
         {selectedApplicationRow.backgroundCheck?.status === "complete" ||
@@ -2416,7 +2417,10 @@ export function ManagerResidents({
                                     activeView={applicationReviewView}
                                     onActiveViewChange={setApplicationReviewView}
                                     onScreeningUpdated={handleScreeningUpdated}
-                                    onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+                                    onOpenScreeningModal={(opts) => {
+                                      setCheckrScreeningShowPicker(Boolean(opts?.showPackagePicker));
+                                      setCheckrScreeningRowId(selectedApplicationRow.id);
+                                    }}
                                   />
                                 </div>
                               ) : (
@@ -3371,7 +3375,11 @@ export function ManagerResidents({
             : null
         }
         open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
         onUpdated={handleScreeningUpdated}
       />
 

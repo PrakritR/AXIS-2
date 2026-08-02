@@ -3,6 +3,14 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=emstjswhotsnyksqhqyf&read_only=false"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--allowed-origins=http://localhost:3000;http://localhost:3010;http://localhost:3011;http://localhost:3012;http://localhost:3013"
+      ]
     }
   }
 }

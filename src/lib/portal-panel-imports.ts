@@ -4,6 +4,10 @@ export async function loadManagerResidents() {
   return (await import("@/components/portal/manager-residents")).ManagerResidents;
 }
 
+export async function loadManagerScreenings() {
+  return (await import("@/components/portal/manager-screenings")).ManagerScreenings;
+}
+
 export async function loadManagerApplications() {
   return (await import("@/components/portal/manager-applications")).ManagerApplications;
 }

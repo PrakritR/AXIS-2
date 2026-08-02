@@ -116,9 +116,11 @@ import {
 } from "@/lib/resident-welcome-email";
 import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { ManagerScreenings } from "@/components/portal/manager-screenings";
 import {
   applicationDetailHref,
   applicationListHref,
+  type ApplicationListTabId,
 } from "@/lib/portal-detail-routes";
 import {
   appendPortalPropertyFilterQuery,
@@ -152,7 +154,7 @@ function countByBucket(rows: DemoApplicantRow[]) {
  * concern only; every row keeps `bucket: "pending"` in storage, so Approve /
  * Reject / delete and the underlying query are unaffected.
  */
-type ManagerApplicationTabId = "pending" | "incomplete" | "approved" | "rejected";
+type ManagerApplicationTabId = ApplicationListTabId;
 
 /** Which tab a row belongs to for DISPLAY — never confuse with `row.bucket`. */
 function tabForRow(row: DemoApplicantRow): ManagerApplicationTabId {
@@ -417,6 +419,7 @@ export function ManagerApplications({
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [checkrScreeningShowPicker, setCheckrScreeningShowPicker] = useState(false);
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -438,21 +441,26 @@ export function ManagerApplications({
     };
   }, [authReady, userId]);
 
-  // Returning from the Stripe screening checkout (?screening=paid|cancelled).
+  // Returning from embedded Stripe screening checkout (?screening=return|paid|cancelled).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const screening = params.get("screening");
     if (!screening) return;
-    if (screening === "paid") {
-      showToast("Payment received. The background check is starting now.");
+    if (screening === "return" || screening === "paid") {
+      if (applicationIdProp) {
+        setCheckrScreeningRowId(decodeURIComponent(applicationIdProp));
+      }
+      if (screening === "paid") {
+        showToast("Payment received. The background check is starting now.");
+      }
     } else if (screening === "cancelled") {
       showToast("Payment cancelled. No screening was ordered.");
+      params.delete("screening");
+      params.delete("session_id");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     }
-    params.delete("screening");
-    params.delete("session_id");
-    const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [showToast]);
+  }, [showToast, applicationIdProp]);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -553,6 +561,11 @@ export function ManagerApplications({
   // draft) is its own tab, so it is subtracted out here rather than shown as
   // an annotation on top of the combined bucket count.
   const pendingReviewCount = counts.pending - incompleteCount;
+  const screeningsCount = useMemo(
+    () =>
+      propertyFilteredRows.filter((r) => applicationShowsBackgroundCheck(r) && r.backgroundCheck).length,
+    [propertyFilteredRows],
+  );
   const tabs = useMemo(
     () =>
       [
@@ -560,8 +573,9 @@ export function ManagerApplications({
         { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
+        { id: "screenings" as const, label: "Screenings", count: screeningsCount },
       ] as const,
-    [counts, incompleteCount, pendingReviewCount],
+    [counts, incompleteCount, pendingReviewCount, screeningsCount],
   );
 
   const propertyFilterLabel = useMemo(() => {
@@ -587,7 +601,8 @@ export function ManagerApplications({
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
   }, [propertyFilteredRows, bucket, searchQuery]);
 
-  const openDetailScreeningModal = useCallback((row: DemoApplicantRow) => {
+  const openDetailScreeningModal = useCallback((row: DemoApplicantRow, opts?: { showPackagePicker?: boolean }) => {
+    setCheckrScreeningShowPicker(Boolean(opts?.showPackagePicker));
     setCheckrScreeningRowId(row.id);
   }, []);
 
@@ -839,7 +854,10 @@ export function ManagerApplications({
   const renderApplicationRowActions = (row: DemoApplicantRow) => {
     const isPending = row.bucket === "pending";
     const showsRunCheck =
-      applicationShowsBackgroundCheck(row) && Boolean(row.application?.consentCredit) && row.backgroundCheck?.status !== "pending";
+      applicationShowsBackgroundCheck(row) &&
+      Boolean(row.application?.consentCredit) &&
+      row.backgroundCheck?.status !== "pending" &&
+      row.backgroundCheck?.status !== "complete";
     const canDownloadScreening =
       row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
 
@@ -1052,7 +1070,7 @@ export function ManagerApplications({
         bareCanvas
         showDownload={false}
         onScreeningUpdated={handleScreeningUpdated}
-        onOpenScreeningModal={() => openDetailScreeningModal(row)}
+        onOpenScreeningModal={(opts) => openDetailScreeningModal(row, opts)}
       />
 
       <ApplicationVerificationPhotos row={row} />
@@ -1219,13 +1237,17 @@ export function ManagerApplications({
             : null
         }
         open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
         onUpdated={handleScreeningUpdated}
       />
     </>
   );
 
-  if (applicationIdProp && detailRow) {
+  if (applicationIdProp && detailRow && bucket !== "screenings") {
     return (
       <>
         {applicationModals}
@@ -1269,12 +1291,16 @@ export function ManagerApplications({
         }))}
         activeDestinationId={bucket}
         destinationAriaLabel="Application status"
-        search={{
-          value: searchQuery,
-          onChange: setSearchQuery,
-          placeholder: "Search applicants",
-          dataAttr: "applications-search",
-        }}
+        search={
+          bucket === "screenings"
+            ? undefined
+            : {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: "Search applicants",
+                dataAttr: "applications-search",
+              }
+        }
         activeFilterChips={
           propertyFilters.length > 0 ? (
             <PortalActiveFilterChips
@@ -1299,10 +1325,16 @@ export function ManagerApplications({
         key={checkrScreeningRowId ?? "none"}
         row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
         onUpdated={handleScreeningUpdated}
       />
-      {!authReady && rows.length === 0 ? (
+      {bucket === "screenings" ? (
+        <ManagerScreenings basePath={basePath} screeningId={applicationIdProp} embedded />
+      ) : !authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <ListSkeleton rows={5} showLeading={false} />
         </div>
