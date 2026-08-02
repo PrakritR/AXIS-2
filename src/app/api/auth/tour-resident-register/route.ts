@@ -134,7 +134,7 @@ export async function POST(req: Request) {
 
     track("resident_account_created", userId, {
       source: tourInquiryId ? "tour_booking" : "property_message",
-      inquiry_id: tourInquiryId || undefined,
+      ...(tourInquiryId ? { inquiry_id: tourInquiryId } : {}),
     });
 
     const redirectTo = handoff === "message" ? "/resident/communication" : "/resident/tour";

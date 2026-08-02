@@ -15,7 +15,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { DataList } from "@/components/ui/data-list";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
