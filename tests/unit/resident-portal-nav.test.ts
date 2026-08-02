@@ -49,16 +49,17 @@ describe("resident portal nav stages", () => {
     expect(isResidentPathAllowedForAccess("/resident/communication/inbox/unopened", preApproval)).toBe(true);
   });
 
-  it("locks tour and application after approval but keeps lease reachable", () => {
-    expect(residentSectionLockedForStage("tour", "post_approval_pre_lease")).toBe(true);
-    expect(residentSectionLockedForStage("applications", "post_approval_pre_lease")).toBe(true);
+  it("keeps tour and application reachable after approval and post-lease", () => {
+    expect(residentSectionLockedForStage("tour", "post_approval_pre_lease")).toBe(false);
+    expect(residentSectionLockedForStage("applications", "post_approval_pre_lease")).toBe(false);
     expect(residentSectionUnlockedForStage("lease", "post_approval_pre_lease")).toBe(true);
     expect(residentSectionUnlockedForStage("payments", "post_approval_pre_lease")).toBe(true);
+    expect(residentSectionLockedForStage("tour", "post_lease")).toBe(false);
+    expect(residentSectionLockedForStage("applications", "post_lease")).toBe(false);
   });
 
   it("keeps lease unlocked after both parties sign", () => {
     expect(residentSectionUnlockedForStage("lease", "post_lease")).toBe(true);
-    expect(residentSectionLockedForStage("tour", "post_lease")).toBe(true);
     expect(residentSectionUnlockedForStage("services", "post_lease")).toBe(true);
   });
 });

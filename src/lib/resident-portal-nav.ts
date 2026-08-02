@@ -20,8 +20,19 @@ export const RESIDENT_BOTTOM_NAV_PRIMARY: Record<ResidentPortalNavStage, readonl
 
 const STAGE_UNLOCKED_SECTIONS: Record<ResidentPortalNavStage, readonly string[]> = {
   pre_approval: ["tour", "applications", "dashboard", "communication", "profile"],
-  post_approval_pre_lease: ["lease", "payments", "dashboard", "communication", "documents", "profile"],
+  post_approval_pre_lease: [
+    "tour",
+    "applications",
+    "lease",
+    "payments",
+    "dashboard",
+    "communication",
+    "documents",
+    "profile",
+  ],
   post_lease: [
+    "tour",
+    "applications",
     "services",
     "payments",
     "dashboard",
@@ -33,9 +44,6 @@ const STAGE_UNLOCKED_SECTIONS: Record<ResidentPortalNavStage, readonly string[]>
   ],
 };
 
-/** Sections locked after application approval (still visible in nav with a lock). */
-const LOCKED_AFTER_APPLICATION_APPROVAL = new Set(["tour", "applications"]);
-
 export function residentBottomNavPrimarySections(stage: ResidentPortalNavStage): readonly string[] {
   return RESIDENT_BOTTOM_NAV_PRIMARY[stage];
 }
@@ -45,9 +53,6 @@ export function residentSectionUnlockedForStage(section: string, stage: Resident
 }
 
 export function residentSectionLockedForStage(section: string, stage: ResidentPortalNavStage): boolean {
-  if (stage === "post_approval_pre_lease" || stage === "post_lease") {
-    if (LOCKED_AFTER_APPLICATION_APPROVAL.has(section)) return true;
-  }
   return !residentSectionUnlockedForStage(section, stage);
 }
 
@@ -66,10 +71,6 @@ export function isResidentPathAllowedForAccess(
 ): boolean {
   const stage = resolveResidentPortalNavStage(access);
   if (pathname === "/resident/profile" || pathname.startsWith("/resident/profile/")) return true;
-
-  if (pathname.startsWith("/resident/applications/apply")) {
-    return stage === "pre_approval";
-  }
 
   const section = residentPathSection(pathname);
   if (!section) return false;
@@ -90,9 +91,6 @@ export function residentNavLockReason(
   stage: ResidentPortalNavStage,
 ): string | null {
   if (!residentSectionLockedForStage(section, stage)) return null;
-  if (LOCKED_AFTER_APPLICATION_APPROVAL.has(section) && stage !== "pre_approval") {
-    return "Unavailable after your application is approved";
-  }
   if (stage === "pre_approval") {
     return "Available after your application is approved";
   }

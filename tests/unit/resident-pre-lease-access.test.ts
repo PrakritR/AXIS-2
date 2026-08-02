@@ -24,17 +24,19 @@ describe("resident portal stage access", () => {
     expect(isResidentPathAllowedForAccess("/resident/payments/pending", preApproval)).toBe(false);
   });
 
-  it("post-approval allows lease and payments but locks tour and application", () => {
+  it("post-approval allows lease, payments, tour, and application", () => {
     expect(isResidentPathAllowedForAccess("/resident/lease", postApproval)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/payments/pending", postApproval)).toBe(true);
-    expect(isResidentPathAllowedForAccess("/resident/tour", postApproval)).toBe(false);
-    expect(isResidentPathAllowedForAccess("/resident/applications/pending", postApproval)).toBe(false);
+    expect(isResidentPathAllowedForAccess("/resident/tour", postApproval)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/applications/pending", postApproval)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/applications/apply?propertyId=demo", postApproval)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postApproval)).toBe(false);
   });
 
-  it("post-lease unlocks services and keeps lease reachable", () => {
+  it("post-lease unlocks services and keeps tour and application reachable", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/lease", postLease)).toBe(true);
-    expect(isResidentPathAllowedForAccess("/resident/tour", postLease)).toBe(false);
+    expect(isResidentPathAllowedForAccess("/resident/tour", postLease)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/applications/pending", postLease)).toBe(true);
   });
 });
