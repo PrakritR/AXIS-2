@@ -16,6 +16,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
+  findThreadByResidentPhone,
+  forwardResidentMessageToManagers,
+  openClawResidentThread,
+} from "@/lib/claw-resident-messaging.server";
+import { sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
+import { normalizeE164 } from "@/lib/twilio";
+import {
   ensureSmsIncludesPortalLink,
   type ResidentSmsLinkKind,
 } from "@/lib/claw-resident-links";
@@ -168,12 +175,20 @@ export async function POST(req: Request) {
       fanOutPropertyInbox?: boolean;
       /** Gate email/SMS per recipient's saved preference for this category (inbox always on). */
       eventCategory?: string;
+      attachmentUrls?: unknown;
     };
 
     const threadId = String(body.threadId ?? "").trim();
     const senderEmail = String(user.email ?? body.fromEmail ?? "portal@example.com").trim().toLowerCase();
     const subject = String(body.subject ?? "").trim();
-    const text = String(body.text ?? "").trim();
+    const rawText = String(body.text ?? "").trim();
+    const attachmentUrls = (Array.isArray(body.attachmentUrls) ? body.attachmentUrls : [])
+      .map((u) => String(u ?? "").trim())
+      .filter(Boolean);
+    const attachmentNote = attachmentUrls.length
+      ? "\n\nAttachments:\n" + attachmentUrls.join("\n")
+      : "";
+    const text = (rawText + attachmentNote).trim() || (attachmentUrls.length ? "(attachment)" : "");
     const fromName = String(body.fromName ?? "PropLane Portal").trim();
     const deliverToPortalInbox = body.deliverToPortalInbox !== false;
     const deliverViaEmail = body.deliverViaEmail !== false;
@@ -188,7 +203,7 @@ export async function POST(req: Request) {
         ? (body.eventCategory as NotificationCategory)
         : null;
 
-    if (!subject || !text) {
+    if (!subject || (!rawText && attachmentUrls.length === 0)) {
       return NextResponse.json({ ok: false, error: "subject and text are required." }, { status: 400 });
     }
 
@@ -529,6 +544,60 @@ export async function POST(req: Request) {
     // SMS channel (verified, non-opted-out phone + pref on); legacy mode texts
     // every recipient with a phone (STOP opt-out still enforced inside sendSms).
     if (anySmsWanted) {
+      const senderRoleNorm = String(senderRole ?? "").trim().toLowerCase();
+      if (senderRoleNorm === "resident" || senderRoleNorm === "vendor") {
+        const { data: senderFull } = await db
+          .from("profiles")
+          .select("phone, phone_verified_at, full_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        const residentPhone =
+          senderFull?.phone_verified_at && senderFull.phone
+            ? normalizeE164(String(senderFull.phone))
+            : null;
+        await Promise.all(
+          recipients.map(async (recipient) => {
+            const role = String(recipient.role ?? "").trim().toLowerCase();
+            if (role !== "manager" && role !== "pro" && role !== "admin" && role !== "owner") return;
+            const { data: mgr } = await db
+              .from("profiles")
+              .select("id, phone, phone_verified_at")
+              .eq("email", recipient.email)
+              .maybeSingle();
+            const mgrId = String(mgr?.id ?? recipient.userId ?? "").trim();
+            if (!mgrId) return;
+            if (senderRoleNorm === "resident" && residentPhone) {
+              let thread = await findThreadByResidentPhone(residentPhone, mgrId);
+              if (!thread) {
+                thread = await openClawResidentThread({
+                  managerUserId: mgrId,
+                  residentPhone,
+                  residentUserId: user.id,
+                  residentEmail: senderEmail,
+                  topic: "general",
+                  bumpLastMessage: true,
+                });
+              }
+              if (!thread) return;
+              await forwardResidentMessageToManagers({
+                fromResident: residentPhone,
+                text: rawText || "(attachment)",
+                thread,
+                briefText: `(${subject})\n${text}`,
+              });
+              return;
+            }
+            const mgrPhone = mgr?.phone ? normalizeE164(String(mgr.phone)) : null;
+            if (!mgrPhone) return;
+            const vendorName = String(senderFull?.full_name ?? "Vendor").trim();
+            const prefix = senderRoleNorm === "vendor" ? `Vendor ${vendorName}` : "Resident";
+            await sendPropLaneSms({
+              to: mgrPhone,
+              text: `(${prefix}) ${subject}\n${text}`.slice(0, 1500),
+            });
+          }),
+        );
+      } else {
       const { data: senderProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
       const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
 
@@ -626,6 +695,7 @@ export async function POST(req: Request) {
           }
           }),
         );
+      }
       }
     }
 

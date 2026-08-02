@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
-import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, inboxTabEmptyCopy, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import { INBOX_TAB_DEFS, InboxBubbleMessage, InboxComposer, InboxReplyChannelPicker, InboxThreadEmpty, InboxThreadView, PortalInboxEmptyState, PortalInboxMessageTable, inboxTabEmptyCopy, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import {
   PortalInboxSelectionToolbar,
   useInboxRowSelection,
@@ -14,6 +14,9 @@ import {
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
+import { buildInboxThreadAssistantContext, InboxThreadAssistantStrip } from "@/components/portal/inbox-thread-assistant-strip";
+import { INBOX_MAX_ATTACHMENTS, uploadInboxAttachment, type InboxComposerAttachment } from "@/lib/inbox-attachments";
+import { markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
@@ -68,7 +71,7 @@ function countThreads(threads: InboxThread[]) {
 
 export type VendorInboxPanelHandle = {
   openCompose: () => void;
-  emptyTrash: () => void;
+  emptyArchive: () => void;
 };
 
 export type VendorInboxTabCounts = {
@@ -92,9 +95,23 @@ export const VendorInboxPanel = forwardRef<
      */
     smsUiEnabled?: boolean;
     onTabCountsChange?: (counts: VendorInboxTabCounts) => void;
+    suppressListPane?: boolean;
+    controlledExpandedId?: string | null;
+    onControlledExpandedIdChange?: (id: string | null) => void;
+    pageScroll?: boolean;
   }
 >(function VendorInboxPanel(
-  { tabId, embeddedInCommunication = false, externalTitleActions = false, smsUiEnabled = false, onTabCountsChange },
+  {
+    tabId,
+    embeddedInCommunication = false,
+    externalTitleActions = false,
+    smsUiEnabled = false,
+    onTabCountsChange,
+    suppressListPane = false,
+    controlledExpandedId,
+    onControlledExpandedIdChange,
+    pageScroll = false,
+  },
   ref,
 ) {
   const { showToast } = useAppUi();
@@ -104,7 +121,26 @@ export const VendorInboxPanel = forwardRef<
   );
   const [persistReady, setPersistReady] = useState(false);
   const persistInboxRef = useRef(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
+  const expandedId = controlledExpandedId !== undefined ? controlledExpandedId : internalExpandedId;
+  const setExpandedId = useCallback(
+    (id: string | null | ((prev: string | null) => string | null)) => {
+      const resolve = (prev: string | null) => (typeof id === "function" ? id(prev) : id);
+      if (controlledExpandedId !== undefined) {
+        onControlledExpandedIdChange?.(resolve(controlledExpandedId));
+      } else {
+        setInternalExpandedId(resolve);
+      }
+    },
+    [controlledExpandedId, onControlledExpandedIdChange],
+  );
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replySending, setReplySending] = useState(false);
+  const [replyViaEmail, setReplyViaEmail] = useState(true);
+  const [replyViaSms, setReplyViaSms] = useState(false);
+  const [autoSend, setAutoSend] = useState(false);
+  const [replyAttachments, setReplyAttachments] = useState<InboxComposerAttachment[]>([]);
+  const [smsConfigured, setSmsConfigured] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   // Threads marked read while viewing "Unopened" stay listed until the tab is
   // switched or the page is refreshed; they only move to "Opened" on reset.
@@ -112,6 +148,21 @@ export const VendorInboxPanel = forwardRef<
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
   const [vendorIdentity, setVendorIdentity] = useState({ name: "Vendor", email: "vendor@example.com" });
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setReplyDraft("");
+    setReplyViaEmail(true);
+    setReplyViaSms(false);
+    setReplyAttachments([]);
+  }, [expandedId]);
+
+  useEffect(() => {
+    if (!smsUiEnabled || isDemoModeActive()) return;
+    void fetch("/api/vendor/sms-conversations", { credentials: "include", cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => setSmsConfigured(Boolean(body?.smsConfigured)))
+      .catch(() => setSmsConfigured(false));
+  }, [smsUiEnabled]);
 
   useEffect(() => {
     if (isDemoModeActive()) return;
@@ -268,7 +319,7 @@ export const VendorInboxPanel = forwardRef<
     return "inbox";
   }
 
-  const moveToTrash = useCallback(
+  const moveToArchive = useCallback(
     (id: string) => {
       void runInboxMutation(async () => {
         persistInboxRef.current = false;
@@ -297,7 +348,7 @@ export const VendorInboxPanel = forwardRef<
     [showToast],
   );
 
-  const restoreFromTrash = useCallback(
+  const restoreFromArchive = useCallback(
     (id: string) => {
       void runInboxMutation(async () => {
         persistInboxRef.current = false;
@@ -356,10 +407,10 @@ export const VendorInboxPanel = forwardRef<
     [local, showToast],
   );
 
-  const emptyTrash = useCallback(() => {
+  const emptyArchive = useCallback(() => {
     const trashItems = local.filter((t) => t.folder === "trash");
     if (trashItems.length === 0) {
-      showToast("Trash is already empty.");
+      showToast("Archive is already empty.");
       return;
     }
     if (!window.confirm(`Delete all ${trashItems.length} trash message${trashItems.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
@@ -380,7 +431,7 @@ export const VendorInboxPanel = forwardRef<
       const synced = await syncPersistedInboxFromServer(VENDOR_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
       setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
       persistInboxRef.current = true;
-      showToast("Trash emptied.");
+      showToast("Archive emptied.");
     })().catch(() => showToast("Could not empty trash."));
   }, [local, showToast]);
 
@@ -388,9 +439,9 @@ export const VendorInboxPanel = forwardRef<
     ref,
     () => ({
       openCompose: () => setComposeOpen(true),
-      emptyTrash,
+      emptyArchive,
     }),
-    [emptyTrash],
+    [emptyArchive],
   );
 
   const handleComposeSend = useCallback(
@@ -444,15 +495,28 @@ export const VendorInboxPanel = forwardRef<
     [navigate, showToast],
   );
 
+  const activeSmsAvailable = smsUiEnabled && smsConfigured;
+
   const handleReply = useCallback(
-    async (row: PortalInboxTableRow, text: string) => {
+    async (
+      row: PortalInboxTableRow,
+      text: string,
+      channels: { email: boolean; sms: boolean } = { email: true, sms: false },
+      attachmentUrls: string[] = [],
+    ) => {
       const thread = local.find((t) => t.id === row.id);
       if (!thread) return;
+      if (!channels.email && !channels.sms) throw new Error("no channel");
+      const replyId = `reply-${Date.now().toString(36)}`;
+      const attachmentMeta = attachmentUrls.map((url, i) => ({ url, name: `Attachment ${i + 1}` }));
       const reply: InboxThreadMessage = {
-        id: `reply-${Date.now().toString(36)}`,
+        id: replyId,
         from: vendorIdentity.name,
         body: text,
         at: new Date().toLocaleString(),
+        outbound: true,
+        delivery: "sending",
+        attachments: attachmentMeta.length ? attachmentMeta : undefined,
       };
       const updated = appendReplyToInboxThread(thread, reply);
       const next = local.map((t) => (t.id === thread.id ? updated : t));
@@ -465,23 +529,66 @@ export const VendorInboxPanel = forwardRef<
         throw new Error("persist failed");
       }
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-      await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          fromName: vendorIdentity.name,
-          fromEmail: vendorIdentity.email,
-          threadId: thread.id,
-          subject,
-          text,
-          toEmails: [thread.email],
-          deliverToPortalInbox: true,
-        }),
-      });
+      let emailOk = !channels.email;
+      let smsOk = !channels.sms;
+      if (channels.email) {
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: vendorIdentity.name,
+            fromEmail: vendorIdentity.email,
+            threadId: thread.id,
+            subject,
+            text,
+            toEmails: [thread.email],
+            deliverToPortalInbox: true,
+            deliverViaEmail: true,
+            deliverViaSms: false,
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        emailOk = res.ok && data.ok === true;
+        if (!emailOk) {
+          const failed = markThreadMessageDelivery(updated, replyId, "failed");
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
+          throw new Error("send failed");
+        }
+      }
+      if (channels.sms && activeSmsAvailable) {
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: vendorIdentity.name,
+            fromEmail: vendorIdentity.email,
+            threadId: thread.id,
+            subject,
+            text,
+            toEmails: [thread.email],
+            deliverToPortalInbox: false,
+            deliverViaEmail: false,
+            deliverViaSms: true,
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        smsOk = res.ok && data.ok === true;
+        if (!smsOk && !channels.email) {
+          const failed = markThreadMessageDelivery(updated, replyId, "failed");
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
+          throw new Error("send failed");
+        }
+      }
+      if (!emailOk && !smsOk) throw new Error("send failed");
+      const delivered = markThreadMessageDelivery(updated, replyId, undefined);
+      setLocal((cur) => cur.map((t) => (t.id === thread.id ? delivered : t)));
       void syncPersistedInboxFromServer(VENDOR_INBOX_STORAGE_KEY, { force: true });
     },
-    [local, vendorIdentity],
+    [activeSmsAvailable, local, vendorIdentity],
   );
 
   const renderExtraActions = useCallback(
@@ -494,7 +601,7 @@ export const VendorInboxPanel = forwardRef<
       if (folder === "trash") {
         return (
           <>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreFromTrash(row.id)}>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreFromArchive(row.id)}>
               Restore
             </Button>
             <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => deleteForever(row.id)}>
@@ -509,19 +616,19 @@ export const VendorInboxPanel = forwardRef<
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markUnread(row.id)}>
               Mark unread
             </Button>
-            <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveToTrash(row.id)}>
-              Trash
+            <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveToArchive(row.id)}>
+              Archive
             </Button>
           </>
         );
       }
       return (
-        <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveToTrash(row.id)}>
-          Trash
+        <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveToArchive(row.id)}>
+          Archive
         </Button>
       );
     },
-    [local, tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+    [local, tabId, moveToArchive, restoreFromArchive, deleteForever, markUnread],
   );
 
   const emptyCopy = inboxTabEmptyCopy(tabId);
@@ -531,13 +638,13 @@ export const VendorInboxPanel = forwardRef<
     threadSelection.clearSelection();
   };
 
-  const bulkMoveToTrash = () => {
-    for (const id of threadSelection.selectedIds) moveToTrash(id);
+  const bulkMoveToArchive = () => {
+    for (const id of threadSelection.selectedIds) moveToArchive(id);
     threadSelection.clearSelection();
   };
 
-  const bulkRestoreFromTrash = () => {
-    for (const id of threadSelection.selectedIds) restoreFromTrash(id);
+  const bulkRestoreFromArchive = () => {
+    for (const id of threadSelection.selectedIds) restoreFromArchive(id);
     threadSelection.clearSelection();
   };
 
@@ -551,6 +658,113 @@ export const VendorInboxPanel = forwardRef<
     for (const id of threadSelection.selectedIds) markUnread(id);
     threadSelection.clearSelection();
   };
+
+
+  const activeThread = useMemo(
+    () => (expandedId ? local.find((t) => t.id === expandedId) ?? null : null),
+    [expandedId, local],
+  );
+  const activeIsSent = activeThread?.folder === "sent";
+  const activeFolder = activeThread
+    ? activeThread.folder === "trash"
+      ? "inbox"
+      : activeThread.folder
+    : "inbox";
+  const activeBubbles = useMemo((): InboxBubbleMessage[] => {
+    if (!activeThread) return [];
+    return inboxThreadMessages(activeThread).map((m, i) => {
+      const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
+      return {
+        id: m.id,
+        author: m.from,
+        body: m.body,
+        at: m.at,
+        direction: outbound ? "outbound" : "inbound",
+        delivery: m.delivery,
+        channel: "email",
+        attachments: m.attachments,
+      } satisfies InboxBubbleMessage;
+    });
+  }, [activeThread, activeFolder]);
+
+  const pickReplyAttachments = useCallback(
+    (files: FileList | null) => {
+      if (!files?.length) return;
+      const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
+      if (room <= 0) {
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} images.`);
+        return;
+      }
+      for (const file of Array.from(files).slice(0, room)) {
+        const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const previewUrl = URL.createObjectURL(file);
+        setReplyAttachments((prev) => [...prev, { id, fileName: file.name, previewUrl, uploading: true }]);
+        void uploadInboxAttachment(file)
+          .then((url) => {
+            setReplyAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, uploadUrl: url, uploading: false } : a)));
+          })
+          .catch((e) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) =>
+                a.id === id ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" } : a,
+              ),
+            );
+          });
+      }
+    },
+    [replyAttachments.length, showToast],
+  );
+
+  const replyChannelPicker = (
+    <InboxReplyChannelPicker
+      viaEmail={replyViaEmail}
+      viaSms={replyViaSms}
+      onViaEmailChange={setReplyViaEmail}
+      onViaSmsChange={setReplyViaSms}
+      emailAvailable
+      smsAvailable={activeSmsAvailable}
+    />
+  );
+
+  const sendActiveReply = useCallback(async () => {
+    if (!activeThread) return;
+    const text = replyDraft.trim();
+    const attachmentUrls = replyAttachments.filter((a) => a.uploadUrl && !a.uploading && !a.error).map((a) => a.uploadUrl!);
+    if (!text && attachmentUrls.length === 0) return;
+    const viaEmail = replyViaEmail || !activeSmsAvailable;
+    const viaSms = replyViaSms && activeSmsAvailable;
+    if (!viaEmail && !viaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    if (replyAttachments.some((a) => a.uploading)) {
+      showToast("Wait for attachments to finish uploading.");
+      return;
+    }
+    setReplySending(true);
+    try {
+      await handleReply(
+        {
+          id: activeThread.id,
+          name: activeThread.from,
+          email: activeThread.email,
+          subject: activeThread.subject,
+          whenLabel: activeThread.time,
+          read: !activeThread.unread,
+        },
+        text,
+        { email: viaEmail, sms: viaSms },
+        attachmentUrls,
+      );
+      setReplyDraft("");
+      setReplyAttachments([]);
+      showToast("Reply sent.");
+    } catch {
+      showToast("Could not send reply.");
+    } finally {
+      setReplySending(false);
+    }
+  }, [activeSmsAvailable, activeThread, handleReply, replyAttachments, replyDraft, replyViaEmail, replyViaSms, showToast]);
 
   const inboxBody = (
     <>
@@ -571,16 +785,71 @@ export const VendorInboxPanel = forwardRef<
         liveContacts={eligibleContacts}
       />
 
-      <PortalListToolbar
+      {!suppressListPane ? <PortalListToolbar
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
           placeholder: "Search messages",
           dataAttr: "vendor-inbox-search",
         }}
-      />
+      /> : null}
 
-      {rowsForTab.length === 0 ? (
+      {suppressListPane ? (
+        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+          {activeThread ? (
+            <InboxThreadView
+              scrollMode={pageScroll ? "page" : "pane"}
+              title={activeIsSent ? activeThread.email || "Unknown recipient" : activeThread.from || activeThread.email || "Unknown sender"}
+              subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
+              messages={activeBubbles}
+              threadKey={activeThread.id}
+              onBack={() => setExpandedId(null)}
+              headerActions={renderExtraActions({
+                id: activeThread.id,
+                name: activeThread.from,
+                email: activeThread.email,
+                subject: activeThread.subject,
+                whenLabel: activeThread.time,
+                read: !activeThread.unread,
+              })}
+              emptyLabel="No messages in this conversation."
+              composer={
+                activeThread.folder === "trash" || tabId === "trash" ? undefined : (
+                  <>
+                    <InboxThreadAssistantStrip
+                      contextHint={buildInboxThreadAssistantContext({
+                        subject: activeThread.subject,
+                        email: activeThread.email,
+                        from: activeThread.from,
+                        sentSemantics: activeIsSent,
+                      })}
+                    />
+                    <InboxComposer
+                      value={replyDraft}
+                      onChange={setReplyDraft}
+                      onSubmit={() => void sendActiveReply()}
+                      sending={replySending}
+                      disabled={!replyViaEmail && !replyViaSms}
+                      placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
+                      maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
+                      dataAttr="vendor-inbox-reply"
+                      channelControl={replyChannelPicker}
+                      attachments={replyAttachments}
+                      onAttachmentsPick={pickReplyAttachments}
+                      onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                      maxAttachments={INBOX_MAX_ATTACHMENTS}
+                      autoSend={autoSend}
+                      onAutoSendChange={setAutoSend}
+                    />
+                  </>
+                )
+              }
+            />
+          ) : (
+            <InboxThreadEmpty />
+          )}
+        </div>
+      ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <div className="space-y-3">
@@ -590,8 +859,8 @@ export const VendorInboxPanel = forwardRef<
                 <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
                   Mark read
                 </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                  Trash
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToArchive}>
+                  Archive
                 </Button>
               </>
             ) : null}
@@ -600,19 +869,19 @@ export const VendorInboxPanel = forwardRef<
                 <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkUnread}>
                   Mark unread
                 </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                  Trash
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToArchive}>
+                  Archive
                 </Button>
               </>
             ) : null}
             {tabId === "sent" ? (
-              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                Trash
+              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToArchive}>
+                Archive
               </Button>
             ) : null}
             {tabId === "trash" ? (
               <>
-                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromArchive}>
                   Restore
                 </Button>
                 <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteForever}>
@@ -630,7 +899,7 @@ export const VendorInboxPanel = forwardRef<
               const thread = local.find((t) => t.id === row.id);
               return thread ? inboxThreadMessages(thread) : [];
             }}
-            onReply={tabId === "trash" ? undefined : handleReply}
+            onReply={tabId === "trash" ? undefined : (row, text) => handleReply(row, text, { email: true, sms: false })}
             expandedId={expandedId}
             onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
             renderExtraActions={renderExtraActions}
@@ -662,9 +931,9 @@ export const VendorInboxPanel = forwardRef<
               type="button"
               variant="outline"
               className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
-              onClick={emptyTrash}
+              onClick={emptyArchive}
             >
-              Empty trash
+              Empty archive
             </Button>
           ) : null}
         </div>
@@ -682,7 +951,7 @@ export const VendorInboxPanel = forwardRef<
               New message
             </Button>
             {tabId === "trash" && counts.trash > 0 ? (
-              <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyTrash}>
+              <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyArchive}>
                 Empty
               </Button>
             ) : null}

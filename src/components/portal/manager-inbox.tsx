@@ -1340,10 +1340,10 @@ export const ManagerInbox = forwardRef<
         type="button"
         variant="outline"
         className="min-h-0 rounded-full px-3 py-1.5 text-xs"
-        data-attr="inbox-thread-trash"
+        data-attr="inbox-thread-archive"
         onClick={() => moveToTrash(activeThread.id)}
       >
-        Trash
+        Archive
       </Button>
     )
   ) : null;

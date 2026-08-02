@@ -19,14 +19,6 @@ export const RESIDENT_FREE_TIER_SECTION_IDS = [
 
 export type ResidentFreeTierSectionId = (typeof RESIDENT_FREE_TIER_SECTION_IDS)[number];
 
-const INBOX_TABS = [
-  { id: "unopened", label: "Unopened" },
-  { id: "opened", label: "Opened" },
-  { id: "schedule", label: "Schedule" },
-  { id: "sent", label: "Sent" },
-  { id: "trash", label: "Trash" },
-] as const;
-
 const SERVICES_TABS = [
   { id: "requests", label: "Requests" },
   { id: "work-orders", label: "Work orders" },
@@ -73,7 +65,7 @@ export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "tour", label: "Tour", tabs: [] },
   { section: "applications", label: "Application", tabs: [] },
   { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "communication", label: "Communication", tabs: [] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
@@ -88,7 +80,7 @@ export const RESIDENT_UNIFIED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "lease", label: "Lease", tabs: [] },
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "payments", label: "Payments", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "communication", label: "Communication", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
@@ -101,7 +93,7 @@ export const RESIDENT_PRE_LEASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Application", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "communication", label: "Communication", tabs: [] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
@@ -119,7 +111,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "communication", label: "Communication", tabs: [...INBOX_TABS] },
+  { section: "communication", label: "Communication", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "move-in", label: "House details", tabs: [] },
@@ -168,7 +160,7 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "House details", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
-  { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/inbox/unopened` },
+  { label: "Communication", path: `${RESIDENT_PORTAL_BASE_PATH}/communication/active` },
   { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },
 ] as const;
 

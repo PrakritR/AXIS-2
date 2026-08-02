@@ -180,7 +180,7 @@ function TourDetailBody({
               </Link>
             </Button>
             <Button type="button" variant="outline" className="rounded-full" asChild>
-              <Link href={`${basePath}/communication/inbox/unopened`} data-attr="resident-tour-message-manager">
+              <Link href={`${basePath}/communication/active`} data-attr="resident-tour-message-manager">
                 Message your manager
               </Link>
             </Button>

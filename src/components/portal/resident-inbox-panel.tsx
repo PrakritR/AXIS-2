@@ -5,7 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
-import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxScheduledCard, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import { INBOX_TAB_DEFS, INBOX_LIST_SCROLL, InboxBubbleMessage, InboxComposer, InboxConversationRow, InboxReplyChannelPicker, InboxScheduledCard, InboxThreadEmpty, InboxThreadView, InboxTwoPane, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import {
   buildInboxThreadAssistantContext,
   InboxThreadAssistantStrip,
@@ -48,6 +48,11 @@ import {
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
+import {
+  INBOX_MAX_ATTACHMENTS,
+  uploadInboxAttachment,
+  type InboxComposerAttachment,
+} from "@/lib/inbox-attachments";
 
 type InboxThread = PersistedInboxThread;
 
@@ -117,6 +122,7 @@ export const ResidentInboxPanel = forwardRef<
     onControlledExpandedIdChange?: (id: string | null) => void;
     /** Let #portal-main-content scroll the thread (native-safe; matches manager embedded chat). */
     pageScroll?: boolean;
+    smsUiEnabled?: boolean;
   }
 >(function ResidentInboxPanel(
   {
@@ -128,6 +134,7 @@ export const ResidentInboxPanel = forwardRef<
     controlledExpandedId,
     onControlledExpandedIdChange,
     pageScroll = false,
+    smsUiEnabled = false,
   },
   ref,
 ) {
@@ -159,6 +166,11 @@ export const ResidentInboxPanel = forwardRef<
   );
   const [replyDraft, setReplyDraft] = useState("");
   const [replySending, setReplySending] = useState(false);
+  const [replyViaEmail, setReplyViaEmail] = useState(true);
+  const [replyViaSms, setReplyViaSms] = useState(false);
+  const [autoSend, setAutoSend] = useState(false);
+  const [replyAttachments, setReplyAttachments] = useState<InboxComposerAttachment[]>([]);
+  const [smsConfigured, setSmsConfigured] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   // Threads marked read while viewing "Unopened" stay listed until the tab is
   // switched or the page is refreshed; they only move to "Opened" on reset.
@@ -170,6 +182,21 @@ export const ResidentInboxPanel = forwardRef<
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setReplyDraft("");
+    setReplyViaEmail(true);
+    setReplyViaSms(false);
+    setReplyAttachments([]);
+  }, [expandedId]);
+
+  useEffect(() => {
+    if (!smsUiEnabled || isDemoModeActive()) return;
+    void fetch("/api/resident/sms-conversations", { credentials: "include", cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => setSmsConfigured(Boolean(body?.smsConfigured)))
+      .catch(() => setSmsConfigured(false));
+  }, [smsUiEnabled]);
 
   const reloadScheduledMessages = useCallback(async () => {
     if (isDemoModeActive()) return;
@@ -469,7 +496,7 @@ export const ResidentInboxPanel = forwardRef<
   const emptyTrash = useCallback(() => {
     const trashItems = local.filter((t) => t.folder === "trash");
     if (trashItems.length === 0) {
-      showToast("Trash is already empty.");
+      showToast("Archive is already empty.");
       return;
     }
     if (!window.confirm(`Delete all ${trashItems.length} trash message${trashItems.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
@@ -490,7 +517,7 @@ export const ResidentInboxPanel = forwardRef<
       const synced = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true, excludeIds: deletedIds });
       setLocal((synced as InboxThread[]).filter((t) => !deletedIds.has(t.id)));
       persistInboxRef.current = true;
-      showToast("Trash emptied.");
+      showToast("Archive cleared.");
     })().catch(() => showToast("Could not empty trash."));
   }, [local, showToast]);
 
@@ -622,11 +649,20 @@ export const ResidentInboxPanel = forwardRef<
     [eligibleContacts, embeddedInCommunication, findThreadForRecipient, navigate, reloadScheduledMessages, session.email, setExpandedId, showToast],
   );
 
+  const activeSmsAvailable = smsUiEnabled && smsConfigured;
+
   const handleReply = useCallback(
-    async (row: PortalInboxTableRow, text: string) => {
+    async (
+      row: PortalInboxTableRow,
+      text: string,
+      channels: { email: boolean; sms: boolean },
+      attachmentUrls: string[] = [],
+    ) => {
       const thread = local.find((t) => t.id === row.id);
       if (!thread) return;
+      if (!channels.email && !channels.sms) throw new Error("no channel");
       const replyId = `reply-${Date.now().toString(36)}`;
+      const attachmentMeta = attachmentUrls.map((url, i) => ({ url, name: `Attachment ${i + 1}` }));
       const reply: InboxThreadMessage = {
         id: replyId,
         from: "Resident",
@@ -634,6 +670,7 @@ export const ResidentInboxPanel = forwardRef<
         at: new Date().toLocaleString(),
         outbound: true,
         delivery: "sending",
+        attachments: attachmentMeta.length ? attachmentMeta : undefined,
       };
       const updated = appendReplyToInboxThread(thread, reply);
       const next = local.map((t) => (t.id === thread.id ? updated : t));
@@ -646,30 +683,65 @@ export const ResidentInboxPanel = forwardRef<
         throw new Error("persist failed");
       }
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-      const res = await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          threadId: thread.id,
-          subject,
-          text,
-          toEmails: [thread.email],
-          deliverToPortalInbox: true,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
-      if (!res.ok || !data.ok) {
-        const failed = markThreadMessageDelivery(updated, replyId, "failed");
-        setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
-        throw new Error("send failed");
+      let emailOk = !channels.email;
+      let smsOk = !channels.sms;
+      if (channels.email) {
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            threadId: thread.id,
+            subject,
+            text,
+            toEmails: [thread.email],
+            deliverToPortalInbox: true,
+            deliverViaEmail: true,
+            deliverViaSms: false,
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        emailOk = res.ok && data.ok === true;
+        if (!emailOk) {
+          const failed = markThreadMessageDelivery(updated, replyId, "failed");
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
+          throw new Error("send failed");
+        }
       }
+      if (channels.sms && activeSmsAvailable) {
+        const res = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            threadId: thread.id,
+            subject,
+            text,
+            toEmails: [thread.email],
+            deliverToPortalInbox: false,
+            deliverViaEmail: false,
+            deliverViaSms: true,
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        smsOk = res.ok && data.ok === true;
+        if (!smsOk && !channels.email) {
+          const failed = markThreadMessageDelivery(updated, replyId, "failed");
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
+          throw new Error("send failed");
+        }
+      }
+      if (!emailOk && !smsOk) throw new Error("send failed");
       const delivered = markThreadMessageDelivery(updated, replyId, undefined);
       setLocal((cur) => cur.map((t) => (t.id === thread.id ? delivered : t)));
       void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
     },
-    [local],
+    [activeSmsAvailable, local],
   );
+
+  const threadActionBtn = embeddedInCommunication ? "min-h-0 rounded-full px-3 py-1.5 text-xs" : PORTAL_DETAIL_BTN;
 
   const renderExtraActions = useCallback(
     (row: PortalInboxTableRow) => {
@@ -726,19 +798,22 @@ export const ResidentInboxPanel = forwardRef<
           </>
         );
       }
-      if (tabId === "opened") {
+      if (tabId === "opened" || tabId === "all") {
         return (
           <>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markUnread(row.id)}>
-              Mark unread
-            </Button>
+            {tabId === "opened" ? (
+              <Button type="button" variant="outline" className={threadActionBtn} onClick={() => markUnread(row.id)}>
+                Mark unread
+              </Button>
+            ) : null}
             <Button
               type="button"
-              variant="danger"
-              className={PORTAL_DETAIL_BTN}
+              variant="outline"
+              className={threadActionBtn}
+              data-attr="inbox-thread-archive"
               onClick={() => moveToTrash(row.id)}
             >
-              Trash
+              Archive
             </Button>
           </>
         );
@@ -746,15 +821,16 @@ export const ResidentInboxPanel = forwardRef<
       return (
         <Button
           type="button"
-          variant="danger"
-          className={PORTAL_DETAIL_BTN}
+          variant="outline"
+          className={threadActionBtn}
+          data-attr="inbox-thread-archive"
           onClick={() => moveToTrash(row.id)}
         >
-          Trash
+          Archive
         </Button>
       );
     },
-    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread, reloadScheduledMessages, showToast],
+    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread, reloadScheduledMessages, showToast, embeddedInCommunication, threadActionBtn],
   );
 
   const bulkScheduleSendNow = async () => {
@@ -852,6 +928,7 @@ export const ResidentInboxPanel = forwardRef<
         direction: outbound ? "outbound" : "inbound",
         delivery,
         channel: "email",
+        attachments: m.attachments,
       } satisfies InboxBubbleMessage;
     });
   }, [activeThread, activeFolder, pendingSendingThreadIds]);
@@ -931,10 +1008,65 @@ export const ResidentInboxPanel = forwardRef<
     [markReadSilent],
   );
 
+  const pickReplyAttachments = useCallback(
+    (files: FileList | null) => {
+      if (!files?.length) return;
+      const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
+      if (room <= 0) {
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} images.`);
+        return;
+      }
+      const batch = Array.from(files).slice(0, room);
+      for (const file of batch) {
+        const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const previewUrl = URL.createObjectURL(file);
+        setReplyAttachments((prev) => [...prev, { id, fileName: file.name, previewUrl, uploading: true }]);
+        void uploadInboxAttachment(file)
+          .then((url) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) => (a.id === id ? { ...a, uploadUrl: url, uploading: false } : a)),
+            );
+          })
+          .catch((e) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) =>
+                a.id === id ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" } : a,
+              ),
+            );
+          });
+      }
+    },
+    [replyAttachments.length, showToast],
+  );
+
+  const replyChannelPicker = (
+    <InboxReplyChannelPicker
+      viaEmail={replyViaEmail}
+      viaSms={replyViaSms}
+      onViaEmailChange={setReplyViaEmail}
+      onViaSmsChange={setReplyViaSms}
+      emailAvailable
+      smsAvailable={activeSmsAvailable}
+    />
+  );
+
   const sendActiveReply = useCallback(async () => {
     if (!activeThread) return;
     const text = replyDraft.trim();
-    if (!text) return;
+    const attachmentUrls = replyAttachments
+      .filter((a) => a.uploadUrl && !a.uploading && !a.error)
+      .map((a) => a.uploadUrl!);
+    if (!text && attachmentUrls.length === 0) return;
+    const viaEmail = replyViaEmail || !activeSmsAvailable;
+    const viaSms = replyViaSms && activeSmsAvailable;
+    if (!viaEmail && !viaSms) {
+      showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    if (replyAttachments.some((a) => a.uploading)) {
+      showToast("Wait for attachments to finish uploading.");
+      return;
+    }
     setReplySending(true);
     try {
       await handleReply(
@@ -947,15 +1079,35 @@ export const ResidentInboxPanel = forwardRef<
           read: !activeThread.unread,
         },
         text,
+        { email: viaEmail, sms: viaSms },
+        attachmentUrls,
       );
       setReplyDraft("");
-      showToast("Reply sent.");
+      setReplyAttachments([]);
+      showToast(viaEmail && viaSms ? "Reply sent via email and text." : viaSms ? "Reply sent via text." : "Reply sent.");
     } catch {
       showToast("Could not send reply.");
     } finally {
       setReplySending(false);
     }
-  }, [activeThread, handleReply, replyDraft, showToast]);
+  }, [
+    activeSmsAvailable,
+    activeThread,
+    handleReply,
+    replyAttachments,
+    replyDraft,
+    replyViaEmail,
+    replyViaSms,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (!autoSend) return;
+    if (!replyViaEmail && !replyViaSms) {
+      setReplyViaEmail(true);
+      if (activeSmsAvailable) setReplyViaSms(true);
+    }
+  }, [activeSmsAvailable, autoSend, replyViaEmail, replyViaSms]);
 
   const emptyCopy =
     tabId === "trash"
@@ -1077,8 +1229,17 @@ export const ResidentInboxPanel = forwardRef<
                       onChange={setReplyDraft}
                       onSubmit={() => void sendActiveReply()}
                       sending={replySending}
-                      placeholder="Write a reply…"
+                      disabled={!replyViaEmail && !replyViaSms}
+                      placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
+                      maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
                       dataAttr="resident-inbox-reply"
+                      channelControl={replyChannelPicker}
+                      attachments={replyAttachments}
+                      onAttachmentsPick={pickReplyAttachments}
+                      onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                      maxAttachments={INBOX_MAX_ATTACHMENTS}
+                      autoSend={autoSend}
+                      onAutoSendChange={setAutoSend}
                     />
                   </>
                 )
@@ -1103,7 +1264,7 @@ export const ResidentInboxPanel = forwardRef<
                         Mark read
                       </Button>
                       <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                        Trash
+                        Archive
                       </Button>
                     </>
                   ) : null}
@@ -1113,13 +1274,13 @@ export const ResidentInboxPanel = forwardRef<
                         Mark unread
                       </Button>
                       <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                        Trash
+                        Archive
                       </Button>
                     </>
                   ) : null}
                   {tabId === "sent" ? (
                     <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
-                      Trash
+                      Archive
                     </Button>
                   ) : null}
                   {tabId === "trash" ? (
@@ -1211,8 +1372,17 @@ export const ResidentInboxPanel = forwardRef<
                         onChange={setReplyDraft}
                         onSubmit={() => void sendActiveReply()}
                         sending={replySending}
-                        placeholder="Write a reply…"
+                        disabled={!replyViaEmail && !replyViaSms}
+                        placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
+                        maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
                         dataAttr="resident-inbox-reply"
+                        channelControl={replyChannelPicker}
+                        attachments={replyAttachments}
+                        onAttachmentsPick={pickReplyAttachments}
+                        onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                        maxAttachments={INBOX_MAX_ATTACHMENTS}
+                        autoSend={autoSend}
+                        onAutoSendChange={setAutoSend}
                       />
                     </>
                   )
@@ -1245,7 +1415,7 @@ export const ResidentInboxPanel = forwardRef<
                 className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
                 onClick={emptyTrash}
               >
-                Empty trash
+                Empty archive
               </Button>
             </div>
           ) : null}

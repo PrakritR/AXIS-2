@@ -7,7 +7,7 @@ import {
   inboxBubbleClusterRadius,
   type InboxBubbleClusterPosition,
 } from "@/lib/inbox-message-timeline";
-import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, Sparkles, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Paperclip, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -558,6 +558,7 @@ export type InboxBubbleMessage = {
   delivery?: "sending" | "sent" | "failed";
   /** Channel this message belongs to. Defaults to "email" when omitted. */
   channel?: InboxChannel;
+  attachments?: { url: string; name?: string }[];
 };
 
 /** Small omnichannel channel tag rendered on a bubble / scheduled card. */
@@ -789,6 +790,22 @@ export function InboxBubble({
         } ${sending ? "opacity-80" : ""} ${failed ? "ring-2 ring-rose-400/50" : ""}`}
       >
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
+        {message.attachments?.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {message.attachments.map((att) => (
+              <a
+                key={att.url}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block overflow-hidden rounded-lg border border-border/60"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={att.url} alt={att.name ?? "Attachment"} className="max-h-40 max-w-full object-cover" />
+              </a>
+            ))}
+          </div>
+        ) : null}
       </div>
       {showMeta && metaCaption ? (
         <span
@@ -943,6 +960,12 @@ export function InboxComposer({
   channelControl,
   /** @deprecated Prefer `channelControl` inline beside the reply field. */
   channelBar,
+  attachments,
+  onAttachmentsPick,
+  onAttachmentRemove,
+  maxAttachments = 4,
+  autoSend = false,
+  onAutoSendChange,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -956,8 +979,15 @@ export function InboxComposer({
   channelControl?: ReactNode;
   /** Channel picker or other controls above the reply field. */
   channelBar?: ReactNode;
+  attachments?: { id: string; fileName: string; previewUrl: string; uploading?: boolean; error?: string }[];
+  onAttachmentsPick?: (files: FileList | null) => void;
+  onAttachmentRemove?: (id: string) => void;
+  maxAttachments?: number;
+  autoSend?: boolean;
+  onAutoSendChange?: (next: boolean) => void;
 }) {
-  const canSend = !sending && !disabled && value.trim().length > 0;
+  const hasReadyAttachment = (attachments ?? []).some((a) => !a.uploading && !a.error);
+  const canSend = !sending && !disabled && (value.trim().length > 0 || hasReadyAttachment);
   const resolvedChannel = channelControl ?? null;
   return (
     <div
@@ -971,7 +1001,50 @@ export function InboxComposer({
           if (canSend) onSubmit();
         }}
       >
+        {attachments?.length ? (
+          <div className="mb-2 flex flex-wrap gap-2 px-1">
+            {attachments.map((att) => (
+              <div key={att.id} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={att.previewUrl} alt={att.fileName} className="h-14 w-14 rounded-lg border border-border object-cover" />
+                {att.uploading ? (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 text-[10px] font-semibold text-white">…</span>
+                ) : null}
+                {att.error ? (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-rose-600/80 px-1 text-center text-[9px] font-semibold text-white">Failed</span>
+                ) : null}
+                {onAttachmentRemove ? (
+                  <button
+                    type="button"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background shadow"
+                    aria-label={`Remove ${att.fileName}`}
+                    onClick={() => onAttachmentRemove(att.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="portal-inbox-composer-row flex items-end gap-2">
+          {onAttachmentsPick ? (
+            <label className="mb-0.5 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-muted hover:bg-accent/40 hover:text-foreground">
+              <Paperclip className="h-5 w-5" strokeWidth={2} />
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                className="sr-only"
+                multiple
+                disabled={disabled || sending || (attachments?.length ?? 0) >= maxAttachments}
+                onChange={(e) => {
+                  onAttachmentsPick(e.target.files);
+                  e.target.value = "";
+                }}
+                data-attr={dataAttr ? `${dataAttr}-attach` : undefined}
+              />
+            </label>
+          ) : null}
           {resolvedChannel}
           <textarea
             rows={1}
@@ -1004,9 +1077,23 @@ export function InboxComposer({
             )}
           </button>
         </div>
-        {hint || maxLength ? (
-          <div className="mt-1 flex items-center justify-between gap-2 px-1">
-            <span className="text-[11px] text-muted">{hint}</span>
+        {hint || maxLength || onAutoSendChange ? (
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2 px-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              {onAutoSendChange ? (
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-border text-primary"
+                    checked={autoSend}
+                    onChange={(e) => onAutoSendChange(e.target.checked)}
+                    data-attr={dataAttr ? `${dataAttr}-auto-send` : undefined}
+                  />
+                  Auto-send
+                </label>
+              ) : null}
+              <span className="text-[11px] text-muted">{hint}</span>
+            </div>
             {maxLength ? (
               <span className="text-[11px] tabular-nums text-muted">
                 {value.trim().length}/{maxLength}

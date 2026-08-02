@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ResidentInboxPanel, type ResidentInboxPanelHandle } from "@/components/portal/resident-inbox-panel";
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
@@ -9,9 +9,11 @@ import {
   InboxConversationRow,
   InboxTwoPane,
   PortalInboxEmptyState,
+  type InboxListSegment,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
@@ -26,6 +28,8 @@ import {
   inboxThreadMessages,
   loadPersistedInbox,
 } from "@/lib/portal-inbox-storage";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import {
   normalizeRoleSmsPayload,
   smsMessageBucket,
@@ -58,19 +62,27 @@ function loadOpenedIds(): Set<string> {
 function ResidentUnifiedInbox({
   inboxRef,
   smsUiEnabled,
+  listSegment,
+  routeThreadId,
+  searchQuery,
   onThreadOpenChange,
+  onFolderCountsChange,
+  commBase,
 }: {
   inboxRef: React.RefObject<ResidentInboxPanelHandle | null>;
   smsUiEnabled: boolean;
+  listSegment: InboxListSegment;
+  routeThreadId?: string;
+  searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
+  onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
+  commBase: string;
 }) {
+  const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
   const [smsOpened] = useState<Set<string>>(() => loadOpenedIds());
-  const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // Archived (trashed) conversations reachable via a toggle, not a tab.
-  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const sync = () => setEmailThreads(loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
@@ -79,8 +91,6 @@ function ResidentUnifiedInbox({
   }, []);
 
   useEffect(() => {
-    // SMS UI hidden until A2P clears — never fetch SMS. Inbound texts still land
-    // as inbox notices and fall through to the unified list (keepSmsLike below).
     if (!smsUiEnabled) return;
     void (async () => {
       try {
@@ -96,8 +106,7 @@ function ResidentUnifiedInbox({
 
   useEffect(() => {
     setSelectedKey(null);
-    setQuery("");
-  }, [showArchived]);
+  }, [listSegment]);
 
   const filteredEmail = useMemo(
     () => filterEmailInboxThreads(emailThreads, { keepSmsLike: !smsUiEnabled }),
@@ -105,7 +114,7 @@ function ResidentUnifiedInbox({
   );
 
   const emailItems = useMemo((): UnifiedInboxListItem[] => {
-    const q = query.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     let rows = filteredEmail;
     if (q) {
       rows = rows.filter((t) => {
@@ -113,8 +122,10 @@ function ResidentUnifiedInbox({
         const hay = [t.from, t.email, t.subject, t.body, t.preview].filter(Boolean).join(" ").toLowerCase();
         return hay.includes(q);
       });
-    } else if (showArchived) {
+    } else if (listSegment === "archived") {
       rows = rows.filter((t) => t.folder === "trash");
+    } else if (listSegment === "unread") {
+      rows = rows.filter((t) => t.folder !== "trash" && t.folder === "inbox" && t.unread);
     } else {
       rows = rows.filter((t) => t.folder !== "trash");
     }
@@ -136,10 +147,10 @@ function ResidentUnifiedInbox({
         sortMs: Date.parse(lastMsg?.at ?? "") || 0,
       };
     });
-  }, [filteredEmail, query, showArchived]);
+  }, [filteredEmail, searchQuery, listSegment]);
 
   const smsItems = useMemo((): UnifiedInboxListItem[] => {
-    if (!smsUiEnabled || showArchived) return [];
+    if (!smsUiEnabled || listSegment === "archived") return [];
     const scoped = smsMessages;
     if (scoped.length === 0) return [];
     const last = [...scoped].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]!;
@@ -156,14 +167,34 @@ function ResidentUnifiedInbox({
       unread,
       sortMs: Date.parse(last.createdAt) || 0,
     };
-    const q = query.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
+    if (listSegment === "unread" && !unread) return [];
     if (q && !["text messages", "property manager", last.body].join(" ").toLowerCase().includes(q)) return [];
     return [item];
-  }, [query, smsMessages, smsOpened, smsUiEnabled, showArchived]);
+  }, [listSegment, searchQuery, smsMessages, smsOpened, smsUiEnabled]);
 
   const merged = useMemo(() => mergeUnifiedInboxItems([...emailItems, ...smsItems]), [emailItems, smsItems]);
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
   const archivedCount = useMemo(() => filteredEmail.filter((t) => t.folder === "trash").length, [filteredEmail]);
+  const unreadCount = useMemo(() => {
+    const emailUnread = filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length;
+    const smsUnread = smsUiEnabled
+      ? smsMessages.some((m) => m.direction === "inbound" && smsMessageBucket(m, smsOpened) === "unopened")
+        ? 1
+        : 0
+      : 0;
+    return emailUnread + smsUnread;
+  }, [filteredEmail, smsMessages, smsOpened, smsUiEnabled]);
+
+  useEffect(() => {
+    onFolderCountsChange?.({ unread: unreadCount, archived: archivedCount });
+  }, [archivedCount, onFolderCountsChange, unreadCount]);
+
+  useEffect(() => {
+    if (!routeThreadId) return;
+    const match = merged.find((r) => r.threadId === routeThreadId);
+    if (match) setSelectedKey(match.key);
+  }, [routeThreadId, merged]);
 
   useEffect(() => {
     onThreadOpenChange?.(Boolean(selection));
@@ -171,62 +202,23 @@ function ResidentUnifiedInbox({
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-border p-2.5">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search messages"
-          className="h-9 w-full rounded-full border border-border bg-background px-3 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
-        />
-        <div className="mt-2 flex items-center justify-between gap-2 px-1">
-          {merged.length > 0 ? (
-            <p className="text-[11px] text-muted">
-              {merged.length} conversation{merged.length === 1 ? "" : "s"}
-              {query.trim() ? ` matching “${query.trim()}”` : showArchived ? " · archived" : ""}
-            </p>
-          ) : (
-            <span />
-          )}
-          {!query.trim() ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              {showArchived && archivedCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => inboxRef.current?.emptyTrash()}
-                  className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-medium text-[var(--status-overdue-fg)] transition-colors hover:bg-[var(--status-overdue-bg)]"
-                  data-attr="resident-inbox-empty-trash"
-                >
-                  Empty trash
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setShowArchived((v) => !v)}
-                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
-                  showArchived
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted hover:bg-foreground/5 hover:text-foreground"
-                }`}
-                data-attr="resident-inbox-archived-toggle"
-                aria-pressed={showArchived}
-              >
-                {showArchived ? "← Conversations" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      {merged.length > 0 && searchQuery.trim() ? (
+        <p className="mb-2 hidden px-1 text-[11px] text-muted sm:block">
+          {merged.length} conversation{merged.length === 1 ? "" : "s"} matching “{searchQuery.trim()}”
+        </p>
+      ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {merged.length === 0 ? (
           <div className="p-4">
             <PortalInboxEmptyState
               title={
-                query.trim()
-                  ? `No messages match “${query.trim()}”.`
-                  : showArchived
+                searchQuery.trim()
+                  ? `No messages match “${searchQuery.trim()}”.`
+                  : listSegment === "archived"
                     ? "No archived conversations."
-                    : "No conversations yet."
+                    : listSegment === "unread"
+                      ? "No unread conversations."
+                      : "No conversations yet."
               }
             />
           </div>
@@ -240,9 +232,13 @@ function ResidentUnifiedInbox({
               previewPrefix={row.previewPrefix}
               time={row.time}
               unread={row.unread}
+              unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
-              onOpen={() => setSelectedKey(row.key)}
+              onOpen={() => {
+                setSelectedKey(row.key);
+                navigate(`${commBase}/${listSegment}/${row.threadId}`);
+              }}
             />
           ))
         )}
@@ -250,9 +246,6 @@ function ResidentUnifiedInbox({
     </div>
   );
 
-  // ALWAYS mounted — including while an SMS thread is open and while nothing is
-  // selected — so the header's New message / Empty trash handles are never wired
-  // to a null ref. With no email thread selected it renders its own empty state.
   const smsSelected = selection?.channel === "sms";
   const threadPane = (
     <>
@@ -264,76 +257,134 @@ function ResidentUnifiedInbox({
       <div className={smsSelected ? "hidden" : "flex min-h-0 flex-1 flex-col"}>
         <ResidentInboxPanel
           ref={inboxRef}
-          tabId={showArchived ? "trash" : "all"}
+          tabId={listSegment === "archived" ? "trash" : "all"}
           embeddedInCommunication
           externalTitleActions
           suppressListPane
           pageScroll
+          smsUiEnabled={smsUiEnabled}
           controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
           onControlledExpandedIdChange={(id) => {
-            if (!id) setSelectedKey(null);
-            else setSelectedKey(unifiedInboxKey("email", id));
+            if (!id) {
+              setSelectedKey(null);
+              navigate(`${commBase}/${listSegment}`);
+              return;
+            }
+            setSelectedKey(unifiedInboxKey("email", id));
+            navigate(`${commBase}/${listSegment}/${id}`);
           }}
         />
       </div>
     </>
   );
 
-  const threadOpen = Boolean(selection);
   return (
     <InboxTwoPane
-      heightMode="flow"
-      fillViewport={false}
-      threadOpen={threadOpen}
+      heightMode="viewport"
+      fillViewport={Boolean(selection)}
+      fillParent
+      mobileCompact
+      className="min-h-0 flex-1 max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+      threadOpen={Boolean(selection)}
       list={listPane}
       thread={threadPane}
     />
   );
 }
 
+/** @deprecated Folder tabs removed; kept so legacy routes still resolve. */
 export type ResidentEmailTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 
 export function ResidentCommunication({
+  listSegment = "active",
+  threadId,
   smsUiEnabled = false,
 }: {
+  /** Routed conversation list segment (Active / Unread / Archived). */
+  listSegment?: InboxListSegment;
+  /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
+  threadId?: string;
   /** @deprecated Folder tabs removed; kept so legacy routes still resolve. */
   inboxTabId?: ResidentEmailTabId;
   smsUiEnabled?: boolean;
 }) {
+  const commBase = `${RESIDENT_PORTAL_BASE_PATH}/communication`;
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
-  const [threadOpen, setThreadOpen] = useState(false);
+  const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
+
+  useEffect(() => {
+    setThreadOpen(Boolean(threadId));
+  }, [threadId]);
+
+  const onFolderCountsChange = useCallback((counts: { unread: number; archived: number }) => {
+    setFolderCounts(counts);
+  }, []);
 
   const newMessageButton = (
     <Button
       type="button"
       variant="primary"
       className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      data-attr="communication-new-message"
       onClick={() => inboxRef.current?.openCompose()}
     >
       New message
     </Button>
   );
 
-  const titleAside = (
-    <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
-      {newMessageButton}
-    </PortalSectionActionRow>
-  );
-
   const mobileActionsRow = <PortalPageHeaderMobileActionsRow actions={newMessageButton} />;
+
+  const controlStack = (
+    <PortalListControlStack
+      destinations={[
+        { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
+        {
+          id: "unread",
+          label: "Unread",
+          href: `${commBase}/unread`,
+          count: folderCounts.unread,
+          dataAttr: "communication-segment-unread",
+        },
+        {
+          id: "archived",
+          label: "Archived",
+          href: `${commBase}/archived`,
+          count: folderCounts.archived,
+          dataAttr: "communication-segment-archived",
+        },
+      ]}
+      activeDestinationId={listSegment}
+      destinationAriaLabel="Conversation folders"
+      search={{
+        value: searchQuery,
+        onChange: setSearchQuery,
+        placeholder: "Search messages",
+        dataAttr: "resident-inbox-search",
+      }}
+    />
+  );
 
   return (
     <PortalCommunicationShell
       title="Communication"
-      titleAside={titleAside}
+      titleAside={newMessageButton}
       mobileActionsRow={mobileActionsRow}
       hideTitleOnMobileNav
+      controlStack={controlStack}
       hideMobileFilterRow={threadOpen}
+      mobileThreadReading={threadOpen}
     >
       <ResidentUnifiedInbox
         inboxRef={inboxRef}
         smsUiEnabled={smsUiEnabled}
+        listSegment={listSegment}
+        routeThreadId={threadId}
+        searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
+        onFolderCountsChange={onFolderCountsChange}
+        commBase={commBase}
       />
     </PortalCommunicationShell>
   );

@@ -10,16 +10,7 @@ export const vendorPortal: PortalDefinition = {
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "work-orders", label: "Services", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
-    {
-      section: "communication",
-      label: "Communication",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
-      ],
-    },
+    { section: "communication", label: "Communication", tabs: [] },
     {
       section: "financials",
       label: "Finances",

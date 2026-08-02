@@ -17,6 +17,8 @@ export type InboxThreadMessage = {
   outbound?: boolean;
   /** Optimistic send lifecycle — cleared after server sync. */
   delivery?: "sending" | "sent" | "failed";
+  /** Image attachments served via /api/portal/inbox-attachments. */
+  attachments?: { url: string; name?: string }[];
 };
 
 /**

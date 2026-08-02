@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { linkTourInquiryToResident } from "@/lib/tour-resident-link.server";
 
@@ -10,7 +12,11 @@ export async function POST(req: Request) {
   try {
     const { user, profile } = await getEffectiveSessionForPortal("resident");
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    if (profile?.role && profile.role !== "resident") {
+    const ctx = await getPortalAccessContext();
+    const preview = await getAdminPreviewFromCookies();
+    const mayAccessResidentPortal =
+      hasRole(ctx, "resident") || (hasAdminRole(ctx) && preview?.portal === "resident");
+    if (!mayAccessResidentPortal) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();

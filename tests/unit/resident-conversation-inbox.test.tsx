@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 //
-// The RESIDENT Communication portal uses the SAME unified, conversation-based
-// design as the manager side: no Unopened/Opened/Schedule/Sent/Trash folder
-// tabs, one conversation list, an Archived toggle instead of a Trash tab, and
-// SMS gated behind `smsUiEnabled` (default false) — correctly scoped to the
-// resident's own conversations.
+// Resident Communication matches the manager CRM layout: Active / Unread /
+// Archived segments, unified conversation list, and Archive (not Trash).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
@@ -19,7 +16,7 @@ const EMAIL_INBOX = {
   time: "Jul 20, 2026",
   unread: true,
 };
-const EMAIL_TRASH = {
+const EMAIL_ARCHIVED = {
   id: "res-thr-1000000002",
   folder: "trash",
   from: "Old notice",
@@ -31,10 +28,16 @@ const EMAIL_TRASH = {
   unread: false,
 };
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/resident/communication/active",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 vi.mock("@/lib/portal-inbox-storage", () => ({
   PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
   RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
-  loadPersistedInbox: () => [EMAIL_INBOX, EMAIL_TRASH],
+  loadPersistedInbox: () => [EMAIL_INBOX, EMAIL_ARCHIVED],
   inboxThreadMessages: (t: { id: string; from: string; body: string; time: string }) => [
     { id: `${t.id}-root`, from: t.from, body: t.body, at: t.time },
   ],
@@ -51,35 +54,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("resident conversation inbox (no folder tabs)", () => {
-  it("shows no folder tabs, a unified list, and an archive toggle", () => {
+describe("resident conversation inbox", () => {
+  it("shows Active / Unread / Archived segments like the manager portal", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     render(<ResidentCommunication />);
 
-    // jsdom does not implement innerText — textContent is the real rendered text,
-    // so these assertions actually fail if the folder tabs come back.
-    const text = document.body.textContent ?? "";
-    expect(text).toContain("Property manager");
-    expect(/\bUnopened\b/.test(text)).toBe(false);
-    expect(/\bOpened\b/.test(text)).toBe(false);
-    expect(/\bSchedule\b/.test(text)).toBe(false);
-    // The live conversation shows; the trashed one does not (until archived).
+    expect(screen.getByRole("link", { name: /^Active$/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Unread/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Archived/i })).toBeTruthy();
     expect(screen.getByText("Property manager")).toBeTruthy();
     expect(screen.queryByText("Old notice")).toBeNull();
-
-    const toggle = document.querySelector('[data-attr="resident-inbox-archived-toggle"]') as HTMLButtonElement;
-    expect(toggle).toBeTruthy();
-    fireEvent.click(toggle);
-    expect(screen.getByText("Old notice")).toBeTruthy();
   });
 
-  it("offers Empty trash only in the archived view, and only when it has rows", () => {
+  it("lists archived conversations on the Archived segment", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
-    render(<ResidentCommunication />);
-
-    expect(document.querySelector('[data-attr="resident-inbox-empty-trash"]')).toBeNull();
-    fireEvent.click(document.querySelector('[data-attr="resident-inbox-archived-toggle"]') as HTMLButtonElement);
-    expect(document.querySelector('[data-attr="resident-inbox-empty-trash"]')).toBeTruthy();
+    render(<ResidentCommunication listSegment="archived" />);
+    expect(screen.getByText("Old notice")).toBeTruthy();
+    expect(screen.queryByText("Property manager")).toBeNull();
   });
 
   it("does not fetch SMS when the SMS UI flag is off (default)", async () => {

@@ -1014,36 +1014,49 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "communication") {
     const tierGate = residentManagerTierGate("communication", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
+
+    const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+    type CommListSegment = (typeof COMM_SEGMENTS)[number];
+
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/communication/inbox/unopened`);
+      redirect(`${def.basePath}/communication/active`);
     }
+
     const channel = tabParts[0]!;
     if (channel === "sms" || channel === "email") {
-      const legacyTab = tabParts[1] ?? "unopened";
-      const mapped =
-        legacyTab === "all" || legacyTab === "unopened"
-          ? "unopened"
-          : legacyTab === "opened"
-            ? "opened"
-            : legacyTab === "sent"
-              ? "sent"
-              : legacyTab === "schedule"
-                ? "schedule"
-                : legacyTab === "trash"
-                  ? "trash"
-                  : null;
-      if (!mapped) notFound();
-      redirect(`${def.basePath}/communication/inbox/${mapped}`);
+      redirect(`${def.basePath}/communication/active`);
     }
+
     if (channel === "inbox") {
-      const emailTab = tabParts[1] ?? "unopened";
-      if (!["unopened", "opened", "schedule", "sent", "trash"].includes(emailTab)) notFound();
-      if (tabParts.length > 2) notFound();
-      return (
-        <ResidentCommunication inboxTabId={emailTab as "unopened" | "opened" | "schedule" | "sent" | "trash"} smsUiEnabled={isSmsCommUiEnabled()} />
-      );
+      const legacyTab = tabParts[1] ?? "unopened";
+      if (legacyTab === "trash") {
+        redirect(`${def.basePath}/communication/archived`);
+      }
+      redirect(`${def.basePath}/communication/active`);
     }
-    notFound();
+
+    let threadId: string | undefined;
+    if (tabParts.length === 2) {
+      threadId = decodeURIComponent(tabParts[1]!);
+    } else if (tabParts.length > 2) {
+      notFound();
+    }
+
+    const segmentRaw = channel;
+    const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
+      ? (segmentRaw as CommListSegment)
+      : "active";
+    if (segmentRaw !== listSegment) {
+      redirect(`${def.basePath}/communication/${listSegment}`);
+    }
+
+    return (
+      <ResidentCommunication
+        listSegment={listSegment}
+        threadId={threadId}
+        smsUiEnabled={isSmsCommUiEnabled()}
+      />
+    );
   }
 
   if (kind === "resident") {
@@ -1085,32 +1098,48 @@ export async function renderPortalSection(
   }
 
   if (kind === "vendor" && section === "communication") {
+    const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+    type CommListSegment = (typeof COMM_SEGMENTS)[number];
+
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/communication/inbox/unopened`);
+      redirect(`${def.basePath}/communication/active`);
     }
+
     const channel = tabParts[0]!;
     if (channel === "sms" || channel === "email") {
-      const legacyTab = tabParts[1] ?? "unopened";
-      const mapped =
-        legacyTab === "all" || legacyTab === "unopened"
-          ? "unopened"
-          : legacyTab === "opened"
-            ? "opened"
-            : legacyTab === "sent"
-              ? "sent"
-              : legacyTab === "trash"
-                ? "trash"
-                : null;
-      if (!mapped) notFound();
-      redirect(`${def.basePath}/communication/inbox/${mapped}`);
+      redirect(`${def.basePath}/communication/active`);
     }
+
     if (channel === "inbox") {
-      const emailTab = tabParts[1] ?? "unopened";
-      if (!["unopened", "opened", "sent", "trash"].includes(emailTab)) notFound();
-      if (tabParts.length > 2) notFound();
-      return <VendorCommunication inboxTabId={emailTab as "unopened" | "opened" | "sent" | "trash"} smsUiEnabled={isSmsCommUiEnabled()} />;
+      const legacyTab = tabParts[1] ?? "unopened";
+      if (legacyTab === "trash") {
+        redirect(`${def.basePath}/communication/archived`);
+      }
+      redirect(`${def.basePath}/communication/active`);
     }
-    notFound();
+
+    let threadId: string | undefined;
+    if (tabParts.length === 2) {
+      threadId = decodeURIComponent(tabParts[1]!);
+    } else if (tabParts.length > 2) {
+      notFound();
+    }
+
+    const segmentRaw = channel;
+    const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
+      ? (segmentRaw as CommListSegment)
+      : "active";
+    if (segmentRaw !== listSegment) {
+      redirect(`${def.basePath}/communication/${listSegment}`);
+    }
+
+    return (
+      <VendorCommunication
+        listSegment={listSegment}
+        threadId={threadId}
+        smsUiEnabled={isSmsCommUiEnabled()}
+      />
+    );
   }
 
   if (kind === "vendor" && section === "financials") {

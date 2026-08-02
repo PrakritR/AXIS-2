@@ -4,6 +4,14 @@ import { GET as getResidentTours } from "@/app/api/portal-resident-tours/route";
 vi.mock("@/lib/auth/effective-session", () => ({
   getEffectiveSessionForPortal: vi.fn(),
 }));
+vi.mock("@/lib/auth/portal-access", () => ({
+  getPortalAccessContext: vi.fn(),
+  hasAdminRole: vi.fn(() => false),
+  hasRole: vi.fn(() => false),
+}));
+vi.mock("@/lib/auth/admin-preview", () => ({
+  getAdminPreviewFromCookies: vi.fn(async () => null),
+}));
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
@@ -12,12 +20,20 @@ vi.mock("@/lib/tour-resident-link.server", () => ({
 }));
 
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { loadResidentTourViews } from "@/lib/tour-resident-link.server";
 
 describe("GET /api/portal-resident-tours", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPortalAccessContext).mockResolvedValue({
+      user: { id: "u1" },
+      profile: null,
+      roles: [],
+      effectiveRole: null,
+    } as never);
+    vi.mocked(hasRole).mockReturnValue(false);
   });
 
   it("denies unauthenticated callers", async () => {
@@ -32,13 +48,28 @@ describe("GET /api/portal-resident-tours", () => {
       user: { id: "mgr-1" },
       profile: { role: "manager", email: "mgr@example.com" },
     } as never);
+    vi.mocked(hasRole).mockReturnValue(false);
     const res = await getResidentTours();
     expect(res.status).toBe(403);
     expect(loadResidentTourViews).not.toHaveBeenCalled();
   });
 
+  it("allows multi-role residents when profile_roles includes resident", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({} as never);
+    vi.mocked(hasRole).mockImplementation((_ctx, role) => role === "resident");
+    vi.mocked(getEffectiveSessionForPortal).mockResolvedValue({
+      user: { id: "dual-1" },
+      profile: { role: "manager", email: "dual@example.com" },
+    } as never);
+    vi.mocked(loadResidentTourViews).mockResolvedValue([] as never);
+    const res = await getResidentTours();
+    expect(res.status).toBe(200);
+    expect(loadResidentTourViews).toHaveBeenCalledWith(expect.anything(), "dual-1");
+  });
+
   it("returns only linked tours for authenticated residents", async () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({} as never);
+    vi.mocked(hasRole).mockImplementation((_ctx, role) => role === "resident");
     vi.mocked(getEffectiveSessionForPortal).mockResolvedValue({
       user: { id: "res-1" },
       profile: { role: "resident", email: "res@example.com" },
