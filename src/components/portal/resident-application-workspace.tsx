@@ -154,7 +154,7 @@ export function ResidentApplicationWorkspaceActions({
       onClick={onApplyClick}
     >
       {workspace.mode === "in_progress"
-        ? "Change property"
+        ? "Apply to property"
         : workspace.mode === "submitted"
           ? "Apply to another property"
           : "Apply to a property"}
@@ -183,7 +183,7 @@ export function ResidentApplicationWorkspaceMobileApply({
       onClick={onApplyClick}
     >
       {workspace.mode === "in_progress"
-        ? "Change property"
+        ? "Apply to property"
         : workspace.mode === "submitted"
           ? "Apply to another property"
           : "Apply to a property"}

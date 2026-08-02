@@ -11,12 +11,12 @@ import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/comp
 import { PortalListAddRow, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
+import { ResidentScheduleTourModal } from "@/components/portal/resident-schedule-tour-modal";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { formatRangeLabel } from "@/lib/demo-admin-scheduling";
 import { formatTourContactPhoneDisplay } from "@/lib/tour-contact-quality";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { residentBrowseForTourHref } from "@/lib/resident-public-nav";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   residentTourDetailHref,
@@ -242,13 +242,14 @@ export function ResidentTourPanel({
   const [detailTab, setDetailTab] = useState<TourDetailTabId>("details");
   const [bucket, setBucket] = useState<ResidentTourBucketId>(bucketProp);
   const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
+  const [scheduleTourOpen, setScheduleTourOpen] = useState(false);
 
   if (bucketProp !== prevBucketProp) {
     setPrevBucketProp(bucketProp);
     setBucket(bucketProp);
   }
 
-  const browseHref = residentBrowseForTourHref();
+  const openScheduleTour = () => setScheduleTourOpen(true);
 
   const loadTours = useCallback(async () => {
     setError(null);
@@ -329,7 +330,7 @@ export function ResidentTourPanel({
       variant="primary"
       className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="resident-tour-schedule"
-      onClick={() => navigate(browseHref)}
+      onClick={openScheduleTour}
     >
       Schedule a tour
     </Button>
@@ -355,7 +356,7 @@ export function ResidentTourPanel({
     />
   );
 
-  const scheduleTourAddRow = <ResidentScheduleTourAddRow onSchedule={() => navigate(browseHref)} />;
+  const scheduleTourAddRow = <ResidentScheduleTourAddRow onSchedule={openScheduleTour} />;
 
   const renderTourList = () => (
     <>
@@ -431,7 +432,13 @@ export function ResidentTourPanel({
   }
 
   return (
-    <ManagerPortalPageShell
+    <>
+      <ResidentScheduleTourModal
+        open={scheduleTourOpen}
+        onClose={() => setScheduleTourOpen(false)}
+        onScheduled={() => void loadTours()}
+      />
+      <ManagerPortalPageShell
       title="Tour"
       hideTitleOnMobileNav
       titleAside={scheduleTourButton}
@@ -440,5 +447,6 @@ export function ResidentTourPanel({
       {tourMobileActionsRow}
       {renderTourList()}
     </ManagerPortalPageShell>
+    </>
   );
 }

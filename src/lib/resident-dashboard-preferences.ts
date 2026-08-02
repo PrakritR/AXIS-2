@@ -8,7 +8,8 @@ export type ResidentDashboardSectionId =
   | "lease"
   | "applications"
   | "services"
-  | "communication";
+  | "communication"
+  | "houseDetails";
 
 export type ResidentDashboardSectionDef = {
   id: ResidentDashboardSectionId;
@@ -40,6 +41,12 @@ export const RESIDENT_DASHBOARD_SECTIONS: readonly ResidentDashboardSectionDef[]
     id: "services",
     label: "Services",
     description: "Open work orders and pending add-on service requests.",
+    defaultVisible: true,
+  },
+  {
+    id: "houseDetails",
+    label: "House details",
+    description: "Move-in placement, keys, and house information.",
     defaultVisible: true,
   },
   {

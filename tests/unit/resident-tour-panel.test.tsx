@@ -1,10 +1,44 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ResidentTourPanel } from "@/components/portal/resident-tour-panel";
 
 vi.mock("@/lib/portal-nav-client", () => ({
   usePortalNavigate: () => vi.fn(),
+}));
+vi.mock("@/components/providers/app-ui-provider", () => ({
+  useAppUi: () => ({ showToast: () => {} }),
+}));
+vi.mock("@/components/ui/modal", () => ({
+  Modal: ({
+    open,
+    title,
+    children,
+  }: {
+    open: boolean;
+    title: string;
+    children: ReactNode;
+  }) => (open ? <div role="dialog" aria-label={title}><h2>{title}</h2>{children}</div> : null),
+}));
+vi.mock("@/components/marketing/tour-schedule-flow", () => ({
+  TourScheduleFlow: () => <div data-testid="tour-schedule-flow" />,
+}));
+vi.mock("@/lib/demo-property-pipeline", () => ({
+  isPropertyActiveForLeads: () => true,
+  loadPublicExtraListingsFromServer: () => Promise.resolve([]),
+  loadPublicPropertyLeadFromServer: () => Promise.resolve(undefined),
+  readExtraListingsPublic: () => [],
+}));
+vi.mock("@/lib/public-sandbox-listings", () => ({
+  filterSandboxFromPublicCatalog: (list: unknown[]) => list,
+}));
+vi.mock("@/lib/public-demo-access", () => ({
+  isProductionPublicSite: () => false,
+}));
+vi.mock("@/lib/rental-application/data", () => ({
+  getPropertyById: () => undefined,
+  getPropertyForPublicLink: () => undefined,
 }));
 
 afterEach(cleanup);
@@ -71,6 +105,23 @@ describe("ResidentTourPanel", () => {
     expect(screen.getByText("Confirmed")).toBeTruthy();
     expect(screen.queryByText("Your scheduled property tours and requested times.")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Browse homes$/i })).toBeNull();
+  });
+
+  it("opens schedule tour in a modal instead of leaving the tour tab", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ tours: [] }),
+      }),
+    );
+
+    render(<ResidentTourPanel basePath="/resident" bucket="declined" />);
+
+    expect(await screen.findByText("SCHEDULE TOUR")).toBeTruthy();
+    fireEvent.click(document.querySelector('[data-attr="resident-tour-schedule"]') as HTMLElement);
+    expect(await screen.findByRole("dialog", { name: "Choose a home to tour" })).toBeTruthy();
+    expect(screen.getByLabelText("Search homes to tour")).toBeTruthy();
   });
 
   it("shows confirmed banner on approved tour detail", async () => {

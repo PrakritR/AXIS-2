@@ -16,6 +16,7 @@ export function ResidentPreApplicationGuard({
     | "leaseAccessUnlocked"
     | "applicationApproved"
     | "hasSubmittedApplication"
+    | "hasCompletedApplicationSubmission"
     | "hasTourLink"
     | "isPreLeaseResident"
   >;

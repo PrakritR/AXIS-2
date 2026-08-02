@@ -3,9 +3,30 @@ import { isResidentPathAllowedForAccess } from "@/lib/resident-portal-nav";
 import { RESIDENT_UNIFIED_PORTAL_SECTIONS } from "@/lib/portals/resident-sections";
 
 describe("resident portal stage access", () => {
-  const preApproval = { leaseAccessUnlocked: false, applicationApproved: false, hasSubmittedApplication: false };
-  const postApproval = { leaseAccessUnlocked: false, applicationApproved: true, hasSubmittedApplication: true };
-  const postLease = { leaseAccessUnlocked: true, applicationApproved: true, hasSubmittedApplication: true };
+  const preApproval = {
+    leaseAccessUnlocked: false,
+    applicationApproved: false,
+    hasSubmittedApplication: false,
+    hasCompletedApplicationSubmission: false,
+  };
+  const applicationSubmitted = {
+    leaseAccessUnlocked: false,
+    applicationApproved: false,
+    hasSubmittedApplication: true,
+    hasCompletedApplicationSubmission: true,
+  };
+  const postApproval = {
+    leaseAccessUnlocked: false,
+    applicationApproved: true,
+    hasSubmittedApplication: true,
+    hasCompletedApplicationSubmission: true,
+  };
+  const postLease = {
+    leaseAccessUnlocked: true,
+    applicationApproved: true,
+    hasSubmittedApplication: true,
+    hasCompletedApplicationSubmission: true,
+  };
 
   it("unified nav catalog lists every resident section", () => {
     const ids = RESIDENT_UNIFIED_PORTAL_SECTIONS.map((s) => s.section);
@@ -24,6 +45,13 @@ describe("resident portal stage access", () => {
     expect(isResidentPathAllowedForAccess("/resident/payments/pending", preApproval)).toBe(false);
   });
 
+  it("submitted application keeps tour/application but blocks lease and payments until approval", () => {
+    expect(isResidentPathAllowedForAccess("/resident/tour", applicationSubmitted)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/applications/pending", applicationSubmitted)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/lease", applicationSubmitted)).toBe(false);
+    expect(isResidentPathAllowedForAccess("/resident/payments/pending", applicationSubmitted)).toBe(false);
+  });
+
   it("post-approval allows lease, payments, tour, and application", () => {
     expect(isResidentPathAllowedForAccess("/resident/lease", postApproval)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/payments/pending", postApproval)).toBe(true);
@@ -33,8 +61,9 @@ describe("resident portal stage access", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postApproval)).toBe(false);
   });
 
-  it("post-lease unlocks services and keeps tour and application reachable", () => {
+  it("post-lease unlocks services and house details and keeps tour and application reachable", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postLease)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/move-in/placement", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/lease", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/tour", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/applications/pending", postLease)).toBe(true);

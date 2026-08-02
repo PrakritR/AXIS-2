@@ -1,25 +1,35 @@
 import type { ResidentPortalAccessState } from "@/lib/resident-portal-access-types";
 
 /** Resident mobile bottom bar + sidebar lock stages. */
-export type ResidentPortalNavStage = "pre_approval" | "post_approval_pre_lease" | "post_lease";
+export type ResidentPortalNavStage =
+  | "pre_approval"
+  | "application_submitted"
+  | "post_approval_pre_lease"
+  | "post_lease";
 
 export function resolveResidentPortalNavStage(
-  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked" | "applicationApproved">,
+  access: Pick<
+    ResidentPortalAccessState,
+    "leaseAccessUnlocked" | "applicationApproved" | "hasCompletedApplicationSubmission"
+  >,
 ): ResidentPortalNavStage {
   if (access.leaseAccessUnlocked) return "post_lease";
   if (access.applicationApproved) return "post_approval_pre_lease";
+  if (access.hasCompletedApplicationSubmission) return "application_submitted";
   return "pre_approval";
 }
 
 /** Fixed native bottom bar tabs per stage (Settings stays in the profile menu). */
 export const RESIDENT_BOTTOM_NAV_PRIMARY: Record<ResidentPortalNavStage, readonly string[]> = {
   pre_approval: ["tour", "applications", "dashboard", "communication"],
+  application_submitted: ["lease", "payments", "dashboard", "communication"],
   post_approval_pre_lease: ["lease", "payments", "dashboard", "communication"],
   post_lease: ["services", "payments", "dashboard", "communication"],
 };
 
 const STAGE_UNLOCKED_SECTIONS: Record<ResidentPortalNavStage, readonly string[]> = {
   pre_approval: ["tour", "applications", "dashboard", "communication", "profile"],
+  application_submitted: ["tour", "applications", "dashboard", "communication", "profile"],
   post_approval_pre_lease: [
     "tour",
     "applications",
@@ -66,7 +76,7 @@ export function isResidentPathAllowedForAccess(
   pathname: string,
   access: Pick<
     ResidentPortalAccessState,
-    "leaseAccessUnlocked" | "applicationApproved" | "hasSubmittedApplication"
+    "leaseAccessUnlocked" | "applicationApproved" | "hasCompletedApplicationSubmission"
   >,
 ): boolean {
   const stage = resolveResidentPortalNavStage(access);
@@ -92,9 +102,21 @@ export function residentNavLockReason(
 ): string | null {
   if (!residentSectionLockedForStage(section, stage)) return null;
   if (stage === "pre_approval") {
+    if (section === "lease" || section === "payments") {
+      return "Available after you submit an application";
+    }
+    return "Available after your application is approved";
+  }
+  if (stage === "application_submitted") {
+    if (section === "lease" || section === "payments") {
+      return "Available after your application is approved";
+    }
     return "Available after your application is approved";
   }
   if (stage === "post_approval_pre_lease") {
+    if (section === "services" || section === "move-in") {
+      return "Available after your lease is signed";
+    }
     return "Available after your lease is signed";
   }
   return "Unavailable";

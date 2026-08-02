@@ -33,14 +33,9 @@ import {
   syncHouseholdChargesFromServer,
   type HouseholdCharge,
 } from "@/lib/household-charges";
-import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
+import { syncManagerApplicationsFromServer, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import {
-  LEASE_PIPELINE_EVENT,
-  findLeaseForResidentEmail,
-  hasBothLeaseSignatures,
-  syncLeasePipelineFromServer,
-} from "@/lib/lease-pipeline-storage";
+import { syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts";
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
@@ -63,7 +58,7 @@ import {
   type ResidentPayMethod,
 } from "@/lib/platform/resident-payments";
 import { safeFormatDateTime } from "@/lib/pacific-time";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
   residentChargeDetailHref,
   residentChargesListHref,
@@ -182,17 +177,15 @@ export function ResidentPaymentsPanel({
   const [savedMethodsLoading, setSavedMethodsLoading] = useState(false);
   const [setupCheckout, setSetupCheckout] = useState<{ kind: "card" | "ach"; clientSecret: string } | null>(null);
   const [setupLoading, setSetupLoading] = useState<"card" | "ach" | null>(null);
-  const [leaseTick, setLeaseTick] = useState(0);
+  const [applicationTick, setApplicationTick] = useState(0);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
 
-  const residentLeaseRow = useMemo(() => {
-    void leaseTick;
-    if (!email) return null;
-    return findLeaseForResidentEmail(email);
-  }, [email, leaseTick]);
-
-  const paymentsUnlocked = Boolean(residentLeaseRow && hasBothLeaseSignatures(residentLeaseRow));
+  const paymentsUnlocked = useMemo(() => {
+    void applicationTick;
+    if (!email) return false;
+    return applicationsForResidentEmail(email).some((row) => row.bucket === "approved");
+  }, [applicationTick, email]);
 
   useEffect(() => {
     if (isStripeResidentPayMethod(paymentMethod) && !availablePaymentMethods.includes(paymentMethod)) {
@@ -312,9 +305,9 @@ export function ResidentPaymentsPanel({
   }, [refresh]);
 
   useEffect(() => {
-    const onLease = () => setLeaseTick((t) => t + 1);
-    window.addEventListener(LEASE_PIPELINE_EVENT, onLease);
-    return () => window.removeEventListener(LEASE_PIPELINE_EVENT, onLease);
+    const onApplications = () => setApplicationTick((t) => t + 1);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, onApplications);
+    return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, onApplications);
   }, []);
 
   useEffect(() => {
@@ -895,7 +888,7 @@ export function ResidentPaymentsPanel({
         variant="outline"
         className={PORTAL_HEADER_ACTION_BTN}
         disabled
-        onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+        onClick={() => showToast("Payments unlock after your application is approved.")}
       >
         Payment method
       </Button>
@@ -904,7 +897,7 @@ export function ResidentPaymentsPanel({
         variant="primary"
         className={PORTAL_HEADER_ACTION_BTN}
         disabled
-        onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+        onClick={() => showToast("Payments unlock after your application is approved.")}
       >
         Pay all
       </Button>
@@ -999,8 +992,8 @@ export function ResidentPaymentsPanel({
     <div className={paymentsLockedEmpty ? "space-y-0" : undefined}>
       {!paymentsUnlocked ? (
         <p className={paymentsLockedEmpty ? PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS : PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
-          <span className="font-semibold">Payments unlock after your lease is fully signed.</span>{" "}
-          Rent, deposits, and online pay become available once you and your manager have both signed.
+          <span className="font-semibold">Payments unlock after your application is approved.</span>{" "}
+          Application fees, rent, and deposits become available once your property manager approves your application.
         </p>
       ) : null}
 

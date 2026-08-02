@@ -93,7 +93,8 @@ type ResidentDashboardSectionId =
   | "lease"
   | "applications"
   | "services"
-  | "communication";
+  | "communication"
+  | "houseDetails";
 
 /** Small theme-aware status pill (light/dark flip via `.portal-badge-*`). */
 function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
@@ -385,7 +386,8 @@ export function ResidentDashboard({
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
-  const canUseFullPortal = leaseSigned;
+  const canUsePayments = applicationApproved;
+  const canUseServices = leaseSigned;
   const userId = session.userId ?? residentUserId;
   const { visibility, setVisible, reset } = useResidentDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -575,7 +577,7 @@ export function ResidentDashboard({
   const totalBalanceDue = pendingCharges.reduce((sum, c) => sum + parseMoneyLabel(c.balanceLabel), 0);
 
 
-  const servicesHref = canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`;
+  const servicesHref = canUseServices ? `${BASE}/services/requests` : `${BASE}/services`;
   const leaseUnlocked = applicationApproved;
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
@@ -591,13 +593,14 @@ export function ResidentDashboard({
       ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""}. Lease not started yet.`
       : "No lease on file yet.";
 
-  const openServiceCount = canUseFullPortal ? serviceItems.length : 0;
+  const openServiceCount = canUseServices ? serviceItems.length : 0;
   const openCount =
-    (canUseFullPortal && visibility.payments ? pendingCharges.length : 0) +
-    (visibility.services && canUseFullPortal ? openServiceCount : 0) +
+    (canUsePayments && visibility.payments ? pendingCharges.length : 0) +
+    (visibility.services && canUseServices ? openServiceCount : 0) +
     (visibility.communication ? inboxThreads.length : 0) +
     (visibility.applications ? pendingApplicationCount : 0) +
-    (visibility.lease && lease.cta ? 1 : 0);
+    (visibility.lease && lease.cta ? 1 : 0) +
+    (visibility.houseDetails && leaseSigned ? 1 : 0);
 
   return (
     <ManagerPortalPageShell
@@ -607,7 +610,7 @@ export function ResidentDashboard({
     >
       <div className={`min-w-0 ${PORTAL_DASHBOARD_STACK}`}>
         <PortalDashboardKpiRow>
-            {canUseFullPortal ? (
+            {canUsePayments ? (
             <PortalDashboardKpiTile
               label="Balance due"
               value={formatUsd(totalBalanceDue)}
@@ -617,7 +620,7 @@ export function ResidentDashboard({
               dataAttr="resident-dashboard-kpi-balance"
             />
             ) : null}
-            {canUseFullPortal ? (
+            {canUseServices ? (
             <PortalDashboardKpiTile
               label="Services"
               value={openServiceCount}
@@ -667,7 +670,7 @@ export function ResidentDashboard({
             </button>
           </div>
 
-          {canUseFullPortal && visibility.payments ? (
+          {canUsePayments && visibility.payments ? (
           <AttentionGroup
             title="Pending & overdue payments"
             href={`${BASE}/payments`}
@@ -773,7 +776,7 @@ export function ResidentDashboard({
           />
           ) : null}
 
-          {canUseFullPortal && visibility.services ? (
+          {canUseServices && visibility.services ? (
           <AttentionGroup
             title="Services"
             href={servicesHref}
@@ -841,13 +844,44 @@ export function ResidentDashboard({
           />
           ) : null}
 
+          {visibility.houseDetails ? (
+          <AttentionGroup
+            title="House details"
+            href={`${BASE}/move-in/placement`}
+            sectionId="houseDetails"
+            tone="info"
+            order={4}
+            items={leaseSigned ? [{ id: "house-details" }] : []}
+            emptyMessage={
+              leaseSigned
+                ? "Open house details for move-in placement and keys."
+                : "Available after your lease is signed."
+            }
+            keyForItem={(item) => item.id}
+            renderRow={() => (
+              <IssueRow
+                href={`${BASE}/move-in/placement`}
+                dot={sectionAccentDot("info")}
+                title="House details"
+                subtitle={
+                  appProperty
+                    ? `${appProperty}${appRoom ? ` · ${appRoom}` : ""}`
+                    : "Move-in placement, keys, and house information"
+                }
+                pill={<StatusPill tone={leaseSigned ? "success" : "neutral"}>{leaseSigned ? "Ready" : "Locked"}</StatusPill>}
+                dataAttr="resident-dashboard-attention-house-details"
+              />
+            )}
+          />
+          ) : null}
+
           {visibility.communication ? (
           <AttentionGroup
             title="Communication"
             href={communicationHref}
             sectionId="communication"
             tone="info"
-            order={4}
+            order={5}
             badge={
               inbox > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-approved-fg)]">

@@ -218,10 +218,13 @@ export function PortalSidebar({
     [definition.kind, navItems, residentNavStage, showMobileNav],
   );
 
-  const nativeBottomNavItems = useMemo(
-    () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
-    [nativeBottomNavSplit, isSectionLocked],
-  );
+  const nativeBottomNavItems = useMemo(() => {
+    const primary = nativeBottomNavSplit.primary;
+    // Resident lifecycle tabs stay visible while locked so the bar can show
+    // Lease / Payments before approval and Services after signing.
+    if (definition.kind === "resident") return primary;
+    return primary.filter((item) => !isSectionLocked(item.section));
+  }, [definition.kind, nativeBottomNavSplit, isSectionLocked]);
   const showMoreTab = showMobileNav && nativeBottomNavShowMoreTab(definition.kind, navItems);
   const moreTabActive = !nativeBottomNavItems.some((item) => item.section === activeSection);
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);

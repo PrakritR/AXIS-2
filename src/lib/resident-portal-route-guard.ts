@@ -44,7 +44,7 @@ export function isResidentRouteAllowed(
   pathname: string,
   access: Pick<
     ResidentPortalAccessState,
-    "leaseAccessUnlocked" | "applicationApproved" | "hasSubmittedApplication"
+    "leaseAccessUnlocked" | "applicationApproved" | "hasCompletedApplicationSubmission"
   >,
 ): boolean {
   return isResidentPathAllowedForAccess(pathname, access);

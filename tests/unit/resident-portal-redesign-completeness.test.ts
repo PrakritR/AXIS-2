@@ -156,8 +156,9 @@ describe("resident portal redesign completeness", () => {
 
     it("dashboard openCount respects customize visibility", () => {
       const src = readPanel("resident-dashboard.tsx");
-      expect(src).toMatch(/canUseFullPortal && visibility\.payments \? pendingCharges\.length : 0/);
-      expect(src).toMatch(/visibility\.services && canUseFullPortal/);
+      expect(src).toMatch(/canUsePayments && visibility\.payments \? pendingCharges\.length : 0/);
+      expect(src).toMatch(/visibility\.services && canUseServices/);
+      expect(src).toMatch(/visibility\.houseDetails/);
       expect(src).toMatch(/visibility\.communication \? inboxThreads\.length : 0/);
     });
   });

@@ -43,6 +43,7 @@ import { PropertySearchPicker, type PropertySearchOption } from "@/components/ma
 import {
   isPropertyActiveForLeads,
   loadPublicExtraListingsFromServer,
+  loadPublicPropertyLeadFromServer,
   readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
@@ -66,7 +67,8 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { clearRentalWizardDraft, loadRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
+import { clearRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
+import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
@@ -160,6 +162,67 @@ function ApplicationOutcomeBanner({ row }: { row: DemoApplicantRow }) {
     );
   }
   return null;
+}
+
+function ResidentApplicationDetailWizard({
+  row,
+  sessionEmail,
+  showToast,
+  exitPath,
+}: {
+  row: DemoApplicantRow;
+  sessionEmail?: string;
+  showToast: (message: string) => void;
+  exitPath: string;
+}) {
+  const propertyId = row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
+  const [propertyReady, setPropertyReady] = useState(!propertyId);
+
+  useEffect(() => {
+    const axisId = normalizeApplicationAxisId(row.id);
+    const currentAxisId = loadRentalWizardDraftAxisId()?.trim();
+    if (currentAxisId && normalizeApplicationAxisId(currentAxisId) !== axisId) {
+      clearRentalWizardDraft();
+    }
+    saveRentalWizardDraftAxisId(axisId);
+    if (row.application) {
+      const email = (sessionEmail ?? row.application.email ?? row.email ?? "").trim().toLowerCase();
+      saveRentalWizardDraft({
+        ...createInitialRentalWizardState(),
+        ...row.application,
+        email,
+      });
+    }
+  }, [row, sessionEmail]);
+
+  useEffect(() => {
+    if (!propertyId) {
+      setPropertyReady(true);
+      return;
+    }
+    let cancelled = false;
+    void loadPublicPropertyLeadFromServer(propertyId).finally(() => {
+      if (!cancelled) setPropertyReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [propertyId]);
+
+  if (!propertyReady) {
+    return <p className="text-sm text-muted">Loading application…</p>;
+  }
+
+  return (
+    <RentalApplicationWizard
+      showToast={showToast}
+      mode="portal"
+      layout="embedded"
+      exitPath={exitPath}
+      sessionEmail={sessionEmail}
+      linkedPropertyId={propertyId || undefined}
+    />
+  );
 }
 
 function continueApplicationPath(row: DemoApplicantRow): string {
@@ -715,7 +778,7 @@ export function ResidentApplicationsPanel({
 
   const renderDetailActions = (row: DemoApplicantRow) => (
     <PortalSectionActionRow variant="header">
-      {isInProgressApplicationRow(row) ? (
+      {isInProgressApplicationRow(row) && !applicationIdProp ? (
         <Button
           type="button"
           variant="primary"
@@ -724,7 +787,7 @@ export function ResidentApplicationsPanel({
         >
           Continue application
         </Button>
-      ) : row.bucket === "pending" && row.application ? (
+      ) : row.bucket === "pending" && row.application && !isInProgressApplicationRow(row) ? (
         <Button
           type="button"
           variant="primary"
@@ -758,8 +821,23 @@ export function ResidentApplicationsPanel({
     // expanded in-progress row gets its normal detail (Continue application →
     // that row's OWN apply URL) — never a wizard bound to a different
     // application under this row's header.
-    if (isInProgressApplicationRow(row) && applyMode && row.id === wizardRowId) {
-      return <div className="mx-auto max-w-5xl">{embeddedWizard}</div>;
+    if (
+      isInProgressApplicationRow(row) &&
+      (applicationIdProp || (applyMode && row.id === wizardRowId))
+    ) {
+      const exitPath = applicationIdProp
+        ? residentApplicationListHref(basePath, row.bucket as ResidentApplicationBucketId)
+        : `${RESIDENT_PORTAL_BASE_PATH}/applications`;
+      return (
+        <div className="mx-auto max-w-5xl">
+          <ResidentApplicationDetailWizard
+            row={row}
+            sessionEmail={sessionEmail ?? undefined}
+            showToast={showToast}
+            exitPath={exitPath}
+          />
+        </div>
+      );
     }
     if (editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row)) {
       return (
@@ -864,7 +942,7 @@ export function ResidentApplicationsPanel({
         onClick={openPropertyPicker}
       >
         {workspace.mode === "in_progress"
-          ? "Change property"
+          ? "Apply to property"
           : workspace.mode === "submitted"
             ? "Apply to another property"
             : "Apply to a property"}
