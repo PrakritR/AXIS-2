@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     const viaEmail = body.viaEmail !== false;
     const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
     const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
-    const phone = phoneRaw ? normalizeE164(phoneRaw) : "";
+    const phone = phoneRaw ? (normalizeE164(phoneRaw) ?? "") : "";
     const prospectName = typeof body.prospectName === "string" ? body.prospectName.trim() : "";
     const singlePropertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
     const listingRoomId = typeof body.listingRoomId === "string" ? body.listingRoomId.trim() : "";
