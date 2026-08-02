@@ -297,6 +297,7 @@ export async function confirmTourInquiry(db: Db, opts: ConfirmTourOptions): Prom
   }
 
   void syncPlannedTourToGoogleCalendar(db, managerUserId, {
+    plannedEventId: String(plannedEvent.id),
     title: String(plannedEvent.title),
     start,
     end,

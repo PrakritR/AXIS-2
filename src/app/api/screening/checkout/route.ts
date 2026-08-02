@@ -41,6 +41,10 @@ type Body = {
   applicationId?: string;
   packageSlug?: string;
   addOnProducts?: string[];
+  /** `embedded` renders Stripe inside the screening modal; default is hosted redirect. */
+  mode?: "embedded" | "hosted";
+  /** Required for embedded mode — app path returned to after payment (starts with "/"). */
+  returnPath?: string;
 };
 
 export async function POST(req: Request) {
@@ -134,14 +138,36 @@ export async function POST(req: Request) {
     const { stripeCustomerId } = await getManagerPurchaseSku(managerUserId);
     const origin = resolveAppOrigin(req);
     const stripe = getStripe();
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
+    const mode = body.mode === "embedded" ? "embedded" : "hosted";
+    const sessionBase = {
+      mode: "payment" as const,
+      payment_method_types: ["card" as const],
       ...(stripeCustomerId ? { customer: stripeCustomerId } : { customer_email: user.email ?? undefined }),
       line_items: lineItems,
       metadata,
       payment_intent_data: { metadata },
       client_reference_id: managerUserId,
+    };
+
+    if (mode === "embedded") {
+      const returnPath = body.returnPath?.trim();
+      if (!returnPath?.startsWith("/")) {
+        return NextResponse.json({ error: "returnPath is required for embedded checkout." }, { status: 400 });
+      }
+      const separator = returnPath.includes("?") ? "&" : "?";
+      const session = await stripe.checkout.sessions.create({
+        ui_mode: "embedded_page",
+        ...sessionBase,
+        return_url: `${origin}${returnPath}${separator}screening=return&session_id={CHECKOUT_SESSION_ID}`,
+      });
+      if (!session.client_secret) {
+        return NextResponse.json({ error: "Stripe did not return a client secret." }, { status: 502 });
+      }
+      return NextResponse.json({ ok: true, mode: "embedded", clientSecret: session.client_secret, totalCents });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      ...sessionBase,
       success_url: `${origin}/portal/applications?screening=paid&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/portal/applications?screening=cancelled`,
     });
@@ -149,7 +175,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Stripe did not return a checkout URL." }, { status: 502 });
     }
 
-    return NextResponse.json({ ok: true, url: session.url, totalCents });
+    return NextResponse.json({ ok: true, mode: "hosted", url: session.url, totalCents });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to start screening checkout.";
     return NextResponse.json({ error: message }, { status: 500 });

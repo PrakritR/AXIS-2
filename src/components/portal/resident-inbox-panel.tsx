@@ -43,8 +43,11 @@ import {
   upsertPersistedInboxRows,
   inboxThreadMessages,
   appendReplyToInboxThread,
+  collapsePersonInboxThreads,
+  inboxThreadCounterpartyEmail,
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
+import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 
 type InboxThread = PersistedInboxThread;
 
@@ -91,6 +94,7 @@ function previewLine(body: string, max = 100) {
 export type ResidentInboxPanelHandle = {
   openCompose: () => void;
   emptyTrash: () => void;
+  findThreadForRecipient: (email: string) => string | null;
 };
 
 export type ResidentInboxTabCounts = {
@@ -133,6 +137,11 @@ export const ResidentInboxPanel = forwardRef<
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
   );
+  const localRef = useRef(local);
+  useEffect(() => {
+    localRef.current = local;
+  }, [local]);
+  const [pendingSendingThreadIds, setPendingSendingThreadIds] = useState<Set<string>>(() => new Set());
   const [persistReady, setPersistReady] = useState(false);
   const persistInboxRef = useRef(true);
   const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
@@ -485,13 +494,20 @@ export const ResidentInboxPanel = forwardRef<
     })().catch(() => showToast("Could not empty trash."));
   }, [local, showToast]);
 
+  const findThreadForRecipient = useCallback((email: string) => {
+    const norm = email.trim().toLowerCase();
+    const collapsed = collapsePersonInboxThreads(localRef.current, { mergeFolders: true });
+    return collapsed.find((t) => inboxThreadCounterpartyEmail(t) === norm)?.id ?? null;
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
       openCompose: () => setComposeOpen(true),
       emptyTrash,
+      findThreadForRecipient,
     }),
-    [emptyTrash],
+    [emptyTrash, findThreadForRecipient],
   );
 
   const handleComposeSend = useCallback(
@@ -533,6 +549,25 @@ export const ResidentInboxPanel = forwardRef<
             return;
           }
 
+          const directEmails = p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean);
+          const primaryRecipient =
+            directEmails.length === 1 && p.broadcastCategories.length === 0 ? directEmails[0]! : null;
+          let optimisticId: string | null = null;
+
+          if (primaryRecipient) {
+            const optimistic = buildOptimisticSentThread({
+              recipientEmail: primaryRecipient,
+              subject: p.subject.trim(),
+              body: p.body.trim(),
+              senderLabel: senderName,
+            });
+            optimisticId = optimistic.id;
+            setPendingSendingThreadIds((prev) => new Set(prev).add(optimistic.id));
+            persistInboxRef.current = false;
+            setLocal((cur) => [optimistic as InboxThread, ...cur]);
+            setExpandedId(optimistic.id);
+          }
+
           if (p.includesDirectoryRecipients) {
             const res = await fetch("/api/portal/send-inbox-message", {
               method: "POST",
@@ -551,32 +586,54 @@ export const ResidentInboxPanel = forwardRef<
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
             if (!res.ok || !data.ok) {
+              if (optimisticId) {
+                setPendingSendingThreadIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(optimisticId!);
+                  return next;
+                });
+              }
               showToast("Message could not be sent.");
               return;
             }
+          }
+          if (optimisticId) {
+            setPendingSendingThreadIds((prev) => {
+              const next = new Set(prev);
+              next.delete(optimisticId!);
+              return next;
+            });
           }
           invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
           showToast("Message sent.");
-          navigate("/resident/communication/email/sent");
+          if (embeddedInCommunication && primaryRecipient) {
+            const threadId = findThreadForRecipient(primaryRecipient);
+            if (threadId) setExpandedId(threadId);
+          } else {
+            navigate("/resident/communication/email/sent");
+          }
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [eligibleContacts, navigate, reloadScheduledMessages, session.email, showToast],
+    [eligibleContacts, embeddedInCommunication, findThreadForRecipient, navigate, reloadScheduledMessages, session.email, setExpandedId, showToast],
   );
 
   const handleReply = useCallback(
     async (row: PortalInboxTableRow, text: string) => {
       const thread = local.find((t) => t.id === row.id);
       if (!thread) return;
+      const replyId = `reply-${Date.now().toString(36)}`;
       const reply: InboxThreadMessage = {
-        id: `reply-${Date.now().toString(36)}`,
+        id: replyId,
         from: "Resident",
         body: text,
         at: new Date().toLocaleString(),
+        outbound: true,
+        delivery: "sending",
       };
       const updated = appendReplyToInboxThread(thread, reply);
       const next = local.map((t) => (t.id === thread.id ? updated : t));
@@ -589,7 +646,7 @@ export const ResidentInboxPanel = forwardRef<
         throw new Error("persist failed");
       }
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-      await fetch("/api/portal/send-inbox-message", {
+      const res = await fetch("/api/portal/send-inbox-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -601,6 +658,14 @@ export const ResidentInboxPanel = forwardRef<
           deliverToPortalInbox: true,
         }),
       });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+      if (!res.ok || !data.ok) {
+        const failed = markThreadMessageDelivery(updated, replyId, "failed");
+        setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
+        throw new Error("send failed");
+      }
+      const delivered = markThreadMessageDelivery(updated, replyId, undefined);
+      setLocal((cur) => cur.map((t) => (t.id === thread.id ? delivered : t)));
       void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
     },
     [local],
@@ -774,18 +839,22 @@ export const ResidentInboxPanel = forwardRef<
 
   const activeBubbles = useMemo((): InboxBubbleMessage[] => {
     if (!activeThread) return [];
+    const pendingRoot = pendingSendingThreadIds.has(activeThread.id);
     return inboxThreadMessages(activeThread).map((m, i) => {
       const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
+      const delivery =
+        m.delivery ?? (pendingRoot && i === 0 && outbound ? ("sending" as const) : undefined);
       return {
         id: m.id,
         author: m.from,
         body: m.body,
         at: m.at,
         direction: outbound ? "outbound" : "inbound",
+        delivery,
         channel: "email",
       } satisfies InboxBubbleMessage;
     });
-  }, [activeThread, activeFolder]);
+  }, [activeThread, activeFolder, pendingSendingThreadIds]);
 
   // Scheduled messages the resident has queued to this conversation's manager —
   // shown inline as compact cards. Residents may cancel or send now, but not

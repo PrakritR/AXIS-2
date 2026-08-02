@@ -573,6 +573,8 @@ export type PlannedEvent = {
   /** Shown in admin details; emailed to partner when accepted (demo log). */
   instructions?: string;
   slotKey?: string;
+  /** Google Calendar event id after PropPlane sync. */
+  googleCalendarEventId?: string;
 };
 
 export function readPartnerInquiries(): PartnerInquiry[] {

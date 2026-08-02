@@ -380,8 +380,13 @@ describe("safePropertyOptionLabel", () => {
     );
   });
 
-  it("keeps ordinary names and addresses that merely contain the word seed", () => {
-    expect(safePropertyOptionLabel(["123 Seed St, Austin, TX"], "p1")).toBe("123 Seed St, Austin, TX");
+  it("drops a shorter address when a longer candidate already contains it", () => {
+    expect(
+      safePropertyOptionLabel(
+        ["41932 Paseo Padre Pkwy", "41932 Paseo Padre Pkwy, Fremont, CA 94539"],
+        "prop-paseo",
+      ),
+    ).toBe("41932 Paseo Padre Pkwy, Fremont, CA 94539");
   });
 });
 

@@ -33,6 +33,8 @@ export function VaulBottomSheet({
    */
   autoElevate = false,
   flushBody = false,
+  /** Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. */
+  maxHeightClass,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,6 +45,7 @@ export function VaulBottomSheet({
   fullScreen?: boolean;
   autoElevate?: boolean;
   flushBody?: boolean;
+  maxHeightClass?: string;
 }) {
   const contentHugging = !fullScreen;
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,8 @@ export function VaulBottomSheet({
             fullScreen
               ? "inset-0 top-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
               : cn(
-                  "h-auto max-h-[min(88dvh,36rem)] rounded-t-2xl",
+                  "h-auto rounded-t-2xl",
+                  maxHeightClass ?? "max-h-[min(88dvh,36rem)]",
                   elevatedPlacement,
                 ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",

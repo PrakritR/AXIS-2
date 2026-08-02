@@ -38,7 +38,8 @@ import {
 import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { ApplicationReviewLauncherRow } from "@/components/portal/application-review-launcher-row";
+import { DestinationNav } from "@/components/ui/destination-nav";
+import { ApplicationReviewLauncherRow, type ApplicationReviewView } from "@/components/portal/application-review-launcher-row";
 import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
@@ -46,6 +47,7 @@ import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
+import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import {
   MANAGER_APPLICATIONS_EVENT,
   deleteManagerApplicationFromServer,
@@ -119,6 +121,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   applicationDetailHref,
   applicationListHref,
+  type ApplicationListTabId,
 } from "@/lib/portal-detail-routes";
 import {
   appendPortalPropertyFilterQuery,
@@ -152,7 +155,7 @@ function countByBucket(rows: DemoApplicantRow[]) {
  * concern only; every row keeps `bucket: "pending"` in storage, so Approve /
  * Reject / delete and the underlying query are unaffected.
  */
-type ManagerApplicationTabId = "pending" | "incomplete" | "approved" | "rejected";
+type ManagerApplicationTabId = ApplicationListTabId;
 
 /** Which tab a row belongs to for DISPLAY — never confuse with `row.bucket`. */
 function tabForRow(row: DemoApplicantRow): ManagerApplicationTabId {
@@ -375,6 +378,8 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
   });
 }
 
+const processedScreeningReturnSessions = new Set<string>();
+
 export function ManagerApplications({
   bucket: bucketProp = "pending",
   basePath = "/portal",
@@ -417,6 +422,8 @@ export function ManagerApplications({
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [checkrScreeningShowPicker, setCheckrScreeningShowPicker] = useState(false);
+  const [applicationReviewView, setApplicationReviewView] = useState<ApplicationReviewView>("application");
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -438,21 +445,59 @@ export function ManagerApplications({
     };
   }, [authReady, userId]);
 
-  // Returning from the Stripe screening checkout (?screening=paid|cancelled).
+  // Returning from embedded Stripe screening checkout (?screening=return|paid|cancelled).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const screening = params.get("screening");
     if (!screening) return;
-    if (screening === "paid") {
-      showToast("Payment received. The background check is starting now.");
+
+    const cleanScreeningParams = () => {
+      params.delete("screening");
+      params.delete("session_id");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    };
+
+    if (screening === "return" || screening === "paid") {
+      setApplicationReviewView("background-check");
+
+      const sessionId = params.get("session_id")?.trim();
+      if (screening === "return" && sessionId && !processedScreeningReturnSessions.has(sessionId)) {
+        processedScreeningReturnSessions.add(sessionId);
+        void (async () => {
+          const res = await fetch("/api/screening/checkout-verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ sessionId }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            paid?: boolean;
+            backgroundCheck?: ApplicationBackgroundCheck;
+            error?: string;
+          };
+          cleanScreeningParams();
+
+          if (!res.ok || !data.paid || !data.backgroundCheck) {
+            if (data.error) showToast(data.error);
+            return;
+          }
+
+          showToast(
+            data.backgroundCheck.status === "complete"
+              ? "Screening complete."
+              : "Payment received. Background check is running.",
+          );
+          void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+        })();
+      } else {
+        cleanScreeningParams();
+      }
     } else if (screening === "cancelled") {
       showToast("Payment cancelled. No screening was ordered.");
+      cleanScreeningParams();
     }
-    params.delete("screening");
-    params.delete("session_id");
-    const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-  }, [showToast]);
+  }, [showToast, userId]);
 
   useEffect(() => {
     if (!authReady || !userId) return;
@@ -483,6 +528,11 @@ export function ManagerApplications({
   const handleScreeningUpdated = useCallback(() => {
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
   }, [userId]);
+
+  const handleScreeningFlowComplete = useCallback(() => {
+    handleScreeningUpdated();
+    setApplicationReviewView("background-check");
+  }, [handleScreeningUpdated]);
 
   const scopeUserId = resolveManagerScopeUserId(userId);
 
@@ -556,8 +606,8 @@ export function ManagerApplications({
   const tabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: pendingReviewCount },
         { id: "incomplete" as const, label: "Incomplete", count: incompleteCount },
+        { id: "pending" as const, label: "Pending", count: pendingReviewCount },
         { id: "approved" as const, label: "Approved", count: counts.approved },
         { id: "rejected" as const, label: "Rejected", count: counts.rejected },
       ] as const,
@@ -587,7 +637,8 @@ export function ManagerApplications({
     return sortApplicationRows(searched, bucket === "approved" ? "approved" : "pending");
   }, [propertyFilteredRows, bucket, searchQuery]);
 
-  const openDetailScreeningModal = useCallback((row: DemoApplicantRow) => {
+  const openDetailScreeningModal = useCallback((row: DemoApplicantRow, opts?: { showPackagePicker?: boolean }) => {
+    setCheckrScreeningShowPicker(Boolean(opts?.showPackagePicker));
     setCheckrScreeningRowId(row.id);
   }, []);
 
@@ -839,12 +890,19 @@ export function ManagerApplications({
   const renderApplicationRowActions = (row: DemoApplicantRow) => {
     const isPending = row.bucket === "pending";
     const showsRunCheck =
-      applicationShowsBackgroundCheck(row) && Boolean(row.application?.consentCredit) && row.backgroundCheck?.status !== "pending";
+      applicationShowsBackgroundCheck(row) &&
+      Boolean(row.application?.consentCredit) &&
+      row.backgroundCheck?.status !== "pending" &&
+      row.backgroundCheck?.status !== "complete";
     const canDownloadScreening =
       row.backgroundCheck?.status === "complete" || (isDemoModeActive() && applicationShowsBackgroundCheck(row));
+    const showsRunAgain =
+      applicationShowsBackgroundCheck(row) &&
+      Boolean(row.application?.consentCredit) &&
+      row.backgroundCheck?.status === "complete";
 
     const approveButton =
-      isPending && !isWithdrawnApplicationRow(row) ? (
+      isPending && !isWithdrawnApplicationRow(row) && !isInProgressApplicationRow(row) ? (
         <Button
           type="button"
           variant="outline"
@@ -877,6 +935,18 @@ export function ManagerApplications({
         onClick={() => openDetailScreeningModal(row)}
       >
         Run background check
+      </Button>
+    ) : null;
+
+    const runAgainButton = showsRunAgain ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="run-background-check-again"
+        onClick={() => openDetailScreeningModal(row, { showPackagePicker: true })}
+      >
+        Run again
       </Button>
     ) : null;
 
@@ -997,19 +1067,22 @@ export function ManagerApplications({
       <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
           <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
-            {approveButton}
             {rejectButton}
+            {sendReminderButton}
+            {approveButton}
             {runCheckButton}
+            {runAgainButton}
             {mobileOverflowMenu}
           </div>
           <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
-            {approveButton}
             {rejectButton}
+            {sendReminderButton}
+            {approveButton}
             {runCheckButton}
+            {runAgainButton}
             {downloadApplicationButton}
             {downloadScreeningButton}
             {moveToPendingButton}
-            {sendReminderButton}
             {deleteButton}
           </div>
         </PortalSectionActionRow>
@@ -1050,8 +1123,10 @@ export function ManagerApplications({
         row={row}
         bareCanvas
         showDownload={false}
-        onScreeningUpdated={handleScreeningUpdated}
-        onOpenScreeningModal={() => openDetailScreeningModal(row)}
+        activeView={applicationReviewView}
+        onActiveViewChange={setApplicationReviewView}
+        onScreeningUpdated={handleScreeningFlowComplete}
+        onOpenScreeningModal={(opts) => openDetailScreeningModal(row, opts)}
       />
 
       <ApplicationVerificationPhotos row={row} />
@@ -1209,6 +1284,22 @@ export function ManagerApplications({
         onSaved={() => setPortfolioTick((n) => n + 1)}
         showToast={showToast}
       />
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={
+          checkrScreeningRowId
+            ? rows.find((r) => r.id === checkrScreeningRowId) ??
+              (detailRow?.id === checkrScreeningRowId ? detailRow : null)
+            : null
+        }
+        open={checkrScreeningRowId !== null}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
+        onUpdated={handleScreeningFlowComplete}
+      />
     </>
   );
 
@@ -1246,16 +1337,21 @@ export function ManagerApplications({
       {applicationsMobileActionsRow}
       <PortalListControlStack
         className="mb-2 max-lg:mb-2"
-        destinationInset
-        destinations={tabs.map((t) => ({
-          id: t.id,
-          label: t.label,
-          href: applicationsListHref(t.id),
-          count: t.count,
-          dataAttr: `applications-bucket-${t.id}`,
-        }))}
-        activeDestinationId={bucket}
-        destinationAriaLabel="Application status"
+        destinationRow={
+          <DestinationNav
+            items={tabs.map((t) => ({
+              id: t.id,
+              label: t.label,
+              href: applicationsListHref(t.id),
+              count: t.count,
+              dataAttr: `applications-bucket-${t.id}`,
+            }))}
+            activeId={bucket}
+            ariaLabel="Application status"
+            itemLayout="equal"
+            className="max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent max-lg:p-0"
+          />
+        }
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
@@ -1286,8 +1382,12 @@ export function ManagerApplications({
         key={checkrScreeningRowId ?? "none"}
         row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
-        onUpdated={handleScreeningUpdated}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
+        onUpdated={handleScreeningFlowComplete}
       />
       {!authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>

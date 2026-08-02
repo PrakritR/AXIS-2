@@ -761,6 +761,10 @@ export async function renderPortalSection(
       }
       if (tabParts.length > 2) notFound();
       const tabRaw = tabParts[0]!;
+      if (tabRaw === "screenings") {
+        const legacyId = tabParts.length >= 2 ? `/${encodeURIComponent(decodeURIComponent(tabParts[1]!))}` : "";
+        redirect(`${def.basePath}/applications/approved${legacyId}`);
+      }
       const applicationTab = APPLICATION_TABS.includes(tabRaw as typeof APPLICATION_TABS[number])
         ? (tabRaw as typeof APPLICATION_TABS[number])
         : "pending";
@@ -779,6 +783,13 @@ export async function renderPortalSection(
         "applications",
         managerOwnerSubscriptionTier,
       );
+    }
+
+    if (section === "screenings") {
+      const legacyId = tabParts?.length
+        ? `/${tabParts.map((p) => encodeURIComponent(p)).join("/")}`
+        : "";
+      redirect(`${def.basePath}/applications/approved${legacyId}`);
     }
 
     if (section === "properties") {

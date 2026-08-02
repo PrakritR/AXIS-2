@@ -195,7 +195,7 @@ export function ListingSpaceMediaBrowser({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-border bg-card shadow-sm listing-detail-surface ${className}`}
+      className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-border bg-card shadow-sm listing-detail-surface ${className}`}
       data-testid={testId}
     >
       <div

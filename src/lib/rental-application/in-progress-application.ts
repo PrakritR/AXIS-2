@@ -7,6 +7,12 @@ import {
 } from "@/lib/manager-applications-storage";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import {
+  clearRentalWizardDraft,
+  loadRentalWizardDraftAxisId,
+  saveRentalWizardDraftAxisId,
+} from "@/lib/rental-application/drafts";
+import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
 export const IN_PROGRESS_APPLICATION_STAGE = "In progress";
@@ -111,6 +117,48 @@ export function inProgressApplicationResumeUrl(origin: string, row: DemoApplican
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
   const path = pid ? `/rent/apply?propertyId=${encodeURIComponent(pid)}` : "/rent/apply";
   return `${base}${path}`;
+}
+
+export function mintApplicationAxisId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `PROPLANE-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  }
+  return `PROPLANE-${Date.now().toString(36).toUpperCase()}`;
+}
+
+/**
+ * When an applicant picks a different property, either resume their existing
+ * in-progress row for that property or mint a fresh axis id so the prior
+ * application is left untouched.
+ */
+export function switchApplicationTargetProperty(input: {
+  previousPropertyId: string;
+  nextPropertyId: string;
+  inProgressRows: DemoApplicantRow[];
+}): { axisId: string; resumedApplication?: RentalWizardFormState } | null {
+  const previousPropertyId = input.previousPropertyId.trim();
+  const nextPropertyId = input.nextPropertyId.trim();
+  if (!nextPropertyId || previousPropertyId === nextPropertyId) return null;
+
+  const hit = findInProgressRowForTarget(input.inProgressRows, { propertyId: nextPropertyId });
+  if (hit?.application) {
+    saveRentalWizardDraftAxisId(hit.id);
+    return {
+      axisId: hit.id,
+      resumedApplication: {
+        ...createInitialRentalWizardState(),
+        ...hit.application,
+      },
+    };
+  }
+
+  const boundAxisId = loadRentalWizardDraftAxisId()?.trim();
+  if (boundAxisId) {
+    clearRentalWizardDraft();
+  }
+  const axisId = mintApplicationAxisId();
+  saveRentalWizardDraftAxisId(axisId);
+  return { axisId };
 }
 
 /** True when a draft snapshot should sync to the server (portal or public guest apply). */

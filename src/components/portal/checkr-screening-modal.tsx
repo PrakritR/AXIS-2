@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { ScreeningInlinePayment } from "@/components/portal/screening-inline-payment";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { track } from "@/lib/analytics/track-client";
 import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
@@ -13,11 +15,21 @@ import { checkrOrderCostCents, formatCheckrPrice } from "@/lib/checkr/packages";
 import type { CheckrPackage } from "@/lib/checkr/config";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isScreeningTestModeActive } from "@/lib/screening/screening-test-mode";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { replaceManagerApplicationRowInCache } from "@/lib/manager-applications-storage";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 const DEMO_SCREENING_RESOLVE_DELAY_MS = 1800;
+const processedScreeningSessions = new Set<string>();
+
+function screeningReturnPath(row: DemoApplicantRow, pathname: string): string {
+  if (pathname.includes(encodeURIComponent(row.id)) || pathname.endsWith(`/${row.id}`)) {
+    return pathname;
+  }
+  const bucket = row.bucket ?? "approved";
+  return `/portal/applications/${bucket}/${encodeURIComponent(row.id)}`;
+}
 
 type PackageOption = {
   slug: CheckrPackage;
@@ -82,16 +94,23 @@ export function CheckrScreeningModal({
   open,
   onClose,
   onUpdated,
+  showPackagePickerInitially = false,
 }: {
   row: DemoApplicantRow | null;
   open: boolean;
   onClose: () => void;
   onUpdated?: () => void;
+  /** When true, skip the completed summary and show package/payment immediately (e.g. Run again). */
+  showPackagePickerInitially?: boolean;
 }) {
   const { showToast } = useAppUi();
-  const isDemo = isDemoModeActive();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const isDemo = isDemoModeActive() || isScreeningTestModeActive();
   const [configured, setConfigured] = useState(() => isDemo);
   const [screeningAllowed, setScreeningAllowed] = useState(() => isDemo);
+  const [packagesLoaded, setPackagesLoaded] = useState(() => isDemo);
   const [packages, setPackages] = useState<PackageOption[]>(() => (isDemo ? DEMO_PACKAGES : []));
   const [addOns, setAddOns] = useState<AddOnOption[]>(() => (isDemo ? DEMO_ADD_ONS : []));
   const [selectedPackage, setSelectedPackage] = useState<CheckrPackage>("essential");
@@ -99,6 +118,7 @@ export function CheckrScreeningModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bg, setBg] = useState<ApplicationBackgroundCheck | undefined>(() => row?.backgroundCheck);
+  const [showPackagePicker, setShowPackagePicker] = useState(showPackagePickerInitially);
   const demoResolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -108,7 +128,9 @@ export function CheckrScreeningModal({
     setBusy(false);
     setSelectedPackage("essential");
     setSelectedAddOns([]);
-  }, [open, row?.id, row?.backgroundCheck]);
+    setShowPackagePicker(showPackagePickerInitially || row?.backgroundCheck?.status !== "complete");
+    setPackagesLoaded(isDemo);
+  }, [open, row?.id, row?.backgroundCheck, showPackagePickerInitially, isDemo]);
 
   useEffect(() => {
     if (!open || isDemo) return;
@@ -126,8 +148,22 @@ export function CheckrScreeningModal({
         if (body.packages?.length) setPackages(body.packages);
         if (body.addOns?.length) setAddOns(body.addOns);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setPackagesLoaded(true));
   }, [open, isDemo]);
+
+  const handlePaymentComplete = useCallback(
+    (backgroundCheck: ApplicationBackgroundCheck) => {
+      setBg(backgroundCheck);
+      setShowPackagePicker(false);
+      showToast(
+        backgroundCheck.status === "complete" ? "Screening complete." : "Payment received. Background check is running.",
+      );
+      onUpdated?.();
+      onClose();
+    },
+    [onClose, onUpdated, showToast],
+  );
 
   useEffect(() => {
     if (!open || !row || bg?.status !== "pending" || isDemo) return;
@@ -146,7 +182,9 @@ export function CheckrScreeningModal({
           const body = (await res.json()) as { backgroundCheck?: ApplicationBackgroundCheck };
           if (!body.backgroundCheck) return;
           setBg(body.backgroundCheck);
-          if (body.backgroundCheck.status === "complete") onUpdated?.();
+          if (body.backgroundCheck.status === "complete") {
+            handlePaymentComplete(body.backgroundCheck);
+          }
         })
         .catch(() => undefined);
     }, 5000);
@@ -154,11 +192,52 @@ export function CheckrScreeningModal({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [open, row, bg?.status, onUpdated, isDemo]);
+  }, [open, row, bg?.status, isDemo, handlePaymentComplete]);
 
   useEffect(() => () => {
     if (demoResolveTimer.current) clearTimeout(demoResolveTimer.current);
   }, []);
+
+  const returnPath = useMemo(() => (row ? screeningReturnPath(row, pathname) : pathname), [row, pathname]);
+
+  // After embedded Stripe checkout, verify payment and return to the background check tab.
+  useEffect(() => {
+    if (!open || !row || isDemo) return;
+    const screening = searchParams.get("screening");
+    if (screening !== "return") return;
+    const sessionId = searchParams.get("session_id")?.trim();
+    if (!sessionId || processedScreeningSessions.has(sessionId)) return;
+
+    processedScreeningSessions.add(sessionId);
+
+    void (async () => {
+      const res = await fetch("/api/screening/checkout-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        paid?: boolean;
+        backgroundCheck?: ApplicationBackgroundCheck;
+        error?: string;
+      };
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("screening");
+      params.delete("session_id");
+      const query = params.toString();
+      router.replace(`${pathname}${query ? `?${query}` : ""}`);
+
+      if (!res.ok || !data.paid || !data.backgroundCheck) {
+        const message = data.error ?? "Could not confirm screening payment.";
+        setError(message);
+        showToast(message);
+        return;
+      }
+      handlePaymentComplete(data.backgroundCheck);
+    })();
+  }, [open, row, isDemo, searchParams, pathname, router, showToast, handlePaymentComplete]);
 
   const totalCents = useMemo(
     () => checkrOrderCostCents(selectedPackage, selectedAddOns),
@@ -200,66 +279,27 @@ export function CheckrScreeningModal({
           backgroundCheck: resolved,
           backgroundCheckStatus: backgroundCheckStatusFromCheckr(resolved),
         });
-        onUpdated?.();
+        handlePaymentComplete(resolved);
       }, DEMO_SCREENING_RESOLVE_DELAY_MS);
       return;
     }
-
-    try {
-      const res = await fetch("/api/screening/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          applicationId: row.id,
-          packageSlug: selectedPackage,
-          addOnProducts: selectedAddOns,
-        }),
-      });
-      const body = (await res.json()) as {
-        error?: string;
-        code?: string;
-        url?: string;
-        ran?: boolean;
-        backgroundCheck?: ApplicationBackgroundCheck;
-      };
-      if (!res.ok) {
-        const message = body.error ?? "Could not start screening.";
-        setError(message);
-        showToast(message);
-        return;
-      }
-      // Simulate-only environments run immediately with no payment.
-      if (body.ran) {
-        if (body.backgroundCheck) setBg(body.backgroundCheck);
-        showToast("Screening started.");
-        onUpdated?.();
-        return;
-      }
-      if (!body.url) {
-        setError("Stripe did not return a payment page.");
-        return;
-      }
-      showToast("Opening Stripe. Screening starts once payment completes.");
-      window.location.assign(body.url);
-      return;
-    } catch {
-      const message = "Network error starting screening.";
-      setError(message);
-      showToast(message);
-    } finally {
-      setBusy(false);
-    }
-  }, [row, onUpdated, showToast, isDemo, selectedPackage, selectedAddOns]);
+  }, [row, handlePaymentComplete, showToast, isDemo, selectedPackage, selectedAddOns]);
 
   if (!row) return null;
 
   const canRun = screeningAllowed && configured && Boolean(row.application?.consentCredit) && bg?.status !== "pending";
+  const showInlinePayment = !isDemo && canRun && showPackagePicker;
+  const backgroundCheckComplete = bg?.status === "complete";
+  const modalTitle = backgroundCheckComplete && !showPackagePicker
+    ? `Background check · ${row.name}`
+    : `Run screening · ${row.name}`;
 
   return (
-    <Modal open={open} onClose={onClose} title={`Run screening · ${row.name}`} panelClassName="max-w-4xl">
+    <Modal open={open} onClose={onClose} title={modalTitle} panelClassName="max-w-4xl max-h-[min(92vh,56rem)] overflow-y-auto">
       <div className="space-y-5 text-sm">
-        {!screeningAllowed ? (
+        {!packagesLoaded ? (
+          <p className="text-muted">Loading screening options…</p>
+        ) : !screeningAllowed ? (
           <>
             <p className="native-hide text-muted">
               Applicant screening requires Pro or Business.{" "}
@@ -276,6 +316,28 @@ export function CheckrScreeningModal({
           <p className="text-muted">Background checks are not configured. Add CHECKR_API_KEY to enable Checkr Tenant.</p>
         ) : !row.application?.consentCredit ? (
           <p className="text-muted">This applicant has not authorized a background check.</p>
+        ) : backgroundCheckComplete && !showPackagePicker ? (
+          <div className="space-y-4" data-attr="screening-completed-summary">
+            <div className="rounded-2xl border border-border bg-card px-4 py-4">
+              <p className="text-base font-semibold text-foreground">Background check already completed</p>
+              <p className="mt-2 text-sm text-muted">
+                A report is on file for this applicant. Run again to place a new Checkr order — for example to upgrade
+                from Starter to Complete — even when applicant details are unchanged.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-3">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                data-attr="screening-run-again"
+                onClick={() => setShowPackagePicker(true)}
+              >
+                Run again
+              </Button>
+            </div>
+          </div>
         ) : (
           <>
             <div className="space-y-3">
@@ -372,6 +434,24 @@ export function CheckrScreeningModal({
                 <p className="font-semibold text-foreground">Total: {formatCheckrPrice(totalCents)} per run</p>
               )}
             </div>
+
+            {showInlinePayment ? (
+              <ScreeningInlinePayment
+                applicationId={row.id}
+                packageSlug={selectedPackage}
+                addOnProducts={selectedAddOns}
+                returnPath={returnPath}
+                onPaid={handlePaymentComplete}
+                onError={setError}
+              />
+            ) : null}
+
+            {bg?.status === "pending" ? (
+              <p className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+                Background check in progress. Results usually arrive within a few minutes — you can close this and
+                check back later.
+              </p>
+            ) : null}
           </>
         )}
 
@@ -388,20 +468,14 @@ export function CheckrScreeningModal({
           data-portal-detail-actions=""
           className="flex flex-wrap items-center justify-end gap-3 border-t border-border py-6 sm:gap-4"
         >
-          {screeningAllowed && configured && row.application?.consentCredit ? (
+          {screeningAllowed && configured && row.application?.consentCredit && isDemo ? (
             <Button
               type="button"
               data-attr="run-screening-checkr"
               disabled={busy || !canRun}
               onClick={() => void confirm()}
             >
-              {busy
-                ? "Starting…"
-                : bg
-                  ? "Re-run screening"
-                  : isDemo
-                    ? "Confirm · $0.00"
-                    : `Pay & run · ${formatCheckrPrice(totalCents)}`}
+              {busy ? "Starting…" : bg ? "Re-run screening" : "Confirm · $0.00"}
             </Button>
           ) : null}
         </div>

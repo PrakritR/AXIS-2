@@ -77,8 +77,8 @@ function ListingHeroPhotoGrid({
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-accent/25 shadow-sm">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="relative min-w-0 overflow-hidden rounded-3xl border border-border bg-accent/25 shadow-sm">
         {mainUrl ? (
           <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
         ) : (
@@ -400,9 +400,9 @@ export function ListingDetailSections({
   const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
   return (
     <ListingPreviewNewTabContext.Provider value={embeddedPreview}>
-    <div className="bg-background text-foreground" data-listing-sections-root>
+    <div className="bg-background text-foreground min-w-0 max-w-full" data-listing-sections-root>
       <div
-        className={`mx-auto flex max-w-6xl flex-col ${
+        className={`mx-auto flex min-w-0 max-w-6xl flex-col ${
           managerPreviewChrome ? "px-3 sm:px-4" : "px-4"
         } ${
           embeddedPreview
@@ -454,7 +454,8 @@ export function ListingDetailSections({
           {portalEmbedded ? (
             <ListingStickySubnav
               mode="portal"
-              className="-mx-3 mb-4 sm:mx-0 sm:rounded-2xl lg:mb-6"
+              appearance="portal"
+              className="mb-4 sm:rounded-2xl lg:mb-6"
             />
           ) : !previewModal ? (
             <ListingStickySubnav className="mb-4 lg:mb-6" />
@@ -462,8 +463,8 @@ export function ListingDetailSections({
           {!embeddedPreview ? (
             <ListingPricingCtaCard property={property} rich={rich} className="mb-6 lg:hidden" />
           ) : null}
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
-            <div className={`order-1 ${compactSections ? "space-y-5 lg:space-y-6" : "space-y-8 lg:space-y-10"}`}>
+          <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
+            <div className={`order-1 min-w-0 ${compactSections ? "space-y-5 lg:space-y-6" : "space-y-8 lg:space-y-10"}`}>
               <ListingDetailCollapsibleSection
                 id="floor-plans"
                 title={rich.floorPlansSectionTitle ?? "Floor plans"}

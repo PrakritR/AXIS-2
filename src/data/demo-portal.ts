@@ -228,6 +228,8 @@ export type DemoManagerWorkOrderRow = {
   /** Full property address, snapshotted at submission time for manager/vendor display. */
   propertyAddress?: string;
   scheduledAtIso?: string;
+  /** Google Calendar event id after PropPlane sync. */
+  googleCalendarEventId?: string;
   residentName?: string;
   residentEmail?: string;
   propertyId?: string;

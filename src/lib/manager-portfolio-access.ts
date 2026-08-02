@@ -333,15 +333,28 @@ function looksLikeGenericPropertyTitle(value: string): boolean {
   return /^property\s*(?:·|-|—)/i.test(value.trim());
 }
 
+/** Drop shorter labels fully contained in a longer candidate (e.g. street duplicated in full address). */
+function collapseRedundantPropertyCandidates(values: string[]): string[] {
+  const usable = values.map((v) => v.trim()).filter(Boolean);
+  if (usable.length <= 1) return usable;
+  return usable.filter((candidate, index) => {
+    const lower = candidate.toLowerCase();
+    return !usable.some((other, otherIndex) => {
+      if (otherIndex === index) return false;
+      return other.length > candidate.length && other.toLowerCase().includes(lower);
+    });
+  });
+}
+
 /**
  * First human-friendly candidate that is not a raw id / seed token. Falls back
  * to any non-id candidate, then a generic label — never the bare id. Shared by
  * every property picker so labels stay consistent and clean across surfaces.
  */
 export function safePropertyOptionLabel(candidates: Array<string | null | undefined>, id: string): string {
-  const usable = candidates
-    .map((c) => (c ?? "").trim())
-    .filter((v) => v && !looksLikeRawPropertyId(v, id));
+  const usable = collapseRedundantPropertyCandidates(
+    candidates.map((c) => (c ?? "").trim()).filter((v) => v && !looksLikeRawPropertyId(v, id)),
+  );
   // Prefer a distinctive name over the "Property · N rooms" placeholder.
   const distinctive = usable.find((v) => !looksLikeGenericPropertyTitle(v));
   if (distinctive) return distinctive;
@@ -382,8 +395,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
   for (const r of readPendingManagerPropertiesForUser(scopeUserId)) {
-    const joined = [r.buildingName, r.address].filter(Boolean).join(" · ");
-    labelById.set(r.id, safePropertyOptionLabel([joined, r.buildingName, r.address], r.id));
+    labelById.set(r.id, resolvePropertyLabelForId(r.id));
   }
 
   const allExtras = readAllExtraListings();
@@ -393,7 +405,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
       const found = allExtras.find((x) => x.id === pid);
       const pending = readAllPendingManagerProperties().find((x) => x.id === pid);
       const pendingJoined = pending
-        ? [pending.buildingName, pending.unitLabel, pending.address].filter(Boolean).join(" · ")
+        ? resolvePropertyLabelForId(pid)
         : undefined;
       labelById.set(
         pid,
@@ -406,9 +418,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     if (labelById.has(pid)) continue;
     const found = allExtras.find((x) => x.id === pid);
     const pending = readAllPendingManagerProperties().find((x) => x.id === pid);
-    const pendingJoined = pending
-      ? [pending.buildingName, pending.unitLabel, pending.address].filter(Boolean).join(" · ")
-      : undefined;
+    const pendingJoined = pending ? resolvePropertyLabelForId(pid) : undefined;
     labelById.set(
       pid,
       safePropertyOptionLabel([found?.title, found?.buildingName, pendingJoined, found?.address], pid),
@@ -419,7 +429,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     if (!applicationVisibleToPortalUser(row, scopeUserId)) continue;
     const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
     if (pid && !labelById.has(pid)) {
-      labelById.set(pid, safePropertyOptionLabel([row.property], pid));
+      labelById.set(pid, resolvePropertyLabelForId(pid, row.property));
     }
   }
 

@@ -26,11 +26,16 @@ import {
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import {
   PortalFilterSortSheet,
   portalFilterActiveCount,
 } from "@/components/portal/portal-filter-sort-sheet";
+import {
+  PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS,
+  PORTAL_FILTER_BROWSE_PANEL_CLASS,
+} from "@/components/portal/filter-field-lists";
 
 const SORT_OPTIONS: { id: BrowseSortId; label: string }[] = [
   { id: "price-asc", label: "Price · lowest first" },
@@ -238,8 +243,8 @@ function BrowseManualFilters({
   const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
 
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-5">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden sm:space-y-5">
+      <div className="grid min-w-0 max-w-full grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
         <ResidentHousingFieldBlock label="Move-in date">
           <input
             type="date"
@@ -292,7 +297,7 @@ function BrowseManualFilters({
             ))}
           </Select>
         </ResidentHousingFieldBlock>
-        <ResidentHousingFieldBlock label={`Max budget · ${budgetLabel}`} className="col-span-2 lg:col-span-1">
+        <ResidentHousingFieldBlock label={`Max budget · ${budgetLabel}`} className="sm:col-span-2">
           <input
             type="range"
             min={RESIDENT_HOUSING_BUDGET_MIN}
@@ -354,34 +359,38 @@ function BrowseFilterPanel({
   onApplyChatFilters: (filters: HousingChatAppliedFilters) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <ResidentHousingFieldBlock label="Sort">
-        <Select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as BrowseSortId)}
-          aria-label="Sort homes"
-          data-attr="resident-browse-sort"
-          className={RESIDENT_HOUSING_INPUT_CLS}
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </Select>
-      </ResidentHousingFieldBlock>
+    <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden sm:space-y-6">
+      <section className="min-w-0 space-y-2 rounded-2xl border border-border/50 bg-accent/20 p-3.5 sm:p-4">
+        <ResidentHousingFieldBlock label="Sort">
+          <Select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as BrowseSortId)}
+            aria-label="Sort homes"
+            data-attr="resident-browse-sort"
+            className={`${RESIDENT_HOUSING_INPUT_CLS} min-w-0 max-w-full`}
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </Select>
+        </ResidentHousingFieldBlock>
+      </section>
 
-      <ResidentHousingChat
-        onApplyFilters={onApplyChatFilters}
-        title="What would you like in your next home?"
-        subtitle="Describe the type of home you want: room setup, budget, neighborhood, or move-in dates."
-        placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
-        showMatchListings={false}
-      />
+      <section className="min-w-0 space-y-2 rounded-2xl border border-border/50 bg-card p-3.5 sm:p-4">
+        <ResidentHousingChat
+          onApplyFilters={onApplyChatFilters}
+          title="What would you like in your next home?"
+          subtitle="Describe the type of home you want: room setup, budget, neighborhood, or move-in dates."
+          placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
+          showMatchListings={false}
+        />
+      </section>
 
-      <div className="h-px w-full bg-border/50" />
-
-      <BrowseManualFilters
+      <section className="min-w-0 space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Refine search</p>
+        <BrowseManualFilters
         moveIn={moveIn}
         setMoveIn={setMoveIn}
         moveOut={moveOut}
@@ -394,7 +403,8 @@ function BrowseFilterPanel({
         setRoomType={setRoomType}
         activeCount={activeCount}
         onClear={onClear}
-      />
+        />
+      </section>
     </div>
   );
 }
@@ -495,6 +505,22 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           className="shrink-0"
           dataAttr="resident-browse-filter-open"
           onReset={clearFilters}
+          compactPanel={false}
+          panelSizeClassName={PORTAL_FILTER_BROWSE_PANEL_CLASS}
+          mobileSheetClassName={PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS}
+          mobileFlushBody={false}
+          desktopPresentation="panel"
+          mobileFooter={(close) => (
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              data-attr="resident-browse-filter-apply"
+              onClick={close}
+            >
+              Show {loading ? "homes" : `${cards.length} home${cards.length === 1 ? "" : "s"}`}
+            </Button>
+          )}
         >
           <BrowseFilterPanel
             sort={sort}

@@ -275,6 +275,7 @@ export async function acceptTourInquiry(
   }
 
   void syncPlannedTourToGoogleCalendar(db, rowManagerUserId, {
+    plannedEventId: String(plannedEvent.id),
     title: String(plannedEvent.title),
     start,
     end,

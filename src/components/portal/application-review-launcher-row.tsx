@@ -27,7 +27,7 @@ export function ApplicationReviewLauncherRow({
   bareCanvas?: boolean;
   showDownload?: boolean;
   onScreeningUpdated?: () => void;
-  onOpenScreeningModal?: () => void;
+  onOpenScreeningModal?: (opts?: { showPackagePicker?: boolean }) => void;
   onScreeningHeaderActionsChange?: (actions: ReactNode) => void;
   activeView?: ApplicationReviewView;
   onActiveViewChange?: (view: ApplicationReviewView) => void;

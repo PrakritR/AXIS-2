@@ -1,9 +1,19 @@
 "use client";
 
-import { CheckboxMultiSelect, type CheckboxMultiSelectOption } from "@/components/ui/checkbox-multi-select";
+import type { ReactNode } from "react";
+import {
+  CheckboxMultiSelect,
+  FieldSingleSelect,
+  type CheckboxMultiSelectOption,
+} from "@/components/ui/checkbox-multi-select";
 import { Input, Textarea } from "@/components/ui/input";
 import { MODAL_INSET_BOX_CLASS } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
+
+/** Fixed-height new-message modal — inner body scrolls; panel does not resize with fields. */
+export const PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS = "w-full max-w-lg max-h-[min(92dvh,38rem)]";
+
+export type PortalMessageSendViaMode = "email" | "sms" | "both";
 
 export const PORTAL_MESSAGE_SEND_VIA_OPTIONS: CheckboxMultiSelectOption[] = [
   { value: "email", label: "Email" },
@@ -15,6 +25,35 @@ export const PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE =
 
 export function portalMessageFieldLabel(className?: string) {
   return cn("text-xs font-medium text-muted", className);
+}
+
+/** Match Subject/Message labels on To / Which people multi-selects. */
+export const PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS = portalMessageFieldLabel();
+
+/** Two-column row for compose dropdowns (To / Which people, Subject / Send via). */
+export const PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS = "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2";
+
+export function portalMessageSendViaToMode(selected: string[]): PortalMessageSendViaMode {
+  const { viaEmail, viaSms } = portalMessageChannelsFromSelection(selected);
+  if (viaEmail && viaSms) return "both";
+  if (viaSms) return "sms";
+  return "email";
+}
+
+export function portalMessageSendViaModeToSelection(mode: PortalMessageSendViaMode): string[] {
+  if (mode === "both") return ["email", "sms"];
+  if (mode === "sms") return ["sms"];
+  return ["email"];
+}
+
+export function PortalMessageComposeModalBody({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-[min(72dvh,34rem)] min-h-[22rem] flex-col overflow-hidden">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function defaultPortalMessageScheduleAt(): string {
@@ -162,6 +201,59 @@ export function PortalMessageSendViaField({
   );
 }
 
+/** Single-select Send via — same field width and label style as Subject / Message. */
+export function PortalMessageSendViaDropdown({
+  selected,
+  onChange,
+  emailAvailable = true,
+  smsAvailable = true,
+  disabled = false,
+  footerNote = PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE,
+  dataAttr = "portal-message-send-via",
+}: {
+  selected: string[];
+  onChange: (next: string[]) => void;
+  emailAvailable?: boolean;
+  smsAvailable?: boolean;
+  disabled?: boolean;
+  footerNote?: string;
+  dataAttr?: string;
+}) {
+  const options: CheckboxMultiSelectOption[] = [
+    { value: "email", label: "Email" },
+    { value: "sms", label: smsAvailable ? "SMS" : "SMS (not enabled)" },
+    { value: "both", label: smsAvailable ? "Email & SMS" : "Email & SMS (SMS off)" },
+  ];
+
+  const mode = portalMessageSendViaToMode(selected);
+  const allowedModes: PortalMessageSendViaMode[] = smsAvailable
+    ? ["email", "sms", "both"]
+    : ["email"];
+  const effectiveMode = allowedModes.includes(mode) ? mode : "email";
+
+  return (
+    <div>
+      <FieldSingleSelect
+        label="Send via"
+        labelClassName={portalMessageFieldLabel()}
+        options={options}
+        value={effectiveMode}
+        onChange={(next) => {
+          const picked = next as PortalMessageSendViaMode;
+          if (!smsAvailable && picked !== "email") {
+            onChange(["email"]);
+            return;
+          }
+          onChange(portalMessageSendViaModeToSelection(picked));
+        }}
+        disabled={disabled}
+        dataAttr={dataAttr}
+      />
+      <p className="mt-1.5 text-xs text-muted">{footerNote}</p>
+    </div>
+  );
+}
+
 export function PortalMessageBodyField({
   id = "portal-message-body",
   value,
@@ -240,8 +332,13 @@ export function PortalMessageScheduleFields({
 }) {
   if (disabled) return null;
   return (
-    <>
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+    <div
+      className={cn(
+        "flex gap-4",
+        scheduleLater ? "flex-col sm:flex-row sm:items-end" : "flex-row items-center",
+      )}
+    >
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm sm:min-h-10">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border accent-primary"
@@ -252,7 +349,7 @@ export function PortalMessageScheduleFields({
         <span className="font-medium text-foreground">Schedule for later</span>
       </label>
       {scheduleLater ? (
-        <label className="block text-sm">
+        <label className="block min-w-0 flex-1 text-sm">
           <span className={portalMessageFieldLabel()}>Send date & time</span>
           <Input
             type="datetime-local"
@@ -263,6 +360,6 @@ export function PortalMessageScheduleFields({
           />
         </label>
       ) : null}
-    </>
+    </div>
   );
 }

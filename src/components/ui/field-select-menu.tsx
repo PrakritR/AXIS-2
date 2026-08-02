@@ -87,6 +87,14 @@ export function fieldSelectMenuContentPx(count: number, extraPx = 0): number {
   return rows * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12 + extraPx;
 }
 
+/** Scrollable list height inside a portaled menu shell (search row excluded). */
+export function fieldSelectMenuListMaxHeightPx(shellMaxHeight: number, searchPx = 0): number {
+  return Math.max(
+    FIELD_SELECT_MENU_ITEM_HEIGHT_PX,
+    shellMaxHeight - searchPx - 8,
+  );
+}
+
 export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,

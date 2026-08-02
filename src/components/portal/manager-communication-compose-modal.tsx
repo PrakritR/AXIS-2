@@ -7,9 +7,13 @@ import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components
 import {
   defaultPortalMessageChannelSelection,
   defaultPortalMessageScheduleAt,
+  PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS,
   PortalMessageBodyField,
+  PortalMessageComposeModalBody,
   PortalMessageScheduleFields,
-  PortalMessageSendViaField,
+  PortalMessageSendViaDropdown,
   PortalMessageSubjectField,
   portalMessageChannelsFromSelection,
   portalMessageFieldLabel,
@@ -27,6 +31,8 @@ import {
 } from "@/data/inbox-scoped-directory";
 import type { ManagerSmsResidentConversation } from "@/lib/manager-sms-messages";
 import { parseOtherRecipientTokens, normalizePhoneE164, type OtherRecipientToken } from "@/lib/communication-other-recipients";
+import { buildOptimisticSentThread } from "@/lib/inbox-message-timeline";
+import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import { RecipientChipsInput } from "@/components/ui/recipient-chips-input";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -112,6 +118,8 @@ export function ManagerCommunicationComposeModal({
   senderName = "Property manager",
   senderEmail = "manager@example.com",
   onSent,
+  onStageOptimistic,
+  onClearOptimistic,
 }: {
   open: boolean;
   onClose: () => void;
@@ -122,7 +130,14 @@ export function ManagerCommunicationComposeModal({
   smsUiEnabled?: boolean;
   senderName?: string;
   senderEmail?: string;
-  onSent?: (channels: { email: boolean; sms: boolean }) => void;
+  onSent?: (result: {
+    email: boolean;
+    sms: boolean;
+    primaryRecipientEmail?: string;
+  }) => void;
+  /** Show the outbound bubble immediately while the send request is in flight. */
+  onStageOptimistic?: (thread: PersistedInboxThread) => void;
+  onClearOptimistic?: (threadId: string) => void;
 }) {
   const { showToast } = useAppUi();
   const [directoryContacts, setDirectoryContacts] = useState<InboxScopedContact[]>([]);
@@ -487,6 +502,26 @@ export function ManagerCommunicationComposeModal({
     let emailOk = !viaEmail;
     let smsOk = !viaSms;
     let lastError = "Could not send.";
+    let optimisticId: string | null = null;
+    let primaryRecipientEmail: string | undefined;
+
+    if (viaEmail) {
+      const emailTargets = resolveEmailTargets();
+      if (
+        emailTargets.directEmails.length === 1 &&
+        emailTargets.broadcastCategories.length === 0
+      ) {
+        primaryRecipientEmail = emailTargets.directEmails[0];
+        const optimistic = buildOptimisticSentThread({
+          recipientEmail: primaryRecipientEmail,
+          subject: subject.trim(),
+          body: text,
+          senderLabel: senderName,
+        });
+        optimisticId = optimistic.id;
+        onStageOptimistic?.(optimistic);
+      }
+    }
 
     try {
       if (viaEmail) {
@@ -552,27 +587,31 @@ export function ManagerCommunicationComposeModal({
       }
 
       if ((viaEmail && !emailOk) || (viaSms && !smsOk)) {
+        if (optimisticId) onClearOptimistic?.(optimisticId);
         if (viaEmail && emailOk && viaSms && !smsOk) {
           showToast("Email sent, but SMS failed.");
           onClose();
-          onSent?.({ email: true, sms: false });
+          onSent?.({ email: true, sms: false, primaryRecipientEmail });
           return;
         }
         if (viaSms && smsOk && viaEmail && !emailOk) {
           showToast("SMS sent, but email failed.");
           onClose();
-          onSent?.({ email: false, sms: true });
+          onSent?.({ email: false, sms: true, primaryRecipientEmail });
           return;
         }
         showToast(lastError);
         return;
       }
 
+      if (optimisticId) onClearOptimistic?.(optimisticId);
+
       const both = viaEmail && viaSms;
       showToast(both ? "Message sent via email and SMS." : viaSms ? "SMS sent." : "Message sent.");
       onClose();
-      onSent?.({ email: viaEmail, sms: viaSms });
+      onSent?.({ email: viaEmail, sms: viaSms, primaryRecipientEmail });
     } catch {
+      if (optimisticId) onClearOptimistic?.(optimisticId);
       showToast(lastError);
     } finally {
       setSending(false);
@@ -593,7 +632,8 @@ export function ManagerCommunicationComposeModal({
       title="New message"
       onClose={onClose}
       dense
-      panelClassName="max-h-[min(92dvh,36rem)]"
+      scrollableContent={false}
+      panelClassName={PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS}
       footer={
         <ModalFooter>
           <Button
@@ -609,10 +649,11 @@ export function ManagerCommunicationComposeModal({
         </ModalFooter>
       }
     >
-      <div className="flex min-h-0 flex-col gap-2.5">
-        <div className="grid shrink-0 gap-2.5 sm:grid-cols-2">
+      <PortalMessageComposeModalBody>
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
           <CheckboxMultiSelect
             label="To"
+            labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
             options={sectionOptions}
             selected={selectedCategories}
             onChange={onCategoriesChange}
@@ -620,6 +661,7 @@ export function ManagerCommunicationComposeModal({
           />
           <CheckboxMultiSelect
             label="Which people"
+            labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
             groups={personGroups}
             selected={selectedKeys}
             onChange={(next) => setSelectedKeys(next as PersonKey[])}
@@ -637,7 +679,7 @@ export function ManagerCommunicationComposeModal({
         </div>
 
         {selectedCategories.includes("other") ? (
-          <div className="shrink-0" data-attr="communication-compose-other-wrap">
+          <div data-attr="communication-compose-other-wrap">
             <label className={portalMessageFieldLabel()} htmlFor="communication-compose-other">
               Other
             </label>
@@ -658,28 +700,32 @@ export function ManagerCommunicationComposeModal({
           </div>
         ) : null}
 
-        <PortalMessageSubjectField
-          value={subject}
-          onChange={setSubject}
-          dataAttr="communication-compose-subject"
-        />
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
+          <PortalMessageSubjectField
+            value={subject}
+            onChange={setSubject}
+            dataAttr="communication-compose-subject"
+          />
 
-        {smsUiEnabled ? (
-          <PortalMessageSendViaField
+          <PortalMessageSendViaDropdown
             selected={sendVia}
             onChange={setSendVia}
             emailAvailable
             smsAvailable={smsUiEnabled}
-            footerNote="SMS uses your work number; recipients need a phone on file or under Other."
+            footerNote={
+              smsUiEnabled
+                ? "SMS uses your work number; recipients need a phone on file or under Other."
+                : "Messages are sent by email and saved to PropLane inbox."
+            }
             dataAttr="communication-compose-send-via"
           />
-        ) : null}
+        </div>
 
         <PortalMessageBodyField
           value={body}
           onChange={setBody}
           placeholder="Write your message…"
-          minHeightClass="max-h-[min(28dvh,10.5rem)] min-h-[5.5rem]"
+          minHeightClass="min-h-[7rem]"
           maxLength={viaSms ? 1600 : undefined}
           showCharCount={viaSms}
           dataAttr="communication-compose-body"
@@ -693,7 +739,7 @@ export function ManagerCommunicationComposeModal({
           scheduleDataAttr="communication-compose-schedule-later"
           sendAtDataAttr="communication-compose-schedule-at"
         />
-      </div>
+      </PortalMessageComposeModalBody>
     </Modal>
   );
 }

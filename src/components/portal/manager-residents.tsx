@@ -162,6 +162,14 @@ import {
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import {
+  APPLICATION_COMPLETION_REMINDER_SUBJECT,
+  buildApplicationCompletionReminderBody,
+} from "@/lib/application-completion-reminder-email";
+import {
+  inProgressApplicationResumeUrl,
+  isInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
 import { buildApplicationGroups, groupForRow } from "@/lib/rental-application/application-groups";
 import {
   invalidatePersistedInboxCache,
@@ -340,8 +348,17 @@ export function ManagerResidents({
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [checkrScreeningShowPicker, setCheckrScreeningShowPicker] = useState(false);
   const [applicationReviewView, setApplicationReviewView] = useState<ApplicationReviewView>("application");
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
+  const [applicationReminderPreview, setApplicationReminderPreview] = useState<{
+    row: DemoApplicantRow;
+    to: string;
+    subject: string;
+    text: string;
+  } | null>(null);
+  const [applicationReminderPreviewBusyId, setApplicationReminderPreviewBusyId] = useState<string | null>(null);
+  const [applicationReminderBusyId, setApplicationReminderBusyId] = useState<string | null>(null);
 
   // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
   const [svcSubTab, setSvcSubTab] = useState<"requests" | "work-orders">("requests");
@@ -1459,6 +1476,99 @@ export function ManagerResidents({
     navigate(`${portalBase}/residents/${residentsTab}`);
   };
 
+  const sendApplicationCompletionReminder = async (
+    row: DemoApplicantRow,
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+  ) => {
+    if (applicationReminderBusyId) return;
+    setApplicationReminderBusyId(row.id);
+    try {
+      if (isDemoModeActive()) {
+        showToast("Application reminder sent to the applicant.");
+        return;
+      }
+      const res = await fetch("/api/portal/send-application-completion-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          applicationId: row.id,
+          viaEmail: channels?.viaEmail !== false,
+          viaSms: channels?.viaSms === true,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (res.ok && data.ok) {
+        showToast("Application reminder sent to the applicant.");
+        return;
+      }
+      if (typeof data.mailtoHref === "string" && data.mailtoHref) {
+        const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+        openMailtoHref(data.mailtoHref);
+        showToast(
+          res.status === 503
+            ? "Email isn't configured. Opened a draft in your mail app instead."
+            : `Couldn't send automatically${data.error ? ` (${data.error})` : ""}. Opened a draft in your mail app.`,
+        );
+        return;
+      }
+      showToast(data.error ?? "Could not send the application reminder.");
+    } catch {
+      showToast("Could not send the application reminder.");
+    } finally {
+      setApplicationReminderBusyId(null);
+      setApplicationReminderPreview(null);
+    }
+  };
+
+  const openApplicationCompletionReminderPreview = async (row: DemoApplicantRow) => {
+    if (applicationReminderPreviewBusyId || applicationReminderBusyId) return;
+    setApplicationReminderPreviewBusyId(row.id);
+    try {
+      if (isDemoModeActive()) {
+        const origin = typeof window === "undefined" ? "" : window.location.origin;
+        const text = buildApplicationCompletionReminderBody({
+          applicantName: row.name || undefined,
+          propertyTitle: row.property || undefined,
+          resumeUrl: inProgressApplicationResumeUrl(origin, row),
+          signInUrl: `${origin}/auth/sign-in?role=resident`,
+        });
+        setApplicationReminderPreview({
+          row,
+          to: row.email?.trim() || "the applicant",
+          subject: APPLICATION_COMPLETION_REMINDER_SUBJECT,
+          text,
+        });
+        return;
+      }
+      const res = await fetch("/api/portal/send-application-completion-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ applicationId: row.id, preview: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        preview?: { to?: string; subject?: string; text?: string };
+      };
+      if (res.ok && data.ok && data.preview) {
+        setApplicationReminderPreview({
+          row,
+          to: data.preview.to ?? "",
+          subject: data.preview.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT,
+          text: data.preview.text ?? "",
+        });
+        return;
+      }
+      showToast(data.error ?? "Could not load the reminder preview.");
+    } catch {
+      showToast("Could not load the reminder preview.");
+    } finally {
+      setApplicationReminderPreviewBusyId(null);
+    }
+  };
+
   function saveManualResident() {
     void (async () => {
       if (arSaving) return;
@@ -2005,19 +2115,35 @@ export function ManagerResidents({
       <>
         {applicationShowsBackgroundCheck(selectedApplicationRow) &&
         Boolean(selectedApplicationRow.application?.consentCredit) &&
-        selectedApplicationRow.backgroundCheck?.status !== "pending" ? (
+        selectedApplicationRow.backgroundCheck?.status !== "pending" &&
+        selectedApplicationRow.backgroundCheck?.status !== "complete" ? (
           <Button
             type="button"
             variant="outline"
             className={PORTAL_DETAIL_BTN}
             data-attr="run-background-check"
-            onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+            onClick={() => {
+              setCheckrScreeningShowPicker(false);
+              setCheckrScreeningRowId(selectedApplicationRow.id);
+            }}
           >
-            {isDemoModeActive()
-              ? "Test"
-              : selectedApplicationRow.backgroundCheck
-                ? "Re-run background check"
-                : "Run background check"}
+            {isDemoModeActive() ? "Test" : "Run background check"}
+          </Button>
+        ) : null}
+        {applicationShowsBackgroundCheck(selectedApplicationRow) &&
+        Boolean(selectedApplicationRow.application?.consentCredit) &&
+        selectedApplicationRow.backgroundCheck?.status === "complete" ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="run-background-check-again"
+            onClick={() => {
+              setCheckrScreeningShowPicker(true);
+              setCheckrScreeningRowId(selectedApplicationRow.id);
+            }}
+          >
+            Run again
           </Button>
         ) : null}
         {selectedApplicationRow.backgroundCheck?.status === "complete" ||
@@ -2046,7 +2172,18 @@ export function ManagerResidents({
             >
               Reject
             </Button>
-            {isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
+            {isInProgressApplicationRow(selectedApplicationRow) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                data-attr="resident-application-send-reminder"
+                disabled={applicationReminderPreviewBusyId !== null || applicationReminderBusyId !== null}
+                onClick={() => void openApplicationCompletionReminderPreview(selectedApplicationRow)}
+              >
+                {applicationReminderPreviewBusyId === selectedApplicationRow.id ? "Loading…" : "Send reminder"}
+              </Button>
+            ) : isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
               <Button
                 type="button"
                 variant="primary"
@@ -2296,7 +2433,10 @@ export function ManagerResidents({
                                     activeView={applicationReviewView}
                                     onActiveViewChange={setApplicationReviewView}
                                     onScreeningUpdated={handleScreeningUpdated}
-                                    onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+                                    onOpenScreeningModal={(opts) => {
+                                      setCheckrScreeningShowPicker(Boolean(opts?.showPackagePicker));
+                                      setCheckrScreeningRowId(selectedApplicationRow.id);
+                                    }}
                                   />
                                 </div>
                               ) : (
@@ -3251,7 +3391,11 @@ export function ManagerResidents({
             : null
         }
         open={checkrScreeningRowId !== null}
-        onClose={() => setCheckrScreeningRowId(null)}
+        showPackagePickerInitially={checkrScreeningShowPicker}
+        onClose={() => {
+          setCheckrScreeningRowId(null);
+          setCheckrScreeningShowPicker(false);
+        }}
         onUpdated={handleScreeningUpdated}
       />
 
@@ -3372,6 +3516,27 @@ export function ManagerResidents({
             draft?.body ?? preview.body,
             channels,
           );
+        }}
+      />
+
+      <PortalNotificationPreviewModal
+        open={applicationReminderPreview !== null}
+        title="Send application reminder"
+        onClose={() => setApplicationReminderPreview(null)}
+        recipient={applicationReminderPreview?.to ?? ""}
+        subject={applicationReminderPreview?.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT}
+        body={applicationReminderPreview?.text ?? ""}
+        intro="Choose Email and/or SMS. Always saved to PropLane inbox."
+        showSkipMessage={false}
+        showChannelPicker
+        emailAvailable
+        smsAvailable
+        confirmLabel="Send reminder"
+        confirmBusy={applicationReminderBusyId !== null}
+        confirmBusyLabel="Sending…"
+        onConfirm={(_skip, channels) => {
+          if (!applicationReminderPreview) return;
+          void sendApplicationCompletionReminder(applicationReminderPreview.row, channels);
         }}
       />
 

@@ -155,6 +155,10 @@ export function teamLinkHref(basePath: string, _tab?: TeamLinkTabId): string {
 export const APPLICATION_BUCKETS = ["incomplete", "pending", "approved", "rejected"] as const;
 export type ApplicationBucketId = (typeof APPLICATION_BUCKETS)[number];
 
+/** Application list tabs shown in the Applications hub. */
+export const APPLICATION_LIST_TABS = [...APPLICATION_BUCKETS] as const;
+export type ApplicationListTabId = (typeof APPLICATION_LIST_TABS)[number];
+
 export function parseApplicationBucket(raw: string | undefined | null): ApplicationBucketId {
   if (raw && (APPLICATION_BUCKETS as readonly string[]).includes(raw)) {
     return raw as ApplicationBucketId;
@@ -162,8 +166,16 @@ export function parseApplicationBucket(raw: string | undefined | null): Applicat
   return "pending";
 }
 
-export function applicationListHref(basePath: string, bucket: ApplicationBucketId): string {
-  return `${basePath}/applications/${bucket}`;
+export function parseApplicationListTab(raw: string | undefined | null): ApplicationListTabId {
+  if (raw === "screenings") return "approved";
+  if (raw && (APPLICATION_LIST_TABS as readonly string[]).includes(raw)) {
+    return raw as ApplicationListTabId;
+  }
+  return "pending";
+}
+
+export function applicationListHref(basePath: string, tab: ApplicationListTabId): string {
+  return `${basePath}/applications/${tab}`;
 }
 
 export function applicationDetailHref(
@@ -172,6 +184,10 @@ export function applicationDetailHref(
   applicationId: string,
 ): string {
   return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
+}
+
+export function applicationScreeningDetailHref(basePath: string, applicationId: string): string {
+  return applicationDetailHref(basePath, "approved", applicationId);
 }
 
 /** Resident application list buckets (Pending / Approved / Rejected). */

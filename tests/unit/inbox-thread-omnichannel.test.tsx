@@ -19,7 +19,7 @@ afterEach(cleanup);
 const LONG = "This is a very long reply ".repeat(40).trim();
 
 describe("inbox thread omnichannel primitives", () => {
-  it("tags each bubble with its channel and renders the full body", () => {
+  it("tags each bubble with its channel when multi-channel timeline requests it", () => {
     const msg: InboxBubbleMessage = {
       id: "m1",
       author: "Dana",
@@ -28,7 +28,7 @@ describe("inbox thread omnichannel primitives", () => {
       direction: "inbound",
       channel: "email",
     };
-    render(<InboxBubble message={msg} />);
+    render(<InboxBubble message={msg} showChannel />);
     expect(screen.getByText("Email")).toBeTruthy();
     // The complete text is present (not clipped to a preview).
     const body = screen.getByText(LONG);
@@ -36,9 +36,18 @@ describe("inbox thread omnichannel primitives", () => {
     expect(body.className).not.toMatch(/line-clamp|truncate/);
   });
 
-  it("defaults an untagged bubble to the Email channel", () => {
+  it("hides the channel tag on single-channel email threads by default", () => {
     render(<InboxBubble message={{ id: "m2", author: "X", body: "hi", at: "now", direction: "outbound" }} />);
-    expect(screen.getByText("Email")).toBeTruthy();
+    expect(screen.queryByText("Email")).toBeNull();
+  });
+
+  it("shows Sending… under outbound bubbles while delivery is in flight", () => {
+    render(
+      <InboxBubble
+        message={{ id: "m3", author: "You", body: "hello", at: "now", direction: "outbound", delivery: "sending" }}
+      />,
+    );
+    expect(screen.getByText("Sending…")).toBeTruthy();
   });
 
   it("renders a scheduled message COMPACT by default — summary only, no body/actions", () => {

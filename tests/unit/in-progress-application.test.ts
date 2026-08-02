@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   inProgressApplicationResumeUrl,
@@ -7,9 +8,11 @@ import {
   INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
   isSubmittedPendingApplicationRow,
+  switchApplicationTargetProperty,
   syncInProgressApplicationRow,
   IN_PROGRESS_APPLICATION_STAGE,
 } from "@/lib/rental-application/in-progress-application";
+import { clearRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import { isWithdrawnApplicationRow, sortResidentApplicationRows } from "@/lib/rental-application/resident-application-list";
 import { residentApplicationSubmitBlocked } from "@/lib/rental-application/application-policy";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
@@ -158,6 +161,36 @@ describe("in-progress-application", () => {
     // exclusion is scoped to withdrawal, not a regression of normal resume.
     const liveDraft = { ...withdrawnDraft, id: "PROPLANE-LIVE1", withdrawnAt: undefined };
     expect(findInProgressRowForTarget([liveDraft], { propertyId: "prop-1" })?.id).toBe("PROPLANE-LIVE1");
+  });
+
+  it("switchApplicationTargetProperty resumes or mints a fresh axis id per property", () => {
+    clearRentalWizardDraft();
+
+    const row = buildInProgressApplicationRow({
+      axisId: "PROPLANE-PROP2",
+      form: { ...createInitialRentalWizardState(), propertyId: "prop-2", fullLegalName: "Jamie" },
+      residentEmail: "jamie@test.com",
+    });
+    saveRentalWizardDraftAxisId("PROPLANE-PROP1");
+
+    const resumed = switchApplicationTargetProperty({
+      previousPropertyId: "prop-1",
+      nextPropertyId: "prop-2",
+      inProgressRows: [row],
+    });
+    expect(resumed?.axisId).toBe("PROPLANE-PROP2");
+    expect(loadRentalWizardDraftAxisId()).toBe("PROPLANE-PROP2");
+
+    clearRentalWizardDraft();
+    saveRentalWizardDraftAxisId("PROPLANE-PROP1");
+    const fresh = switchApplicationTargetProperty({
+      previousPropertyId: "prop-1",
+      nextPropertyId: "prop-3",
+      inProgressRows: [row],
+    });
+    expect(fresh?.axisId).toMatch(/^PROPLANE-/);
+    expect(fresh?.axisId).not.toBe("PROPLANE-PROP1");
+    expect(loadRentalWizardDraftAxisId()).toBe(fresh?.axisId);
   });
 
   it("withdrawal removes the row from the resident's active list but the manager keeps the record", () => {

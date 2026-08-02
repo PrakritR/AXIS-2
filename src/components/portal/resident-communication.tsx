@@ -11,8 +11,8 @@ import {
   PortalInboxEmptyState,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   mergeUnifiedInboxItems,
@@ -272,6 +272,7 @@ function ResidentUnifiedInbox({
           controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
           onControlledExpandedIdChange={(id) => {
             if (!id) setSelectedKey(null);
+            else setSelectedKey(unifiedInboxKey("email", id));
           }}
         />
       </div>
@@ -302,37 +303,31 @@ export function ResidentCommunication({
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
   const [threadOpen, setThreadOpen] = useState(false);
 
+  const newMessageButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+      onClick={() => inboxRef.current?.openCompose()}
+    >
+      New message
+    </Button>
+  );
+
   const titleAside = (
     <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
-      <Button
-        type="button"
-        variant="primary"
-        className={PORTAL_HEADER_ACTION_BTN}
-        onClick={() => inboxRef.current?.openCompose()}
-      >
-        New message
-      </Button>
+      {newMessageButton}
     </PortalSectionActionRow>
   );
 
-  const mobileActionsRow = (
-    <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-communication-mobile-actions">
-      <Button
-        type="button"
-        variant="primary"
-        className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-        onClick={() => inboxRef.current?.openCompose()}
-      >
-        New message
-      </Button>
-    </div>
-  );
+  const mobileActionsRow = <PortalPageHeaderMobileActionsRow actions={newMessageButton} />;
 
   return (
     <PortalCommunicationShell
       title="Communication"
       titleAside={titleAside}
       mobileActionsRow={mobileActionsRow}
+      hideTitleOnMobileNav
       hideMobileFilterRow={threadOpen}
     >
       <ResidentUnifiedInbox

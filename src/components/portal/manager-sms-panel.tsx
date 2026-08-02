@@ -226,6 +226,7 @@ export const ManagerSmsPanel = forwardRef<
   const [replyViaEmail, setReplyViaEmail] = useState(false);
   const [replyViaSms, setReplyViaSms] = useState(true);
   const [sending, setSending] = useState(false);
+  const [pendingOutboundByRow, setPendingOutboundByRow] = useState<Record<string, ManagerSmsMessageRow[]>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const messagesDeleteEndpoint = useMemo(() => smsMessagesDeleteEndpoint(endpoint), [endpoint]);
@@ -521,6 +522,24 @@ export const ManagerSmsPanel = forwardRef<
       return;
     }
     setSending(true);
+    const pendingId = `pending-${Date.now()}`;
+    const pendingRow: ManagerSmsMessageRow = {
+      id: pendingId,
+      direction: "outbound",
+      body: text,
+      fromPhone: null,
+      toPhone: active?.resident.phone ?? "",
+      messageSid: null,
+      source: "work_number",
+      createdAt: new Date().toISOString(),
+    };
+    if (active) {
+      setPendingOutboundByRow((prev) => ({
+        ...prev,
+        [active.rowId]: [...(prev[active.rowId] ?? []), pendingRow],
+      }));
+    }
+    setDraft("");
     try {
       let smsOk = !replyViaSms;
       let emailOk = !replyViaEmail;
@@ -576,7 +595,6 @@ export const ManagerSmsPanel = forwardRef<
         }
       }
 
-      setDraft("");
       if (replyViaSms) {
         setHiddenConversationIds((prev) => {
           if (!active || !prev.has(active.rowId)) return prev;
@@ -593,6 +611,13 @@ export const ManagerSmsPanel = forwardRef<
     } catch {
       showToast("Could not send.");
     } finally {
+      if (active) {
+        setPendingOutboundByRow((prev) => {
+          const next = { ...prev };
+          delete next[active.rowId];
+          return next;
+        });
+      }
       setSending(false);
     }
   }
@@ -730,7 +755,12 @@ export const ManagerSmsPanel = forwardRef<
             : "portal-inbox-thread-body flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
         }
       >
-        {active.messages.length === 0 ? (
+        {(() => {
+          const threadMessages = [
+            ...active.messages,
+            ...(pendingOutboundByRow[active.rowId] ?? []),
+          ];
+          return threadMessages.length === 0 ? (
           <div className={`flex items-center justify-center py-6 ${pageScroll ? "" : "min-h-full flex-1"}`}>
             <PortalInboxEmptyState title="No messages in this conversation." />
           </div>
@@ -738,16 +768,28 @@ export const ManagerSmsPanel = forwardRef<
           <div
             className={`flex w-full flex-col gap-2 ${pageScroll ? "space-y-2" : "min-h-min flex-grow justify-end"}`}
           >
-            {active.messages.map((msg) => (
+            {threadMessages.map((msg, index) => (
               <Bubble
                 key={msg.id}
                 message={msg}
+                pending={msg.id.startsWith("pending-")}
+                cluster={
+                  threadMessages[index - 1]?.direction === msg.direction &&
+                  threadMessages[index + 1]?.direction === msg.direction
+                    ? "middle"
+                    : threadMessages[index - 1]?.direction === msg.direction
+                      ? "last"
+                      : threadMessages[index + 1]?.direction === msg.direction
+                        ? "first"
+                        : "single"
+                }
                 deleting={deletingMessageId === msg.id}
-                onDelete={allowDelete ? () => void deleteMessage(msg) : undefined}
+                onDelete={allowDelete && !msg.id.startsWith("pending-") ? () => void deleteMessage(msg) : undefined}
               />
             ))}
           </div>
-        )}
+        );
+        })()}
         <div ref={threadEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
@@ -808,22 +850,44 @@ function Bubble({
   message,
   onDelete,
   deleting,
+  pending = false,
+  cluster = "single",
 }: {
   message: ManagerSmsMessageRow;
   onDelete?: () => void;
   deleting?: boolean;
+  pending?: boolean;
+  cluster?: "single" | "first" | "middle" | "last";
 }) {
   const outbound = message.direction === "outbound";
+  const radius = outbound
+    ? cluster === "first"
+      ? "rounded-[1.125rem] rounded-br-md"
+      : cluster === "middle"
+        ? "rounded-[1.125rem] rounded-tr-md rounded-br-md"
+        : cluster === "last"
+          ? "rounded-[1.125rem] rounded-tr-md"
+          : "rounded-[1.125rem] rounded-br-md"
+    : cluster === "first"
+      ? "rounded-[1.125rem] rounded-bl-md"
+      : cluster === "middle"
+        ? "rounded-[1.125rem] rounded-tl-md rounded-bl-md"
+        : cluster === "last"
+          ? "rounded-[1.125rem] rounded-tl-md"
+          : "rounded-[1.125rem] rounded-bl-md border border-border bg-secondary text-foreground";
   return (
     <div className={`group/msg flex ${outbound ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`relative max-w-[min(85%,26rem)] px-3.5 py-2 text-sm leading-relaxed ${
-          outbound
-            ? "rounded-2xl rounded-br-md text-primary-foreground"
-            : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
-        }`}
-        style={outbound ? { background: BUBBLE_OUT_BG } : undefined}
-      >
+      <div className="flex max-w-full flex-col">
+        <div
+          className={`relative max-w-[min(88%,20rem)] px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm ${radius} ${
+            outbound
+              ? "text-primary-foreground shadow-[0_1px_2px_rgba(15,23,42,0.12)]"
+              : cluster === "single"
+                ? "border border-border bg-secondary text-foreground"
+                : "border border-border bg-secondary text-foreground"
+          } ${pending ? "opacity-80" : ""}`}
+          style={outbound ? { background: BUBBLE_OUT_BG } : undefined}
+        >
         {onDelete ? (
           <button
             type="button"
@@ -837,6 +901,12 @@ function Bubble({
           </button>
         ) : null}
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
+        </div>
+        {pending ? (
+          <span className={`mt-1 block px-1 text-[11px] italic text-muted ${outbound ? "text-right" : ""}`}>
+            Sending…
+          </span>
+        ) : null}
       </div>
     </div>
   );
