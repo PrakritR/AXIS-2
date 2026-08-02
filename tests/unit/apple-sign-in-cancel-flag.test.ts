@@ -69,3 +69,34 @@ describe("Apple sign-in cancellation flag", () => {
     expect(result.ok === false && result.cancelled).toBeFalsy();
   });
 });
+
+describe("cancellation is classified at the authorization step only", () => {
+  it("does NOT treat a token-exchange abort as a user cancellation", async () => {
+    // On iOS an aborted request surfaces as NSURLErrorCancelled. Before this was scoped, that
+    // was reported as `cancelled`, and because cancellation is silent the user saw NOTHING at
+    // all for a real network failure — the silent failure this whole change removes.
+    vi.resetModules();
+    vi.doMock("@capacitor-community/apple-sign-in", () => ({
+      SignInWithApple: {
+        authorize: async () => ({ response: { identityToken: "tok" } }),
+      },
+    }));
+
+    const supabase = {
+      auth: {
+        signInWithIdToken: async () => {
+          throw new Error("The request was cancelled. (NSURLErrorDomain -999)");
+        },
+        updateUser: async () => ({ data: {}, error: null }),
+      },
+    };
+
+    const { runNativeAppleSignIn } = await import("@/lib/auth/native-apple-sign-in");
+    const result = await runNativeAppleSignIn(supabase as never, {});
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.cancelled).toBeFalsy();
+    }
+  });
+});

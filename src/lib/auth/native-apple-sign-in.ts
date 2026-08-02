@@ -22,6 +22,23 @@ export type NativeAppleSignInResult =
  */
 export const APPLE_SIGN_IN_CANCELLED_MESSAGE = "Apple sign-in was cancelled.";
 
+/**
+ * Did the USER dismiss the Apple sheet?
+ *
+ * Prefers the structured signal — ASAuthorizationError.canceled is 1001, which the plugin
+ * surfaces as an error `code` — and only falls back to matching the human string, which is why
+ * this is confined to the authorization call rather than applied to every throw in the flow.
+ */
+function isAppleAuthorizationCancellation(error: unknown, message: string): boolean {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
+  if (code === "1001" || code.toUpperCase().includes("CANCEL")) return true;
+  return message.toLowerCase().includes("cancel");
+}
+
+
 function randomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = new Uint8Array(length);
@@ -110,13 +127,31 @@ export async function runNativeAppleSignIn(
     const rawNonce = randomString(32);
     const hashedNonce = await sha256Hex(rawNonce);
 
-    const result = await SignInWithApple.authorize({
-      clientId: IOS_BUNDLE_ID,
-      redirectURI: supabaseAppleOAuthRedirectUri(),
-      scopes: "email name",
-      state: randomString(16),
-      nonce: hashedNonce,
-    });
+    // Cancellation is classified HERE, around the authorization call only. It used to be
+    // inferred in the outer catch from `message.includes("cancel")`, which also spans
+    // `signInWithIdToken` / `updateUser` — and on iOS an aborted request surfaces as
+    // NSURLErrorCancelled, so backgrounding the app mid-token-exchange was reported as a user
+    // cancellation. Since cancellation is silent, that turned a real network failure into a
+    // blank screen: the exact silent failure this whole change removes.
+    let result: Awaited<ReturnType<typeof SignInWithApple.authorize>>;
+    try {
+      result = await SignInWithApple.authorize({
+        clientId: IOS_BUNDLE_ID,
+        redirectURI: supabaseAppleOAuthRedirectUri(),
+        scopes: "email name",
+        state: randomString(16),
+        nonce: hashedNonce,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Apple sign-in failed.";
+      if (isAppleAuthorizationCancellation(e, message)) {
+        return { ok: false, message: APPLE_SIGN_IN_CANCELLED_MESSAGE, cancelled: true };
+      }
+      if (message.toLowerCase().includes("not implemented")) {
+        return { ok: false, message: NATIVE_APPLE_REBUILD_MESSAGE };
+      }
+      return { ok: false, message };
+    }
 
     const identityToken = result.response?.identityToken?.trim();
     if (!identityToken) {
@@ -144,10 +179,10 @@ export async function runNativeAppleSignIn(
     window.location.replace(destination);
     return { ok: true };
   } catch (e) {
+    // Deliberately does NOT classify cancellation: anything thrown past the authorization step
+    // came from the token exchange or profile update, and must surface as a real error even
+    // when the platform words it "cancelled" (NSURLErrorCancelled).
     const message = e instanceof Error ? e.message : "Apple sign-in failed.";
-    if (message.toLowerCase().includes("cancel")) {
-      return { ok: false, message: APPLE_SIGN_IN_CANCELLED_MESSAGE, cancelled: true };
-    }
     if (message.toLowerCase().includes("not implemented")) {
       return { ok: false, message: NATIVE_APPLE_REBUILD_MESSAGE };
     }
