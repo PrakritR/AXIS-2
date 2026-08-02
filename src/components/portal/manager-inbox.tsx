@@ -812,6 +812,8 @@ export const ManagerInbox = forwardRef<
   const [replyViaEmail, setReplyViaEmail] = useState(true);
   const [replyViaSms, setReplyViaSms] = useState(false);
   const [approvingDraft, setApprovingDraft] = useState(false);
+  const [aiAutoSend, setAiAutoSend] = useState(false);
+  const autoSentDraftRef = useRef<string | null>(null);
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [discardedDraftIds, setDiscardedDraftIds] = useState<Set<string>>(() => new Set());
   const [draftingIds, setDraftingIds] = useState<Set<string>>(() => new Set());
@@ -1085,6 +1087,39 @@ export const ManagerInbox = forwardRef<
     }
   }, [activeSmsAvailable, activeThread, handleReply, replyViaEmail, replyViaSms, showToast]);
 
+  useEffect(() => {
+    autoSentDraftRef.current = null;
+  }, [activeThread?.id]);
+
+  useEffect(() => {
+    if (!aiAutoSend || !activeThread?.aiDraft?.text) return;
+    if (activeThread.aiDraft.status !== "pending_approval") return;
+    if (approvingDraft || draftingIds.has(activeThread.id)) return;
+    const key = `${activeThread.id}:${activeThread.aiDraft.text}`;
+    if (autoSentDraftRef.current === key) return;
+    autoSentDraftRef.current = key;
+    void approveActiveDraft();
+  }, [
+    aiAutoSend,
+    activeThread?.id,
+    activeThread?.aiDraft?.text,
+    activeThread?.aiDraft?.status,
+    approvingDraft,
+    draftingIds,
+    approveActiveDraft,
+  ]);
+
+  const replyChannelPicker = (
+    <InboxReplyChannelPicker
+      viaEmail={replyViaEmail}
+      viaSms={replyViaSms}
+      onViaEmailChange={setReplyViaEmail}
+      onViaSmsChange={setReplyViaSms}
+      emailAvailable
+      smsAvailable={activeSmsAvailable}
+    />
+  );
+
   const editActiveDraft = useCallback(() => {
     if (!activeThread?.aiDraft?.text) return;
     setReplyDraft(activeThread.aiDraft.text);
@@ -1355,7 +1390,6 @@ export const ManagerInbox = forwardRef<
       }
       subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
       messages={activeBubbles}
-      afterMessages={scheduledCards}
       threadKey={activeThread.id}
       onBack={() => setExpandedId(null)}
       headerActions={threadHeaderActions}
@@ -1364,6 +1398,14 @@ export const ManagerInbox = forwardRef<
       composer={
         activeThread.folder === "trash" ? undefined : (
           <>
+            {scheduledCards ? (
+              <div
+                className="shrink-0 border-t border-border bg-card/90 px-2 py-2 md:px-3"
+                data-attr="inbox-thread-scheduled-pin"
+              >
+                {scheduledCards}
+              </div>
+            ) : null}
             {showAiDraftUi ? (
               <AiDraftReplyCard
                 drafting={draftingIds.has(activeThread.id) && !activeThread.aiDraft?.text}
@@ -1375,6 +1417,9 @@ export const ManagerInbox = forwardRef<
                 onApprove={() => void approveActiveDraft()}
                 onEdit={editActiveDraft}
                 onDiscard={() => void discardActiveDraft()}
+                channelControl={replyChannelPicker}
+                autoSend={aiAutoSend}
+                onAutoSendChange={setAiAutoSend}
                 onGenerate={
                   discardedDraftIds.has(activeThread.id) || draftErrors[activeThread.id]
                     ? () => {
@@ -1401,16 +1446,7 @@ export const ManagerInbox = forwardRef<
               placeholder="Write a reply…"
               maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
               dataAttr="inbox-reply"
-              channelControl={
-                <InboxReplyChannelPicker
-                  viaEmail={replyViaEmail}
-                  viaSms={replyViaSms}
-                  onViaEmailChange={setReplyViaEmail}
-                  onViaSmsChange={setReplyViaSms}
-                  emailAvailable
-                  smsAvailable={activeSmsAvailable}
-                />
-              }
+              channelControl={replyChannelPicker}
             />
           </>
         )

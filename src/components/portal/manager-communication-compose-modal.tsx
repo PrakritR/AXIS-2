@@ -9,6 +9,7 @@ import {
   defaultPortalMessageScheduleAt,
   PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS,
   PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS,
   PortalMessageBodyField,
   PortalMessageComposeModalBody,
   PortalMessageScheduleFields,
@@ -649,7 +650,7 @@ export function ManagerCommunicationComposeModal({
       }
     >
       <PortalMessageComposeModalBody>
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
           <CheckboxMultiSelect
             label="To"
             labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
@@ -699,24 +700,26 @@ export function ManagerCommunicationComposeModal({
           </div>
         ) : null}
 
-        <PortalMessageSubjectField
-          value={subject}
-          onChange={setSubject}
-          dataAttr="communication-compose-subject"
-        />
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
+          <PortalMessageSubjectField
+            value={subject}
+            onChange={setSubject}
+            dataAttr="communication-compose-subject"
+          />
 
-        <PortalMessageSendViaDropdown
-          selected={sendVia}
-          onChange={setSendVia}
-          emailAvailable
-          smsAvailable={smsUiEnabled}
-          footerNote={
-            smsUiEnabled
-              ? "SMS uses your work number; recipients need a phone on file or under Other."
-              : "Messages are sent by email and saved to PropLane inbox."
-          }
-          dataAttr="communication-compose-send-via"
-        />
+          <PortalMessageSendViaDropdown
+            selected={sendVia}
+            onChange={setSendVia}
+            emailAvailable
+            smsAvailable={smsUiEnabled}
+            footerNote={
+              smsUiEnabled
+                ? "SMS uses your work number; recipients need a phone on file or under Other."
+                : "Messages are sent by email and saved to PropLane inbox."
+            }
+            dataAttr="communication-compose-send-via"
+          />
+        </div>
 
         <PortalMessageBodyField
           value={body}

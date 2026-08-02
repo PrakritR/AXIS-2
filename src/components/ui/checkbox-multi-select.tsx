@@ -23,6 +23,7 @@ import {
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
+  fieldSelectMenuListMaxHeightPx,
   fieldSelectMenuMatches,
   fieldSelectMenuZIndex,
   useFieldSelectMenu,
@@ -112,10 +113,16 @@ export function CheckboxMultiSelect({
   }, [groups, options]);
 
   const showSearch = flatOptions.length > FIELD_SELECT_MENU_VISIBLE_ITEMS;
-  const contentPx = fieldSelectMenuContentPx(
-    flatOptions.length,
-    showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+  const searchPx = showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0;
+  const groupHeaderPx =
+    groups?.length && flatOptions.length > 0
+      ? (groups.length * 26)
+      : 0;
+  const visibleOptionRows = Math.min(
+    Math.max(flatOptions.length, 1),
+    FIELD_SELECT_MENU_VISIBLE_ITEMS,
   );
+  const contentPx = fieldSelectMenuContentPx(visibleOptionRows, searchPx + groupHeaderPx);
 
   const setOpenAndReset = (next: boolean) => {
     setOpen(next);
@@ -211,7 +218,10 @@ export function CheckboxMultiSelect({
           aria-multiselectable="true"
           aria-label={label}
           className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
-          style={{ touchAction: "pan-y" }}
+          style={{
+            touchAction: "pan-y",
+            maxHeight: fieldSelectMenuListMaxHeightPx(menuRect.maxHeight, searchPx),
+          }}
         >
           {flatOptions.length === 0 ? (
             <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -304,10 +314,9 @@ export function FieldSingleSelect({
 
   const buttonLabel = options.find((o) => o.value === value)?.label ?? placeholder;
   const showSearch = options.length > FIELD_SELECT_MENU_VISIBLE_ITEMS;
-  const contentPx = fieldSelectMenuContentPx(
-    options.length,
-    showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
-  );
+  const searchPx = showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0;
+  const visibleOptionRows = Math.min(Math.max(options.length, 1), FIELD_SELECT_MENU_VISIBLE_ITEMS);
+  const contentPx = fieldSelectMenuContentPx(visibleOptionRows, searchPx);
 
   const setOpenAndReset = (next: boolean) => {
     setOpen(next);
@@ -355,7 +364,10 @@ export function FieldSingleSelect({
           role="listbox"
           aria-label={label}
           className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
-          style={{ touchAction: "pan-y" }}
+          style={{
+            touchAction: "pan-y",
+            maxHeight: fieldSelectMenuListMaxHeightPx(menuRect.maxHeight, searchPx),
+          }}
         >
           {filteredOptions.length === 0 ? (
             <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">No matches</p>

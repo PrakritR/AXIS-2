@@ -19,7 +19,7 @@ describe("inbox reply channel helpers", () => {
 });
 
 describe("InboxReplyChannelPicker", () => {
-  it("renders email-only dropdown when SMS is unavailable", () => {
+  it("always lists email and sms channels when sms is unavailable", () => {
     render(
       <InboxReplyChannelPicker
         viaEmail
@@ -30,9 +30,11 @@ describe("InboxReplyChannelPicker", () => {
         smsAvailable={false}
       />,
     );
-    const select = screen.getByLabelText("Send via") as HTMLSelectElement;
-    expect(select.value).toBe("email");
-    expect(select.disabled).toBe(true);
+    const trigger = screen.getByLabelText("Send via");
+    expect(trigger).toHaveTextContent("Email");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("option", { name: /SMS \(not enabled\)/i })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /Email & SMS \(SMS off\)/i })).toBeTruthy();
   });
 
   it("offers email, sms, and both when both channels are available", () => {
@@ -48,12 +50,8 @@ describe("InboxReplyChannelPicker", () => {
         smsAvailable
       />,
     );
-    const select = screen.getByLabelText("Send via");
-    expect(select).toHaveTextContent("Email");
-    expect(select).toHaveTextContent("SMS");
-    expect(select).toHaveTextContent("Email & SMS");
-
-    fireEvent.change(select, { target: { value: "both" } });
+    fireEvent.click(screen.getByLabelText("Send via"));
+    fireEvent.pointerDown(screen.getByRole("option", { name: "Email & SMS" }));
     expect(onEmail).toHaveBeenCalledWith(true);
     expect(onSms).toHaveBeenCalledWith(true);
   });

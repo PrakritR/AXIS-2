@@ -10,7 +10,8 @@ import {
 import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
-import { Input, NativeSelect, Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
+import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -850,8 +851,8 @@ export function inboxReplyModeToChannels(mode: InboxReplyChannelMode): { viaEmai
   }
 }
 
-const INBOX_REPLY_CHANNEL_COMPACT_SELECT_CLASS =
-  "min-h-[2.75rem] w-[min(7.75rem,28vw)] rounded-2xl px-2.5 py-1.5 text-xs font-medium sm:text-xs";
+const INBOX_REPLY_CHANNEL_COMPACT_TRIGGER_CLASS =
+  "min-h-[2.75rem] w-[min(8.5rem,30vw)] rounded-2xl px-2.5 py-1.5 text-xs font-medium sm:text-xs";
 
 /** Email / SMS channel dropdown for thread replies — compact control beside the reply field. */
 export function InboxReplyChannelPicker({
@@ -871,38 +872,42 @@ export function InboxReplyChannelPicker({
 }) {
   const options: { value: InboxReplyChannelMode; label: string }[] = [];
   if (emailAvailable) options.push({ value: "email", label: "Email" });
-  if (smsAvailable) options.push({ value: "sms", label: "SMS" });
-  if (emailAvailable && smsAvailable) options.push({ value: "both", label: "Email & SMS" });
-
-  if (options.length === 0) return null;
+  options.push({ value: "sms", label: smsAvailable ? "SMS" : "SMS (not enabled)" });
+  options.push({
+    value: "both",
+    label: smsAvailable ? "Email & SMS" : "Email & SMS (SMS off)",
+  });
 
   const mode = inboxReplyChannelsToMode(viaEmail, viaSms);
-  const effectiveMode = options.some((o) => o.value === mode) ? mode : options[0]!.value;
+  const effectiveMode =
+    !smsAvailable && (mode === "sms" || mode === "both")
+      ? "email"
+      : options.some((o) => o.value === mode)
+        ? mode
+        : "email";
 
   return (
     <div className="flex shrink-0 flex-col gap-0.5" data-attr="inbox-reply-channel-picker">
-      <label className="px-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted" htmlFor="inbox-reply-send-via">
-        Send via
-      </label>
-      <NativeSelect
-        id="inbox-reply-send-via"
-        className={INBOX_REPLY_CHANNEL_COMPACT_SELECT_CLASS}
+      <FieldSingleSelect
+        label="Send via"
+        labelClassName="px-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted"
+        wrapperClassName="w-auto shrink-0"
+        triggerClassName={INBOX_REPLY_CHANNEL_COMPACT_TRIGGER_CLASS}
+        options={options}
         value={effectiveMode}
-        onChange={(e) => {
-          const next = inboxReplyModeToChannels(e.target.value as InboxReplyChannelMode);
-          onViaEmailChange(next.viaEmail);
-          onViaSmsChange(next.viaSms);
+        onChange={(next) => {
+          const picked = next as InboxReplyChannelMode;
+          if (!smsAvailable && picked !== "email") {
+            onViaEmailChange(true);
+            onViaSmsChange(false);
+            return;
+          }
+          const channels = inboxReplyModeToChannels(picked);
+          onViaEmailChange(channels.viaEmail);
+          onViaSmsChange(channels.viaSms);
         }}
-        disabled={options.length === 1}
-        aria-label="Send via"
-        data-attr="inbox-reply-send-via"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </NativeSelect>
+        dataAttr="inbox-reply-send-via"
+      />
     </div>
   );
 }
@@ -1100,6 +1105,10 @@ export function AiDraftReplyCard({
   onEdit,
   onDiscard,
   onGenerate,
+  channelControl,
+  autoSend = false,
+  onAutoSendChange,
+  scheduledSection,
 }: {
   /** True while a draft is being generated. */
   drafting?: boolean;
@@ -1114,6 +1123,13 @@ export function AiDraftReplyCard({
   onDiscard: () => void;
   /** Manual (re)generate — shown when there is no draft yet (e.g. after Discard). */
   onGenerate?: () => void;
+  /** Send-via picker shown on the draft card (Email / SMS). */
+  channelControl?: ReactNode;
+  /** When true, approving happens automatically once a draft is ready. */
+  autoSend?: boolean;
+  onAutoSendChange?: (next: boolean) => void;
+  /** Scheduled messages for this thread — pinned above draft actions. */
+  scheduledSection?: ReactNode;
 }) {
   if (drafting) {
     return (
@@ -1127,6 +1143,18 @@ export function AiDraftReplyCard({
           </span>
           <span className="animate-pulse">PropLane AI is drafting a reply…</span>
         </div>
+        {onAutoSendChange ? (
+          <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-[12px] text-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border text-primary"
+              checked={autoSend}
+              onChange={(e) => onAutoSendChange(e.target.checked)}
+              data-attr="inbox-ai-draft-auto-send"
+            />
+            Auto-send when draft is ready
+          </label>
+        ) : null}
       </div>
     );
   }
@@ -1182,7 +1210,23 @@ export function AiDraftReplyCard({
       <p className="portal-inbox-ai-draft-text mt-2 whitespace-pre-wrap break-words rounded-xl border border-border bg-card px-3 py-2.5 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
         {draft}
       </p>
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      {scheduledSection ? <div className="mt-2.5">{scheduledSection}</div> : null}
+      <div className="mt-2.5 flex flex-wrap items-end gap-2">
+        {channelControl}
+        {onAutoSendChange ? (
+          <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-[12px] text-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border text-primary"
+              checked={autoSend}
+              onChange={(e) => onAutoSendChange(e.target.checked)}
+              data-attr="inbox-ai-draft-auto-send"
+            />
+            Auto-send
+          </label>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="primary"
@@ -1220,7 +1264,9 @@ export function AiDraftReplyCard({
           <X className="h-3.5 w-3.5" strokeWidth={2.25} />
           Discard
         </Button>
-        <span className="ml-auto text-[11px] text-muted">You’re in control · nothing sends without you</span>
+        <span className="ml-auto text-[11px] text-muted">
+          {autoSend ? "Will send automatically" : "You’re in control · nothing sends without you"}
+        </span>
       </div>
     </div>
   );

@@ -30,6 +30,9 @@ export function portalMessageFieldLabel(className?: string) {
 /** Match Subject/Message labels on To / Which people multi-selects. */
 export const PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS = portalMessageFieldLabel();
 
+/** Two-column row for compose dropdowns (To / Which people, Subject / Send via). */
+export const PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS = "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2";
+
 export function portalMessageSendViaToMode(selected: string[]): PortalMessageSendViaMode {
   const { viaEmail, viaSms } = portalMessageChannelsFromSelection(selected);
   if (viaEmail && viaSms) return "both";
@@ -216,13 +219,17 @@ export function PortalMessageSendViaDropdown({
   footerNote?: string;
   dataAttr?: string;
 }) {
-  const options: CheckboxMultiSelectOption[] = [];
-  if (emailAvailable) options.push({ value: "email", label: "Email" });
-  if (smsAvailable) options.push({ value: "sms", label: "SMS" });
-  if (emailAvailable && smsAvailable) options.push({ value: "both", label: "Email & SMS" });
+  const options: CheckboxMultiSelectOption[] = [
+    { value: "email", label: "Email" },
+    { value: "sms", label: smsAvailable ? "SMS" : "SMS (not enabled)" },
+    { value: "both", label: smsAvailable ? "Email & SMS" : "Email & SMS (SMS off)" },
+  ];
 
   const mode = portalMessageSendViaToMode(selected);
-  const effectiveMode = options.some((option) => option.value === mode) ? mode : (options[0]?.value ?? "email");
+  const allowedModes: PortalMessageSendViaMode[] = smsAvailable
+    ? ["email", "sms", "both"]
+    : ["email"];
+  const effectiveMode = allowedModes.includes(mode) ? mode : "email";
 
   return (
     <div>
@@ -231,10 +238,15 @@ export function PortalMessageSendViaDropdown({
         labelClassName={portalMessageFieldLabel()}
         options={options}
         value={effectiveMode}
-        onChange={(next) =>
-          onChange(portalMessageSendViaModeToSelection(next as PortalMessageSendViaMode))
-        }
-        disabled={disabled || options.length <= 1}
+        onChange={(next) => {
+          const picked = next as PortalMessageSendViaMode;
+          if (!smsAvailable && picked !== "email") {
+            onChange(["email"]);
+            return;
+          }
+          onChange(portalMessageSendViaModeToSelection(picked));
+        }}
+        disabled={disabled}
         dataAttr={dataAttr}
       />
       <p className="mt-1.5 text-xs text-muted">{footerNote}</p>

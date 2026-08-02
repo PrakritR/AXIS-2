@@ -9,6 +9,7 @@ import {
   defaultPortalMessageScheduleAt,
   PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS,
   PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS,
   PortalMessageBodyField,
   PortalMessageComposeModalBody,
   PortalMessageScheduleFields,
@@ -370,7 +371,7 @@ export function ScopedInboxComposeModal({
       }
     >
       <PortalMessageComposeModalBody>
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
           <CheckboxMultiSelect
             label="To"
             labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
@@ -394,15 +395,17 @@ export function ScopedInboxComposeModal({
           />
         </div>
 
-        <PortalMessageSubjectField value={subject} onChange={setSubject} />
+        <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
+          <PortalMessageSubjectField value={subject} onChange={setSubject} />
 
-        <PortalMessageSendViaDropdown
-          selected={sendVia}
-          onChange={setSendVia}
-          emailAvailable
-          smsAvailable={showSmsOption}
-          dataAttr="inbox-compose-send-via"
-        />
+          <PortalMessageSendViaDropdown
+            selected={sendVia}
+            onChange={setSendVia}
+            emailAvailable
+            smsAvailable={showSmsOption}
+            dataAttr="inbox-compose-send-via"
+          />
+        </div>
 
         <PortalMessageBodyField value={body} onChange={setBody} minHeightClass="min-h-[7rem]" />
 
