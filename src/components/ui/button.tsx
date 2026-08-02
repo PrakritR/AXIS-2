@@ -1,7 +1,7 @@
 "use client";
 
 import { Slot } from "@radix-ui/react-slot";
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { track } from "@/lib/analytics/track-client";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "metallic";
@@ -21,7 +21,16 @@ const variants: Record<Variant, string> = {
     "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card active:scale-[0.99] [html[data-theme=dark]_&]:portal-outline-control",
 };
 
-export function Button({
+export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: Variant;
+  children: ReactNode;
+  /** Optional named PostHog event fired on click (object_action, non-PII). */
+  event?: string;
+  /** Optional non-PII properties sent with `event`. */
+  eventProps?: Record<string, string | number | boolean | undefined>;
+  /** Render as the single child element (via Radix Slot) instead of a <button>, e.g. to wrap a <Link>. */
+  asChild?: boolean;
+}>(function Button({
   className = "",
   variant = "primary",
   style,
@@ -31,21 +40,13 @@ export function Button({
   onClick,
   asChild = false,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: Variant;
-  children: ReactNode;
-  /** Optional named PostHog event fired on click (object_action, non-PII). */
-  event?: string;
-  /** Optional non-PII properties sent with `event`. */
-  eventProps?: Record<string, string | number | boolean | undefined>;
-  /** Render as the single child element (via Radix Slot) instead of a <button>, e.g. to wrap a <Link>. */
-  asChild?: boolean;
-}) {
+}, ref) {
   const isPrimary = variant === "primary";
   const isMetallic = variant === "metallic";
   const Comp = asChild ? Slot : "button";
   return (
     <Comp
+      ref={ref}
       className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold outline-none ring-primary/0 transition-[transform,box-shadow,filter,background-color,border-color] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 ${variants[variant]} ${className}`}
       style={
         isPrimary
@@ -63,4 +64,6 @@ export function Button({
       {children}
     </Comp>
   );
-}
+});
+
+Button.displayName = "Button";

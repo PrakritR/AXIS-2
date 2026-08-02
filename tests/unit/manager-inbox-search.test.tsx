@@ -184,7 +184,7 @@ describe("manager inbox search", () => {
 
     expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Trash" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Archive" }).length).toBeGreaterThan(0);
   });
 
   it("keeps the trash tab's own actions when no search is active", () => {
