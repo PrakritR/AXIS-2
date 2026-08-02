@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import {
   INBOX_ATTACHMENTS_BUCKET,
   contentTypeForInboxAttachmentPath,
   inboxAttachmentServeUrl,
   inboxAttachmentStoragePrefix,
   isInboxAttachmentPath,
+  sanitizeInboxAttachmentExt,
+  userCanAccessInboxAttachment,
 } from "@/lib/inbox-attachments.server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -22,14 +26,6 @@ async function resolveUser() {
   return user;
 }
 
-async function canAccessPath(userId: string, path: string, db: ReturnType<typeof createSupabaseServiceRoleClient>) {
-  const ownerId = path.split("/")[0] ?? "";
-  if (ownerId === userId) return true;
-  const { data: profile } = await db.from("profiles").select("role").eq("id", userId).maybeSingle();
-  const role = String(profile?.role ?? "").trim().toLowerCase();
-  return role === "admin" || role === "manager" || role === "pro" || role === "owner";
-}
-
 export async function GET(req: Request) {
   try {
     const user = await resolveUser();
@@ -41,7 +37,16 @@ export async function GET(req: Request) {
     }
 
     const db = createSupabaseServiceRoleClient();
-    if (!(await canAccessPath(user.id, path, db))) {
+    const userEmail = String(user.email ?? "").trim().toLowerCase();
+    const admin = await isAdminUser(user.id);
+    if (
+      !(await userCanAccessInboxAttachment(db, {
+        userId: user.id,
+        userEmail,
+        path,
+        isAdmin: admin,
+      }))
+    ) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
 
@@ -86,8 +91,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Image must be 5 MB or smaller." }, { status: 400 });
     }
 
-    const ext = body.ext ?? (mime.split("/")[1] ?? "jpg");
-    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const ext = sanitizeInboxAttachmentExt(body.ext, mime);
+    if (!ext) {
+      return NextResponse.json({ error: "Invalid file extension." }, { status: 400 });
+    }
+    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${randomUUID()}.${ext}`;
     const db = createSupabaseServiceRoleClient();
     const { error } = await db.storage.from(INBOX_ATTACHMENTS_BUCKET).upload(path, bytes, {
       contentType: mime,

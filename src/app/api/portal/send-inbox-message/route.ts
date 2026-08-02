@@ -33,6 +33,7 @@ import {
   resolveChannels,
   type NotificationCategory,
 } from "@/lib/notification-preferences";
+import { normalizeInboxAttachmentUrls } from "@/lib/inbox-attachments.server";
 
 export const runtime = "nodejs";
 
@@ -182,9 +183,10 @@ export async function POST(req: Request) {
     const senderEmail = String(user.email ?? body.fromEmail ?? "portal@example.com").trim().toLowerCase();
     const subject = String(body.subject ?? "").trim();
     const rawText = String(body.text ?? "").trim();
-    const attachmentUrls = (Array.isArray(body.attachmentUrls) ? body.attachmentUrls : [])
-      .map((u) => String(u ?? "").trim())
-      .filter(Boolean);
+    const attachmentUrls = normalizeInboxAttachmentUrls(
+      Array.isArray(body.attachmentUrls) ? body.attachmentUrls : [],
+      user.id,
+    );
     const attachmentNote = attachmentUrls.length
       ? "\n\nAttachments:\n" + attachmentUrls.join("\n")
       : "";
