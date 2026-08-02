@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ManagerPortalFilterRow, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { InboxAvatar, InboxThreadEmpty, InboxTwoPane } from "@/components/portal/portal-inbox-ui";
+import { cn } from "@/lib/utils";
 
 /** Desktop shows list + detail together; phones use list-then-detail navigation. */
 export function portalUsesDesktopSplit(breakpointPx = 1024): boolean {
@@ -79,6 +80,7 @@ export function PortalDetailHeader({
   suppressMobileActions = false,
   /** When true, actions stay in the title row on all breakpoints (horizontal scroll on narrow screens). */
   inlineActions = false,
+  inlineActionsClassName,
   dataAttrBack = "portal-detail-back",
 }: {
   title: string;
@@ -93,6 +95,7 @@ export function PortalDetailHeader({
   actions?: ReactNode;
   suppressMobileActions?: boolean;
   inlineActions?: boolean;
+  inlineActionsClassName?: string;
   dataAttrBack?: string;
 }) {
   return (
@@ -125,11 +128,12 @@ export function PortalDetailHeader({
         </div>
         {actions ? (
           <div
-            className={
+            className={cn(
               inlineActions
                 ? "flex max-w-[min(70%,24rem)] shrink-0 items-center gap-1 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] md:max-w-none [&::-webkit-scrollbar]:hidden"
-                : "hidden shrink-0 items-center gap-1.5 md:flex"
-            }
+                : "hidden shrink-0 items-center gap-1.5 md:flex",
+              inlineActionsClassName,
+            )}
           >
             {actions}
           </div>

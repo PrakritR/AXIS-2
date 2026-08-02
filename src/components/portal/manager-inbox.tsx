@@ -1497,14 +1497,16 @@ export const ManagerInbox = forwardRef<
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : suppressListPane ? (
-        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>{threadPane}</div>
+        <div className={`${pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}`}>{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}
     </>
   );
 
-  if (embeddedInCommunication) return inboxBody;
+  if (embeddedInCommunication) {
+    return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{inboxBody}</div>;
+  }
 
   return (
     <ManagerPortalPageShell

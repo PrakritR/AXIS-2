@@ -13,6 +13,7 @@ import {
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
+  fieldSelectMenuListMaxHeightPx,
   fieldSelectMenuMatches,
   fieldSelectMenuZIndex,
   useFieldSelectMenu,
@@ -28,11 +29,55 @@ export const FILTER_LIST_MAX_HEIGHT_PX = FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX;
 
 /** Fixed portal filter shell — same width/height for modal, sheet, and desktop dropdown. */
 export const PORTAL_FILTER_PANEL_WIDTH_CLASS = "w-[min(22rem,calc(100vw-2rem))]";
+export const PORTAL_FILTER_PANEL_WIDTH_PX = 22 * 16;
+export const PORTAL_FILTER_BROWSE_PANEL_WIDTH_PX = 28 * 16;
+
+/** Parse fixed panel height from portal filter size class names (total shell height). */
+export function portalFilterDropdownHeightPx(panelSizeClass: string): number {
+  const remMatch = panelSizeClass.match(/h-\[(\d+(?:\.\d+)?)rem\]/);
+  if (remMatch) return parseFloat(remMatch[1]) * 16;
+  if (panelSizeClass.includes("min(36rem")) {
+    const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
+    return Math.min(36 * 16, viewportH * 0.82);
+  }
+  if (panelSizeClass.includes("28rem")) return 28 * 16;
+  return 10.5 * 16;
+}
+
+export function portalFilterDropdownWidthPx(panelSizeClass: string): number {
+  return panelSizeClass.includes("28rem")
+    ? PORTAL_FILTER_BROWSE_PANEL_WIDTH_PX
+    : PORTAL_FILTER_PANEL_WIDTH_PX;
+}
 export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
 export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
-/** Compact filter dropdown — grows with fields, capped so open menus do not sprawl. */
-export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "max-h-[14rem]";
-export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} h-auto ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
+/** Single-field compact filter dropdown. */
+export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[10.5rem]";
+export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
+export const PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS = "h-[14rem]";
+export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "h-[19rem]";
+export const PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS = "h-[19rem]";
+
+/** Pick a fixed filter shell height from the number of filter rows (property, resident, sort, …). */
+export function portalFilterPanelSizeClass(fieldCount: number): string {
+  const heightClass =
+    fieldCount >= 4
+      ? PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS
+      : fieldCount === 3
+        ? PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS
+        : fieldCount === 2
+          ? PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS
+          : PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS;
+  return `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${heightClass}`;
+}
+/** Communication filter — four fields (house, role, resident, sort). */
+export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
+  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[19rem] flex-col overflow-hidden`;
+/** Mobile Communication / inbox filter sheet — room for 4 fields + open menus. */
+export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS =
+  "h-[min(24rem,55vh)] max-h-[min(24rem,55vh)]";
+/** Default compact mobile sheet when callers do not override height. */
+export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "h-auto max-h-[min(20rem,52vh)]";
 /** Tall mobile sheet for browse-home filters (AI + manual fields). */
 export const PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS =
   "h-[min(82dvh,42rem)] min-h-[min(70dvh,34rem)]";
@@ -46,12 +91,21 @@ export const PORTAL_FILTER_BODY_CLASS =
 export const PORTAL_FILTER_ICON_CLASS = "size-3.5 shrink-0";
 
 const FILTER_TRIGGER_CLASS =
-  "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
+  "flex h-11 max-h-11 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
+
+/** Fixed portaled filter menu width — never shrink to a narrow trigger. */
+export const FILTER_FIELD_MENU_MIN_WIDTH_PX = 352;
+/** Portal filter menus always show the search row (consistent with Resident/House pickers). */
+export const FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH = true;
+
+const FILTER_FIELD_MENU_SEARCH_PX = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH
+  ? FIELD_SELECT_MENU_SEARCH_PX
+  : 0;
 
 /** Estimated menu height (search row + 5 option rows) for open-up/positioning math. */
 export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
-  FIELD_SELECT_MENU_SEARCH_PX,
+  FILTER_FIELD_MENU_SEARCH_PX,
 );
 
 type Option = { value: string; label: string };
@@ -62,6 +116,12 @@ type FilterFieldsAccordionContextValue = {
 };
 
 const FilterFieldsAccordionContext = createContext<FilterFieldsAccordionContextValue | null>(null);
+
+const FieldSelectMenuShellHeightContext = createContext<number | null>(null);
+
+function useFieldSelectMenuShellHeight(fallbackPx: number): number {
+  return useContext(FieldSelectMenuShellHeightContext) ?? fallbackPx;
+}
 
 export function useFilterAccordionClose(): () => void {
   const accordion = useContext(FilterFieldsAccordionContext);
@@ -84,12 +144,10 @@ export function filterMultiSelectSummary(
   allLabel = "All",
 ): string {
   if (selected.length === 0) return allLabel;
-  const labels = selected
-    .map((value) => options.find((o) => o.value === value)?.label ?? value)
-    .filter(Boolean);
-  const joined = labels.join(", ");
-  if (joined.length > 96) return `${joined.slice(0, 93)}…`;
-  return joined;
+  if (selected.length === 1) {
+    return options.find((o) => o.value === selected[0])?.label ?? selected[0] ?? allLabel;
+  }
+  return `${selected.length} selected`;
 }
 
 export function filterSingleSelectSummary(value: string, options: Option[], allLabel = "All"): string {
@@ -148,15 +206,19 @@ export function FilterCollapsibleSection({
     }
   };
 
+  const showMenuSearch =
+    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || (menuOptionCount ?? 0) > FILTER_LIST_VISIBLE_ROWS;
+  /** Always size filter menus to search + 5 rows so open/close never changes dimensions. */
   const menuContentPx = fieldSelectMenuContentPx(
-    menuOptionCount ?? FILTER_LIST_VISIBLE_ROWS,
-    (menuOptionCount ?? 0) > FILTER_LIST_VISIBLE_ROWS ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+    FILTER_LIST_VISIBLE_ROWS,
+    showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
   );
 
   const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
     open,
     onOpenChange: setOpen,
     contentPx: menuContentPx,
+    minMenuWidth: FILTER_FIELD_MENU_MIN_WIDTH_PX,
   });
 
   const menu =
@@ -164,18 +226,22 @@ export function FilterCollapsibleSection({
       <div
         id={listId}
         data-field-select-menu=""
-        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex h-full min-h-0 flex-col")}
+        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex min-h-0 flex-col")}
         style={{
           position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           width: menuRect.width,
+          height: menuRect.maxHeight,
+          minHeight: menuRect.maxHeight,
           maxHeight: menuRect.maxHeight,
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        {children}
+        <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
+          {children}
+        </FieldSelectMenuShellHeightContext.Provider>
       </div>
     ) : null;
 
@@ -227,7 +293,8 @@ export function FilterCheckboxList({
   dataAttr?: string;
 }) {
   const [query, setQuery] = useState("");
-  const showSearch = options.length > FILTER_LIST_VISIBLE_ROWS;
+  const showSearch = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || options.length > FILTER_LIST_VISIBLE_ROWS;
+  const shellMaxHeightPx = useFieldSelectMenuShellHeight(FILTER_MENU_CONTENT_PX);
 
   // Filtering only hides rows; `selected` is never mutated, so searching never
   // drops an already-selected option from the selection.
@@ -255,7 +322,13 @@ export function FilterCheckboxList({
         aria-multiselectable="true"
         data-attr={dataAttr}
         className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
-        style={{ touchAction: "pan-y" }}
+        style={{
+          touchAction: "pan-y",
+          maxHeight: fieldSelectMenuListMaxHeightPx(
+            shellMaxHeightPx,
+            showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+          ),
+        }}
       >
         {options.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -314,7 +387,8 @@ export function FilterSingleSelectList({
   searchPlaceholder?: string;
 }) {
   const [query, setQuery] = useState("");
-  const showSearch = options.length > FILTER_LIST_VISIBLE_ROWS;
+  const showSearch = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || options.length > FILTER_LIST_VISIBLE_ROWS;
+  const shellMaxHeightPx = useFieldSelectMenuShellHeight(FILTER_MENU_CONTENT_PX);
 
   const visibleOptions = useMemo(() => {
     if (!query.trim()) return options;
@@ -335,7 +409,13 @@ export function FilterSingleSelectList({
         role="listbox"
         data-attr={dataAttr}
         className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
-        style={{ touchAction: "pan-y" }}
+        style={{
+          touchAction: "pan-y",
+          maxHeight: fieldSelectMenuListMaxHeightPx(
+            shellMaxHeightPx,
+            showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+          ),
+        }}
       >
         {visibleOptions.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">No matches</p>

@@ -20,8 +20,44 @@ export const IN_PROGRESS_APPLICATION_STAGE = "In progress";
 /** User-facing label for draft applications (stored stage remains `In progress`). */
 export const INCOMPLETE_APPLICATION_LABEL = "Incomplete";
 
+function isSubmittedStage(row: Pick<DemoApplicantRow, "stage">): boolean {
+  return row.stage?.trim().toLowerCase() === "submitted";
+}
+
+/** Pending draft applications — stored as "In progress", shown in the UI as "Incomplete". */
 export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
-  return row.bucket === "pending" && row.stage.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
+  if (row.bucket !== "pending" || isWithdrawnApplicationRow(row)) return false;
+  if (isSubmittedStage(row)) return false;
+  const stage = row.stage?.trim().toLowerCase() ?? "";
+  if (
+    stage === IN_PROGRESS_APPLICATION_STAGE.toLowerCase() ||
+    stage === INCOMPLETE_APPLICATION_LABEL.toLowerCase() ||
+    stage === "draft" ||
+    stage === "started"
+  ) {
+    return true;
+  }
+  // Wizard snapshot without stage metadata (common on older rows) is still an incomplete draft.
+  const app = row.application;
+  if (app && (app.propertyId?.trim() || app.email?.trim() || app.fullLegalName?.trim())) {
+    return true;
+  }
+  // Pending listing metadata without an explicit submitted stage (legacy / partial row_data).
+  if (!stage && (row.propertyId?.trim() || row.property?.trim())) {
+    return true;
+  }
+  return false;
+}
+
+/** Incomplete / in-progress drafts are eligible for the manager completion reminder. */
+export function shouldOfferApplicationCompletionReminder(
+  row: DemoApplicantRow,
+  opts?: { viewingIncompleteApplicationDetail?: boolean },
+): boolean {
+  if (isInProgressApplicationRow(row)) return true;
+  if (row.bucket !== "pending" || isWithdrawnApplicationRow(row)) return false;
+  if (opts?.viewingIncompleteApplicationDetail) return !isSubmittedStage(row);
+  return false;
 }
 
 /**

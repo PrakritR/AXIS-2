@@ -57,7 +57,6 @@ const SMS_HIDDEN_STORAGE_KEY = "axis_manager_sms_hidden_v2";
 // Site-themed surfaces (values resolve per light/dark via CSS variables) so the
 // SMS panel matches the rest of the product instead of a hardcoded iOS look.
 /** Outbound bubble / send accent — the site primary (cobalt light / indigo dark). */
-const BUBBLE_OUT_BG = "var(--btn-primary)";
 /** Destructive red for swipe / delete affordances. */
 const DELETE_RED = "var(--status-overdue-fg)";
 
@@ -707,9 +706,9 @@ export const ManagerSmsPanel = forwardRef<
   const threadPane = !active ? (
     <InboxThreadEmpty hint="Choose a conversation on the left, or use New message above." />
   ) : (
-    <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}>
       <header
-        className="portal-inbox-thread-header flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
+        className="portal-inbox-thread-header sticky top-0 z-10 flex shrink-0 items-center gap-1 border-b border-border bg-card px-2 py-2"
         style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0px))" }}
       >
         <button
@@ -838,7 +837,7 @@ export const ManagerSmsPanel = forwardRef<
       ) : null}
 
       {suppressListPane ? (
-        <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>{threadPane}</div>
+        <div className={pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}>{threadPane}</div>
       ) : (
         <InboxTwoPane threadOpen={showThread} list={listPane} thread={threadPane} />
       )}
@@ -879,14 +878,13 @@ function Bubble({
     <div className={`group/msg flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div className="flex max-w-full flex-col">
         <div
-          className={`relative max-w-[min(88%,20rem)] px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm ${radius} ${
+          className={`relative max-w-[min(88%,20rem)] px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm portal-inbox-inbound-bubble ${radius} ${
             outbound
-              ? "text-primary-foreground shadow-[0_1px_2px_rgba(15,23,42,0.12)]"
+              ? "portal-inbox-outbound-bubble"
               : cluster === "single"
                 ? "border border-border bg-secondary text-foreground"
                 : "border border-border bg-secondary text-foreground"
           } ${pending ? "opacity-80" : ""}`}
-          style={outbound ? { background: BUBBLE_OUT_BG } : undefined}
         >
         {onDelete ? (
           <button

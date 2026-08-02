@@ -6,7 +6,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 let ROWS: DemoApplicantRow[] = [];
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/portal/applications",
+  usePathname: () => "/portal/applications/incomplete/PROPLANE-E2E86A70",
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -71,8 +71,49 @@ describe("manager Applications — incomplete detail reminder", () => {
     render(<ManagerApplications bucket="incomplete" applicationId="PROPLANE-E2E86A70" />);
 
     expect(screen.getAllByText("Send reminder").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Send reminder" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Approve")).toBeNull();
     expect(screen.getAllByText("Reject").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Download application").length).toBeGreaterThan(0);
+
+    const sendReminder = screen.getAllByRole("button", { name: "Send reminder" })[0]!;
+    const reject = screen.getAllByRole("button", { name: "Reject" })[0]!;
+    expect(
+      sendReminder.compareDocumentPosition(reject) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("offers Send reminder when legacy stage is stored as Incomplete", () => {
+    ROWS = [
+      {
+        id: "PROPLANE-LEGACY",
+        name: "Applicant",
+        email: "resident@test.proplane.local",
+        property: "Ballard House",
+        propertyId: "prop-ballard",
+        stage: "Incomplete",
+        bucket: "pending",
+        detail: "Started",
+      },
+    ];
+    render(<ManagerApplications bucket="incomplete" applicationId="PROPLANE-LEGACY" />);
+    expect(screen.getAllByText("Send reminder").length).toBeGreaterThan(0);
+  });
+
+  it("offers Send reminder on the Incomplete tab list before opening detail", () => {
+    ROWS = [
+      {
+        id: "PROPLANE-INCOMPLETE-LIST",
+        name: "Applicant",
+        email: "resident@test.proplane.local",
+        property: "Ballard House",
+        propertyId: "prop-ballard",
+        stage: "In progress",
+        bucket: "pending",
+        detail: "Started",
+      },
+    ];
+    render(<ManagerApplications bucket="incomplete" />);
+    expect(screen.getAllByRole("button", { name: "Send reminder" }).length).toBeGreaterThan(0);
   });
 });

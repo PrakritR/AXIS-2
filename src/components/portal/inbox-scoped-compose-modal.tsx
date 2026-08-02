@@ -360,7 +360,6 @@ export function ScopedInboxComposeModal({
       title={title}
       onClose={onClose}
       dense
-      scrollableContent={false}
       panelClassName={PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS}
       footer={
         <ModalFooter>

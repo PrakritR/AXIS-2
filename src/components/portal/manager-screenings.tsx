@@ -232,6 +232,7 @@ export function ManagerScreenings({
   const filterSheet = (
     <PortalFilterSortSheet
       compactPanel
+      filterFieldCount={3}
       activeCount={portalFilterActiveCount([propertyFilters, statusFilter !== "all", sort !== "newest"])}
       onReset={() => {
         setPropertyFilters([]);

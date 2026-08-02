@@ -169,6 +169,7 @@ import {
 import {
   inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
+  shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
 import { buildApplicationGroups, groupForRow } from "@/lib/rental-application/application-groups";
 import {
@@ -186,6 +187,10 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import {
+  EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
+  buildExistingResidentWelcomeEmailBody,
+} from "@/lib/existing-resident-welcome-email";
 import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
@@ -409,9 +414,9 @@ export function ManagerResidents({
   const [arMoveInFee, setArMoveInFee] = useState("");
   const [arSecurityDeposit, setArSecurityDeposit] = useState("");
   const [arNotes, setArNotes] = useState("");
-  const [arSendWelcome, setArSendWelcome] = useState(true);
   const [arSignedLeaseFileName, setArSignedLeaseFileName] = useState("");
   const [arSignedLeaseDataUrl, setArSignedLeaseDataUrl] = useState("");
+  const [addResidentNoticePreview, setAddResidentNoticePreview] = useState<DemoApplicantRow | null>(null);
   const [arSaving, setArSaving] = useState(false);
 
   // Edit resident
@@ -1149,17 +1154,30 @@ export function ManagerResidents({
     opts?: {
       channels?: { viaEmail?: boolean; viaSms?: boolean };
       draft?: { subject?: string; body?: string; scheduleAt?: string };
+      quiet?: boolean;
     },
   ) {
+    const toast = (message: string) => {
+      if (!opts?.quiet) showToast(message);
+    };
     setWelcomeEmailBusyForResident(res.id);
     try {
-      const subject = opts?.draft?.subject?.trim() || RESIDENT_WELCOME_EMAIL_SUBJECT;
+      const subject =
+        opts?.draft?.subject?.trim() ||
+        (res.manuallyAdded ? EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT : RESIDENT_WELCOME_EMAIL_SUBJECT);
       const signupUrl = residentAccountCreationUrl(window.location.origin, res.axisId);
-      const defaultBody = buildResidentWelcomeEmailBody({
-        residentName: res.name,
-        axisId: res.axisId,
-        signupUrl,
-      });
+      const defaultBody = res.manuallyAdded
+        ? buildExistingResidentWelcomeEmailBody({
+            residentName: res.name,
+            axisId: res.axisId,
+            signupUrl,
+            propertyLabel: res.propertyLabel,
+          })
+        : buildResidentWelcomeEmailBody({
+            residentName: res.name,
+            axisId: res.axisId,
+            signupUrl,
+          });
       const body = opts?.draft?.body?.trim() || defaultBody;
       const viaEmail = opts?.channels?.viaEmail !== false;
       const viaSms = opts?.channels?.viaSms === true;
@@ -1182,10 +1200,10 @@ export function ManagerResidents({
         });
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         if (!response.ok) {
-          showToast(data.error ?? "Could not schedule account setup message.");
+          toast(data.error ?? "Could not schedule account setup message.");
           return;
         }
-        showToast("Account setup message scheduled.");
+        toast("Account setup message scheduled.");
         return;
       }
 
@@ -1206,10 +1224,10 @@ export function ManagerResidents({
         });
         const data = (await response.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; error?: string };
         if (!response.ok || !data.ok) {
-          showToast(data.error ?? "Could not send account setup message.");
+          toast(data.error ?? "Could not send account setup message.");
           return;
         }
-        showToast(
+        toast(
           data.skipped
             ? "Account setup message saved to PropLane inbox."
             : viaSms && viaEmail
@@ -1569,77 +1587,115 @@ export function ManagerResidents({
     }
   };
 
-  function saveManualResident() {
+  function resetAddResidentForm() {
+    setArName("");
+    setArEmail("");
+    setArPhone("");
+    setArPropertyId("");
+    setArRoomId("");
+    setArLeaseTerm("");
+    setArLeaseTermCustomMode(false);
+    setArMoveInDate("");
+    setArMoveOutDate("");
+    setArRent("");
+    setArUtilities("");
+    setArMoveInFee("");
+    setArSecurityDeposit("");
+    setArNotes("");
+    setArSignedLeaseFileName("");
+    setArSignedLeaseDataUrl("");
+    setAddResidentNoticePreview(null);
+  }
+
+  function buildManualResidentRow(): DemoApplicantRow | null {
+    if (!arName.trim()) {
+      showToast("Enter the resident's name.");
+      return null;
+    }
+    if (!arEmail.trim()) {
+      showToast("Enter the resident's email.");
+      return null;
+    }
+    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+    const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode, arPropertyId);
+    const arSavingShortTerm = arAppLeaseFields.rentalType === "short_term";
+    const utilities = arSavingShortTerm
+      ? null
+      : arUtilities.trim()
+        ? Number(arUtilities.replace(/[^\d.]/g, ""))
+        : null;
+    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
+    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
+    const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+    const propLabel = arPropertyId
+      ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
+      : "—";
+    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+    const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
+    const hasUploadedLeasePdf = Boolean(arSignedLeaseDataUrl.trim());
+    return {
+      id: axisId,
+      name: arName.trim(),
+      email: arEmail.trim(),
+      property: propLabel,
+      stage: "Active",
+      bucket: "approved",
+      detail: "",
+      assignedPropertyId: arPropertyId || undefined,
+      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+      signedMonthlyRent: rent ?? undefined,
+      managerUserId: userId ?? undefined,
+      manuallyAdded: true,
+      manualResidentDetails: {
+        phone: arPhone.trim() || undefined,
+        moveInDate: arMoveInDate || undefined,
+        moveOutDate: arMoveOutDate || undefined,
+        monthlyUtilities: utilities ?? undefined,
+        moveInFee: moveInFee ?? undefined,
+        securityDeposit: secDeposit ?? undefined,
+        roomNumber: selectedRoomLabel || undefined,
+        leaseTerm: arLeaseTerm.trim() || undefined,
+        notes: arNotes.trim() || undefined,
+        signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
+        signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
+        signedLeaseUploadedAt,
+        ...(hasUploadedLeasePdf ? { externallySignedLease: true as const } : {}),
+      },
+      application: arAppLeaseFields.leaseTerm
+        ? ({
+            propertyId: arPropertyId || undefined,
+            roomChoice1: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+            leaseTerm: arAppLeaseFields.leaseTerm,
+            rentalType: arAppLeaseFields.rentalType,
+            leaseStart: arMoveInDate || undefined,
+            leaseEnd: arMoveOutDate || undefined,
+            fullLegalName: arName.trim(),
+            email: arEmail.trim(),
+            phone: arPhone.trim() || undefined,
+          } as unknown as DemoApplicantRow["application"])
+        : undefined,
+    };
+  }
+
+  function reviewManualResident() {
+    const row = buildManualResidentRow();
+    if (!row) return;
+    setAddResidentNoticePreview(row);
+  }
+
+  function confirmManualResident(
+    skipMessage: boolean,
+    channels?: { viaEmail: boolean; viaSms: boolean },
+    draft?: { subject: string; body: string; scheduleAt?: string },
+  ) {
     void (async () => {
-      if (arSaving) return;
-      if (!arName.trim()) { showToast("Enter the resident's name."); return; }
-      if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
-      const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode, arPropertyId);
-      const arSavingShortTerm = arAppLeaseFields.rentalType === "short_term";
-      const utilities = arSavingShortTerm
-        ? null
-        : arUtilities.trim()
-          ? Number(arUtilities.replace(/[^\d.]/g, ""))
-          : null;
-      const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
-      const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
-      const axisId = `PROPLANE-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-      const propLabel = arPropertyId
-        ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
-        : "—";
-      const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
-      const signedLeaseUploadedAt = arSignedLeaseDataUrl.trim() ? new Date().toISOString() : undefined;
-      const hasUploadedLeasePdf = Boolean(arSignedLeaseDataUrl.trim());
-      const nextRow: DemoApplicantRow = {
-        id: axisId,
-        name: arName.trim(),
-        email: arEmail.trim(),
-        property: propLabel,
-        stage: "Active",
-        bucket: "approved",
-        detail: "",
-        assignedPropertyId: arPropertyId || undefined,
-        assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
-        signedMonthlyRent: rent ?? undefined,
-        managerUserId: userId ?? undefined,
-        manuallyAdded: true,
-        manualResidentDetails: {
-          phone: arPhone.trim() || undefined,
-          moveInDate: arMoveInDate || undefined,
-          moveOutDate: arMoveOutDate || undefined,
-          monthlyUtilities: utilities ?? undefined,
-          moveInFee: moveInFee ?? undefined,
-          securityDeposit: secDeposit ?? undefined,
-          roomNumber: selectedRoomLabel || undefined,
-          leaseTerm: arLeaseTerm.trim() || undefined,
-          notes: arNotes.trim() || undefined,
-          signedLeaseFileName: arSignedLeaseFileName.trim() || undefined,
-          signedLeaseDataUrl: arSignedLeaseDataUrl.trim() || undefined,
-          signedLeaseUploadedAt,
-          ...(hasUploadedLeasePdf ? { externallySignedLease: true as const } : {}),
-        },
-        application: arAppLeaseFields.leaseTerm
-          ? // Manual add-resident supplies only the lease-relevant fields; the rest of the
-            // wizard form state is not collected here (cast keeps this intentional partial).
-            ({
-              propertyId: arPropertyId || undefined,
-              roomChoice1: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
-              leaseTerm: arAppLeaseFields.leaseTerm,
-              rentalType: arAppLeaseFields.rentalType,
-              leaseStart: arMoveInDate || undefined,
-              leaseEnd: arMoveOutDate || undefined,
-              fullLegalName: arName.trim(),
-              email: arEmail.trim(),
-              phone: arPhone.trim() || undefined,
-            } as unknown as DemoApplicantRow["application"])
-          : undefined,
-      };
+      const nextRow = addResidentNoticePreview;
+      if (!nextRow || arSaving) return;
       setArSaving(true);
       try {
         appendManagerApplicationRow(nextRow, { skipServerMirror: true });
         const persisted = await upsertApplicationRowToServerAwait(nextRow, {
-          existingResidentOnboarding: { sendWelcomeEmail: arSendWelcome },
+          existingResidentOnboarding: { sendWelcomeEmail: false },
         });
         if (!persisted.ok) {
           if (persisted.mailtoHref) {
@@ -1652,22 +1708,73 @@ export function ManagerResidents({
         recordApprovedApplicationCharges(nextRow, userId ?? null, true);
         syncLeasePipelineFromApplications(userId ?? null);
 
-        showToast(
-          persisted.welcomeEmailSent
-            ? `Resident added. Portal setup email sent to ${arEmail.trim()}.`
-            : `Resident added. PropLane ID: ${axisId}`,
-        );
-
         await Promise.all([
           syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
           syncLeasePipelineFromServer(userId ?? null, { force: true }),
           syncHouseholdChargesFromServer(true),
         ]);
         setChargeBucket("pending");
-        setArName(""); setArEmail(""); setArPhone(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
-        setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
-        setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
-        setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
+
+        if (!skipMessage) {
+          const signupUrl = residentAccountCreationUrl(window.location.origin, nextRow.id);
+          const subject = draft?.subject?.trim() || EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT;
+          const body =
+            draft?.body?.trim() ||
+            buildExistingResidentWelcomeEmailBody({
+              residentName: nextRow.name,
+              axisId: nextRow.id,
+              signupUrl,
+              propertyLabel: nextRow.property,
+            });
+          const viaEmail = channels?.viaEmail !== false;
+          const viaSms = channels?.viaSms === true;
+
+          if (draft?.scheduleAt) {
+            const response = await fetch("/api/portal/scheduled-inbox-messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                subject,
+                body,
+                sendAt: draft.scheduleAt,
+                deliverViaEmail: viaEmail,
+                deliverViaSms: viaSms,
+                recipientEmail: nextRow.email!.trim().toLowerCase(),
+                recipientName: nextRow.name.trim(),
+                senderPortal: "manager",
+              }),
+            });
+            const data = (await response.json().catch(() => ({}))) as { error?: string };
+            if (!response.ok) {
+              showToast(data.error ?? "Resident added, but the notice could not be scheduled.");
+            } else {
+              showToast(`Resident added. Portal setup notice scheduled for ${nextRow.email?.trim()}.`);
+            }
+          } else {
+            const notice = await deliverPortalInboxMessage({
+              eventCategory: "messages",
+              toEmails: [nextRow.email!.trim().toLowerCase()],
+              subject,
+              text: body,
+              deliverViaEmail: viaEmail,
+              deliverViaSms: viaSms,
+            });
+            if (notice.ok) {
+              showToast(
+                notice.skipped
+                  ? `Resident added. Notice saved to PropLane inbox for ${nextRow.email?.trim()}.`
+                  : `Resident added. Portal setup notice sent to ${nextRow.email?.trim()}.`,
+              );
+            } else {
+              showToast(notice.error ? `Resident added, but notice failed: ${notice.error}` : "Resident added, but notice could not be sent.");
+            }
+          }
+        } else {
+          showToast(`Resident added. PropLane ID: ${nextRow.id}`);
+        }
+
+        resetAddResidentForm();
         setAddResidentOpen(false);
         setHcTick((n) => n + 1);
         setLeaseTick((n) => n + 1);
@@ -2163,16 +2270,7 @@ export function ManagerResidents({
       <>
         {selectedApplicationRow.bucket === "pending" ? (
           <>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="resident-application-reject"
-              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
-            >
-              Reject
-            </Button>
-            {isInProgressApplicationRow(selectedApplicationRow) ? (
+            {shouldOfferApplicationCompletionReminder(selectedApplicationRow) ? (
               <Button
                 type="button"
                 variant="outline"
@@ -2183,7 +2281,18 @@ export function ManagerResidents({
               >
                 {applicationReminderPreviewBusyId === selectedApplicationRow.id ? "Loading…" : "Send reminder"}
               </Button>
-            ) : isWithdrawnApplicationRow(selectedApplicationRow) ? null : (
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="resident-application-reject"
+              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+            >
+              Reject
+            </Button>
+            {!isInProgressApplicationRow(selectedApplicationRow) &&
+            !isWithdrawnApplicationRow(selectedApplicationRow) ? (
               <Button
                 type="button"
                 variant="primary"
@@ -2193,7 +2302,7 @@ export function ManagerResidents({
               >
                 Approve
               </Button>
-            )}
+            ) : null}
           </>
         ) : (
           <Button
@@ -3006,13 +3115,16 @@ export function ManagerResidents({
       </Modal>
 
       <Modal
-        open={addResidentOpen}
+        open={addResidentOpen && addResidentNoticePreview === null}
         title="Add resident"
-        onClose={() => setAddResidentOpen(false)}
+        onClose={() => {
+          resetAddResidentForm();
+          setAddResidentOpen(false);
+        }}
         footer={
           <ModalFooter>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident} disabled={arSaving}>
-              {arSaving ? "Adding…" : "Add resident"}
+            <Button type="button" variant="primary" className="rounded-full" onClick={reviewManualResident} disabled={arSaving}>
+              Review & add resident
             </Button>
           </ModalFooter>
         }
@@ -3170,15 +3282,6 @@ export function ManagerResidents({
                 <span className="text-xs text-muted">Attached: {arSignedLeaseFileName}</span>
               ) : null}
             </label>
-            <label className="col-span-2 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={arSendWelcome}
-                onChange={(e) => setArSendWelcome(e.target.checked)}
-                className="size-4 rounded border-border"
-              />
-              <span>Email portal setup instructions to the resident</span>
-            </label>
             <label className="col-span-2 flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Notes</span>
               <Textarea
@@ -3191,6 +3294,44 @@ export function ManagerResidents({
           </div>
         </div>
       </Modal>
+
+      <PortalNotificationPreviewModal
+        open={addResidentNoticePreview !== null}
+        title="Add resident — notification preview"
+        onClose={() => setAddResidentNoticePreview(null)}
+        recipient={addResidentNoticePreview?.email ?? ""}
+        recipientPhone={
+          addResidentNoticePreview?.manualResidentDetails?.phone?.trim() ||
+          addResidentNoticePreview?.application?.phone?.trim() ||
+          ""
+        }
+        subject={EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={
+          addResidentNoticePreview
+            ? buildExistingResidentWelcomeEmailBody({
+                residentName: addResidentNoticePreview.name,
+                axisId: addResidentNoticePreview.id,
+                signupUrl: residentAccountCreationUrl(window.location.origin, addResidentNoticePreview.id),
+                propertyLabel: addResidentNoticePreview.property,
+              })
+            : ""
+        }
+        intro="Review the portal setup message before creating this resident record."
+        showChannelPicker
+        showSchedule
+        emailAvailable={Boolean(addResidentNoticePreview?.email?.includes("@"))}
+        smsAvailable={Boolean(
+          addResidentNoticePreview?.manualResidentDetails?.phone?.trim() ||
+            addResidentNoticePreview?.application?.phone?.trim(),
+        )}
+        defaultViaSms={false}
+        confirmLabel="Add resident & send notice"
+        confirmLabelWithoutMessage="Add resident only"
+        confirmBusy={arSaving}
+        confirmBusyLabel="Adding…"
+        cancelLabel="Back"
+        onConfirm={(skipMessage, channels, draft) => void confirmManualResident(skipMessage, channels, draft)}
+      />
 
       <Modal
         open={editResidentOpen}

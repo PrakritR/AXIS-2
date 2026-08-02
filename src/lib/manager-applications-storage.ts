@@ -13,6 +13,7 @@ import {
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
+import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -136,7 +137,7 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
 
 /** A pending row still being filled in by the applicant (not yet submitted). */
 export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
-  return row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress";
+  return isInProgressApplicationRow(row as DemoApplicantRow);
 }
 
 /**

@@ -20,7 +20,7 @@ const PORTAL_FOOTER_INLINE_SPACER =
 
 /**
  * Desktop title row — page title (and optional trailing tabs) on the left;
- * filter + primary actions grouped flush right (filter touches the first action).
+ * filter + primary actions grouped on the right (dropdown opens leftward from filter).
  */
 export function PortalPageTitleBand({
   title,
@@ -38,10 +38,19 @@ export function PortalPageTitleBand({
   className?: string;
 }) {
   const headerActions = filter || actions ? (
-    <PortalSectionActionRow variant="header" className="shrink-0 gap-1.5 sm:gap-2">
-      {filter}
-      {actions}
-    </PortalSectionActionRow>
+    filter && actions ? (
+      <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-2.5">
+        <div className="shrink-0">{filter}</div>
+        <PortalSectionActionRow variant="header" className="gap-2 sm:gap-2">
+          {actions}
+        </PortalSectionActionRow>
+      </div>
+    ) : (
+      <PortalSectionActionRow variant="header" className="shrink-0 gap-2 sm:gap-2">
+        {filter}
+        {actions}
+      </PortalSectionActionRow>
+    )
   ) : null;
 
   return (
@@ -70,7 +79,7 @@ export function PortalPageTitleBand({
   );
 }
 
-/** Mobile — filter + primary actions grouped flush right (below the nav title). */
+/** Mobile — filter + primary actions grouped on the right (below the nav title). */
 export function PortalPageHeaderMobileActionsRow({
   filter,
   actions,
@@ -85,13 +94,15 @@ export function PortalPageHeaderMobileActionsRow({
   return (
     <div
       className={cn(
-        "mb-2 flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 sm:gap-2 md:hidden",
+        "mb-2 flex w-full min-w-0 flex-nowrap items-center justify-end gap-2 sm:gap-2.5 md:hidden",
         className,
       )}
       data-slot="portal-page-header-mobile-actions"
     >
       {filter ? <div className="shrink-0">{filter}</div> : null}
-      {actions ? <div className="shrink-0">{actions}</div> : null}
+      {actions ? (
+        <div className="flex shrink-0 flex-nowrap items-center gap-1.5 sm:gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }

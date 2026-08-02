@@ -366,6 +366,8 @@ export function ListingStickySubnav({
   }, [mode, pinned]);
 
   const portalTabs = appearance === "portal";
+  /** Property listing preview (manager tab, modal shell): fit all section tabs without horizontal clip. */
+  const compactEqualTabs = portalTabs || (mode === "modal" && pinned);
 
   const portalSticky = mode === "portal" && !pinned;
 
@@ -375,17 +377,19 @@ export function ListingStickySubnav({
       data-listing-subnav
       data-listing-subnav-pinned={pinned ? "" : undefined}
       data-listing-subnav-portal={portalSticky ? "" : undefined}
-      className={`z-[45] min-w-0 max-w-full py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
+      className={`z-[45] min-w-0 w-full max-w-full overflow-hidden py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${
         portalTabs
           ? `border-b border-border ${portalSticky ? "sticky bg-background shadow-sm [top:var(--portal-mobile-top-chrome,0px)]" : "bg-accent/30"}`
-          : `border-b border-border ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
-              pinned
-                ? "bg-background"
-                : pageScrolled
-                  ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
-                  : "bg-background/90"
-            }`
-      } ${portalTabs ? className : ""}`}
+          : compactEqualTabs
+            ? `border-b border-border bg-accent/30 ${className}`
+            : `border-b border-border ${pinned ? "relative top-0 bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
+                pinned
+                  ? "bg-background"
+                  : pageScrolled
+                    ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
+                    : "bg-background/90"
+              }`
+      } ${portalTabs ? className : compactEqualTabs ? "" : ""}`}
       style={
         pinned
           ? { top: 0 }
@@ -397,16 +401,20 @@ export function ListingStickySubnav({
     >
       <ul
         ref={listRef}
-        className={`flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain px-2 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
-          fadeEnd && !portalTabs && mode !== "portal"
-            ? "[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none]"
-            : ""
-        } justify-start sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]`}
+        className={
+          compactEqualTabs
+            ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0 px-0.5 py-0.5 text-[10px] font-semibold leading-tight"
+            : `flex flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain px-2 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] ${
+                fadeEnd && mode !== "portal"
+                  ? "[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_1.75rem),transparent)] sm:[mask-image:none] sm:[-webkit-mask-image:none]"
+                  : ""
+              } justify-start sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]`
+        }
       >
         {nav.map((item) => {
           const active = activeId === item.id;
           return (
-            <li key={item.id} className="shrink-0">
+            <li key={item.id} className={compactEqualTabs ? "min-w-0" : "shrink-0"}>
               <button
                 ref={(el) => {
                   tabRefs.current.set(item.id, el);
@@ -414,14 +422,18 @@ export function ListingStickySubnav({
                 type="button"
                 data-attr="listing-section-tab"
                 aria-current={active ? "true" : undefined}
-                className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-xl border-0 px-3 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
-                  portalTabs
-                    ? active
-                      ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
-                      : "text-muted hover:bg-card/60 hover:text-foreground"
-                    : active
-                      ? "rounded-full bg-primary text-primary-foreground shadow-sm"
-                      : "rounded-full bg-transparent text-muted hover:bg-accent/40 hover:text-foreground"
+                className={`inline-flex w-full min-w-0 cursor-pointer items-center justify-center border-0 text-[inherit] transition-colors ${
+                  compactEqualTabs
+                    ? `min-h-9 rounded-lg px-0 py-1.5 ${
+                        active
+                          ? "bg-card text-foreground shadow-[var(--shadow-sm)] ring-1 ring-primary/25"
+                          : "text-muted hover:bg-card/60 hover:text-foreground"
+                      }`
+                    : `min-h-[44px] rounded-xl px-3 py-2 sm:min-h-0 sm:py-1.5 ${
+                        active
+                          ? "rounded-full bg-primary text-primary-foreground shadow-sm"
+                          : "rounded-full bg-transparent text-muted hover:bg-accent/40 hover:text-foreground"
+                      }`
                 }`}
                 onClick={() => {
                   clickLockRef.current = { id: item.id, until: Date.now() + 1500 };
@@ -436,8 +448,14 @@ export function ListingStickySubnav({
                   }
                 }}
               >
-                <span className="sm:hidden">{item.shortLabel}</span>
-                <span className="hidden sm:inline">{item.label}</span>
+                {compactEqualTabs ? (
+                  <span className="block w-full max-w-full truncate text-center">{item.shortLabel}</span>
+                ) : (
+                  <>
+                    <span className="sm:hidden">{item.shortLabel}</span>
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </>
+                )}
               </button>
             </li>
           );

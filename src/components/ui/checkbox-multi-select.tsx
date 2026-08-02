@@ -20,9 +20,11 @@ import {
   FIELD_SELECT_MENU_SEARCH_PX,
   FIELD_SELECT_MENU_SHELL_CLASS,
   FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS,
+  FIELD_SELECT_MENU_LISTBOX_FIT_CLASS,
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
+  fieldSelectMenuFitsWithoutScroll,
   fieldSelectMenuListMaxHeightPx,
   fieldSelectMenuMatches,
   fieldSelectMenuZIndex,
@@ -33,7 +35,7 @@ export { FIELD_SELECT_MENU_VISIBLE_ITEMS };
 
 const matchesQuery = fieldSelectMenuMatches;
 
-export type CheckboxMultiSelectOption = { value: string; label: string };
+export type CheckboxMultiSelectOption = { value: string; label: string; disabled?: boolean };
 export type CheckboxMultiSelectGroup = { label: string; options: CheckboxMultiSelectOption[] };
 
 function summarizeSelection(
@@ -44,12 +46,6 @@ function summarizeSelection(
   if (selected.length === 0) return emptyLabel;
   if (selected.length === 1) {
     return options.find((o) => o.value === selected[0])?.label ?? "1 selected";
-  }
-  if (selected.length === 2) {
-    const labels = selected
-      .map((v) => options.find((o) => o.value === v)?.label)
-      .filter(Boolean) as string[];
-    if (labels.length === 2) return labels.join(", ");
   }
   return `${selected.length} selected`;
 }
@@ -136,6 +132,8 @@ export function CheckboxMultiSelect({
   });
 
   const toggle = (value: string) => {
+    const option = flatOptions.find((o) => o.value === value);
+    if (option?.disabled) return;
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
 
@@ -158,18 +156,26 @@ export function CheckboxMultiSelect({
 
   const renderCheckboxOption = (opt: CheckboxMultiSelectOption) => {
     const checked = selected.includes(opt.value);
+    const optionDisabled = Boolean(disabled || opt.disabled);
     return (
       <label
         key={opt.value}
         role="option"
         aria-selected={checked}
-        className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS}`}
-        onPointerDown={(event) => handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value))}
+        aria-disabled={optionDisabled || undefined}
+        className={`flex items-start gap-2.5 px-3 py-2 text-sm ${FIELD_SELECT_MENU_OPTION_CLASS} ${
+          optionDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+        }`}
+        onPointerDown={(event) => {
+          if (optionDisabled) return;
+          handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value));
+        }}
       >
         <input
           type="checkbox"
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
           checked={checked}
+          disabled={optionDisabled}
           readOnly
           tabIndex={-1}
           aria-hidden
@@ -316,6 +322,7 @@ export function FieldSingleSelect({
   const showSearch = options.length > FIELD_SELECT_MENU_VISIBLE_ITEMS;
   const searchPx = showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0;
   const visibleOptionRows = Math.min(Math.max(options.length, 1), FIELD_SELECT_MENU_VISIBLE_ITEMS);
+  const fitsWithoutScroll = fieldSelectMenuFitsWithoutScroll(options.length, searchPx);
   const contentPx = fieldSelectMenuContentPx(visibleOptionRows, searchPx);
 
   const setOpenAndReset = (next: boolean) => {
@@ -339,14 +346,18 @@ export function FieldSingleSelect({
       <div
         id={listId}
         {...{ [FIELD_SELECT_MENU_DATA_ATTR]: "" }}
-        className={`${FIELD_SELECT_MENU_SHELL_CLASS} ${pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""}`}
+        className={`${FIELD_SELECT_MENU_SHELL_CLASS} ${fitsWithoutScroll ? "overflow-visible" : ""} ${pill ? "w-max max-w-[min(18rem,calc(100vw-2rem))]" : ""}`}
         style={{
           position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           minWidth: pill ? menuRect.width : undefined,
           width: pill ? undefined : menuRect.width,
-          maxHeight: menuRect.maxHeight,
+          ...(fitsWithoutScroll
+            ? {}
+            : {
+                maxHeight: menuRect.maxHeight,
+              }),
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
@@ -363,11 +374,15 @@ export function FieldSingleSelect({
         <div
           role="listbox"
           aria-label={label}
-          className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
-          style={{
-            touchAction: "pan-y",
-            maxHeight: fieldSelectMenuListMaxHeightPx(menuRect.maxHeight, searchPx),
-          }}
+          className={fitsWithoutScroll ? FIELD_SELECT_MENU_LISTBOX_FIT_CLASS : FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
+          style={
+            fitsWithoutScroll
+              ? { touchAction: "pan-y" }
+              : {
+                  touchAction: "pan-y",
+                  maxHeight: fieldSelectMenuListMaxHeightPx(menuRect.maxHeight, searchPx),
+                }
+          }
         >
           {filteredOptions.length === 0 ? (
             <p className="field-dropdown-menu-option px-3 py-2 text-sm text-muted">No matches</p>
@@ -391,7 +406,7 @@ export function FieldSingleSelect({
                   <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
                     {active ? "✓" : ""}
                   </span>
-                  <span className="leading-snug">{opt.label}</span>
+                  <span className="whitespace-nowrap leading-snug">{opt.label}</span>
                 </button>
               );
             })

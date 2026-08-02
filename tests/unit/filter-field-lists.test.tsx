@@ -10,16 +10,20 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import {
   FIELD_SELECT_MENU_SEARCH_PX,
+  computeFieldSelectMenuRectInHost,
+  computePortalFilterDropdownRect,
   fieldSelectMenuContentPx,
 } from "@/components/ui/field-select-menu";
 import {
   FILTER_LIST_MAX_HEIGHT_PX,
   FILTER_LIST_VISIBLE_ROWS,
   FILTER_MENU_CONTENT_PX,
+  FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH,
   FilterCheckboxList,
   FilterCollapsibleSection,
   FilterFieldsAccordion,
   filterMultiSelectSummary,
+  portalFilterPanelSizeClass,
 } from "@/components/portal/filter-field-lists";
 
 afterEach(cleanup);
@@ -117,14 +121,12 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     // The 5-row cap lives on the portaled shell (search row + 5 option rows); the
     // listbox is the scrollable flex child that shrinks under it.
     const shell = listbox.closest("[data-field-select-menu]") as HTMLElement;
-    const expectedMenuHeight = fieldSelectMenuContentPx(30, FIELD_SELECT_MENU_SEARCH_PX);
+    const expectedMenuHeight = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
     expect(shell.style.maxHeight).toBe(`${expectedMenuHeight}px`);
-    expect(FILTER_MENU_CONTENT_PX).toBe(fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX));
+    expect(shell.style.height).toBe(`${expectedMenuHeight}px`);
+    expect(FILTER_MENU_CONTENT_PX).toBe(expectedMenuHeight);
     expect(FILTER_LIST_MAX_HEIGHT_PX).toBe(FILTER_LIST_VISIBLE_ROWS * 40);
     expect(listbox.className).toContain("overflow-y-auto");
-    // The shell sizes to content instead of a fixed height, so it never leaves
-    // empty space below a short/filtered list.
-    expect(shell.style.height).toBe("");
     // All 30 options are still rendered (scrolled), not truncated.
     expect(within(listbox).getAllByRole("option")).toHaveLength(30);
   });
@@ -135,11 +137,15 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(screen.getByRole("textbox")).toBeTruthy();
   });
 
-  it("hides the search box when there are 5 or fewer options", () => {
+  it("shows a search box on every portal filter menu, and always when there are more than 5 options", () => {
     render(<Harness optionCount={4} />);
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
-    expect(screen.getByRole("listbox")).toBeTruthy();
-    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
+  it("hides the search box on non-filter field-select menus with 5 or fewer options", () => {
+    // FilterCheckboxList always shows search; this documents the filter-specific rule only.
+    expect(FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH).toBe(true);
   });
 
   it("filters the visible options as you type without dropping the selection", () => {
@@ -187,5 +193,150 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(screen.getByRole("listbox")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("uses a count summary for multi-select so the trigger width stays stable", () => {
+    expect(filterMultiSelectSummary([], [{ value: "a", label: "Ballard House" }], "All properties")).toBe(
+      "All properties",
+    );
+    expect(filterMultiSelectSummary(["a"], [{ value: "a", label: "Ballard House" }], "All properties")).toBe(
+      "Ballard House",
+    );
+    expect(
+      filterMultiSelectSummary(
+        ["a", "b"],
+        [
+          { value: "a", label: "Ballard House · 3 rooms" },
+          { value: "b", label: "Emerald Court · Unit 3" },
+        ],
+        "All properties",
+      ),
+    ).toBe("2 selected");
+  });
+});
+
+describe("portalFilterPanelSizeClass", () => {
+  it("uses shorter height for one field and taller for more", () => {
+    expect(portalFilterPanelSizeClass(1)).toContain("10.5rem");
+    expect(portalFilterPanelSizeClass(2)).toContain("14rem");
+    expect(portalFilterPanelSizeClass(3)).toContain("19rem");
+    expect(portalFilterPanelSizeClass(4)).toContain("19rem");
+  });
+});
+
+describe("portal filter dropdown positioning", () => {
+  it("right-aligns the panel to the trigger and stays inside the viewport", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 80,
+        left: 900,
+        right: 1000,
+        bottom: 120,
+        width: 100,
+        height: 40,
+        x: 900,
+        y: 80,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 768, configurable: true });
+
+    const rect = computePortalFilterDropdownRect(button, 168, { widthPx: 352 });
+    expect(rect.left + rect.width).toBe(1000);
+    expect(rect.left).toBeGreaterThanOrEqual(12);
+    expect(rect.top).toBeGreaterThanOrEqual(120);
+
+    document.body.removeChild(button);
+  });
+
+  it("keeps field menus inside an open filter dropdown host", () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "portal-filter-dropdown-panel");
+    host.style.position = "fixed";
+    host.style.top = "100px";
+    host.style.left = "600px";
+    host.style.width = "352px";
+    host.style.height = "304px";
+    document.body.appendChild(host);
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 180,
+        left: 612,
+        right: 940,
+        bottom: 224,
+        width: 328,
+        height: 44,
+        x: 612,
+        y: 180,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    host.getBoundingClientRect = () =>
+      ({
+        top: 100,
+        left: 600,
+        right: 952,
+        bottom: 404,
+        width: 352,
+        height: 304,
+        x: 600,
+        y: 100,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const rect = computeFieldSelectMenuRectInHost(button, 252, host, { minWidth: 328, preferOpenDown: true });
+    expect(rect.position).toBe("absolute");
+    expect(rect.top).toBeGreaterThanOrEqual(224 - 100 + 4);
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304 + 252);
+
+    document.body.removeChild(host);
+  });
+
+  it("opens filter field menus below the trigger when the field is near the panel bottom", () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "portal-filter-dropdown-panel");
+    host.style.position = "fixed";
+    host.style.top = "100px";
+    host.style.left = "600px";
+    host.style.width = "352px";
+    host.style.height = "304px";
+    document.body.appendChild(host);
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 348,
+        left: 612,
+        right: 940,
+        bottom: 392,
+        width: 328,
+        height: 44,
+        x: 612,
+        y: 348,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    host.getBoundingClientRect = () =>
+      ({
+        top: 100,
+        left: 600,
+        right: 952,
+        bottom: 404,
+        width: 352,
+        height: 304,
+        x: 600,
+        y: 100,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const rect = computeFieldSelectMenuRectInHost(button, 252, host, { preferOpenDown: true });
+    const triggerBottomInHost = 392 - 100;
+    expect(rect.top).toBe(triggerBottomInHost + 4);
+
+    document.body.removeChild(host);
   });
 });

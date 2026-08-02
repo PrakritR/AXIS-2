@@ -533,12 +533,12 @@ export function PortalCalendar({
         {portal === "manager" ? (
           <div className="mt-1">
             {calendarView !== "services" ? (
-              <div className="mb-4">
+              <div className="mb-4 shrink-0">
                 <TourProposalsPanel />
               </div>
             ) : null}
             {servicesOnlyView ? (
-              <p className="mb-3 text-sm text-muted">
+              <p className="mb-3 shrink-0 text-sm text-muted">
                 Scheduled vendor visits and work you assigned to yourself. Filter by house or leave all properties
                 selected to see your full service schedule.
               </p>
@@ -551,6 +551,7 @@ export function PortalCalendar({
             storageKey={calendarStorageKey}
             calendarRefreshSignal={calendarRefreshSignal}
             tourScopeLabel={tourScopeLabel}
+            bareSurface
             unavailableMessage={
               portal === "manager" && managerProperties.length === 0
                 ? "No houses found for this manager account yet."

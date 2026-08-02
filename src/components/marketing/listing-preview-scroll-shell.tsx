@@ -11,7 +11,7 @@ export function ListingPreviewScrollShell({
   /** Let #portal-main-content own vertical scroll on phones (manager property preview). */
   pageScrollOnMobile = false,
   /** Match manager portal segmented tabs instead of marketing primary pills. */
-  subnavAppearance = "marketing",
+  subnavAppearance = "portal",
 }: {
   children: ReactNode;
   className?: string;

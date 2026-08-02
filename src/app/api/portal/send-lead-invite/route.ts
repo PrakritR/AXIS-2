@@ -4,6 +4,7 @@ import {
   buildLeadInviteEmailBody,
   buildLeadInviteEmailHtml,
   buildLeadInviteMailtoHref,
+  buildLeadInviteSmsText,
   leadInviteSubject,
 } from "@/lib/lead-invite-email";
 import {
@@ -16,9 +17,13 @@ import {
 } from "@/lib/manager-property-links";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
+import { sendFromManagerWorkNumber } from "@/lib/proplane-sms-transport.server";
+import { recordResidentProspectInboxMessage } from "@/lib/tour-notification-delivery.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
+import { normalizeE164 } from "@/lib/twilio";
+import { resolveManagerWorkNumber } from "@/lib/twilio-provisioning";
 
 export const runtime = "nodejs";
 
@@ -51,6 +56,9 @@ export async function POST(req: Request) {
     let body: {
       kind?: unknown;
       to?: unknown;
+      phone?: unknown;
+      viaEmail?: unknown;
+      viaSms?: unknown;
       prospectName?: unknown;
       propertyId?: unknown;
       propertyIds?: unknown;
@@ -67,7 +75,11 @@ export async function POST(req: Request) {
 
     const kind =
       body.kind === "tour" ? "tour" : body.kind === "listing" ? "listing" : body.kind === "apply" ? "apply" : null;
+    const viaSms = body.viaSms === true;
+    const viaEmail = body.viaEmail !== false;
     const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
+    const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
+    const phone = phoneRaw ? normalizeE164(phoneRaw) : "";
     const prospectName = typeof body.prospectName === "string" ? body.prospectName.trim() : "";
     const singlePropertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
     const listingRoomId = typeof body.listingRoomId === "string" ? body.listingRoomId.trim() : "";
@@ -76,7 +88,15 @@ export async function POST(req: Request) {
     const rentalType = body.rentalType === "short_term" ? "short_term" : "standard";
 
     if (!kind) return NextResponse.json({ error: "kind must be apply, tour, or listing." }, { status: 400 });
-    if (!to || !EMAIL_RE.test(to)) return NextResponse.json({ error: "A valid recipient email is required." }, { status: 400 });
+    if (!viaEmail && !viaSms) {
+      return NextResponse.json({ error: "Choose email, SMS, or both." }, { status: 400 });
+    }
+    if (viaEmail && (!to || !EMAIL_RE.test(to))) {
+      return NextResponse.json({ error: "A valid recipient email is required." }, { status: 400 });
+    }
+    if (viaSms && !phone) {
+      return NextResponse.json({ error: "A valid US phone number is required for SMS." }, { status: 400 });
+    }
 
     // Listing, apply, and tour sends may include several properties at once.
     // Normalize both shapes (array or legacy scalar) into a deduped id list; the
@@ -197,25 +217,91 @@ export async function POST(req: Request) {
     } satisfies Parameters<typeof buildLeadInviteEmailBody>[0];
     const text = buildLeadInviteEmailBody(emailParams);
     const html = buildLeadInviteEmailHtml(emailParams);
-    const mailtoHref = buildLeadInviteMailtoHref({ to, ...emailParams });
-
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json({ ok: false, error: "Email delivery is not configured (set RESEND_API_KEY).", mailtoHref }, { status: 503 });
-    }
-
-    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject, text, html }),
+    const mailtoHref = viaEmail ? buildLeadInviteMailtoHref({ to, ...emailParams }) : "";
+    const smsText = buildLeadInviteSmsText({
+      kind,
+      prospectName: prospectName || undefined,
+      propertyTitle,
+      linkUrl,
+      listingCount,
+      tourCount,
+      managerNote: note || undefined,
     });
-    const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
-    if (!res.ok) {
-      return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
+
+    let emailId: string | null = null;
+    if (viaEmail) {
+      const apiKey = process.env.RESEND_API_KEY?.trim();
+      if (!apiKey) {
+        return NextResponse.json(
+          { ok: false, error: "Email delivery is not configured (set RESEND_API_KEY).", mailtoHref },
+          { status: 503 },
+        );
+      }
+
+      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [to], subject, text, html }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
+      if (!res.ok) {
+        return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
+      }
+      emailId = payload.id ?? null;
+
+      await recordResidentProspectInboxMessage(svc, {
+        participantEmail: to,
+        subject,
+        body: text,
+        fromName: "PropLane",
+        fromEmail: "invites@axis.local",
+      });
     }
-    track("lead_invite_sent", user.id, { kind, property_id: propertyId, property_count: authorized.length });
-    return NextResponse.json({ ok: true, id: payload.id ?? null, linkUrl });
+
+    if (viaSms) {
+      const workNumber = await resolveManagerWorkNumber(svc, user.id);
+      if (!workNumber) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "No work number on this account yet. Open View number or finish SMS setup first.",
+            emailSent: viaEmail && Boolean(emailId),
+          },
+          { status: 400 },
+        );
+      }
+      const smsResult = await sendFromManagerWorkNumber({
+        managerUserId: user.id,
+        to: phone,
+        text: smsText,
+        fromNumber: workNumber,
+        source: "work_number",
+        counterpartyRole: "prospect",
+      });
+      if (!smsResult.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              smsResult.error === "recipient_opted_out"
+                ? "That number has opted out of texts."
+                : "Could not send SMS.",
+            emailSent: viaEmail && Boolean(emailId),
+          },
+          { status: 502 },
+        );
+      }
+    }
+
+    track("lead_invite_sent", user.id, {
+      kind,
+      property_id: propertyId,
+      property_count: authorized.length,
+      via_email: viaEmail,
+      via_sms: viaSms,
+    });
+    return NextResponse.json({ ok: true, id: emailId, linkUrl, viaEmail, viaSms });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send invite." }, { status: 500 });
   }

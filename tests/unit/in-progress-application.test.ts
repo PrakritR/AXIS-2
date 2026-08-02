@@ -8,6 +8,7 @@ import {
   INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
   isSubmittedPendingApplicationRow,
+  shouldOfferApplicationCompletionReminder,
   switchApplicationTargetProperty,
   syncInProgressApplicationRow,
   IN_PROGRESS_APPLICATION_STAGE,
@@ -63,6 +64,16 @@ describe("in-progress-application", () => {
     ).toBe(true);
     expect(
       isInProgressApplicationRow({
+        id: "AXIS-LEGACY",
+        name: "A",
+        property: "P",
+        bucket: "pending",
+        stage: INCOMPLETE_APPLICATION_LABEL,
+        detail: "",
+      }),
+    ).toBe(true);
+    expect(
+      isInProgressApplicationRow({
         id: "AXIS-2",
         name: "A",
         property: "P",
@@ -70,6 +81,93 @@ describe("in-progress-application", () => {
         stage: "Submitted",
         detail: "",
       }),
+    ).toBe(false);
+  });
+
+  it("offers completion reminder for legacy Incomplete stage storage", () => {
+    expect(
+      shouldOfferApplicationCompletionReminder({
+        id: "AXIS-LEGACY",
+        name: "A",
+        property: "P",
+        bucket: "pending",
+        stage: INCOMPLETE_APPLICATION_LABEL,
+        detail: "",
+      }),
+    ).toBe(true);
+  });
+
+  it("offers completion reminder for wizard snapshot rows without stage metadata", () => {
+    expect(
+      shouldOfferApplicationCompletionReminder({
+        id: "PROPLANE-SNAPSHOT",
+        name: "Applicant",
+        property: "Ballard House",
+        bucket: "pending",
+        stage: "",
+        detail: "",
+        email: "resident@test.proplane.local",
+        application: {
+          propertyId: "prop-ballard",
+          email: "resident@test.proplane.local",
+          fullLegalName: "Applicant",
+        } as never,
+      }),
+    ).toBe(true);
+    expect(
+      isInProgressApplicationRow({
+        id: "PROPLANE-SNAPSHOT",
+        name: "Applicant",
+        property: "Ballard House",
+        bucket: "pending",
+        stage: "",
+        detail: "",
+        application: { propertyId: "prop-ballard" } as never,
+      }),
+    ).toBe(true);
+  });
+
+  it("offers completion reminder for pending rows with only top-level property metadata", () => {
+    expect(
+      shouldOfferApplicationCompletionReminder({
+        id: "PROPLANE-E2E86A70",
+        name: "Applicant",
+        property: "Ballard House",
+        propertyId: "prop-ballard",
+        bucket: "pending",
+        stage: "",
+        detail: "",
+        email: "resident@test.proplane.local",
+      }),
+    ).toBe(true);
+  });
+
+  it("offers completion reminder on incomplete detail even when stage metadata is ambiguous", () => {
+    expect(
+      shouldOfferApplicationCompletionReminder(
+        {
+          id: "PROPLANE-E2E86A70",
+          name: "A",
+          property: "P",
+          bucket: "pending",
+          stage: "",
+          detail: "",
+        },
+        { viewingIncompleteApplicationDetail: true },
+      ),
+    ).toBe(true);
+    expect(
+      shouldOfferApplicationCompletionReminder(
+        {
+          id: "PROPLANE-SUBMITTED",
+          name: "A",
+          property: "P",
+          bucket: "pending",
+          stage: "Submitted",
+          detail: "",
+        },
+        { viewingIncompleteApplicationDetail: true },
+      ),
     ).toBe(false);
   });
 

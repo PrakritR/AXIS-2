@@ -198,6 +198,7 @@ function PaymentsFilterSheet({
     <PortalFilterSortSheet
       activeCount={activeCount}
       compactPanel
+      filterFieldCount={personOptions.length > 0 ? 3 : 2}
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"

@@ -430,7 +430,7 @@ export function ManagerUnifiedInbox({
   }, [mergedRows, routeThreadId]);
 
   const listPane = (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {listChrome === "internal" ? (
         <div className={PORTAL_INBOX_LIST_TOOLBAR_CLASS}>
           <DestinationNav
@@ -569,9 +569,11 @@ export function ManagerUnifiedInbox({
 
   return (
     <InboxTwoPane
-      mobileCompact
+      heightMode="viewport"
       fillViewport={threadOpen}
-      className="max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
+      fillParent
+      mobileCompact
+      className="min-h-0 flex-1 max-md:rounded-xl max-md:shadow-[var(--shadow-sm)]"
       threadOpen={threadOpen}
       list={listPane}
       thread={threadPane}

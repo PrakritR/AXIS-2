@@ -340,6 +340,7 @@ export function ManagerAllServicesPanel({
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilters])}
         compactPanel
+        filterFieldCount={residentOptions.length > 0 ? 2 : 1}
         className="min-w-0 shrink-0"
         onReset={resetServicesFilters}
         dataAttr="services-filter-sheet-open"

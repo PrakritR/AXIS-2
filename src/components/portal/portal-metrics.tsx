@@ -11,7 +11,9 @@ import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/p
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
 import { PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import { cn } from "@/lib/utils";
+import { renderPortalStickyBody } from "@/lib/portal-page-chrome-layout";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { usePortalStickyPageChrome } from "@/hooks/use-portal-sticky-page-chrome";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
 export const PORTAL_DASHBOARD_TILE_LINK =
@@ -20,6 +22,12 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] max-lg:rounded-2xl max-lg:p-3 sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3 [html[data-native]_&]:py-3";
+
+/** Scrollable list body below fixed page chrome (Properties, Leases, Residents, Calendar, …). */
+export const PORTAL_LIST_PAGE_SCROLL_BODY =
+  "portal-list-page-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]";
+
+export { PortalPageChrome, PortalPageScrollBody } from "@/lib/portal-page-chrome-layout";
 
 /** Flat manager page shell — content sits on the portal gradient canvas. */
 export const PORTAL_PAGE_SHELL_BARE = "relative z-0 min-w-0 w-full";
@@ -598,6 +606,9 @@ export function ManagerPortalPageShell({
   mobileFlush = false,
   /** Communication thread reading: flex-fill children to the bottom nav on phones. */
   mobileThreadFill = false,
+  viewportFillBody = false,
+  /** Fixed title + tabs/search; only the body region scrolls (default on). */
+  stickyPageChrome = true,
   surfaceCard = false,
   count,
 }: {
@@ -624,6 +635,10 @@ export function ManagerPortalPageShell({
   mobileFlush?: boolean;
   /** Flex-fill page body on phones so inbox thread + composer reach the bottom nav. */
   mobileThreadFill?: boolean;
+  /** Flex-fill page body at all breakpoints — fixed chrome + scrollable inbox below. */
+  viewportFillBody?: boolean;
+  /** List pages: pin header/tabs; scroll table or cards in {@link PORTAL_LIST_PAGE_SCROLL_BODY}. */
+  stickyPageChrome?: boolean;
   /** Legacy white card shell — default is flat on the page canvas. */
   surfaceCard?: boolean;
   /** Optional record count beside the title. */
@@ -641,6 +656,11 @@ export function ManagerPortalPageShell({
   const showMobileFooterActions = titleAsideDesktopOnly;
   const showTitleOnMobile = !hideTitleOnMobileNav;
   const filterRowBorder = surfaceCard ? "border-b border-border" : "";
+  const pinChrome = stickyPageChrome && !viewportFillBody;
+  usePortalStickyPageChrome(pinChrome);
+  const fillBody = viewportFillBody || mobileThreadFill || pinChrome;
+  const chromeShrink = viewportFillBody || pinChrome ? "shrink-0" : "";
+  const bodyChildren = pinChrome ? renderPortalStickyBody(children) : children;
   return (
     <div
       className={cn(
@@ -648,7 +668,7 @@ export function ManagerPortalPageShell({
         surfaceCard && "relative z-0 min-w-0 w-full shrink-0",
         mobileFlush &&
           "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
-        mobileThreadFill && "max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+        fillBody && "flex min-h-0 flex-1 flex-col",
       )}
     >
       {useInlineTitleBand ? (
@@ -659,12 +679,13 @@ export function ManagerPortalPageShell({
             showTitleOnMobile={false}
             className={cn(
               "md:hidden",
+              chromeShrink,
               compactFilterRow && "!space-y-1.5 max-lg:!space-y-1",
               hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
             )}
           />
           <PortalPageTitleBand
-            className={cn("max-md:hidden", hideTitleOnNative && "[html[data-native]_&_h1]:sr-only")}
+            className={cn("max-md:hidden", chromeShrink, hideTitleOnNative && "[html[data-native]_&_h1]:sr-only")}
             title={title}
             count={count}
             filter={titleInlineFilter}
@@ -680,6 +701,7 @@ export function ManagerPortalPageShell({
           primaryAction={titleAside && !titleAsideDesktopOnly ? titleAside : undefined}
           showTitleOnMobile={showTitleOnMobile}
           className={cn(
+            chromeShrink,
             compactFilterRow && "!space-y-1.5 max-lg:!space-y-1",
             hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
             !showTitleOnMobile && "max-md:[&_h1]:sr-only",
@@ -690,6 +712,7 @@ export function ManagerPortalPageShell({
       {subtitle ? (
         <p
           className={cn(
+            chromeShrink,
             welcomeSubtitle
               ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-lg [html[data-native]_&]:text-base"
               : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:text-xs",
@@ -701,7 +724,9 @@ export function ManagerPortalPageShell({
         </p>
       ) : null}
       {titleAside && titleAsideDesktopOnly ? (
-        <div className="mt-2 flex w-full flex-wrap items-center justify-end gap-2 max-md:hidden">{titleAside}</div>
+        <div className={cn("mt-2 flex w-full flex-wrap items-center justify-end gap-2 max-md:hidden", chromeShrink)}>
+          {titleAside}
+        </div>
       ) : null}
       {filterRow ? (
         <>
@@ -712,6 +737,7 @@ export function ManagerPortalPageShell({
                 : `mt-4 ${filterRowBorder} pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5`,
               mobileHideFilterRow && "max-md:hidden",
               mobileFlush && "max-md:mt-0 max-md:border-0 max-md:pb-0",
+              pinChrome && "shrink-0",
             )}
           >
             <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>{filterRow}</div>
@@ -723,9 +749,10 @@ export function ManagerPortalPageShell({
                 : "mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5",
               mobileHideFilterRow && "max-md:mt-0",
               mobileFlush && "max-md:mt-0",
+              fillBody && "flex min-h-0 flex-1 flex-col",
             )}
           >
-            {children}
+            {bodyChildren}
           </div>
         </>
       ) : (
@@ -734,10 +761,11 @@ export function ManagerPortalPageShell({
             tightChrome
               ? "mt-1.5 max-lg:mt-0 sm:mt-2 [html[data-native]_&]:mt-0"
               : "mt-4 sm:mt-6 max-lg:mt-0 [html[data-native]_&]:mt-0",
-            mobileThreadFill && "max-md:mt-0 max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+            mobileThreadFill && !viewportFillBody && !pinChrome && "max-md:mt-0 max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+            (viewportFillBody || pinChrome) && "mt-0 flex min-h-0 flex-1 flex-col",
           )}
         >
-          {children}
+          {bodyChildren}
         </div>
       )}
       {showMobileFooterActions ? (

@@ -78,7 +78,7 @@ export function PortalListControlStack({
   if (!showDestinations && !showFindRow && !activeFilterChips) return null;
 
   return (
-    <div className={cn("space-y-2 max-lg:space-y-1.5", className)} data-slot="portal-list-control-stack">
+    <div className={cn("shrink-0 space-y-2 max-lg:space-y-1.5", className)} data-slot="portal-list-control-stack">
       {showDestinations ? (
         <HorizontalScrollCapture
           className={cn(
@@ -130,3 +130,5 @@ export function PortalListControlStack({
     </div>
   );
 }
+
+PortalListControlStack.displayName = "PortalListControlStack";

@@ -1205,20 +1205,19 @@ export function PortalCalendarPanels({
 
   if (compactAvailability) {
     const vendorMode = Boolean(vendorDayFlexibility);
-    const compactShellClass = bareSurface
-      ? ""
-      : "overflow-hidden rounded-2xl border border-border bg-card shadow-sm";
+    const compactShellClass = bareSurface ? "" : "overflow-hidden rounded-2xl border border-border bg-card shadow-sm";
+    const compactToolbarClass = cn(
+      "portal-calendar-toolbar shrink-0",
+      "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
+      bareSurface
+        ? "border-b border-border/50"
+        : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
+    );
+    const compactBodyClass = bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5";
     return (
       <>
         <div className={compactShellClass}>
-          <div
-            className={cn(
-              "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
-              bareSurface
-                ? "border-b border-border/50"
-                : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
-            )}
-          >
+          <div className={compactToolbarClass}>
             <div className="flex w-full min-w-0 items-center justify-center">
               <div className="flex min-w-0 items-center justify-center gap-0.5 sm:gap-1">
                 <Button
@@ -1330,7 +1329,7 @@ export function PortalCalendarPanels({
             </div>
           </div>
 
-          <div className={bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5"}>
+          <div className={compactBodyClass}>
           {upcomingMeetingSummary.total > 0 ? (
             <div className="mt-2 rounded-2xl border px-4 py-3 portal-banner-info">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1492,7 +1491,7 @@ export function PortalCalendarPanels({
                   ) : null}
                   <div className={bareSurface ? "mt-2" : "mt-2 overflow-hidden rounded-2xl border border-border bg-card"}>
                     <div className={`grid grid-cols-[72px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
-                      <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
+                      <div className={`px-2 py-2 ${bareSurface ? "bg-transparent" : ""} ${CALENDAR_HEADER_CELL}`}>Time</div>
                       <div className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
                         {mobileDate.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                       </div>

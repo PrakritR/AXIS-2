@@ -14,6 +14,7 @@ export function PortalPersonRecordRow({
   selected = false,
   onOpen,
   dataAttr,
+  trailing,
 }: {
   name: string;
   subtitle?: string;
@@ -23,6 +24,7 @@ export function PortalPersonRecordRow({
   selected?: boolean;
   onOpen: () => void;
   dataAttr?: string;
+  trailing?: ReactNode;
 }) {
   return (
     <div data-attr={dataAttr}>
@@ -33,6 +35,7 @@ export function PortalPersonRecordRow({
         time={meta ?? ""}
         selected={selected}
         onOpen={onOpen}
+        trailing={trailing}
       />
       {badge ? <div className="px-3 pb-2 -mt-1 max-md:px-2.5">{badge}</div> : null}
     </div>

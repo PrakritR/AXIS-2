@@ -346,20 +346,18 @@ export function ManagerLeases({
             ) : null
           }
         />
-        <div className="portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1">
-          <ManagerLeasesPipelinePanel
-            rows={searchedRows}
-            tab={tab}
-            refreshKey={tick}
-            managerUserId={userId}
-            residentAccountEmails={residentAccountEmails}
-            leaseId={leaseIdProp}
-            listBasePath={basePath}
-            onEmailAccountSetup={(email) => {
-              setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
-            }}
-          />
-        </div>
+        <ManagerLeasesPipelinePanel
+          rows={searchedRows}
+          tab={tab}
+          refreshKey={tick}
+          managerUserId={userId}
+          residentAccountEmails={residentAccountEmails}
+          leaseId={leaseIdProp}
+          listBasePath={basePath}
+          onEmailAccountSetup={(email) => {
+            setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
+          }}
+        />
       </ManagerPortalPageShell>
       {modals}
     </>

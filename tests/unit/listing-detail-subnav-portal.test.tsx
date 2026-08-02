@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
 
 vi.mock("@/lib/portal-mobile-top-chrome", () => ({
@@ -30,7 +30,17 @@ describe("ListingStickySubnav — portal property preview", () => {
 
     const list = document.querySelector("[data-listing-subnav] ul");
     expect(list).not.toBeNull();
-    expect(list?.className).toContain("justify-start");
+    expect(list?.className).toContain("grid");
+    expect(list?.className).toContain("w-full");
     expect(document.querySelectorAll('[data-attr="listing-section-tab"]').length).toBe(6);
+  });
+
+  it("uses compact equal-width tabs in pinned listing preview shell", () => {
+    render(<ListingStickySubnav mode="modal" pinned appearance="portal" />);
+
+    const list = document.querySelector("[data-listing-subnav] ul");
+    expect(list?.className).toContain("grid");
+    expect(screen.getByRole("button", { name: "Rules" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Location" })).toBeTruthy();
   });
 });

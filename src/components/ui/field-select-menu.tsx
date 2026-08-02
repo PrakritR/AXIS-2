@@ -33,13 +33,19 @@ export const FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX =
 export const FIELD_SELECT_MENU_SHELL_CLASS =
   "field-dropdown-menu flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border shadow-[0_16px_40px_-12px_rgba(15,23,42,0.35)]";
 
-/**
- * Scrollable option list — a shrinkable flex child (`flex: 0 1 auto`) so the shell
+/** Scrollable option list — a shrinkable flex child (`flex: 0 1 auto`) so the shell
  * still sizes to its real content and the list scrolls once the shell hits its cap.
  * Never `flex-1` here: a zero flex-basis collapses the auto-height shell.
  */
 export const FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS =
   "min-h-0 overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]";
+
+/** Short menus (≤5 options, no search) — size to content with no inner scrollbar. */
+export const FIELD_SELECT_MENU_LISTBOX_FIT_CLASS = "overflow-visible py-1";
+
+export function fieldSelectMenuFitsWithoutScroll(optionCount: number, searchPx = 0): boolean {
+  return searchPx === 0 && optionCount <= FIELD_SELECT_MENU_VISIBLE_ITEMS;
+}
 
 const FIELD_SELECT_MENU_SEARCH_INPUT_CLASS =
   "h-9 w-full rounded-xl border border-border bg-auth-input-bg pl-8 pr-3 text-sm text-foreground outline-none placeholder:text-muted/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/10";
@@ -59,15 +65,27 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
  * menus and clip option lists.
  */
 export function resolveFieldSelectMenuPortal(): HTMLElement {
+  const vaulSheet = document.querySelector<HTMLElement>(
+    '[data-slot="vaul-bottom-sheet"][data-state="open"]',
+  );
+  // Vaul animates with transform; `position: fixed` menus must use viewport/body coords.
+  if (vaulSheet) return document.body;
+
   for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
     const host = document.querySelector<HTMLElement>(selector);
     if (host) return host;
   }
+  const openFilterPanel = document.querySelector<HTMLElement>(
+    '[data-slot="portal-filter-dropdown-panel"]',
+  );
+  if (openFilterPanel) return openFilterPanel;
   return document.body;
 }
 
 export function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
-  return portalHost === document.body ? 10000 : 80;
+  if (portalHost === document.body) return 10000;
+  if (portalHost.matches('[data-slot="portal-filter-dropdown-panel"]')) return 30;
+  return 80;
 }
 
 export type FieldSelectMenuRect = {
@@ -95,13 +113,84 @@ export function fieldSelectMenuListMaxHeightPx(shellMaxHeight: number, searchPx 
   );
 }
 
+/** Right-align a fixed filter panel to its trigger and clamp inside the viewport. */
+export function computePortalFilterDropdownRect(
+  button: HTMLButtonElement,
+  panelHeightPx: number,
+  options?: { widthPx?: number },
+): FieldSelectMenuRect {
+  const rect = button.getBoundingClientRect();
+  const viewportH = window.innerHeight;
+  const viewportW = window.innerWidth;
+  const viewportPadding = 12;
+  const preferredWidth = options?.widthPx ?? 22 * 16;
+  const width = Math.min(preferredWidth, viewportW - viewportPadding * 2);
+
+  let left = rect.right - width;
+  left = Math.min(Math.max(viewportPadding, left), viewportW - width - viewportPadding);
+
+  const gap = 8;
+  const spaceBelow = viewportH - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const openUp = spaceBelow < panelHeightPx && spaceAbove > spaceBelow;
+  const maxHeight = Math.min(
+    panelHeightPx,
+    Math.max(120, openUp ? spaceAbove - gap : spaceBelow - gap),
+  );
+  const top = openUp
+    ? Math.max(viewportPadding, rect.top - maxHeight - gap)
+    : rect.bottom + gap;
+
+  return { top, left, width, maxHeight, position: "fixed" };
+}
+
+/** Position a field menu inside an open filter dropdown (or other non-body host). */
+export function computeFieldSelectMenuRectInHost(
+  button: HTMLButtonElement,
+  contentPx: number,
+  host: HTMLElement,
+  options?: { minWidth?: number; hostPaddingPx?: number; preferOpenDown?: boolean },
+): FieldSelectMenuRect {
+  const hostRect = host.getBoundingClientRect();
+  const rect = button.getBoundingClientRect();
+  const gap = 4;
+  const hostPadding = options?.hostPaddingPx ?? 12;
+  const maxMenuWidth = Math.max(120, hostRect.width - hostPadding * 2);
+  const minWidth = options?.minWidth ?? 0;
+  const width = Math.min(Math.max(minWidth, rect.width), maxMenuWidth);
+
+  let left = rect.left - hostRect.left;
+  left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
+
+  const spaceBelow = hostRect.bottom - rect.bottom - gap;
+  const spaceAbove = rect.top - hostRect.top - gap;
+  const preferOpenDown = options?.preferOpenDown ?? false;
+  const openUp = !preferOpenDown && spaceBelow < contentPx && spaceAbove > spaceBelow;
+  const maxHeight = preferOpenDown
+    ? contentPx
+    : Math.min(
+        contentPx,
+        Math.max(
+          FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
+          openUp ? spaceAbove - gap : spaceBelow - gap,
+        ),
+      );
+  const top = openUp
+    ? Math.max(gap, rect.top - hostRect.top - maxHeight - gap)
+    : rect.bottom - hostRect.top + gap;
+
+  return { top, left, width, maxHeight, position: "absolute" };
+}
+
 export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,
   _portalHost: HTMLElement,
+  options?: { minWidth?: number },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
+  const viewportW = window.innerWidth;
   const viewportPadding = 12;
   const contentHeight = contentPx;
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
@@ -112,13 +201,22 @@ export function computeFieldSelectMenuRect(
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
   const maxHeight = Math.min(contentHeight, viewportCap);
+  const minWidth = options?.minWidth ?? 0;
+  const width = Math.min(
+    minWidth > 0 ? minWidth : rect.width,
+    viewportW - viewportPadding * 2,
+  );
+  const left = Math.min(
+    Math.max(viewportPadding, rect.left),
+    viewportW - width - viewportPadding,
+  );
   const top = openUp
     ? Math.max(viewportPadding, rect.top - maxHeight - 4)
     : rect.bottom + 4;
   return {
     top,
-    left: rect.left,
-    width: rect.width,
+    left,
+    width,
     maxHeight,
     position: "fixed",
   };
@@ -134,10 +232,16 @@ export function useFieldSelectMenu({
   open,
   onOpenChange,
   contentPx,
+  minMenuWidth,
+  align = "start",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contentPx: number;
+  /** When set, the portaled menu is at least this wide (filter fields). */
+  minMenuWidth?: number;
+  /** `end` right-aligns the menu to the trigger (portal filter dropdown). */
+  align?: "start" | "end";
 }) {
   const listId = useId();
   const isClient = useIsClient();
@@ -157,7 +261,20 @@ export function useFieldSelectMenu({
     const updateMenuRect = () => {
       const button = buttonRef.current;
       if (!button) return;
-      setMenuRect(computeFieldSelectMenuRect(button, contentPx, resolveFieldSelectMenuPortal()));
+      const portalHost = resolveFieldSelectMenuPortal();
+      const inFilterPanel =
+        portalHost !== document.body &&
+        portalHost.matches('[data-slot="portal-filter-dropdown-panel"]');
+      setMenuRect(
+        align === "end"
+          ? computePortalFilterDropdownRect(button, contentPx, { widthPx: minMenuWidth })
+          : inFilterPanel
+            ? computeFieldSelectMenuRectInHost(button, contentPx, portalHost, {
+                minWidth: minMenuWidth,
+                preferOpenDown: true,
+              })
+            : computeFieldSelectMenuRect(button, contentPx, portalHost, { minWidth: minMenuWidth }),
+      );
     };
     updateMenuRect();
     window.addEventListener("resize", updateMenuRect);
@@ -166,7 +283,7 @@ export function useFieldSelectMenu({
       window.removeEventListener("resize", updateMenuRect);
       window.removeEventListener("scroll", updateMenuRect, true);
     };
-  }, [open, contentPx]);
+  }, [align, open, contentPx, minMenuWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -174,6 +291,7 @@ export function useFieldSelectMenu({
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (wrapRef.current?.contains(target)) return;
+      if (target instanceof HTMLElement && target.closest('[data-slot="portal-filter-dropdown-panel"]')) return;
       // A click inside ANY portaled field-select menu must not close this one.
       if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
       if (document.getElementById(listId)?.contains(target)) return;

@@ -11,7 +11,7 @@ import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, 
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
+import { CheckboxMultiSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -617,6 +617,7 @@ export function InboxConversationRow({
   leading,
   previewPrefix,
   channelBadge,
+  trailing,
 }: {
   name: string;
   subtitle?: string;
@@ -633,6 +634,8 @@ export function InboxConversationRow({
   previewPrefix?: string;
   /** Small label for unified email + SMS lists. */
   channelBadge?: "Email" | "SMS";
+  /** Optional slot after the row body (e.g. a quick action button). */
+  trailing?: ReactNode;
 }) {
   const badgeCount = unreadCount ?? (unread ? 1 : 0);
   return (
@@ -683,6 +686,7 @@ export function InboxConversationRow({
           </div>
         </div>
       </button>
+      {trailing ? <div className="shrink-0">{trailing}</div> : null}
     </div>
   );
 }
@@ -778,16 +782,15 @@ export function InboxBubble({
       <div
         className={`portal-inbox-inbound-bubble max-w-[min(88%,20rem)] px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm ${radius} ${
           outbound
-            ? "text-primary-foreground shadow-[0_1px_2px_rgba(15,23,42,0.12)]"
+            ? "portal-inbox-outbound-bubble text-white"
             : cluster === "single"
               ? "border border-border bg-secondary text-foreground"
               : "border border-border bg-secondary text-foreground"
         } ${sending ? "opacity-80" : ""} ${failed ? "ring-2 ring-rose-400/50" : ""}`}
-        style={outbound ? { background: "var(--btn-primary)" } : undefined}
       >
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
       </div>
-      {showMeta ? (
+      {showMeta && metaCaption ? (
         <span
           className={`mt-1 flex max-w-full items-center gap-1.5 px-1 text-[11px] text-muted ${
             outbound ? "flex-row-reverse" : ""
@@ -801,7 +804,7 @@ export function InboxBubble({
   );
 }
 
-/** Instagram-style clustered message list for an open thread. */
+/** Clustered message list for an open thread. */
 export function InboxMessageTimeline({
   messages,
   showAuthors = false,
@@ -854,7 +857,7 @@ export function inboxReplyModeToChannels(mode: InboxReplyChannelMode): { viaEmai
 const INBOX_REPLY_CHANNEL_COMPACT_TRIGGER_CLASS =
   "min-h-[2.75rem] w-[min(8.5rem,30vw)] rounded-2xl px-2.5 py-1.5 text-xs font-medium sm:text-xs";
 
-/** Email / SMS channel dropdown for thread replies — compact control beside the reply field. */
+/** Email / SMS channel multi-select for thread replies — compact control beside the reply field. */
 export function InboxReplyChannelPicker({
   viaEmail,
   viaSms,
@@ -870,41 +873,47 @@ export function InboxReplyChannelPicker({
   emailAvailable?: boolean;
   smsAvailable?: boolean;
 }) {
-  const options: { value: InboxReplyChannelMode; label: string }[] = [];
-  if (emailAvailable) options.push({ value: "email", label: "Email" });
-  options.push({ value: "sms", label: smsAvailable ? "SMS" : "SMS (not enabled)" });
-  options.push({
-    value: "both",
-    label: smsAvailable ? "Email & SMS" : "Email & SMS (SMS off)",
-  });
+  const options = [
+    ...(emailAvailable ? [{ value: "email", label: "Email" }] : []),
+    {
+      value: "sms",
+      label: smsAvailable ? "SMS" : "SMS (not enabled)",
+      disabled: !smsAvailable,
+    },
+  ];
 
-  const mode = inboxReplyChannelsToMode(viaEmail, viaSms);
-  const effectiveMode =
-    !smsAvailable && (mode === "sms" || mode === "both")
-      ? "email"
-      : options.some((o) => o.value === mode)
-        ? mode
-        : "email";
+  const selected = [
+    ...(viaEmail && emailAvailable ? ["email"] : []),
+    ...(viaSms ? ["sms"] : []),
+  ];
+  const effectiveSelected =
+    selected.length > 0 ? selected : emailAvailable ? ["email"] : smsAvailable ? ["sms"] : [];
+
+  const selectionTriggerLabel =
+    effectiveSelected.includes("email") && effectiveSelected.includes("sms")
+      ? "Email & SMS"
+      : effectiveSelected.includes("sms")
+        ? "SMS"
+        : effectiveSelected.includes("email")
+          ? "Email"
+          : undefined;
 
   return (
     <div className="flex shrink-0 flex-col gap-0.5" data-attr="inbox-reply-channel-picker">
-      <FieldSingleSelect
+      <CheckboxMultiSelect
         label="Send via"
         labelClassName="px-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted"
-        wrapperClassName="w-auto shrink-0"
-        triggerClassName={INBOX_REPLY_CHANNEL_COMPACT_TRIGGER_CLASS}
+        className={`w-auto shrink-0 ${INBOX_REPLY_CHANNEL_COMPACT_TRIGGER_CLASS}`}
+        variant="pill"
         options={options}
-        value={effectiveMode}
+        selected={effectiveSelected}
+        selectionTriggerLabel={selectionTriggerLabel}
+        emptyLabel="Choose channels…"
         onChange={(next) => {
-          const picked = next as InboxReplyChannelMode;
-          if (!smsAvailable && picked !== "email") {
-            onViaEmailChange(true);
-            onViaSmsChange(false);
-            return;
-          }
-          const channels = inboxReplyModeToChannels(picked);
-          onViaEmailChange(channels.viaEmail);
-          onViaSmsChange(channels.viaSms);
+          const enabled = next.filter((value) => value !== "sms" || smsAvailable);
+          if (enabled.length === 0) return;
+          onViaEmailChange(enabled.includes("email"));
+          onViaSmsChange(enabled.includes("sms"));
         }}
         dataAttr="inbox-reply-send-via"
       />
@@ -989,7 +998,7 @@ export function InboxComposer({
             className={PORTAL_INBOX_COMPOSER_SEND_CLASS}
           >
             {sending ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current/40 border-t-current" />
             ) : (
               <ArrowUp className="h-5 w-5" strokeWidth={2.25} />
             )}
@@ -1600,9 +1609,9 @@ export function InboxThreadView({
   );
 
   return (
-    <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}>
       <header
-        className="portal-inbox-thread-header flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]"
+        className="portal-inbox-thread-header sticky top-0 z-10 flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]"
       >
         {onBack ? (
           <button
@@ -1679,6 +1688,8 @@ export function InboxTwoPane({
   mobileCompact = false,
   /** Mobile thread reading: stretch to the bottom nav with no dead space below the composer. */
   fillViewport = false,
+  /** Fill a flex parent (Communication page) instead of a capped pixel height. */
+  fillParent = false,
 }: {
   list: ReactNode;
   thread: ReactNode;
@@ -1689,6 +1700,7 @@ export function InboxTwoPane({
   heightMode?: "viewport" | "section" | "flow";
   mobileCompact?: boolean;
   fillViewport?: boolean;
+  fillParent?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
@@ -1714,7 +1726,8 @@ export function InboxTwoPane({
         return;
       }
       const minH = compact ? 280 : narrow ? 360 : 440;
-      const maxH = compact ? 600 : narrow ? 680 : 760;
+      // Communication split view: use full remaining viewport (no cap) so both panes can scroll.
+      const maxH = fillParent ? avail : compact ? 600 : narrow ? 680 : 760;
       setMeasuredHeight(Math.max(minH, Math.min(maxH, avail)));
     };
     measure();
@@ -1728,42 +1741,43 @@ export function InboxTwoPane({
       window.clearTimeout(timer);
       window.removeEventListener("resize", measure);
     };
-  }, [fillViewport, heightMode, mobileCompact]);
+  }, [fillParent, fillViewport, heightMode, mobileCompact]);
 
   const sectionHeight = "min(20rem, 38dvh)";
   const fallback = isNativeRuntimeSync() ? "min(78dvh, calc(100dvh - 12rem))" : "min(68vh, 640px)";
   const flexFillMobile = fillViewport && threadOpen;
+  const flexFillLayout = fillParent && heightMode === "viewport";
   const flowLayout = heightMode === "flow";
   const height =
-    flowLayout
+    flowLayout || flexFillMobile
       ? undefined
       : heightMode === "section"
         ? sectionHeight
-        : flexFillMobile
-          ? undefined
-          : measuredHeight
-            ? `${measuredHeight}px`
-            : fallback;
+        : measuredHeight
+          ? `${measuredHeight}px`
+          : fallback;
 
   return (
     <div
       ref={rootRef}
-      className={`portal-inbox-two-pane rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] max-md:rounded-xl max-md:border-x-0 max-md:shadow-none ${flowLayout ? "overflow-visible" : "overflow-hidden"} ${flexFillMobile ? "max-md:flex max-md:min-h-0 max-md:flex-1" : ""} ${className}`}
+      className={`portal-inbox-two-pane rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] max-md:rounded-xl max-md:border-x-0 max-md:shadow-none ${flowLayout ? "overflow-visible" : "overflow-hidden"} ${flexFillMobile || flexFillLayout ? "flex min-h-0 flex-1 flex-col" : ""} ${className}`}
       style={height ? { height } : undefined}
       data-attr="portal-inbox-two-pane"
       data-fill-viewport={flexFillMobile ? "true" : undefined}
       data-height-mode={flowLayout ? "flow" : undefined}
     >
-      <div className={`grid ${flowLayout ? "" : "h-full"} ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(320px,38%)_1fr]"}`}>
+      <div
+        className={`grid min-h-0 flex-1 ${flowLayout ? "" : "h-full grid-rows-[minmax(0,1fr)]"} ${listHidden ? "grid-cols-1" : "lg:grid-cols-[minmax(320px,38%)_1fr]"}`}
+      >
         <section
-          className={`portal-inbox-list-pane min-h-0 min-w-0 flex-col border-border lg:border-r ${
+          className={`portal-inbox-list-pane flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-border lg:border-r ${
             listHidden ? "hidden" : threadOpen ? "hidden lg:flex" : "flex"
           }`}
         >
           {list}
         </section>
         <section
-          className={`portal-inbox-thread-pane min-h-0 min-w-0 flex-col ${listHidden || threadOpen ? "flex" : "hidden lg:flex"}`}
+          className={`portal-inbox-thread-pane flex h-full min-h-0 min-w-0 flex-col overflow-hidden ${listHidden || threadOpen ? "flex" : "hidden lg:flex"}`}
         >
           {thread}
         </section>

@@ -20,6 +20,7 @@ export function PortalRecordDetailPage({
   actions,
   suppressMobileActions = false,
   inlineActions = false,
+  inlineActionsClassName,
   children,
   dataAttrBack = "portal-record-detail-back",
 }: {
@@ -37,6 +38,7 @@ export function PortalRecordDetailPage({
   actions?: ReactNode;
   suppressMobileActions?: boolean;
   inlineActions?: boolean;
+  inlineActionsClassName?: string;
   children: ReactNode;
   dataAttrBack?: string;
 }) {
@@ -55,6 +57,7 @@ export function PortalRecordDetailPage({
         actions={actions}
         suppressMobileActions={suppressMobileActions}
         inlineActions={inlineActions}
+        inlineActionsClassName={inlineActionsClassName}
       />
       <div className="min-h-0 flex-1">{children}</div>
     </div>

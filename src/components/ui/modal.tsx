@@ -258,8 +258,9 @@ function ModalPanelInner({
   DescriptionPrimitive: ComponentType<ModalDescriptionPrimitiveProps>;
   ClosePrimitive: ComponentType<ModalClosePrimitiveProps>;
 }) {
+  const bodyFillsPanel = scrollableContent || Boolean(footer);
   return (
-    <div className={cn("flex flex-col overflow-hidden", scrollableContent ? "min-h-0 flex-1" : "shrink-0")}>
+    <div className={cn("flex flex-col overflow-hidden", bodyFillsPanel ? "min-h-0 flex-1" : "shrink-0")}>
       <div
         className={cn(
           "flex shrink-0 flex-col border-b border-border",
@@ -294,20 +295,28 @@ function ModalPanelInner({
       </div>
       <div
         className={cn(
-          scrollableContent ? "flex min-h-0 flex-1" : "flex shrink-0",
+          bodyFillsPanel ? "flex min-h-0 flex-1" : "flex shrink-0",
           showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
         )}
       >
         <div
           className={cn(
-            scrollableContent
-              ? "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+            bodyFillsPanel
+              ? scrollableContent
+                ? "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+                : "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
               : "min-w-0 shrink-0 flex-col",
-            footer && scrollableContent && "flex flex-col",
+            footer && bodyFillsPanel && scrollableContent && "flex flex-col",
             dense ? "pt-2" : "pt-4",
           )}
         >
-          {children}
+          {scrollableContent || !footer ? (
+            children
+          ) : (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+              {children}
+            </div>
+          )}
         </div>
         {showAssistantStrip && assistantConversationInstance > 0 ? (
           <ModalAssistantStrip

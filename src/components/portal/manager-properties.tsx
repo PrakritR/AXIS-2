@@ -280,7 +280,12 @@ export function ManagerProperties({
       {isDetailView ? (
         listPanel
       ) : (
-        <ManagerPortalPageShell title="Properties" hideTitleOnMobileNav titleAside={propertiesDesktopHeaderActions} compactFilterRow>
+        <ManagerPortalPageShell
+          title="Properties"
+          hideTitleOnMobileNav
+          titleAside={propertiesDesktopHeaderActions}
+          compactFilterRow
+        >
           {propertiesMobileActionsRow}
           <PortalListControlStack
             className="mb-2"
@@ -295,7 +300,7 @@ export function ManagerProperties({
             destinationAriaLabel="Property pipeline stage"
           />
           {atPropertyLimit && limitMax != null ? (
-            <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
+            <p className="mb-4 shrink-0 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
               You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
               <span className="native-hide">
                 {" "}

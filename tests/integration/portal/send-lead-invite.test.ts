@@ -20,9 +20,23 @@ vi.mock("@/lib/manager-property-share-access", () => ({
   getShareablePropertyForUser: vi.fn(),
 }));
 
+vi.mock("@/lib/twilio-provisioning", () => ({
+  resolveManagerWorkNumber: vi.fn(),
+}));
+
+vi.mock("@/lib/proplane-sms-transport.server", () => ({
+  sendFromManagerWorkNumber: vi.fn(),
+}));
+
+vi.mock("@/lib/tour-notification-delivery.server", () => ({
+  recordResidentProspectInboxMessage: vi.fn(),
+}));
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
+import { resolveManagerWorkNumber } from "@/lib/twilio-provisioning";
+import { sendFromManagerWorkNumber } from "@/lib/proplane-sms-transport.server";
 import { POST as sendLeadInvite } from "@/app/api/portal/send-lead-invite/route";
 
 describe("POST /api/portal/send-lead-invite", () => {
@@ -209,5 +223,51 @@ describe("POST /api/portal/send-lead-invite", () => {
     });
     const res = await sendLeadInvite(req);
     expect(res.status).toBe(403);
+  });
+
+  it("sends SMS when viaSms is true and a work number is configured", async () => {
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
+    } as never);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: { role: "manager" }, error: null }),
+          }),
+        }),
+      }),
+    } as never);
+    vi.mocked(getShareablePropertyForUser).mockResolvedValue({
+      id: "mgr-1",
+      title: "Test House",
+      adminPublishLive: true,
+    } as never);
+    vi.mocked(resolveManagerWorkNumber).mockResolvedValue("+15555550100");
+    vi.mocked(sendFromManagerWorkNumber).mockResolvedValue({ ok: true, sid: "SM123", channel: "sms" });
+
+    const req = jsonRequest("http://localhost/api/portal/send-lead-invite", {
+      method: "POST",
+      body: {
+        kind: "listing",
+        phone: "+15555551234",
+        viaEmail: false,
+        viaSms: true,
+        propertyId: "mgr-1",
+      },
+    });
+    const res = await sendLeadInvite(req);
+    const { status, data } = await parseJsonResponse<{ ok?: boolean; viaSms?: boolean }>(res);
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.viaSms).toBe(true);
+    expect(sendFromManagerWorkNumber).toHaveBeenCalledWith(
+      expect.objectContaining({
+        managerUserId: "user-1",
+        to: "+15555551234",
+        counterpartyRole: "prospect",
+      }),
+    );
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

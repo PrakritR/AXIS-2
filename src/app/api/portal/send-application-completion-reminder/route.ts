@@ -10,7 +10,7 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import {
   inProgressApplicationResumeUrl,
-  isInProgressApplicationRow,
+  shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -35,6 +35,21 @@ function appOrigin(): string {
 
 function canSendApplicationReminder(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+}
+
+/** Fill gaps in stored row_data so incomplete drafts match client-side eligibility. */
+function hydrateApplicationRowForReminder(
+  row: DemoApplicantRow,
+  record: { resident_email?: string | null; property_id?: string | null },
+): DemoApplicantRow {
+  const email = row.email?.trim() || record.resident_email?.trim() || row.email;
+  const propertyId = row.propertyId?.trim() || record.property_id?.trim() || row.propertyId;
+  return {
+    ...row,
+    bucket: row.bucket ?? "pending",
+    ...(email ? { email } : {}),
+    ...(propertyId ? { propertyId } : {}),
+  };
 }
 
 export async function POST(req: Request) {
@@ -81,9 +96,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Application not found." }, { status: 404 });
     }
 
-    const row = record.row_data as DemoApplicantRow;
-    if (!isInProgressApplicationRow(row)) {
-      return NextResponse.json({ error: "Only in-progress applications can receive a completion reminder." }, { status: 400 });
+    const row = hydrateApplicationRowForReminder(
+      record.row_data as DemoApplicantRow,
+      record,
+    );
+    if (!shouldOfferApplicationCompletionReminder(row)) {
+      return NextResponse.json({ error: "Only incomplete applications can receive a completion reminder." }, { status: 400 });
     }
 
     if (!admin && !applicationVisibleToPortalUser(row, user.id)) {

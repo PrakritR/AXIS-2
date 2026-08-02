@@ -52,16 +52,25 @@ export function PortalCommunicationShell({
       compactFilterRow={compactFilterRow}
       mobileHideFilterRow={hideMobileFilterRow}
       mobileFlush={mobileThreadReading}
-      mobileThreadFill={mobileThreadReading}
+      viewportFillBody
+      stickyPageChrome={false}
     >
-      {mobileActionsRow && !hideMobileFilterRow ? mobileActionsRow : null}
+      {mobileActionsRow && !hideMobileFilterRow ? (
+        <div className="shrink-0" data-portal-communication-chrome>
+          {mobileActionsRow}
+        </div>
+      ) : null}
       {resolvedStack ? (
-        <div className={hideMobileFilterRow ? "mb-2 max-md:hidden" : "mb-2"}>{resolvedStack}</div>
+        <div
+          className={hideMobileFilterRow ? "mb-2 shrink-0 max-md:hidden" : "mb-2 shrink-0"}
+          data-portal-communication-chrome
+        >
+          {resolvedStack}
+        </div>
       ) : null}
       <div
         className={cn(
-          "portal-communication-inbox max-md:mt-0 max-md:-mx-0.5 md:mt-1",
-          mobileThreadReading && "max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+          "portal-communication-inbox flex min-h-0 min-w-0 flex-1 flex-col max-md:mt-0 max-md:-mx-0.5 md:mt-1",
         )}
       >
         {children}

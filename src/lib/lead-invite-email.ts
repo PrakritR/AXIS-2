@@ -116,6 +116,40 @@ export function buildLeadInviteEmailBody(params: {
   return lines.join("\n");
 }
 
+/** Short SMS copy for manager-initiated listing / apply / tour shares. */
+export function buildLeadInviteSmsText(params: {
+  kind: LeadInviteKind;
+  prospectName?: string;
+  propertyTitle: string;
+  linkUrl: string;
+  listingCount?: number;
+  tourCount?: number;
+  managerNote?: string;
+}): string {
+  const hi = params.prospectName?.trim() ? `Hi ${params.prospectName.trim()}, ` : "";
+  const title = params.propertyTitle.trim() || "a property";
+  const note = params.managerNote?.trim();
+
+  let lead = "";
+  if (params.kind === "listing" && (params.listingCount ?? 0) > 1) {
+    lead = `${hi}Your property manager shared ${params.listingCount} homes on PropLane: ${params.linkUrl}`;
+  } else if (params.kind === "tour" && (params.tourCount ?? 0) > 1) {
+    lead = `${hi}Schedule a tour — choose from ${params.tourCount} properties on PropLane: ${params.linkUrl}`;
+  } else if (params.kind === "apply" && (params.listingCount ?? 0) > 1) {
+    lead = `${hi}Apply for one of ${params.listingCount} homes on PropLane: ${params.linkUrl}`;
+  } else if (params.kind === "listing") {
+    lead = `${hi}Listing for ${title} on PropLane: ${params.linkUrl}`;
+  } else if (params.kind === "apply") {
+    lead = `${hi}Apply for ${title} on PropLane: ${params.linkUrl}`;
+  } else {
+    lead = `${hi}Schedule a tour for ${title} on PropLane: ${params.linkUrl}`;
+  }
+
+  if (!note) return lead;
+  const withNote = `${lead}\n\nNote: ${note}`;
+  return withNote.length > 1600 ? `${lead}\n\nNote: ${note.slice(0, 1600 - lead.length - 10)}…` : withNote;
+}
+
 export function buildLeadInviteEmailHtml(params: {
   kind: LeadInviteKind;
   prospectName?: string;

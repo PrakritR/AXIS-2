@@ -3,15 +3,15 @@
 import type { ReactNode } from "react";
 import {
   CheckboxMultiSelect,
-  FieldSingleSelect,
   type CheckboxMultiSelectOption,
 } from "@/components/ui/checkbox-multi-select";
 import { Input, Textarea } from "@/components/ui/input";
 import { MODAL_INSET_BOX_CLASS } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
-/** Fixed-height new-message modal — inner body scrolls; panel does not resize with fields. */
-export const PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS = "w-full max-w-lg max-h-[min(92dvh,38rem)]";
+/** New-message compose modals: cap height; body scrolls inside {@link Modal} (`scrollableContent`). */
+export const PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS =
+  "flex w-full max-w-lg min-h-0 max-h-[min(92dvh,38rem)] flex-col";
 
 export type PortalMessageSendViaMode = "email" | "sms" | "both";
 
@@ -47,13 +47,7 @@ export function portalMessageSendViaModeToSelection(mode: PortalMessageSendViaMo
 }
 
 export function PortalMessageComposeModalBody({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex h-[min(72dvh,34rem)] min-h-[22rem] flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5">
-        {children}
-      </div>
-    </div>
-  );
+  return <div className="space-y-3">{children}</div>;
 }
 
 export function defaultPortalMessageScheduleAt(): string {
@@ -201,7 +195,7 @@ export function PortalMessageSendViaField({
   );
 }
 
-/** Single-select Send via — same field width and label style as Subject / Message. */
+/** Multi-select Send via — same field width and label style as Subject / Message. */
 export function PortalMessageSendViaDropdown({
   selected,
   onChange,
@@ -219,34 +213,41 @@ export function PortalMessageSendViaDropdown({
   footerNote?: string;
   dataAttr?: string;
 }) {
-  const options: CheckboxMultiSelectOption[] = [
-    { value: "email", label: "Email" },
-    { value: "sms", label: smsAvailable ? "SMS" : "SMS (not enabled)" },
-    { value: "both", label: smsAvailable ? "Email & SMS" : "Email & SMS (SMS off)" },
+  const options = [
+    ...(emailAvailable ? [{ value: "email", label: "Email" }] : []),
+    {
+      value: "sms",
+      label: smsAvailable ? "SMS" : "SMS (not enabled)",
+      disabled: !smsAvailable,
+    },
   ];
 
-  const mode = portalMessageSendViaToMode(selected);
-  const allowedModes: PortalMessageSendViaMode[] = smsAvailable
-    ? ["email", "sms", "both"]
-    : ["email"];
-  const effectiveMode = allowedModes.includes(mode) ? mode : "email";
+  const effectiveSelected = selected.filter(
+    (value) => (value === "email" && emailAvailable) || (value === "sms" && smsAvailable),
+  );
+  const displaySelected =
+    effectiveSelected.length > 0
+      ? effectiveSelected
+      : emailAvailable
+        ? ["email"]
+        : smsAvailable
+          ? ["sms"]
+          : [];
 
   return (
     <div>
-      <FieldSingleSelect
+      <CheckboxMultiSelect
         label="Send via"
         labelClassName={portalMessageFieldLabel()}
         options={options}
-        value={effectiveMode}
+        selected={displaySelected}
         onChange={(next) => {
-          const picked = next as PortalMessageSendViaMode;
-          if (!smsAvailable && picked !== "email") {
-            onChange(["email"]);
-            return;
-          }
-          onChange(portalMessageSendViaModeToSelection(picked));
+          const enabled = next.filter((value) => value !== "sms" || smsAvailable);
+          if (enabled.length === 0) return;
+          onChange(enabled);
         }}
         disabled={disabled}
+        emptyLabel="Choose channels…"
         dataAttr={dataAttr}
       />
       <p className="mt-1.5 text-xs text-muted">{footerNote}</p>

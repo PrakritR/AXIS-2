@@ -19,7 +19,7 @@ describe("inbox reply channel helpers", () => {
 });
 
 describe("InboxReplyChannelPicker", () => {
-  it("always lists email and sms channels when sms is unavailable", () => {
+  it("lists email and sms as independent checkboxes when sms is unavailable", () => {
     render(
       <InboxReplyChannelPicker
         viaEmail
@@ -33,11 +33,12 @@ describe("InboxReplyChannelPicker", () => {
     const trigger = screen.getByLabelText("Send via");
     expect(trigger).toHaveTextContent("Email");
     fireEvent.click(trigger);
+    expect(screen.getByRole("option", { name: /Email/i })).toBeTruthy();
     expect(screen.getByRole("option", { name: /SMS \(not enabled\)/i })).toBeTruthy();
-    expect(screen.getByRole("option", { name: /Email & SMS \(SMS off\)/i })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /Email & SMS/i })).toBeNull();
   });
 
-  it("offers email, sms, and both when both channels are available", () => {
+  it("allows selecting email and sms independently when both channels are available", () => {
     const onEmail = vi.fn();
     const onSms = vi.fn();
     render(
@@ -51,8 +52,22 @@ describe("InboxReplyChannelPicker", () => {
       />,
     );
     fireEvent.click(screen.getByLabelText("Send via"));
-    fireEvent.pointerDown(screen.getByRole("option", { name: "Email & SMS" }));
-    expect(onEmail).toHaveBeenCalledWith(true);
+    fireEvent.pointerDown(screen.getByRole("option", { name: /^SMS$/i }));
     expect(onSms).toHaveBeenCalledWith(true);
+    expect(onEmail).toHaveBeenCalledWith(true);
+  });
+
+  it("shows Email & SMS on the trigger when both are selected", () => {
+    render(
+      <InboxReplyChannelPicker
+        viaEmail
+        viaSms
+        onViaEmailChange={vi.fn()}
+        onViaSmsChange={vi.fn()}
+        emailAvailable
+        smsAvailable
+      />,
+    );
+    expect(screen.getByLabelText("Send via")).toHaveTextContent("Email & SMS");
   });
 });

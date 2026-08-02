@@ -81,7 +81,10 @@ import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
+  applicationStageDisplayLabel,
+  INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
+  shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
@@ -642,11 +645,33 @@ export function ManagerApplications({
     setCheckrScreeningRowId(row.id);
   }, []);
 
+  const onIncompleteApplicationsRoute = /\/applications\/incomplete(?:\/|$)/.test(pathname);
+  const viewingIncompleteApplicationDetail =
+    Boolean(applicationIdProp) && (onIncompleteApplicationsRoute || bucketProp === "incomplete");
+
+  const showCompletionReminderForRow = useCallback(
+    (row: DemoApplicantRow) => {
+      if (viewingIncompleteApplicationDetail && row.bucket === "pending") return true;
+      if (row.bucket !== "pending" || isWithdrawnApplicationRow(row)) return false;
+      const canApprove = !isInProgressApplicationRow(row);
+      if (!canApprove) return true;
+      return (
+        isInProgressApplicationRow(row) ||
+        applicationStageDisplayLabel(row) === INCOMPLETE_APPLICATION_LABEL ||
+        shouldOfferApplicationCompletionReminder(row)
+      );
+    },
+    [viewingIncompleteApplicationDetail],
+  );
+
   const detailRow = useMemo(() => {
     if (!applicationIdProp) return null;
-    const decoded = decodeURIComponent(applicationIdProp);
-    return scopedRows.find((r) => r.id === decoded) ?? null;
-  }, [applicationIdProp, scopedRows]);
+    const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
+    const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
+    if (!hit) return null;
+    if (scopeUserId && !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
+    return hit;
+  }, [applicationIdProp, rows, scopeUserId]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -889,6 +914,20 @@ export function ManagerApplications({
 
   const renderApplicationRowActions = (row: DemoApplicantRow) => {
     const isPending = row.bucket === "pending";
+    const showCompletionReminder = showCompletionReminderForRow(row);
+    const renderSendReminderButton = (className = RESIDENT_DETAIL_HEADER_ACTION_BTN) => (
+      <Button
+        type="button"
+        variant="outline"
+        className={className}
+        data-attr="application-send-reminder"
+        disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+        onClick={() => void openReminderPreview(row)}
+      >
+        {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+      </Button>
+    );
+    const sendReminderButton = showCompletionReminder ? renderSendReminderButton() : null;
     const showsRunCheck =
       applicationShowsBackgroundCheck(row) &&
       Boolean(row.application?.consentCredit) &&
@@ -986,20 +1025,6 @@ export function ManagerApplications({
       </Button>
     ) : null;
 
-    const sendReminderButton =
-      isPending && !isWithdrawnApplicationRow(row) && isInProgressApplicationRow(row) ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
-          data-attr="application-send-reminder"
-          disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-          onClick={() => void openReminderPreview(row)}
-        >
-          {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
-        </Button>
-      ) : null;
-
     const deleteButton = (
       <Button
         type="button"
@@ -1026,6 +1051,15 @@ export function ManagerApplications({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" backdrop>
+          {showCompletionReminder ? (
+            <DropdownMenuItem
+              data-attr="application-send-reminder-menu"
+              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+              onSelect={() => void openReminderPreview(row)}
+            >
+              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem data-attr="application-pdf-download" onSelect={() => runApplicationPdfDownload(row, showToast)}>
             Download application
           </DropdownMenuItem>
@@ -1040,15 +1074,6 @@ export function ManagerApplications({
           {moveToPendingButton ? (
             <DropdownMenuItem data-attr="application-move-pending" onSelect={() => setRowBucket(row.id, "pending")}>
               Move to pending
-            </DropdownMenuItem>
-          ) : null}
-          {sendReminderButton ? (
-            <DropdownMenuItem
-              data-attr="application-send-reminder"
-              disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-              onSelect={() => void openReminderPreview(row)}
-            >
-              {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuSeparator />
@@ -1066,17 +1091,17 @@ export function ManagerApplications({
     return (
       <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
         <PortalSectionActionRow variant="header" className={RESIDENT_DETAIL_HEADER_ACTIONS_ROW}>
-          <div className="flex max-w-full flex-nowrap items-center gap-1 md:hidden">
-            {rejectButton}
+          <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-1 md:hidden">
             {sendReminderButton}
+            {rejectButton}
             {approveButton}
             {runCheckButton}
             {runAgainButton}
             {mobileOverflowMenu}
           </div>
           <div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">
-            {rejectButton}
             {sendReminderButton}
+            {rejectButton}
             {approveButton}
             {runCheckButton}
             {runAgainButton}
@@ -1303,7 +1328,27 @@ export function ManagerApplications({
     </>
   );
 
-  if (applicationIdProp && detailRow) {
+  if (applicationIdProp) {
+    if (!detailRow) {
+      return (
+        <>
+          {applicationModals}
+          <PortalRecordDetailPage
+            pageTitle="Applications"
+            title="Application"
+            backHref={applicationsListHref(bucketProp)}
+            hideBackText
+            bareHeader
+            dataAttrBack="application-detail-back"
+          >
+            <div className="px-3 py-6">
+              <ListSkeleton rows={4} showLeading={false} />
+            </div>
+          </PortalRecordDetailPage>
+        </>
+      );
+    }
+
     return (
       <>
         {applicationModals}
@@ -1316,7 +1361,7 @@ export function ManagerApplications({
           hideBackText
           bareHeader
           dataAttrBack="application-detail-back"
-          inlineActions
+          inlineActions={false}
           actions={renderApplicationRowActions(detailRow)}
         >
           {renderApplicationDetail(detailRow)}
@@ -1434,7 +1479,24 @@ export function ManagerApplications({
                     <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
                   ) : undefined
                 }
-                onOpen={() => navigate(applicationDetailHref(basePath, bucket, row.id))}
+                trailing={
+                  showCompletionReminderForRow(row) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-[11px] font-semibold"
+                      data-attr="application-send-reminder"
+                      disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void openReminderPreview(row);
+                      }}
+                    >
+                      {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
+                    </Button>
+                  ) : undefined
+                }
+                onOpen={() => navigate(applicationDetailHref(basePath, tabForRow(row), row.id))}
                 dataAttr="application-list-row"
               />
             );

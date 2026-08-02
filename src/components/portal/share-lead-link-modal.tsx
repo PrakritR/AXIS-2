@@ -13,6 +13,7 @@ import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
   buildLeadInviteEmailBody,
   leadInviteSubject,
+  buildLeadInviteSmsText,
   type LeadInviteKind,
 } from "@/lib/lead-invite-email";
 import {
@@ -27,6 +28,13 @@ import {
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { getPropertyById, getRoomOptionsForProperty, parseRoomChoiceValue, propertyAllowsShortTermRental } from "@/lib/rental-application/data";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
+import { normalizeManagerSmsConversationsPayload } from "@/lib/manager-sms-messages";
+import {
+  portalMessageChannelsFromSelection,
+  PortalMessageSendViaDropdown,
+  PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS,
+} from "@/components/portal/portal-message-compose-fields";
+import type { NotificationDeliveryChannels } from "@/components/portal/portal-notification-preview-modal";
 
 const FIELD_LABEL_CLASS = "mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted";
 
@@ -103,6 +111,9 @@ export function ShareLeadLinkModal({
   const [applyRentalTypes, setApplyRentalTypes] = useState<string[]>(["standard"]);
   const [prospectName, setProspectName] = useState("");
   const [prospectEmail, setProspectEmail] = useState("");
+  const [prospectPhone, setProspectPhone] = useState("");
+  const [sendVia, setSendVia] = useState<string[]>(["email"]);
+  const [smsAvailable, setSmsAvailable] = useState(false);
   const [note, setNote] = useState("");
   const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
@@ -119,11 +130,33 @@ export function ShareLeadLinkModal({
       setApplyRentalTypes(["standard"]);
       setProspectName("");
       setProspectEmail("");
+      setProspectPhone("");
+      setSendVia(["email"]);
       setNote("");
       setSendPreviewOpen(false);
       setSendBusy(false);
     });
   }, [open, kind, preselectedPropertyId, properties]);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void fetch("/api/manager/sms-conversations", { credentials: "include", cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!active || !body) return;
+        const payload = normalizeManagerSmsConversationsPayload(body);
+        setSmsAvailable(Boolean(payload.workNumber?.trim()));
+      })
+      .catch(() => {
+        if (active) setSmsAvailable(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  const { viaEmail, viaSms } = portalMessageChannelsFromSelection(sendVia);
 
   const singlePropertyId = propertyIds.length === 1 ? propertyIds[0] : "";
   const isMultiProperty = propertyIds.length > 1;
@@ -249,6 +282,32 @@ export function ShareLeadLinkModal({
     });
   }, [kind, prospectName, propertyTitle, linkUrl, singlePropertyId, isMultiProperty, isMultiListing, isPortfolioTour, isMultiApply, propertyIds.length, roomChoice, roomOptions, listingSummary, note]);
 
+  const inviteSmsBody = useMemo(() => {
+    if (!linkUrl) return "";
+    return buildLeadInviteSmsText({
+      kind,
+      prospectName: prospectName.trim() || undefined,
+      propertyTitle,
+      linkUrl,
+      listingCount: isMultiListing || isMultiApply ? propertyIds.length : undefined,
+      tourCount: isPortfolioTour ? propertyIds.length : undefined,
+      managerNote: note.trim() || undefined,
+    });
+  }, [
+    kind,
+    prospectName,
+    propertyTitle,
+    linkUrl,
+    isMultiListing,
+    isMultiApply,
+    isPortfolioTour,
+    propertyIds.length,
+    note,
+  ]);
+
+  const previewBody = viaSms && !viaEmail ? inviteSmsBody : invitePreviewBody;
+  const previewRecipient = viaEmail ? prospectEmail.trim() : prospectPhone.trim();
+
   const sendListingRoomParams = useMemo(() => {
     if (kind === "listing" || isMultiListing || isMultiApply) {
       return { listingRoomId: undefined, roomName: undefined };
@@ -275,25 +334,41 @@ export function ShareLeadLinkModal({
       showToast("Select a property first.");
       return;
     }
-    if (!prospectEmail.trim().includes("@")) {
+    if (!viaEmail && !viaSms) {
+      showToast("Choose email, SMS, or both.");
+      return;
+    }
+    if (viaEmail && !prospectEmail.trim().includes("@")) {
       showToast("Enter a valid prospect email.");
+      return;
+    }
+    if (viaSms && prospectPhone.replace(/\D/g, "").length < 10) {
+      showToast("Enter a valid prospect phone number for SMS.");
       return;
     }
     setSendPreviewOpen(true);
   };
 
-  const sendInvite = async () => {
-    if (propertyIds.length === 0 || !prospectEmail.trim()) return;
+  const sendInvite = async (channels?: NotificationDeliveryChannels) => {
+    const deliverEmail = channels?.viaEmail ?? viaEmail;
+    const deliverSms = channels?.viaSms ?? viaSms;
+    if (propertyIds.length === 0) return;
+    if (deliverEmail && !prospectEmail.trim()) return;
+    if (deliverSms && !prospectPhone.trim()) return;
     const { listingRoomId, roomName } = sendListingRoomParams;
     setSendBusy(true);
     try {
       if (isDemoModeActive()) {
-        logDemoOutboundEmail(
-          prospectEmail.trim(),
-          leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined),
-          invitePreviewBody,
-        );
-        showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
+        if (deliverEmail) {
+          logDemoOutboundEmail(
+            prospectEmail.trim(),
+            leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined),
+            invitePreviewBody,
+          );
+        }
+        const channelLabel =
+          deliverEmail && deliverSms ? "Email and SMS sent" : deliverSms ? "SMS sent" : "Listing sent";
+        showToast(`${channelLabel} (demo).`);
         setSendPreviewOpen(false);
         onClose();
         return;
@@ -304,6 +379,9 @@ export function ShareLeadLinkModal({
         body: JSON.stringify({
           kind,
           to: prospectEmail.trim(),
+          phone: prospectPhone.trim(),
+          viaEmail: deliverEmail,
+          viaSms: deliverSms,
           prospectName: prospectName.trim() || undefined,
           propertyId: propertyIds[0],
           propertyIds,
@@ -315,7 +393,9 @@ export function ShareLeadLinkModal({
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
       if (data.ok) {
-        showToast(kind === "listing" ? "Listing sent." : "Invite sent.");
+        const channelLabel =
+          deliverEmail && deliverSms ? "Email and SMS sent" : deliverSms ? "SMS sent" : kind === "listing" ? "Listing sent" : "Invite sent";
+        showToast(`${channelLabel}.`);
         setSendPreviewOpen(false);
         onClose();
         return;
@@ -351,12 +431,13 @@ export function ShareLeadLinkModal({
         open={open}
         title={title}
         onClose={onClose}
+        dense
         panelClassName="max-w-lg"
         fullPage={useFullPageModal}
         fullScreenMobile={useFullPageModal}
         footer={actionFooter}
       >
-        <div className="space-y-4">
+        <div className="max-h-[min(60vh,28rem)] space-y-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
           {properties.length === 0 ? (
             <p className="text-sm text-muted">
               No active properties yet. List a property as active before sharing apply or tour links.
@@ -589,50 +670,90 @@ export function ShareLeadLinkModal({
                 />
               ) : null}
 
-              <div className="border-t border-border pt-4">
+              <div className="border-t border-border pt-3">
                 <p className="text-sm font-semibold text-foreground">Send to prospect</p>
-                {kind !== "listing" ? (
-                  <p className="mt-1 text-xs text-muted">
-                    Email an invite with the link above. You can add an optional note.
-                  </p>
-                ) : null}
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="share-lead-name" className={FIELD_LABEL_CLASS}>
-                      Name (optional)
-                    </label>
-                    <Input
-                      id="share-lead-name"
-                      value={prospectName}
-                      onChange={(e) => setProspectName(e.target.value)}
-                      placeholder="Prospect name"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="share-lead-email" className={FIELD_LABEL_CLASS}>
-                      Email
-                    </label>
-                    <Input
-                      id="share-lead-email"
-                      type="email"
-                      value={prospectEmail}
-                      onChange={(e) => setProspectEmail(e.target.value)}
-                      placeholder="prospect@example.com"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label htmlFor="share-lead-note" className={FIELD_LABEL_CLASS}>
-                    Note (optional)
-                  </label>
-                  <textarea
-                    id="share-lead-note"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={3}
-                    className="w-full rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
-                    placeholder="Add context for the prospect…"
+                <p className="mt-1 text-xs text-muted">
+                  Choose email and/or SMS. Messages send from PropLane when delivery is configured.
+                </p>
+                <div className="mt-3 space-y-3">
+                  <PortalMessageSendViaDropdown
+                    selected={sendVia}
+                    onChange={setSendVia}
+                    smsAvailable={smsAvailable}
+                    footerNote={
+                      smsAvailable
+                        ? "SMS uses your PropLane work number."
+                        : "Add a work number under Communication → SMS to text prospects."
+                    }
+                    dataAttr="share-lead-send-via"
                   />
+                  <div className={PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS}>
+                    <div>
+                      <label htmlFor="share-lead-name" className={FIELD_LABEL_CLASS}>
+                        Name (optional)
+                      </label>
+                      <Input
+                        id="share-lead-name"
+                        value={prospectName}
+                        onChange={(e) => setProspectName(e.target.value)}
+                        placeholder="Prospect name"
+                      />
+                    </div>
+                    {viaEmail ? (
+                      <div>
+                        <label htmlFor="share-lead-email" className={FIELD_LABEL_CLASS}>
+                          Email
+                        </label>
+                        <Input
+                          id="share-lead-email"
+                          type="email"
+                          value={prospectEmail}
+                          onChange={(e) => setProspectEmail(e.target.value)}
+                          placeholder="prospect@example.com"
+                        />
+                      </div>
+                    ) : viaSms ? (
+                      <div>
+                        <label htmlFor="share-lead-phone" className={FIELD_LABEL_CLASS}>
+                          Phone
+                        </label>
+                        <Input
+                          id="share-lead-phone"
+                          type="tel"
+                          value={prospectPhone}
+                          onChange={(e) => setProspectPhone(e.target.value)}
+                          placeholder="(555) 555-5555"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                  {viaEmail && viaSms ? (
+                    <div>
+                      <label htmlFor="share-lead-phone" className={FIELD_LABEL_CLASS}>
+                        Phone (SMS)
+                      </label>
+                      <Input
+                        id="share-lead-phone"
+                        type="tel"
+                        value={prospectPhone}
+                        onChange={(e) => setProspectPhone(e.target.value)}
+                        placeholder="(555) 555-5555"
+                      />
+                    </div>
+                  ) : null}
+                  <div>
+                    <label htmlFor="share-lead-note" className={FIELD_LABEL_CLASS}>
+                      Note (optional)
+                    </label>
+                    <textarea
+                      id="share-lead-note"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-2xl border border-border bg-card px-3.5 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
+                      placeholder="Add context for the prospect…"
+                    />
+                  </div>
                 </div>
               </div>
             </>
@@ -644,20 +765,25 @@ export function ShareLeadLinkModal({
         open={sendPreviewOpen}
         title={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         onClose={() => setSendPreviewOpen(false)}
-        recipient={prospectEmail.trim()}
+        recipient={previewRecipient || "prospect"}
+        recipientPhone={viaEmail && viaSms ? prospectPhone.trim() : undefined}
         subject={leadInviteSubject(kind, propertyTitle, isMultiProperty ? propertyIds.length : undefined)}
-        body={invitePreviewBody}
-        intro="Review the email before sending."
-        footerNote="Sent via PropLane when email delivery is configured."
+        body={previewBody}
+        intro="Review the message before sending."
+        showSkipMessage={false}
+        showChannelPicker
+        showSchedule={false}
+        emailAvailable
+        smsAvailable={smsAvailable}
+        defaultViaEmail={viaEmail}
+        defaultViaSms={viaSms}
+        editableSubject={viaEmail}
+        footerNote="Sent via PropLane when email and SMS delivery are configured."
         confirmLabel={kind === "listing" ? "Send listing" : kind === "apply" ? "Send application" : "Send tour link"}
         confirmBusy={sendBusy}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
-          if (skipMessage) {
-            setSendPreviewOpen(false);
-            return;
-          }
-          void sendInvite();
+        onConfirm={(_skip, channels) => {
+          void sendInvite(channels);
         }}
         panelClassName="max-w-lg"
       />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
@@ -11,8 +12,18 @@ import {
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
   PORTAL_FILTER_BODY_CLASS,
   PORTAL_FILTER_ICON_CLASS,
+  PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS,
+  PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS,
+  portalFilterDropdownHeightPx,
+  portalFilterDropdownWidthPx,
+  portalFilterPanelSizeClass,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import {
+  fieldSelectMenuZIndex,
+  useFieldSelectMenu,
+} from "@/components/ui/field-select-menu";
+import { useIsClient } from "@/hooks/use-is-client";
 import { cn } from "@/lib/utils";
 
 const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
@@ -78,7 +89,7 @@ function FilterPanelFields({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={compact ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
@@ -87,7 +98,7 @@ function FilterPanelFields({
       <div
         className={
           compact
-            ? "overflow-x-hidden"
+            ? "min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
             : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
         }
       >
@@ -115,12 +126,14 @@ export function PortalFilterSortSheet({
   className,
   desktopPresentation = "dropdown",
   compactPanel = true,
+  /** Number of filter rows — sizes the desktop dropdown (1 = property only, 3 = property + resident + sort). */
+  filterFieldCount = 1,
   /** Override fixed panel dimensions (modal / desktop dropdown). */
   panelSizeClassName,
   /** Override mobile sheet inner height/layout (default compact 14rem strip). */
   mobileSheetClassName,
   /** When false, sheet body uses horizontal padding like standard modals. */
-  mobileFlushBody = true,
+  mobileFlushBody = false,
   mobileFooter,
 }: {
   children: ReactNode;
@@ -131,6 +144,7 @@ export function PortalFilterSortSheet({
   className?: string;
   desktopPresentation?: "inline" | "panel" | "dropdown";
   compactPanel?: boolean;
+  filterFieldCount?: number;
   panelSizeClassName?: string;
   mobileSheetClassName?: string;
   mobileFlushBody?: boolean;
@@ -138,33 +152,91 @@ export function PortalFilterSortSheet({
 }) {
   const [open, setOpen] = useState(false);
   const isMobile = useSmallPortalViewport();
+  const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
   const close = () => setOpen(false);
   const panelSizeClass =
-    panelSizeClassName ?? (compactPanel ? PORTAL_FILTER_PANEL_COMPACT_CLASS : PORTAL_FILTER_PANEL_SIZE_CLASS);
+    panelSizeClassName ??
+    (compactPanel
+      ? portalFilterPanelSizeClass(filterFieldCount)
+      : PORTAL_FILTER_PANEL_SIZE_CLASS);
+  const panelHeightPx = portalFilterDropdownHeightPx(panelSizeClass);
+  const panelWidthPx = portalFilterDropdownWidthPx(panelSizeClass);
+  const dropdownOpen = !isMobile && desktopPresentation === "dropdown" && open;
+  const { wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
+    open: dropdownOpen,
+    onOpenChange: setOpen,
+    contentPx: panelHeightPx,
+    minMenuWidth: panelWidthPx,
+    align: "end",
+  });
+  const resolvedMobileSheetClass =
+    mobileSheetClassName ??
+    (compactPanel ? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS : "h-auto max-h-[min(14rem,45vh)]");
   const fields = (
     <FilterPanelFields onReset={onReset} extraModalContent={extraModalContent} compact={compactPanel}>
       {children}
     </FilterPanelFields>
   );
 
+  const filterDropdownPanel = (
+    <div
+      role="dialog"
+      aria-label="Filter"
+      data-slot="portal-filter-dropdown-panel"
+        className={cn(
+        panelSizeClass,
+        "portal-filter-dropdown-panel relative z-50 flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+      )}
+      style={
+        menuRect
+          ? {
+              position: "fixed",
+              top: menuRect.top,
+              left: menuRect.left,
+              width: menuRect.width,
+              height: menuRect.maxHeight,
+              zIndex: portalHost ? fieldSelectMenuZIndex(portalHost) : 10000,
+            }
+          : undefined
+      }
+      data-attr="portal-filter-dropdown-panel"
+    >
+      <FilterDropdownHeader onReset={onReset} onClose={close} />
+      <div
+        className={cn(
+          compactPanel
+            ? "flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2"
+            : PORTAL_FILTER_BODY_CLASS,
+          !compactPanel && "flex-1",
+        )}
+      >
+        {fields}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div
+        ref={wrapRef}
         className={cn(
-          "relative inline-flex w-fit min-w-0 max-w-full",
-          compactTrigger ? "shrink-0 max-md:flex-1 max-md:w-full md:flex-initial" : "flex-1 md:hidden",
+          "relative inline-flex min-w-0 max-w-full",
+          compactTrigger
+            ? "w-full shrink-0 max-md:flex-1 md:w-[10.75rem] md:max-w-[10.75rem]"
+            : "w-fit flex-1 md:hidden",
           className,
         )}
       >
         <Button
+          ref={buttonRef}
           type="button"
           variant="outline"
           className={cn(
             compactTrigger
               ? cn(
                   PORTAL_HEADER_ACTION_BTN,
-                  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-full max-md:min-w-0 md:w-auto md:min-w-[7.25rem]",
+                  "inline-flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap max-md:px-2.5 md:px-3",
                 )
               : "inline-flex h-9 min-w-0 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold whitespace-nowrap",
           )}
@@ -183,37 +255,21 @@ export function PortalFilterSortSheet({
             Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
           </span>
         </Button>
-        {!isMobile && desktopPresentation === "dropdown" && open ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-40 cursor-default"
-              aria-label="Close filters"
-              onClick={close}
-            />
-            <div
-              role="dialog"
-              aria-label="Filter"
-              data-slot="portal-filter-dropdown-panel"
-              className={cn(
-                panelSizeClass,
-                PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "portal-filter-dropdown-panel absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
-              )}
-              data-attr="portal-filter-dropdown-panel"
-            >
-              <FilterDropdownHeader onReset={onReset} onClose={close} />
-              <div
-                className={cn(
-                  compactPanel ? "px-3 py-2" : PORTAL_FILTER_BODY_CLASS,
-                  !compactPanel && "flex-1",
-                )}
-              >
-                {fields}
-              </div>
-            </div>
-          </>
-        ) : null}
+        {dropdownOpen && isClient && menuRect && portalHost
+          ? createPortal(
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 cursor-default"
+                  style={{ zIndex: fieldSelectMenuZIndex(portalHost) - 1 }}
+                  aria-label="Close filters"
+                  onClick={close}
+                />
+                {filterDropdownPanel}
+              </>,
+              portalHost,
+            )
+          : null}
       </div>
       {!compactTrigger ? (
         <div className="hidden min-w-0 flex-wrap items-center gap-1.5 sm:gap-2.5 md:flex md:gap-3">
@@ -226,7 +282,14 @@ export function PortalFilterSortSheet({
           onOpenChange={setOpen}
           title="Filter"
           flushBody={mobileFlushBody}
-          maxHeightClass={mobileSheetClassName ? "max-h-[min(92dvh,44rem)]" : undefined}
+          autoElevate={compactPanel}
+          maxHeightClass={
+            mobileSheetClassName
+              ? "max-h-[min(92dvh,44rem)]"
+              : compactPanel
+                ? "max-h-[min(78dvh,34rem)]"
+                : undefined
+          }
           footer={
             mobileFooter
               ? typeof mobileFooter === "function"
@@ -237,8 +300,8 @@ export function PortalFilterSortSheet({
         >
           <div
             className={cn(
-              "flex w-full max-w-full flex-col overflow-x-hidden",
-              mobileSheetClassName ?? "h-auto max-h-[min(14rem,45vh)]",
+              "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+              resolvedMobileSheetClass,
             )}
           >
             {fields}
