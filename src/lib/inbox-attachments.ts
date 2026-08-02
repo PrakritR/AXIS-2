@@ -40,4 +40,32 @@ export async function uploadInboxAttachment(file: File): Promise<string> {
   return body.url;
 }
 
+/**
+ * `URL.createObjectURL` pins the whole file in memory until it is revoked, so
+ * every path that drops a composer attachment (remove, send, thread switch,
+ * unmount) must release its preview. Reducer-shaped so callers can revoke and
+ * update state in one `setState` call without an effect race.
+ */
+export function revokeInboxAttachmentPreviews(attachments: InboxComposerAttachment[]): void {
+  if (typeof URL === "undefined" || typeof URL.revokeObjectURL !== "function") return;
+  for (const attachment of attachments) {
+    if (attachment.previewUrl.startsWith("blob:")) URL.revokeObjectURL(attachment.previewUrl);
+  }
+}
+
+/** Drop one attachment by id, releasing its preview blob. */
+export function removeInboxAttachment(
+  attachments: InboxComposerAttachment[],
+  id: string,
+): InboxComposerAttachment[] {
+  revokeInboxAttachmentPreviews(attachments.filter((a) => a.id === id));
+  return attachments.filter((a) => a.id !== id);
+}
+
+/** Drop every attachment, releasing their preview blobs. */
+export function clearInboxAttachments(attachments: InboxComposerAttachment[]): InboxComposerAttachment[] {
+  revokeInboxAttachmentPreviews(attachments);
+  return [];
+}
+
 export { MAX_ATTACHMENTS as INBOX_MAX_ATTACHMENTS };

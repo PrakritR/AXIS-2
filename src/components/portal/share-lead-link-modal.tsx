@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
@@ -117,9 +117,12 @@ export function ShareLeadLinkModal({
   const [note, setNote] = useState("");
   const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
+  /** Address the invite email already reached, so a retry only re-runs the SMS leg. */
+  const emailDeliveredToRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    emailDeliveredToRef.current = null;
     void Promise.resolve().then(() => {
       const initialId =
         preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
@@ -350,9 +353,14 @@ export function ShareLeadLinkModal({
   };
 
   const sendInvite = async (channels?: NotificationDeliveryChannels) => {
-    const deliverEmail = channels?.viaEmail ?? viaEmail;
+    const recipientEmail = prospectEmail.trim().toLowerCase();
+    // A partial send (email out, SMS failed) leaves the preview open so the
+    // manager can retry — the retry must not mail the prospect a second copy.
+    const emailAlreadyDelivered = Boolean(recipientEmail) && emailDeliveredToRef.current === recipientEmail;
+    const deliverEmail = (channels?.viaEmail ?? viaEmail) && !emailAlreadyDelivered;
     const deliverSms = channels?.viaSms ?? viaSms;
     if (propertyIds.length === 0) return;
+    if (!deliverEmail && !deliverSms) return;
     if (deliverEmail && !prospectEmail.trim()) return;
     if (deliverSms && !prospectPhone.trim()) return;
     const { listingRoomId, roomName } = sendListingRoomParams;
@@ -391,7 +399,15 @@ export function ShareLeadLinkModal({
           rentalType: kind === "apply" ? applyLinkRentalType(effectiveApplyRentalTypes) : undefined,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        mailtoHref?: string;
+        emailSent?: boolean;
+      };
+      if (deliverEmail && (data.ok || data.emailSent) && recipientEmail) {
+        emailDeliveredToRef.current = recipientEmail;
+      }
       if (data.ok) {
         const channelLabel =
           deliverEmail && deliverSms ? "Email and SMS sent" : deliverSms ? "SMS sent" : kind === "listing" ? "Listing sent" : "Invite sent";

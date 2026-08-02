@@ -63,8 +63,14 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
  * `fixed` coords for non-modal surfaces (filters, tables, etc.). Filter dropdown panels
  * intentionally use body too — their centering transform would trap `position: fixed`
  * menus and clip option lists.
+ *
+ * `anchor` is the trigger the menu belongs to. The filter-panel host is resolved
+ * from the trigger's OWN ancestor chain, never "the first open panel in the
+ * document" — otherwise a compose-modal or detail-panel select opened while a
+ * filter dropdown happens to be open gets portaled into, and positioned relative
+ * to, a panel it has nothing to do with.
  */
-export function resolveFieldSelectMenuPortal(): HTMLElement {
+export function resolveFieldSelectMenuPortal(anchor?: Element | null): HTMLElement {
   const vaulSheet = document.querySelector<HTMLElement>(
     '[data-slot="vaul-bottom-sheet"][data-state="open"]',
   );
@@ -75,10 +81,8 @@ export function resolveFieldSelectMenuPortal(): HTMLElement {
     const host = document.querySelector<HTMLElement>(selector);
     if (host) return host;
   }
-  const openFilterPanel = document.querySelector<HTMLElement>(
-    '[data-slot="portal-filter-dropdown-panel"]',
-  );
-  if (openFilterPanel) return openFilterPanel;
+  const ownFilterPanel = anchor?.closest<HTMLElement>('[data-slot="portal-filter-dropdown-panel"]');
+  if (ownFilterPanel) return ownFilterPanel;
   return document.body;
 }
 
@@ -202,8 +206,10 @@ export function computeFieldSelectMenuRect(
   );
   const maxHeight = Math.min(contentHeight, viewportCap);
   const minWidth = options?.minWidth ?? 0;
+  // `minWidth` is a FLOOR, not an override — a trigger wider than it must never
+  // get a narrower menu (matches `computeFieldSelectMenuRectInHost`).
   const width = Math.min(
-    minWidth > 0 ? minWidth : rect.width,
+    Math.max(minWidth, rect.width),
     viewportW - viewportPadding * 2,
   );
   const left = Math.min(
@@ -248,6 +254,9 @@ export function useFieldSelectMenu({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
+  // Resolved alongside the rect (it is derived from the trigger's own ancestor
+  // chain), so render never has to read `buttonRef.current`.
+  const [resolvedPortalHost, setResolvedPortalHost] = useState<HTMLElement | null>(null);
   const onOpenChangeRef = useRef(onOpenChange);
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
@@ -256,12 +265,14 @@ export function useFieldSelectMenu({
   useLayoutEffect(() => {
     if (!open) {
       setMenuRect(null);
+      setResolvedPortalHost(null);
       return;
     }
     const updateMenuRect = () => {
       const button = buttonRef.current;
       if (!button) return;
-      const portalHost = resolveFieldSelectMenuPortal();
+      const portalHost = resolveFieldSelectMenuPortal(button);
+      setResolvedPortalHost(portalHost);
       const inFilterPanel =
         portalHost !== document.body &&
         portalHost.matches('[data-slot="portal-filter-dropdown-panel"]');
@@ -291,7 +302,10 @@ export function useFieldSelectMenu({
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (wrapRef.current?.contains(target)) return;
-      if (target instanceof HTMLElement && target.closest('[data-slot="portal-filter-dropdown-panel"]')) return;
+      // Only THIS trigger's own filter panel is "inside" — a click in some other
+      // open panel is an outside click and must still close this menu.
+      const ownFilterPanel = wrapRef.current?.closest('[data-slot="portal-filter-dropdown-panel"]');
+      if (ownFilterPanel?.contains(target)) return;
       // A click inside ANY portaled field-select menu must not close this one.
       if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
       if (document.getElementById(listId)?.contains(target)) return;
@@ -311,7 +325,7 @@ export function useFieldSelectMenu({
     };
   }, [listId, open]);
 
-  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+  const portalHost = menuRect && isClient ? resolvedPortalHost ?? document.body : null;
   return { listId, isClient, wrapRef, buttonRef, menuRect, portalHost };
 }
 

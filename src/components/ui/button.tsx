@@ -1,7 +1,7 @@
 "use client";
 
 import { Slot } from "@radix-ui/react-slot";
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
 import { track } from "@/lib/analytics/track-client";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "metallic";
@@ -40,6 +40,8 @@ export function Button({
   eventProps?: Record<string, string | number | boolean | undefined>;
   /** Render as the single child element (via Radix Slot) instead of a <button>, e.g. to wrap a <Link>. */
   asChild?: boolean;
+  /** React 19 passes `ref` as a plain prop; it is forwarded through `...props`. */
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const isPrimary = variant === "primary";
   const isMetallic = variant === "metallic";

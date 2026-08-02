@@ -81,8 +81,6 @@ import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { getBundleChoiceLabel, getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   inProgressApplicationResumeUrl,
-  applicationStageDisplayLabel,
-  INCOMPLETE_APPLICATION_LABEL,
   isInProgressApplicationRow,
   shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
@@ -649,18 +647,11 @@ export function ManagerApplications({
   const viewingIncompleteApplicationDetail =
     Boolean(applicationIdProp) && (onIncompleteApplicationsRoute || bucketProp === "incomplete");
 
+  // Same predicate the send route enforces — a button that always 400s is worse
+  // than no button, so the incomplete-detail override must still exclude a
+  // submitted application (reachable via a stale or hand-typed incomplete URL).
   const showCompletionReminderForRow = useCallback(
-    (row: DemoApplicantRow) => {
-      if (viewingIncompleteApplicationDetail && row.bucket === "pending") return true;
-      if (row.bucket !== "pending" || isWithdrawnApplicationRow(row)) return false;
-      const canApprove = !isInProgressApplicationRow(row);
-      if (!canApprove) return true;
-      return (
-        isInProgressApplicationRow(row) ||
-        applicationStageDisplayLabel(row) === INCOMPLETE_APPLICATION_LABEL ||
-        shouldOfferApplicationCompletionReminder(row)
-      );
-    },
+    (row: DemoApplicantRow) => shouldOfferApplicationCompletionReminder(row, { viewingIncompleteApplicationDetail }),
     [viewingIncompleteApplicationDetail],
   );
 
@@ -669,7 +660,10 @@ export function ManagerApplications({
     const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
     const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
     if (!hit) return null;
-    if (scopeUserId && !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
+    // Fail closed exactly like `scopedRows`: an unresolved scope id is "not yet
+    // authorized", not "authorized" — otherwise a co-manager sees an application
+    // detail outside their module/property scope for the whole session-resolve window.
+    if (!scopeUserId || !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
     return hit;
   }, [applicationIdProp, rows, scopeUserId]);
 

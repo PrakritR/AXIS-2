@@ -59,7 +59,11 @@ export async function GET(req: Request) {
       headers: {
         "Content-Type": contentTypeForInboxAttachmentPath(path),
         "Content-Disposition": `inline; filename="${path.split("/").pop()?.replace(/"/g, "") ?? "attachment"}"`,
-        "Cache-Control": "private, no-store",
+        // Stored objects are immutable (unique `${Date.now()}-${uuid}` filename),
+        // so the browser may keep them for the session instead of re-fetching the
+        // bytes from Storage on every thread render. `private` keeps them out of
+        // shared caches; every cache miss still re-authorizes above.
+        "Cache-Control": "private, max-age=86400, immutable",
         "X-Content-Type-Options": "nosniff",
       },
     });

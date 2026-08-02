@@ -50,6 +50,9 @@ import {
 import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import {
   INBOX_MAX_ATTACHMENTS,
+  clearInboxAttachments,
+  removeInboxAttachment,
+  revokeInboxAttachmentPreviews,
   uploadInboxAttachment,
   type InboxComposerAttachment,
 } from "@/lib/inbox-attachments";
@@ -187,8 +190,12 @@ export const ResidentInboxPanel = forwardRef<
     setReplyDraft("");
     setReplyViaEmail(true);
     setReplyViaSms(false);
-    setReplyAttachments([]);
+    setReplyAttachments(clearInboxAttachments);
   }, [expandedId]);
+
+  const replyAttachmentsRef = useRef<InboxComposerAttachment[]>([]);
+  replyAttachmentsRef.current = replyAttachments;
+  useEffect(() => () => revokeInboxAttachmentPreviews(replyAttachmentsRef.current), []);
 
   useEffect(() => {
     if (!smsUiEnabled || isDemoModeActive()) return;
@@ -1083,7 +1090,7 @@ export const ResidentInboxPanel = forwardRef<
         attachmentUrls,
       );
       setReplyDraft("");
-      setReplyAttachments([]);
+      setReplyAttachments(clearInboxAttachments);
       showToast(viaEmail && viaSms ? "Reply sent via email and text." : viaSms ? "Reply sent via text." : "Reply sent.");
     } catch {
       showToast("Could not send reply.");
@@ -1236,7 +1243,7 @@ export const ResidentInboxPanel = forwardRef<
                       channelControl={replyChannelPicker}
                       attachments={replyAttachments}
                       onAttachmentsPick={pickReplyAttachments}
-                      onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                      onAttachmentRemove={(id) => setReplyAttachments((prev) => removeInboxAttachment(prev, id))}
                       maxAttachments={INBOX_MAX_ATTACHMENTS}
                       autoSend={autoSend}
                       onAutoSendChange={setAutoSend}
@@ -1379,7 +1386,7 @@ export const ResidentInboxPanel = forwardRef<
                         channelControl={replyChannelPicker}
                         attachments={replyAttachments}
                         onAttachmentsPick={pickReplyAttachments}
-                        onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                        onAttachmentRemove={(id) => setReplyAttachments((prev) => removeInboxAttachment(prev, id))}
                         maxAttachments={INBOX_MAX_ATTACHMENTS}
                         autoSend={autoSend}
                         onAutoSendChange={setAutoSend}

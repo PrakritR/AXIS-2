@@ -9,7 +9,6 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   notifyManagerApplicationSubmitted,
   shouldNotifyManagerOfApplicationSubmit,
@@ -55,8 +54,8 @@ function idVariants(id: string): string[] {
   ];
 }
 
-/** Stage stored on a draft snapshot; matched case-insensitively via `ilike`. */
-const DRAFT_STAGE = "in progress";
+/** Terminal stage a draft write must never walk back; matched case-insensitively. */
+const SUBMITTED_STAGE = "submitted";
 
 /**
  * Persist a draft (in-progress) snapshot without ever walking a submitted
@@ -87,12 +86,19 @@ async function persistDraftRow(
       .filter((row) => isDraftApplicationRow((row.row_data ?? {}) as DemoApplicantRow))
       .map((row) => String(row.id));
     if (draftIds.length === 0) return false;
+    // The SELECT above only narrows the candidates — it cannot be the guard, or a
+    // submit landing between the two statements would be overwritten by this
+    // stale draft. The DOWNGRADE guard has to live on the UPDATE itself: a row
+    // that has since been submitted (or moved bucket, or been withdrawn) no
+    // longer satisfies the predicate and is left alone. `stage` may legitimately
+    // be absent on a draft snapshot, so the null case is allowed through.
     const { data } = await db
       .from("manager_application_records")
       .update(values)
       .in("id", draftIds)
       .eq("row_data->>bucket", "pending")
       .is("row_data->>withdrawnAt", null)
+      .or(`row_data->>stage.is.null,row_data->>stage.not.ilike.${SUBMITTED_STAGE}`)
       .select("id");
     return (data?.length ?? 0) > 0;
   };
