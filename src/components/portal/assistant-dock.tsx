@@ -10,6 +10,7 @@ import {
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
 import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
+import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
 
 /**
@@ -34,12 +35,15 @@ export function AssistantDock({
   /** Shown as an "unpin" control in the header when provided. */
   onUnpin?: () => void;
 }) {
+  const portalConfig = usePortalAssistantConfig();
+  const resolvedEndpoint = portalConfig?.endpoint ?? endpoint;
+  const resolvedName = managerName ?? portalConfig?.managerName ?? null;
   const { input, setInput, messages, lastTools, pendingAction, loading, error, send, resolvePendingAction, reset } =
-    useAssistantConversation(endpoint);
+    useAssistantConversation(resolvedEndpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const firstName = managerName?.trim().split(/\s+/)[0] || null;
+  const firstName = resolvedName?.trim().split(/\s+/)[0] || null;
   const hasConversation = messages.length > 0;
 
   useEffect(() => {

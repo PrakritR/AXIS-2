@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
-import { PortalAssistantRail } from "@/components/portal/portal-assistant-rail";
+import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSessionKeepalive } from "@/components/portal/portal-session-keepalive";
@@ -24,7 +24,6 @@ import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
 import { resolveResidentPortalNavStage } from "@/lib/resident-portal-nav";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
-import { getAssistantDockCollapsed, getAssistantDocked } from "@/lib/assistant-dock-state";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
   await assertPortalLayoutRole("resident", "resident");
@@ -40,16 +39,12 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     email: profile?.email ?? user?.email ?? null,
     managerSubscriptionTier,
   });
-  const [sidebarCollapsed, assistantDockCollapsed, assistantDocked] = await Promise.all([
-    getSidebarCollapsed(),
-    getAssistantDockCollapsed(),
-    getAssistantDocked(),
-  ]);
+  const sidebarCollapsed = await getSidebarCollapsed();
 
   const residentNavStage = resolveResidentPortalNavStage(access);
 
   return (
-    <AxisAssistant endpoint="/api/agent/resident-chat" managerName={profile?.full_name ?? null}>
+    <AxisAssistant endpoint="/api/agent/resident-chat" managerName={profile?.full_name ?? null} dockable>
     <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
@@ -87,12 +82,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
             </div>
           </main>
         </div>
-        <PortalAssistantRail
-          managerName={profile?.full_name ?? null}
-          endpoint="/api/agent/resident-chat"
-          initialCollapsed={assistantDockCollapsed}
-          initialDocked={assistantDocked}
-        />
+        <PortalAssistantDockRail managerName={profile?.full_name ?? null} />
       </div>
     </div>
     </AxisAssistant>
