@@ -9,7 +9,6 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   notifyManagerApplicationSubmitted,
   shouldNotifyManagerOfApplicationSubmit,
