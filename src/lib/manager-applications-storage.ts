@@ -13,7 +13,6 @@ import {
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -135,9 +134,18 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
-/** A pending row still being filled in by the applicant (not yet submitted). */
+/**
+ * A pending row still being filled in by the applicant (not yet submitted).
+ *
+ * Deliberately withdrawn-agnostic and narrower than `isInProgressApplicationRow`:
+ * this is the persistence guard, and it must mirror the conditional UPDATE in
+ * `persistDraftRow` (bucket `pending` + stage "In progress"), which already
+ * refuses a withdrawn row in SQL. Treating a withdrawn draft as "not a draft"
+ * here would route it down the unconditional upsert instead and let a late
+ * autosave revive it.
+ */
 export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
-  return isInProgressApplicationRow(row as DemoApplicantRow);
+  return row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress";
 }
 
 /**
