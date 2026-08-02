@@ -13,7 +13,7 @@ import {
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import { isDraftShapedApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -135,9 +135,15 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
-/** A pending row still being filled in by the applicant (not yet submitted). */
+/**
+ * A pending row still being filled in by the applicant (not yet submitted).
+ *
+ * Deliberately the SHAPE check, not `isInProgressApplicationRow`: withdrawal
+ * must not turn a draft write into an authoritative one, or a trailing autosave
+ * escapes the conditional write path and overwrites the withdrawn row.
+ */
 export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
-  return isInProgressApplicationRow(row as DemoApplicantRow);
+  return isDraftShapedApplicationRow(row as DemoApplicantRow);
 }
 
 /**
