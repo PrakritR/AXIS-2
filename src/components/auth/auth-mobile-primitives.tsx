@@ -218,11 +218,13 @@ export function AuthRoleStack({
   onSelect,
   disabled = false,
   busyId = null,
+  variant = "card",
 }: {
   options: AuthRoleTabOption[];
   onSelect: (id: string) => void;
   disabled?: boolean;
   busyId?: string | null;
+  variant?: "card" | "blend";
 }) {
   return (
     <div className="auth-role-stack mt-3 flex w-full flex-col gap-2 sm:mt-4 sm:gap-2.5">
@@ -233,6 +235,7 @@ export function AuthRoleStack({
           hint={option.hint}
           icon={option.icon}
           tone={option.tone}
+          variant={variant}
           busy={busyId === option.id}
           disabled={disabled}
           onClick={() => onSelect(option.id)}
@@ -247,6 +250,7 @@ type AuthRoleCardProps = {
   hint?: string;
   icon: AuthRoleIconName;
   tone?: "blue" | "steel";
+  variant?: "card" | "blend";
   onClick?: () => void;
   disabled?: boolean;
   busy?: boolean;
@@ -257,6 +261,7 @@ export function AuthRoleCard({
   hint,
   icon,
   tone = "blue",
+  variant = "card",
   onClick,
   disabled = false,
   busy = false,
@@ -265,6 +270,36 @@ export function AuthRoleCard({
     tone === "steel"
       ? "bg-[linear-gradient(135deg,rgba(255,255,255,0.35),rgba(188,212,255,0.25))] text-[#1a2f5c]"
       : "bg-[linear-gradient(135deg,var(--primary),var(--sky))] text-white shadow-[0_8px_20px_-10px_rgba(47,107,255,0.65)]";
+
+  if (variant === "blend") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="auth-choice-button auth-choice-button-blend group flex w-full items-center gap-3 rounded-xl py-3 text-left transition-colors duration-200 hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99] sm:gap-3.5 sm:py-3.5"
+      >
+        <span
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-11 sm:w-11 ${iconWrap}`}
+          aria-hidden
+        >
+          <AuthRoleIcon name={icon} className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-[15px] text-foreground sm:text-base">{busy ? "Opening…" : label}</p>
+          {hint ? (
+            <p className="auth-choice-hint mt-0.5 text-[12px] leading-snug text-muted sm:text-[13px]">{hint}</p>
+          ) : null}
+        </div>
+        <span
+          className="text-primary/40 transition group-hover:translate-x-0.5 group-hover:text-primary/70"
+          aria-hidden
+        >
+          →
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button

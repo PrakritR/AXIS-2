@@ -3,7 +3,6 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack, AuthAccountFooterLink } from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
-import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -44,8 +43,6 @@ const ROLE_META: Record<
 function ChoosePortalForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isNative } = useIsNativeApp();
-  const cardVariant = isNative ? "blend" : "card";
   useAuthWelcomeChrome(true);
   const nextRaw = searchParams.get("next") ?? "";
   const safeNext = nextRaw.startsWith("/") ? nextRaw : "";
@@ -126,7 +123,7 @@ function ChoosePortalForm() {
   };
 
   return (
-    <AuthCard variant={cardVariant}>
+    <AuthCard variant="blend">
       <AuthPageHeader
         showLogo
         title="Choose a portal"
@@ -142,6 +139,7 @@ function ChoosePortalForm() {
         <p className="auth-role-stack text-center text-sm text-muted">No portal roles found.</p>
       ) : (
         <AuthRoleStack
+          variant="blend"
           options={stackOptions}
           onSelect={(id) => void choose(id as AuthRole)}
           disabled={busy !== null}
@@ -159,9 +157,8 @@ function ChoosePortalForm() {
 }
 
 function ChoosePortalFallback() {
-  const { isNative } = useIsNativeApp();
   return (
-    <AuthCard variant={isNative ? "blend" : "card"}>
+    <AuthCard variant="blend">
       <p className="text-center text-sm text-muted">Loading…</p>
     </AuthCard>
   );
