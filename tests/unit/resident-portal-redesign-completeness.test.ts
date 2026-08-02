@@ -140,10 +140,17 @@ describe("resident portal redesign completeness", () => {
       }
     });
 
-    it("communication uses PortalCommunicationShell + PortalSectionActionRow", () => {
+    // Resident Communication was aligned to manager Communication, which pairs
+    // the shell with `PortalPageHeaderMobileActionsRow` (same
+    // `portal-section-action-row` module, header band) rather than
+    // `PortalSectionActionRow`. Assert the pair the reference implementation
+    // actually uses — `manager-communication.tsx` and `vendor-communication.tsx`
+    // are both on this shape.
+    it("communication uses PortalCommunicationShell + PortalPageHeaderMobileActionsRow", () => {
       const src = readPanel("resident-communication.tsx");
       expect(src).toContain("PortalCommunicationShell");
-      expect(src).toContain("PortalSectionActionRow");
+      expect(src).toContain("PortalPageHeaderMobileActionsRow");
+      expect(src).toContain("@/components/portal/portal-section-action-row");
     });
 
     it("dashboard uses manager-style attention groups without welcome subtitle", () => {

@@ -109,12 +109,14 @@ describe("vendor conversation inbox (unified 'all' view)", () => {
     expect(screen.getAllByText("From / To").length).toBeGreaterThan(0);
   });
 
-  it("offers bulk Mark read / Trash in the 'all' view", () => {
+  // "Archive" is the unified inbox's name for what used to be labelled "Trash"
+  // (`bulkMoveToArchive`); the bulk affordance itself is unchanged.
+  it("offers bulk Mark read / Archive in the 'all' view", () => {
     const { container } = render(<VendorInboxPanel tabId="all" embeddedInCommunication externalTitleActions />);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(checkbox).toBeTruthy();
     checkbox.click();
     expect(screen.getAllByText("Mark read").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Trash").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Archive").length).toBeGreaterThan(0);
   });
 });

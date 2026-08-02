@@ -665,13 +665,26 @@ export function ManagerApplications({
   );
 
   const detailRow = useMemo(() => {
+    // `portfolioTick` is a cache-invalidation signal, not a value read here —
+    // same reason as `scopedRows` above: re-resolve once the property pipeline
+    // cache hydrates so a linked-property row opens without a manual refresh.
+    void portfolioTick;
     if (!applicationIdProp) return null;
+    // Fail CLOSED on an unresolved scope, exactly like `scopedRows`. `scopeUserId`
+    // is null before auth resolves (`useManagerUserId` reports null until
+    // `authReady`) and whenever `resolveManagerScopeUserId` yields nothing, and
+    // this view renders full applicant PII — name, contact, income, screening
+    // results. A guard of the form `if (scopeUserId && !visible(...))` skips the
+    // check entirely in exactly the case it exists for, so the detail must deny
+    // an unresolved scope rather than fall through to the row. The caller
+    // renders a skeleton for a null row and re-runs once the scope resolves.
+    if (!scopeUserId) return null;
     const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
     const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
     if (!hit) return null;
-    if (scopeUserId && !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
+    if (!applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
     return hit;
-  }, [applicationIdProp, rows, scopeUserId]);
+  }, [applicationIdProp, rows, scopeUserId, portfolioTick]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -1313,7 +1326,7 @@ export function ManagerApplications({
         key={checkrScreeningRowId ?? "none"}
         row={
           checkrScreeningRowId
-            ? rows.find((r) => r.id === checkrScreeningRowId) ??
+            ? scopedRows.find((r) => r.id === checkrScreeningRowId) ??
               (detailRow?.id === checkrScreeningRowId ? detailRow : null)
             : null
         }
@@ -1425,7 +1438,7 @@ export function ManagerApplications({
       />
       <CheckrScreeningModal
         key={checkrScreeningRowId ?? "none"}
-        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        row={scopedRows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
         showPackagePickerInitially={checkrScreeningShowPicker}
         onClose={() => {
