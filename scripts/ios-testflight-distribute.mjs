@@ -26,7 +26,8 @@
 //   TESTFLIGHT_APP_ID                       expected numeric app id (default 6795707576)
 //   TESTFLIGHT_BUNDLE_ID                    default space.proplane.app
 //   TESTFLIGHT_INTERNAL_GROUP               exact beta group name (default "Internal — PropLane team")
-//   TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS   bound on the processing wait (default 1500)
+//   TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS   bound on the processing wait (defaults to the
+//                                           largest wait that still fits the step budget)
 
 import { createPrivateKey, sign } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
@@ -48,6 +49,18 @@ const TERMINAL_PROCESSING_FAILURES = new Set(["FAILED", "INVALID"]);
 // or served as non-JSON would read as installable. Only these two states mean an
 // internal tester can actually install the build.
 const INSTALLABLE_INTERNAL_BUILD_STATES = new Set(["READY_FOR_BETA_TESTING", "IN_BETA_TESTING"]);
+
+/**
+ * States that mean "Apple has not decided yet", not "this build is broken".
+ *
+ * `build.processingState` and `buildBetaDetail.internalBuildState` are separate
+ * App Store Connect resources updated by different backends, so a build can be
+ * VALID and assigned while its beta detail still reads one of these. Re-polling
+ * them is what keeps the allowlist from producing a false red — a workflow that
+ * reds at random trains people to re-run without reading, and a guard everyone
+ * ignores is worse than no guard.
+ */
+const TRANSIENT_INTERNAL_BUILD_STATES = new Set(["PROCESSING", "IN_EXPORT_COMPLIANCE_REVIEW"]);
 
 /** Beta group names are compared exactly, after NFC + trim. */
 export function normalizeGroupName(name) {
@@ -161,6 +174,9 @@ const REQUEST_BACKOFF_STEP_MS = 2000;
 const CONFIRM_ATTEMPTS = 5;
 const CONFIRM_INTERVAL_MS = 12_000;
 const PROCESSING_POLL_INTERVAL_MS = 20_000;
+/** ~60s of re-reads (4 sleeps) before a still-transient beta state fails closed. */
+const BETA_STATE_ATTEMPTS = 5;
+const BETA_STATE_INTERVAL_MS = 15_000;
 
 /** Worst-case backoff one request can spend before it gives up or succeeds. */
 const REQUEST_BACKOFF_BUDGET_MS =
@@ -185,18 +201,20 @@ const PROCESS_STARTUP_BUDGET_MS = 15_000;
  *   1  the alreadyAssigned pre-check
  *   2  the two assign POST shapes
  *   +  one read per confirmAssignment attempt
- *   1  the buildBetaDetail read
+ *   +  one buildBetaDetail read per beta-state attempt
  */
-const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + 1;
+const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + BETA_STATE_ATTEMPTS;
 
 /**
  * Every sleep that happens outside the bounded processing wait. One term per
- * source, so a future one — a bounded beta-state re-poll, say — is a single line
- * here and the reserve below follows automatically.
+ * source, so adding another is a single line here and the reserve below follows
+ * automatically.
  */
 const SLEEP_MS_OUTSIDE_PROCESSING_WAIT =
   // confirmAssignment's sleeps between re-reads.
-  (CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS;
+  (CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS +
+  // resolveInstallableBetaState's sleeps while the state is still transient.
+  (BETA_STATE_ATTEMPTS - 1) * BETA_STATE_INTERVAL_MS;
 
 /**
  * Seconds the work outside the processing wait can take, so the advertised
@@ -213,7 +231,14 @@ const POST_WAIT_RESERVE_SECONDS = Math.ceil(
 );
 
 export const MAX_PROCESSING_TIMEOUT_SECONDS = STEP_BUDGET_SECONDS - POST_WAIT_RESERVE_SECONDS;
-export const DEFAULT_PROCESSING_TIMEOUT_SECONDS = 1500;
+
+/**
+ * Wait as long as the step budget allows, since Apple's processing queue is the
+ * unpredictable part. Derived, not a literal: a hard-coded default silently
+ * became LARGER than the maximum its own validator allows the moment the reserve
+ * grew, which would have made every default run fail on a bad-config error.
+ */
+export const DEFAULT_PROCESSING_TIMEOUT_SECONDS = MAX_PROCESSING_TIMEOUT_SECONDS;
 
 /**
  * Reject a timeout that cannot do what it claims.
@@ -529,6 +554,38 @@ async function reportBetaDetail(client, buildId) {
  * `--verify-only` away from confirmation, which is far cheaper than shipping the
  * belief that something installable went out when it did not.
  */
+/** True while Apple has simply not finished deciding, so a re-read may still turn green. */
+export function betaStateIsTransient(attributes) {
+  const state = attributes?.internalBuildState;
+  return Boolean(state) && TRANSIENT_INTERNAL_BUILD_STATES.has(state);
+}
+
+/**
+ * Read the beta state, re-reading only while it is TRANSIENT.
+ *
+ * The allowlist in `assertInstallableBetaState` is intolerant by design, and
+ * `buildBetaDetail` lags `build.processingState` because they are different
+ * resources on different backends. Re-polling closes that gap without weakening
+ * anything: it can only turn a not-yet-decided state into a decided one, exactly
+ * like the group-membership re-poll. An unreadable state is NOT retried here —
+ * the request layer already retried it, so it is a real unknown and fails closed.
+ */
+async function resolveInstallableBetaState(client, buildId, options = {}) {
+  const { attempts = BETA_STATE_ATTEMPTS, intervalMs = BETA_STATE_INTERVAL_MS } = options;
+  let attributes = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    attributes = await reportBetaDetail(client, buildId);
+    if (!betaStateIsTransient(attributes)) return attributes;
+    if (attempt === attempts) break;
+    console.log(
+      `  ${attributes.internalBuildState} is transient (read ${attempt}/${attempts}); ` +
+        `re-reading in ${intervalMs / 1000}s`,
+    );
+    await sleep(intervalMs);
+  }
+  return attributes;
+}
+
 export function assertInstallableBetaState(attributes, buildNumber) {
   const state = attributes?.internalBuildState;
   if (!state) {
@@ -585,8 +642,27 @@ async function main() {
   const group = selectBetaGroup(groupsBody?.data ?? [], groupName);
   console.log(`Internal group: ${JSON.stringify(group.attributes.name)} (id ${group.id})`);
 
-  console.log(`Waiting for build ${buildNumber} to finish processing (max ${timeoutSeconds}s)…`);
-  const build = await waitForProcessedBuild(client, app.id, buildNumber, timeoutSeconds);
+  // --verify-only answers "is build N installable RIGHT NOW". Polling for up to
+  // ~23 minutes and then timing out is the wrong answer to that question, and it
+  // contradicts the "report state without changing anything" this flag documents.
+  let build;
+  if (verifyOnly) {
+    build = await findBuild(client, app.id, buildNumber);
+    if (!build) {
+      throw new Error(`Build ${buildNumber} does not exist on app ${app.id} (nothing to report).`);
+    }
+    const state = build.attributes?.processingState ?? "UNKNOWN";
+    console.log(`Build ${buildNumber} processingState: ${state}`);
+    if (state !== "VALID") {
+      throw new Error(
+        `Build ${buildNumber} is ${state}, not VALID, so it is not installable yet. ` +
+          "Not waiting — re-run this command to check again, or drop --verify-only to wait and distribute.",
+      );
+    }
+  } else {
+    console.log(`Waiting for build ${buildNumber} to finish processing (max ${timeoutSeconds}s)…`);
+    build = await waitForProcessedBuild(client, app.id, buildNumber, timeoutSeconds);
+  }
   console.log(
     `Build ${buildNumber} is VALID (id ${build.id}, ` +
       `usesNonExemptEncryption=${JSON.stringify(build.attributes?.usesNonExemptEncryption ?? null)}, ` +
@@ -617,7 +693,10 @@ async function main() {
     ? alreadyAssigned
     : await confirmAssignment(client, build.id, group.id);
   console.log(`  build ${buildNumber} (${build.id}) in ${JSON.stringify(group.attributes.name)}: ${assigned}`);
-  const betaDetail = await reportBetaDetail(client, build.id);
+  // --verify-only never polls: it reports the state as it stands right now.
+  const betaDetail = verifyOnly
+    ? await reportBetaDetail(client, build.id)
+    : await resolveInstallableBetaState(client, build.id);
 
   if (!assigned) {
     throw new Error(

@@ -285,7 +285,10 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    needs App Review and is never enabled here.
 3. Poll `builds?filter[version]=<n>` every 20s until `processingState = VALID`,
    logging elapsed time and state each tick, bounded by
-   `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS` (default 1500). `FAILED`/`INVALID`
+   `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS`, which defaults to (and is capped at) the
+   largest wait that still leaves the step budget room to assign and verify —
+   both are derived from the step's `timeout-minutes`, never typed in.
+   `FAILED`/`INVALID`
    fails immediately.
 4. Assign the build to the group, then **re-read
    `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless

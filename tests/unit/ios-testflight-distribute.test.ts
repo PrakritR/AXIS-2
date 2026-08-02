@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AscClient,
   assertInstallableBetaState,
+  betaStateIsTransient,
   DEFAULT_PROCESSING_TIMEOUT_SECONDS,
   MAX_PROCESSING_TIMEOUT_SECONDS,
   normalizeGroupName,
@@ -153,6 +154,32 @@ describe("beta-state gate fails closed", () => {
   });
 });
 
+describe("betaStateIsTransient", () => {
+  // buildBetaDetail and build.processingState are separate resources on separate
+  // backends, so a VALID assigned build can still read PROCESSING here. Re-polling
+  // these two is what keeps the allowlist from producing a false red.
+  it("treats only the not-yet-decided states as transient", () => {
+    expect(betaStateIsTransient({ internalBuildState: "PROCESSING" })).toBe(true);
+    expect(betaStateIsTransient({ internalBuildState: "IN_EXPORT_COMPLIANCE_REVIEW" })).toBe(true);
+  });
+
+  it("never re-polls a decided state, so a real verdict is never softened", () => {
+    expect(betaStateIsTransient({ internalBuildState: "IN_BETA_TESTING" })).toBe(false);
+    expect(betaStateIsTransient({ internalBuildState: "MISSING_EXPORT_COMPLIANCE" })).toBe(false);
+    expect(betaStateIsTransient({ internalBuildState: "EXPIRED" })).toBe(false);
+    // An unreadable state is a real unknown — the request layer already retried
+    // it — so it must fail closed rather than spin here.
+    expect(betaStateIsTransient(null)).toBe(false);
+    expect(betaStateIsTransient({})).toBe(false);
+  });
+
+  it("still fails closed on a state that stays transient", () => {
+    expect(() => assertInstallableBetaState({ internalBuildState: "PROCESSING" }, "38")).toThrow(
+      /not one of the states an internal tester can install/,
+    );
+  });
+});
+
 describe("AscClient credential failures", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -211,18 +238,21 @@ describe("timeout budget leaves room to verify", () => {
   it("fits the maximum wait plus the worst-case work outside it inside the step cap, with slack", () => {
     const stepBudgetSeconds = 30 * 60; // timeout-minutes: 30 on the distribute step
     const confirmRePollSleepSeconds = 4 * 12; // (CONFIRM_ATTEMPTS - 1) x CONFIRM_INTERVAL
+    const betaStateRePollSleepSeconds = 4 * 15; // (BETA_STATE_ATTEMPTS - 1) x BETA_STATE_INTERVAL
     const worstCaseBackoffPerRequestSeconds = 2 + 4 + 6; // 3 retries at 2s steps
     // resolveApp, the betaGroups read, the findBuild that lands on the deadline,
-    // the alreadyAssigned pre-check, 2 assign POSTs, 5 confirm reads, the
-    // buildBetaDetail read.
-    const requestsOutsideTheWait = 2 + 1 + 1 + 2 + 5 + 1;
+    // the alreadyAssigned pre-check, 2 assign POSTs, 5 confirm reads, and one
+    // buildBetaDetail read per beta-state attempt.
+    const requestsOutsideTheWait = 2 + 1 + 1 + 2 + 5 + 5;
 
     // Sleeps only. The reserve must ALSO cover the round-trip latency of those
     // requests and node's own startup, neither of which is a sleep — a reserve
     // that lands exactly on the cap reproduces the opaque mid-verification
     // cancellation parseTimeoutSeconds exists to prevent.
     const worstCaseSleepSecondsOutsideWait =
-      confirmRePollSleepSeconds + requestsOutsideTheWait * worstCaseBackoffPerRequestSeconds;
+      confirmRePollSleepSeconds +
+      betaStateRePollSleepSeconds +
+      requestsOutsideTheWait * worstCaseBackoffPerRequestSeconds;
 
     const slackSeconds =
       stepBudgetSeconds - (MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait);
@@ -231,7 +261,17 @@ describe("timeout budget leaves room to verify", () => {
     // At least a second of real network time per request outside the wait.
     expect(slackSeconds).toBeGreaterThanOrEqual(requestsOutsideTheWait);
     expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThan(0);
+  });
+
+  it("keeps the default within its own validator", () => {
+    // A hard-coded default silently became LARGER than the maximum the validator
+    // allows the moment the reserve grew, which would have failed every default
+    // run on a bad-config error. Both are derived now; this pins that.
     expect(DEFAULT_PROCESSING_TIMEOUT_SECONDS).toBeLessThanOrEqual(MAX_PROCESSING_TIMEOUT_SECONDS);
+    expect(() => parseTimeoutSeconds(String(DEFAULT_PROCESSING_TIMEOUT_SECONDS))).not.toThrow();
+    expect(parseTimeoutSeconds(undefined)).toBe(DEFAULT_PROCESSING_TIMEOUT_SECONDS);
+    // Still long enough to be useful against Apple's queue.
+    expect(DEFAULT_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThanOrEqual(15 * 60);
   });
 
   it("clamps the processing poll sleep to the deadline so the wait cannot overshoot it", () => {
