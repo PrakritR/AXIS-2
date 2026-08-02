@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeAll } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, afterEach, beforeAll } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { QuickActionRow } from "@/components/ui/quick-action-row";
@@ -19,6 +19,16 @@ beforeAll(() => {
   }
   vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 });
+
+// This project runs vitest without `globals: true`, so Testing Library never
+// installs its auto-cleanup hook — a rendered tree stays mounted for the rest of
+// the file. `DestinationNav` and `QuickActionRow` render `next/link`, which keeps
+// scheduling React work after `act()` returns; the commit that follows queues a
+// passive-effect flush on the real Scheduler (a `setImmediate`) that reads
+// `window.event`. Left mounted, that callback loses the race against jsdom
+// teardown and fails the run with "ReferenceError: window is not defined".
+// Unmounting after each test cancels the pending work instead.
+afterEach(cleanup);
 
 describe("DestinationNav", () => {
   it("marks active item by id", () => {
