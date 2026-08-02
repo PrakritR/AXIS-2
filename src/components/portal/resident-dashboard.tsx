@@ -88,6 +88,34 @@ function sectionAccentDot(tone: AttentionTone): string {
   return ATTENTION_TONE[tone].fg;
 }
 
+/** Consistent circular count in attention group headers (including zero). */
+function AttentionCountBadge({
+  count,
+  tone,
+  isEmpty,
+}: {
+  count: number;
+  tone: AttentionTone;
+  isEmpty: boolean;
+}) {
+  const accent = ATTENTION_TONE[tone];
+  return (
+    <span
+      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold leading-none tabular-nums [html[data-native]_&]:size-[1.125rem] [html[data-native]_&]:text-[10px]"
+      style={
+        isEmpty
+          ? {
+              color: "color-mix(in srgb, var(--muted) 72%, transparent)",
+              background: "color-mix(in srgb, var(--muted) 14%, var(--card))",
+            }
+          : { background: accent.bg, color: accent.fg }
+      }
+    >
+      {count}
+    </span>
+  );
+}
+
 type ResidentDashboardSectionId =
   | "payments"
   | "lease"
@@ -178,6 +206,7 @@ function AttentionGroup<T>({
   tone,
   order = 0,
   badge,
+  headerCount,
   items,
   emptyMessage,
   keyForItem,
@@ -189,6 +218,8 @@ function AttentionGroup<T>({
   tone: AttentionTone;
   order?: number;
   badge?: ReactNode;
+  /** When set, shown in the header circle instead of `items.length` (e.g. total unread vs preview slice). */
+  headerCount?: number;
   items: T[];
   emptyMessage: string;
   keyForItem: (item: T) => string;
@@ -196,7 +227,7 @@ function AttentionGroup<T>({
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
-  const count = items.length;
+  const count = headerCount ?? items.length;
   const isEmpty = count === 0;
   const accent = ATTENTION_TONE[tone];
   const [override, setOverride] = useState<boolean | null>(null);
@@ -227,32 +258,27 @@ function AttentionGroup<T>({
             setOverride(!open);
           }
         }}
-        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+        className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:gap-2 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
-        <PortalTableExpandChevron expanded={open} />
+        <span className="flex shrink-0 items-center self-center">
+          <PortalTableExpandChevron expanded={open} />
+        </span>
         <h3
-          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug"
+          className="min-w-0 flex-1 self-center text-sm font-semibold leading-none tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           {title}
         </h3>
-        <span
-          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
-          style={
-            isEmpty
-              ? { color: "color-mix(in srgb, var(--muted) 60%, transparent)" }
-              : { background: accent.bg, color: accent.fg }
-          }
-        >
-          {count}
+        <span className="flex shrink-0 items-center gap-1.5 self-center">
+          <AttentionCountBadge count={count} tone={tone} isEmpty={isEmpty} />
+          {badge ? <span className="inline-flex items-center">{badge}</span> : null}
         </span>
-        {badge ? <span className="shrink-0">{badge}</span> : null}
         <Link
           href={href}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Open ${title}`}
           data-attr="resident-dashboard-attention-link"
-          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          className="ml-auto shrink-0 self-center whitespace-nowrap text-xs font-semibold leading-none hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           →
@@ -355,10 +381,10 @@ function servicePreviewItems(
   workOrders: DemoManagerWorkOrderRow[],
 ): ServicePreviewItem[] {
   const items: ServicePreviewItem[] = [];
-  for (const row of requests.filter((r) => r.status === "pending" || r.status === "approved")) {
+  for (const row of requests.filter((r) => r.status === "pending")) {
     items.push({ kind: "request", id: `req-${row.id}`, row });
   }
-  for (const row of workOrders.filter((r) => r.bucket === "open" || r.bucket === "scheduled")) {
+  for (const row of workOrders.filter((r) => r.bucket === "open")) {
     items.push({ kind: "work-order", id: `wo-${row.id}`, row });
   }
   return items;
@@ -496,10 +522,6 @@ export function ResidentDashboard({
         workOrders: [] as DemoManagerWorkOrderRow[],
         serviceRequests: [] as ServiceRequest[],
         serviceItems: [] as ServicePreviewItem[],
-        openWorkOrderCount: 0,
-        scheduledWorkOrderCount: 0,
-        pendingRequestCount: 0,
-        approvedRequestCount: 0,
       };
     }
 
@@ -513,17 +535,12 @@ export function ResidentDashboard({
             (r as { requestType?: string }).requestType !== "service",
         )
       : [];
-    const openWorkOrderCount = workOrders.filter((r) => r.bucket === "open").length;
-    const scheduledWorkOrderCount = workOrders.filter((r) => r.bucket === "scheduled").length;
-
     const serviceRequests = email ? readServiceRequestsForResident(email) : [];
-    const pendingRequestCount = serviceRequests.filter((r) => r.status === "pending").length;
-    const approvedRequestCount = serviceRequests.filter((r) => r.status === "approved").length;
     const serviceItems = servicePreviewItems(serviceRequests, workOrders);
 
-    const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK)
-      .filter((t) => t.folder === "inbox" && t.unread)
-      .slice(0, 5);
+    const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK).filter(
+      (t) => t.folder === "inbox" && t.unread,
+    );
     const inbox = countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
 
     const charges = email ? readChargesForResident(email, residentUserId) : [];
@@ -542,13 +559,7 @@ export function ResidentDashboard({
       inboxThreads,
       pendingCharges,
       applicationRows: email ? applicationsForResidentEmail(email) : [],
-      workOrders,
-      serviceRequests,
       serviceItems,
-      openWorkOrderCount,
-      scheduledWorkOrderCount,
-      pendingRequestCount,
-      approvedRequestCount,
     };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
@@ -560,13 +571,9 @@ export function ResidentDashboard({
     pendingCharges,
     applicationRows,
     serviceItems,
-    openWorkOrderCount,
-    scheduledWorkOrderCount,
-    pendingRequestCount,
-    approvedRequestCount,
   } = data;
-  const pendingApplicationCount = applicationRows.filter((r) => r.bucket === "pending").length;
-  const approvedApplicationCount = applicationRows.filter((r) => r.bucket === "approved").length;
+  const pendingApplicationRows = applicationRows.filter((r) => r.bucket === "pending");
+  const pendingApplicationCount = pendingApplicationRows.length;
 
   const welcomeName =
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
@@ -578,6 +585,7 @@ export function ResidentDashboard({
 
 
   const servicesHref = canUseServices ? `${BASE}/services/requests` : `${BASE}/services`;
+  const houseDetailsHref = `${BASE}/move-in/placement`;
   const leaseUnlocked = applicationApproved;
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
@@ -597,7 +605,7 @@ export function ResidentDashboard({
   const openCount =
     (canUsePayments && visibility.payments ? pendingCharges.length : 0) +
     (visibility.services && canUseServices ? openServiceCount : 0) +
-    (visibility.communication ? inboxThreads.length : 0) +
+    (visibility.communication ? inbox : 0) +
     (visibility.applications ? pendingApplicationCount : 0) +
     (visibility.lease && lease.cta ? 1 : 0) +
     (visibility.houseDetails && leaseSigned ? 1 : 0);
@@ -638,6 +646,15 @@ export function ResidentDashboard({
               href={communicationHref}
               dataAttr="resident-dashboard-kpi-inbox"
             />
+            {leaseSigned ? (
+            <PortalDashboardKpiTile
+              label="House details"
+              value="—"
+              tone="neutral"
+              href={houseDetailsHref}
+              dataAttr="resident-dashboard-kpi-house-details"
+            />
+            ) : null}
         </PortalDashboardKpiRow>
 
         {/* Needs attention — dense issue rows grouped under tiny uppercase labels. */}
@@ -679,10 +696,7 @@ export function ResidentDashboard({
             order={0}
             badge={
               overdueChargeCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                  {overdueChargeCount} overdue
-                </span>
+                <StatusPill tone="danger">{overdueChargeCount} overdue</StatusPill>
               ) : null
             }
             items={pendingCharges}
@@ -745,20 +759,8 @@ export function ResidentDashboard({
             sectionId="applications"
             tone="pending"
             order={2}
-            badge={
-              pendingApplicationCount > 0 || approvedApplicationCount > 0 ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {pendingApplicationCount > 0 ? (
-                    <StatusPill tone="pending">{pendingApplicationCount} pending</StatusPill>
-                  ) : null}
-                  {approvedApplicationCount > 0 ? (
-                    <StatusPill tone="success">{approvedApplicationCount} approved</StatusPill>
-                  ) : null}
-                </span>
-              ) : null
-            }
-            items={applicationRows}
-            emptyMessage="No applications yet. Start your first application."
+            items={pendingApplicationRows}
+            emptyMessage="No pending applications."
             keyForItem={(row) => row.id}
             renderRow={(row, sectionTone) => {
               const badge = applicationStatusBadge(row);
@@ -783,32 +785,11 @@ export function ResidentDashboard({
             sectionId="services"
             tone="pending"
             order={3}
-            badge={
-              openWorkOrderCount > 0 ||
-                scheduledWorkOrderCount > 0 ||
-                pendingRequestCount > 0 ||
-                approvedRequestCount > 0 ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {openWorkOrderCount > 0 ? (
-                    <StatusPill tone="pending">{openWorkOrderCount} open</StatusPill>
-                  ) : null}
-                  {scheduledWorkOrderCount > 0 ? (
-                    <StatusPill tone="info">{scheduledWorkOrderCount} scheduled</StatusPill>
-                  ) : null}
-                  {pendingRequestCount > 0 ? (
-                    <StatusPill tone="pending">
-                      {pendingRequestCount} pending request{pendingRequestCount === 1 ? "" : "s"}
-                    </StatusPill>
-                  ) : null}
-                </span>
-              ) : null
-            }
             items={serviceItems}
-            emptyMessage="No open work orders or pending requests."
+            emptyMessage="No open services right now."
             keyForItem={(item) => item.id}
             renderRow={(item, sectionTone) => {
               if (item.kind === "request") {
-                const approved = item.row.status === "approved";
                 const propertyName = getPropertyById(item.row.propertyId)?.buildingName?.trim() || "";
                 return (
                   <IssueRow
@@ -816,27 +797,18 @@ export function ResidentDashboard({
                     dot={sectionAccentDot(sectionTone)}
                     title={item.row.offerName?.trim() || "Add-on service"}
                     subtitle={propertyName || "Add-on service"}
-                    pill={
-                      <StatusPill tone={approved ? "success" : "pending"}>
-                        {approved ? "Approved" : "Pending"}
-                      </StatusPill>
-                    }
+                    pill={<StatusPill tone="pending">Pending</StatusPill>}
                     dataAttr="resident-dashboard-attention-service"
                   />
                 );
               }
-              const scheduled = item.row.bucket === "scheduled";
               return (
                 <IssueRow
                   href={`${BASE}/services/work-orders`}
                   dot={sectionAccentDot(sectionTone)}
                   title={item.row.title?.trim() || "Work order"}
                   subtitle={[item.row.propertyName, item.row.unit].filter(Boolean).join(" · ") || "Maintenance"}
-                  pill={
-                    <StatusPill tone={scheduled ? "info" : "pending"}>
-                      {scheduled ? "Scheduled" : "Open"}
-                    </StatusPill>
-                  }
+                  pill={<StatusPill tone="pending">Open</StatusPill>}
                   dataAttr="resident-dashboard-attention-service"
                 />
               );
@@ -882,14 +854,7 @@ export function ResidentDashboard({
             sectionId="communication"
             tone="info"
             order={5}
-            badge={
-              inbox > 0 ? (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-approved-fg)]">
-                  <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                  {inbox} unread
-                </span>
-              ) : null
-            }
+            headerCount={inbox}
             items={inboxThreads}
             emptyMessage="No unread messages. Communication is clear."
             keyForItem={(thread) => thread.id}

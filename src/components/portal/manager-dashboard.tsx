@@ -63,6 +63,7 @@ import {
   syncManagerOutgoingExpensesFromServer,
 } from "@/lib/manager-outgoing-payments";
 import {
+  countUnopenedPersistedInbox,
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -119,6 +120,34 @@ const ATTENTION_TONE: Record<AttentionTone, { fg: string; bg: string }> = {
 
 function sectionAccentDot(tone: AttentionTone): string {
   return ATTENTION_TONE[tone].fg;
+}
+
+/** Consistent circular count in attention group headers (including zero). */
+function AttentionCountBadge({
+  count,
+  tone,
+  isEmpty,
+}: {
+  count: number;
+  tone: AttentionTone;
+  isEmpty: boolean;
+}) {
+  const accent = ATTENTION_TONE[tone];
+  return (
+    <span
+      className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold leading-none tabular-nums [html[data-native]_&]:size-[1.125rem] [html[data-native]_&]:text-[10px]"
+      style={
+        isEmpty
+          ? {
+              color: "color-mix(in srgb, var(--muted) 72%, transparent)",
+              background: "color-mix(in srgb, var(--muted) 14%, var(--card))",
+            }
+          : { background: accent.bg, color: accent.fg }
+      }
+    >
+      {count}
+    </span>
+  );
 }
 
 type DashboardServiceAttentionItem = {
@@ -242,6 +271,7 @@ function AttentionGroup<T>({
   tone,
   order = 0,
   badge,
+  headerCount,
   items,
   emptyMessage,
   keyForItem,
@@ -255,6 +285,8 @@ function AttentionGroup<T>({
   /** Stable position for the staggered entrance delay (0-based). */
   order?: number;
   badge?: ReactNode;
+  /** When set, shown in the header circle instead of `items.length`. */
+  headerCount?: number;
   items: T[];
   emptyMessage: string;
   keyForItem: (item: T) => string;
@@ -262,7 +294,7 @@ function AttentionGroup<T>({
 }) {
   const { visible, overflow } = usePortalPreviewSlice(items);
   const { isNative } = useIsNativeApp();
-  const count = items.length;
+  const count = headerCount ?? items.length;
   const isEmpty = count === 0;
   const accent = ATTENTION_TONE[tone];
   // null → follow the "open when non-empty" default (reactive to async loads);
@@ -296,32 +328,27 @@ function AttentionGroup<T>({
             setOverride(!open);
           }
         }}
-        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+        className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--attn-section-bg)_45%,transparent)] [html[data-native]_&]:gap-2 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
-        <PortalTableExpandChevron expanded={open} />
+        <span className="flex shrink-0 items-center self-center">
+          <PortalTableExpandChevron expanded={open} />
+        </span>
         <h3
-          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug"
+          className="min-w-0 flex-1 self-center text-sm font-semibold leading-none tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           {title}
         </h3>
-        <span
-          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
-          style={
-            isEmpty
-              ? { color: "color-mix(in srgb, var(--muted) 60%, transparent)" }
-              : { background: accent.bg, color: accent.fg }
-          }
-        >
-          {count}
+        <span className="flex shrink-0 items-center gap-1.5 self-center">
+          <AttentionCountBadge count={count} tone={tone} isEmpty={isEmpty} />
+          {badge ? <span className="inline-flex items-center">{badge}</span> : null}
         </span>
-        {badge ? <span className="shrink-0">{badge}</span> : null}
         <Link
           href={href}
           onClick={(e) => e.stopPropagation()}
           aria-label={`Open ${title}`}
           data-attr="dashboard-attention-link"
-          className="ml-auto shrink-0 whitespace-nowrap text-xs font-semibold hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
+          className="ml-auto shrink-0 self-center whitespace-nowrap text-xs font-semibold leading-none hover:underline underline-offset-2 [html[data-native]_&]:text-sm"
           style={{ color: isEmpty ? "var(--muted)" : accent.fg }}
         >
           →
@@ -413,26 +440,20 @@ function AiDraftsGroup({
             setOverride(!open);
           }
         }}
-        className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
+        className="flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-[var(--secondary)] [html[data-native]_&]:gap-2 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2"
       >
-        <PortalTableExpandChevron expanded={open} />
+        <span className="flex shrink-0 items-center self-center">
+          <PortalTableExpandChevron expanded={open} />
+        </span>
         <h3
-          className="min-w-0 text-sm font-semibold tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
+          className="min-w-0 flex-1 self-center text-sm font-semibold leading-none tracking-[-0.01em] [html[data-native]_&]:text-[13px]"
           style={{ color: accent.fg }}
         >
           AI drafts
         </h3>
-        <span
-          className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums"
-          style={{ background: accent.bg, color: accent.fg }}
-        >
-          {count}
-        </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-primary [html[data-native]_&]:text-xs">
-          <span aria-hidden className="text-sm leading-none">
-            ✦
-          </span>
-          Pending approval
+        <AttentionCountBadge count={count} tone="info" isEmpty={count === 0} />
+        <span className="ml-auto inline-flex shrink-0 items-center self-center gap-1 whitespace-nowrap [html[data-native]_&]:text-xs">
+          <StatusPill tone="info">Pending approval</StatusPill>
         </span>
       </div>
       {open ? (
@@ -688,9 +709,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     ].sort((a, b) => b.sortKey - a.sortKey);
     const pendingServiceCount = serviceItems.length;
 
-    const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
-      .filter((t) => t.folder === "inbox" && t.unread)
-      .slice(0, 5);
+    const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []).filter(
+      (t) => t.folder === "inbox" && t.unread,
+    );
+    const inboxCount = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
 
     const cutoff = nowMs - 30 * 60 * 1000;
     const tours = [
@@ -757,6 +779,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       pendingLeaseRows,
       pendingCharges,
       inboxThreads,
+      inboxCount,
       serviceItems,
       pendingServiceCount,
       tours,
@@ -776,6 +799,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     pendingLeaseRows,
     pendingCharges,
     inboxThreads,
+    inboxCount,
     serviceItems,
     pendingServiceCount,
     tours,
@@ -823,7 +847,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     (visibility.residents ? residentAttentionItems.length : 0) +
     (visibility.payments ? pendingCharges.length : 0) +
     (visibility.services ? serviceItems.length : 0) +
-    (visibility.inbox ? inboxThreads.length : 0);
+    (visibility.inbox ? inboxCount : 0);
 
   const anyAttentionVisible =
     visibility.aiDrafts ||
@@ -918,9 +942,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
             />
             <PortalDashboardKpiTile
               label="Messages"
-              value={inboxThreads.length}
-              tone={inboxThreads.length > 0 ? "brand" : "neutral"}
-              emphasis={inboxThreads.length > 0}
+              value={inboxCount}
+              tone={inboxCount > 0 ? "brand" : "neutral"}
+              emphasis={inboxCount > 0}
               href={`${BASE}/communication/inbox/unopened`}
               dataAttr="dashboard-kpi-messages"
             />
@@ -1092,16 +1116,10 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                 pendingPaymentCount > 0 || overdueChargeCount > 0 ? (
                   <span className="flex flex-wrap items-center gap-1.5">
                     {pendingPaymentCount > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-pending">
-                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                        {pendingPaymentCount} pending
-                      </span>
+                      <StatusPill tone="pending">{pendingPaymentCount} pending</StatusPill>
                     ) : null}
                     {overdueChargeCount > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums portal-badge-danger">
-                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                        {overdueChargeCount} overdue
-                      </span>
+                      <StatusPill tone="danger">{overdueChargeCount} overdue</StatusPill>
                     ) : null}
                   </span>
                 ) : null
@@ -1162,6 +1180,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               sectionId="inbox"
               tone="danger"
               order={6}
+              headerCount={inboxCount}
               items={inboxThreads}
               emptyMessage="No unread messages. Communication is clear."
               keyForItem={(thread) => thread.id}

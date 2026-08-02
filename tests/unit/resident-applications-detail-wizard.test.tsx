@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 let ROWS: DemoApplicantRow[] = [];
+const portalNavigate = vi.fn();
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/resident/applications/pending/PROPLANE-AAAA0001",
@@ -17,14 +18,21 @@ vi.mock("@/components/providers/app-ui-provider", () => ({
   useAppUi: () => ({ showToast: () => {} }),
 }));
 vi.mock("@/lib/portal-nav-client", () => ({
-  usePortalNavigate: () => vi.fn(),
+  usePortalNavigate: () => portalNavigate,
 }));
 vi.mock("@/lib/manager-applications-storage", () => ({
   MANAGER_APPLICATIONS_EVENT: "manager-applications-changed",
   syncManagerApplicationsFromServer: () => Promise.resolve(),
   readManagerApplicationRows: () => ROWS,
-  replaceManagerApplicationRowInCache: () => {},
+  replaceManagerApplicationRowInCache: vi.fn(),
+  cancelPendingApplicationRowUpsert: vi.fn(),
   normalizeApplicationAxisId: (id: string) => id,
+}));
+vi.mock("@/lib/rental-application/drafts", () => ({
+  clearRentalWizardDraft: vi.fn(),
+  loadRentalWizardDraftAxisId: () => "PROPLANE-AAAA0001",
+  saveRentalWizardDraft: vi.fn(),
+  saveRentalWizardDraftAxisId: vi.fn(),
 }));
 vi.mock("@/lib/demo/demo-session", () => ({ isDemoModeActive: () => false }));
 vi.mock("@/lib/demo-property-pipeline", () => ({
@@ -47,7 +55,9 @@ vi.mock("@/lib/rental-application/data", () => ({
 vi.mock("@/lib/resident-public-nav", () => ({
   residentBrowseFromApplicationHref: () => "/rent/browse",
 }));
-vi.mock("@/components/portal/manager-applications", () => ({ ApplicationDocumentPreview: () => null }));
+vi.mock("@/components/portal/manager-applications", () => ({
+  applicationPdfHref: () => "/api/manager-applications/test/pdf?disposition=inline",
+}));
 vi.mock("@/components/portal/resident-application-editor", () => ({ ResidentApplicationEditor: () => null }));
 vi.mock("@/components/marketing/rental-application-finish-panel", () => ({ GroupShareCallout: () => null }));
 vi.mock("@/components/marketing/rental-application-wizard", () => ({
@@ -73,6 +83,8 @@ function inProgressRow(id: string, propertyId: string, property: string): DemoAp
 afterEach(() => {
   cleanup();
   ROWS = [];
+  portalNavigate.mockReset();
+  vi.restoreAllMocks();
 });
 
 describe("ResidentApplicationsPanel application detail", () => {
@@ -84,5 +96,43 @@ describe("ResidentApplicationsPanel application detail", () => {
     expect(await screen.findByTestId("rental-wizard")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /continue application/i })).toBeNull();
     expect(screen.getByRole("button", { name: /withdraw application/i })).toBeTruthy();
+    expect(screen.queryByText(/^Incomplete$/i)).toBeNull();
+  });
+
+  it("renders the inline PDF for submitted pending applications", async () => {
+    ROWS = [
+      {
+        ...inProgressRow("PROPLANE-BBBB0002", "mgr-test-spruce", "Spruce Studio"),
+        stage: "Submitted",
+        application: { propertyId: "mgr-test-spruce", email: "jamie.rivera@example.com", fullLegalName: "Jamie Rivera" },
+      } as DemoApplicantRow,
+    ];
+
+    render(<ResidentApplicationsPanel applicationId="PROPLANE-BBBB0002" bucket="pending" />);
+
+    const pdf = await screen.findByTestId("resident-application-pdf");
+    expect(pdf.getAttribute("src")).toContain("/api/manager-applications/");
+    expect(screen.queryByText(/^Incomplete$/i)).toBeNull();
+  });
+
+  it("withdraws from the detail page and returns to the applications list", async () => {
+    ROWS = [inProgressRow("PROPLANE-AAAA0001", "mgr-test-magnolia", "Magnolia House")];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }),
+    );
+
+    render(<ResidentApplicationsPanel applicationId="PROPLANE-AAAA0001" bucket="pending" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^withdraw application$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^withdraw application$/i }));
+
+    await vi.waitFor(() => {
+      expect(portalNavigate).toHaveBeenCalledWith("/resident/applications/pending");
+    });
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { ClipboardList, Wrench } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -12,19 +13,19 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
   PORTAL_INLINE_UNLOCK_NOTICE_CLASS,
   PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS,
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalListAddRow, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
+import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableColGroup,
-  PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -478,6 +479,48 @@ export function WorkOrderDetail({
         }}
       />
     </>
+  );
+}
+
+function ResidentServicesRequestAddRow({
+  onRequest,
+  disabled = false,
+}: {
+  onRequest: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+      <PortalListAddRow
+        label="Schedule service"
+        hint="Contact our support team"
+        icon={ClipboardList}
+        onClick={onRequest}
+        disabled={disabled}
+        dataAttr="resident-services-request-add"
+      />
+    </div>
+  );
+}
+
+function ResidentServicesMaintenanceAddRow({
+  onReport,
+  disabled = false,
+}: {
+  onReport: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+      <PortalListAddRow
+        label="Report maintenance"
+        hint="Describe an issue at your home"
+        icon={Wrench}
+        onClick={onReport}
+        disabled={disabled}
+        dataAttr="resident-services-maintenance-add"
+      />
+    </div>
   );
 }
 
@@ -1146,44 +1189,57 @@ export function ResidentServicesPanel({
     !requestTypeId ||
     (serviceRequestIsCustom ? !customTitle.trim() || !customPriceLimit.trim() : !serviceRequestCatalogSelected);
 
+  const openRequestService = () => {
+    if (!servicesUnlocked) {
+      showToast("Services unlock after your lease is fully signed.");
+      return;
+    }
+    setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
+    setModalMode("service");
+  };
+
+  const openMaintenanceReport = () => {
+    if (!servicesUnlocked) {
+      showToast("Services unlock after your lease is fully signed.");
+      return;
+    }
+    setModalMode("maintenance");
+  };
+
   const servicesHeaderAction =
     activeTab === "work-orders" ? (
       <Button
         type="button"
-        className={PORTAL_HEADER_ACTION_BTN}
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
         data-attr="resident-report-maintenance"
         disabled={!servicesUnlocked}
-        onClick={() => {
-          if (!servicesUnlocked) {
-            showToast("Services unlock after your lease is fully signed.");
-            return;
-          }
-          setModalMode("maintenance");
-        }}
+        onClick={openMaintenanceReport}
       >
-        Report
+        Report maintenance
       </Button>
     ) : (
       <Button
         type="button"
-        className={PORTAL_HEADER_ACTION_BTN}
+        variant="primary"
+        className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
+        data-attr="resident-request-service"
         disabled={!servicesUnlocked}
-        onClick={() => {
-          if (!servicesUnlocked) {
-            showToast("Services unlock after your lease is fully signed.");
-            return;
-          }
-          setRequestTypeId(availableOffers.length > 0 ? "" : CUSTOM_SERVICE_REQUEST_OFFER_ID);
-          setModalMode("service");
-        }}
+        onClick={openRequestService}
       >
         Request service
       </Button>
     );
 
+  const servicesMobileActionsRow = (
+    <div data-attr="resident-services-mobile-actions">
+      <PortalPageHeaderMobileActionsRow actions={servicesHeaderAction} className="[&_button]:w-full" />
+    </div>
+  );
+
   const servicesListChrome = (
     <PortalListControlStack
-      destinationInset
+      className="mb-2 max-lg:mb-2"
       destinations={[
         {
           id: "requests",
@@ -1237,19 +1293,16 @@ export function ResidentServicesPanel({
   const requestsLockedEmpty = !servicesUnlocked && activeTab === "requests" && sortedRequests.length === 0;
   const workOrdersLockedEmpty = !servicesUnlocked && activeTab === "work-orders" && myRows.length === 0;
   const lockedEmpty = requestsLockedEmpty || workOrdersLockedEmpty;
-  const emptyVariant = lockedEmpty ? ("stacked" as const) : ("card" as const);
 
   return (
     <ManagerPortalPageShell
       title="Services"
-      titleAside={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {servicesHeaderAction}
-        </PortalSectionActionRow>
-      }
+      hideTitleOnMobileNav
+      titleAside={servicesHeaderAction}
       compactFilterRow
     >
-      <div className="mb-3 max-lg:mb-4">{servicesListChrome}</div>
+      {servicesMobileActionsRow}
+      {servicesListChrome}
       <div
         className={lockedEmpty ? "space-y-0" : undefined}
         data-slot="resident-services-body"
@@ -1263,15 +1316,7 @@ export function ResidentServicesPanel({
 
       {activeTab === "requests" ? (
         <div>
-          {sortedRequests.length === 0 ? (
-            <PortalDataTableEmpty message="No requests yet." icon="service" variant={emptyVariant} />
-          ) : filteredRequests.length === 0 ? (
-            <PortalDataTableEmpty
-              message="No requests in this status yet."
-              icon="service"
-              variant={emptyVariant}
-            />
-          ) : (
+          {filteredRequests.length > 0 ? (
         <>
         <div className="space-y-2 lg:hidden">
           {filteredRequests.map((req) => {
@@ -1343,19 +1388,14 @@ export function ResidentServicesPanel({
             </div>
         </div>
         </>
-          )}
+          ) : sortedRequests.length > 0 ? (
+            <p className="mb-2 px-1 text-center text-sm text-muted">No requests in this status yet.</p>
+          ) : null}
+          <ResidentServicesRequestAddRow onRequest={openRequestService} disabled={!servicesUnlocked} />
         </div>
       ) : (
         <div>
-          {myRows.length === 0 ? (
-            <PortalDataTableEmpty icon="work-order" message="No work orders yet." variant={emptyVariant} />
-          ) : rows.length === 0 ? (
-            <PortalDataTableEmpty
-              icon="work-order"
-              message="No work orders in this status yet."
-              variant={emptyVariant}
-            />
-          ) : (
+          {rows.length > 0 ? (
             <>
             <div className="space-y-2 lg:hidden">
               {rows.map((row) => {
@@ -1442,7 +1482,10 @@ export function ResidentServicesPanel({
               </div>
             </div>
             </>
-          )}
+          ) : myRows.length > 0 ? (
+            <p className="mb-2 px-1 text-center text-sm text-muted">No work orders in this status yet.</p>
+          ) : null}
+          <ResidentServicesMaintenanceAddRow onReport={openMaintenanceReport} disabled={!servicesUnlocked} />
         </div>
       )}
 

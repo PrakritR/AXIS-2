@@ -20,6 +20,7 @@ import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail
 import { DataList } from "@/components/ui/data-list";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
   chargeDueLabel,

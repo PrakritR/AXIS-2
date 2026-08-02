@@ -33,9 +33,12 @@ let searchParams = new URLSearchParams({ propertyId: PROPERTY_ID, listingRoomId:
 const mocks = vi.hoisted(() => ({ wizardMountCount: 0 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/resident/applications/apply",
+  usePathname: () => "/resident/applications/pending/PROPLANE-TESTROOM1",
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {}, prefetch: () => {} }),
   useSearchParams: () => searchParams,
+}));
+vi.mock("@/lib/portal-nav-client", () => ({
+  usePortalNavigate: () => vi.fn(),
 }));
 vi.mock("@/hooks/use-portal-session", () => ({
   usePortalSession: () => ({ email: "jamie.rivera@example.com", ready: true }),
@@ -57,8 +60,25 @@ vi.mock("@/lib/demo/demo-session", () => ({
 vi.mock("@/lib/resident-public-nav", () => ({
   residentBrowseFromApplicationHref: () => "/rent/browse",
 }));
+vi.mock("@/lib/demo-property-pipeline", () => ({
+  isPropertyActiveForLeads: () => true,
+  loadPublicExtraListingsFromServer: () => Promise.resolve([]),
+  loadPublicPropertyLeadFromServer: () => Promise.resolve(undefined),
+  readExtraListingsPublic: () => [],
+}));
+vi.mock("@/lib/public-sandbox-listings", () => ({
+  filterSandboxFromPublicCatalog: (list: unknown[]) => list,
+}));
+vi.mock("@/lib/public-demo-access", () => ({
+  isProductionPublicSite: () => false,
+}));
+vi.mock("@/lib/rental-application/data", () => ({
+  getPropertyById: () => undefined,
+  getRoomChoiceLabel: (value: string) => value,
+  parseRoomChoiceValue: (value: string) => ({ listingRoomId: value.split("::")[1] ?? value }),
+}));
 vi.mock("@/components/portal/manager-applications", () => ({
-  ApplicationDocumentPreview: () => null,
+  applicationPdfHref: () => "/api/manager-applications/test/pdf?disposition=inline",
 }));
 vi.mock("@/components/portal/resident-application-editor", () => ({
   ResidentApplicationEditor: () => null,
@@ -105,16 +125,11 @@ describe("ResidentApplicationsPanel — room change on an in-progress applicatio
     ];
 
     await act(async () => {
-      render(<ResidentApplicationsPanel applyMode />);
+      render(<ResidentApplicationsPanel applicationId="PROPLANE-TESTROOM1" bucket="pending" />);
     });
 
-    // The panel renders both a mobile-card list and a desktop table for the
-    // same row set (CSS, not JS, decides which is visible), so an expanded
-    // in-progress row legitimately mounts the wizard twice here — once per
-    // layout. That baseline is not what this test is about; what matters is
-    // whether a room change mints ADDITIONAL instances on top of it.
     const baselineMountCount = mocks.wizardMountCount;
-    expect(baselineMountCount).toBeGreaterThan(0);
+    expect(baselineMountCount).toBe(1);
 
     // The resident changes their room selection inside the wizard. In the real
     // app this happens via the wizard's own `patchForm`, which calls

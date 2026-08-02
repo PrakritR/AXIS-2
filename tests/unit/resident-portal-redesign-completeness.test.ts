@@ -159,7 +159,7 @@ describe("resident portal redesign completeness", () => {
       expect(src).toMatch(/canUsePayments && visibility\.payments \? pendingCharges\.length : 0/);
       expect(src).toMatch(/visibility\.services && canUseServices/);
       expect(src).toMatch(/visibility\.houseDetails/);
-      expect(src).toMatch(/visibility\.communication \? inboxThreads\.length : 0/);
+      expect(src).toMatch(/visibility\.communication \? inbox : 0/);
     });
   });
 

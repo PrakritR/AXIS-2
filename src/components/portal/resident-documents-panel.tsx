@@ -363,15 +363,32 @@ function SignedLeaseDocumentsTable() {
   const email = session.email?.trim() ?? "";
   const [tick, setTick] = useState(0);
   const [residentAxisId, setResidentAxisId] = useState("");
+  const [profileManagerId, setProfileManagerId] = useState<string | null>(null);
+  const [axisResolved, setAxisResolved] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
-    if (!session.userId) return;
-    // Demo sandbox: never resolve an axis id from the real Supabase browser
-    // session — a visitor signed in to a real account would resolve THEIR id,
-    // which mismatches the seeded demo lease and hides it after first paint.
-    if (isDemoModeActive()) return;
+    if (!session.userId) {
+      queueMicrotask(() => setAxisResolved(true));
+      return;
+    }
     let cancelled = false;
+    const normalizedEmail = email.trim().toLowerCase();
+    const matchingApplication = readManagerApplicationRows()
+      .slice()
+      .reverse()
+      .find((row) => row.email?.trim().toLowerCase() === normalizedEmail);
+
+    if (isDemoModeActive()) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setProfileManagerId(null);
+        setResidentAxisId(resolveResidentPortalAxisId({ applicationRowId: matchingApplication?.id }));
+        setAxisResolved(true);
+      });
+      return;
+    }
+
     void (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
@@ -382,20 +399,24 @@ function SignedLeaseDocumentsTable() {
         if (cancelled) return;
         const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
         const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
+        setProfileManagerId(profile?.manager_id ?? null);
         setResidentAxisId(
           resolveResidentPortalAxisId({
             profileManagerId: profile?.manager_id,
             authUserAxisId: metaAxis,
+            applicationRowId: matchingApplication?.id,
           }),
         );
       } catch {
         /* ignore */
+      } finally {
+        if (!cancelled) setAxisResolved(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [session.userId]);
+  }, [email, session.userId]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -410,13 +431,13 @@ function SignedLeaseDocumentsTable() {
 
   const row = useMemo<LeasePipelineRow | null>(() => {
     void tick;
-    if (!email) return null;
+    if (!email || !axisResolved) return null;
     return findLeaseForResidentEmail(email, {
       email,
       residentAxisId,
-      profileManagerId: residentAxisId,
+      profileManagerId,
     });
-  }, [email, tick, residentAxisId]);
+  }, [axisResolved, email, profileManagerId, residentAxisId, tick]);
 
   const fullySigned = Boolean(row && hasBothLeaseSignatures(row));
 

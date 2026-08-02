@@ -125,6 +125,12 @@ export type RentalApplicationWizardProps = {
   layout?: "standalone" | "embedded";
   /** Demo / embedded portal apply when URL search params are unavailable. */
   linkedPropertyId?: string;
+  /**
+   * Portal-only URL for wizard step sync and fee-checkout return. Defaults to
+   * `/resident/applications/apply`; pass the application detail path when the
+   * wizard is embedded on `/resident/applications/{bucket}/{id}`.
+   */
+  applyPath?: string;
 };
 
 function makeNewApplicationId(): string {
@@ -244,6 +250,7 @@ export function RentalApplicationWizard({
   sessionEmail,
   layout = "standalone",
   linkedPropertyId: linkedPropertyIdProp,
+  applyPath,
 }: RentalApplicationWizardProps) {
   return (
     <Suspense
@@ -258,6 +265,7 @@ export function RentalApplicationWizard({
         sessionEmail={sessionEmail}
         layout={layout}
         linkedPropertyId={linkedPropertyIdProp}
+        applyPath={applyPath}
       />
     </Suspense>
   );
@@ -270,6 +278,7 @@ function RentalApplicationWizardInner({
   sessionEmail,
   layout = "standalone",
   linkedPropertyId: linkedPropertyIdProp,
+  applyPath,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const requestedTarget = mode === "portal" ? wizardTargetFromParam(searchParams) : null;
@@ -391,7 +400,8 @@ function RentalApplicationWizardInner({
     [activeSteps],
   );
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
-  const wizardApplyPath = rentalApplicationApplyPath(mode);
+  const wizardApplyPath =
+    applyPath?.startsWith("/") ? applyPath : rentalApplicationApplyPath(mode);
   const browseHomesHref = residentBrowseFromApplicationHref(wizardApplyPath);
   /**
    * `ResidentApplicationsPanel` renders an expanded in-progress row's detail
