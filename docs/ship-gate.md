@@ -9,9 +9,11 @@ substantial feature. Agents must follow it (see `AGENTS.md` and
 - **Web (live)** deploys from Vercel on every push to **`production`** only.
 - **`main`** builds **Preview** deployments (staging). Non-`main` / non-`production`
   pushes are skipped via the Vercel Ignored Build Step plus `vercel.json`.
-- **iOS** uploads to TestFlight from GitHub Actions on push to **`production`**
+- **iOS** builds, uploads **and distributes** to the internal TestFlight tester
+  group from GitHub Actions on push to **`production`**
   (`.github/workflows/ios-testflight.yml`), keeping the Capacitor shell aligned
-  with the repo while the WebView loads the live site.
+  with the repo while the WebView loads the live site. An upload alone is not a
+  ship — see [`docs/mobile-app.md`](mobile-app.md#the-distribute-step-is-what-makes-a-build-installable).
 - Reviews and full feature testing catch auth, cache, and edge regressions that
   unit tests miss.
 
@@ -106,7 +108,9 @@ git checkout main
 Then verify:
 
 1. Vercel **Production** deployment succeeded (from `production` branch)
-2. GitHub Action **iOS TestFlight** succeeded (or secrets missing — report it)
+2. GitHub Action **iOS TestFlight** succeeded, including its "Distribute build to
+   internal TestFlight group" step — that step, not the upload, is what proves the
+   build is installable (or secrets missing — report it)
 3. Spot-check the live site for the shipped feature
 
 ## Native-shell-only changes

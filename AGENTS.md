@@ -515,58 +515,38 @@ shell (plugins, splash, push, deep links) in sync with the repo.
 
 ### Uploading is not shipping — a build must be assigned to a tester group
 
-`upload_to_testflight` succeeding means nothing on its own. Builds 33-37 all
-uploaded "successfully" and sat in App Store Connect with an **empty Groups
-column**: no invites, no installs, green CI. `skip_waiting_for_build_processing`
-is why — pilot cannot assign a build to a tester group in the same call that
-skips the wait, because assignment requires Apple to have finished processing.
+`upload_to_testflight` succeeding proves nothing on its own:
+`skip_waiting_for_build_processing` is mutually exclusive with tester-group
+assignment (pilot needs a build Apple has finished processing), so uploads used to
+land in App Store Connect with an **empty Groups column** — green CI, nothing any
+tester could install. The workflow's separate distribute step
+(`scripts/ios-testflight-distribute.mjs`) is the real ship gate: bounded wait for
+processing, assign the internal group, then re-read the App Store Connect API to
+prove the assignment stuck. Mechanism, tunables and failure modes:
+[`docs/mobile-app.md`](docs/mobile-app.md#the-distribute-step-is-what-makes-a-build-installable).
+The invariants below are settled decisions, not open questions:
 
-So the lane uploads, and a separate workflow step
-(`scripts/ios-testflight-distribute.mjs`) does the part that makes it
-installable: bounded wait for `processingState = VALID`, assign to the internal
-group, then **re-read `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`
-to prove the assignment stuck** and fail the run if it did not. Rules:
-
-- **A failed read during the processing wait is a tick, not the end of the wait.**
-  It keeps polling to the deadline, so an App Store Connect blip cannot red a
-  promote whose build is fine; `FAILED`/`INVALID` and an ambiguous build number
-  still fail immediately, and the timeout message says whether Apple never
-  finished processing or the API could never be read at all.
-- **Verification is a FRESH read after the POST, and the exit code reflects that
-  read — never the POST's status code.** That is the whole point: the old failure
-  was trusting a success signal that did not mean the build was installable. It
-  cuts both ways — a POST that errors (a retry landing on 409 "already exists")
-  must not fail a build the API says *is* assigned. The filtered query is exact,
-  so a group that has accumulated hundreds of builds can never report a
-  correctly-assigned build as missing; it is re-polled briefly because that
-  filter is search-index-backed and can lag the write.
-- **The group name is matched exactly** (`Internal — PropLane team`, em dash) and
-  read from the API. No match, or a match that is an *external* group → hard
+- **The exit code reflects a FRESH read, never a POST's status code**, in both
+  directions — a POST that "succeeded" while the build is not in the group fails
+  the run, and a POST that 409s while the API says the build *is* assigned passes.
+- **The gate fails CLOSED, and the installable-state check is an ALLOWLIST**
+  (`READY_FOR_BETA_TESTING` / `IN_BETA_TESTING`). Re-polling the two transient
+  states can only prevent a false red; it never softens the verdict. Do not
+  propose fail-open or a denylist — a denylist passes every value it has not heard
+  of, which is how an absent state once shipped as green.
+- **The internal group is matched by exact name** (`Internal — PropLane team`, em
+  dash) read from the API. No match, or a match that is an *external* group → hard
   failure. Never fall back to "the first internal group"; never enable external
   distribution (that would need App Review).
-- **The gate fails CLOSED on anything it cannot confirm.** Only an affirmatively
-  installable `internalBuildState` passes — `READY_FOR_BETA_TESTING` or
-  `IN_BETA_TESTING`. `PROCESSING` and `IN_EXPORT_COMPLIANCE_REVIEW` are the two
-  TRANSIENT states (`buildBetaDetail` is a different resource on a different
-  backend than `build.processingState`, so it lags): they are re-polled for ~60s
-  and then fail closed, so re-polling only prevents a false red, it never softens
-  the verdict. Everything else reds the run immediately —
-  `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`, `EXPIRED`, a state that is
-  absent, a state that cannot be read at all (after retries — transport errors
-  and 5xx are retried), and any value Apple adds later. It is an **allowlist, not
-  a denylist**, because a denylist passes every value it has not heard of; that is
-  how an absent state once slipped through as green. "Unknown" rendering as green
-  is the exact failure being removed here; a build that is genuinely fine is one
-  `--verify-only` away from confirmation.
 - **Export compliance is declarative**: `ITSAppUsesNonExemptEncryption` in
-  `ios/App/App/Info.plist`. Without it a build is stuck on "Missing Compliance"
-  and stays un-installable no matter what the group column says. If a `cap sync`
-  ever drops that key, the distribute step fails on `MISSING_EXPORT_COMPLIANCE`.
-- **A green workflow is now real evidence** — that is the point of the extra
-  step. Backfill a stranded older build with
-  `node scripts/ios-testflight-distribute.mjs --build=<n>` (needs `ASC_KEY_ID` /
-  `ASC_ISSUER_ID` / `ASC_KEY_P8` or `ASC_KEY_P8_PATH`); add `--verify-only` to
-  report state without changing anything.
+  `ios/App/App/Info.plist`. Without it a build stays un-installable no matter what
+  the group column says; if a `cap sync` ever drops that key the distribute step
+  fails on `MISSING_EXPORT_COMPLIANCE`.
+- **A green workflow is now real evidence** — that is the point of the extra step.
+  Backfill or inspect a stranded build with
+  `node scripts/ios-testflight-distribute.mjs --build=<n> [--verify-only]` (needs
+  `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` or `ASC_KEY_P8_PATH`). Coverage:
+  `tests/unit/ios-testflight-distribute.test.ts`.
 
 ### Two iOS app records — build numbers are NOT comparable across them
 
@@ -580,14 +560,8 @@ shipping before the rebrand. Comparing build numbers across the two records
 therefore concludes backwards: a higher number on the legacy record is an
 *older*, orphaned app. The distribute script pins bundle id → app id and refuses
 to run against anything else, so a build can never land on the dead record by
-accident.
-
-Check which record a machine actually has installed:
-
-```
-/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
-  /Applications/PropLane.app/Wrapper/*.app/Info.plist
-```
+accident. To check which record a machine actually has installed, see
+[`docs/mobile-app.md`](docs/mobile-app.md#app-identity-ios-rebranded-to-proplane-android-deferred).
 
 Full mobile model: [`docs/mobile-app.md`](docs/mobile-app.md).
 Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).

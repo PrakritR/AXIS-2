@@ -286,8 +286,10 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
 3. Poll `builds?filter[version]=<n>` every 20s until `processingState = VALID`,
    logging elapsed time and state each tick, bounded by
    `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS`, which defaults to (and is capped at) the
-   largest wait that still leaves the step budget room to assign and verify —
-   both are derived from the step's `timeout-minutes`, never typed in. A read that
+   largest wait that still leaves the step budget room to assign and verify — both
+   are derived from `STEP_BUDGET_SECONDS` and the poll intervals, never typed in,
+   and a unit test asserts that budget still equals the distribute step's own
+   `timeout-minutes`. A read that
    fails is a tick, not the end of the wait, so an App Store Connect blip inside
    the deadline no longer reds a promote whose build is fine; `FAILED`/`INVALID`
    and a build number matching more than one build still fail immediately. The
@@ -334,6 +336,11 @@ export ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_P8_PATH=~/AuthKey_XXXX.p8
 node scripts/ios-testflight-distribute.mjs --build=37
 node scripts/ios-testflight-distribute.mjs --build=37 --verify-only   # read-only
 ```
+
+`--verify-only` answers "is build N installable right now": one read of each
+resource, no waiting and no re-polling, so a build Apple is still processing is
+reported as such immediately instead of blocking. Drop the flag to wait and
+distribute.
 
 Xcode Cloud was a redundant second pipeline that did the same thing. It failed
 continuously (builds 54–97) because Apple only runs `ci_scripts/ci_post_clone.sh`
