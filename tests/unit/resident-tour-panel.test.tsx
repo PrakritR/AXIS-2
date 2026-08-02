@@ -52,4 +52,21 @@ describe("ResidentTourPanel", () => {
     expect(screen.getByText("(206) 555-0100")).toBeTruthy();
     expect(screen.getByText("Looking for a quiet room.")).toBeTruthy();
   });
+
+  it("shows schedule tour add row without subtitle when there are no tours", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ tours: [] }),
+      }),
+    );
+
+    render(<ResidentTourPanel basePath="/resident" />);
+
+    expect(await screen.findByText("SCHEDULE TOUR")).toBeTruthy();
+    expect(screen.getByText("Browse homes")).toBeTruthy();
+    expect(screen.queryByText("Your scheduled property tours and requested times.")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Browse homes$/i })).toBeNull();
+  });
 });

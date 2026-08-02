@@ -17,6 +17,7 @@ export const PORTAL_LIST_ADD_ROW_CLASS =
 export function PortalListAddRow({
   label,
   icon: Icon = Home,
+  hint,
   onClick,
   disabled = false,
   dataAttr,
@@ -24,12 +25,15 @@ export function PortalListAddRow({
 }: {
   label: string;
   icon?: LucideIcon;
+  /** Secondary line under the label (e.g. “Browse homes”). */
+  hint?: string;
   onClick: () => void;
   disabled?: boolean;
   dataAttr?: string;
   className?: string;
 }) {
   const displayLabel = label.trim().toUpperCase();
+  const hintText = hint?.trim();
 
   return (
     <button
@@ -40,7 +44,12 @@ export function PortalListAddRow({
       className={cn(PORTAL_LIST_ADD_ROW_CLASS, className)}
     >
       <Icon className="h-8 w-8 text-primary" strokeWidth={1.35} aria-hidden />
-      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">{displayLabel}</span>
+      <span className="flex flex-col items-center gap-1">
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">{displayLabel}</span>
+        {hintText ? (
+          <span className="text-xs font-medium normal-case tracking-normal text-muted">{hintText}</span>
+        ) : null}
+      </span>
     </button>
   );
 }

@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DataList } from "@/components/ui/data-list";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PortalListAddRow, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { formatRangeLabel } from "@/lib/demo-admin-scheduling";
@@ -183,24 +183,16 @@ function ResidentTourDetail({
   );
 }
 
-function ResidentTourEmptyState({ onBrowse }: { onBrowse: () => void }) {
+function ResidentScheduleTourAddRow({ onSchedule }: { onSchedule: () => void }) {
   return (
-    <div className="space-y-4">
-      <PortalDataTableEmpty
-        icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} aria-hidden />}
-        message="No tours yet. Browse homes and schedule a visit — your requests will show up here."
+    <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+      <PortalListAddRow
+        label="Schedule tour"
+        hint="Browse homes"
+        icon={Calendar}
+        onClick={onSchedule}
+        dataAttr="resident-tour-schedule-add"
       />
-      <div className="flex justify-center">
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          data-attr="resident-tour-browse-homes"
-          onClick={onBrowse}
-        >
-          Browse homes
-        </Button>
-      </div>
     </div>
   );
 }
@@ -295,9 +287,10 @@ export function ResidentTourPanel({
         { id: "room", header: "Room", cell: (tour) => tour.roomLabel || "—" },
         { id: "status", header: "Status", cell: (tour) => <TourStatusBadge tour={tour} /> },
       ]}
-      emptyState={<ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />}
     />
   );
+
+  const scheduleTourAddRow = <ResidentScheduleTourAddRow onSchedule={() => navigate(browseHref)} />;
 
   if (inquiryId) {
     if (loading) {
@@ -323,7 +316,6 @@ export function ResidentTourPanel({
   return (
     <ManagerPortalPageShell
       title="Tour"
-      subtitle="Your scheduled property tours and requested times."
       hideTitleOnMobileNav
       titleAside={scheduleTourButton}
       compactFilterRow
@@ -332,15 +324,14 @@ export function ResidentTourPanel({
 
       {loading ? (
         <PortalEmptyState title="Loading your tours…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />
-      ) : error ? (
-        <div className="space-y-4">
-          <p className="rounded-2xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{error}</p>
-          <ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />
-        </div>
-      ) : tours.length === 0 ? (
-        <ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />
       ) : (
-        <div data-attr="resident-tour-list">{tourList}</div>
+        <>
+          {error ? (
+            <p className="mb-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{error}</p>
+          ) : null}
+          {tours.length > 0 ? <div data-attr="resident-tour-list">{tourList}</div> : null}
+          {scheduleTourAddRow}
+        </>
       )}
     </ManagerPortalPageShell>
   );
