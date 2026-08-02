@@ -45,6 +45,7 @@ import {
 import { counterpartyRoleLabel } from "@/lib/sms-conversation-identity";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { formatPacificDate } from "@/lib/pacific-time";
+import { useInboxThreadScroll } from "@/hooks/use-inbox-thread-scroll";
 import { Select } from "@/components/ui/input";
 
 const SMS_OPENED_STORAGE_KEY = "axis_manager_sms_opened_v1";
@@ -227,7 +228,6 @@ export const ManagerSmsPanel = forwardRef<
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
-  const threadEndRef = useRef<HTMLDivElement>(null);
   const messagesDeleteEndpoint = useMemo(() => smsMessagesDeleteEndpoint(endpoint), [endpoint]);
   // Keep the latest onConversationOpened without making it an effect dependency —
   // parents pass an inline callback that changes identity every render, and letting
@@ -362,11 +362,8 @@ export const ManagerSmsPanel = forwardRef<
     [activeId, rows, visibleRows],
   );
 
-  useEffect(() => {
-    if (!activeId) return;
-    // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
-    threadEndRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
-  }, [activeId, active?.messages.length]);
+  const { scrollRef: threadScrollRef, endRef: threadEndRef, handleScroll: handleThreadScroll } =
+    useInboxThreadScroll(activeId ?? undefined, active?.messages.length ?? 0);
 
   // Persists synchronously, not from inside a state updater: callers notify a
   // parent (`onConversationOpened`) on the very next line, and that parent reads
@@ -725,27 +722,33 @@ export const ManagerSmsPanel = forwardRef<
       </header>
 
       <div
+        ref={pageScroll ? undefined : threadScrollRef}
+        onScroll={pageScroll ? undefined : handleThreadScroll}
         className={
           pageScroll
             ? "portal-inbox-thread-body space-y-2 bg-background/40 px-3 py-4"
-            : "portal-inbox-thread-body min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
+            : "portal-inbox-thread-body flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background/40 px-3 py-4 [-webkit-overflow-scrolling:touch]"
         }
       >
         {active.messages.length === 0 ? (
-          <div className={`flex items-center justify-center py-6 ${pageScroll ? "" : "min-h-full"}`}>
+          <div className={`flex items-center justify-center py-6 ${pageScroll ? "" : "min-h-full flex-1"}`}>
             <PortalInboxEmptyState title="No messages in this conversation." />
           </div>
         ) : (
-          active.messages.map((msg) => (
-            <Bubble
-              key={msg.id}
-              message={msg}
-              deleting={deletingMessageId === msg.id}
-              onDelete={allowDelete ? () => void deleteMessage(msg) : undefined}
-            />
-          ))
+          <div
+            className={`flex w-full flex-col gap-2 ${pageScroll ? "space-y-2" : "min-h-min flex-grow justify-end"}`}
+          >
+            {active.messages.map((msg) => (
+              <Bubble
+                key={msg.id}
+                message={msg}
+                deleting={deletingMessageId === msg.id}
+                onDelete={allowDelete ? () => void deleteMessage(msg) : undefined}
+              />
+            ))}
+          </div>
         )}
-        <div ref={threadEndRef} />
+        <div ref={threadEndRef} className="h-px shrink-0" aria-hidden />
       </div>
 
       <InboxThreadAssistantStrip
@@ -766,15 +769,15 @@ export const ManagerSmsPanel = forwardRef<
         placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a reply…"}
         maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
         dataAttr="sms-messages-reply"
-        channelBar={
-          activeEmailAvailable ? (
-            <InboxReplyChannelPicker
-              viaEmail={replyViaEmail}
-              viaSms={replyViaSms}
-              onViaEmailChange={setReplyViaEmail}
-              onViaSmsChange={setReplyViaSms}
-            />
-          ) : null
+        channelControl={
+          <InboxReplyChannelPicker
+            viaEmail={replyViaEmail}
+            viaSms={replyViaSms}
+            onViaEmailChange={setReplyViaEmail}
+            onViaSmsChange={setReplyViaSms}
+            emailAvailable={activeEmailAvailable}
+            smsAvailable
+          />
         }
       />
     </div>

@@ -622,6 +622,57 @@ export const ManagerInbox = forwardRef<
 
       void (async () => {
         try {
+          if (p.scheduleLater && p.sendAt) {
+            const directEmails = p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean);
+            const schedulePayloads: Record<string, unknown>[] = [];
+            for (const category of p.broadcastCategories) {
+              schedulePayloads.push({
+                subject: p.subject.trim(),
+                body: p.body.trim(),
+                sendAt: p.sendAt,
+                broadcastCategories: [category],
+                deliverViaEmail: p.deliverViaEmail !== false,
+                deliverViaSms: p.deliverViaSms === true,
+                senderPortal: "manager",
+              });
+            }
+            for (const email of directEmails) {
+              schedulePayloads.push({
+                subject: p.subject.trim(),
+                body: p.body.trim(),
+                sendAt: p.sendAt,
+                recipientEmail: email,
+                recipientName: email,
+                deliverViaEmail: p.deliverViaEmail !== false,
+                deliverViaSms: p.deliverViaSms === true,
+                senderPortal: "manager",
+              });
+            }
+            if (schedulePayloads.length === 0) {
+              showToast("Add at least one recipient to schedule.");
+              return;
+            }
+            const results = await Promise.all(
+              schedulePayloads.map((payload) =>
+                fetch("/api/portal/scheduled-inbox-messages", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify(payload),
+                }),
+              ),
+            );
+            if (results.some((res) => !res.ok)) {
+              showToast("Some messages could not be scheduled.");
+              return;
+            }
+            showToast(
+              schedulePayloads.length === 1 ? "Message scheduled." : `${schedulePayloads.length} messages scheduled.`,
+            );
+            navigate(`${inboxBase}/schedule`);
+            return;
+          }
+
           const res = await fetch("/api/portal/send-inbox-message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -634,6 +685,7 @@ export const ManagerInbox = forwardRef<
               subject: p.subject.trim(),
               text: p.body.trim(),
               deliverToPortalInbox: true,
+              deliverViaEmail: p.deliverViaEmail !== false,
               deliverViaSms: p.deliverViaSms === true,
               eventCategory: "messages",
             }),
@@ -1253,15 +1305,15 @@ export const ManagerInbox = forwardRef<
               placeholder="Write a reply…"
               maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
               dataAttr="inbox-reply"
-              channelBar={
-                activeSmsAvailable ? (
-                  <InboxReplyChannelPicker
-                    viaEmail={replyViaEmail}
-                    viaSms={replyViaSms}
-                    onViaEmailChange={setReplyViaEmail}
-                    onViaSmsChange={setReplyViaSms}
-                  />
-                ) : null
+              channelControl={
+                <InboxReplyChannelPicker
+                  viaEmail={replyViaEmail}
+                  viaSms={replyViaSms}
+                  onViaEmailChange={setReplyViaEmail}
+                  onViaSmsChange={setReplyViaSms}
+                  emailAvailable
+                  smsAvailable={activeSmsAvailable}
+                />
               }
             />
           </>

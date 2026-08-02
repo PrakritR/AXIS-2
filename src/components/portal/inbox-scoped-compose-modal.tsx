@@ -2,9 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
+import {
+  defaultPortalMessageChannelSelection,
+  defaultPortalMessageScheduleAt,
+  PortalMessageBodyField,
+  PortalMessageScheduleFields,
+  PortalMessageSendViaField,
+  PortalMessageSubjectField,
+  portalMessageChannelsFromSelection,
+} from "@/components/portal/portal-message-compose-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -33,20 +41,13 @@ export type ScopedInboxSendPayload = {
   broadcastCategories: ("management" | "resident")[];
   scheduleLater?: boolean;
   sendAt?: string;
-  /** Also deliver via SMS when the recipient has a phone on file. */
+  /** Delivery channels for manager portal compose. */
+  deliverViaEmail?: boolean;
   deliverViaSms?: boolean;
 };
 
 type ComposeCategory = "resident" | "management" | "admin" | "vendor";
 type PersonKey = "admin" | "broadcast:management" | "broadcast:resident" | `id:${string}`;
-
-function defaultScheduleSendAt(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(9, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function contactOptionLabel(contact: InboxScopedContact): string {
   const property = contact.propertyLabel?.trim();
@@ -135,9 +136,11 @@ export function ScopedInboxComposeModal({
   const [selectedKeys, setSelectedKeys] = useState<PersonKey[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [deliverViaSms, setDeliverViaSms] = useState(false);
+  const [sendVia, setSendVia] = useState<string[]>(["email"]);
   const [scheduleLater, setScheduleLater] = useState(false);
-  const [sendAt, setSendAt] = useState(defaultScheduleSendAt);
+  const [sendAt, setSendAt] = useState(defaultPortalMessageScheduleAt);
+
+  const { viaEmail, viaSms } = portalMessageChannelsFromSelection(sendVia);
 
   const sectionOptions = useMemo(
     () => categoryOptions.map((c) => ({ value: c, label: categoryLabel(c) })),
@@ -161,11 +164,6 @@ export function ScopedInboxComposeModal({
   const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
 
   const showSmsOption = portal === "manager";
-  const smsEligible = selectedKeys.some((key) => {
-    if (key === "broadcast:resident") return true;
-    if (!key.startsWith("id:")) return false;
-    return contacts.some((c) => c.role === "resident" && `id:${c.id}` === key);
-  });
 
   useEffect(() => {
     if (!open || portal !== "manager" || isDemoModeActive()) {
@@ -222,19 +220,15 @@ export function ScopedInboxComposeModal({
       setSelectedKeys([]);
       setSubject("");
       setBody("");
-      setDeliverViaSms(false);
+      setSendVia(defaultPortalMessageChannelSelection(true, showSmsOption, true, false));
       setScheduleLater(false);
-      setSendAt(defaultScheduleSendAt());
+      setSendAt(defaultPortalMessageScheduleAt());
     });
   }, [open, portal]);
 
   useEffect(() => {
     setSelectedKeys((prev) => prev.filter((key) => validPersonKeys.has(key)));
   }, [validPersonKeys]);
-
-  useEffect(() => {
-    if (!smsEligible && deliverViaSms) setDeliverViaSms(false);
-  }, [smsEligible, deliverViaSms]);
 
   const onCategoriesChange = (next: string[]) => {
     const cats = next.filter((v): v is ComposeCategory =>
@@ -262,7 +256,11 @@ export function ScopedInboxComposeModal({
       showToast("Select at least one recipient.");
       return;
     }
-    if (portal === "resident" && scheduleLater) {
+    if (!viaEmail && !viaSms) {
+      showToast("Choose at least one channel under Send via.");
+      return;
+    }
+    if (scheduleLater) {
       const when = new Date(sendAt);
       if (Number.isNaN(when.getTime())) {
         showToast("Choose a valid send date and time.");
@@ -343,11 +341,14 @@ export function ScopedInboxComposeModal({
       includesAxisAdmin,
       includesDirectoryRecipients,
       broadcastCategories,
-      scheduleLater: portal === "resident" ? scheduleLater : false,
-      sendAt: portal === "resident" && scheduleLater ? new Date(sendAt).toISOString() : undefined,
-      deliverViaSms: showSmsOption && smsEligible ? deliverViaSms : false,
+      scheduleLater,
+      sendAt: scheduleLater ? new Date(sendAt).toISOString() : undefined,
+      deliverViaEmail: viaEmail,
+      deliverViaSms: showSmsOption ? viaSms : false,
     });
   };
+
+  const sendLabel = scheduleLater ? "Schedule" : viaEmail && viaSms ? "Send message" : viaSms ? "Send SMS" : "Send email";
 
   return (
     <Modal
@@ -357,7 +358,7 @@ export function ScopedInboxComposeModal({
       footer={
         <ModalFooter>
           <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
-            {scheduleLater ? "Schedule" : deliverViaSms ? "Send email + SMS" : "Send"}
+            {sendLabel}
           </Button>
         </ModalFooter>
       }
@@ -385,80 +386,26 @@ export function ScopedInboxComposeModal({
           />
         </div>
 
-        <div>
-          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="compose-subject">
-            Subject
-          </label>
-          <Input
-            id="compose-subject"
-            className="mt-1"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Subject"
-          />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="compose-body">
-            Message
-          </label>
-          <Textarea
-            id="compose-body"
-            className="mt-1 min-h-[120px]"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your message…"
-          />
-        </div>
+        <PortalMessageSubjectField value={subject} onChange={setSubject} />
 
         {showSmsOption ? (
-          <label
-            className={`flex items-start gap-2.5 text-sm ${smsEligible ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
-          >
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-              checked={deliverViaSms}
-              disabled={!smsEligible}
-              onChange={(e) => setDeliverViaSms(e.target.checked)}
-              data-attr="inbox-compose-sms"
-            />
-            <span>
-              <span className="font-medium text-foreground">Also send as SMS</span>
-              <span className="mt-0.5 block text-xs text-muted">
-                {smsEligible
-                  ? "Texts selected residents from your work number when a phone is on file."
-                  : "Select a resident to enable SMS."}
-              </span>
-            </span>
-          </label>
+          <PortalMessageSendViaField
+            selected={sendVia}
+            onChange={setSendVia}
+            emailAvailable
+            smsAvailable
+            dataAttr="inbox-compose-send-via"
+          />
         ) : null}
 
-        {portal === "resident" ? (
-          <>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border accent-primary"
-                checked={scheduleLater}
-                onChange={(e) => setScheduleLater(e.target.checked)}
-              />
-              <span className="font-medium text-foreground">Schedule for later</span>
-            </label>
-            {scheduleLater ? (
-              <label className="block text-sm">
-                <span className="font-medium text-muted">Send date &amp; time</span>
-                <Input
-                  type="datetime-local"
-                  className="mt-1"
-                  value={sendAt}
-                  onChange={(e) => setSendAt(e.target.value)}
-                />
-              </label>
-            ) : null}
-          </>
-        ) : null}
+        <PortalMessageBodyField value={body} onChange={setBody} minHeightClass="min-h-[120px]" />
 
+        <PortalMessageScheduleFields
+          scheduleLater={scheduleLater}
+          onScheduleLaterChange={setScheduleLater}
+          sendAt={sendAt}
+          onSendAtChange={setSendAt}
+        />
       </div>
     </Modal>
   );

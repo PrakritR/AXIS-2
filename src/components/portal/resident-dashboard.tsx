@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
+import { PORTAL_FILTER_ICON_CLASS } from "@/components/portal/filter-field-lists";
 import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
 import {
   ManagerPortalPageShell,
@@ -682,7 +683,7 @@ export function ResidentDashboard({
               data-attr="resident-dashboard-customize-open"
               className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-primary/40 hover:text-foreground"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              <SlidersHorizontal className={PORTAL_FILTER_ICON_CLASS} aria-hidden />
               <span className="[html[data-native]_&]:sr-only">Customize</span>
             </button>
           </div>

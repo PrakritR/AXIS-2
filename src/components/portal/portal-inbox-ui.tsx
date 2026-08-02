@@ -1,10 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useInboxThreadScroll } from "@/hooks/use-inbox-thread-scroll";
 import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, NativeSelect, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -770,7 +771,30 @@ export function InboxBubble({
   );
 }
 
-/** Email / SMS channel toggles for thread replies — matches New message compose. */
+/** Thread-reply send channel — maps to the email/SMS boolean pair used by send handlers. */
+export type InboxReplyChannelMode = "email" | "sms" | "both";
+
+export function inboxReplyChannelsToMode(viaEmail: boolean, viaSms: boolean): InboxReplyChannelMode {
+  if (viaEmail && viaSms) return "both";
+  if (viaSms) return "sms";
+  return "email";
+}
+
+export function inboxReplyModeToChannels(mode: InboxReplyChannelMode): { viaEmail: boolean; viaSms: boolean } {
+  switch (mode) {
+    case "both":
+      return { viaEmail: true, viaSms: true };
+    case "sms":
+      return { viaEmail: false, viaSms: true };
+    default:
+      return { viaEmail: true, viaSms: false };
+  }
+}
+
+const INBOX_REPLY_CHANNEL_COMPACT_SELECT_CLASS =
+  "min-h-[2.75rem] w-[min(7.75rem,28vw)] rounded-2xl px-2.5 py-1.5 text-xs font-medium sm:text-xs";
+
+/** Email / SMS channel dropdown for thread replies — compact control beside the reply field. */
 export function InboxReplyChannelPicker({
   viaEmail,
   viaSms,
@@ -786,32 +810,40 @@ export function InboxReplyChannelPicker({
   emailAvailable?: boolean;
   smsAvailable?: boolean;
 }) {
-  if (!emailAvailable && !smsAvailable) return null;
-  if (!smsAvailable || !emailAvailable) return null;
+  const options: { value: InboxReplyChannelMode; label: string }[] = [];
+  if (emailAvailable) options.push({ value: "email", label: "Email" });
+  if (smsAvailable) options.push({ value: "sms", label: "SMS" });
+  if (emailAvailable && smsAvailable) options.push({ value: "both", label: "Email & SMS" });
+
+  if (options.length === 0) return null;
+
+  const mode = inboxReplyChannelsToMode(viaEmail, viaSms);
+  const effectiveMode = options.some((o) => o.value === mode) ? mode : options[0]!.value;
 
   return (
-    <div className="border-b border-border/70 px-2 pt-2 md:px-3" data-attr="inbox-reply-channel-picker">
-      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send via</p>
-      <div className={PORTAL_TOOLBAR_GROUP} role="group" aria-label="Send platform">
-        <button
-          type="button"
-          className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaEmail ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-          aria-pressed={viaEmail}
-          data-attr="inbox-reply-via-email"
-          onClick={() => onViaEmailChange(!viaEmail)}
-        >
-          Email
-        </button>
-        <button
-          type="button"
-          className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaSms ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-          aria-pressed={viaSms}
-          data-attr="inbox-reply-via-sms"
-          onClick={() => onViaSmsChange(!viaSms)}
-        >
-          SMS
-        </button>
-      </div>
+    <div className="flex shrink-0 flex-col gap-0.5" data-attr="inbox-reply-channel-picker">
+      <label className="px-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted" htmlFor="inbox-reply-send-via">
+        Send via
+      </label>
+      <NativeSelect
+        id="inbox-reply-send-via"
+        className={INBOX_REPLY_CHANNEL_COMPACT_SELECT_CLASS}
+        value={effectiveMode}
+        onChange={(e) => {
+          const next = inboxReplyModeToChannels(e.target.value as InboxReplyChannelMode);
+          onViaEmailChange(next.viaEmail);
+          onViaSmsChange(next.viaSms);
+        }}
+        disabled={options.length === 1}
+        aria-label="Send via"
+        data-attr="inbox-reply-send-via"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </NativeSelect>
     </div>
   );
 }
@@ -834,6 +866,9 @@ export function InboxComposer({
   maxLength,
   hint,
   dataAttr,
+  /** Inline channel picker rendered beside the reply field (preferred). */
+  channelControl,
+  /** @deprecated Prefer `channelControl` inline beside the reply field. */
   channelBar,
 }: {
   value: string;
@@ -845,10 +880,12 @@ export function InboxComposer({
   maxLength?: number;
   hint?: ReactNode;
   dataAttr?: string;
+  channelControl?: ReactNode;
   /** Channel picker or other controls above the reply field. */
   channelBar?: ReactNode;
 }) {
   const canSend = !sending && !disabled && value.trim().length > 0;
+  const resolvedChannel = channelControl ?? null;
   return (
     <div
       className="portal-inbox-composer shrink-0 border-t border-border bg-card max-md:pb-[max(0.375rem,env(safe-area-inset-bottom,0px))] md:pb-[max(0.625rem,env(safe-area-inset-bottom,0px))]"
@@ -862,6 +899,7 @@ export function InboxComposer({
         }}
       >
         <div className="portal-inbox-composer-row flex items-end gap-2">
+          {resolvedChannel}
           <textarea
             rows={1}
             value={value}
@@ -1451,33 +1489,10 @@ export function InboxThreadView({
   scrollMode?: "pane" | "page";
 }) {
   const pageScroll = scrollMode === "page";
-  const endRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const prevThreadKeyRef = useRef<string | undefined>(undefined);
-  // Stickiness has to be sampled BEFORE the new message is committed — measuring
-  // it inside the effect reads the post-append geometry, which reports "far from
-  // the bottom" for a reader who was in fact pinned there. Default true so a
-  // thread that has never been scrolled follows its tail.
-  const stickToBottomRef = useRef(true);
-  const handleThreadScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  }, []);
-  useEffect(() => {
-    const threadChanged = prevThreadKeyRef.current !== threadKey;
-    prevThreadKeyRef.current = threadKey;
-    // Optional call: scrollIntoView is absent in jsdom / non-DOM environments.
-    if (threadChanged) {
-      // Opening a conversation lands at the newest message, no animation.
-      stickToBottomRef.current = true;
-      endRef.current?.scrollIntoView?.({ block: "end" });
-      return;
-    }
-    // Same thread, a message arrived — only follow the tail if the reader was
-    // near the bottom before it landed, so reading history isn't interrupted.
-    if (stickToBottomRef.current) endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
-  }, [messages.length, threadKey]);
+  const { scrollRef, endRef, handleScroll: handleThreadScroll } = useInboxThreadScroll(
+    threadKey,
+    messages.length,
+  );
 
   return (
     <div className={pageScroll ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
@@ -1522,7 +1537,9 @@ export function InboxThreadView({
             <PortalInboxEmptyState title={emptyLabel} />
           </div>
         ) : (
-          <div className={`flex w-full flex-col gap-2 md:gap-3 ${pageScroll ? "" : "mt-auto"}`}>
+          <div
+            className={`flex w-full min-h-min flex-col gap-2 md:gap-3 ${pageScroll ? "" : "flex-grow justify-end"}`}
+          >
             {messages.map((m) => (
               <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />
             ))}

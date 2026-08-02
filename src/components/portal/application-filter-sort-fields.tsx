@@ -86,6 +86,7 @@ function ApplicationFilterSortFieldsBody({
       label="Property"
       summary={summary}
       empty={propertyFilters.length === 0}
+      menuOptionCount={selectionMode === "single" ? options.length + 1 : options.length}
       dataAttr={`${dataAttr}-trigger`}
     >
       {propertyField}

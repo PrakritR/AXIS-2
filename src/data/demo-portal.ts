@@ -80,6 +80,7 @@ export type DemoApplicantRow = {
   backgroundCheck?: ApplicationBackgroundCheck;
   /** Extra fields only present on manually-added residents. */
   manualResidentDetails?: {
+    phone?: string;
     moveInDate?: string;
     moveOutDate?: string;
     monthlyUtilities?: number;

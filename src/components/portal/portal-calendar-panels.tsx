@@ -59,6 +59,7 @@ import {
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
+import { buildScheduledTourMeetings } from "@/lib/manager-calendar-tour-meetings";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -231,6 +232,8 @@ export function PortalCalendarPanels({
   vendorDayFlexibility,
   vendorCalendarActions,
   preferEventCountsInDayHeader = false,
+  anchorDate: anchorDateProp,
+  onAnchorDateChange,
   /** Flat portal canvas — no outer card or input-style chrome (property calendar tab). */
   bareSurface = false,
 }: {
@@ -263,6 +266,8 @@ export function PortalCalendarPanels({
   };
   /** Vendor calendar: click empty slots to add personal work blocks; edit vendor-owned meetings. */
   preferEventCountsInDayHeader?: boolean;
+  anchorDate?: Date;
+  onAnchorDateChange?: (date: Date) => void;
   vendorCalendarActions?: {
     onAddFromSlot: (dateStr: string, slotIdx: number) => void;
     canEditMeeting: (meeting: DemoMeeting) => boolean;
@@ -273,7 +278,17 @@ export function PortalCalendarPanels({
   const { showToast } = useAppUi();
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
-  const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [uncontrolledAnchorDate, setUncontrolledAnchorDate] = useState(() => new Date());
+  const anchorDate = anchorDateProp ?? uncontrolledAnchorDate;
+  const setAnchorDate = useCallback(
+    (updater: Date | ((prev: Date) => Date)) => {
+      const prev = anchorDateProp ?? uncontrolledAnchorDate;
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (onAnchorDateChange) onAnchorDateChange(next);
+      else setUncontrolledAnchorDate(next);
+    },
+    [anchorDateProp, onAnchorDateChange, uncontrolledAnchorDate],
+  );
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() =>
     storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
   );
@@ -358,93 +373,8 @@ export function PortalCalendarPanels({
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
     void meetingRefresh;
-    const showAdminMeetings =
-      storageKey === ADMIN_AVAILABILITY_STORAGE_KEY || Boolean(storageKey?.startsWith("axis_admin_avail_slots_v2_admin_"));
-    const showManagerTours = Boolean(scheduledTourFilter?.viewerUserId);
-
-    const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
-      .filter((event) => {
-        if (showAdminMeetings) return event.kind !== "tour";
-        if (!scheduledTourFilter) return false;
-        return plannedTourVisibleToViewer(event, scheduledTourFilter);
-      })
-      .map((event) => {
-      const start = new Date(event.start);
-      const durationMinutes = durationMinutesBetweenIso(event.start, event.end);
-      const isPeerTour =
-        event.kind === "tour" &&
-        Boolean(scheduledTourFilter) &&
-        event.managerUserId !== scheduledTourFilter?.viewerUserId;
-      const hostPeer = scheduledTourFilter?.peers.find((peer) => peer.userId === event.managerUserId);
-      return {
-        id: `planned-${event.id}`,
-        source: "planned",
-        sourceId: event.id,
-        startIso: event.start,
-        endIso: event.end,
-        dateStr: toLocalDateStr(start),
-        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / SLOT_DURATION_MINUTES)),
-        span: Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES)),
-        durationMinutes,
-        title: event.title,
-        color: isPeerTour ? MEETING_PEER_COLOR : MEETING_CONFIRMED_COLOR,
-        statusLabel: isPeerTour ? "Co-manager tour" : "Confirmed",
-        name: event.attendeeName,
-        email: event.attendeeEmail,
-        phone: event.attendeePhone,
-        notes: event.notes,
-        propertyTitle: event.propertyTitle,
-        propertyId: event.propertyId,
-        roomLabel: event.roomLabel,
-        instructions: event.instructions,
-        kind: event.kind,
-        hostLabel: hostPeer?.label,
-        isPeerTour,
-      } satisfies DemoMeeting;
-    }) : [];
-
-    const pending = readPartnerInquiries()
-      .filter((row) => row.status === "pending")
-      .filter((row) => {
-        if (showAdminMeetings) return row.kind !== "tour";
-        if (!showManagerTours || !scheduledTourFilter) return false;
-        return tourInquiryVisibleToViewer(row, scheduledTourFilter);
-      })
-      .flatMap((row) =>
-        getPartnerInquiryWindows(row).map((window, index) => {
-          const start = new Date(window.start);
-          const end = new Date(window.end);
-          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-            return null;
-          }
-          const durationMinutes = durationMinutesBetweenIso(window.start, window.end);
-          return {
-            id: `inquiry-${row.id}-${index}`,
-            source: "inquiry",
-            sourceId: row.id,
-            startIso: window.start,
-            endIso: window.end,
-            dateStr: toLocalDateStr(start),
-            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / SLOT_DURATION_MINUTES)),
-            span: Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES)),
-            durationMinutes,
-            title: row.kind === "tour" ? `Tour · ${row.name}` : `${row.name} request`,
-            color: MEETING_PENDING_COLOR,
-            statusLabel: row.kind === "tour" ? "Tour requested" : "Requested",
-            name: row.name,
-            email: row.email,
-            phone: row.phone,
-            notes: row.notes,
-            propertyTitle: row.propertyTitle,
-            propertyId: row.propertyId,
-            roomLabel: row.roomLabel,
-            kind: row.kind,
-          } satisfies DemoMeeting;
-        }),
-      )
-      .filter(Boolean) as DemoMeeting[];
-
-    return [...planned, ...pending, ...(externalMeetings ?? [])];
+    const tourMeetings = buildScheduledTourMeetings(scheduledTourFilter, storageKey);
+    return [...tourMeetings, ...(externalMeetings ?? [])];
   }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter, externalMeetings]);
 
   const monthYear = anchorDate.getFullYear();

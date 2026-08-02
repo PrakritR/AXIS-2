@@ -196,7 +196,7 @@ export function resolveManualResidentPlacementValues(input: {
   const sub = normalizeManagerListingSubmissionV1(prop.listingSubmission);
   const room = resolveManualResidentRoom(sub, input.roomId);
 
-  const appFields = residentLeaseTermToApplicationFields(leaseTerm, input.leaseTermCustomMode);
+  const appFields = residentLeaseTermToApplicationFields(leaseTerm, input.leaseTermCustomMode, propertyId);
   const rentalType = appFields.rentalType;
 
   if (rentalType === "short_term") {

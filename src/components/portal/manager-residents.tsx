@@ -317,10 +317,6 @@ export function ManagerResidents({
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
-  const [messageSubject, setMessageSubject] = useState("");
-  const [messageBody, setMessageBody] = useState("");
-  const [messageScheduleLater, setMessageScheduleLater] = useState(false);
-  const [messageSendAt, setMessageSendAt] = useState("");
   const [messageBusy, setMessageBusy] = useState(false);
   const [leaseReminderBusy, setLeaseReminderBusy] = useState(false);
   const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
@@ -384,6 +380,7 @@ export function ManagerResidents({
   const [addResidentOpen, setAddResidentOpen] = useState(false);
   const [arName, setArName] = useState("");
   const [arEmail, setArEmail] = useState("");
+  const [arPhone, setArPhone] = useState("");
   const [arPropertyId, setArPropertyId] = useState("");
   const [arRoomId, setArRoomId] = useState("");
   const [arLeaseTerm, setArLeaseTerm] = useState("");
@@ -405,6 +402,7 @@ export function ManagerResidents({
   const [editResidentOpen, setEditResidentOpen] = useState(false);
   const [erName, setErName] = useState("");
   const [erEmail, setErEmail] = useState("");
+  const [erPhone, setErPhone] = useState("");
   const [erPropertyId, setErPropertyId] = useState("");
   const [erRoomId, setErRoomId] = useState("");
   const [erLeaseTerm, setErLeaseTerm] = useState("");
@@ -694,17 +692,17 @@ export function ManagerResidents({
     [arLeaseTerm, arLeaseTermCustomMode, arLeaseTermPresetValues],
   );
 
-  const isMonthToMonthLease = isResidentMonthToMonthLease(arLeaseTerm);
+  const isMonthToMonthLease = isResidentMonthToMonthLease(arLeaseTerm, arPropertyId);
 
   const arManualLeaseFields = useMemo(
-    () => residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode),
-    [arLeaseTerm, arLeaseTermCustomMode],
+    () => residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode, arPropertyId),
+    [arLeaseTerm, arLeaseTermCustomMode, arPropertyId],
   );
   const arIsShortTermStay = arManualLeaseFields.rentalType === "short_term";
 
   const erManualLeaseFields = useMemo(
-    () => residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode),
-    [erLeaseTerm, erLeaseTermCustomMode],
+    () => residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode, erPropertyId),
+    [erLeaseTerm, erLeaseTermCustomMode, erPropertyId],
   );
   const erIsShortTermStay = erManualLeaseFields.rentalType === "short_term";
 
@@ -782,7 +780,7 @@ export function ManagerResidents({
     [erLeaseTerm, erLeaseTermCustomMode, erLeaseTermPresetValues],
   );
 
-  const isEditMonthToMonthLease = isResidentMonthToMonthLease(erLeaseTerm);
+  const isEditMonthToMonthLease = isResidentMonthToMonthLease(erLeaseTerm, erPropertyId);
 
   if (isMonthToMonthLease && arMoveOutDate) {
     setArMoveOutDate("");
@@ -1046,25 +1044,21 @@ export function ManagerResidents({
     return c;
   }, [residentWorkOrders]);
 
-  async function sendResidentMessage() {
+  async function sendResidentMessage(
+    channels?: { viaEmail?: boolean; viaSms?: boolean },
+    draft?: { subject?: string; body?: string; scheduleAt?: string },
+  ) {
     if (!selected || messageBusy) return;
-    const subject = messageSubject.trim();
-    const body = messageBody.trim();
+    const subject = draft?.subject?.trim() || "";
+    const body = draft?.body?.trim() || "";
     if (!subject || !body) {
       showToast("Add a subject and message.");
       return;
     }
+    const viaEmail = channels?.viaEmail !== false;
+    const viaSms = channels?.viaSms === true;
 
-    if (messageScheduleLater) {
-      const sendAt = new Date(messageSendAt);
-      if (Number.isNaN(sendAt.getTime())) {
-        showToast("Choose a valid send date and time.");
-        return;
-      }
-      if (sendAt.getTime() < Date.now() - 60_000) {
-        showToast("Send time must be in the future.");
-        return;
-      }
+    if (draft?.scheduleAt) {
       setMessageBusy(true);
       try {
         const res = await fetch("/api/portal/scheduled-inbox-messages", {
@@ -1074,10 +1068,12 @@ export function ManagerResidents({
           body: JSON.stringify({
             subject,
             body,
-            sendAt: sendAt.toISOString(),
-            deliverViaEmail: true,
+            sendAt: draft.scheduleAt,
+            deliverViaEmail: viaEmail,
+            deliverViaSms: viaSms,
             recipientEmail: selected.email.trim().toLowerCase(),
             recipientName: selected.name.trim(),
+            senderPortal: "manager",
           }),
         });
         if (!res.ok) {
@@ -1085,9 +1081,6 @@ export function ManagerResidents({
           showToast(payload.error ?? "Could not schedule message.");
           return;
         }
-        setMessageSubject("");
-        setMessageBody("");
-        setMessageScheduleLater(false);
         setMessageOpen(false);
         showToast("Message scheduled.");
       } finally {
@@ -1097,9 +1090,6 @@ export function ManagerResidents({
     }
 
     setMessageBusy(true);
-    setMessageSubject("");
-    setMessageBody("");
-    setMessageScheduleLater(false);
     setMessageOpen(false);
     try {
       const result = await deliverPortalInboxMessage({
@@ -1108,6 +1098,8 @@ export function ManagerResidents({
         toEmails: [selected.email],
         subject,
         text: body,
+        deliverViaEmail: viaEmail,
+        deliverViaSms: viaSms,
       });
       if (!result.ok) {
         showToast(result.error ?? "Message could not be sent.");
@@ -1117,25 +1109,101 @@ export function ManagerResidents({
       const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
       persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
       setInboxTick((n) => n + 1);
-      showToast(result.skipped ? "Message sent to inbox (demo email skipped)." : "Message sent via inbox and email.");
+      showToast(
+        result.skipped
+          ? "Message saved to PropLane inbox."
+          : viaSms && viaEmail
+            ? "Message sent via email, SMS, and PropLane inbox."
+            : viaSms
+              ? "Message sent via SMS and PropLane inbox."
+              : "Message sent via inbox and email.",
+      );
     } finally {
       setMessageBusy(false);
     }
   }
 
   function openResidentMessageModal() {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    setMessageSendAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
-    setMessageScheduleLater(false);
     setMessageOpen(true);
   }
 
-  async function sendResidentAccountEmail(res: ActiveResident) {
+  async function sendResidentAccountEmail(
+    res: ActiveResident,
+    opts?: {
+      channels?: { viaEmail?: boolean; viaSms?: boolean };
+      draft?: { subject?: string; body?: string; scheduleAt?: string };
+    },
+  ) {
     setWelcomeEmailBusyForResident(res.id);
     try {
+      const subject = opts?.draft?.subject?.trim() || RESIDENT_WELCOME_EMAIL_SUBJECT;
+      const signupUrl = residentAccountCreationUrl(window.location.origin, res.axisId);
+      const defaultBody = buildResidentWelcomeEmailBody({
+        residentName: res.name,
+        axisId: res.axisId,
+        signupUrl,
+      });
+      const body = opts?.draft?.body?.trim() || defaultBody;
+      const viaEmail = opts?.channels?.viaEmail !== false;
+      const viaSms = opts?.channels?.viaSms === true;
+
+      if (opts?.draft?.scheduleAt) {
+        const response = await fetch("/api/portal/scheduled-inbox-messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            subject,
+            body,
+            sendAt: opts.draft.scheduleAt,
+            deliverViaEmail: viaEmail,
+            deliverViaSms: viaSms,
+            recipientEmail: res.email.trim().toLowerCase(),
+            recipientName: res.name.trim(),
+            senderPortal: "manager",
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        if (!response.ok) {
+          showToast(data.error ?? "Could not schedule account setup message.");
+          return;
+        }
+        showToast("Account setup message scheduled.");
+        return;
+      }
+
+      if (opts?.channels && (viaSms || viaEmail)) {
+        const response = await fetch("/api/portal/send-inbox-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            fromName: managerEmail ?? "Property Manager",
+            toEmails: [res.email],
+            subject,
+            text: body,
+            deliverToPortalInbox: true,
+            deliverViaEmail: viaEmail,
+            deliverViaSms: viaSms,
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; error?: string };
+        if (!response.ok || !data.ok) {
+          showToast(data.error ?? "Could not send account setup message.");
+          return;
+        }
+        showToast(
+          data.skipped
+            ? "Account setup message saved to PropLane inbox."
+            : viaSms && viaEmail
+              ? "Account setup message sent via email, SMS, and PropLane inbox."
+              : viaSms
+                ? "Account setup message sent via SMS and PropLane inbox."
+                : "Account setup message sent via email and PropLane inbox.",
+        );
+        return;
+      }
+
       const endpoint = res.manuallyAdded
         ? "/api/portal/onboard-existing-resident"
         : "/api/portal/send-resident-welcome";
@@ -1397,7 +1465,7 @@ export function ManagerResidents({
       if (!arName.trim()) { showToast("Enter the resident's name."); return; }
       if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
       const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode);
+      const arAppLeaseFields = residentLeaseTermToApplicationFields(arLeaseTerm, arLeaseTermCustomMode, arPropertyId);
       const arSavingShortTerm = arAppLeaseFields.rentalType === "short_term";
       const utilities = arSavingShortTerm
         ? null
@@ -1427,6 +1495,7 @@ export function ManagerResidents({
         managerUserId: userId ?? undefined,
         manuallyAdded: true,
         manualResidentDetails: {
+          phone: arPhone.trim() || undefined,
           moveInDate: arMoveInDate || undefined,
           moveOutDate: arMoveOutDate || undefined,
           monthlyUtilities: utilities ?? undefined,
@@ -1452,6 +1521,7 @@ export function ManagerResidents({
               leaseEnd: arMoveOutDate || undefined,
               fullLegalName: arName.trim(),
               email: arEmail.trim(),
+              phone: arPhone.trim() || undefined,
             } as unknown as DemoApplicantRow["application"])
           : undefined,
       };
@@ -1484,7 +1554,7 @@ export function ManagerResidents({
           syncHouseholdChargesFromServer(true),
         ]);
         setChargeBucket("pending");
-        setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
+        setArName(""); setArEmail(""); setArPhone(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm(""); setArLeaseTermCustomMode(false);
         setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
         setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
         setArSignedLeaseFileName(""); setArSignedLeaseDataUrl(""); setArSendWelcome(true);
@@ -1513,14 +1583,22 @@ export function ManagerResidents({
         : assignedRoomChoice;
     setErName(row.name || app?.fullLegalName?.trim() || "");
     setErEmail(row.email?.trim() || app?.email?.trim() || "");
+    setErPhone(row.manualResidentDetails?.phone?.trim() || app?.phone?.trim() || "");
     setErPropertyId(assignedPropId);
     setErRoomId(assignedRoomId);
     const assignedPropIdForLease = assignedPropId;
     const storedLeaseTerm = row.manualResidentDetails?.leaseTerm || app?.leaseTerm || "";
     const erDisplayLeaseTerm = listingLeaseTermToResidentValue(storedLeaseTerm) || storedLeaseTerm;
     const erOpts = residentLeaseTermOptionsForProperty(assignedPropIdForLease).map((o) => o.value);
-    setErLeaseTerm(erDisplayLeaseTerm);
-    setErLeaseTermCustomMode(shouldUseResidentLeaseCustomMode(erDisplayLeaseTerm, erOpts));
+    const erCustomMode =
+      erDisplayLeaseTerm === RESIDENT_LEASE_TERM_CUSTOM ||
+      shouldUseResidentLeaseCustomMode(erDisplayLeaseTerm, erOpts);
+    setErLeaseTerm(
+      erCustomMode && erDisplayLeaseTerm === RESIDENT_LEASE_TERM_CUSTOM
+        ? storedLeaseTerm
+        : erDisplayLeaseTerm,
+    );
+    setErLeaseTermCustomMode(erCustomMode);
     setErMoveInDate(row.manualResidentDetails?.moveInDate || app?.leaseStart || "");
     setErMoveOutDate(row.manualResidentDetails?.moveOutDate || app?.leaseEnd || "");
     const savedRent = Number.isFinite(row.signedMonthlyRent ?? NaN) ? String(row.signedMonthlyRent ?? "") : "";
@@ -1549,7 +1627,7 @@ export function ManagerResidents({
       return;
     }
     const rent = erRent.trim() ? Number(erRent.replace(/[^\d.]/g, "")) : null;
-    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode);
+    const appLeaseFields = residentLeaseTermToApplicationFields(erLeaseTerm, erLeaseTermCustomMode, erPropertyId);
     const erSavingShortTerm = appLeaseFields.rentalType === "short_term";
     const utilities = erSavingShortTerm
       ? null
@@ -1573,6 +1651,7 @@ export function ManagerResidents({
       signedMonthlyRent: rent ?? undefined,
       manualResidentDetails: {
         ...(existing.manualResidentDetails ?? {}),
+        phone: erPhone.trim() || undefined,
         moveInDate: erMoveInDate || undefined,
         moveOutDate: erMoveOutDate || undefined,
         monthlyUtilities: utilities ?? undefined,
@@ -1588,6 +1667,7 @@ export function ManagerResidents({
             ...existing.application,
             fullLegalName: erName.trim() || existing.application.fullLegalName,
             email: erEmail.trim() || existing.application.email,
+            phone: erPhone.trim() || existing.application.phone,
             propertyId: propId || existing.application.propertyId,
             roomChoice1: newRoomChoice ?? existing.application.roomChoice1,
             leaseTerm: appLeaseFields.leaseTerm || existing.application.leaseTerm,
@@ -2275,6 +2355,7 @@ export function ManagerResidents({
                                 }
                                 onEmbeddedDetailActions={handleEmbeddedPaymentFooterActions}
                                 onEmbeddedBulkActions={handleEmbeddedPaymentBulkActions}
+                                onAddPayment={() => setAddResidentPaymentOpen(true)}
                               />
                             </ResidentDetailTabPanel>
                             ) : null}
@@ -2810,6 +2891,10 @@ export function ManagerResidents({
               <Input type="email" value={arEmail} onChange={(e) => setArEmail(e.target.value)} placeholder="jane@example.com" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-muted">Phone</span>
+              <Input type="tel" value={arPhone} onChange={(e) => setArPhone(e.target.value)} placeholder="(555) 555-0100" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Property</span>
               <Select
                 value={arPropertyId}
@@ -2843,7 +2928,6 @@ export function ManagerResidents({
                     {opt.label}
                   </option>
                 ))}
-                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </Select>
               {arLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
@@ -2997,6 +3081,10 @@ export function ManagerResidents({
               <Input type="email" value={erEmail} onChange={(e) => setErEmail(e.target.value)} placeholder="resident@email.com" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-muted">Phone</span>
+              <Input type="tel" value={erPhone} onChange={(e) => setErPhone(e.target.value)} placeholder="(555) 555-0100" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Property</span>
               <NativeSelect
                 value={erPropertyId}
@@ -3036,7 +3124,6 @@ export function ManagerResidents({
                     {opt.label}
                   </option>
                 ))}
-                <option value={RESIDENT_LEASE_TERM_CUSTOM}>Custom…</option>
               </NativeSelect>
               {erLeaseTermSelectValue === RESIDENT_LEASE_TERM_CUSTOM ? (
                 <Input
@@ -3208,13 +3295,30 @@ export function ManagerResidents({
         title="Email account setup · preview"
         onClose={() => setWelcomePreviewFor(null)}
         recipient={welcomePreviewFor?.email ?? ""}
+        recipientPhone={
+          welcomePreviewFor
+            ? (() => {
+                const row = readManagerApplicationRows().find((r) => r.id === welcomePreviewFor.id);
+                return row?.manualResidentDetails?.phone?.trim() || row?.application?.phone?.trim() || "";
+              })()
+            : undefined
+        }
         subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
         body={welcomePreviewContent}
-        confirmLabel="Send email"
+        showSchedule
+        smsAvailable={Boolean(
+          welcomePreviewFor &&
+            (() => {
+              const row = readManagerApplicationRows().find((r) => r.id === welcomePreviewFor.id);
+              return Boolean(row?.manualResidentDetails?.phone?.trim() || row?.application?.phone?.trim());
+            })(),
+        )}
+        defaultViaSms={false}
+        confirmLabel="Send message"
         confirmLabelWithoutMessage="Close without sending"
         confirmBusy={welcomePreviewFor !== null && welcomeEmailBusyForResident === welcomePreviewFor.id}
         confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
+        onConfirm={(skipMessage, channels, draft) => {
           if (!welcomePreviewFor) return;
           if (skipMessage) {
             setWelcomePreviewFor(null);
@@ -3222,7 +3326,7 @@ export function ManagerResidents({
           }
           const res = welcomePreviewFor;
           setWelcomePreviewFor(null);
-          void sendResidentAccountEmail(res);
+          void sendResidentAccountEmail(res, { channels, draft });
         }}
       />
 
@@ -3271,60 +3375,40 @@ export function ManagerResidents({
         }}
       />
 
-      <Modal
+      <PortalNotificationPreviewModal
         open={messageOpen}
         title="Message resident"
         onClose={() => {
           if (messageBusy) return;
           setMessageOpen(false);
         }}
-        footer={
-          <ModalFooter>
-            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
-              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
-            </Button>
-          </ModalFooter>
+        recipient={selected?.email ?? ""}
+        recipientPhone={
+          selected
+            ? (() => {
+                const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+                return row?.manualResidentDetails?.phone?.trim() || row?.application?.phone?.trim() || "";
+              })()
+            : undefined
         }
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-muted">
-            Sending to <span className="font-semibold text-foreground">{selected?.email || "resident"}</span>.
-          </p>
-          <label className="block text-sm">
-            <span className="font-medium text-muted">Subject</span>
-            <Input className="mt-1.5" value={messageSubject} onChange={(e) => setMessageSubject(e.target.value)} placeholder="Subject" />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium text-muted">Message</span>
-            <Textarea
-              className="mt-1.5 min-h-[160px]"
-              value={messageBody}
-              onChange={(e) => setMessageBody(e.target.value)}
-              placeholder="Write your message..."
-            />
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border accent-primary"
-              checked={messageScheduleLater}
-              onChange={(e) => setMessageScheduleLater(e.target.checked)}
-            />
-            <span className="font-medium text-foreground">Schedule for later</span>
-          </label>
-          {messageScheduleLater ? (
-            <label className="block text-sm">
-              <span className="font-medium text-muted">Send date & time</span>
-              <Input
-                type="datetime-local"
-                className="mt-1.5"
-                value={messageSendAt}
-                onChange={(e) => setMessageSendAt(e.target.value)}
-              />
-            </label>
-          ) : null}
-        </div>
-      </Modal>
+        subject=""
+        body=""
+        showSkipMessage={false}
+        smsAvailable={Boolean(
+          selected &&
+            (() => {
+              const row = readManagerApplicationRows().find((r) => r.id === selected.id);
+              return Boolean(row?.manualResidentDetails?.phone?.trim() || row?.application?.phone?.trim());
+            })(),
+        )}
+        defaultViaSms={false}
+        confirmLabel="Send message"
+        confirmBusy={messageBusy}
+        confirmBusyLabel="Sending…"
+        onConfirm={(_skip, channels, draft) => {
+          void sendResidentMessage(channels, draft);
+        }}
+      />
     </>
   );
 }

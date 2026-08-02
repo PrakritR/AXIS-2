@@ -92,6 +92,7 @@ import {
   type PendingActionListItem,
 } from "@/lib/axis-assistant/pending-action-display";
 import { SlidersHorizontal } from "lucide-react";
+import { PORTAL_FILTER_ICON_CLASS } from "@/components/portal/filter-field-lists";
 import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -981,7 +982,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               data-attr="dashboard-customize-open"
               className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-primary/40 hover:text-foreground"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              <SlidersHorizontal className={PORTAL_FILTER_ICON_CLASS} aria-hidden />
               <span className="[html[data-native]_&]:sr-only">Customize</span>
             </button>
           </div>

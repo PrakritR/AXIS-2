@@ -6,8 +6,6 @@
 //
 //  1. OPENING a conversation lands on the newest message — even when the new
 //     thread happens to have the same message COUNT as the one it replaced.
-//     The old effect keyed only on `messages.length`, so switching between two
-//     equal-length threads never re-scrolled and the reader landed mid-history.
 //  2. A message arriving in the SAME thread only follows the tail when the
 //     reader is already near the bottom, so scrolling back through history is
 //     never yanked forward.
@@ -40,7 +38,6 @@ function stubThreadGeometry(container: HTMLElement, { scrollTop }: { scrollTop: 
 
 beforeEach(() => {
   scrollIntoView.mockClear();
-  // jsdom has no layout, so scrollIntoView is not implemented by default.
   Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
     value: scrollIntoView,
     writable: true,
@@ -51,34 +48,32 @@ afterEach(() => cleanup());
 
 describe("InboxThreadView full-thread scroll", () => {
   it("jumps to the newest message when the open thread changes, even at an identical message count", () => {
-    const { rerender } = render(
+    const { container, rerender } = render(
       <InboxThreadView title="Sam Ortega" threadKey="thread-a" messages={msgs("a", 12)} />,
     );
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "end" });
+    const scroller = stubThreadGeometry(container, { scrollTop: 400 });
+    expect(scroller.scrollTop).toBe(400);
 
-    scrollIntoView.mockClear();
-    // Same length (12) — only `threadKey` differs.
     rerender(<InboxThreadView title="Riley Chen" threadKey="thread-b" messages={msgs("b", 12)} />);
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "end" });
+    expect(scroller.scrollTop).toBe(2000);
   });
 
   it("follows a new message when the reader is already at the bottom", () => {
     const { container, rerender } = render(
       <InboxThreadView title="Sam Ortega" threadKey="thread-a" messages={msgs("a", 12)} />,
     );
-    // scrollHeight 2000 - scrollTop 1500 - clientHeight 500 = 0 -> pinned.
-    stubThreadGeometry(container, { scrollTop: 1500 });
+    const scroller = stubThreadGeometry(container, { scrollTop: 1500 });
     scrollIntoView.mockClear();
 
     rerender(<InboxThreadView title="Sam Ortega" threadKey="thread-a" messages={msgs("a", 13)} />);
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "end" });
+    expect(scroller.scrollTop).toBe(2000);
   });
 
   it("does NOT yank the reader forward when a message arrives while they are reading history", () => {
     const { container, rerender } = render(
       <InboxThreadView title="Sam Ortega" threadKey="thread-a" messages={msgs("a", 12)} />,
     );
-    // 2000 - 0 - 500 = 1500 px from the bottom -> reading history.
     stubThreadGeometry(container, { scrollTop: 0 });
     scrollIntoView.mockClear();
 

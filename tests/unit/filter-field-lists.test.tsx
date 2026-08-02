@@ -9,6 +9,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import {
+  FIELD_SELECT_MENU_SEARCH_PX,
+  fieldSelectMenuContentPx,
+} from "@/components/ui/field-select-menu";
+import {
   FILTER_LIST_MAX_HEIGHT_PX,
   FILTER_LIST_VISIBLE_ROWS,
   FILTER_MENU_CONTENT_PX,
@@ -45,6 +49,7 @@ function Harness({ optionCount = 8 }: { optionCount?: number }) {
           label="Property"
           summary={filterMultiSelectSummary(propertyFilters, options, "All properties")}
           empty={propertyFilters.length === 0}
+          menuOptionCount={options.length}
           dataAttr="test-filter-property-trigger"
         >
           <FilterCheckboxList
@@ -59,6 +64,7 @@ function Harness({ optionCount = 8 }: { optionCount?: number }) {
           label="Resident"
           summary={filterMultiSelectSummary(residentFilters, residentOptions, "All residents")}
           empty={residentFilters.length === 0}
+          menuOptionCount={residentOptions.length}
           dataAttr="test-filter-resident-trigger"
         >
           <FilterCheckboxList
@@ -111,8 +117,9 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     // The 5-row cap lives on the portaled shell (search row + 5 option rows); the
     // listbox is the scrollable flex child that shrinks under it.
     const shell = listbox.closest("[data-field-select-menu]") as HTMLElement;
-    expect(shell.style.maxHeight).toBe(`${FILTER_MENU_CONTENT_PX}px`);
-    expect(FILTER_MENU_CONTENT_PX).toBe(FILTER_LIST_MAX_HEIGHT_PX + 12 + 52);
+    const expectedMenuHeight = fieldSelectMenuContentPx(30, FIELD_SELECT_MENU_SEARCH_PX);
+    expect(shell.style.maxHeight).toBe(`${expectedMenuHeight}px`);
+    expect(FILTER_MENU_CONTENT_PX).toBe(fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX));
     expect(FILTER_LIST_MAX_HEIGHT_PX).toBe(FILTER_LIST_VISIBLE_ROWS * 40);
     expect(listbox.className).toContain("overflow-y-auto");
     // The shell sizes to content instead of a fixed height, so it never leaves

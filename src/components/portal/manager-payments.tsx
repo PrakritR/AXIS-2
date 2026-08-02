@@ -760,6 +760,7 @@ export function ManagerPayments({
         paymentId={paymentId}
         listBasePath={basePath}
         direction={direction}
+        onAddPayment={() => setAddOpen(true)}
       />
     ) : (
       <ManagerOutgoingPaymentsPanel
@@ -768,6 +769,7 @@ export function ManagerPayments({
         vendorById={vendorById}
         paymentId={paymentId}
         listBasePath={basePath}
+        onAddPayment={() => setAddOutgoingOpen(true)}
         onRowsChanged={() => {
           setOutgoingTick((n) => n + 1);
           void syncManagerOutgoingExpensesFromServer(true);

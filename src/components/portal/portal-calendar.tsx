@@ -26,9 +26,7 @@ import {
 import {
   coManagerOverlaysFromPeers,
   listPropertyCalendarPeers,
-  plannedTourVisibleToViewer,
   propertyHasMultipleCalendarManagers,
-  tourInquiryVisibleToViewer,
   type CoManagerCalendarPeerDto,
 } from "@/lib/co-manager-calendar";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -49,10 +47,9 @@ import {
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
 import {
-  readPartnerInquiries,
-  readPlannedEvents,
-  getPartnerInquiryWindows,
-} from "@/lib/demo-admin-scheduling";
+  buildScheduledTourMeetings,
+  meetingsInWeek,
+} from "@/lib/manager-calendar-tour-meetings";
 import {
   calendarViewHref,
   parseCalendarViewTab,
@@ -90,6 +87,7 @@ export function PortalCalendar({
   const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
   const calendarView = portal === "manager" ? parseCalendarViewTab(calendarViewProp) : "all";
   const [workOrderTick, setWorkOrderTick] = useState(0);
+  const [calendarAnchorDate, setCalendarAnchorDate] = useState(() => new Date());
 
 
   useEffect(() => {
@@ -339,23 +337,23 @@ export function PortalCalendar({
       propertyId: null,
       peers: [],
     };
-    const plannedTours = readPlannedEvents().filter(
-      (event) => event.kind === "tour" && plannedTourVisibleToViewer(event, tourFilter),
-    ).length;
-    const pendingTours = readPartnerInquiries()
-      .filter((row) => row.kind === "tour" && row.status === "pending")
-      .filter((row) => tourInquiryVisibleToViewer(row, tourFilter))
-      .flatMap((row) => getPartnerInquiryWindows(row)).length;
-    const services = serviceCalendarMeetings.length;
-    const tours = plannedTours + pendingTours;
+    const tourMeetings = meetingsInWeek(
+      buildScheduledTourMeetings(tourFilter, storageKey),
+      calendarAnchorDate,
+    );
+    const servicesInWeek = meetingsInWeek(serviceCalendarMeetings, calendarAnchorDate);
+    const tours = tourMeetings.length;
+    const services = servicesInWeek.length;
     return { all: tours + services, tours, services };
   }, [
     portal,
     userId,
     calendarScheduledTourFilter,
+    storageKey,
     calendarRefreshSignal,
     workOrderTick,
-    serviceCalendarMeetings.length,
+    calendarAnchorDate,
+    serviceCalendarMeetings,
   ]);
 
   const calendarTabs = useMemo(
@@ -567,7 +565,9 @@ export function PortalCalendar({
             externalMeetings={portal === "manager" ? mergedExternalMeetings : undefined}
             readOnly={portal === "manager" ? calendarPanelsReadOnly : false}
             eventSummaryLabel={servicesOnlyView ? "visit" : calendarView === "all" ? "event" : "tour"}
-            preferEventCountsInDayHeader={calendarView !== "tours"}
+            preferEventCountsInDayHeader
+            anchorDate={calendarAnchorDate}
+            onAnchorDateChange={setCalendarAnchorDate}
             otherProperties={
               portal === "manager" && soleCalendarPropertyId
                 ? managerProperties.filter((p) => p.id !== soleCalendarPropertyId)

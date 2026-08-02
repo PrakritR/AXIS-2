@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components/ui/checkbox-multi-select";
 import {
-  PORTAL_TOOLBAR_GROUP,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
-} from "@/components/portal/portal-metrics";
+  defaultPortalMessageChannelSelection,
+  defaultPortalMessageScheduleAt,
+  PortalMessageBodyField,
+  PortalMessageScheduleFields,
+  PortalMessageSendViaField,
+  PortalMessageSubjectField,
+  portalMessageChannelsFromSelection,
+  portalMessageFieldLabel,
+} from "@/components/portal/portal-message-compose-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
@@ -36,6 +40,16 @@ export type CommunicationComposeChannel = "email" | "sms";
 type ComposeCategory = "resident" | "management" | "admin" | "vendor" | "other";
 type DirectoryComposeCategory = Exclude<ComposeCategory, "other">;
 type PersonKey = "admin" | "broadcast:management" | "broadcast:resident" | `id:${string}`;
+
+async function postScheduledInboxMessage(payload: Record<string, unknown>): Promise<boolean> {
+  const res = await fetch("/api/portal/scheduled-inbox-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ...payload, senderPortal: "manager" }),
+  });
+  return res.ok;
+}
 
 function contactOptionLabel(contact: InboxScopedContact): string {
   const property = contact.propertyLabel?.trim();
@@ -125,9 +139,12 @@ export function ManagerCommunicationComposeModal({
   const [otherTokens, setOtherTokens] = useState<OtherRecipientToken[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [viaEmail, setViaEmail] = useState(true);
-  const [viaSms, setViaSms] = useState(false);
+  const [sendVia, setSendVia] = useState<string[]>(["email"]);
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [sendAt, setSendAt] = useState(defaultPortalMessageScheduleAt);
   const [sending, setSending] = useState(false);
+
+  const { viaEmail, viaSms } = portalMessageChannelsFromSelection(sendVia);
 
   const withPhone = useMemo(
     () => smsRecipients.filter((r) => Boolean(r.phone?.trim())),
@@ -195,9 +212,16 @@ export function ManagerCommunicationComposeModal({
       setOtherTokens([]);
       setSubject("");
       setBody("");
-      // SMS hidden → always email-only, whatever channel was requested.
-      setViaEmail(smsUiEnabled ? initialChannel === "email" : true);
-      setViaSms(smsUiEnabled ? initialChannel === "sms" : false);
+      setSendVia(
+        defaultPortalMessageChannelSelection(
+          true,
+          smsUiEnabled,
+          initialChannel !== "sms",
+          initialChannel === "sms",
+        ),
+      );
+      setScheduleLater(false);
+      setSendAt(defaultPortalMessageScheduleAt());
       setSending(false);
     });
   }, [open, initialChannel, smsUiEnabled]);
@@ -384,6 +408,81 @@ export function ManagerCommunicationComposeModal({
       }
     }
 
+    if (scheduleLater) {
+      const when = new Date(sendAt);
+      if (Number.isNaN(when.getTime())) {
+        showToast("Choose a valid send date and time.");
+        return;
+      }
+      if (when.getTime() < Date.now() - 60_000) {
+        showToast("Send time must be in the future.");
+        return;
+      }
+      const s = subject.trim();
+      setSending(true);
+      try {
+        const emailTargets = viaEmail ? resolveEmailTargets() : null;
+        const schedulePayloads: Record<string, unknown>[] = [];
+        if (emailTargets) {
+          for (const category of emailTargets.broadcastCategories) {
+            schedulePayloads.push({
+              subject: s,
+              body: text,
+              sendAt: when.toISOString(),
+              broadcastCategories: [category],
+              deliverViaEmail: true,
+              deliverViaSms: viaSms,
+            });
+          }
+          for (const email of emailTargets.directEmails) {
+            schedulePayloads.push({
+              subject: s,
+              body: text,
+              sendAt: when.toISOString(),
+              recipientEmail: email,
+              recipientName: email,
+              deliverViaEmail: true,
+              deliverViaSms: viaSms,
+            });
+          }
+        }
+        if (schedulePayloads.length === 0 && viaSms) {
+          const smsTargets = resolveSmsTargets();
+          const first = smsTargets[0];
+          if (!first) {
+            showToast("Add at least one recipient to schedule.");
+            return;
+          }
+          schedulePayloads.push({
+            subject: s || "Message",
+            body: text,
+            sendAt: when.toISOString(),
+            recipientEmail: `sms:${first.phone}`,
+            recipientName: first.phone,
+            deliverViaEmail: false,
+            deliverViaSms: true,
+          });
+        }
+        if (schedulePayloads.length === 0) {
+          showToast("Add at least one recipient to schedule.");
+          return;
+        }
+        const results = await Promise.all(schedulePayloads.map((payload) => postScheduledInboxMessage(payload)));
+        if (results.some((ok) => !ok)) {
+          showToast("Some messages could not be scheduled.");
+          return;
+        }
+        showToast(
+          schedulePayloads.length === 1 ? "Message scheduled." : `${schedulePayloads.length} messages scheduled.`,
+        );
+        onClose();
+        onSent?.({ email: viaEmail, sms: viaSms });
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     setSending(true);
     let emailOk = !viaEmail;
     let smsOk = !viaSms;
@@ -482,7 +581,8 @@ export function ManagerCommunicationComposeModal({
 
   const sendLabel = (() => {
     if (sending) return "Sending…";
-    if (viaEmail && viaSms) return "Send email + SMS";
+    if (scheduleLater) return "Schedule";
+    if (viaEmail && viaSms) return "Send message";
     if (viaSms) return "Send SMS";
     return "Send email";
   })();
@@ -538,10 +638,7 @@ export function ManagerCommunicationComposeModal({
 
         {selectedCategories.includes("other") ? (
           <div className="shrink-0" data-attr="communication-compose-other-wrap">
-            <label
-              className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted"
-              htmlFor="communication-compose-other"
-            >
+            <label className={portalMessageFieldLabel()} htmlFor="communication-compose-other">
               Other
             </label>
             <RecipientChipsInput
@@ -561,74 +658,41 @@ export function ManagerCommunicationComposeModal({
           </div>
         ) : null}
 
-        {viaEmail ? (
-          <div className="shrink-0">
-            <label
-              className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted"
-              htmlFor="communication-compose-subject"
-            >
-              Subject
-            </label>
-            <Input
-              id="communication-compose-subject"
-              className="mt-1"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Subject"
-              data-attr="communication-compose-subject"
-            />
-          </div>
-        ) : null}
-
-        <div className="flex min-h-0 flex-1 flex-col">
-          <label
-            className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted"
-            htmlFor="communication-compose-body"
-          >
-            Message
-          </label>
-          <Textarea
-            id="communication-compose-body"
-            className="mt-1 max-h-[min(28dvh,10.5rem)] min-h-[5.5rem] resize-none overflow-y-auto overscroll-contain"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your message…"
-            maxLength={viaSms ? 1600 : undefined}
-            data-attr="communication-compose-body"
-          />
-          {viaSms ? (
-            <span className="mt-1 block shrink-0 text-xs text-muted">{body.trim().length}/1600</span>
-          ) : null}
-        </div>
+        <PortalMessageSubjectField
+          value={subject}
+          onChange={setSubject}
+          dataAttr="communication-compose-subject"
+        />
 
         {smsUiEnabled ? (
-        <div className="shrink-0 border-t border-border pt-2.5">
-          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Send via</p>
-          <div className={PORTAL_TOOLBAR_GROUP} role="group" aria-label="Send platform">
-            <button
-              type="button"
-              className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaEmail ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-              aria-pressed={viaEmail}
-              data-attr="communication-compose-via-email"
-              onClick={() => setViaEmail((v) => !v)}
-            >
-              Email
-            </button>
-            <button
-              type="button"
-              className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${viaSms ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-              aria-pressed={viaSms}
-              data-attr="communication-compose-via-sms"
-              onClick={() => setViaSms((v) => !v)}
-            >
-              SMS
-            </button>
-          </div>
-          <p className="mt-1.5 text-xs text-muted">
-            Pick one or both. SMS uses your work number; recipients need a phone on file or under Other.
-          </p>
-        </div>
+          <PortalMessageSendViaField
+            selected={sendVia}
+            onChange={setSendVia}
+            emailAvailable
+            smsAvailable={smsUiEnabled}
+            footerNote="SMS uses your work number; recipients need a phone on file or under Other."
+            dataAttr="communication-compose-send-via"
+          />
         ) : null}
+
+        <PortalMessageBodyField
+          value={body}
+          onChange={setBody}
+          placeholder="Write your message…"
+          minHeightClass="max-h-[min(28dvh,10.5rem)] min-h-[5.5rem]"
+          maxLength={viaSms ? 1600 : undefined}
+          showCharCount={viaSms}
+          dataAttr="communication-compose-body"
+        />
+
+        <PortalMessageScheduleFields
+          scheduleLater={scheduleLater}
+          onScheduleLaterChange={setScheduleLater}
+          sendAt={sendAt}
+          onSendAtChange={setSendAt}
+          scheduleDataAttr="communication-compose-schedule-later"
+          sendAtDataAttr="communication-compose-schedule-at"
+        />
       </div>
     </Modal>
   );

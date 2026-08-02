@@ -35,7 +35,7 @@ export function ManagerPipelineLeaseEditModal({
   const [baselineHtml, setBaselineHtml] = useState("");
   const assistantContext = useMemo(() => buildLeasePacketEditAssistantContext(activeRow), [activeRow]);
   const [conversationInstance, setConversationInstance] = useState(0);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const editableHtml = leaseDocumentHtmlForSectionEdit(activeRow);
@@ -47,7 +47,7 @@ export function ManagerPipelineLeaseEditModal({
     setDraftHtml(html);
     setBaselineHtml(html);
     setConversationInstance((n) => n + 1);
-    setChatOpen(true);
+    setChatOpen(false);
     setActiveSectionId(null);
   }, [open, row.id, row]);
 
@@ -86,9 +86,9 @@ export function ManagerPipelineLeaseEditModal({
       assistantStrip={false}
       scrollableContent={false}
       dense
-      panelClassName="max-w-6xl w-full"
+      panelClassName="max-w-6xl w-full max-h-[min(92dvh,56rem)]"
     >
-      <div className="flex max-h-[min(72vh,42rem)] min-h-[min(50vh,24rem)] flex-col gap-3">
+      <div className="flex h-[min(82dvh,48rem)] max-h-[min(82dvh,48rem)] flex-col gap-2">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {editableHtml && draftHtml ? (
             <LeaseDocumentDirectEditor
@@ -113,7 +113,7 @@ export function ManagerPipelineLeaseEditModal({
             <div
               className={cn(
                 "flex w-full shrink-0 flex-col",
-                chatOpen ? "min-h-[11.5rem] max-h-[min(34vh,16rem)]" : "",
+                chatOpen ? "max-h-[min(28vh,13rem)]" : "",
               )}
               data-attr="lease-edit-assistant"
               data-expanded={chatOpen ? "true" : "false"}

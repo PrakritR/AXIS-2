@@ -10,6 +10,7 @@ import {
   PORTAL_FILTER_PANEL_SIZE_CLASS,
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
   PORTAL_FILTER_BODY_CLASS,
+  PORTAL_FILTER_ICON_CLASS,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { cn } from "@/lib/utils";
@@ -77,19 +78,13 @@ function FilterPanelFields({
   compact?: boolean;
 }) {
   return (
-    <div className={cn("flex flex-col", compact ? "gap-2" : "min-h-0 flex-1")}>
+    <div className="flex min-h-0 flex-1 flex-col">
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
         </div>
       ) : null}
-      <div
-        className={cn(
-          compact
-            ? "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
-            : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-        )}
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="flex flex-col gap-3 max-lg:gap-2">
           {children}
           {extraModalContent}
@@ -149,8 +144,11 @@ export function PortalFilterSortSheet({
           variant="outline"
           className={cn(
             compactTrigger
-              ? cn(PORTAL_HEADER_ACTION_BTN, "whitespace-nowrap w-full max-md:min-w-0 md:w-auto")
-              : "h-9 min-w-0 w-full rounded-full text-xs font-semibold whitespace-nowrap",
+              ? cn(
+                  PORTAL_HEADER_ACTION_BTN,
+                  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-full max-md:min-w-0 md:w-auto md:min-w-[7.25rem]",
+                )
+              : "inline-flex h-9 min-w-0 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold whitespace-nowrap",
           )}
           data-attr={dataAttr}
           aria-expanded={compactTrigger ? open : undefined}
@@ -162,8 +160,10 @@ export function PortalFilterSortSheet({
             setOpen(true);
           }}
         >
-          <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
-          Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
+          <SlidersHorizontal className={PORTAL_FILTER_ICON_CLASS} strokeWidth={2} aria-hidden />
+          <span className="truncate">
+            Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
+          </span>
         </Button>
         {!isMobile && desktopPresentation === "dropdown" && open ? (
           <>
@@ -180,7 +180,7 @@ export function PortalFilterSortSheet({
               className={cn(
                 panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "portal-filter-dropdown-panel absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-visible rounded-2xl border border-border shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+                "portal-filter-dropdown-panel absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
               data-attr="portal-filter-dropdown-panel"
             >
@@ -197,7 +197,7 @@ export function PortalFilterSortSheet({
       ) : null}
       {isMobile ? (
         <VaulBottomSheet open={open} onOpenChange={setOpen} title="Filter" flushBody>
-          <div className="flex w-full flex-col overflow-hidden">{fields}</div>
+          <div className="flex h-[min(14rem,45vh)] w-full flex-col overflow-hidden">{fields}</div>
         </VaulBottomSheet>
       ) : desktopPresentation === "panel" ? (
         <Modal
@@ -208,7 +208,7 @@ export function PortalFilterSortSheet({
           panelClassName={cn(
             panelSizeClass,
             PORTAL_FILTER_PANEL_WIDTH_CLASS,
-            "portal-filter-dropdown-panel flex flex-col overflow-visible",
+            "portal-filter-dropdown-panel flex flex-col overflow-hidden bg-card",
           )}
           dense
           scrollableContent

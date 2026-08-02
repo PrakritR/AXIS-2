@@ -18,6 +18,11 @@ import {
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -130,6 +135,7 @@ export function ManagerPaymentsLedgerPanel({
   buildPaymentDetailHref,
   onEmbeddedDetailActions,
   onEmbeddedBulkActions,
+  onAddPayment,
 }: {
   rows: DemoManagerPaymentLedgerRow[];
   managerUserId: string | null;
@@ -147,6 +153,8 @@ export function ManagerPaymentsLedgerPanel({
   buildPaymentDetailHref?: (row: DemoManagerPaymentLedgerRow) => string;
   onEmbeddedDetailActions?: (actions: ReactNode | null) => void;
   onEmbeddedBulkActions?: (actions: ReactNode | null) => void;
+  /** Dashed footer row — opens the add-charge / add-payment flow. */
+  onAddPayment?: () => void;
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
@@ -595,6 +603,22 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
+  const addPaymentLabel = embeddedInResident
+    ? "Add payment"
+    : direction === "incoming"
+      ? "Add charge"
+      : "Add payment";
+  const renderAddPaymentRow = (className?: string) =>
+    onAddPayment ? (
+      <div className={className ?? PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label={addPaymentLabel}
+          icon={PORTAL_LIST_ADD_ICONS.payment}
+          onClick={onAddPayment}
+          dataAttr="payments-list-add"
+        />
+      </div>
+    ) : null;
 
   const renderStayNightsCell = (row: DemoManagerPaymentLedgerRow) => {
     if (editingRowId !== row.id || !row.householdChargeId || !isStayTotalRow(row)) return null;
@@ -1139,7 +1163,11 @@ export function ManagerPaymentsLedgerPanel({
       </PortalRecordDetailPage>
       )
     ) : !hasAnySource ? (
-      <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
+      onAddPayment ? (
+        renderAddPaymentRow(`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} pt-5 sm:pt-6`)
+      ) : (
+        <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
+      )
     ) : (
       <div className={PORTAL_LIST_PAGE_BODY}>
         {showSelection ? (
@@ -1262,6 +1290,7 @@ export function ManagerPaymentsLedgerPanel({
             </div>
           );
         })}
+        {renderAddPaymentRow()}
       </div>
     )}
     </>

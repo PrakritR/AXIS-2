@@ -30,10 +30,14 @@ export const FILTER_LIST_MAX_HEIGHT_PX = FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX;
 export const PORTAL_FILTER_PANEL_WIDTH_CLASS = "w-[min(22rem,calc(100vw-2rem))]";
 export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
 export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
-/** Single-field filter sheets — size to content instead of a tall empty modal. */
-export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} h-auto max-h-[min(72vh,24rem)]`;
+/** Compact filter dropdown — fixed height so opening a field does not resize the shell. */
+export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[14rem] min-h-[14rem] max-h-[14rem]";
+export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
 export const PORTAL_FILTER_BODY_CLASS =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2 [-webkit-overflow-scrolling:touch]";
+  "flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2";
+
+/** Shared filter trigger icon sizing (toolbar Filter buttons). */
+export const PORTAL_FILTER_ICON_CLASS = "size-3.5 shrink-0";
 
 const FILTER_TRIGGER_CLASS =
   "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
@@ -106,6 +110,7 @@ export function FilterCollapsibleSection({
   open: controlledOpen,
   onOpenChange,
   empty = false,
+  menuOptionCount,
 }: {
   label: string;
   summary: string;
@@ -118,6 +123,8 @@ export function FilterCollapsibleSection({
   onOpenChange?: (open: boolean) => void;
   /** When true, summary uses placeholder styling (nothing selected). */
   empty?: boolean;
+  /** Option count for portaled menu height (search row + capped list). */
+  menuOptionCount?: number;
 }) {
   const accordion = useContext(FilterFieldsAccordionContext);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -135,10 +142,15 @@ export function FilterCollapsibleSection({
     }
   };
 
+  const menuContentPx = fieldSelectMenuContentPx(
+    menuOptionCount ?? FILTER_LIST_VISIBLE_ROWS,
+    (menuOptionCount ?? 0) > FILTER_LIST_VISIBLE_ROWS ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+  );
+
   const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
     open,
     onOpenChange: setOpen,
-    contentPx: FILTER_MENU_CONTENT_PX,
+    contentPx: menuContentPx,
   });
 
   const menu =
@@ -146,7 +158,7 @@ export function FilterCollapsibleSection({
       <div
         id={listId}
         data-field-select-menu=""
-        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card")}
+        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex h-full min-h-0 flex-col")}
         style={{
           position: menuRect.position,
           top: menuRect.top,
@@ -182,7 +194,10 @@ export function FilterCollapsibleSection({
         >
           {summary}
         </span>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted transition-transform", open && "rotate-180")} aria-hidden />
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")}
+          aria-hidden
+        />
       </button>
       {menu && portalHost ? createPortal(menu, portalHost) : null}
     </div>
@@ -220,7 +235,7 @@ export function FilterCheckboxList({
   };
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -233,7 +248,7 @@ export function FilterCheckboxList({
         role="listbox"
         aria-multiselectable="true"
         data-attr={dataAttr}
-        className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
+        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
         style={{ touchAction: "pan-y" }}
       >
         {options.length === 0 ? (
@@ -301,7 +316,7 @@ export function FilterSingleSelectList({
   }, [options, query]);
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -313,7 +328,7 @@ export function FilterSingleSelectList({
       <div
         role="listbox"
         data-attr={dataAttr}
-        className={FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS}
+        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
         style={{ touchAction: "pan-y" }}
       >
         {visibleOptions.length === 0 ? (
@@ -378,6 +393,7 @@ export function FilterMultiSelectDropdown({
       label={label}
       summary={filterMultiSelectSummary(selected, options, allLabel)}
       empty={selected.length === 0}
+      menuOptionCount={options.length}
       dataAttr={dataAttr ? `${dataAttr}-trigger` : undefined}
     >
       <FilterCheckboxList
@@ -418,6 +434,7 @@ export function FilterSingleSelectDropdown({
       label={label}
       summary={filterSingleSelectSummary(value, options, placeholder)}
       empty={!value}
+      menuOptionCount={options.length}
       dataAttr={dataAttr ? `${dataAttr}-trigger` : undefined}
       open={sectionId ? undefined : open}
       onOpenChange={sectionId ? undefined : setOpen}

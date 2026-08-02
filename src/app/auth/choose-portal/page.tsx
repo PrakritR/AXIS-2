@@ -5,6 +5,7 @@ import { AuthBackLink, AuthPageHeader, AuthRoleStack, AuthAccountFooterLink } fr
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
+import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
@@ -147,7 +148,7 @@ function ChoosePortalForm() {
         />
       )}
 
-      <AuthAccountFooterLink href="/auth/create-account?mode=create">
+      <AuthAccountFooterLink href={GET_STARTED_PATH}>
         Add another portal type
       </AuthAccountFooterLink>
 

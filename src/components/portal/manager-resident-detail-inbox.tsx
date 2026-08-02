@@ -228,15 +228,15 @@ function ResidentDirectChatPane({
             placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a message…"}
             maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
             dataAttr="resident-direct-chat-compose"
-            channelBar={
-              smsAvailable && emailAvailable ? (
-                <InboxReplyChannelPicker
-                  viaEmail={replyViaEmail}
-                  viaSms={replyViaSms}
-                  onViaEmailChange={setReplyViaEmail}
-                  onViaSmsChange={setReplyViaSms}
-                />
-              ) : null
+            channelControl={
+              <InboxReplyChannelPicker
+                viaEmail={replyViaEmail}
+                viaSms={replyViaSms}
+                onViaEmailChange={setReplyViaEmail}
+                onViaSmsChange={setReplyViaSms}
+                emailAvailable={emailAvailable}
+                smsAvailable={smsAvailable}
+              />
             }
           />
         </>

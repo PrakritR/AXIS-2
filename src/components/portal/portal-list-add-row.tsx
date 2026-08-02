@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, FileText, Home, Megaphone, UserPlus, Users } from "lucide-react";
+import { ClipboardList, CreditCard, FileText, Home, Megaphone, UserPlus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Outer padding around dashed add rows in list panes — scales with viewport. */
@@ -61,4 +61,5 @@ export const PORTAL_LIST_ADD_ICONS = {
   lease: FileText,
   promotion: Megaphone,
   team: Users,
+  payment: CreditCard,
 } satisfies Record<string, LucideIcon>;

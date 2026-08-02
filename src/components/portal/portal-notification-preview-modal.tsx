@@ -2,15 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CheckboxMultiSelect, type CheckboxMultiSelectOption } from "@/components/ui/checkbox-multi-select";
-import { Input, Textarea } from "@/components/ui/input";
-import {
-  Modal,
-  ModalFooter,
-  MODAL_INSET_BOX_CLASS,
-  MODAL_WARNING_BOX_CLASS,
-} from "@/components/ui/modal";
+import { Modal, ModalFooter, MODAL_INSET_BOX_CLASS, MODAL_WARNING_BOX_CLASS } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
+import { portalMessageFieldLabel } from "@/components/portal/portal-message-compose-fields";
+import {
+  defaultPortalMessageChannelSelection,
+  defaultPortalMessageScheduleAt,
+  PortalMessageBodyField,
+  PortalMessagePhoneReadonly,
+  PortalMessageRecipientReadonly,
+  PortalMessageScheduleFields,
+  PortalMessageSendViaField,
+  PortalMessageSubjectField,
+  portalMessageChannelsFromSelection,
+  PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE,
+  PORTAL_MESSAGE_SEND_VIA_OPTIONS,
+} from "@/components/portal/portal-message-compose-fields";
 
 export type NotificationDeliveryChannels = {
   viaEmail: boolean;
@@ -20,35 +27,10 @@ export type NotificationDeliveryChannels = {
 export type NotificationConfirmDraft = {
   subject: string;
   body: string;
+  scheduleAt?: string;
 };
 
-export const NOTIFICATION_SEND_VIA_OPTIONS: CheckboxMultiSelectOption[] = [
-  { value: "email", label: "Email" },
-  { value: "sms", label: "SMS" },
-];
-
-function fieldLabel(className?: string) {
-  return cn("text-xs font-medium text-muted", className);
-}
-
-function channelsFromSelection(selected: string[]): NotificationDeliveryChannels {
-  return {
-    viaEmail: selected.includes("email"),
-    viaSms: selected.includes("sms"),
-  };
-}
-
-function defaultChannelSelection(
-  emailAvailable: boolean,
-  smsAvailable: boolean,
-  defaultViaEmail: boolean,
-  defaultViaSms: boolean,
-): string[] {
-  const selected: string[] = [];
-  if (emailAvailable && defaultViaEmail) selected.push("email");
-  if (smsAvailable && defaultViaSms) selected.push("sms");
-  return selected;
-}
+export const NOTIFICATION_SEND_VIA_OPTIONS = PORTAL_MESSAGE_SEND_VIA_OPTIONS;
 
 /**
  * Shared resident-message popup (payment reminders, service approve, etc.).
@@ -72,6 +54,8 @@ export function PortalNotificationPreviewModal({
   defaultViaSms = true,
   editableBody = true,
   editableSubject = true,
+  recipientPhone,
+  showSchedule = true,
   confirmLabel,
   confirmLabelWithoutMessage,
   confirmBusy = false,
@@ -98,6 +82,8 @@ export function PortalNotificationPreviewModal({
   defaultViaSms?: boolean;
   editableBody?: boolean;
   editableSubject?: boolean;
+  recipientPhone?: string;
+  showSchedule?: boolean;
   confirmLabel: string;
   confirmLabelWithoutMessage?: string;
   confirmBusy?: boolean;
@@ -112,6 +98,8 @@ export function PortalNotificationPreviewModal({
 }) {
   const [skipMessage, setSkipMessage] = useState(false);
   const [sendVia, setSendVia] = useState<string[]>([]);
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [sendAt, setSendAt] = useState(defaultPortalMessageScheduleAt);
   const [draftSubject, setDraftSubject] = useState(subject);
   const [draftBody, setDraftBody] = useState(body);
 
@@ -127,7 +115,9 @@ export function PortalNotificationPreviewModal({
     if (!open) return;
     queueMicrotask(() => {
       setSkipMessage(false);
-      setSendVia(defaultChannelSelection(emailAvailable, smsAvailable, defaultViaEmail, defaultViaSms));
+      setSendVia(defaultPortalMessageChannelSelection(emailAvailable, smsAvailable, defaultViaEmail, defaultViaSms));
+      setScheduleLater(false);
+      setSendAt(defaultPortalMessageScheduleAt());
       setDraftSubject(subject);
       setDraftBody(body);
     });
@@ -155,8 +145,15 @@ export function PortalNotificationPreviewModal({
         onClick={() =>
           onConfirm(
             skipMessage,
-            channelsFromSelection(sendVia),
-            { subject: draftSubject.trim(), body: draftBody.trim() },
+            portalMessageChannelsFromSelection(sendVia),
+            {
+              subject: draftSubject.trim(),
+              body: draftBody.trim(),
+              scheduleAt:
+                showSchedule && scheduleLater && !skipMessage
+                  ? new Date(sendAt).toISOString()
+                  : undefined,
+            },
           )
         }
       >
@@ -182,86 +179,36 @@ export function PortalNotificationPreviewModal({
         ) : null}
         {intro ? <p className="text-sm leading-snug text-muted">{intro}</p> : null}
 
-        <div>
-          <p className={fieldLabel()}>To</p>
-          <p className={cn("mt-1 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-2")}>
-            {recipient}
-          </p>
-        </div>
+        <PortalMessageRecipientReadonly recipient={recipient} />
+        <PortalMessagePhoneReadonly phone={recipientPhone} />
 
-        <div>
-          <label className={fieldLabel()} htmlFor={editableSubject ? "portal-notification-subject" : undefined}>
-            Subject
-          </label>
-          {editableSubject && !skipMessage ? (
-            <Input
-              id="portal-notification-subject"
-              className="mt-1"
-              value={draftSubject}
-              onChange={(e) => setDraftSubject(e.target.value)}
-              data-attr="portal-notification-subject"
-            />
-          ) : (
-            <p
-              className={cn(
-                "mt-1 truncate text-sm",
-                MODAL_INSET_BOX_CLASS,
-                "py-2",
-                skipMessage ? "opacity-50" : "",
-              )}
-            >
-              {draftSubject}
-            </p>
-          )}
-        </div>
+        <PortalMessageSubjectField
+          value={draftSubject}
+          onChange={setDraftSubject}
+          disabled={skipMessage}
+          readOnly={!editableSubject}
+          dataAttr="portal-notification-subject"
+        />
 
         {showChannelPicker && !skipMessage ? (
-          <div>
-            <CheckboxMultiSelect
-              label="Send via"
-              labelClassName={fieldLabel()}
-              options={sendViaOptions}
-              selected={sendVia}
-              onChange={setSendVia}
-              emptyLabel="Choose channels…"
-              dataAttr="portal-notification-send-via"
-            />
-            {!channelsOk ? (
-              <p className="mt-1.5 text-xs font-medium text-red-600">Choose at least one channel.</p>
-            ) : (
-              <p className="mt-1.5 text-xs text-muted">
-                {footerNote?.trim() ||
-                  "Always saved to PropLane inbox. SMS uses your work number when enabled."}
-              </p>
-            )}
-          </div>
+          <PortalMessageSendViaField
+            selected={sendVia}
+            onChange={setSendVia}
+            emailAvailable={emailAvailable}
+            smsAvailable={smsAvailable}
+            footerNote={footerNote?.trim() || PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE}
+            dataAttr="portal-notification-send-via"
+          />
         ) : null}
 
-        <div>
-          <label className={fieldLabel()} htmlFor={editableBody ? "portal-notification-body" : undefined}>
-            Message
-          </label>
-          {editableBody && !skipMessage ? (
-            <Textarea
-              id="portal-notification-body"
-              className="mt-1 min-h-[9rem] resize-y"
-              value={draftBody}
-              onChange={(e) => setDraftBody(e.target.value)}
-              data-attr="portal-notification-body"
-              placeholder="Write a message to the resident…"
-            />
-          ) : (
-            <pre
-              className={cn(
-                MODAL_INSET_BOX_CLASS,
-                "mt-1 min-h-[9rem] overflow-y-auto whitespace-pre-wrap py-2 text-sm leading-relaxed",
-                skipMessage ? "opacity-50" : "",
-              )}
-            >
-              {draftBody}
-            </pre>
-          )}
-        </div>
+        <PortalMessageBodyField
+          value={draftBody}
+          onChange={setDraftBody}
+          disabled={skipMessage}
+          readOnly={!editableBody}
+          placeholder="Write a message to the resident…"
+          dataAttr="portal-notification-body"
+        />
 
         {showSkipMessage ? (
           <label className="flex items-start gap-2 text-sm">
@@ -274,6 +221,18 @@ export function PortalNotificationPreviewModal({
             />
             <span className="text-muted">{skipMessageLabel}</span>
           </label>
+        ) : null}
+
+        {showSchedule ? (
+          <PortalMessageScheduleFields
+            scheduleLater={scheduleLater}
+            onScheduleLaterChange={setScheduleLater}
+            sendAt={sendAt}
+            onSendAtChange={setSendAt}
+            disabled={skipMessage}
+            scheduleDataAttr="portal-notification-schedule-later"
+            sendAtDataAttr="portal-notification-schedule-at"
+          />
         ) : null}
 
         {!showChannelPicker && footerNote && !skipMessage ? (
@@ -341,15 +300,15 @@ export function PortalBulkPaymentReminderPreviewModal({
             ) : null}
             <p className="text-xs font-semibold text-foreground">{item.chargeLabel}</p>
             <div>
-              <p className={fieldLabel()}>To</p>
+              <p className={portalMessageFieldLabel()}>To</p>
               <p className={cn("mt-0.5 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-1.5")}>{item.recipient}</p>
             </div>
             <div>
-              <p className={fieldLabel()}>Subject</p>
+              <p className={portalMessageFieldLabel()}>Subject</p>
               <p className={cn("mt-0.5 truncate text-sm text-foreground", MODAL_INSET_BOX_CLASS, "py-1.5")}>{item.subject}</p>
             </div>
             <div>
-              <p className={fieldLabel()}>Message</p>
+              <p className={portalMessageFieldLabel()}>Message</p>
               <pre
                 className={cn(
                   MODAL_INSET_BOX_CLASS,
