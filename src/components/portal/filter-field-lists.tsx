@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export const FILTER_FIELD_LABEL_CLASS =
-  "mb-1.5 block px-4 text-xs font-semibold uppercase tracking-wide text-muted";
+  "mb-1 block text-xs font-semibold uppercase tracking-wide text-muted";
 
 /** One source of the "5 rows visible, scroll for the rest" number — shared with all field-select menus. */
 export const FILTER_LIST_VISIBLE_ROWS = FIELD_SELECT_MENU_VISIBLE_ITEMS;
@@ -31,9 +31,9 @@ export const PORTAL_FILTER_PANEL_WIDTH_CLASS = "w-[min(22rem,calc(100vw-2rem))]"
 export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
 export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
 /** Single-field filter sheets — size to content instead of a tall empty modal. */
-export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} h-auto max-h-[min(70vh,20rem)]`;
+export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} h-auto max-h-[min(72vh,24rem)]`;
 export const PORTAL_FILTER_BODY_CLASS =
-  "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch]";
+  "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 py-2 [-webkit-overflow-scrolling:touch]";
 
 const FILTER_TRIGGER_CLASS =
   "flex min-h-[44px] w-full items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
@@ -63,7 +63,7 @@ export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <FilterFieldsAccordionContext.Provider value={{ openId, setOpenId }}>
-      <div className="grid gap-4 max-lg:gap-3">{children}</div>
+      <div className="grid gap-3 max-lg:gap-2">{children}</div>
     </FilterFieldsAccordionContext.Provider>
   );
 }

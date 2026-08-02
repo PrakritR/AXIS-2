@@ -48,14 +48,15 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
   '[data-slot="modal-vaul-drawer"][data-state="open"]',
   '[data-slot="modal-radix-dialog"][data-state="open"]',
   '[data-slot="vaul-bottom-sheet"][data-state="open"]',
-  '[data-slot="portal-filter-dropdown-panel"]',
 ];
 
 /**
  * Portal menus into an open modal/drawer shell when present. Radix `hideOthers` and Vaul
  * mark every `document.body` sibling outside the dialog tree as aria-hidden, so body-
  * portaled menus look correct but cannot receive clicks. Body fallback keeps viewport
- * `fixed` coords for non-modal surfaces (filters, tables, etc.).
+ * `fixed` coords for non-modal surfaces (filters, tables, etc.). Filter dropdown panels
+ * intentionally use body too — their centering transform would trap `position: fixed`
+ * menus and clip option lists.
  */
 export function resolveFieldSelectMenuPortal(): HTMLElement {
   for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {

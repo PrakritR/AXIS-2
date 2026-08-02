@@ -47,9 +47,10 @@ function FilterResetLink({ onReset }: { onReset: () => void }) {
 
 function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClose: () => void }) {
   return (
-    <>
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">Filter</p>
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <p className="text-sm font-semibold text-foreground">Filter</p>
+      <div className="flex items-center gap-3">
+        <FilterResetLink onReset={onReset} />
         <button
           type="button"
           className={MODAL_HEADER_CLOSE_CLASS}
@@ -60,10 +61,7 @@ function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClo
           <X className="h-4 w-4" strokeWidth={2.25} />
         </button>
       </div>
-      <div className="flex shrink-0 justify-end border-b border-border px-4 py-2">
-        <FilterResetLink onReset={onReset} />
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -79,9 +77,9 @@ function FilterPanelFields({
   compact?: boolean;
 }) {
   return (
-    <div className={cn("flex flex-col", compact ? "gap-3" : "min-h-0 flex-1")}>
+    <div className={cn("flex flex-col", compact ? "gap-2" : "min-h-0 flex-1")}>
       {!compact ? (
-        <div className="flex shrink-0 justify-end px-4 pb-2">
+        <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
         </div>
       ) : null}
@@ -92,7 +90,7 @@ function FilterPanelFields({
             : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
         )}
       >
-        <div className="flex flex-col gap-4 max-lg:gap-0">
+        <div className="flex flex-col gap-3 max-lg:gap-2">
           {children}
           {extraModalContent}
         </div>
@@ -141,8 +139,8 @@ export function PortalFilterSortSheet({
     <>
       <div
         className={cn(
-          "relative flex min-w-0",
-          compactTrigger ? "shrink-0 max-md:flex-1 md:flex-initial" : "flex-1 md:hidden",
+          "relative inline-flex w-fit min-w-0 max-w-full",
+          compactTrigger ? "shrink-0 max-md:flex-1 max-md:w-full md:flex-initial" : "flex-1 md:hidden",
           className,
         )}
       >
@@ -182,7 +180,7 @@ export function PortalFilterSortSheet({
               className={cn(
                 panelSizeClass,
                 PORTAL_FILTER_PANEL_WIDTH_CLASS,
-                "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 flex -translate-x-1/2 flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+                "absolute left-1/2 top-[calc(100%+0.5rem)] z-50 -ml-[min(11rem,calc(50vw-1rem))] flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
               )}
               data-attr="portal-filter-dropdown-panel"
             >
