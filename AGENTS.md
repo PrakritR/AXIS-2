@@ -382,7 +382,7 @@ Before writing mock copy, open the real component and copy its labels:
 
 | Mock | Source of truth |
 | --- | --- |
-| Applications panel | `manager-applications.tsx` — tabs Pending / Approved / Rejected, badges from `applicationStatusPill` (New / Screening / Screened / Flagged / In progress), row actions Approve / Reject / Send reminder / Delete |
+| Applications panel | `manager-applications.tsx` — tabs Incomplete / Pending / Approved / Rejected, badges from `applicationStatusPill` (New / Screening / Screened / Flagged / Incomplete / Withdrawn), row actions Approve / Reject / Send reminder / Delete |
 | Lease task rows | `manager-leases.tsx` — Manager review / Resident signature pending / Manager signature pending / Signed |
 | Section names in task rows | `src/lib/portals/pro.ts` (Leases, Payments, Services → Work orders / Vendors, Communication) |
 
