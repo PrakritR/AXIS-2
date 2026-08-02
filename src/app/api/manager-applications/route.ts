@@ -54,9 +54,6 @@ function idVariants(id: string): string[] {
   ];
 }
 
-/** Stage stored on a draft snapshot; matched case-insensitively via `ilike`. */
-const DRAFT_STAGE = "in progress";
-
 /**
  * Persist a draft (in-progress) snapshot without ever walking a submitted
  * application backwards.

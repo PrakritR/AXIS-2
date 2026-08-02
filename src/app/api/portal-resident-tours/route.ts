@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 /** Scoped tour list for the signed-in resident — linked inquiry ids only. */
 export async function GET() {
   try {
-    const { user, profile } = await getEffectiveSessionForPortal("resident");
+    const { user } = await getEffectiveSessionForPortal("resident");
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const ctx = await getPortalAccessContext();
     const preview = await getAdminPreviewFromCookies();

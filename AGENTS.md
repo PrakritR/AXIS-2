@@ -300,6 +300,12 @@ the modal targets one tour flow. Rules baked into the modal +
 - The email builder (`lead-invite-email.ts`) takes an optional `listingCount`;
   `>1` switches subject + body/html to the multi-listing "browse these N homes"
   copy instead of the single-listing summary.
+- A share goes out over **email and/or SMS** (`viaEmail` / `viaSms`; at least one,
+  else 400). SMS sends the short `buildLeadInviteSmsText` copy through
+  `sendFromManagerWorkNumber`, so it obeys the one outbound rule in
+  [`docs/agents/sms-system.md`](docs/agents/sms-system.md) — a manager with no
+  provisioned work number is refused (400), never texted from another number, and
+  the modal only offers the SMS channel once one exists.
 - The server **re-authorizes every requested id** via
   `getShareablePropertyForUser` and rejects the whole send (403) if any id is
   not owned/assigned — never silently drops one. Client sends both `propertyId`
@@ -757,17 +763,23 @@ inheriting it for a live inbox row destroys real mail. Coverage:
 
 Every portal's Communication (manager, resident, vendor, admin) is a single
 conversation list + threads, NOT the old Unopened / Opened / Sent / Trash /
-Schedule tab bar. Manager + resident use the chat two-pane
-(`manager-unified-inbox.tsx`, `ResidentUnifiedInbox` in `resident-communication.tsx`
-→ `ResidentInboxPanel`); vendor + admin reuse their existing panels driven by an
-`"all"` tabId (all non-trash conversations) plus the archive toggle. Invariants:
+Schedule tab bar. Manager, resident, and vendor use the chat two-pane
+(`ManagerUnifiedInbox` / `ResidentUnifiedInbox` / `VendorUnifiedInbox`, each
+mounting its portal's inbox panel with `suppressListPane` for the thread side);
+admin alone keeps its flat table driven by an `"all"` tabId (all non-trash
+conversations) plus the archive toggle. Invariants:
 
-- **No folder tabs.** The list shows ALL live conversations (inbox + sent); the
-  `tabId` route param is legacy and does not segregate the list. Archived
-  (trashed) conversations are reachable via a `*-inbox-archived-toggle` button,
-  and trash/restore live in the open thread — never re-add a top-level
-  Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone tabbed panels survive
-  only for the /demo path and legacy route redirects.
+- **No folder tabs.** The list shows ALL live conversations (inbox + sent).
+  Manager / resident / vendor route on
+  `/communication/{active|unread|archived}[/{threadId}]` — `PortalListControlStack`
+  destinations that scope that ONE list and deep-link the open thread, never
+  folders: `unread` filters it, `archived` is the trashed view. Admin still routes
+  `/communication/inbox/{tab}` and reaches archived through its
+  `admin-inbox-archived-toggle` button. Trash/restore live in the open thread —
+  never re-add a top-level Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone
+  tabbed panels survive only for the /demo path and legacy route redirects — on
+  those three portals every legacy `inbox` / `email` / `sms` path now folds into a
+  segment rather than resolving a tab.
 - **Scheduled messages render INLINE in the recipient's thread** as a COMPACT,
   collapsible "Scheduled · sends <when> · <subject>" card (`InboxScheduledCard`)
   that expands for the full body + Send now / Cancel send / Edit; Edit is an
