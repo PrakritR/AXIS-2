@@ -58,7 +58,6 @@ import {
   ManagerVendorsPanel,
   type ManagerVendorsPanelHandle,
 } from "@/components/portal/manager-vendors-panel";
-import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
@@ -88,7 +87,6 @@ export function ManagerAllServicesPanel({
   const tabId = useShallowTabId<FilterType>(serverTabId, SERVICES_TAB_IDS);
   const router = useRouter();
   const navigate = usePortalNavigate();
-  const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);

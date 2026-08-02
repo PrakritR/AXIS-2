@@ -2,14 +2,8 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
+import { HORIZONTAL_SCROLL_ATTR } from "@/lib/horizontal-scroll";
 import { PAGE_HEADER_COUNT_CLASS, PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
-
-const PORTAL_FOOTER_INLINE_ACTIONS_ROW = cn(
-  "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-start gap-1 pb-0.5",
-  PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-  "overscroll-x-contain scroll-px-1 sm:justify-end sm:gap-2 sm:pb-0",
-);
 
 const PORTAL_FOOTER_HEADER_ACTIONS_ROW = cn(
   "flex w-full min-w-0 shrink-0 flex-nowrap items-stretch justify-start gap-2 pb-0.5 sm:pb-0",

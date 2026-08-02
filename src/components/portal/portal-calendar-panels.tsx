@@ -3,12 +3,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input, NativeSelect, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
@@ -25,7 +19,6 @@ import {
   buildTourNotificationContext,
 } from "@/lib/tour-notifications";
 import {
-  ADMIN_AVAILABILITY_STORAGE_KEY,
   DEFAULT_EVENT_DURATION_MINUTES,
   EVENT_DURATION_PRESET_MINUTES,
   MAX_EVENT_DURATION_MINUTES,
@@ -38,12 +31,9 @@ import {
   dateSlotKey,
   deletePartnerInquiryFromServer,
   deletePlannedEventFromServer,
-  durationMinutesBetweenIso,
   endIsoForDuration,
   formatRangeLabel,
   formatAvailabilitySlotLabel,
-  getPartnerInquiryWindows,
-  readPartnerInquiries,
   readPlannedEvents,
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
@@ -54,8 +44,6 @@ import {
 import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
 import { cn } from "@/lib/utils";
 import {
-  plannedTourVisibleToViewer,
-  tourInquiryVisibleToViewer,
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
@@ -229,7 +217,6 @@ export function PortalCalendarPanels({
   scheduledTourFilter,
   coManagerAvailabilityOverlays,
   scheduleOwnerLabel,
-  availabilityHeading = "Availability",
   externalMeetings,
   onGoogleCalendarRefresh,
   readOnly = false,

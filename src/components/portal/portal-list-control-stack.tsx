@@ -15,10 +15,6 @@ import { cn } from "@/lib/utils";
  */
 export function PortalListControlStack({
   filterRow,
-  /**
-   * @deprecated Pass actions via `titleAside` on {@link ManagerPortalPageShell} (Appendix F band 1).
-   */
-  primaryAction: _primaryAction,
   destinations,
   activeDestinationId,
   destinationAriaLabel = "Section views",

@@ -9,7 +9,6 @@ import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/comp
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
 } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {

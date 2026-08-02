@@ -955,7 +955,7 @@ export const VendorInboxPanel = forwardRef<
             activeTone="primary"
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => navigate(`/vendor/communication/email/`)}
+            onChange={() => navigate(`/vendor/communication/email/`)}
           />
           <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
             <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>

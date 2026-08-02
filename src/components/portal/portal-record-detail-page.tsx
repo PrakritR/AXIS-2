@@ -8,7 +8,6 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
  * Full-page record detail (Appendix E2) — no split list pane; URL is the lease route.
  */
 export function PortalRecordDetailPage({
-  pageTitle: _pageTitle,
   title,
   subtitle,
   avatarName,

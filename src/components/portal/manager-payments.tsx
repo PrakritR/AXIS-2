@@ -87,7 +87,6 @@ function paymentFilterTouches(
   propertyFilters: string[],
   residentFilters: string[],
   listSort: PaymentListSort,
-  direction: ManagerPaymentDirection,
 ): number {
   let count = 0;
   if (propertyFilters.length > 0) count += 1;
@@ -580,7 +579,7 @@ export function ManagerPayments({
     });
   }, [mergedRows, bucket, propertyFilters, activeResidentFilters, listSort, searchQuery]);
 
-  const filterTouchCount = paymentFilterTouches(propertyFilters, residentFilters, listSort, direction);
+  const filterTouchCount = paymentFilterTouches(propertyFilters, residentFilters, listSort);
 
   const sortOptions = useMemo(
     () => [

@@ -162,7 +162,7 @@ export function ManagerUnifiedInbox({
   );
   const [smsResidents, setSmsResidents] = useState<ManagerSmsResidentConversation[]>([]);
   const [smsOpenedIds, setSmsOpenedIds] = useState<Set<string>>(() => loadSmsOpenedIds());
-  const [smsHiddenIds, setSmsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
+  const [smsHiddenIds] = useState<Set<string>>(() => loadSmsHiddenIds());
   const [internalQuery, setInternalQuery] = useState("");
   const query = onSearchQueryChange ? (searchQueryProp ?? "") : internalQuery;
   const setQuery = onSearchQueryChange ?? setInternalQuery;

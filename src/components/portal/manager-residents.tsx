@@ -13,28 +13,21 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -85,7 +78,6 @@ import {
   upsertApplicationRowToServer,
   upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
-  deleteManagerApplicationFromServer,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
@@ -142,7 +134,6 @@ import {
   runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
-  updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
@@ -160,7 +151,7 @@ import {
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
@@ -191,7 +182,6 @@ import {
   EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildExistingResidentWelcomeEmailBody,
 } from "@/lib/existing-resident-welcome-email";
-import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
@@ -287,7 +277,6 @@ function shortDateLabel(iso: string): string {
 }
 
 export function ManagerResidents({
-  tabId: _tabId = "current",
   residentId: residentIdProp,
   detailTab: detailTabProp,
   paymentId: paymentIdProp,
@@ -318,7 +307,7 @@ export function ManagerResidents({
   const [leaseTick, setLeaseTick] = useState(0);
   const [workOrderTick, setWorkOrderTick] = useState(0);
   const [srTick, setSrTick] = useState(0);
-  const [inboxTick, setInboxTick] = useState(0);
+  const [, setInboxTick] = useState(0);
   const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const residentsTab = RESIDENTS_LIST_TAB;
@@ -1145,10 +1134,6 @@ export function ManagerResidents({
     }
   }
 
-  function openResidentMessageModal() {
-    setMessageOpen(true);
-  }
-
   async function sendResidentAccountEmail(
     res: ActiveResident,
     opts?: {
@@ -1454,44 +1439,6 @@ export function ManagerResidents({
           ? "Application rejected."
           : "Moved to pending.";
     showToast(msg);
-  };
-
-  const deleteApplicationForRow = async (row: DemoApplicantRow) => {
-    if (!window.confirm(`Delete the application for ${row.name || row.email}? This cannot be undone.`)) return;
-    const email = row.email?.trim().toLowerCase();
-    const nextRows = readManagerApplicationRows().filter((candidate) => candidate.id !== row.id);
-    writeManagerApplicationRows(nextRows);
-    setHcTick((n) => n + 1);
-
-    let serverError: string | null = null;
-    if (email || row.id) {
-      try {
-        const res = await fetch("/api/portal/delete-resident-access", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, purgeData: true, applicationId: row.id }),
-        });
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        if (!res.ok) {
-          serverError = body?.error ?? "Could not delete application.";
-        }
-      } catch {
-        serverError = "Could not delete application.";
-      }
-    } else {
-      const result = await deleteManagerApplicationFromServer(row.id);
-      if (!result.ok) serverError = result.error ?? "Could not delete application.";
-    }
-
-    if (serverError) {
-      void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
-      showToast(serverError);
-      return;
-    }
-
-    showToast("Application deleted.");
-    navigate(`${portalBase}/residents/${residentsTab}`);
   };
 
   const sendApplicationCompletionReminder = async (

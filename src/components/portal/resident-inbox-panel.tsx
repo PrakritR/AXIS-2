@@ -27,7 +27,6 @@ import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 import {
-  appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
   deleteInboxThreadIds,
@@ -1434,7 +1433,7 @@ export const ResidentInboxPanel = forwardRef<
             activeTone="primary"
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => navigate(`/resident/communication/email/`)}
+            onChange={() => navigate(`/resident/communication/email/`)}
           />
           {tabId === "trash" && counts.trash > 0 ? (
             <div className={PORTAL_FILTER_ACTIONS_MOBILE}>

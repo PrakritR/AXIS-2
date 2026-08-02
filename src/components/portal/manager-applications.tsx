@@ -33,9 +33,7 @@ import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
-import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { DestinationNav } from "@/components/ui/destination-nav";

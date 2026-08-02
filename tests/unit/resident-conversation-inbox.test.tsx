@@ -3,7 +3,7 @@
 // Resident Communication matches the manager CRM layout: Active / Unread /
 // Archived segments, unified conversation list, and Archive (not Trash).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 
 const EMAIL_INBOX = {
   id: "res-thr-1000000001",
