@@ -33,6 +33,12 @@ export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS
 /** Compact filter dropdown — fixed height so opening a field does not resize the shell. */
 export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[14rem] min-h-[14rem] max-h-[14rem]";
 export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
+/** Tall mobile sheet for browse-home filters (AI + manual fields). */
+export const PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS =
+  "h-[min(82dvh,42rem)] min-h-[min(70dvh,34rem)]";
+
+export const PORTAL_FILTER_BROWSE_PANEL_CLASS =
+  "w-[min(28rem,calc(100vw-2rem))] h-[min(36rem,82vh)] min-h-[28rem]";
 export const PORTAL_FILTER_BODY_CLASS =
   "flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2";
 

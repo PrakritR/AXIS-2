@@ -30,9 +30,12 @@ import {
   appendReplyToInboxThread,
   collapsePersonInboxThreads,
   resolveCollapsedInboxThread,
+  inboxThreadCounterpartyEmail,
   type InboxAiDraft,
   type InboxThreadMessage,
+  type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
+import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
@@ -131,6 +134,10 @@ export type ManagerInboxHandle = {
   openCompose: () => void;
   deleteAllTrash: () => void;
   reloadInbox: () => void;
+  reloadInboxAsync: () => Promise<InboxThread[]>;
+  findThreadForRecipient: (email: string) => string | null;
+  stageOptimisticSentThread: (thread: PersistedInboxThread) => void;
+  clearPendingSend: (threadId: string) => void;
 };
 
 export const ManagerInbox = forwardRef<
@@ -205,6 +212,11 @@ export const ManagerInbox = forwardRef<
   }, [manualScheduledMessages, scheduledMessages]);
   const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
+  const localRef = useRef(local);
+  useEffect(() => {
+    localRef.current = local;
+  }, [local]);
+  const [pendingSendingThreadIds, setPendingSendingThreadIds] = useState<Set<string>>(() => new Set());
   const [inboxSynced, setInboxSynced] = useState(false);
   const persistInboxRef = useRef(true);
   const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
@@ -500,6 +512,36 @@ export const ManagerInbox = forwardRef<
     });
   }, []);
 
+  const reloadInboxAsync = useCallback(async () => {
+    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+    const rows = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+    setLocal(rows as InboxThread[]);
+    return rows as InboxThread[];
+  }, []);
+
+  const findThreadForRecipient = useCallback((email: string) => {
+    const norm = email.trim().toLowerCase();
+    const collapsed = collapsePersonInboxThreads(localRef.current, { mergeFolders: true });
+    return collapsed.find((t) => inboxThreadCounterpartyEmail(t) === norm)?.id ?? null;
+  }, []);
+
+  const stageOptimisticSentThread = useCallback((thread: PersistedInboxThread) => {
+    setPendingSendingThreadIds((prev) => new Set(prev).add(thread.id));
+    const next = [thread as InboxThread, ...localRef.current];
+    persistInboxRef.current = false;
+    setLocal(next);
+    setExpandedId(thread.id);
+  }, [setExpandedId]);
+
+  const clearPendingSend = useCallback((threadId: string) => {
+    setPendingSendingThreadIds((prev) => {
+      if (!prev.has(threadId)) return prev;
+      const next = new Set(prev);
+      next.delete(threadId);
+      return next;
+    });
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -508,8 +550,20 @@ export const ManagerInbox = forwardRef<
       },
       deleteAllTrash,
       reloadInbox,
+      reloadInboxAsync,
+      findThreadForRecipient,
+      stageOptimisticSentThread,
+      clearPendingSend,
     }),
-    [deleteAllTrash, reloadInbox, suppressCompose],
+    [
+      clearPendingSend,
+      deleteAllTrash,
+      findThreadForRecipient,
+      reloadInbox,
+      reloadInboxAsync,
+      stageOptimisticSentThread,
+      suppressCompose,
+    ],
   );
 
   const handleReply = useCallback(
@@ -528,11 +582,14 @@ export const ManagerInbox = forwardRef<
       let smsOk = !channels.sms;
 
       if (channels.email) {
+        const replyId = `reply-${Date.now().toString(36)}`;
         const reply: InboxThreadMessage = {
-          id: `reply-${Date.now().toString(36)}`,
+          id: replyId,
           from: "Property manager",
           body: text,
           at: new Date().toLocaleString(),
+          outbound: true,
+          delivery: "sending",
         };
         const updated = { ...appendReplyToInboxThread(thread, reply), aiDraft: undefined };
         const next = local.map((t) => (t.id === thread.id ? updated : t));
@@ -556,15 +613,18 @@ export const ManagerInbox = forwardRef<
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
         emailOk = res.ok && data.ok === true;
         if (emailOk) {
-          const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+          const delivered = markThreadMessageDelivery(updated, replyId, undefined);
+          const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [delivered], next.map((t) => (t.id === thread.id ? delivered : t)));
           persistInboxRef.current = true;
           if (!ok) {
             setLocal(local);
             throw new Error("persist failed");
           }
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? delivered : t)));
         } else {
+          const failed = markThreadMessageDelivery(updated, replyId, "failed");
           persistInboxRef.current = true;
-          setLocal(local);
+          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
           throw new Error("email failed");
         }
       }
@@ -673,6 +733,22 @@ export const ManagerInbox = forwardRef<
             return;
           }
 
+          const directEmails = p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean);
+          const primaryRecipient =
+            directEmails.length === 1 && p.broadcastCategories.length === 0 ? directEmails[0]! : null;
+          let optimisticId: string | null = null;
+
+          if (primaryRecipient) {
+            const optimistic = buildOptimisticSentThread({
+              recipientEmail: primaryRecipient,
+              subject: p.subject.trim(),
+              body: p.body.trim(),
+              senderLabel: p.senderName,
+            });
+            optimisticId = optimistic.id;
+            stageOptimisticSentThread(optimistic);
+          }
+
           const res = await fetch("/api/portal/send-inbox-message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -692,12 +768,13 @@ export const ManagerInbox = forwardRef<
           });
           const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
           if (!res.ok || !data.ok) {
+            if (optimisticId) clearPendingSend(optimisticId);
             showToast("Message could not be sent.");
             return;
           }
-          invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
-          const rows = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-          setLocal(rows as InboxThread[]);
+          if (optimisticId) clearPendingSend(optimisticId);
+          await reloadInboxAsync();
+          const threadId = primaryRecipient ? findThreadForRecipient(primaryRecipient) : null;
           showToast(
             p.includesAxisAdmin && !p.includesDirectoryRecipients
               ? "Message sent to PropLane admin."
@@ -705,13 +782,28 @@ export const ManagerInbox = forwardRef<
                 ? "Message sent via inbox, email, and text."
                 : "Message sent.",
           );
-          navigate(`${inboxBase}/sent`);
+          if (threadId) {
+            setExpandedId(threadId);
+          }
+          if (!embeddedInCommunication) {
+            navigate(`${inboxBase}/sent`);
+          }
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [navigate, showToast, inboxBase],
+    [
+      clearPendingSend,
+      embeddedInCommunication,
+      findThreadForRecipient,
+      inboxBase,
+      navigate,
+      reloadInboxAsync,
+      setExpandedId,
+      showToast,
+      stageOptimisticSentThread,
+    ],
   );
 
   // ---- Open conversation (right pane) ----------------------------------
@@ -746,24 +838,28 @@ export const ManagerInbox = forwardRef<
 
   const activeBubbles = useMemo((): InboxBubbleMessage[] => {
     if (!activeThread) return [];
+    const pendingRoot = pendingSendingThreadIds.has(activeThread.id);
     return inboxThreadMessages(activeThread).map((m, i) => {
       // Root direction follows the folder (a Sent thread we authored). Appended
       // messages default to outbound (a reply we sent), but a new message
       // delivered into this person-thread carries an explicit direction so an
       // inbound turn on our inbox copy renders inbound rather than as our reply.
       const outbound = m.outbound ?? (i === 0 ? activeFolder === "sent" : true);
+      const delivery =
+        m.delivery ?? (pendingRoot && i === 0 && outbound ? ("sending" as const) : undefined);
       return {
         id: m.id,
         author: m.from,
         body: m.body,
         at: m.at,
         direction: outbound ? "outbound" : "inbound",
+        delivery,
         // Email is the only live channel today; the tag makes the thread
         // omnichannel-ready so SMS/WhatsApp/Gmail can join the same person-thread.
         channel: "email",
       } satisfies InboxBubbleMessage;
     });
-  }, [activeThread, activeFolder]);
+  }, [activeThread, activeFolder, pendingSendingThreadIds]);
 
   // ---- Scheduled / automated messages, INLINE in the person's thread --------
   // The old standalone Schedule table is gone; upcoming messages to this person

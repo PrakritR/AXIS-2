@@ -360,10 +360,10 @@ export function ResidentHousingChat({
   }
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{title}</p>
-      <p className="mt-1 text-sm text-muted">{subtitle}</p>
-      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+      <p className="mt-1 text-sm leading-relaxed text-muted">{subtitle}</p>
+      <form onSubmit={handleSubmit} className="mt-3 flex min-w-0 max-w-full flex-col gap-2">
         <input
           type="text"
           value={query}
@@ -371,14 +371,14 @@ export function ResidentHousingChat({
           placeholder={placeholder}
           aria-label="Describe the home you're looking for"
           data-attr="resident-search-ai-chat-input"
-          className={`${inputCls} flex-1`}
+          className={`${inputCls} min-w-0 w-full flex-1`}
         />
         <Button
           type="submit"
           variant="primary"
           disabled={status === "loading" || !query.trim()}
           data-attr="resident-search-ai-chat-submit"
-          className="shrink-0"
+          className="w-full shrink-0 sm:w-auto"
         >
           {status === "loading" ? "Searching…" : "Search"}
         </Button>

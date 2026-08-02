@@ -15,6 +15,8 @@ export type InboxThreadMessage = {
    * message is the owner's reply.
    */
   outbound?: boolean;
+  /** Optimistic send lifecycle — cleared after server sync. */
+  delivery?: "sending" | "sent" | "failed";
 };
 
 /**

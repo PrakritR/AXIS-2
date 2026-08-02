@@ -2,6 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useInboxThreadScroll } from "@/hooks/use-inbox-thread-scroll";
+import {
+  buildInboxMessageTimeline,
+  inboxBubbleClusterRadius,
+  type InboxBubbleClusterPosition,
+} from "@/lib/inbox-message-timeline";
 import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
@@ -548,6 +553,8 @@ export type InboxBubbleMessage = {
   direction: InboxMessageDirection;
   /** Optional delivery/status caption under the bubble (e.g. "Scheduled"). */
   status?: string;
+  /** Optimistic send lifecycle for outbound bubbles. */
+  delivery?: "sending" | "sent" | "failed";
   /** Channel this message belongs to. Defaults to "email" when omitted. */
   channel?: InboxChannel;
 };
@@ -737,37 +744,89 @@ export function InboxListSegmentTabs({
 export function InboxBubble({
   message,
   showAuthor = false,
+  cluster = "single",
+  showMeta = true,
+  showChannel = false,
 }: {
   message: InboxBubbleMessage;
   showAuthor?: boolean;
+  cluster?: InboxBubbleClusterPosition;
+  showMeta?: boolean;
+  showChannel?: boolean;
 }) {
   const outbound = message.direction === "outbound";
   const channel = message.channel ?? "email";
+  const sending = message.delivery === "sending";
+  const failed = message.delivery === "failed";
+  const radius = outbound
+    ? inboxBubbleClusterRadius(true, cluster)
+    : inboxBubbleClusterRadius(false, cluster);
+
+  const metaCaption = (() => {
+    if (failed) return "Couldn't send";
+    if (sending) return "Sending…";
+    if (message.status) return message.status;
+    return message.at;
+  })();
+
   return (
-    <div className={`flex flex-col ${outbound ? "items-end" : "items-start"}`}>
-      {showAuthor && !outbound ? (
+    <div className={`flex max-w-full flex-col ${outbound ? "items-end" : "items-start"}`}>
+      {showAuthor && !outbound && cluster === "single" ? (
         <span className="mb-1 px-1 text-[11px] font-medium text-muted">{message.author}</span>
       ) : null}
       <div
-        className={`portal-inbox-inbound-bubble max-w-[min(92%,32rem)] px-3 py-2 text-sm leading-relaxed max-md:max-w-[96%] max-md:px-3 max-md:py-1.5 max-md:text-[13px] ${
+        className={`portal-inbox-inbound-bubble max-w-[min(88%,20rem)] px-3.5 py-2 text-[15px] leading-relaxed sm:text-sm ${radius} ${
           outbound
-            ? "rounded-2xl rounded-br-md text-primary-foreground"
-            : "rounded-2xl rounded-bl-md border border-border bg-secondary text-foreground"
-        }`}
+            ? "text-primary-foreground shadow-[0_1px_2px_rgba(15,23,42,0.12)]"
+            : cluster === "single"
+              ? "border border-border bg-secondary text-foreground"
+              : "border border-border bg-secondary text-foreground"
+        } ${sending ? "opacity-80" : ""} ${failed ? "ring-2 ring-rose-400/50" : ""}`}
         style={outbound ? { background: "var(--btn-primary)" } : undefined}
       >
-        {/* Full text, always — pre-wrap + break-words + overflow-wrap so a long
-            reply or a URL wraps inside the bubble instead of being clipped. */}
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
       </div>
-      <span className={`mt-1 flex items-center gap-1.5 px-1 text-[11px] text-muted ${outbound ? "flex-row-reverse" : ""}`}>
-        <InboxChannelTag channel={channel} />
-        <span>
-          {message.at}
-          {message.status ? ` · ${message.status}` : ""}
+      {showMeta ? (
+        <span
+          className={`mt-1 flex max-w-full items-center gap-1.5 px-1 text-[11px] text-muted ${
+            outbound ? "flex-row-reverse" : ""
+          }`}
+        >
+          {showChannel ? <InboxChannelTag channel={channel} /> : null}
+          <span className={sending ? "italic" : failed ? "font-medium text-rose-600" : ""}>{metaCaption}</span>
         </span>
-      </span>
+      ) : null}
     </div>
+  );
+}
+
+/** Instagram-style clustered message list for an open thread. */
+export function InboxMessageTimeline({
+  messages,
+  showAuthors = false,
+}: {
+  messages: InboxBubbleMessage[];
+  showAuthors?: boolean;
+}) {
+  const items = buildInboxMessageTimeline(messages);
+  return (
+    <>
+      {items.map((item) => (
+        <div
+          key={item.key}
+          className={item.clusterStart ? "mt-3 first:mt-0" : "mt-0.5"}
+          data-inbox-cluster-start={item.clusterStart ? "true" : "false"}
+        >
+          <InboxBubble
+            message={item.message}
+            showAuthor={showAuthors}
+            cluster={item.cluster}
+            showMeta={item.showMeta}
+            showChannel={item.showChannel}
+          />
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -1538,11 +1597,9 @@ export function InboxThreadView({
           </div>
         ) : (
           <div
-            className={`flex w-full min-h-min flex-col gap-2 md:gap-3 ${pageScroll ? "" : "flex-grow justify-end"}`}
+            className={`flex w-full min-h-min flex-col md:gap-0 ${pageScroll ? "" : "flex-grow justify-end"}`}
           >
-            {messages.map((m) => (
-              <InboxBubble key={m.id} message={m} showAuthor={showAuthors} />
-            ))}
+            <InboxMessageTimeline messages={messages} showAuthors={showAuthors} />
             {afterMessages}
             <div ref={endRef} />
           </div>

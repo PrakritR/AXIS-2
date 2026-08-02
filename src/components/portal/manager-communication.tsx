@@ -153,18 +153,24 @@ export function ManagerCommunication({
   );
 
   const handleComposeSent = useCallback(
-    (channels: { email: boolean; sms: boolean }) => {
-      // No folder tabs to navigate to anymore — the new message appends to the
-      // recipient's conversation in the unified list. Just refresh the data.
-      if (channels.email) {
-        inboxRef.current?.reloadInbox?.();
+    async (result: { email: boolean; sms: boolean; primaryRecipientEmail?: string }) => {
+      if (result.email) {
+        if (result.primaryRecipientEmail) {
+          await inboxRef.current?.reloadInboxAsync?.();
+          const threadId = inboxRef.current?.findThreadForRecipient?.(result.primaryRecipientEmail);
+          if (threadId) {
+            navigate(`${commBase}/active/${threadId}`);
+          }
+        } else {
+          inboxRef.current?.reloadInbox?.();
+        }
       }
-      if (channels.sms) {
+      if (result.sms) {
         smsRef.current?.reload?.();
         void loadSmsRecipients();
       }
     },
-    [loadSmsRecipients],
+    [commBase, loadSmsRecipients, navigate],
   );
 
   const filterTouchCount = communicationFilterTouches(filters, listSort);
@@ -321,6 +327,8 @@ export function ManagerCommunication({
         liveContacts={liveContacts}
         smsRecipients={smsRecipients}
         smsUiEnabled={smsUiEnabled}
+        onStageOptimistic={(thread) => inboxRef.current?.stageOptimisticSentThread(thread)}
+        onClearOptimistic={(threadId) => inboxRef.current?.clearPendingSend(threadId)}
         onSent={handleComposeSent}
       />
 

@@ -7,9 +7,12 @@ import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components
 import {
   defaultPortalMessageChannelSelection,
   defaultPortalMessageScheduleAt,
+  PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS,
   PortalMessageBodyField,
+  PortalMessageComposeModalBody,
   PortalMessageScheduleFields,
-  PortalMessageSendViaField,
+  PortalMessageSendViaDropdown,
   PortalMessageSubjectField,
   portalMessageChannelsFromSelection,
 } from "@/components/portal/portal-message-compose-fields";
@@ -355,6 +358,9 @@ export function ScopedInboxComposeModal({
       open={open}
       title={title}
       onClose={onClose}
+      dense
+      scrollableContent={false}
+      panelClassName={PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS}
       footer={
         <ModalFooter>
           <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
@@ -363,10 +369,11 @@ export function ScopedInboxComposeModal({
         </ModalFooter>
       }
     >
-      <div className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <PortalMessageComposeModalBody>
+        <div className="flex min-w-0 flex-col gap-3">
           <CheckboxMultiSelect
             label="To"
+            labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
             options={sectionOptions}
             selected={selectedCategories}
             onChange={onCategoriesChange}
@@ -374,6 +381,7 @@ export function ScopedInboxComposeModal({
           />
           <CheckboxMultiSelect
             label="Which people"
+            labelClassName={PORTAL_MESSAGE_COMPOSE_SELECT_LABEL_CLASS}
             groups={personGroups}
             selected={selectedKeys}
             onChange={onPeopleChange}
@@ -388,17 +396,15 @@ export function ScopedInboxComposeModal({
 
         <PortalMessageSubjectField value={subject} onChange={setSubject} />
 
-        {showSmsOption ? (
-          <PortalMessageSendViaField
-            selected={sendVia}
-            onChange={setSendVia}
-            emailAvailable
-            smsAvailable
-            dataAttr="inbox-compose-send-via"
-          />
-        ) : null}
+        <PortalMessageSendViaDropdown
+          selected={sendVia}
+          onChange={setSendVia}
+          emailAvailable
+          smsAvailable={showSmsOption}
+          dataAttr="inbox-compose-send-via"
+        />
 
-        <PortalMessageBodyField value={body} onChange={setBody} minHeightClass="min-h-[120px]" />
+        <PortalMessageBodyField value={body} onChange={setBody} minHeightClass="min-h-[7rem]" />
 
         <PortalMessageScheduleFields
           scheduleLater={scheduleLater}
@@ -406,7 +412,7 @@ export function ScopedInboxComposeModal({
           sendAt={sendAt}
           onSendAtChange={setSendAt}
         />
-      </div>
+      </PortalMessageComposeModalBody>
     </Modal>
   );
 }
