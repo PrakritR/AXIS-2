@@ -510,25 +510,10 @@ export function ResidentDocumentsPanel({
   tabId,
   basePath = "/resident",
   tabs,
-  applicationOnly = false,
 }: {
   tabId: string;
   basePath?: string;
   tabs: ReadonlyArray<{ id: string; label: string }>;
-  /**
-   * Free-tier households: Documents is a paid resident section, but the
-   * Application tab is exempt so an approved resident can always read their OWN
-   * submitted application (`applications` is a RESIDENT_FREE_TIER_SECTION_ID —
-   * moving that content under Documents must not take it away from them).
-   *
-   * The exemption is the TAB, not the section, so the rest of the chrome has to
-   * go with it: the other tab links each resolve to `ResidentFreeTierFeatureNotice`,
-   * and `onDocumentAdded` navigates to `documents/other` on success — which
-   * would drop a free-tier resident onto that notice with the file they just
-   * uploaded unreachable. Resolved server-side in render-portal-section.tsx;
-   * never re-derive the manager's tier here.
-   */
-  applicationOnly?: boolean;
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
@@ -588,47 +573,41 @@ export function ResidentDocumentsPanel({
       title="Documents"
       hideTitleOnMobileNav
       titleAside={
-        applicationOnly ? null : (
-          <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
-            <Button
-              type="button"
-              className={PORTAL_HEADER_ACTION_BTN}
-              data-attr="resident-documents-add"
-              onClick={openAdd}
-            >
-              Add
-            </Button>
-          </PortalSectionActionRow>
-        )
-      }
-      compactFilterRow
-    >
-      {applicationOnly ? null : (
-        <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-documents-mobile-actions">
+        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
           <Button
             type="button"
-            className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+            className={PORTAL_HEADER_ACTION_BTN}
             data-attr="resident-documents-add"
             onClick={openAdd}
           >
             Add
           </Button>
-        </div>
-      )}
-      {applicationOnly ? null : (
-        <PortalListControlStack
-          className="mb-3 max-lg:mb-4"
-          destinationInset
-          destinations={tabItems.map((tab) => ({
-            id: tab.id,
-            label: tab.label,
-            href: tab.href,
-            dataAttr: `resident-documents-tab-${tab.id}`,
-          }))}
-          activeDestinationId={tabId}
-          destinationAriaLabel="Documents"
-        />
-      )}
+        </PortalSectionActionRow>
+      }
+      compactFilterRow
+    >
+      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-documents-mobile-actions">
+        <Button
+          type="button"
+          className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="resident-documents-add"
+          onClick={openAdd}
+        >
+          Add
+        </Button>
+      </div>
+      <PortalListControlStack
+        className="mb-3 max-lg:mb-4"
+        destinationInset
+        destinations={tabItems.map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          href: tab.href,
+          dataAttr: `resident-documents-tab-${tab.id}`,
+        }))}
+        activeDestinationId={tabId}
+        destinationAriaLabel="Documents"
+      />
       {tabId === "application" ? <ApplicationDocumentsTable /> : null}
 
       {tabId === "lease" ? <SignedLeaseDocumentsTable /> : null}

@@ -61,21 +61,23 @@ function desktopNav() {
 afterEach(cleanup);
 
 describe("inert locked nav rows expose their reason on hover", () => {
-  it("titles the post-approval Application row with where the document went", () => {
-    render(<PortalSidebar definition={RESIDENT_DEFINITION} residentNavStage="post_approval_pre_lease" />);
-
-    const row = desktopNav().getByRole("link", { name: "Application: Approved — now read-only in Documents" });
-    expect(row.tagName.toLowerCase()).toBe("span");
-    expect(row.getAttribute("aria-disabled")).toBe("true");
-    // The tooltip must carry the reason, not just the bare section label.
-    expect(row.getAttribute("title")).toBe("Application: Approved — now read-only in Documents");
-  });
-
-  it("titles every other resident lock reason too, not just that one", () => {
+  it("puts the lock reason in the tooltip, not only in aria-label", () => {
     render(<PortalSidebar definition={RESIDENT_DEFINITION} residentNavStage="pre_approval" />);
 
-    const row = desktopNav().getByRole("link", { name: "Lease: Available after your application is approved" });
-    expect(row.getAttribute("title")).toBe("Lease: Available after your application is approved");
+    const reason = "Lease: Available after you submit an application";
+    const row = desktopNav().getByRole("link", { name: reason });
+    expect(row.tagName.toLowerCase()).toBe("span");
+    expect(row.getAttribute("aria-disabled")).toBe("true");
+    // Without `title` a sighted resident taps a dead row and learns nothing.
+    expect(row.getAttribute("title")).toBe(reason);
+  });
+
+  it("carries whatever reason the stage produces, not one hard-coded string", () => {
+    render(<PortalSidebar definition={RESIDENT_DEFINITION} residentNavStage="application_submitted" />);
+
+    const row = desktopNav().getByRole("link", { name: /^Lease: / });
+    expect(row.getAttribute("title")).toBe(row.getAttribute("aria-label"));
+    expect(row.getAttribute("title")).toMatch(/Available after/);
   });
 
   it("leaves unlocked rows as ordinary links with no lock tooltip", () => {

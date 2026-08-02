@@ -36,6 +36,7 @@ const residentAccess = {
   leaseAccessUnlocked: false,
   leaseSigned: false,
   hasSubmittedApplication: false,
+  hasCompletedApplicationSubmission: false,
   hasTourLink: false,
 };
 
@@ -97,6 +98,7 @@ describe("resident legacy section redirects resolve before the stage guard", () 
       leaseAccessUnlocked: false,
       leaseSigned: false,
       hasSubmittedApplication: true,
+      hasCompletedApplicationSubmission: true,
       hasTourLink: false,
     });
   });
@@ -136,7 +138,7 @@ describe("resident legacy section redirects resolve before the stage guard", () 
   it("still resolves the legacy aliases for a brand-new pre-application resident", async () => {
     // The stage guard is strictest here (nothing but tour/applications/dashboard
     // /communication is unlocked), so this is the case that regressed first.
-    Object.assign(residentAccess, { hasSubmittedApplication: false });
+    Object.assign(residentAccess, { hasSubmittedApplication: false, hasCompletedApplicationSubmission: false });
     expect(await redirectTargetFor("inbox", ["unopened"])).toBe("/resident/communication/email/unopened");
     expect(await redirectTargetFor("bugs-feedback")).toBe("/resident/profile");
     expect(await redirectTargetFor("financials", ["summary"])).toBe("/resident/payments");
@@ -145,38 +147,7 @@ describe("resident legacy section redirects resolve before the stage guard", () 
   it("still guards a real section the resident's stage has not unlocked", async () => {
     // The guard is not weakened — only reordered. `/resident/lease` is not a
     // legacy alias, so a pre-approval resident is still sent home.
-    Object.assign(residentAccess, { hasSubmittedApplication: false });
+    Object.assign(residentAccess, { hasSubmittedApplication: false, hasCompletedApplicationSubmission: false });
     expect(await redirectTargetFor("lease")).toBe("/resident/applications/apply");
-  });
-});
-
-describe("approved residents reach their submitted application under Documents", () => {
-  beforeEach(() => {
-    Object.assign(residentAccess, {
-      applicationApproved: true,
-      leaseAccessUnlocked: false,
-      leaseSigned: false,
-      hasSubmittedApplication: true,
-      hasTourLink: false,
-    });
-  });
-
-  it("redirects the /resident/applications approval deep link to Documents", async () => {
-    expect(await redirectTargetFor("applications")).toBe("/resident/documents/application");
-  });
-
-  it("redirects an applications sub-path to Documents too", async () => {
-    expect(await redirectTargetFor("applications", ["approved"])).toBe("/resident/documents/application");
-  });
-
-  it("keeps doing so once the lease is signed", async () => {
-    Object.assign(residentAccess, { leaseAccessUnlocked: true, leaseSigned: true });
-    expect(await redirectTargetFor("applications")).toBe("/resident/documents/application");
-  });
-
-  it("does not hijack the apply wizard for a pre-approval resident", async () => {
-    Object.assign(residentAccess, { applicationApproved: false, hasSubmittedApplication: false });
-    // Pre-approval, /resident/applications keeps its own bucket redirect.
-    expect(await redirectTargetFor("applications")).toBe("/resident/applications/pending");
   });
 });
