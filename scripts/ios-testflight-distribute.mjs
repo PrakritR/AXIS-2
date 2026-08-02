@@ -33,7 +33,7 @@ import { createPrivateKey, sign } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const ASC_BASE = "https://api.appstoreconnect.apple.com/v1";
+export const ASC_BASE = "https://api.appstoreconnect.apple.com/v1";
 
 // The canonical PropLane app record. The pre-rebrand record
 // (com.axisseattlehousing.app, shown as "PropLane Legacy") is dead but still
@@ -292,7 +292,11 @@ export class AscClient {
   }
 
   async request(method, path, body) {
-    const url = path.startsWith("http") ? path : `${ASC_BASE}/${path.replace(/^\/+/, "")}`;
+    // Always ASC_BASE. There is deliberately no absolute-URL branch and no env
+    // override for the host: every request carries a signed App Store Connect
+    // token, so any caller- or config-supplied origin is a way for the release
+    // pipeline to hand that token to another host. Callers pass paths only.
+    const url = `${ASC_BASE}/${path.replace(/^\/+/, "")}`;
     let lastError;
     // Apple's API 429s and 5xxs under load; a bounded retry keeps a whole build
     // cycle from being wasted on a transient blip. 401 is deliberately NOT
@@ -476,10 +480,16 @@ async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds)
     if (Date.now() >= deadline) {
       // Distinguish "Apple never finished" from "we could never ask" — reporting a
       // state that was never actually read would send someone hunting the wrong bug.
-      const outcome = observedState
+      // The FINAL read decides the wording: `observedState` is never cleared, so a
+      // build that read once and then failed every read up to the deadline would
+      // otherwise be reported as a stuck state with the read error dropped entirely.
+      const outcome = !readFailed
         ? `was still "${observedState}" after ${timeoutSeconds}s`
-        : `could not be read at all in ${timeoutSeconds}s (every App Store Connect read failed; ` +
-          `last error: ${lastReadError?.message ?? "unknown"})`;
+        : `could not be read at the ${timeoutSeconds}s deadline ` +
+          (observedState
+            ? `(last state successfully read: "${observedState}"; ` +
+              `last error: ${lastReadError?.message ?? "unknown"})`
+            : `(every App Store Connect read failed; last error: ${lastReadError?.message ?? "unknown"})`);
       throw new Error(
         `Build ${buildNumber} ${outcome}. ` +
           "The upload succeeded but the build is NOT distributed, so nobody can install it. " +
@@ -572,7 +582,8 @@ async function assignBuildToGroup(client, buildId, groupId) {
  * Reporting is separate from asserting so the diagnostics still print when the run
  * is about to fail for a different reason — a failure with no state in the log is
  * one someone has to reproduce by hand. The request itself already retries
- * transport errors and 5xx, so a `null` here means the read genuinely failed.
+ * transport errors and 5xx, so a `null` here means an affirmatively retryable read
+ * genuinely failed; anything else is re-thrown with its own message.
  *
  * A body with no `internalBuildState` is `null` too, never an empty object: an
  * empty object is truthy and would slip past the fail-closed branch below. HTTP
@@ -586,6 +597,12 @@ async function reportBetaDetail(client, buildId) {
     detail = await client.get(`builds/${buildId}/buildBetaDetail`);
   } catch (error) {
     console.log(`  buildBetaDetail could NOT be read: ${error.message}`);
+    // Only an affirmatively retryable failure becomes the fail-closed UNKNOWN
+    // path, exactly like the processing wait. A 401, a 403, a permanent 4xx — or
+    // any untagged error — surfaces with its own message instead of being
+    // reported as an unknown beta state, which would blame Apple's compliance
+    // pipeline for our own credential.
+    if (error?.retryable !== true) throw error;
     return null;
   }
   const attributes = detail?.data?.attributes;

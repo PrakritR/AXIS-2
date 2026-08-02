@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ASC_BASE,
   AscClient,
   assertInstallableBetaState,
   BETA_STATE_ATTEMPTS,
@@ -245,6 +246,29 @@ describe("AscClient credential failures", () => {
     await expect(client.get("apps")).resolves.toEqual({ data: [] });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   }, 15_000);
+
+  it("always addresses the App Store Connect base, with no absolute-URL escape hatch", async () => {
+    // Every request carries a signed ASC bearer token, so a caller-supplied host
+    // would be a way to hand that token to somewhere else. There is deliberately
+    // no env override for the same reason; this pins that a path that merely
+    // LOOKS absolute is still sent to Apple.
+    const fetchSpy = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify({ data: [] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const client = new AscClient(() => ({ token: "t", expiresAt: 2 ** 40 }));
+    await client.get("apps");
+    await client.get("/builds?limit=1");
+    await client.get("https://attacker.example/v1/apps");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    for (const [url] of fetchSpy.mock.calls) {
+      expect(String(url).startsWith(`${ASC_BASE}/`)).toBe(true);
+    }
+  });
 
   it("does not retry a 401", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
