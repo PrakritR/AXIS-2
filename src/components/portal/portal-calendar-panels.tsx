@@ -112,9 +112,9 @@ const COMPACT_TIME_SELECT_TRIGGER_FLAT =
   "h-8 min-h-0 shrink-0 rounded-md border-0 bg-transparent px-1 text-[11px] font-semibold whitespace-nowrap text-foreground shadow-none ring-0 hover:bg-accent/50 focus:border-transparent focus:ring-0 sm:text-xs";
 export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
-const MEETING_PEER_COLOR =
+export const MEETING_PEER_COLOR =
   "border-indigo-300 bg-indigo-100 text-indigo-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
-const MEETING_PENDING_COLOR =
+export const MEETING_PENDING_COLOR =
   "border-amber-300 bg-amber-100 text-amber-950 [html[data-theme=dark]_&]:portal-calendar-meeting-pending";
 
 function addDays(d: Date, n: number): Date {
