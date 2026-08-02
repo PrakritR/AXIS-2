@@ -420,13 +420,16 @@ async function findBuild(client, appId, buildNumber) {
 /**
  * Poll until the build exists and Apple has finished processing it, or the deadline passes.
  *
- * A read that fails is a tick, not the end of the wait. `findBuild` throws once the
- * request layer's own retry budget is spent, so a ~15s Apple 5xx window or a single
- * 429 used to red a promote whose build is fine while 20+ minutes of the deadline
- * sat unused — the same false red the group-membership and beta-state re-polls
- * exist to prevent. This stays fail-closed: a build that never reads VALID still
- * reds the run, a terminal processingState still fails immediately, and an
- * ambiguous build number is a `fatal` error that is never mistaken for a blip.
+ * A read that fails is a tick, not the end of the wait — but ONLY when the request
+ * layer tagged it `retryable`. `findBuild` throws once the request layer's own retry
+ * budget is spent, so a ~15s Apple 5xx window or a single 429 used to red a promote
+ * whose build is fine while 20+ minutes of the deadline sat unused — the same false
+ * red the group-membership and beta-state re-polls exist to prevent. Anything else
+ * surfaces immediately with its own message: a 401 or 403 must not be re-read for
+ * 20 minutes and then reported as Apple being slow. This stays fail-closed: a build
+ * that never reads VALID still reds the run, a terminal processingState still fails
+ * immediately, and an ambiguous build number carries no `retryable` tag, so it is
+ * never mistaken for a blip.
  */
 async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds) {
   const startedAt = Date.now();

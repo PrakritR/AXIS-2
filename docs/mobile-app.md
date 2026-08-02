@@ -289,12 +289,15 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    largest wait that still leaves the step budget room to assign and verify — both
    are derived from `STEP_BUDGET_SECONDS` and the poll intervals, never typed in,
    and a unit test asserts that budget still equals the distribute step's own
-   `timeout-minutes`. A read that
-   fails is a tick, not the end of the wait, so an App Store Connect blip inside
-   the deadline no longer reds a promote whose build is fine; `FAILED`/`INVALID`
-   and a build number matching more than one build still fail immediately. The
-   timeout message distinguishes "Apple never finished processing" from "the API
-   could never be read at all", so those are never confused for one another.
+   `timeout-minutes`. A failed read is a tick, not the end of the wait, **only when
+   the request layer tagged it retryable** (transport error, 429, 5xx): an App Store
+   Connect blip inside the deadline no longer reds a promote whose build is fine,
+   while a 401, a 403, any permanent 4xx, or an untagged error surfaces immediately
+   with its own message instead of being re-read to the deadline and reported as
+   Apple being slow. `FAILED`/`INVALID` and a build number matching more than one
+   build still fail immediately. The timeout message names which case it was —
+   still processing, read once and then unreadable, or never readable at all — so
+   those are never confused for one another.
 4. Assign the build to the group, then **re-read
    `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless
    the build is present. The exit code reflects a fresh API read, not the POST's
@@ -320,7 +323,10 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    defeated the fail-closed guarantee. Every request retries transport errors and
    5xx (node's `fetch` *rejects* on a dropped socket, so that is caught, not just
    status codes), so an unreadable state is a real unknown, and the step fails
-   closed rather than reporting success it cannot support.
+   closed rather than reporting success it cannot support. Only a *retryable*
+   failure becomes that unknown: a credential or permanent-4xx failure on the
+   `buildBetaDetail` read is re-thrown with its own message rather than dressed up
+   as an unknown beta state.
 
 The build number comes from the fastlane step's `build_number` output, not from
 "latest build", so a concurrent upload can't cause the wrong build to be
