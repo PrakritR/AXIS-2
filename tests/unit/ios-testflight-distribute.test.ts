@@ -208,6 +208,28 @@ describe("AscClient credential failures", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("tags errors with whether they were retryable, so callers never have to guess", async () => {
+    // The processing wait tolerates a failed read so a brief Apple outage does not
+    // red a good promote. It must tolerate ONLY this class: without the tag, a
+    // revoked key would be re-read every 20s for the whole deadline and then
+    // reported as "could not be read at all", blaming Apple for our credential.
+    const unauthorized = {
+      status: 401,
+      ok: false,
+      text: async () => JSON.stringify({ errors: [{ title: "NOT_AUTHORIZED" }] }),
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(unauthorized));
+    await expect(new AscClient(() => ({ token: "t", expiresAt: 2 ** 40 })).get("builds")).rejects.toMatchObject({
+      retryable: false,
+    });
+
+    vi.unstubAllGlobals();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("socket hang up")));
+    await expect(new AscClient(() => ({ token: "t", expiresAt: 2 ** 40 })).get("builds")).rejects.toMatchObject({
+      retryable: true,
+    });
+  });
+
   it("still retries a genuine transport error", async () => {
     const fetchSpy = vi
       .fn()

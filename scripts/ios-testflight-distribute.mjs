@@ -336,6 +336,12 @@ export class AscClient {
         retryable = true;
       }
 
+      // Callers that tolerate a failed read (the processing wait) must tolerate
+      // ONLY this class. Tagging it here is the point: the request layer is where
+      // "was this worth retrying" is actually known, so deciding it anywhere else
+      // means guessing — and guessing turns a revoked key into "Apple is slow".
+      lastError.retryable = retryable;
+
       if (!retryable || attempt === REQUEST_ATTEMPTS) throw lastError;
       const backoffMs = REQUEST_BACKOFF_STEP_MS * attempt;
       console.log(`  ↻ ${lastError.message.slice(0, 160)}; retrying in ${backoffMs / 1000}s`);
@@ -432,7 +438,13 @@ async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds)
       build = await findBuild(client, appId, buildNumber);
       lastReadError = null;
     } catch (error) {
-      if (error?.fatal) throw error;
+      // Tolerate ONLY an affirmatively retryable failure. A 401 (revoked or
+      // clock-skewed key), a 403, a permanent 4xx — or any untagged error, which
+      // is by definition not something we decided was worth retrying — surfaces
+      // immediately with its own message. Spinning out the full deadline and then
+      // reporting "could not be read" would blame Apple for our own bad
+      // credential: exactly the self-misdescribing behaviour this script ends.
+      if (error?.retryable !== true) throw error;
       readFailed = true;
       lastReadError = error;
     }
