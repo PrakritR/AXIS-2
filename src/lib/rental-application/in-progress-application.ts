@@ -24,9 +24,15 @@ function isSubmittedStage(row: Pick<DemoApplicantRow, "stage">): boolean {
   return row.stage?.trim().toLowerCase() === "submitted";
 }
 
-/** Pending draft applications — stored as "In progress", shown in the UI as "Incomplete". */
-export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
-  if (row.bucket !== "pending" || isWithdrawnApplicationRow(row)) return false;
+/**
+ * Draft SHAPE only — a pending, unsubmitted wizard snapshot. Withdrawal is
+ * deliberately NOT considered here: a withdrawn row is no longer an *active*
+ * draft (that is `isInProgressApplicationRow`), but a trailing autosave carrying
+ * one is still a draft WRITE and must stay on the guarded conditional-update
+ * path in `/api/manager-applications`, or it clobbers the withdrawn row.
+ */
+export function isDraftShapedApplicationRow(row: DemoApplicantRow): boolean {
+  if (row.bucket !== "pending") return false;
   if (isSubmittedStage(row)) return false;
   const stage = row.stage?.trim().toLowerCase() ?? "";
   if (
@@ -47,6 +53,11 @@ export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
     return true;
   }
   return false;
+}
+
+/** Pending draft applications — stored as "In progress", shown in the UI as "Incomplete". */
+export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
+  return !isWithdrawnApplicationRow(row) && isDraftShapedApplicationRow(row);
 }
 
 /** Incomplete / in-progress drafts are eligible for the manager completion reminder. */
