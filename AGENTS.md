@@ -672,8 +672,10 @@ while the section's component still compiled and its tests still passed:
    a legacy alias is only reachable when it is (a) rewritten *before* the server
    guard and (b) allow-listed inside the shared guard —
    `RESIDENT_LEGACY_SECTION_ALIASES` (`inbox`, `financials`, `finances`,
-   `bugs-feedback`, plus post-approval `applications`). Allow-listing is not a
+   `bugs-feedback`). Allow-listing is not a
    hole: those paths always redirect, and the guard re-judges the destination.
+   `applications` is NOT an alias — it is a live resident nav section that stays
+   unlocked after approval, so never add a redirect off it.
    Fixing only (a) makes the unit tests pass while the browser still bounces.
    Coverage: `tests/unit/resident-legacy-section-redirects.test.ts` drives the
    real `renderPortalSection`.
