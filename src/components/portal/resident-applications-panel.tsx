@@ -16,6 +16,8 @@ import {
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalListAddRow, PORTAL_LIST_ADD_ICONS, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
+import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { DataList } from "@/components/ui/data-list";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
@@ -87,7 +89,6 @@ import {
   type ResidentApplicationBucketId,
 } from "@/lib/portal-detail-routes";
 import {
-  ResidentApplicationWorkspace,
   ResidentApplicationWorkspaceActions,
   ResidentApplicationWorkspaceMobileApply,
 } from "@/components/portal/resident-application-workspace";
@@ -116,6 +117,49 @@ function rowStatusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "rejected") return "Rejected";
   if (isWithdrawnApplicationRow(row)) return "Withdrawn";
   return applicationStageDisplayLabel(row);
+}
+
+function rowStatusBadgeClass(row: DemoApplicantRow): string {
+  if (row.bucket === "approved") return "portal-badge-success";
+  if (row.bucket === "rejected") return "portal-badge-danger";
+  return "portal-badge-pending";
+}
+
+function ApplicationStatusBadge({ row }: { row: DemoApplicantRow }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] ${rowStatusBadgeClass(row)}`}
+    >
+      {rowStatusLabel(row)}
+    </span>
+  );
+}
+
+function ApplicationOutcomeBanner({ row }: { row: DemoApplicantRow }) {
+  if (row.bucket === "approved") {
+    return (
+      <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-success">
+        <p className="font-semibold text-foreground">Application approved</p>
+        <p className="mt-1.5 text-muted">
+          Your property manager approved your application
+          {row.property ? ` for ${row.property}` : ""}. Check Communication for next steps about lease signing and
+          move-in.
+        </p>
+      </div>
+    );
+  }
+  if (row.bucket === "rejected") {
+    return (
+      <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-danger">
+        <p className="font-semibold text-foreground">Application not approved</p>
+        <p className="mt-1.5 text-muted">
+          This application was not approved
+          {row.property ? ` for ${row.property}` : ""}. You can apply to another property anytime.
+        </p>
+      </div>
+    );
+  }
+  return null;
 }
 
 function continueApplicationPath(row: DemoApplicantRow): string {
@@ -734,6 +778,7 @@ export function ResidentApplicationsPanel({
     }
     return (
       <div className="space-y-4">
+        <ApplicationOutcomeBanner row={row} />
         {!isInProgressApplicationRow(row) && applicationHasGroup(row.application) ? (
           <GroupShareCallout
             groupId={(row.application?.groupId ?? "").trim()}
@@ -795,7 +840,13 @@ export function ResidentApplicationsPanel({
         dataAttr: `resident-applications-bucket-${t.id}`,
       }))}
       activeId={bucket}
-      onChange={(id) => setBucket(id as ManagerApplicationBucket)}
+      onChange={(id) => {
+        const next = id as ManagerApplicationBucket;
+        setBucket(next);
+        if (!embedded && !applyMode) {
+          portalNavigate(residentApplicationListHref(basePath, next as ResidentApplicationBucketId));
+        }
+      }}
       ariaLabel="Application status"
     />
   );
@@ -975,6 +1026,60 @@ export function ResidentApplicationsPanel({
 
   if (embedded) return tableBody;
 
+  const renderResidentApplicationList = () => {
+    const listRows = searchQuery.trim() ? filteredRowsForBucket : rowsForBucket;
+
+    return (
+      <>
+        <PortalListControlStack className="mb-2 max-lg:mb-2" destinationRow={filterRow} />
+
+        {!sessionReady ? (
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+          </div>
+        ) : listRows.length > 0 ? (
+          <div className={PORTAL_LIST_PAGE_BODY}>
+            {listRows.map((row) => {
+              const room = displayRoomForRow(row);
+              const address = [room !== "—" ? `Room ${room}` : null, row.name || "Your application"]
+                .filter(Boolean)
+                .join(" · ");
+              const summary = rowStatusLabel(row);
+              return (
+                <PortalPropertyRecordRow
+                  key={row.id}
+                  title={stripPropertyRoomCountSuffix(row.property || "Property")}
+                  address={address}
+                  summary={summary}
+                  badge={<ApplicationStatusBadge row={row} />}
+                  onOpen={() =>
+                    portalNavigate(residentApplicationDetailHref(basePath, row.bucket as ResidentApplicationBucketId, row.id))
+                  }
+                  dataAttr="resident-application-list-row"
+                />
+              );
+            })}
+          </div>
+        ) : null}
+
+        {sessionReady && canOpenPropertyPicker ? (
+          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+            <PortalListAddRow
+              label="Add application"
+              hint="Apply to another property"
+              icon={PORTAL_LIST_ADD_ICONS.application}
+              onClick={openPropertyPicker}
+              dataAttr="resident-applications-add"
+            />
+          </div>
+        ) : null}
+
+        {withdrawModal}
+        {propertyPickerModal}
+      </>
+    );
+  };
+
   if (!applicationIdProp && !applyMode) {
     return (
       <ManagerPortalPageShell
@@ -996,17 +1101,7 @@ export function ResidentApplicationsPanel({
           onApplyClick={openPropertyPicker}
           canOpenPropertyPicker={canOpenPropertyPicker}
         />
-        <ResidentApplicationWorkspace
-          workspace={workspace}
-          sessionReady={sessionReady}
-          sessionEmail={sessionEmail ?? undefined}
-          showToast={showToast}
-          applyMode={false}
-          onApplyClick={openPropertyPicker}
-          onWithdraw={(row) => setWithdrawTarget(row)}
-        />
-        {withdrawModal}
-        {propertyPickerModal}
+        {renderResidentApplicationList()}
       </ManagerPortalPageShell>
     );
   }
@@ -1020,16 +1115,19 @@ export function ResidentApplicationsPanel({
         compactFilterRow
       >
         {applicationsMobileActionsRow}
-        <ResidentApplicationWorkspace
-          workspace={workspace}
-          sessionReady={sessionReady}
-          sessionEmail={sessionEmail ?? undefined}
-          demoApplyPropertyId={demoApplyPropertyId}
-          showToast={showToast}
-          applyMode
-          onApplyClick={openPropertyPicker}
-          onWithdraw={(row) => setWithdrawTarget(row)}
-        />
+        <PortalListControlStack className="mb-2 max-lg:mb-2" destinationRow={filterRow} />
+        {!sessionReady ? (
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+          </div>
+        ) : (
+          <>
+            {applyMode && !activeInProgressRow ? (
+              <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>
+            ) : null}
+            {rowsForBucket.length > 0 ? renderApplicationsTable() : null}
+          </>
+        )}
         {withdrawModal}
         {propertyPickerModal}
       </ManagerPortalPageShell>
@@ -1072,9 +1170,9 @@ export function ResidentApplicationsPanel({
         {propertyPickerModal}
         <PortalRecordDetailPage
           pageTitle="Applications"
-          title={detailRow.name || "Application"}
-          subtitle={detailRow.property || undefined}
-          backHref={residentApplicationListHref(basePath)}
+          title={detailRow.property || detailRow.name || "Application"}
+          subtitle={rowStatusLabel(detailRow)}
+          backHref={residentApplicationListHref(basePath, detailRow.bucket as ResidentApplicationBucketId)}
           hideBackText
           bareHeader
           dataAttrBack="resident-application-detail-back"

@@ -292,9 +292,7 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "applications") {
     const RESIDENT_APP_BUCKETS = ["pending", "approved", "rejected"] as const;
     if (!tabParts?.length) {
-      return (
-        <ResidentApplicationsPanel basePath={def.basePath} />
-      );
+      redirect(`${def.basePath}/applications/pending`);
     }
     if (tabParts.length > 2) notFound();
     const tabRaw = tabParts[0]!;
@@ -307,7 +305,9 @@ export async function renderPortalSection(
       notFound();
     }
     if (tabParts.length === 1) {
-      redirect(`${def.basePath}/applications`);
+      return (
+        <ResidentApplicationsPanel bucket={applicationBucket} basePath={def.basePath} />
+      );
     }
     const applicationId = decodeURIComponent(tabParts[1]!);
     return (
@@ -893,9 +893,26 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "tour") {
-    if (tabParts && tabParts.length > 1) notFound();
-    const inquiryId = tabParts?.length === 1 ? decodeURIComponent(tabParts[0]!) : undefined;
-    return <ResidentTourPanel basePath={def.basePath} inquiryId={inquiryId} />;
+    const RESIDENT_TOUR_BUCKETS = ["pending", "confirmed", "declined"] as const;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/tour/pending`);
+    }
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const tourBucket = RESIDENT_TOUR_BUCKETS.includes(tabRaw as (typeof RESIDENT_TOUR_BUCKETS)[number])
+      ? (tabRaw as (typeof RESIDENT_TOUR_BUCKETS)[number])
+      : null;
+    if (tourBucket) {
+      if (tabParts.length === 1) {
+        return <ResidentTourPanel bucket={tourBucket} basePath={def.basePath} />;
+      }
+      const inquiryId = decodeURIComponent(tabParts[1]!);
+      return (
+        <ResidentTourPanel bucket={tourBucket} basePath={def.basePath} inquiryId={inquiryId} />
+      );
+    }
+    const legacyInquiryId = decodeURIComponent(tabRaw);
+    return <ResidentTourPanel basePath={def.basePath} inquiryId={legacyInquiryId} />;
   }
 
   if (kind === "resident" && section === "profile") {

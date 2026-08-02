@@ -137,7 +137,7 @@ export async function POST(req: Request) {
       ...(tourInquiryId ? { inquiry_id: tourInquiryId } : {}),
     });
 
-    const redirectTo = handoff === "message" ? "/resident/communication" : "/resident/tour";
+    const redirectTo = handoff === "message" ? "/resident/communication" : "/resident/tour/pending";
     const res = NextResponse.json({
       ok: true,
       redirectTo,

@@ -61,7 +61,7 @@ export function residentSignInHref(
 
 /** In-portal tour list → browse listings, then schedule from a property page. */
 export function residentBrowseForTourHref(): string {
-  const q = new URLSearchParams({ from: "resident-tour", return: "/resident/tour" });
+  const q = new URLSearchParams({ from: "resident-tour", return: "/resident/tour/pending" });
   return `${RESIDENT_BROWSE_PATH}?${q.toString()}`;
 }
 

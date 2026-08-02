@@ -187,9 +187,9 @@ export function parseResidentApplicationBucket(raw: string | undefined | null): 
 
 export function residentApplicationListHref(
   basePath: string,
-  _bucket?: ResidentApplicationBucketId,
+  bucket: ResidentApplicationBucketId = "pending",
 ): string {
-  return `${basePath}/applications`;
+  return `${basePath}/applications/${bucket}`;
 }
 
 export function residentApplicationDetailHref(
@@ -198,6 +198,28 @@ export function residentApplicationDetailHref(
   applicationId: string,
 ): string {
   return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
+}
+
+export const RESIDENT_TOUR_BUCKETS = ["pending", "confirmed", "declined"] as const;
+export type ResidentTourBucketId = (typeof RESIDENT_TOUR_BUCKETS)[number];
+
+export function parseResidentTourBucket(raw: string | undefined | null): ResidentTourBucketId {
+  if (raw && (RESIDENT_TOUR_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as ResidentTourBucketId;
+  }
+  return "pending";
+}
+
+export function residentTourListHref(basePath: string, bucket: ResidentTourBucketId = "pending"): string {
+  return `${basePath}/tour/${bucket}`;
+}
+
+export function residentTourDetailHref(
+  basePath: string,
+  bucket: ResidentTourBucketId,
+  inquiryId: string,
+): string {
+  return `${basePath}/tour/${bucket}/${encodeURIComponent(inquiryId)}`;
 }
 
 /** Resident house-details tabs (routed under /move-in). */
