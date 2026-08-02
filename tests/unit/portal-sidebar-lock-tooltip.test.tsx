@@ -2,8 +2,8 @@
 //
 // An inert locked row has no destination and no visible reason text, so without
 // a `title` a SIGHTED resident taps a dead row and learns nothing — the lock
-// reason ("Approved — now read-only in Documents", "Available after your lease
-// is signed") reached assistive tech only. Every resident lock reason must be
+// reason ("Available after you submit an application", "Available after your
+// lease is signed") reached assistive tech only. Every resident lock reason must be
 // hoverable, not just the new one.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
