@@ -4,6 +4,20 @@ import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { validateRentalWizardStep } from "@/lib/rental-application/validate";
 
+/**
+ * A stay that starts in the FUTURE, computed rather than written down. These were the literals
+ * "2026-08-01"/"2026-08-15", so the suite went red on its own the day the start date fell into
+ * the past and validation began reporting "Lease start date cannot be in the past."
+ */
+function futureStayDates(): { leaseStart: string; leaseEnd: string } {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const start = new Date();
+  start.setDate(start.getDate() + 30);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 14);
+  return { leaseStart: iso(start), leaseEnd: iso(end) };
+}
+
 describe("rental-application validate", () => {
   it("requires group choice on step 1", () => {
     const state = createInitialRentalWizardState();
@@ -122,8 +136,7 @@ describe("rental-application validate", () => {
       roomChoice1: "prop-short-term::room-1",
       rentalType: "short_term" as const,
       leaseTerm: SHORT_TERM_LEASE_TERM,
-      leaseStart: "2026-08-01",
-      leaseEnd: "2026-08-15",
+      ...futureStayDates(),
     };
     const missing = validateRentalWizardStep(3, state, {
       property: { id: "prop-short-term", listingSubmission: sub },
@@ -150,8 +163,7 @@ describe("rental-application validate", () => {
       roomChoice1: "prop-no-short-term::room-1",
       rentalType: "short_term" as const,
       leaseTerm: SHORT_TERM_LEASE_TERM,
-      leaseStart: "2026-08-01",
-      leaseEnd: "2026-08-15",
+      ...futureStayDates(),
       shortTermCheckInTime: "15:00",
       shortTermCheckOutTime: "11:00",
     };
