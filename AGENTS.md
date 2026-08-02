@@ -279,9 +279,9 @@ structure rather than reinventing table/filter markup per tab.
 `ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
 Invite to apply / Share tour" surface, mounted from Properties (header **Share**
 and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
-Only the **listing** kind is multi-select (a manager can send several/all
-properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
-single-property because they target one apply/tour flow. Rules baked into the
+The **listing** and **apply** kinds are multi-select (a manager can send
+several/all properties at once via `CheckboxMultiSelect`); **tour** stays
+single-property because it targets one tour flow. Rules baked into the
 modal + `/api/portal/send-lead-invite`:
 
 - **Single listing → direct listing page** (`buildManagerListingUrl` →
@@ -297,7 +297,15 @@ modal + `/api/portal/send-lead-invite`:
   meaningless (and hidden) for a multi-send.
 - The email builder (`lead-invite-email.ts`) takes an optional `listingCount`;
   `>1` switches subject + body/html to the multi-listing "browse these N homes"
-  copy instead of the single-listing summary.
+  copy instead of the single-listing summary. `buildLeadInviteSmsText` is the
+  short-copy sibling for the SMS leg.
+- **A send is email, SMS, or both** (`viaEmail` / `viaSms` + `phone` in the
+  request; the modal's send-via dropdown). SMS goes out from the manager's own
+  work number, so the route resolves `resolveManagerWorkNumber` and 400s
+  **before** the first send when there is none — a missing number discovered
+  after the email left would leave the manager unable to see their own copy, and
+  the natural retry mails the prospect twice. For the same reason the modal
+  remembers the address the email already reached and re-runs only the SMS leg.
 - The server **re-authorizes every requested id** via
   `getShareablePropertyForUser` and rejects the whole send (403) if any id is
   not owned/assigned — never silently drops one. Client sends both `propertyId`
@@ -697,17 +705,32 @@ inheriting it for a live inbox row destroys real mail. Coverage:
 
 Every portal's Communication (manager, resident, vendor, admin) is a single
 conversation list + threads, NOT the old Unopened / Opened / Sent / Trash /
-Schedule tab bar. Manager + resident use the chat two-pane
+Schedule tab bar. Manager, resident, and vendor all render the chat two-pane
 (`manager-unified-inbox.tsx`, `ResidentUnifiedInbox` in `resident-communication.tsx`
-→ `ResidentInboxPanel`); vendor + admin reuse their existing panels driven by an
-`"all"` tabId (all non-trash conversations) plus the archive toggle. Invariants:
+→ `ResidentInboxPanel`, `VendorUnifiedInbox` in `vendor-communication.tsx` →
+`VendorInboxPanel`); admin alone stays a flat table. Invariants:
 
-- **No folder tabs.** The list shows ALL live conversations (inbox + sent); the
-  `tabId` route param is legacy and does not segregate the list. Archived
-  (trashed) conversations are reachable via a `*-inbox-archived-toggle` button,
-  and trash/restore live in the open thread — never re-add a top-level
-  Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone tabbed panels survive
-  only for the /demo path and legacy route redirects.
+- **No folder tabs — the URL carries a list SEGMENT.** All three chat portals
+  route `/{portal}/communication/{active|unread|archived}[/{threadId}]`, so
+  their section registries declare `tabs: []` and `renderPortalSection`
+  redirects every legacy `inbox/*` / `email/*` / `sms/*` path into a segment
+  (`trash` → `archived`, everything else → `active`). Active shows ALL live
+  conversations (inbox + sent); trash/restore live in the open thread — never
+  re-add a top-level Schedule/Trash tab. Admin keeps its
+  `admin-inbox-archived-toggle` button instead of segments. `INBOX_TAB_DEFS`
+  and the standalone tabbed panels survive only for the /demo path, the admin
+  table, and legacy route redirects.
+- **Image attachments are private-bucket + authenticated serve.** The shared
+  `InboxComposer` takes attachments (resident + vendor panels wire it up today)
+  and uploads through `POST /api/portal/inbox-attachments` into the private
+  `portal-inbox-attachments` bucket (path `<uploaderUserId>/<ts>-<uuid>.<ext>`,
+  images ≤5 MB) and stores the origin-relative serve URL; bubbles read bytes
+  back through `GET` on the same route. That GET authorizes against the
+  STRUCTURED `row_data.attachments[].url` / `row_data.messages[].attachments[].url`
+  fields — never a scan of message text, because the serve URL is appended to
+  outbound email/SMS and so is not a secret. Outbound copies get the absolute
+  canonical-origin form of the same URL. `src/lib/inbox-attachments.server.ts`,
+  coverage `tests/unit/inbox-attachments.server.test.ts`.
 - **Scheduled messages render INLINE in the recipient's thread** as a COMPACT,
   collapsible "Scheduled · sends <when> · <subject>" card (`InboxScheduledCard`)
   that expands for the full body + Send now / Cancel send / Edit; Edit is an

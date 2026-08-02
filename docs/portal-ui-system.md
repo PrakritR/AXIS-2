@@ -145,6 +145,25 @@ import { PortalTableDetailActions, PORTAL_DETAIL_BTN } from "@/components/portal
 
 Admin/manager tab tables use `ManagerPortalPageShell` with `filterRow` above the divider — see `admin-inbox-client.tsx` and `AGENTS.md` → Admin portal table tabs.
 
+**Page chrome is pinned by default; only the list body scrolls.**
+`ManagerPortalPageShell` opts into `stickyPageChrome` unless a caller turns it
+off (Communication does, via `viewportFillBody`). While any such shell is
+mounted, `usePortalStickyPageChrome` sets `html[data-portal-sticky-chrome]`,
+which locks portal main to a flex viewport (`globals.css`); the shell then
+splits its own children with `renderPortalStickyBody`
+(`src/lib/portal-page-chrome-layout.tsx`) into fixed chrome plus one scroll
+region. Consequences worth knowing before you restructure a section:
+
+- The split point is the first `PortalPageScrollBody` (or any element carrying
+  `portal-list-page-scroll` / `PORTAL_LIST_PAGE_SCROLL_BODY`); with none, it
+  falls back to everything after the LAST `PortalListControlStack`. Wrap the
+  table/card list explicitly rather than relying on that fallback.
+- Detection reads `displayName`, because a production minifier mangles
+  `Function.name` — a marker component that loses its `displayName` silently
+  stops being treated as chrome.
+- Don't add a second `overflow-y-auto` inside the body; the shell already owns
+  the one scroller (same rule as [Modals scroll in ONE place](#modals-scroll-in-one-place)).
+
 ## Filter dropdowns: one portaled-overlay pattern
 
 Every portal filter field (property / resident / status / sort / scope) is ONE
@@ -155,8 +174,14 @@ or resize the panel.
 
 - **Shared machinery:** `src/components/ui/field-select-menu.tsx`
   (`useFieldSelectMenu`, `resolveFieldSelectMenuPortal`, rect math, the 5-row
-  constants, `FieldSelectMenuSearch`). It portals into the open modal / Vaul
-  sheet shell when there is one, else `document.body` — so it works inside the
+  constants, `FieldSelectMenuSearch`). `resolveFieldSelectMenuPortal(anchor)`
+  picks the host in this order: an open Vaul bottom sheet forces `document.body`
+  (Vaul animates with `transform`, which would trap a `position: fixed` menu),
+  then an open modal shell, then the ANCHOR's own filter-dropdown panel —
+  resolved off the trigger's ancestor chain, never "the first open panel in the
+  document", or a compose-modal select opened while a filter happens to be open
+  gets positioned inside a panel it has nothing to do with — else
+  `document.body`. So it works inside the
   `PortalFilterSortSheet` modal, the mobile bottom sheet, and the desktop
   dropdown popover alike. Do NOT fork a second positioning implementation.
 - **Filter fields:** `src/components/portal/filter-field-lists.tsx`
@@ -169,10 +194,21 @@ or resize the panel.
   `FIELD_SELECT_MENU_VISIBLE_ITEMS` (aliased as `FILTER_LIST_VISIBLE_ROWS`) stays
   the single source of the "5" — and the option list is a shrinkable flex child
   (`FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS`, which also carries the touch-scroll
-  affordances) that scrolls under it. The menu otherwise sizes to its real content, so a short or
-  filtered list leaves no empty space below it; never give the listbox a fixed
-  height or `flex-1`, both of which break that. A search box appears only when a
-  field has MORE than 5 options and never drops an already-selected option.
+  affordances) that scrolls under it. Never give the listbox a fixed height or
+  `flex-1`. Searching only hides rows, so it never drops an already-selected
+  option. Two sizing regimes:
+  - **Portal filter fields** (`FilterCheckboxList` / `FilterSingleSelectList`)
+    are FIXED at search row + 5 rows — `FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH` is
+    on and the shell pins `height`/`minHeight` to that — so opening, closing, or
+    typing in a menu never resizes the panel. The enclosing filter panel is
+    likewise a fixed height picked from its field count
+    (`portalFilterPanelSizeClass`).
+  - **Form/toolbar pickers** (`CheckboxMultiSelect` / `FieldSingleSelect`) still
+    size to real content: a search row appears only above 5 options, and a short
+    scroll-free menu uses `FIELD_SELECT_MENU_LISTBOX_FIT_CLASS`
+    (`fieldSelectMenuFitsWithoutScroll`) so there is no empty space or stray
+    scrollbar. Multi-select triggers summarize as one label or `N selected`.
+
   Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
 
 ## Modals scroll in ONE place

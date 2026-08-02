@@ -18,6 +18,10 @@ ManagerPortalPageShell          ← single PORTAL_SECTION_SURFACE (outer card)
     └── PORTAL_DATA_TABLE_WRAP  ← or PortalDataTableEmpty
 ```
 
+Header + filter row stay pinned and the body scrolls on its own — see **Page
+shell & filters** in [`portal-ui-system.md`](portal-ui-system.md) for how the
+shell splits chrome from the scroll region.
+
 Use `PortalListSectionShell` as a thin alias when building new sections:
 
 ```tsx
