@@ -39,6 +39,14 @@ export const runtime = "nodejs";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+
+function inboxAttachmentsFromUrls(urls: string[]): { url: string; name?: string }[] {
+  return urls.map((url) => {
+    const name = url.split("/").pop()?.split("?")[0]?.trim();
+    return name ? { url, name } : { url };
+  });
+}
+
 const VENDOR_INBOX_SCOPE = "axis_portal_inbox_vendor_v1";
 
 function normalizeEmails(value: unknown): string[] {
@@ -218,6 +226,7 @@ export async function POST(req: Request) {
         senderEmail,
         fromName,
         text,
+        attachments: inboxAttachmentsFromUrls(attachmentUrls),
       });
 
       // A vendor replying in their agent thread talks to the agent, not to a
@@ -417,6 +426,7 @@ export async function POST(req: Request) {
           when,
           unread: false,
           outbound: true,
+          attachments: inboxAttachmentsFromUrls(attachmentUrls),
         });
 
         if (recipientLower === senderEmail) continue;
@@ -437,6 +447,7 @@ export async function POST(req: Request) {
           when,
           unread: true,
           outbound: false,
+          attachments: inboxAttachmentsFromUrls(attachmentUrls),
         });
       }
 
@@ -559,6 +570,7 @@ export async function POST(req: Request) {
             : null;
         await Promise.all(
           recipients.map(async (recipient) => {
+            if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) return;
             const role = String(recipient.role ?? "").trim().toLowerCase();
             if (role !== "manager" && role !== "pro" && role !== "admin" && role !== "owner") return;
             const { data: mgr } = await db
@@ -589,7 +601,8 @@ export async function POST(req: Request) {
               });
               return;
             }
-            const mgrPhone = mgr?.phone ? normalizeE164(String(mgr.phone)) : null;
+            const mgrPhone =
+              mgr?.phone_verified_at && mgr?.phone ? normalizeE164(String(mgr.phone)) : null;
             if (!mgrPhone) return;
             const vendorName = String(senderFull?.full_name ?? "Vendor").trim();
             const prefix = senderRoleNorm === "vendor" ? `Vendor ${vendorName}` : "Resident";

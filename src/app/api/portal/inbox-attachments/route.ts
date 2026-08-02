@@ -10,6 +10,7 @@ import {
   userCanAccessInboxAttachment,
 } from "@/lib/inbox-attachments.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
         "Content-Type": contentTypeForInboxAttachmentPath(path),
         "Content-Disposition": `inline; filename="${path.split("/").pop()?.replace(/"/g, "") ?? "attachment"}"`,
         "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch {
@@ -70,6 +72,13 @@ export async function POST(req: Request) {
   try {
     const user = await resolveUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    if (
+      !rateLimit(`inbox-attach:user:${user.id}`, 20, 60_000).ok ||
+      !rateLimit(`inbox-attach:ip:${clientIpFrom(req)}`, 40, 60_000).ok
+    ) {
+      return NextResponse.json({ error: "Too many uploads. Please slow down." }, { status: 429 });
+    }
 
     const body = (await req.json()) as { dataUrl?: string; ext?: string };
     const dataUrl = body.dataUrl;

@@ -99,7 +99,7 @@ export async function userCanAccessInboxAttachment(
   const { data: participant } = await db
     .from("portal_inbox_thread_records")
     .select("row_data")
-    .ilike("participant_email", email)
+    .eq("participant_email", email)
     .limit(300);
   return (participant ?? []).some((row) => rowDataReferencesAttachment(row.row_data, path));
 }

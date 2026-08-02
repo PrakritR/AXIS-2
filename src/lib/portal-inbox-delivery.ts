@@ -88,6 +88,7 @@ export async function appendInboxThreadReply(
     senderEmail: string;
     fromName: string;
     text: string;
+    attachments?: { url: string; name?: string }[];
   },
 ): Promise<{ ok: boolean; thread?: { threadType: string; ownerUserId: string | null } }> {
   const threadId = opts.threadId.trim();
@@ -113,6 +114,7 @@ export async function appendInboxThreadReply(
     from: opts.fromName,
     body: opts.text,
     at: when,
+    ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
   });
   await db.from("portal_inbox_thread_records").upsert(
     {
@@ -244,6 +246,7 @@ export async function deliverPortalMessageThreadSide(
      * is what makes a redelivered inbound-email webhook idempotent.
      */
     messageId?: string;
+    attachments?: { url: string; name?: string }[];
   },
 ): Promise<{ action: "append" | "create" | "skipped"; threadId: string }> {
   const existing = await findExistingPortalMessageThread(db, args);
@@ -266,6 +269,7 @@ export async function deliverPortalMessageThreadSide(
       body: args.body,
       at: args.when,
       outbound: args.outbound,
+      ...(args.attachments?.length ? { attachments: args.attachments } : {}),
     });
     await db.from("portal_inbox_thread_records").upsert(
       {
@@ -311,6 +315,7 @@ export async function deliverPortalMessageThreadSide(
         // The root message lives in `body`, not `messages[]` — remember its
         // deterministic id so a redelivered webhook can still dedupe it.
         ...(args.messageId ? { rootMessageId: args.messageId } : {}),
+        ...(args.attachments?.length ? { attachments: args.attachments } : {}),
       },
       updated_at: nowIso,
     },

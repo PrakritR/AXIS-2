@@ -9,6 +9,7 @@ import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lea
 import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { isDraftApplicationRow, normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   notifyManagerApplicationSubmitted,
   shouldNotifyManagerOfApplicationSubmit,
@@ -78,12 +79,19 @@ async function persistDraftRow(
   values: Record<string, unknown>,
 ): Promise<void> {
   const updateIfStillDraft = async (): Promise<boolean> => {
+    const { data: existingRows } = await db
+      .from("manager_application_records")
+      .select("id, row_data")
+      .in("id", ids);
+    const draftIds = (existingRows ?? [])
+      .filter((row) => isDraftApplicationRow((row.row_data ?? {}) as DemoApplicantRow))
+      .map((row) => String(row.id));
+    if (draftIds.length === 0) return false;
     const { data } = await db
       .from("manager_application_records")
       .update(values)
-      .in("id", ids)
+      .in("id", draftIds)
       .eq("row_data->>bucket", "pending")
-      .ilike("row_data->>stage", DRAFT_STAGE)
       .is("row_data->>withdrawnAt", null)
       .select("id");
     return (data?.length ?? 0) > 0;

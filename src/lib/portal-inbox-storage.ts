@@ -48,6 +48,8 @@ export type PersistedInboxThread = {
   body: string;
   time: string;
   unread: boolean;
+  /** Root-turn attachments when the thread was opened with media. */
+  attachments?: { url: string; name?: string }[];
   messages?: InboxThreadMessage[];
   /** Manager-only pending AI reply draft (never present on resident-scope rows). */
   aiDraft?: InboxAiDraft;
@@ -385,6 +387,7 @@ export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMe
     from: thread.from,
     body: thread.body,
     at: thread.time,
+    ...(thread.attachments?.length ? { attachments: thread.attachments } : {}),
   };
   return [root, ...(thread.messages ?? [])];
 }
