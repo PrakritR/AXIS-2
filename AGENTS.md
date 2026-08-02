@@ -279,10 +279,11 @@ structure rather than reinventing table/filter markup per tab.
 `ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
 Invite to apply / Share tour" surface, mounted from Properties (header **Share**
 and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
-Only the **listing** kind is multi-select (a manager can send several/all
-properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
-single-property because they target one apply/tour flow. Rules baked into the
-modal + `/api/portal/send-lead-invite`:
+**listing** and **apply** are multi-select once the manager has more than one
+property (`CheckboxMultiSelect`) — several listings resolve to a browse link, a
+multi-apply to a portfolio apply link; **tour** stays single-property because it
+targets one tour flow. Rules baked into the modal +
+`/api/portal/send-lead-invite`:
 
 - **Single listing → direct listing page** (`buildManagerListingUrl` →
   `/rent/listings/{id}`). **Several listings → filtered browse link**
@@ -302,6 +303,13 @@ modal + `/api/portal/send-lead-invite`:
   `getShareablePropertyForUser` and rejects the whole send (403) if any id is
   not owned/assigned — never silently drops one. Client sends both `propertyId`
   (first, back-compat) and `propertyIds` (full list).
+- **Email and/or SMS, chosen per send.** The modal's Send via picker sets
+  `viaEmail` / `viaSms` (+ `phone`) on the request; SMS is offered only when
+  `/api/manager/sms-conversations` reports a work number, and the route sends it
+  through `sendFromManagerWorkNumber` (`counterpartyRole: "prospect"`, so it
+  threads like any other prospect SMS — see
+  [`docs/agents/sms-system.md`](docs/agents/sms-system.md)). SMS copy is its own
+  short builder, `buildLeadInviteSmsText`, not a trimmed email body.
 
 ## Listing images: never fabricate a photo
 

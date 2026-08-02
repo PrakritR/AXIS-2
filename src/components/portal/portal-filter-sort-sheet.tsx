@@ -7,12 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Modal, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
 import {
-  PORTAL_FILTER_PANEL_COMPACT_CLASS,
   PORTAL_FILTER_PANEL_SIZE_CLASS,
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
   PORTAL_FILTER_BODY_CLASS,
   PORTAL_FILTER_ICON_CLASS,
-  PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS,
   PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS,
   portalFilterDropdownHeightPx,
   portalFilterDropdownWidthPx,
