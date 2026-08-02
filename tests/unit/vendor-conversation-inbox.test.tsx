@@ -119,4 +119,12 @@ describe("vendor conversation inbox (unified 'all' view)", () => {
     expect(screen.getAllByText("Mark read").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Archive").length).toBeGreaterThan(0);
   });
+
+  it("does not use page scroll mode in Communication shell", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src = readFileSync(join(process.cwd(), "src/components/portal/vendor-communication.tsx"), "utf8");
+    expect(src).not.toMatch(/\bpageScroll\b/);
+  });
+
 });
