@@ -304,6 +304,13 @@ the modal targets one tour flow. Rules baked into the modal +
   `getShareablePropertyForUser` and rejects the whole send (403) if any id is
   not owned/assigned — never silently drops one. Client sends both `propertyId`
   (first, back-compat) and `propertyIds` (full list).
+- **Email and/or SMS, chosen per send.** The modal's Send via picker sets
+  `viaEmail` / `viaSms` (+ `phone`) on the request; SMS is offered only when
+  `/api/manager/sms-conversations` reports a work number, and the route sends it
+  through `sendFromManagerWorkNumber` (`counterpartyRole: "prospect"`, so it
+  threads like any other prospect SMS — see
+  [`docs/agents/sms-system.md`](docs/agents/sms-system.md)). SMS copy is its own
+  short builder, `buildLeadInviteSmsText`, not a trimmed email body.
 
 ## Listing images: never fabricate a photo
 
