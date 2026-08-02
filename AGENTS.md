@@ -279,9 +279,9 @@ structure rather than reinventing table/filter markup per tab.
 `ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
 Invite to apply / Share tour" surface, mounted from Properties (header **Share**
 and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
-Only the **listing** kind is multi-select (a manager can send several/all
-properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
-single-property because they target one apply/tour flow. Rules baked into the
+**listing** and **apply** are multi-select (a manager can send several/all
+properties at once via `CheckboxMultiSelect`); **tour** stays single-property
+(`FieldSingleSelect`) because it targets one tour flow. Rules baked into the
 modal + `/api/portal/send-lead-invite`:
 
 - **Single listing → direct listing page** (`buildManagerListingUrl` →
@@ -1063,8 +1063,9 @@ in place, and the rest of the detail live in
 
 Two routing gotchas this exposed, both of which silently break a section without failing a build:
 
-- **Legacy section redirects must run before `findSection`.** `financials` is not a resident nav
-  section, so a redirect placed after `findSection` is dead code — `notFound()` fires first.
+- **Legacy section redirects run first or not at all.** `financials` is not a resident nav
+  section, so a redirect placed after `findSection` — or after the resident stage guard — is
+  dead code. Full ordering: "Portal routing precedence" above.
 - **`/demo` renders portal panels directly**, not through `render-portal-section.tsx`, and
   `src/components/demo/demo-section-renderer.tsx` has its own per-section prop list. When you add
   sub-tabs to a section wired into the demo, forward `tabId`/`basePath` there too or the demo
