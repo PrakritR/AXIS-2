@@ -187,9 +187,9 @@ export function parseResidentApplicationBucket(raw: string | undefined | null): 
 
 export function residentApplicationListHref(
   basePath: string,
-  bucket: ResidentApplicationBucketId,
+  _bucket?: ResidentApplicationBucketId,
 ): string {
-  return `${basePath}/applications/${bucket}`;
+  return `${basePath}/applications`;
 }
 
 export function residentApplicationDetailHref(

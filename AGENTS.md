@@ -914,19 +914,22 @@ is a `"draft"` value on the existing `ManagerPropertyRecordStatus`
   table row key and unmount the open editor. Publishing is always in place, so
   the one-record invariant holds either way. Unnamed drafts render as "Untitled
   draft" in the list.
-- **Closing the wizard IS the save — there is no "Save draft" button.** Every
+- **Closing the wizard also saves — there is no "Save draft" button.** Every
   close affordance (footer Close, header ✕, backdrop click) routes through
-  `closeWizard` in `manager-add-listing-form.tsx`, which persists the current
-  submission as a draft and only then calls `onClose`. Two guards make that safe
-  to leave implicit: an UNTOUCHED wizard closes without writing anything (the
-  baseline fingerprint captured on first render, `manager-listing-draft-autosave.ts`,
-  compares the whole submission rather than an allowlist of fields, so a field
-  added to the wizard tomorrow is covered), and every EDIT mode (pending / live
-  listing / request-change / `preview` scope) is excluded, because those rows are
-  already persisted elsewhere and drafting one would fork it. A failed draft
-  write leaves the wizard OPEN with the work intact rather than closing on a lie.
-  Coverage: `tests/unit/listing-wizard-draft-autosave.test.tsx` drives the real
-  component through the real save path.
+  `closeWizard` in `manager-add-listing-form.tsx`, which flushes any unsaved
+  edits as a draft and only then calls `onClose`. While the wizard stays open,
+  **background autosave** debounces (`LISTING_DRAFT_AUTOSAVE_DEBOUNCE_MS` in
+  `manager-listing-draft-autosave.ts`) and persists in-progress work to Drafts
+  without closing. Two guards make implicit save safe to leave: an UNTOUCHED
+  wizard closes without writing anything (the baseline fingerprint captured on
+  first render, `manager-listing-draft-autosave.ts`, compares the whole
+  submission rather than an allowlist of fields, so a field added to the wizard
+  tomorrow is covered), and every EDIT mode (pending / live listing /
+  request-change / `preview` scope) is excluded, because those rows are already
+  persisted elsewhere and drafting one would fork it. A failed draft write leaves
+  the wizard OPEN with the work intact rather than closing on a lie. Coverage:
+  `tests/unit/listing-wizard-draft-autosave.test.tsx` drives the real component
+  through the real save path.
 - **Draft saving is unvalidated** (partial-friendly, on every step) and does NOT
   count toward the plan property limit; **publishing** runs full validation +
   the limit gate like any new listing — so the wizard's `skuTier`/`skuLoaded`

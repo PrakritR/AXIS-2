@@ -14,6 +14,7 @@ import {
   createDefaultListingSubmission,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import { LISTING_DRAFT_AUTOSAVE_DEBOUNCE_MS } from "@/lib/manager-listing-draft-autosave";
 
 /** The route mints the object folder from the authenticated user, so it is a real uuid. */
 const LEASE_TEMPLATE_OWNER_UUID = "b5809cf3-dcff-4e46-a0cc-5dcc53bc8910";
@@ -168,6 +169,22 @@ function typePropertyName(value: string) {
 function typeAddress(value: string) {
   fireEvent.change(wizardField("address"), { target: { value } });
 }
+
+describe("background autosave while the wizard stays open", () => {
+  it("persists a draft without closing", async () => {
+    const { onClose } = renderWizard();
+    typePropertyName("Ravenna Craftsman");
+
+    await waitFor(
+      () => expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(1),
+      { timeout: LISTING_DRAFT_AUTOSAVE_DEBOUNCE_MS + 5000 },
+    );
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("listing-wizard-autosave-status")).toHaveTextContent(/saved to drafts/i);
+    expect(readAdminPropertyRows(5, MANAGER_ID)[0]).toMatchObject({ buildingName: "Ravenna Craftsman" });
+  });
+});
 
 describe("closing the add-listing wizard saves the work in progress", () => {
   it("persists what the manager entered as a draft, then closes", async () => {

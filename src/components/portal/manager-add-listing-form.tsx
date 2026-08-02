@@ -1,7 +1,7 @@
 "use client";
 
 import type { DragEvent, ReactNode } from "react";
-import { Children, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { Children, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -38,10 +38,18 @@ import {
 import {
   listingSubmissionFingerprint,
   listingWizardHasUnsavedInput,
+  LISTING_DRAFT_AUTOSAVE_DEBOUNCE_MS,
   stripSubmissionDataUrls,
 } from "@/lib/manager-listing-draft-autosave";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 import { sortRoomIndicesByFloor } from "@/lib/listing-floor-order";
+import {
+  fileListFromFiles,
+  firstVideoFileFromDataTransfer,
+  imageFilesFromDataTransfer,
+  isImageUploadFile,
+  isVideoUploadFile,
+} from "@/lib/listing-media-drop";
 import {
   scoreRoomMedia,
   shouldWarnOnPublish,
@@ -350,16 +358,6 @@ const MAX_HOUSE_PHOTOS = 12;
 /** Max pixel width after compression. */
 const IMG_MAX_WIDTH = 1280;
 const IMG_QUALITY = 0.75;
-
-function isImageUploadFile(file: File): boolean {
-  if (file.type.startsWith("image/")) return true;
-  return /\.(jpe?g|png|gif|webp|heic|heif|avif)$/i.test(file.name);
-}
-
-function isVideoUploadFile(file: File): boolean {
-  if (file.type.startsWith("video/")) return true;
-  return /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(file.name);
-}
 
 function mediaDropZoneClass(active: boolean) {
   return `rounded-xl border border-dashed p-4 transition ${
@@ -1500,6 +1498,26 @@ export function ManagerAddListingForm({
       serviceRequestOptions: serviceOffers,
     });
   }
+  /** Last submission fingerprint successfully written to the drafts bucket. */
+  const lastPersistedFingerprintRef = useRef<string | null>(
+    editDraftId?.trim()
+      ? listingSubmissionFingerprint({
+          ...(initialSubmission
+            ? normalizeManagerListingSubmissionV1(initialSubmission)
+            : createNewListingWizardSubmission()),
+          serviceRequestOptions:
+            normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission())
+              .serviceRequestOptions ?? [],
+        })
+      : null,
+  );
+  const lastPersistedStepRef = useRef({ stepIndex: resumedStepIndex, maxStepReached: resumedMaxStepReached });
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveDirtyRef = useRef(false);
+  const persistDraftRef = useRef<
+    (opts?: { silent?: boolean; closeAfter?: boolean }) => Promise<boolean>
+  >(() => Promise.resolve(false));
   const wizardSteps = useMemo(() => listingWizardStepIndices(wizardScope), [wizardScope]);
   const lastStepIndex = wizardSteps[wizardSteps.length - 1] ?? LISTING_STEP_COUNT - 1;
   const visibleStepPosition = Math.max(0, wizardSteps.indexOf(stepIndex));
@@ -2116,7 +2134,7 @@ export function ManagerAddListingForm({
 
   const onPickRoomVideo = async (roomIndex: number, file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
+    if (!isVideoUploadFile(file)) { showToast("Please choose a video file."); return; }
     const roomId = sub.rooms[roomIndex]?.id;
     if (!roomId) return;
     const key = `room-${roomId}`;
@@ -2358,7 +2376,7 @@ export function ManagerAddListingForm({
 
   const onPickHouseVideo = async (file: File | null) => {
     if (!file) return;
-    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
+    if (!isVideoUploadFile(file)) { showToast("Please choose a video file."); return; }
     setVideoPreview("house", file);
     setVideoUploadingKeys((s) => new Set([...s, "house"]));
     try {
@@ -2381,7 +2399,7 @@ export function ManagerAddListingForm({
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone("house-video");
-    void onPickHouseVideo(event.dataTransfer.files?.[0] ?? null);
+    void onPickHouseVideo(firstVideoFileFromDataTransfer(event.dataTransfer));
   };
 
   const activateDropZone = (zoneId: string) => {
@@ -2395,6 +2413,9 @@ export function ManagerAddListingForm({
   const handleDragOver = (event: DragEvent<HTMLElement>, zoneId: string) => {
     event.preventDefault();
     event.stopPropagation();
+    if (event.dataTransfer.types.includes("Files")) {
+      event.dataTransfer.dropEffect = "copy";
+    }
     activateDropZone(zoneId);
   };
 
@@ -2410,49 +2431,49 @@ export function ManagerAddListingForm({
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone("house-photos");
-    void onPickHousePhotos(event.dataTransfer.files);
+    void onPickHousePhotos(fileListFromFiles(imageFilesFromDataTransfer(event.dataTransfer)));
   };
 
   const onDropRoomPhotos = (roomIndex: number, roomId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`room-photos-${roomId}`);
-    void onPickRoomPhotos(roomIndex, event.dataTransfer.files);
+    void onPickRoomPhotos(roomIndex, fileListFromFiles(imageFilesFromDataTransfer(event.dataTransfer)));
   };
 
   const onDropRoomVideo = (roomIndex: number, roomId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`room-video-${roomId}`);
-    void onPickRoomVideo(roomIndex, event.dataTransfer.files?.[0] ?? null);
+    void onPickRoomVideo(roomIndex, firstVideoFileFromDataTransfer(event.dataTransfer));
   };
 
   const onDropBathroomPhotos = (bathId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`bath-photos-${bathId}`);
-    void onPickBathroomPhotos(bathId, event.dataTransfer.files);
+    void onPickBathroomPhotos(bathId, fileListFromFiles(imageFilesFromDataTransfer(event.dataTransfer)));
   };
 
   const onDropBathroomVideo = (bathId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`bath-video-${bathId}`);
-    void onPickBathroomVideo(bathId, event.dataTransfer.files?.[0] ?? null);
+    void onPickBathroomVideo(bathId, firstVideoFileFromDataTransfer(event.dataTransfer));
   };
 
   const onDropSharedSpacePhotos = (spaceId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`shared-photos-${spaceId}`);
-    void onPickSharedSpacePhotos(spaceId, event.dataTransfer.files);
+    void onPickSharedSpacePhotos(spaceId, fileListFromFiles(imageFilesFromDataTransfer(event.dataTransfer)));
   };
 
   const onDropSharedSpaceVideo = (spaceId: string, event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
     deactivateDropZone(`shared-video-${spaceId}`);
-    void onPickSharedSpaceVideo(spaceId, event.dataTransfer.files?.[0] ?? null);
+    void onPickSharedSpaceVideo(spaceId, firstVideoFileFromDataTransfer(event.dataTransfer));
   };
 
   /** Assign stable answer keys and drop blank drafts before persisting. */
@@ -2482,94 +2503,186 @@ export function ManagerAddListingForm({
   const draftAutoSaveEligible = !isEditMode && !isPreviewWizard;
 
   /**
-   * Closing IS the save: persist whatever the manager has entered as a draft,
-   * then close. There is no "Save draft" button — this is the only save path
-   * for in-progress work, so it must not silently drop it. When the save fails
-   * the wizard deliberately stays open with the work intact rather than closing
-   * on a lie.
+   * Closing also saves: persist whatever the manager has entered as a draft,
+   * then close. Background autosave runs while the wizard stays open; close
+   * flushes any edits not yet persisted.
    */
   const closeWizard = () => {
     if (!draftAutoSaveEligible) {
       onClose();
       return;
     }
-    void saveDraftAndClose();
+    void persistDraftRef.current({ closeAfter: true });
   };
 
-  const saveDraftAndClose = async () => {
-    if (busy || closingDraft) return;
-    const existingDraftId = draftIdRef.current;
-    const current: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: serviceOffers };
-    const contentChanged = listingWizardHasUnsavedInput(current, baselineFingerprintRef.current ?? "");
-    // A resumed draft whose content is untouched can still have moved to another
-    // step; re-saving keeps the restored position honest.
-    const positionChanged = Boolean(
-      existingDraftId && (stepIndex !== resumedStepIndex || maxStepReached !== resumedMaxStepReached),
-    );
-    if (!contentChanged && !positionChanged) {
-      setDraftSaveError(null);
-      onClose();
-      return;
-    }
-    if (!authReady || !userId) {
-      // Same rule as a failed write below: never close on a lie. The work stays
-      // in the open wizard so signing in again and closing still saves it.
-      const msg = "Could not save your progress — sign in again, then close. Your work is still here.";
-      setDraftSaveError(msg);
-      showToast(msg);
-      return;
-    }
+  const persistListingDraft = useCallback(
+    async (opts?: { silent?: boolean; closeAfter?: boolean }): Promise<boolean> => {
+      if (!draftAutoSaveEligible || busy || closingDraft) return false;
 
-    setClosingDraft(true);
-    try {
-      let submission = current;
-      try {
-        const uploaded = await uploadSubmissionMedia(current);
-        submission = uploaded.submission;
-        if (uploaded.failedCount > 0) droppedAttachmentsRef.current = true;
-        // Keep the uploaded URLs so a retried close does not re-upload the same
-        // bytes and orphan the first copies in the bucket.
-        setSub(submission);
-      } catch (err) {
-        // Per-attachment settling means only a programming error lands here.
-        // Photos are worth less than the typed listing: save the draft anyway
-        // rather than losing everything to a failed upload — but strip the raw
-        // base64 first, so the text saves as a small payload instead of a
-        // multi-megabyte blob that would likely fail the write too.
-        console.error("manager-add-listing-form: draft media upload failed", err);
-        submission = stripSubmissionDataUrls(current);
-        droppedAttachmentsRef.current = true;
-      }
-      const savedId = await saveManagerPropertyDraftToServer(submission, userId, {
-        existingDraftId,
-        stepIndex,
-        maxStepReached,
-        allowIdUpgrade: draftIdMintedHereRef.current,
-      });
-      if (!savedId) {
-        const msg = droppedAttachmentsRef.current
-          ? "Could not save your progress. Your listing is still here, but some attachments couldn't be saved — check your connection and close again."
-          : "Could not save your progress. It is still here — check your connection and close again.";
-        setDraftSaveError(msg);
-        showToast(msg);
-        return;
-      }
-      setDraftSaveError(null);
-      draftIdRef.current = savedId;
-      setSavedListingId(savedId);
-      onSaved?.();
-      const droppedAttachments = droppedAttachmentsRef.current;
-      droppedAttachmentsRef.current = false;
-      showToast(
-        droppedAttachments
-          ? "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time."
-          : "Progress saved to Drafts.",
+      const current: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: serviceOffers };
+      const fingerprint = listingSubmissionFingerprint(current);
+      const contentChangedSinceOpen = listingWizardHasUnsavedInput(
+        current,
+        baselineFingerprintRef.current ?? "",
       );
-      onClose();
-    } finally {
-      setClosingDraft(false);
+      const contentChangedSincePersist =
+        fingerprint !== (lastPersistedFingerprintRef.current ?? baselineFingerprintRef.current ?? "");
+      const positionChanged =
+        stepIndex !== lastPersistedStepRef.current.stepIndex ||
+        maxStepReached !== lastPersistedStepRef.current.maxStepReached;
+
+      if (!contentChangedSinceOpen && !positionChanged) {
+        setDraftSaveError(null);
+        if (opts?.closeAfter) onClose();
+        return true;
+      }
+      if (!contentChangedSincePersist && !positionChanged) {
+        setDraftSaveError(null);
+        if (opts?.closeAfter) onClose();
+        return true;
+      }
+      if (!authReady || !userId) {
+        const msg =
+          "Could not save your progress — sign in again, then close. Your work is still here.";
+        setDraftSaveError(msg);
+        setAutosaveStatus("error");
+        if (!opts?.silent) showToast(msg);
+        return false;
+      }
+
+      if (opts?.closeAfter) {
+        setClosingDraft(true);
+      } else {
+        setAutosaveStatus("saving");
+      }
+
+      try {
+        let submission = current;
+        try {
+          const uploaded = await uploadSubmissionMedia(current);
+          submission = uploaded.submission;
+          if (uploaded.failedCount > 0) droppedAttachmentsRef.current = true;
+          setSub(submission);
+        } catch (err) {
+          console.error("manager-add-listing-form: draft media upload failed", err);
+          submission = stripSubmissionDataUrls(current);
+          droppedAttachmentsRef.current = true;
+        }
+
+        const savedId = await saveManagerPropertyDraftToServer(submission, userId, {
+          existingDraftId: draftIdRef.current,
+          stepIndex,
+          maxStepReached,
+          allowIdUpgrade: draftIdMintedHereRef.current,
+        });
+        if (!savedId) {
+          const msg = droppedAttachmentsRef.current
+            ? "Could not save your progress. Your listing is still here, but some attachments couldn't be saved — check your connection and close again."
+            : "Could not save your progress. It is still here — check your connection and close again.";
+          setDraftSaveError(msg);
+          setAutosaveStatus("error");
+          if (!opts?.silent) showToast(msg);
+          return false;
+        }
+
+        setDraftSaveError(null);
+        draftIdRef.current = savedId;
+        setSavedListingId(savedId);
+        lastPersistedFingerprintRef.current = listingSubmissionFingerprint(submission);
+        lastPersistedStepRef.current = { stepIndex, maxStepReached };
+        onSaved?.();
+
+        const droppedAttachments = droppedAttachmentsRef.current;
+        droppedAttachmentsRef.current = false;
+
+        if (opts?.closeAfter) {
+          showToast(
+            droppedAttachments
+              ? "Progress saved to Drafts. Some attachments couldn't be saved — add them again next time."
+              : "Progress saved to Drafts.",
+          );
+          onClose();
+        } else {
+          setAutosaveStatus("saved");
+        }
+        return true;
+      } finally {
+        if (opts?.closeAfter) {
+          setClosingDraft(false);
+        }
+      }
+    },
+    [
+      authReady,
+      busy,
+      closingDraft,
+      draftAutoSaveEligible,
+      maxStepReached,
+      onClose,
+      onSaved,
+      serviceOffers,
+      showToast,
+      stepIndex,
+      sub,
+      userId,
+    ],
+  );
+
+  persistDraftRef.current = persistListingDraft;
+
+  useEffect(() => {
+    if (!draftAutoSaveEligible || !authReady || !userId) return;
+
+    const current: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: serviceOffers };
+    if (!listingWizardHasUnsavedInput(current, baselineFingerprintRef.current ?? "")) {
+      return;
     }
-  };
+
+    const fingerprint = listingSubmissionFingerprint(current);
+    const alreadyPersisted =
+      fingerprint === lastPersistedFingerprintRef.current &&
+      stepIndex === lastPersistedStepRef.current.stepIndex &&
+      maxStepReached === lastPersistedStepRef.current.maxStepReached;
+    if (alreadyPersisted) return;
+
+    setAutosaveStatus((status) => (status === "saved" ? "idle" : status));
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveDirtyRef.current = true;
+    autosaveTimerRef.current = setTimeout(() => {
+      autosaveTimerRef.current = null;
+      autosaveDirtyRef.current = false;
+      void persistListingDraft({ silent: true });
+    }, LISTING_DRAFT_AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [
+    authReady,
+    draftAutoSaveEligible,
+    maxStepReached,
+    persistListingDraft,
+    serviceOffers,
+    stepIndex,
+    sub,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (!draftAutoSaveEligible) return;
+    const flushOnHide = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      if (!autosaveDirtyRef.current) return;
+      autosaveDirtyRef.current = false;
+      void persistListingDraft({ silent: true });
+    };
+    document.addEventListener("visibilitychange", flushOnHide);
+    return () => document.removeEventListener("visibilitychange", flushOnHide);
+  }, [draftAutoSaveEligible, persistListingDraft]);
 
   const submitListing = async () => {
     const invalid = (() => {
@@ -3566,6 +3679,9 @@ export function ManagerAddListingForm({
                   <MediaPickTrigger accept="video/*" disabled={videoUploadingKeys.has("house")} onFiles={(files) => { void onPickHouseVideo(files?.[0] ?? null); }}>
                     {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
                   </MediaPickTrigger>
+                  {!sub.houseVideoDataUrl && !videoUploadingKeys.has("house") ? (
+                    <p className="mt-2 text-xs text-muted">Drop one video here or use the button.</p>
+                  ) : null}
                   {sub.houseVideoDataUrl ? (
                     <div className="mt-3 space-y-2">
                       <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-border bg-black object-contain" />
@@ -4693,7 +4809,7 @@ export function ManagerAddListingForm({
                     ? "Review each step, then submit your changes when the listing is ready for review."
                     : isPreviewWizard
                       ? "Review each step, then save the preview when it reads the way you want."
-                      : "Nothing is published until you click Submit listing below — then it goes live on Rent with PropLane right away. Close any time and your progress is saved to Drafts."}
+                      : "Nothing is published until you click Submit listing below — then it goes live on Rent with PropLane right away. Your progress saves automatically to Drafts as you work."}
                 </p>
               </div>
             </div>
@@ -4720,6 +4836,18 @@ export function ManagerAddListingForm({
           {draftSaveError ? (
             <p role="alert" data-testid="listing-wizard-draft-save-error" className="mb-3 text-xs font-medium text-red-600">
               {draftSaveError}
+            </p>
+          ) : draftAutoSaveEligible && autosaveStatus !== "idle" ? (
+            <p
+              className="mb-3 text-xs text-muted"
+              data-testid="listing-wizard-autosave-status"
+              aria-live="polite"
+            >
+              {autosaveStatus === "saving"
+                ? "Saving…"
+                : autosaveStatus === "saved"
+                  ? "Saved to Drafts"
+                  : "Couldn't save — check your connection"}
             </p>
           ) : null}
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">

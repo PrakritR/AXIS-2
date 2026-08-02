@@ -292,7 +292,9 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "applications") {
     const RESIDENT_APP_BUCKETS = ["pending", "approved", "rejected"] as const;
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/applications/pending`);
+      return (
+        <ResidentApplicationsPanel basePath={def.basePath} />
+      );
     }
     if (tabParts.length > 2) notFound();
     const tabRaw = tabParts[0]!;
@@ -300,11 +302,14 @@ export async function renderPortalSection(
       tabRaw as (typeof RESIDENT_APP_BUCKETS)[number],
     )
       ? (tabRaw as (typeof RESIDENT_APP_BUCKETS)[number])
-      : "pending";
-    if (tabRaw !== applicationBucket) {
-      redirect(`${def.basePath}/applications/${applicationBucket}`);
+      : null;
+    if (!applicationBucket) {
+      notFound();
     }
-    const applicationId = tabParts.length >= 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+    if (tabParts.length === 1) {
+      redirect(`${def.basePath}/applications`);
+    }
+    const applicationId = decodeURIComponent(tabParts[1]!);
     return (
       <ResidentApplicationsPanel
         bucket={applicationBucket}

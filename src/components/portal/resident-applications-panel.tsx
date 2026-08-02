@@ -85,6 +85,12 @@ import {
   residentApplicationListHref,
   type ResidentApplicationBucketId,
 } from "@/lib/portal-detail-routes";
+import {
+  ResidentApplicationWorkspace,
+  ResidentApplicationWorkspaceActions,
+  ResidentApplicationWorkspaceMobileApply,
+} from "@/components/portal/resident-application-workspace";
+import { buildResidentApplicationWorkspaceState } from "@/lib/rental-application/resident-application-workspace";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 
 function countByBucket(rows: DemoApplicantRow[]) {
@@ -404,19 +410,45 @@ export function ResidentApplicationsPanel({
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [pickerOpen, tick]);
 
+  const workspace = useMemo(
+    () => buildResidentApplicationWorkspaceState(rows, applyTarget),
+    [rows, applyTarget],
+  );
+
+  const openPropertyPicker = () => {
+    setPickedPropertyId(null);
+    void loadPublicExtraListingsFromServer();
+    setPickerOpen(true);
+  };
+
+  const abandonInProgressRow = (row: DemoApplicantRow) => {
+    cancelPendingApplicationRowUpsert(row.id);
+    const draftAxisId = loadRentalWizardDraftAxisId();
+    if (draftAxisId && normalizeApplicationAxisId(draftAxisId) === normalizeApplicationAxisId(row.id)) {
+      clearRentalWizardDraft();
+    }
+    replaceManagerApplicationRowInCache({ ...row, withdrawnAt: new Date().toISOString() });
+    if (expandedId === row.id) setExpandedId(null);
+    if (wizardRowId === row.id) setWizardRowId(null);
+    if (editingId === row.id) setEditingId(null);
+    autoExpandedApplyIdRef.current = null;
+    setTick((t) => t + 1);
+  };
+
   const startApplicationForProperty = (propertyId: string) => {
     const pid = propertyId.trim();
     if (!pid) return;
     setPickerOpen(false);
     setPickedPropertyId(null);
+    const inProgress = rows.find(isInProgressApplicationRow);
+    if (inProgress && inProgress.propertyId?.trim() !== pid) {
+      abandonInProgressRow(inProgress);
+    }
     if (demoMode) {
       setDemoApplyPropertyId(pid);
       setDemoApplyOpen(true);
       return;
     }
-    // Stay inside the portal: /resident/applications/apply renders THIS same
-    // panel in apply mode, so the wizard opens inline under a new row here
-    // (the wizard's draft-sync mints the row once property + email are set).
     portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`);
   };
 
@@ -767,19 +799,23 @@ export function ResidentApplicationsPanel({
     />
   );
 
+  const canOpenPropertyPicker =
+    workspace.canStartAnotherApplication || workspace.mode === "in_progress";
+
   const newApplicationButton =
-    sessionReady ? (
+    sessionReady && canOpenPropertyPicker ? (
       <Button
         type="button"
         variant="primary"
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         data-attr="resident-applications-apply"
-        onClick={() => {
-          setPickedPropertyId(null);
-          setPickerOpen(true);
-        }}
+        onClick={openPropertyPicker}
       >
-        Apply to a property
+        {workspace.mode === "in_progress"
+          ? "Change property"
+          : workspace.mode === "submitted"
+            ? "Apply to another property"
+            : "Apply to a property"}
       </Button>
     ) : null;
 
@@ -940,6 +976,73 @@ export function ResidentApplicationsPanel({
 
   if (embedded) return tableBody;
 
+  if (!applicationIdProp && !applyMode) {
+    return (
+      <ManagerPortalPageShell
+        title="Applications"
+        hideTitleOnMobileNav
+        titleAside={
+          <ResidentApplicationWorkspaceActions
+            workspace={workspace}
+            sessionReady={sessionReady}
+            onApplyClick={openPropertyPicker}
+            canOpenPropertyPicker={canOpenPropertyPicker}
+          />
+        }
+        compactFilterRow
+      >
+        <ResidentApplicationWorkspaceMobileApply
+          workspace={workspace}
+          sessionReady={sessionReady}
+          onApplyClick={openPropertyPicker}
+          canOpenPropertyPicker={canOpenPropertyPicker}
+        />
+        <ResidentApplicationWorkspace
+          workspace={workspace}
+          sessionReady={sessionReady}
+          sessionEmail={sessionEmail ?? undefined}
+          showToast={showToast}
+          applyMode={false}
+          onApplyClick={openPropertyPicker}
+          onWithdraw={(row) => setWithdrawTarget(row)}
+        />
+        {withdrawModal}
+        {propertyPickerModal}
+      </ManagerPortalPageShell>
+    );
+  }
+
+  if (!applicationIdProp && applyMode) {
+    return (
+      <ManagerPortalPageShell
+        title="Applications"
+        hideTitleOnMobileNav
+        titleAside={
+          newApplicationButton ? (
+            <PortalSectionActionRow variant="header" className="hidden md:flex">
+              {newApplicationButton}
+            </PortalSectionActionRow>
+          ) : undefined
+        }
+        compactFilterRow
+      >
+        {applicationsMobileActionsRow}
+        <ResidentApplicationWorkspace
+          workspace={workspace}
+          sessionReady={sessionReady}
+          sessionEmail={sessionEmail ?? undefined}
+          demoApplyPropertyId={demoApplyPropertyId}
+          showToast={showToast}
+          applyMode
+          onApplyClick={openPropertyPicker}
+          onWithdraw={(row) => setWithdrawTarget(row)}
+        />
+        {withdrawModal}
+        {propertyPickerModal}
+      </ManagerPortalPageShell>
+    );
+  }
+
   if (applicationIdProp) {
     if (!sessionReady) {
       return (
@@ -978,7 +1081,7 @@ export function ResidentApplicationsPanel({
           pageTitle="Applications"
           title={detailRow.name || "Application"}
           subtitle={detailRow.property || undefined}
-          backHref={residentApplicationListHref(basePath, bucket)}
+          backHref={residentApplicationListHref(basePath)}
           hideBackText
           bareHeader
           dataAttrBack="resident-application-detail-back"
@@ -991,44 +1094,5 @@ export function ResidentApplicationsPanel({
     );
   }
 
-  return (
-    <ManagerPortalPageShell
-      title="Applications"
-      hideTitleOnMobileNav
-      titleAside={
-        newApplicationButton ? (
-          <PortalSectionActionRow variant="header" className="hidden md:flex">
-            {newApplicationButton}
-          </PortalSectionActionRow>
-        ) : undefined
-      }
-      compactFilterRow
-    >
-      {applicationsMobileActionsRow}
-      {!applyMode ? (
-        <PortalListControlStack
-          className="mb-3 max-lg:mb-4"
-          destinationInset
-          destinations={tabs.map((t) => ({
-            id: t.id,
-            label: t.label,
-            href: residentApplicationListHref(basePath, t.id),
-            count: t.count,
-            dataAttr: `resident-applications-bucket-${t.id}`,
-          }))}
-          activeDestinationId={bucket}
-          destinationAriaLabel="Application status"
-          search={{
-            value: searchQuery,
-            onChange: setSearchQuery,
-            placeholder: "Search applications",
-            dataAttr: "resident-applications-search",
-          }}
-        />
-      ) : (
-        filterRow
-      )}
-      {tableBody}
-    </ManagerPortalPageShell>
-  );
+  return null;
 }
