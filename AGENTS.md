@@ -279,10 +279,12 @@ structure rather than reinventing table/filter markup per tab.
 `ShareLeadLinkModal` (`share-lead-link-modal.tsx`) is the one "Send listing /
 Invite to apply / Share tour" surface, mounted from Properties (header **Share**
 and each listed row's ACTIONS **Send to prospect**), Applications, and Calendar.
-Only the **listing** kind is multi-select (a manager can send several/all
-properties at once via `CheckboxMultiSelect`); **apply** and **tour** stay
-single-property because they target one apply/tour flow. Rules baked into the
-modal + `/api/portal/send-lead-invite`:
+**listing** and **apply** are multi-select (a manager can send several/all
+properties at once via `CheckboxMultiSelect`; a multi-property apply share links
+to `/rent/apply?ids=…` via `buildManagerPortfolioApplyUrl`, where the prospect
+picks a home before entering the wizard). **tour** stays single-property because
+the modal targets one tour flow. Rules baked into the modal +
+`/api/portal/send-lead-invite`:
 
 - **Single listing → direct listing page** (`buildManagerListingUrl` →
   `/rent/listings/{id}`). **Several listings → filtered browse link**
@@ -782,6 +784,12 @@ The rules that follow from it:
   written to a log — it is a live credential until it is used. The one distinguishable
   reply is the `503` for an unconfigured mailer, which is a deployment fact rather than a
   per-address signal.
+- **Because every reply is generic, a broken mint is visible only in the logs.**
+  `admin.generateLink` reports API failures by RETURNING `{data: null, error}` rather
+  than throwing, so that `error` must be logged: drop it and a revoked service-role key
+  or a paused project looks exactly like an unknown address while reset is dead. An
+  unknown address itself stays quiet — it is routine, not an incident — and the token is
+  still never logged.
 - **`RESEND_API_KEY` is now load-bearing for password reset.** Recovery mail used to go
   through Supabase's own mailer, so reset worked on a deployment with no email provider
   configured; it no longer does — without that key the route answers `503` and reset is
