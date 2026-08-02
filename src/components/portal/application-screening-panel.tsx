@@ -18,9 +18,13 @@ import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
 const DEMO_SCREENING_DEFAULTS = { mode: "manual" as const };
 
-function backgroundCheckDocumentHref(applicationId: string, opts?: { attachment?: boolean }): string {
+function backgroundCheckDocumentHref(
+  applicationId: string,
+  opts?: { attachment?: boolean; cacheKey?: string },
+): string {
   const params = new URLSearchParams({ applicationId });
   if (opts?.attachment) params.set("disposition", "attachment");
+  if (opts?.cacheKey) params.set("v", opts.cacheKey);
   return `/api/screening/background-check/document?${params.toString()}`;
 }
 
@@ -51,55 +55,52 @@ export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { 
   const bg = row.backgroundCheck;
   const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
   const canTryOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
-  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
+  const pdfCacheKey = bg
+    ? `${bg.reportId ?? ""}:${bg.reportResourceId ?? ""}:${bg.completedAt ?? ""}`
+    : "";
+  const pdfHref = canTryOfficialPdf
+    ? backgroundCheckDocumentHref(row.id, { cacheKey: pdfCacheKey })
+    : null;
+  const pdfSrc = pdfHref ? `${pdfHref}#toolbar=0&navpanes=0` : null;
   const [pdfFailed, setPdfFailed] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfReady, setPdfReady] = useState(false);
 
   useEffect(() => {
-    if (!canTryOfficialPdf) {
-      setPdfObjectUrl(null);
+    if (!pdfHref) {
       setPdfFailed(false);
-      setPdfLoading(false);
+      setPdfReady(false);
       return;
     }
 
     let cancelled = false;
-    let objectUrl: string | null = null;
     setPdfFailed(false);
-    setPdfObjectUrl(null);
-    setPdfLoading(true);
+    setPdfReady(false);
 
-    void fetch(backgroundCheckDocumentHref(row.id), { credentials: "include" })
-      .then(async (res) => {
+    void fetch(pdfHref, { credentials: "include" })
+      .then((res) => {
         if (cancelled) return;
         const type = res.headers.get("content-type") ?? "";
         if (!res.ok || !type.includes("pdf")) {
           setPdfFailed(true);
           return;
         }
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        setPdfObjectUrl(objectUrl);
+        setPdfReady(true);
       })
       .catch(() => {
         if (!cancelled) setPdfFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setPdfLoading(false);
       });
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [canTryOfficialPdf, row.id, bg?.reportId, bg?.reportResourceId, bg?.completedAt]);
+  }, [pdfHref]);
 
   const frameClass = bareCanvas
     ? "h-[min(70vh,720px)] w-full border-0 bg-white"
     : "h-[min(52vh,420px)] w-full border-0 bg-white";
 
-  if (canTryOfficialPdf && !pdfFailed) {
-    if (pdfLoading || !pdfObjectUrl) {
+  if (pdfSrc && !pdfFailed) {
+    if (!pdfReady) {
       return (
         <div className={`flex items-center justify-center text-sm text-muted ${frameClass}`}>
           Loading Checkr report…
@@ -108,7 +109,8 @@ export function BackgroundCheckReportFrame({ row, demo, bareCanvas = false }: { 
     }
     return (
       <iframe
-        src={`${pdfObjectUrl}#toolbar=0&navpanes=0`}
+        key={pdfSrc}
+        src={pdfSrc}
         title="Background check report preview"
         loading="lazy"
         className={frameClass}

@@ -71,6 +71,20 @@ export async function POST(req: Request) {
       );
     }
 
+    const { data: existingRecord } = await db
+      .from("manager_application_records")
+      .select("row_data")
+      .eq("id", applicationId)
+      .maybeSingle();
+    const existingRow = existingRecord?.row_data as { backgroundCheck?: { stripeCheckoutSessionId?: string } } | null;
+    if (existingRow?.backgroundCheck?.stripeCheckoutSessionId === session.id) {
+      return NextResponse.json({
+        paid: true,
+        sessionId: session.id,
+        backgroundCheck: existingRow.backgroundCheck,
+      });
+    }
+
     const paymentIntentId =
       typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
     const rawPackageSlug = session.metadata?.package_slug ?? "";

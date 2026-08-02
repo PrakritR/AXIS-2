@@ -332,8 +332,13 @@ export function PortalMessageScheduleFields({
 }) {
   if (disabled) return null;
   return (
-    <>
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+    <div
+      className={cn(
+        "flex gap-4",
+        scheduleLater ? "flex-col sm:flex-row sm:items-end" : "flex-row items-center",
+      )}
+    >
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm sm:min-h-10">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border accent-primary"
@@ -344,7 +349,7 @@ export function PortalMessageScheduleFields({
         <span className="font-medium text-foreground">Schedule for later</span>
       </label>
       {scheduleLater ? (
-        <label className="block text-sm">
+        <label className="block min-w-0 flex-1 text-sm">
           <span className={portalMessageFieldLabel()}>Send date & time</span>
           <Input
             type="datetime-local"
@@ -355,6 +360,6 @@ export function PortalMessageScheduleFields({
           />
         </label>
       ) : null}
-    </>
+    </div>
   );
 }

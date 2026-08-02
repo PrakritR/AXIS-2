@@ -15,6 +15,10 @@ import {
 } from "@/lib/work-order-notification.server";
 import type { WorkOrderRowWithDispatch } from "@/lib/work-order-dispatch";
 import { prepareDispatch } from "@/lib/work-order-dispatch.server";
+import {
+  syncWorkOrderToGoogleCalendar,
+  workOrderGoogleCalendarSyncChanged,
+} from "@/lib/google-calendar/sync.server";
 
 export const runtime = "nodejs";
 
@@ -351,14 +355,31 @@ export async function POST(req: Request) {
       rows?: DemoManagerWorkOrderRow[];
     };
 
-    type ExistingRecord = OwnerCols & { dispatch?: unknown };
+    type ExistingRecord = OwnerCols & { dispatch?: unknown; row_data?: DemoManagerWorkOrderRow | null };
     const findExisting = async (id: string): Promise<ExistingRecord | null> => {
       const { data } = await db
         .from("portal_work_order_records")
-        .select("manager_user_id, resident_email, dispatch:row_data->dispatch")
+        .select("manager_user_id, resident_email, dispatch:row_data->dispatch, row_data")
         .eq("id", id)
         .maybeSingle();
       return (data as ExistingRecord | null) ?? null;
+    };
+
+    const maybeSyncWorkOrderGoogleCalendar = async (
+      existing: ExistingRecord | null,
+      persisted: { manager_user_id: string | null; row_data: DemoManagerWorkOrderRow },
+    ): Promise<void> => {
+      const managerUserId = persisted.manager_user_id?.trim();
+      if (!managerUserId || actor.role === "resident") return;
+      const previous = existing?.row_data ?? null;
+      const next = persisted.row_data;
+      if (!workOrderGoogleCalendarSyncChanged(previous, next)) return;
+      const synced = await syncWorkOrderToGoogleCalendar(db, managerUserId, next).catch(() => next);
+      if (synced.googleCalendarEventId === next.googleCalendarEventId) return;
+      await db
+        .from("portal_work_order_records")
+        .update({ row_data: synced, updated_at: new Date().toISOString() })
+        .eq("id", next.id);
     };
 
     /** row_data.dispatch is strictly server-owned (dispatch pipeline). Clients
@@ -439,6 +460,7 @@ export async function POST(req: Request) {
             await notifyManagerOfCreatedWorkOrder(db, actor, stamped, persisted.manager_user_id);
           }
           maybePrepareDispatch(existing, stamped.id);
+          await maybeSyncWorkOrderGoogleCalendar(existing, persisted);
         }
       }
       return NextResponse.json({ ok: true });
@@ -449,12 +471,19 @@ export async function POST(req: Request) {
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
       const { data: existing } = await db
         .from("portal_work_order_records")
-        .select("manager_user_id, resident_email")
+        .select("manager_user_id, resident_email, row_data")
         .eq("id", id)
         .maybeSingle();
       if (!existing) return NextResponse.json({ ok: true });
       if (!actorOwnsRecord(actor, existing)) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      const row = existing.row_data as DemoManagerWorkOrderRow | null;
+      const managerUserId = (existing.manager_user_id as string | null) ?? row?.managerUserId ?? null;
+      if (row && managerUserId) {
+        await syncWorkOrderToGoogleCalendar(db, managerUserId, { ...row, bucket: "completed", scheduledAtIso: undefined }).catch(
+          () => undefined,
+        );
       }
       const { error } = await db.from("portal_work_order_records").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -490,6 +519,7 @@ export async function POST(req: Request) {
       await notifyManagerOfCreatedWorkOrder(db, actor, stamped, persisted.manager_user_id);
     }
     maybePrepareDispatch(existing, stamped.id);
+    await maybeSyncWorkOrderGoogleCalendar(existing, persisted);
     return NextResponse.json({ ok: true, row: persisted.row_data });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save work order.";

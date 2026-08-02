@@ -25,7 +25,7 @@ afterEach(cleanup);
 const completedRow: DemoApplicantRow = {
   id: "AXIS-TEST",
   name: "Olivia Brooks",
-  email: "olivia.brooks.workflow@test.axis.local",
+  email: "olivia.brooks.workflow@test.proplane.local",
   property: "Ballard House",
   propertyId: "prop-ballard",
   stage: "Submitted",
@@ -33,7 +33,7 @@ const completedRow: DemoApplicantRow = {
   detail: "Approved",
   application: {
     consentCredit: true,
-    email: "olivia.brooks.workflow@test.axis.local",
+    email: "olivia.brooks.workflow@test.proplane.local",
   } as DemoApplicantRow["application"],
   backgroundCheck: {
     provider: "checkr",

@@ -328,19 +328,31 @@ export async function listGoogleCalendarEvents(
     .filter(Boolean) as GoogleCalendarApiEvent[];
 }
 
+export type GoogleCalendarEventWriteInput = {
+  title: string;
+  description?: string;
+  start: string;
+  end: string;
+  location?: string;
+};
+
+function googleCalendarEventBody(input: GoogleCalendarEventWriteInput) {
+  return {
+    summary: input.title,
+    description: input.description,
+    location: input.location,
+    start: { dateTime: input.start },
+    end: { dateTime: input.end },
+  };
+}
+
 export async function createGoogleCalendarEvent(
   db: SupabaseClient,
   managerUserId: string,
-  input: {
-    title: string;
-    description?: string;
-    start: string;
-    end: string;
-    location?: string;
-  },
-): Promise<void> {
+  input: GoogleCalendarEventWriteInput,
+): Promise<string | null> {
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
-  if (!connection.syncEnabled) return;
+  if (!connection.syncEnabled) return null;
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
   const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
     method: "POST",
@@ -348,16 +360,65 @@ export async function createGoogleCalendarEvent(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      summary: input.title,
-      description: input.description,
-      location: input.location,
-      start: { dateTime: input.start },
-      end: { dateTime: input.end },
-    }),
+    body: JSON.stringify(googleCalendarEventBody(input)),
   });
+  const data = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
     throw new Error(data.error?.message ?? "Could not create Google Calendar event.");
+  }
+  return data.id?.trim() || null;
+}
+
+export async function updateGoogleCalendarEvent(
+  db: SupabaseClient,
+  managerUserId: string,
+  eventId: string,
+  input: GoogleCalendarEventWriteInput,
+): Promise<string | null> {
+  const trimmedId = eventId.trim();
+  if (!trimmedId) return null;
+  const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
+  if (!connection.syncEnabled) return null;
+  const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
+  const encodedEventId = encodeURIComponent(trimmedId);
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${encodedEventId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(googleCalendarEventBody(input)),
+    },
+  );
+  const data = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not update Google Calendar event.");
+  }
+  return data.id?.trim() || trimmedId;
+}
+
+export async function deleteGoogleCalendarEvent(
+  db: SupabaseClient,
+  managerUserId: string,
+  eventId: string,
+): Promise<void> {
+  const trimmedId = eventId.trim();
+  if (!trimmedId) return;
+  const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
+  if (!connection.syncEnabled) return;
+  const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
+  const encodedEventId = encodeURIComponent(trimmedId);
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${encodedEventId}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(data.error?.message ?? "Could not delete Google Calendar event.");
   }
 }

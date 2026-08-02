@@ -755,12 +755,16 @@ export async function renderPortalSection(
     }
 
     if (section === "applications") {
-      const APPLICATION_TABS = ["incomplete", "pending", "approved", "rejected", "screenings"] as const;
+      const APPLICATION_TABS = ["incomplete", "pending", "approved", "rejected"] as const;
       if (!tabParts?.length) {
         redirect(`${def.basePath}/applications/pending`);
       }
       if (tabParts.length > 2) notFound();
       const tabRaw = tabParts[0]!;
+      if (tabRaw === "screenings") {
+        const legacyId = tabParts.length >= 2 ? `/${encodeURIComponent(decodeURIComponent(tabParts[1]!))}` : "";
+        redirect(`${def.basePath}/applications/approved${legacyId}`);
+      }
       const applicationTab = APPLICATION_TABS.includes(tabRaw as typeof APPLICATION_TABS[number])
         ? (tabRaw as typeof APPLICATION_TABS[number])
         : "pending";
@@ -782,10 +786,10 @@ export async function renderPortalSection(
     }
 
     if (section === "screenings") {
-      const legacyPath = tabParts?.length
-        ? `/applications/screenings/${tabParts.map((p) => encodeURIComponent(p)).join("/")}`
-        : "/applications/screenings";
-      redirect(`${def.basePath}${legacyPath}`);
+      const legacyId = tabParts?.length
+        ? `/${tabParts.map((p) => encodeURIComponent(p)).join("/")}`
+        : "";
+      redirect(`${def.basePath}/applications/approved${legacyId}`);
     }
 
     if (section === "properties") {

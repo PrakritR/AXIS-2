@@ -85,6 +85,72 @@ async function loadCheckrProperty(
   return { name: "Rental property", street: "Unknown", city: "Seattle", state: "WA", zipcode: "98101" };
 }
 
+const STRIPE_CHECKOUT_CLAIM_PROVIDER = "stripe_checkout";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForPrepaidScreeningRow(
+  db: SupabaseClient,
+  applicationId: string,
+  checkoutSessionId: string,
+  maxAttempts = 15,
+  delayMs = 400,
+): Promise<DemoApplicantRow | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const row = await loadApplicationRow(db, applicationId);
+    if (row?.backgroundCheck?.stripeCheckoutSessionId === checkoutSessionId) {
+      return row;
+    }
+    if (attempt < maxAttempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  return null;
+}
+
+/**
+ * Ensures only one worker places a Checkr order for a paid Checkout session.
+ * Webhook and checkout-verify can race; the unique screening_orders claim wins.
+ */
+async function claimPrepaidScreeningCheckout(opts: {
+  db: SupabaseClient;
+  applicationId: string;
+  managerUserId: string;
+  checkoutSessionId: string;
+}): Promise<
+  | { kind: "proceed" }
+  | { kind: "existing"; row: DemoApplicantRow; backgroundCheck: ApplicationBackgroundCheck }
+  | { kind: "busy" }
+> {
+  const existing = await loadApplicationRow(opts.db, opts.applicationId);
+  if (existing?.backgroundCheck?.stripeCheckoutSessionId === opts.checkoutSessionId) {
+    return { kind: "existing", row: existing, backgroundCheck: existing.backgroundCheck };
+  }
+
+  const { error } = await opts.db.from("screening_orders").insert({
+    application_id: opts.applicationId,
+    manager_user_id: opts.managerUserId,
+    provider: STRIPE_CHECKOUT_CLAIM_PROVIDER,
+    external_order_id: opts.checkoutSessionId,
+    status: "processing",
+    row_data: { checkoutSessionId: opts.checkoutSessionId },
+  });
+
+  if (!error) return { kind: "proceed" };
+
+  if (error.code === "23505") {
+    const row = await waitForPrepaidScreeningRow(opts.db, opts.applicationId, opts.checkoutSessionId);
+    if (row?.backgroundCheck) {
+      return { kind: "existing", row, backgroundCheck: row.backgroundCheck };
+    }
+    return { kind: "busy" };
+  }
+
+  throw new Error(error.message);
+}
+
 async function loadApplicationRow(
   db: SupabaseClient,
   applicationId: string,
@@ -214,6 +280,24 @@ export async function runBackgroundCheck(opts: {
     const existing = await loadApplicationRow(opts.db, opts.applicationId);
     if (existing?.backgroundCheck?.stripeCheckoutSessionId === opts.prepaid.checkoutSessionId) {
       return { ok: true, row: existing, backgroundCheck: existing.backgroundCheck };
+    }
+
+    const claim = await claimPrepaidScreeningCheckout({
+      db: opts.db,
+      applicationId: opts.applicationId,
+      managerUserId: opts.managerUserId,
+      checkoutSessionId: opts.prepaid.checkoutSessionId,
+    });
+    if (claim.kind === "existing") {
+      return { ok: true, row: claim.row, backgroundCheck: claim.backgroundCheck };
+    }
+    if (claim.kind === "busy") {
+      return {
+        ok: false,
+        status: 409,
+        error: "A background check is already being placed for this payment.",
+        code: "in_progress",
+      };
     }
   }
 

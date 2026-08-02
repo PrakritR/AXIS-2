@@ -563,6 +563,7 @@ export function PortalCalendar({
             }
             coManagerAvailabilityOverlays={showCoManagerCoordination ? coManagerAvailabilityOverlays : undefined}
             externalMeetings={portal === "manager" ? mergedExternalMeetings : undefined}
+            onGoogleCalendarRefresh={() => setGoogleCalendarTick((n) => n + 1)}
             readOnly={portal === "manager" ? calendarPanelsReadOnly : false}
             eventSummaryLabel={servicesOnlyView ? "visit" : calendarView === "all" ? "event" : "tour"}
             preferEventCountsInDayHeader

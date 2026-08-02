@@ -60,6 +60,8 @@ import {
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
 import { buildScheduledTourMeetings } from "@/lib/manager-calendar-tour-meetings";
+import { isGoogleCalendarPrivateBlock, meetingCalendarGridLabel, calendarMeetingSupportsDelete, isPropPlaneGoogleTourMeeting } from "@/lib/google-calendar/meetings";
+import { deleteProplaneGoogleTourFromServer } from "@/lib/google-calendar/delete-tour.client";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -184,9 +186,11 @@ export type DemoMeeting = {
   propertyId?: string;
   roomLabel?: string;
   instructions?: string;
-  kind?: "partner" | "tour";
+  kind?: "partner" | "tour" | "service";
   hostLabel?: string;
   isPeerTour?: boolean;
+  /** Personal Google Calendar busy time — title/details must not be shown in the UI. */
+  googleCalendarPrivate?: boolean;
 };
 
 type CalendarBlockSelection =
@@ -227,6 +231,7 @@ export function PortalCalendarPanels({
   scheduleOwnerLabel,
   availabilityHeading = "Availability",
   externalMeetings,
+  onGoogleCalendarRefresh,
   readOnly = false,
   eventSummaryLabel,
   vendorDayFlexibility,
@@ -254,6 +259,7 @@ export function PortalCalendarPanels({
   /** Pre-built calendar events from a caller-owned data source (e.g. vendor visits) merged
    * alongside the planned-events/partner-inquiries meetings this component reads itself. */
   externalMeetings?: DemoMeeting[];
+  onGoogleCalendarRefresh?: () => void;
   /** Hides availability-editing affordances (create/copy/clear block, slot painting) so this
    * component can display a schedule for a caller that manages availability elsewhere. */
   readOnly?: boolean;
@@ -374,7 +380,21 @@ export function PortalCalendarPanels({
     void calendarRefreshSignal;
     void meetingRefresh;
     const tourMeetings = buildScheduledTourMeetings(scheduledTourFilter, storageKey);
-    return [...tourMeetings, ...(externalMeetings ?? [])];
+    const linkedGoogleIds = new Set(
+      readPlannedEvents()
+        .map((event) => event.googleCalendarEventId?.trim())
+        .filter((id): id is string => Boolean(id)),
+    );
+    const plannedTourStarts = new Set(
+      tourMeetings.filter((meeting) => meeting.source === "planned" && meeting.kind === "tour").map((meeting) => meeting.startIso),
+    );
+    const filteredExternal = (externalMeetings ?? []).filter((meeting) => {
+      if (!isPropPlaneGoogleTourMeeting(meeting)) return true;
+      if (linkedGoogleIds.has(meeting.sourceId)) return false;
+      if (plannedTourStarts.has(meeting.startIso)) return false;
+      return true;
+    });
+    return [...tourMeetings, ...filteredExternal];
   }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter, externalMeetings]);
 
   const monthYear = anchorDate.getFullYear();
@@ -552,16 +572,35 @@ export function PortalCalendarPanels({
 
   const deleteSelectedMeeting = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting") return;
-    const ok =
-      selectedBlock.meeting.source === "planned"
-        ? await deletePlannedEventFromServer(selectedBlock.meeting.sourceId)
-        : await deletePartnerInquiryFromServer(selectedBlock.meeting.sourceId);
+    const meeting = selectedBlock.meeting;
+    let ok = false;
+    if (isPropPlaneGoogleTourMeeting(meeting)) {
+      const result = await deleteProplaneGoogleTourFromServer(meeting.sourceId);
+      if (!result.ok) {
+        showToast(result.error ?? "Could not delete calendar event.");
+        return;
+      }
+      ok = true;
+    } else if (meeting.source === "planned") {
+      const planned = readPlannedEvents().find((event) => event.id === meeting.sourceId);
+      if (planned?.googleCalendarEventId?.trim()) {
+        await deleteProplaneGoogleTourFromServer(planned.googleCalendarEventId);
+        onGoogleCalendarRefresh?.();
+      }
+      ok = await deletePlannedEventFromServer(meeting.sourceId);
+    } else {
+      ok = await deletePartnerInquiryFromServer(meeting.sourceId);
+    }
     if (ok) {
       setSelectedBlock(null);
       setMeetingRefresh((n) => n + 1);
       reloadAvailability();
+      if (isPropPlaneGoogleTourMeeting(meeting)) onGoogleCalendarRefresh?.();
+      showToast(meeting.source === "inquiry" ? "Tour request removed." : "Event deleted.");
+    } else {
+      showToast("Could not delete this event.");
     }
-  }, [reloadAvailability, selectedBlock]);
+  }, [onGoogleCalendarRefresh, reloadAvailability, selectedBlock, showToast]);
 
   const prevRefreshSig = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -608,6 +647,7 @@ export function PortalCalendarPanels({
   const upcomingMeetingSummary = useMemo(() => {
     const now = today.getTime() - 30 * 60 * 1000;
     const sorted = meetings
+      .filter((meeting) => !isGoogleCalendarPrivateBlock(meeting))
       .map((meeting) => ({ meeting, startMs: new Date(meeting.startIso).getTime() }))
       .filter((item) => Number.isFinite(item.startMs) && item.startMs >= now)
       .sort((a, b) => a.startMs - b.startMs);
@@ -912,7 +952,11 @@ export function PortalCalendarPanels({
       >
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
-          {selectedBlock.kind === "meeting" ? selectedBlock.meeting.title : "Availability block"}
+          {selectedBlock.kind === "meeting"
+            ? isGoogleCalendarPrivateBlock(selectedBlock.meeting)
+              ? "Blocked"
+              : selectedBlock.meeting.title
+            : "Availability block"}
         </h3>
         <button
           type="button"
@@ -928,10 +972,20 @@ export function PortalCalendarPanels({
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
             <p className="font-semibold text-foreground">{formatRangeLabel(selectedBlock.meeting.startIso, selectedBlock.meeting.endIso)}</p>
             <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-              {selectedBlock.meeting.statusLabel ?? (selectedBlock.meeting.source === "planned" ? "Confirmed" : "Requested")}
+              {selectedBlock.meeting.statusLabel ??
+                (selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting)
+                  ? "Confirmed"
+                  : "Requested")}
             </p>
           </div>
 
+          {isGoogleCalendarPrivateBlock(selectedBlock.meeting) ? (
+            <p className="text-sm text-muted">
+              This time is busy on your linked Google Calendar. Personal event details stay on Google — only the blocked
+              time is shown here so tour availability stays accurate.
+            </p>
+          ) : (
+            <>
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             {selectedBlock.meeting.name ? (
               <div>
@@ -1046,16 +1100,21 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
+            </>
+          )}
+
           <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
-            {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
+            {calendarMeetingSupportsDelete(selectedBlock.meeting) ? (
               <>
             <Button
               type="button"
               variant="outline"
               className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
-              onClick={deleteSelectedMeeting}
+              onClick={() => void deleteSelectedMeeting()}
             >
-              {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
+              {selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting)
+                ? "Delete event"
+                : "Delete request"}
             </Button>
             {selectedBlock.meeting.source === "inquiry" ? (
               selectedBlock.meeting.kind === "tour" ? (
@@ -1293,7 +1352,7 @@ export function PortalCalendarPanels({
                     className="rounded-xl border bg-card px-3 py-2 text-left text-xs shadow-sm transition hover:border-primary/30 hover:bg-[var(--status-approved-bg)]"
                     onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(meeting.dateStr, meeting.startSlot, e.currentTarget, meeting)}
                   >
-                    <span className="block font-bold text-foreground">{meeting.title}</span>
+                    <span className="block font-bold text-foreground">{meetingCalendarGridLabel(meeting)}</span>
                     <span className="mt-1 block text-muted">{formatRangeLabel(meeting.startIso, meeting.endIso)}</span>
                     {meeting.propertyTitle ? (
                       <span className="mt-1 block truncate text-muted">{meeting.propertyTitle}</span>
@@ -1358,12 +1417,11 @@ export function PortalCalendarPanels({
                 >
                   {meeting ? (
                     isMeetingStart ? (
-                      <span className="block truncate">
-                        {meeting.statusLabel}: {meeting.title}
-                        {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
-                      </span>
+                      <span className="block truncate">{meetingCalendarGridLabel(meeting)}</span>
                     ) : (
-                      <span className="block truncate opacity-70">{meeting.statusLabel}</span>
+                      <span className="block truncate opacity-70">
+                        {isGoogleCalendarPrivateBlock(meeting) ? "Blocked" : meeting.statusLabel}
+                      </span>
                     )
                   ) : selected ? (
                     "Selected"
@@ -1821,8 +1879,7 @@ export function PortalCalendarPanels({
                                 className={`w-full rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
                                 onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                               >
-                                {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
-                                {meeting.title}
+                                {meetingCalendarGridLabel(meeting)}
                               </button>
                             ) : (
                               <div className="h-full rounded-xl border border-dashed border-border" />
@@ -1860,8 +1917,7 @@ export function PortalCalendarPanels({
                         style={{ height: `calc(${meeting.durationMinutes / SLOT_DURATION_MINUTES} * 40px - 4px)` }}
                         onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                       >
-                        {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
-                        {meeting.title}
+                        {meetingCalendarGridLabel(meeting)}
                       </button>
                     ) : (
                       <div className="h-full rounded-xl border border-dashed border-border" />

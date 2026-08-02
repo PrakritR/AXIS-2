@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { classifyGoogleCalendarEventsFetchError, listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { googleCalendarEventsToMeetings } from "@/lib/google-calendar/meetings";
+import { deleteProplaneGoogleCalendarEvent } from "@/lib/google-calendar/sync.server";
 import { loadGoogleCalendarConnection } from "@/lib/google-calendar/settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -63,6 +64,24 @@ export async function GET(req: Request) {
         hint: classified.hint,
       });
     }
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const ctx = await requireManager();
+    if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const eventId = new URL(req.url).searchParams.get("eventId")?.trim() ?? "";
+    if (!eventId) return NextResponse.json({ error: "eventId is required." }, { status: 400 });
+    const connection = await loadGoogleCalendarConnection(ctx.db, ctx.userId);
+    if (!connection.connected) {
+      return NextResponse.json({ error: "Google Calendar is not connected." }, { status: 400 });
+    }
+    await deleteProplaneGoogleCalendarEvent(ctx.db, ctx.userId, eventId);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to delete calendar event.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

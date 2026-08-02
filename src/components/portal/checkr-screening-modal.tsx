@@ -152,6 +152,19 @@ export function CheckrScreeningModal({
       .finally(() => setPackagesLoaded(true));
   }, [open, isDemo]);
 
+  const handlePaymentComplete = useCallback(
+    (backgroundCheck: ApplicationBackgroundCheck) => {
+      setBg(backgroundCheck);
+      setShowPackagePicker(false);
+      showToast(
+        backgroundCheck.status === "complete" ? "Screening complete." : "Payment received. Background check is running.",
+      );
+      onUpdated?.();
+      onClose();
+    },
+    [onClose, onUpdated, showToast],
+  );
+
   useEffect(() => {
     if (!open || !row || bg?.status !== "pending" || isDemo) return;
     let cancelled = false;
@@ -169,7 +182,9 @@ export function CheckrScreeningModal({
           const body = (await res.json()) as { backgroundCheck?: ApplicationBackgroundCheck };
           if (!body.backgroundCheck) return;
           setBg(body.backgroundCheck);
-          if (body.backgroundCheck.status === "complete") onUpdated?.();
+          if (body.backgroundCheck.status === "complete") {
+            handlePaymentComplete(body.backgroundCheck);
+          }
         })
         .catch(() => undefined);
     }, 5000);
@@ -177,7 +192,7 @@ export function CheckrScreeningModal({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [open, row, bg?.status, onUpdated, isDemo]);
+  }, [open, row, bg?.status, isDemo, handlePaymentComplete]);
 
   useEffect(() => () => {
     if (demoResolveTimer.current) clearTimeout(demoResolveTimer.current);
@@ -185,24 +200,15 @@ export function CheckrScreeningModal({
 
   const returnPath = useMemo(() => (row ? screeningReturnPath(row, pathname) : pathname), [row, pathname]);
 
-  const handlePaymentComplete = useCallback(
-    (backgroundCheck: ApplicationBackgroundCheck) => {
-      setBg(backgroundCheck);
-      showToast(
-        backgroundCheck.status === "complete" ? "Screening complete." : "Payment received. Background check is running.",
-      );
-      onUpdated?.();
-    },
-    [onUpdated, showToast],
-  );
-
-  // After embedded Stripe checkout, verify payment and keep the modal on background check.
+  // After embedded Stripe checkout, verify payment and return to the background check tab.
   useEffect(() => {
     if (!open || !row || isDemo) return;
     const screening = searchParams.get("screening");
     if (screening !== "return") return;
     const sessionId = searchParams.get("session_id")?.trim();
     if (!sessionId || processedScreeningSessions.has(sessionId)) return;
+
+    processedScreeningSessions.add(sessionId);
 
     void (async () => {
       const res = await fetch("/api/screening/checkout-verify", {
@@ -216,7 +222,6 @@ export function CheckrScreeningModal({
         backgroundCheck?: ApplicationBackgroundCheck;
         error?: string;
       };
-      processedScreeningSessions.add(sessionId);
 
       const params = new URLSearchParams(searchParams.toString());
       params.delete("screening");
@@ -274,11 +279,11 @@ export function CheckrScreeningModal({
           backgroundCheck: resolved,
           backgroundCheckStatus: backgroundCheckStatusFromCheckr(resolved),
         });
-        onUpdated?.();
+        handlePaymentComplete(resolved);
       }, DEMO_SCREENING_RESOLVE_DELAY_MS);
       return;
     }
-  }, [row, onUpdated, showToast, isDemo, selectedPackage, selectedAddOns]);
+  }, [row, handlePaymentComplete, showToast, isDemo, selectedPackage, selectedAddOns]);
 
   if (!row) return null;
 

@@ -13,6 +13,7 @@ import { sendWorkOrderVendorOffers, vendorDirectoryRowsById } from "@/lib/work-o
 import { approveAndPayWorkOrder } from "@/lib/work-order-approve-pay.server";
 import { createExpensesFromWorkOrder, mergeWorkOrderCompletion } from "@/lib/work-order-expenses";
 import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
+import { syncWorkOrderToGoogleCalendar } from "@/lib/google-calendar/sync.server";
 import { buildVendorVisitEmail } from "@/lib/vendor-visit-email";
 import { sendVendorNotification } from "@/lib/vendor-notification-delivery";
 import { assertFinancialsTier } from "@/lib/reports/auth";
@@ -752,6 +753,15 @@ export const scheduleVendorVisitTool = defineWriteTool({
     if (error) {
       await updateAuditResult(ctx, dedupeKey, { error: "update_failed" }, { clearDedupeKey: true });
       throw new Error(`Could not schedule the visit: ${error.message}`);
+    }
+
+    const syncedRow = await syncWorkOrderToGoogleCalendar(ctx.db, ctx.landlordId, nextRowData).catch(() => nextRowData);
+    if (syncedRow.googleCalendarEventId !== nextRowData.googleCalendarEventId) {
+      await ctx.db
+        .from("portal_work_order_records")
+        .update({ row_data: syncedRow, updated_at: new Date().toISOString() })
+        .eq("id", owned.id)
+        .eq("manager_user_id", ctx.landlordId);
     }
 
     // Existing vendor notification pipeline: Resend email + outbound-mail audit

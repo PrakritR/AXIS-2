@@ -64,7 +64,7 @@ describe("manager Applications — screening modal on detail route", () => {
       {
         id: "AXIS-DEMOSOFID",
         name: "Sofia Diaz",
-        email: "sofia.diaz.workflow@test.axis.local",
+        email: "sofia.diaz.workflow@test.proplane.local",
         property: "Ballard House",
         propertyId: "prop-ballard",
         stage: "Submitted",
@@ -72,7 +72,7 @@ describe("manager Applications — screening modal on detail route", () => {
         detail: "Approved",
         application: {
           consentCredit: true,
-          email: "sofia.diaz.workflow@test.axis.local",
+          email: "sofia.diaz.workflow@test.proplane.local",
         } as DemoApplicantRow["application"],
       },
     ];

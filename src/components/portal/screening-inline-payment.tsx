@@ -11,7 +11,7 @@ import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
  * Inline Stripe payment for applicant screening — card form renders inside the
  * screening modal below the package total. On completion Stripe returns to
  * `returnPath?screening=return&session_id=…`; the parent verifies server-side
- * and keeps the modal open on the background-check view.
+ * and closes the modal on the background-check tab.
  */
 export function ScreeningInlinePayment({
   applicationId,
@@ -33,7 +33,18 @@ export function ScreeningInlinePayment({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const inFlight = useRef(false);
-  const selectionKey = `${packageSlug}:${addOnProducts.join(",")}`;
+  const startedSelectionKey = useRef<string | null>(null);
+  const onPaidRef = useRef(onPaid);
+  const onErrorRef = useRef(onError);
+  const selectionKey = `${applicationId}:${packageSlug}:${addOnProducts.join(",")}`;
+
+  useEffect(() => {
+    onPaidRef.current = onPaid;
+  }, [onPaid]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const start = useCallback(async () => {
     if (inFlight.current) return;
@@ -63,33 +74,35 @@ export function ScreeningInlinePayment({
       if (!res.ok) {
         const message = data.error ?? "Could not start payment. Please try again.";
         setError(message);
-        onError?.(message);
+        onErrorRef.current?.(message);
         return;
       }
       if (data.ran && data.backgroundCheck) {
-        onPaid(data.backgroundCheck);
+        onPaidRef.current(data.backgroundCheck);
         return;
       }
       if (!data.clientSecret) {
         const message = "Stripe did not return a payment form.";
         setError(message);
-        onError?.(message);
+        onErrorRef.current?.(message);
         return;
       }
       setClientSecret(data.clientSecret);
     } catch {
       const message = "Could not start payment. Please try again.";
       setError(message);
-      onError?.(message);
+      onErrorRef.current?.(message);
     } finally {
       setLoading(false);
       inFlight.current = false;
     }
-  }, [applicationId, packageSlug, addOnProducts, returnPath, onPaid, onError]);
+  }, [applicationId, packageSlug, addOnProducts, returnPath]);
 
   useEffect(() => {
+    if (startedSelectionKey.current === selectionKey) return;
+    startedSelectionKey.current = selectionKey;
     void start();
-  }, [start, selectionKey]);
+  }, [selectionKey, start]);
 
   if (error) {
     return (

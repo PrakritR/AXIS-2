@@ -16,9 +16,9 @@ afterEach(cleanup);
 
 function completeRow(): DemoApplicantRow {
   return {
-    id: "AXIS-TEST",
+    id: "PROPLANE-TEST",
     name: "Olivia Brooks",
-    email: "olivia.brooks.workflow@test.axis.local",
+    email: "olivia.brooks.workflow@test.proplane.local",
     property: "Ballard House",
     propertyId: "prop-ballard",
     stage: "Submitted",
@@ -26,7 +26,7 @@ function completeRow(): DemoApplicantRow {
     detail: "Approved",
     application: {
       consentCredit: true,
-      email: "olivia.brooks.workflow@test.axis.local",
+      email: "olivia.brooks.workflow@test.proplane.local",
     } as DemoApplicantRow["application"],
     backgroundCheck: {
       provider: "checkr",
@@ -52,13 +52,13 @@ describe("BackgroundCheckReportFrame", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(pdfBytes, { status: 200, headers: { "Content-Type": "application/pdf" } }),
     );
-    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:checkr-report");
 
     const { container } = render(<BackgroundCheckReportFrame row={completeRow()} demo={false} />);
 
     await waitFor(() => {
       const iframe = container.querySelector("iframe");
-      expect(iframe?.getAttribute("src")).toContain("blob:checkr-report");
+      expect(iframe?.getAttribute("src")).toContain("/api/screening/background-check/document");
+      expect(iframe?.getAttribute("src")).toContain("applicationId=PROPLANE-TEST");
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -67,7 +67,6 @@ describe("BackgroundCheckReportFrame", () => {
     );
 
     fetchMock.mockRestore();
-    createObjectURL.mockRestore();
   });
 
   it("falls back to inline HTML when the PDF proxy fails", async () => {

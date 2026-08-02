@@ -1,13 +1,124 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createGoogleCalendarEvent } from "@/lib/google-calendar/api.server";
+import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
+} from "@/lib/google-calendar/api.server";
 import { loadGoogleCalendarConnection } from "@/lib/google-calendar/settings";
 
-/** Best-effort push of a confirmed PropLane tour onto the manager's Google Calendar. */
+import {
+  PROPLANE_GOOGLE_CALENDAR_MARKER,
+  PROPLANE_TOUR_TYPE_MARKER,
+  PROPLANE_WORK_ORDER_TYPE_MARKER,
+} from "@/lib/google-calendar/markers";
+
+const PLANNED_RECORD_ID = "axis_admin_planned_events_v1";
+const SERVICE_VISIT_DURATION_MINUTES = 60;
+
+type GoogleCalendarUpsertInput = {
+  title: string;
+  description: string;
+  start: string;
+  end: string;
+  location?: string;
+  googleCalendarEventId?: string | null;
+};
+
+async function upsertGoogleCalendarEvent(
+  db: SupabaseClient,
+  managerUserId: string,
+  input: GoogleCalendarUpsertInput,
+): Promise<string | null> {
+  const connection = await loadGoogleCalendarConnection(db, managerUserId);
+  if (!connection.connected || !connection.syncEnabled) return null;
+
+  const existingId = input.googleCalendarEventId?.trim() || null;
+  if (existingId) {
+    try {
+      return await updateGoogleCalendarEvent(db, managerUserId, existingId, input);
+    } catch {
+      // Stale or deleted remote event — fall through to create.
+    }
+  }
+  return createGoogleCalendarEvent(db, managerUserId, input);
+}
+
+function rowsFromPlannedRecord(rowData: unknown): Record<string, unknown>[] {
+  if (!rowData || typeof rowData !== "object") return [];
+  const payload = (rowData as { payload?: unknown }).payload;
+  return Array.isArray(payload) ? payload.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")) : [];
+}
+
+export async function persistPlannedEventGoogleCalendarId(
+  db: SupabaseClient,
+  plannedEventId: string,
+  googleCalendarEventId: string | null,
+): Promise<void> {
+  const id = plannedEventId.trim();
+  if (!id) return;
+  const { data: plannedRecord, error: readError } = await db
+    .from("portal_schedule_records")
+    .select("row_data")
+    .eq("id", PLANNED_RECORD_ID)
+    .maybeSingle();
+  if (readError || !plannedRecord?.row_data) return;
+
+  const plannedRows = rowsFromPlannedRecord(plannedRecord.row_data);
+  let changed = false;
+  const nextRows = plannedRows.map((row) => {
+    if (String(row.id ?? "") !== id) return row;
+    changed = true;
+    if (googleCalendarEventId) {
+      return { ...row, googleCalendarEventId };
+    }
+    const { googleCalendarEventId: _removed, ...rest } = row;
+    return rest;
+  });
+  if (!changed) return;
+
+  const rowData = plannedRecord.row_data as Record<string, unknown>;
+  const { error: writeError } = await db.from("portal_schedule_records").upsert(
+    {
+      id: PLANNED_RECORD_ID,
+      manager_user_id: null,
+      property_id: (rowData.propertyId as string | null) ?? null,
+      record_type: PLANNED_RECORD_ID,
+      row_data: { ...rowData, payload: nextRows },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  if (writeError) throw new Error(writeError.message);
+}
+
+function buildTourDescription(event: {
+  attendeeName?: string;
+  attendeeEmail?: string;
+  attendeePhone?: string;
+  notes?: string;
+  instructions?: string;
+}): string {
+  return [
+    PROPLANE_TOUR_TYPE_MARKER,
+    event.attendeeName ? `Guest: ${event.attendeeName}` : null,
+    event.attendeeEmail ? `Email: ${event.attendeeEmail}` : null,
+    event.attendeePhone ? `Phone: ${event.attendeePhone}` : null,
+    event.notes ? `Notes: ${event.notes}` : null,
+    event.instructions ? `Instructions: ${event.instructions}` : null,
+    PROPLANE_GOOGLE_CALENDAR_MARKER,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Best-effort push or update of a confirmed PropLane tour on the manager's Google Calendar. */
 export async function syncPlannedTourToGoogleCalendar(
   db: SupabaseClient,
   managerUserId: string,
   event: {
+    plannedEventId: string;
     title: string;
     start: string;
     end: string;
@@ -17,25 +128,155 @@ export async function syncPlannedTourToGoogleCalendar(
     attendeePhone?: string;
     notes?: string;
     instructions?: string;
+    googleCalendarEventId?: string | null;
   },
-): Promise<void> {
-  const connection = await loadGoogleCalendarConnection(db, managerUserId);
-  if (!connection.connected || !connection.syncEnabled) return;
-
-  const descriptionParts = [
-    event.attendeeName ? `Guest: ${event.attendeeName}` : null,
-    event.attendeeEmail ? `Email: ${event.attendeeEmail}` : null,
-    event.attendeePhone ? `Phone: ${event.attendeePhone}` : null,
-    event.notes ? `Notes: ${event.notes}` : null,
-    event.instructions ? `Instructions: ${event.instructions}` : null,
-    "Created from PropLane",
-  ].filter(Boolean);
-
-  await createGoogleCalendarEvent(db, managerUserId, {
+): Promise<string | null> {
+  const googleCalendarEventId = await upsertGoogleCalendarEvent(db, managerUserId, {
     title: event.title,
-    description: descriptionParts.join("\n"),
+    description: buildTourDescription(event),
     start: event.start,
     end: event.end,
     location: event.propertyTitle,
+    googleCalendarEventId: event.googleCalendarEventId,
   });
+  if (googleCalendarEventId) {
+    await persistPlannedEventGoogleCalendarId(db, event.plannedEventId, googleCalendarEventId).catch(() => undefined);
+  }
+  return googleCalendarEventId;
+}
+
+function workOrderCalendarTitle(row: DemoManagerWorkOrderRow): string {
+  if (row.selfAssigned) return `My work · ${row.title}`;
+  if (row.vendorName?.trim()) return `${row.vendorName.trim()} · ${row.title}`;
+  return `Service · ${row.title}`;
+}
+
+function workOrderPropertyLabel(row: DemoManagerWorkOrderRow): string | undefined {
+  const unit = row.unit?.trim();
+  if (unit && unit !== "—") return `${row.propertyName} · ${unit}`;
+  return row.propertyName?.trim() || undefined;
+}
+
+function buildWorkOrderDescription(row: DemoManagerWorkOrderRow): string {
+  return [
+    PROPLANE_WORK_ORDER_TYPE_MARKER,
+    `Work order: ${row.id}`,
+    row.vendorName?.trim() ? `Vendor: ${row.vendorName.trim()}` : null,
+    row.residentName?.trim() ? `Resident: ${row.residentName.trim()}` : null,
+    row.description?.trim() ? `Details: ${row.description.trim()}` : null,
+    PROPLANE_GOOGLE_CALENDAR_MARKER,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function workOrderVisitEndIso(row: DemoManagerWorkOrderRow): string | null {
+  if (!row.scheduledAtIso) return null;
+  const start = new Date(row.scheduledAtIso);
+  if (Number.isNaN(start.getTime())) return null;
+  return new Date(start.getTime() + SERVICE_VISIT_DURATION_MINUTES * 60_000).toISOString();
+}
+
+export function workOrderShouldSyncToGoogleCalendar(row: DemoManagerWorkOrderRow): boolean {
+  if (row.bucket === "completed" || !row.scheduledAtIso) return false;
+  return row.bucket === "scheduled" || Boolean(row.scheduledAtIso);
+}
+
+/** Best-effort push, update, or remove a scheduled work order on the manager's Google Calendar. */
+export async function syncWorkOrderToGoogleCalendar(
+  db: SupabaseClient,
+  managerUserId: string,
+  row: DemoManagerWorkOrderRow,
+): Promise<DemoManagerWorkOrderRow> {
+  const managerId = managerUserId.trim();
+  if (!managerId) return row;
+
+  const existingEventId = row.googleCalendarEventId?.trim() || null;
+  if (!workOrderShouldSyncToGoogleCalendar(row)) {
+    if (existingEventId) {
+      await deleteGoogleCalendarEvent(db, managerId, existingEventId).catch(() => undefined);
+    }
+    if (existingEventId) {
+      const { googleCalendarEventId: _removed, ...rest } = row;
+      return rest;
+    }
+    return row;
+  }
+
+  const endIso = workOrderVisitEndIso(row);
+  if (!row.scheduledAtIso || !endIso) return row;
+
+  const googleCalendarEventId = await upsertGoogleCalendarEvent(db, managerId, {
+    title: workOrderCalendarTitle(row),
+    description: buildWorkOrderDescription(row),
+    start: row.scheduledAtIso,
+    end: endIso,
+    location: workOrderPropertyLabel(row),
+    googleCalendarEventId: existingEventId,
+  });
+
+  if (!googleCalendarEventId) return row;
+  return googleCalendarEventId === existingEventId ? row : { ...row, googleCalendarEventId };
+}
+
+export function workOrderGoogleCalendarSyncChanged(
+  previous: DemoManagerWorkOrderRow | null | undefined,
+  next: DemoManagerWorkOrderRow,
+): boolean {
+  if (!previous) return workOrderShouldSyncToGoogleCalendar(next);
+  return (
+    previous.scheduledAtIso !== next.scheduledAtIso ||
+    previous.bucket !== next.bucket ||
+    previous.title !== next.title ||
+    previous.vendorName !== next.vendorName ||
+    previous.selfAssigned !== next.selfAssigned ||
+    previous.propertyName !== next.propertyName ||
+    previous.unit !== next.unit ||
+    previous.description !== next.description ||
+    previous.googleCalendarEventId !== next.googleCalendarEventId
+  );
+}
+
+export async function deletePlannedTourByGoogleCalendarEventId(
+  db: SupabaseClient,
+  googleCalendarEventId: string,
+): Promise<boolean> {
+  const eventId = googleCalendarEventId.trim();
+  if (!eventId) return false;
+  const { data: plannedRecord, error: readError } = await db
+    .from("portal_schedule_records")
+    .select("row_data")
+    .eq("id", PLANNED_RECORD_ID)
+    .maybeSingle();
+  if (readError || !plannedRecord?.row_data) return false;
+
+  const plannedRows = rowsFromPlannedRecord(plannedRecord.row_data);
+  const nextRows = plannedRows.filter((row) => String(row.googleCalendarEventId ?? "") !== eventId);
+  if (nextRows.length === plannedRows.length) return false;
+
+  const rowData = plannedRecord.row_data as Record<string, unknown>;
+  const { error: writeError } = await db.from("portal_schedule_records").upsert(
+    {
+      id: PLANNED_RECORD_ID,
+      manager_user_id: null,
+      property_id: (rowData.propertyId as string | null) ?? null,
+      record_type: PLANNED_RECORD_ID,
+      row_data: { ...rowData, payload: nextRows },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  if (writeError) throw new Error(writeError.message);
+  return true;
+}
+
+export async function deleteProplaneGoogleCalendarEvent(
+  db: SupabaseClient,
+  managerUserId: string,
+  googleEventId: string,
+): Promise<void> {
+  const eventId = googleEventId.trim();
+  if (!eventId) return;
+  await deleteGoogleCalendarEvent(db, managerUserId, eventId);
+  await deletePlannedTourByGoogleCalendarEventId(db, eventId).catch(() => undefined);
 }

@@ -11,6 +11,7 @@ import { notifyManagerFromAgent } from "@/lib/agent-notify.server";
 import { ensureVendorAgentSession } from "@/lib/agent/vendor-agent.server";
 import { track } from "@/lib/analytics/posthog";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { syncWorkOrderToGoogleCalendar } from "@/lib/google-calendar/sync.server";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { buildResidentWorkOrderUpdate } from "@/lib/work-order-resident-notifications";
 import { DEFAULT_VISIT_DURATION_MINUTES } from "@/lib/vendor-availability";
@@ -278,6 +279,16 @@ export async function executeDispatch(
       .update({ result_summary: { outcome: "failed", error: updateError.message }, dedupe_key: null })
       .eq("dedupe_key", dedupeKey);
     return { ok: false, error: "Failed to assign the vendor.", status: 500 };
+  }
+
+  if (scheduledIso) {
+    const syncedRow = await syncWorkOrderToGoogleCalendar(db, args.landlordId, nextRow).catch(() => nextRow);
+    if (syncedRow.googleCalendarEventId !== nextRow.googleCalendarEventId) {
+      await db
+        .from("portal_work_order_records")
+        .update({ row_data: syncedRow, updated_at: nowIso })
+        .eq("id", args.workOrderId);
+    }
   }
 
   // Resident notification is best-effort and mirrors the manual manager flow:
