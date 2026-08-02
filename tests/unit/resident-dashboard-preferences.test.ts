@@ -5,12 +5,16 @@ import {
 } from "@/lib/resident-dashboard-preferences";
 
 describe("resident dashboard preferences", () => {
-  it("defines five customizable attention groups", () => {
+  it("defines six customizable attention groups", () => {
+    // houseDetails joined the catalog with the resident house-details group. Its render is
+    // gated on visibility.houseDetails in resident-dashboard.tsx, which is the invariant that
+    // matters: a section missing from this catalog bypasses the Customize modal entirely.
     expect(RESIDENT_DASHBOARD_SECTIONS.map((s) => s.id)).toEqual([
       "payments",
       "lease",
       "applications",
       "services",
+      "houseDetails",
       "communication",
     ]);
   });

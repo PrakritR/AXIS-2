@@ -22,7 +22,7 @@ function expectContiguousBlock(sections: string[], block: string[], anchorAfter:
   expect(slice).toEqual(block);
 }
 
-describe("portal nav order parity (web registry = native bottom bar)", () => {
+describe("portal nav order contracts", () => {
   it("pro native order matches web registry through feedback after co-managers", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "pro").map((item) => item.section);
@@ -38,20 +38,36 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
     expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("resident limited native order matches web registry", () => {
+  it("resident limited native order follows the cross-stage mobile order", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
-    expect(ordered).toEqual(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS));
+    expect(ordered).toEqual([
+      "tour",
+      "applications",
+      "dashboard",
+      "lease",
+      "payments",
+      "communication",
+      "documents",
+      "profile",
+    ]);
     expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("resident approved native order matches property-management pattern", () => {
+  it("resident approved native order follows the cross-stage mobile order", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
-    expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
-    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
-    expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("communication"));
-    expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("profile"));
+    expect(ordered).toEqual([
+      "applications",
+      "dashboard",
+      "lease",
+      "services",
+      "payments",
+      "communication",
+      "move-in",
+      "documents",
+      "profile",
+    ]);
   });
 });
 
@@ -106,23 +122,24 @@ describe("pro portal nav grouping (leasing → tenancy → operations → market
 describe("resident portal nav grouping", () => {
   const freeIds = new Set<string>(RESIDENT_FREE_TIER_SECTION_IDS);
 
-  it("limited: groups locked sections after move-in", () => {
+  it("limited: keeps the pre-lease workflow ahead of communication", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["communication", "documents"], "move-in", "profile");
+    expectContiguousBlock(sections, ["lease", "payments"], "applications", "communication");
     for (const id of ["communication", "documents"]) {
       expect(freeIds.has(id)).toBe(id === "communication");
     }
   });
 
-  it("approved: follows property-management block order after move-in", () => {
+  it("approved: leads with resident operations before reference sections", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["services", "communication", "documents"], "move-in", "profile");
+    expect(sections.slice(0, 4)).toEqual(["services", "payments", "dashboard", "communication"]);
+    expectContiguousBlock(sections, ["applications", "lease", "move-in"], "communication", "documents");
   });
 
-  it("approved: mirrors pro free block then paid workspace pattern", () => {
+  it("approved: keeps documents next to settings after the post-lease workspace", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 5)).toEqual(["dashboard", "applications", "lease", "payments", "move-in"]);
-    expect(sections.slice(-1)).toEqual(["profile"]);
+    expect(sections.slice(-2)).toEqual(["documents", "profile"]);
+    expect(sections.indexOf("move-in")).toBeLessThan(sections.indexOf("documents"));
   });
 });
 
