@@ -17,9 +17,10 @@ describe("resident application-phase route guard", () => {
     expect(isResidentApplicationPhaseAllowedPath("/resident/communication/email/unopened")).toBe(true);
   });
 
-  it("blocks other resident routes", () => {
-    expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(false);
+  it("allows the application dashboard while blocking lease-only routes", () => {
+    expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(true);
     expect(isResidentApplicationPhaseAllowedPath("/resident/lease")).toBe(false);
+    expect(isResidentApplicationPhaseAllowedPath("/resident/payments")).toBe(false);
   });
 
   it("allows dashboard after a completed application submission", () => {

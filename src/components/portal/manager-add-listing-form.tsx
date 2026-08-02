@@ -2628,7 +2628,14 @@ export function ManagerAddListingForm({
     ],
   );
 
-  persistDraftRef.current = persistListingDraft;
+  // Assigned in an effect, not during render: a render-phase ref write is unsafe under
+  // concurrent rendering. The ref exists only to let closeWizard, declared above,
+  // reach persistListingDraft, declared below, and it is read from that click handler
+  // alone, so an effect always lands before it can be called. Its initializer is a
+  // no-op resolving false, so an early call cannot throw.
+  useEffect(() => {
+    persistDraftRef.current = persistListingDraft;
+  }, [persistListingDraft]);
 
   useEffect(() => {
     if (!draftAutoSaveEligible || !authReady || !userId) return;

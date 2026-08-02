@@ -132,5 +132,6 @@ export function residentPortalHomePath(
   if (access.leaseAccessUnlocked) return "/resident/dashboard";
   if (access.applicationApproved) return "/resident/dashboard";
   if (access.hasTourLink && !access.hasSubmittedApplication) return "/resident/tour";
+  if (!access.hasSubmittedApplication) return "/resident/applications/apply";
   return "/resident/dashboard";
 }
