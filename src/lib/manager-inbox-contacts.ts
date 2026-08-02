@@ -4,6 +4,21 @@ import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readOwnActiveManagerVendorRows, isVendorCategorySettingsRow } from "@/lib/manager-vendors-storage";
 import { readProRelationships } from "@/lib/pro-relationships";
 
+/** Merge contact lists by email — first occurrence wins. */
+export function mergeInboxScopedContacts(...lists: InboxScopedContact[][]): InboxScopedContact[] {
+  const out: InboxScopedContact[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const contact of list) {
+      const key = contact.email.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(contact);
+    }
+  }
+  return out;
+}
+
 /** Approved residents + pending applicants + linked co-managers + vendors for Communication. */
 export function buildManagerInboxLiveContacts(userId: string | null | undefined): InboxScopedContact[] {
   const out: InboxScopedContact[] = [];

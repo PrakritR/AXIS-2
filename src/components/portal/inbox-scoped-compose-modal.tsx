@@ -8,6 +8,7 @@ import { CheckboxMultiSelect, type CheckboxMultiSelectGroup } from "@/components
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
   broadcastStubForCategory,
   categoryForContactRole,
@@ -126,7 +127,9 @@ export function ScopedInboxComposeModal({
   liveContacts?: InboxScopedContact[];
 }) {
   const { showToast } = useAppUi();
-  const contacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
+  const localContacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
+  const [directoryContacts, setDirectoryContacts] = useState<InboxScopedContact[]>([]);
+  const contacts = directoryContacts.length > 0 ? directoryContacts : localContacts;
   const categoryOptions = useMemo(() => categoriesForPortal(portal), [portal]);
   const [selectedCategories, setSelectedCategories] = useState<ComposeCategory[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<PersonKey[]>([]);
@@ -163,6 +166,32 @@ export function ScopedInboxComposeModal({
     if (!key.startsWith("id:")) return false;
     return contacts.some((c) => c.role === "resident" && `id:${c.id}` === key);
   });
+
+  useEffect(() => {
+    if (!open || portal !== "manager" || isDemoModeActive()) {
+      if (open && portal === "manager" && isDemoModeActive()) setDirectoryContacts(localContacts);
+      return;
+    }
+    let active = true;
+    setDirectoryContacts(localContacts);
+    void fetch("/api/portal/inbox-eligible-contacts?portal=manager", {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : { contacts: [] }))
+      .then((data: { contacts?: InboxScopedContact[] }) => {
+        if (!active) return;
+        const fromApi = Array.isArray(data.contacts) ? data.contacts : [];
+        const vendors = localContacts.filter((c) => c.role === "vendor");
+        setDirectoryContacts(mergeInboxScopedContacts(fromApi, vendors, localContacts));
+      })
+      .catch(() => {
+        if (active) setDirectoryContacts(localContacts);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, portal, localContacts]);
 
   useEffect(() => {
     if (!isDemoModeActive()) return;
@@ -348,6 +377,7 @@ export function ScopedInboxComposeModal({
             selected={selectedKeys}
             onChange={onPeopleChange}
             disabled={selectedCategories.length === 0}
+            searchPlaceholder="Search people…"
             emptyMenuText={
               selectedCategories.length === 0 ? "Pick a section first" : "No contacts in selected sections"
             }

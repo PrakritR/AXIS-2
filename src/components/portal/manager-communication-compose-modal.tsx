@@ -11,6 +11,8 @@ import {
   PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
   broadcastStubForCategory,
   categoryForContactRole,
@@ -109,7 +111,9 @@ export function ManagerCommunicationComposeModal({
   onSent?: (channels: { email: boolean; sms: boolean }) => void;
 }) {
   const { showToast } = useAppUi();
-  const contacts = useMemo(() => contactsForPortal("manager", liveContacts), [liveContacts]);
+  const [directoryContacts, setDirectoryContacts] = useState<InboxScopedContact[]>([]);
+  const localContacts = useMemo(() => contactsForPortal("manager", liveContacts), [liveContacts]);
+  const contacts = directoryContacts.length > 0 ? directoryContacts : localContacts;
   /** Other sits last, under Vendor. */
   const categoryOptions = useMemo(
     (): ComposeCategory[] => ["resident", "management", "admin", "vendor", "other"],
@@ -155,6 +159,33 @@ export function ManagerCommunicationComposeModal({
 
   const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
   const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (isDemoModeActive()) {
+      setDirectoryContacts(localContacts);
+      return;
+    }
+    let active = true;
+    setDirectoryContacts(localContacts);
+    void fetch("/api/portal/inbox-eligible-contacts?portal=manager", {
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then((res) => (res.ok ? res.json() : { contacts: [] }))
+      .then((data: { contacts?: InboxScopedContact[] }) => {
+        if (!active) return;
+        const fromApi = Array.isArray(data.contacts) ? data.contacts : [];
+        const vendors = localContacts.filter((c) => c.role === "vendor");
+        setDirectoryContacts(mergeInboxScopedContacts(fromApi, vendors, localContacts));
+      })
+      .catch(() => {
+        if (active) setDirectoryContacts(localContacts);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, localContacts]);
 
   useEffect(() => {
     if (!open) return;
@@ -493,6 +524,7 @@ export function ManagerCommunicationComposeModal({
             selected={selectedKeys}
             onChange={(next) => setSelectedKeys(next as PersonKey[])}
             disabled={directoryCategories.length === 0}
+            searchPlaceholder="Search people…"
             emptyMenuText={
               selectedCategories.length === 0
                 ? "Pick a section first"

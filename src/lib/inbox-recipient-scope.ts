@@ -295,14 +295,17 @@ export async function listEligibleInboxContacts(
   };
 
   if (isManagerRole(sender.role) || sender.isAdmin) {
-    // Own approved residents.
     const { data: apps } = await db
       .from("manager_application_records")
       .select("id, resident_email, row_data")
       .eq("manager_user_id", sender.id);
     for (const row of apps ?? []) {
       const rowData = (row.row_data ?? {}) as Record<string, unknown>;
-      if (rowData.bucket !== "approved") continue;
+      const bucket = String(rowData.bucket ?? "").trim();
+      if (bucket !== "approved" && bucket !== "pending") continue;
+      if (bucket === "pending" && String(rowData.stage ?? "").trim().toLowerCase() === "in progress") {
+        continue;
+      }
       const email = String(row.resident_email ?? rowData.email ?? "").trim();
       if (!email) continue;
       push({
@@ -313,10 +316,27 @@ export async function listEligibleInboxContacts(
         propertyLabel: String(rowData.property ?? "").trim() || undefined,
         propertyId:
           String(rowData.assignedPropertyId ?? rowData.propertyId ?? "").trim() || undefined,
+        tenancyStatus: bucket === "approved" ? "resident" : "applicant",
       });
     }
-    // Own linked co-managers.
     await pushCoManagers(db, [sender.id], push);
+    const { data: vendorRows } = await db
+      .from("manager_vendor_records")
+      .select("id, row_data")
+      .eq("manager_user_id", sender.id);
+    for (const row of vendorRows ?? []) {
+      const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+      const name = String(rowData.name ?? "").trim();
+      if (!name || name === "__vendor_category_settings__") continue;
+      const email = String(rowData.email ?? "").trim();
+      if (!email) continue;
+      push({
+        id: `ven-${row.id}`,
+        name,
+        email,
+        role: "vendor",
+      });
+    }
     return out;
   }
 
