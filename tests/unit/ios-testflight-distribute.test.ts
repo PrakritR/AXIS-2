@@ -208,7 +208,7 @@ describe("timeout budget leaves room to verify", () => {
   // cancellation that parseTimeoutSeconds exists to prevent. Asserted as the
   // invariant rather than a literal, so tuning a constant either stays safe or
   // fails here.
-  it("fits the maximum wait plus the worst-case work outside it inside the step cap", () => {
+  it("fits the maximum wait plus the worst-case work outside it inside the step cap, with slack", () => {
     const stepBudgetSeconds = 30 * 60; // timeout-minutes: 30 on the distribute step
     const confirmRePollSleepSeconds = 4 * 12; // (CONFIRM_ATTEMPTS - 1) x CONFIRM_INTERVAL
     const worstCaseBackoffPerRequestSeconds = 2 + 4 + 6; // 3 retries at 2s steps
@@ -217,10 +217,19 @@ describe("timeout budget leaves room to verify", () => {
     // buildBetaDetail read.
     const requestsOutsideTheWait = 2 + 1 + 1 + 2 + 5 + 1;
 
-    const worstCaseOutsideWaitSeconds =
+    // Sleeps only. The reserve must ALSO cover the round-trip latency of those
+    // requests and node's own startup, neither of which is a sleep — a reserve
+    // that lands exactly on the cap reproduces the opaque mid-verification
+    // cancellation parseTimeoutSeconds exists to prevent.
+    const worstCaseSleepSecondsOutsideWait =
       confirmRePollSleepSeconds + requestsOutsideTheWait * worstCaseBackoffPerRequestSeconds;
 
-    expect(MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseOutsideWaitSeconds).toBeLessThanOrEqual(stepBudgetSeconds);
+    const slackSeconds =
+      stepBudgetSeconds - (MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait);
+
+    expect(MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait).toBeLessThan(stepBudgetSeconds);
+    // At least a second of real network time per request outside the wait.
+    expect(slackSeconds).toBeGreaterThanOrEqual(requestsOutsideTheWait);
     expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThan(0);
     expect(DEFAULT_PROCESSING_TIMEOUT_SECONDS).toBeLessThanOrEqual(MAX_PROCESSING_TIMEOUT_SECONDS);
   });

@@ -167,6 +167,16 @@ const REQUEST_BACKOFF_BUDGET_MS =
   ((REQUEST_ATTEMPTS * (REQUEST_ATTEMPTS - 1)) / 2) * REQUEST_BACKOFF_STEP_MS;
 
 /**
+ * Round-trip time allowed per request. Backoff sleeps are not the only cost: a
+ * reserve built from sleeps alone leaves nothing for the network itself, so the
+ * advertised maximum wait would still run into the step cap.
+ */
+const REQUEST_LATENCY_BUDGET_MS = 5000;
+
+/** Node boot + module load before the first request goes out. */
+const PROCESS_STARTUP_BUDGET_MS = 15_000;
+
+/**
  * Every request that is NOT inside the bounded processing wait, so its retry
  * backoff eats step budget the wait's own timeout does not cover:
  *   2  resolveApp + the betaGroups read, before the wait even starts
@@ -180,6 +190,15 @@ const REQUEST_BACKOFF_BUDGET_MS =
 const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + 1;
 
 /**
+ * Every sleep that happens outside the bounded processing wait. One term per
+ * source, so a future one — a bounded beta-state re-poll, say — is a single line
+ * here and the reserve below follows automatically.
+ */
+const SLEEP_MS_OUTSIDE_PROCESSING_WAIT =
+  // confirmAssignment's sleeps between re-reads.
+  (CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS;
+
+/**
  * Seconds the work outside the processing wait can take, so the advertised
  * maximum wait still leaves room to finish. Derived from the constants above
  * rather than hard-coded: a second magic number would drift the moment one of
@@ -187,10 +206,9 @@ const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + 1;
  * cancellation that `parseTimeoutSeconds` exists to prevent.
  */
 const POST_WAIT_RESERVE_SECONDS = Math.ceil(
-  // confirmAssignment's sleeps between re-reads…
-  ((CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS +
-    // …plus a full retry-backoff budget for each request outside the wait.
-    REQUESTS_OUTSIDE_PROCESSING_WAIT * REQUEST_BACKOFF_BUDGET_MS) /
+  (SLEEP_MS_OUTSIDE_PROCESSING_WAIT +
+    REQUESTS_OUTSIDE_PROCESSING_WAIT * (REQUEST_BACKOFF_BUDGET_MS + REQUEST_LATENCY_BUDGET_MS) +
+    PROCESS_STARTUP_BUDGET_MS) /
     1000,
 );
 

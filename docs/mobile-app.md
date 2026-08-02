@@ -297,10 +297,16 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    prevents a false red, it never softens the verdict. The query is exact rather
    than a page of the group's builds, so a group with hundreds of accumulated
    builds can never report a correctly-assigned build as missing.
-5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and fail
-   on `MISSING_EXPORT_COMPLIANCE` or `PROCESSING_EXCEPTION` — **or on not being able
-   to read that state at all.** Every request retries transport errors and 5xx
-   (node's `fetch` *rejects* on a dropped socket, so that is caught, not just
+5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and pass
+   **only** on an affirmatively installable `internalBuildState` —
+   `READY_FOR_BETA_TESTING` or `IN_BETA_TESTING`. Every other value reds the run:
+   `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`, `PROCESSING`, `EXPIRED`,
+   `IN_EXPORT_COMPLIANCE_REVIEW`, an absent state, an unreadable one, and any
+   value Apple adds later. It is an **allowlist, not a denylist of bad states**,
+   because a denylist passes everything it has not heard of — that is how an
+   absent state (an empty body read as `{}`) once slipped through and silently
+   defeated the fail-closed guarantee. Every request retries transport errors and
+   5xx (node's `fetch` *rejects* on a dropped socket, so that is caught, not just
    status codes), so an unreadable state is a real unknown, and the step fails
    closed rather than reporting success it cannot support.
 
