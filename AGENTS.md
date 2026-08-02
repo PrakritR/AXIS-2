@@ -541,14 +541,18 @@ to prove the assignment stuck** and fail the run if it did not. Rules:
   distribution (that would need App Review).
 - **The gate fails CLOSED on anything it cannot confirm.** Only an affirmatively
   installable `internalBuildState` passes — `READY_FOR_BETA_TESTING` or
-  `IN_BETA_TESTING`. Everything else reds the run: `MISSING_EXPORT_COMPLIANCE`,
-  `PROCESSING_EXCEPTION`, `PROCESSING`, `EXPIRED`, `IN_EXPORT_COMPLIANCE_REVIEW`,
-  a state that is absent, a state that cannot be read at all (after retries —
-  transport errors and 5xx are retried), and any value Apple adds later. It is an
-  **allowlist, not a denylist**, because a denylist passes every value it has not
-  heard of; that is how an absent state once slipped through as green. "Unknown"
-  rendering as green is the exact failure being removed here; a build that is
-  genuinely fine is one `--verify-only` away from confirmation.
+  `IN_BETA_TESTING`. `PROCESSING` and `IN_EXPORT_COMPLIANCE_REVIEW` are the two
+  TRANSIENT states (`buildBetaDetail` is a different resource on a different
+  backend than `build.processingState`, so it lags): they are re-polled for ~60s
+  and then fail closed, so re-polling only prevents a false red, it never softens
+  the verdict. Everything else reds the run immediately —
+  `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`, `EXPIRED`, a state that is
+  absent, a state that cannot be read at all (after retries — transport errors
+  and 5xx are retried), and any value Apple adds later. It is an **allowlist, not
+  a denylist**, because a denylist passes every value it has not heard of; that is
+  how an absent state once slipped through as green. "Unknown" rendering as green
+  is the exact failure being removed here; a build that is genuinely fine is one
+  `--verify-only` away from confirmation.
 - **Export compliance is declarative**: `ITSAppUsesNonExemptEncryption` in
   `ios/App/App/Info.plist`. Without it a build is stuck on "Missing Compliance"
   and stays un-installable no matter what the group column says. If a `cap sync`

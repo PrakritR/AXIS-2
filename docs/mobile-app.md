@@ -302,9 +302,13 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    builds can never report a correctly-assigned build as missing.
 5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and pass
    **only** on an affirmatively installable `internalBuildState` —
-   `READY_FOR_BETA_TESTING` or `IN_BETA_TESTING`. Every other value reds the run:
-   `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`, `PROCESSING`, `EXPIRED`,
-   `IN_EXPORT_COMPLIANCE_REVIEW`, an absent state, an unreadable one, and any
+   `READY_FOR_BETA_TESTING` or `IN_BETA_TESTING`. `PROCESSING` and
+   `IN_EXPORT_COMPLIANCE_REVIEW` are TRANSIENT — `buildBetaDetail` lags
+   `build.processingState` because they are separate resources on separate
+   backends — so they are re-polled for ~60s and then fail closed; re-polling only
+   prevents a false red, it never softens the verdict. Every other value reds the
+   run immediately: `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`,
+   `EXPIRED`, an absent state, an unreadable one, and any
    value Apple adds later. It is an **allowlist, not a denylist of bad states**,
    because a denylist passes everything it has not heard of — that is how an
    absent state (an empty body read as `{}`) once slipped through and silently

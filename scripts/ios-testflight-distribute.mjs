@@ -167,16 +167,16 @@ function requireEnv(name) {
 
 // `timeout-minutes: 30` on the distribute step in
 // .github/workflows/ios-testflight.yml is the hard ceiling for everything below.
-const STEP_BUDGET_SECONDS = 30 * 60;
+export const STEP_BUDGET_SECONDS = 30 * 60;
 
-const REQUEST_ATTEMPTS = 4;
-const REQUEST_BACKOFF_STEP_MS = 2000;
-const CONFIRM_ATTEMPTS = 5;
-const CONFIRM_INTERVAL_MS = 12_000;
+export const REQUEST_ATTEMPTS = 4;
+export const REQUEST_BACKOFF_STEP_MS = 2000;
+export const CONFIRM_ATTEMPTS = 5;
+export const CONFIRM_INTERVAL_MS = 12_000;
 const PROCESSING_POLL_INTERVAL_MS = 20_000;
 /** ~60s of re-reads (4 sleeps) before a still-transient beta state fails closed. */
-const BETA_STATE_ATTEMPTS = 5;
-const BETA_STATE_INTERVAL_MS = 15_000;
+export const BETA_STATE_ATTEMPTS = 5;
+export const BETA_STATE_INTERVAL_MS = 15_000;
 
 /** Worst-case backoff one request can spend before it gives up or succeeds. */
 const REQUEST_BACKOFF_BUDGET_MS =
@@ -203,7 +203,8 @@ const PROCESS_STARTUP_BUDGET_MS = 15_000;
  *   +  one read per confirmAssignment attempt
  *   +  one buildBetaDetail read per beta-state attempt
  */
-const REQUESTS_OUTSIDE_PROCESSING_WAIT = 2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + BETA_STATE_ATTEMPTS;
+export const REQUESTS_OUTSIDE_PROCESSING_WAIT =
+  2 + 1 + 1 + 2 + CONFIRM_ATTEMPTS + BETA_STATE_ATTEMPTS;
 
 /**
  * Every sleep that happens outside the bounded processing wait. One term per
@@ -396,43 +397,79 @@ async function findBuild(client, appId, buildNumber) {
   const body = await client.get(`builds?${query}`);
   const builds = body?.data ?? [];
   if (builds.length > 1) {
-    throw new Error(
+    const ambiguous = new Error(
       `Build number ${buildNumber} matched ${builds.length} builds on app ${appId} ` +
         `(${builds.map((build) => build.id).join(", ")}); cannot pick one safely.`,
     );
+    ambiguous.fatal = true;
+    throw ambiguous;
   }
   return builds[0] ?? null;
 }
 
-/** Poll until the build exists and Apple has finished processing it, or the deadline passes. */
+/**
+ * Poll until the build exists and Apple has finished processing it, or the deadline passes.
+ *
+ * A read that fails is a tick, not the end of the wait. `findBuild` throws once the
+ * request layer's own retry budget is spent, so a ~15s Apple 5xx window or a single
+ * 429 used to red a promote whose build is fine while 20+ minutes of the deadline
+ * sat unused — the same false red the group-membership and beta-state re-polls
+ * exist to prevent. This stays fail-closed: a build that never reads VALID still
+ * reds the run, a terminal processingState still fails immediately, and an
+ * ambiguous build number is a `fatal` error that is never mistaken for a blip.
+ */
 async function waitForProcessedBuild(client, appId, buildNumber, timeoutSeconds) {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutSeconds * 1000;
   let lastState = null;
+  let observedState = null;
+  let lastReadError = null;
 
   for (;;) {
-    const build = await findBuild(client, appId, buildNumber);
+    let build = null;
+    let readFailed = false;
+    try {
+      build = await findBuild(client, appId, buildNumber);
+      lastReadError = null;
+    } catch (error) {
+      if (error?.fatal) throw error;
+      readFailed = true;
+      lastReadError = error;
+    }
     const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    const state = build ? (build.attributes?.processingState ?? "UNKNOWN") : "NOT_YET_VISIBLE";
 
-    if (state !== lastState) {
-      console.log(`  [${elapsed}s] build ${buildNumber}: ${state}`);
-      lastState = state;
+    if (readFailed) {
+      console.log(`  [${elapsed}s] build ${buildNumber}: read failed, still waiting — ${lastReadError.message.slice(0, 160)}`);
+      lastState = null;
     } else {
-      console.log(`  [${elapsed}s] still ${state}…`);
-    }
+      const state = build ? (build.attributes?.processingState ?? "UNKNOWN") : "NOT_YET_VISIBLE";
+      observedState = state;
 
-    if (build && TERMINAL_PROCESSING_FAILURES.has(state)) {
-      throw new Error(
-        `Build ${buildNumber} finished processing as ${state}. It can never be distributed; ` +
-          "check the App Store Connect activity log for the rejection reason.",
-      );
+      if (state !== lastState) {
+        console.log(`  [${elapsed}s] build ${buildNumber}: ${state}`);
+        lastState = state;
+      } else {
+        console.log(`  [${elapsed}s] still ${state}…`);
+      }
+
+      if (build && TERMINAL_PROCESSING_FAILURES.has(state)) {
+        throw new Error(
+          `Build ${buildNumber} finished processing as ${state}. It can never be distributed; ` +
+            "check the App Store Connect activity log for the rejection reason.",
+        );
+      }
+      if (build && state === "VALID") return build;
     }
-    if (build && state === "VALID") return build;
 
     if (Date.now() >= deadline) {
+      // Distinguish "Apple never finished" from "we could never ask" — reporting a
+      // state that was never actually read would send someone hunting the wrong bug.
+      const outcome = observedState
+        ? `was still "${observedState}" after ${timeoutSeconds}s`
+        : `could not be read at all in ${timeoutSeconds}s (every App Store Connect read failed; ` +
+          `last error: ${lastReadError?.message ?? "unknown"})`;
       throw new Error(
-        `Build ${buildNumber} was still "${state}" after ${timeoutSeconds}s. ` +
+        `Build ${buildNumber} ${outcome}. ` +
           "The upload succeeded but the build is NOT distributed, so nobody can install it. " +
           "Re-run this step once processing finishes: " +
           `node scripts/ios-testflight-distribute.mjs --build=${buildNumber}`,
@@ -693,10 +730,14 @@ async function main() {
     ? alreadyAssigned
     : await confirmAssignment(client, build.id, group.id);
   console.log(`  build ${buildNumber} (${build.id}) in ${JSON.stringify(group.attributes.name)}: ${assigned}`);
-  // --verify-only never polls: it reports the state as it stands right now.
-  const betaDetail = verifyOnly
-    ? await reportBetaDetail(client, build.id)
-    : await resolveInstallableBetaState(client, build.id);
+  // --verify-only never polls: it reports the state as it stands right now. An
+  // unassigned build is already going to fail below, so it gets the same single
+  // read — the diagnostics still land in the log, without spending ~60s re-polling
+  // a transient state whose value is then discarded.
+  const betaDetail =
+    verifyOnly || !assigned
+      ? await reportBetaDetail(client, build.id)
+      : await resolveInstallableBetaState(client, build.id);
 
   if (!assigned) {
     throw new Error(

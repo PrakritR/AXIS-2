@@ -6,12 +6,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AscClient,
   assertInstallableBetaState,
+  BETA_STATE_ATTEMPTS,
+  BETA_STATE_INTERVAL_MS,
   betaStateIsTransient,
+  CONFIRM_ATTEMPTS,
+  CONFIRM_INTERVAL_MS,
   DEFAULT_PROCESSING_TIMEOUT_SECONDS,
   MAX_PROCESSING_TIMEOUT_SECONDS,
   normalizeGroupName,
   parseTimeoutSeconds,
+  REQUEST_ATTEMPTS,
+  REQUEST_BACKOFF_STEP_MS,
+  REQUESTS_OUTSIDE_PROCESSING_WAIT,
   selectBetaGroup,
+  STEP_BUDGET_SECONDS,
   tokenIsUsable,
 } from "../../scripts/ios-testflight-distribute.mjs";
 
@@ -236,14 +244,13 @@ describe("timeout budget leaves room to verify", () => {
   // invariant rather than a literal, so tuning a constant either stays safe or
   // fails here.
   it("fits the maximum wait plus the worst-case work outside it inside the step cap, with slack", () => {
-    const stepBudgetSeconds = 30 * 60; // timeout-minutes: 30 on the distribute step
-    const confirmRePollSleepSeconds = 4 * 12; // (CONFIRM_ATTEMPTS - 1) x CONFIRM_INTERVAL
-    const betaStateRePollSleepSeconds = 4 * 15; // (BETA_STATE_ATTEMPTS - 1) x BETA_STATE_INTERVAL
-    const worstCaseBackoffPerRequestSeconds = 2 + 4 + 6; // 3 retries at 2s steps
-    // resolveApp, the betaGroups read, the findBuild that lands on the deadline,
-    // the alreadyAssigned pre-check, 2 assign POSTs, 5 confirm reads, and one
-    // buildBetaDetail read per beta-state attempt.
-    const requestsOutsideTheWait = 2 + 1 + 1 + 2 + 5 + 5;
+    // Computed from the script's OWN constants, never re-typed as literals: a
+    // duplicated copy drifts silently and turns this guard into a tautology that
+    // only catches someone hard-coding the maximum.
+    const confirmRePollSleepSeconds = ((CONFIRM_ATTEMPTS - 1) * CONFIRM_INTERVAL_MS) / 1000;
+    const betaStateRePollSleepSeconds = ((BETA_STATE_ATTEMPTS - 1) * BETA_STATE_INTERVAL_MS) / 1000;
+    const worstCaseBackoffPerRequestSeconds =
+      (((REQUEST_ATTEMPTS * (REQUEST_ATTEMPTS - 1)) / 2) * REQUEST_BACKOFF_STEP_MS) / 1000;
 
     // Sleeps only. The reserve must ALSO cover the round-trip latency of those
     // requests and node's own startup, neither of which is a sleep — a reserve
@@ -252,15 +259,25 @@ describe("timeout budget leaves room to verify", () => {
     const worstCaseSleepSecondsOutsideWait =
       confirmRePollSleepSeconds +
       betaStateRePollSleepSeconds +
-      requestsOutsideTheWait * worstCaseBackoffPerRequestSeconds;
+      REQUESTS_OUTSIDE_PROCESSING_WAIT * worstCaseBackoffPerRequestSeconds;
 
     const slackSeconds =
-      stepBudgetSeconds - (MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait);
+      STEP_BUDGET_SECONDS - (MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait);
 
-    expect(MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait).toBeLessThan(stepBudgetSeconds);
+    expect(MAX_PROCESSING_TIMEOUT_SECONDS + worstCaseSleepSecondsOutsideWait).toBeLessThan(
+      STEP_BUDGET_SECONDS,
+    );
     // At least a second of real network time per request outside the wait.
-    expect(slackSeconds).toBeGreaterThanOrEqual(requestsOutsideTheWait);
+    expect(slackSeconds).toBeGreaterThanOrEqual(REQUESTS_OUTSIDE_PROCESSING_WAIT);
     expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThan(0);
+  });
+
+  it("keeps the step budget matching the workflow step's own timeout-minutes", () => {
+    // The reserve is derived from STEP_BUDGET_SECONDS, so if the workflow's cap
+    // ever drops below it every derived bound above is quietly wrong.
+    const workflow = readRepoFile(".github/workflows/ios-testflight.yml");
+    const minutes = [...workflow.matchAll(/timeout-minutes:\s*(\d+)/g)].map((m) => Number(m[1]));
+    expect(minutes).toContain(STEP_BUDGET_SECONDS / 60);
   });
 
   it("keeps the default within its own validator", () => {
