@@ -287,9 +287,12 @@ Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
    logging elapsed time and state each tick, bounded by
    `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS`, which defaults to (and is capped at) the
    largest wait that still leaves the step budget room to assign and verify —
-   both are derived from the step's `timeout-minutes`, never typed in.
-   `FAILED`/`INVALID`
-   fails immediately.
+   both are derived from the step's `timeout-minutes`, never typed in. A read that
+   fails is a tick, not the end of the wait, so an App Store Connect blip inside
+   the deadline no longer reds a promote whose build is fine; `FAILED`/`INVALID`
+   and a build number matching more than one build still fail immediately. The
+   timeout message distinguishes "Apple never finished processing" from "the API
+   could never be read at all", so those are never confused for one another.
 4. Assign the build to the group, then **re-read
    `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless
    the build is present. The exit code reflects a fresh API read, not the POST's

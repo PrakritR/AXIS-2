@@ -272,12 +272,21 @@ describe("timeout budget leaves room to verify", () => {
     expect(MAX_PROCESSING_TIMEOUT_SECONDS).toBeGreaterThan(0);
   });
 
-  it("keeps the step budget matching the workflow step's own timeout-minutes", () => {
-    // The reserve is derived from STEP_BUDGET_SECONDS, so if the workflow's cap
-    // ever drops below it every derived bound above is quietly wrong.
+  it("keeps the step budget matching the distribute step's own timeout-minutes", () => {
+    // The reserve is derived from STEP_BUDGET_SECONDS, so if THIS step's cap ever
+    // drops below it every derived bound above is quietly wrong. Anchored to the
+    // distribute step's own block: scanning the whole file also sees the job's
+    // timeout-minutes, so a step lowered to 20 under an 80 → 30 job would pass.
     const workflow = readRepoFile(".github/workflows/ios-testflight.yml");
-    const minutes = [...workflow.matchAll(/timeout-minutes:\s*(\d+)/g)].map((m) => Number(m[1]));
-    expect(minutes).toContain(STEP_BUDGET_SECONDS / 60);
+    const distributeSteps = workflow
+      .split(/^ {6}- /m)
+      .slice(1)
+      .filter((step) => step.includes("node scripts/ios-testflight-distribute.mjs"));
+
+    expect(distributeSteps).toHaveLength(1);
+    const timeout = distributeSteps[0].match(/^ {8}timeout-minutes:\s*(\d+)\s*$/m);
+    expect(timeout).not.toBeNull();
+    expect(Number(timeout?.[1])).toBe(STEP_BUDGET_SECONDS / 60);
   });
 
   it("keeps the default within its own validator", () => {

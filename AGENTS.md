@@ -527,6 +527,11 @@ installable: bounded wait for `processingState = VALID`, assign to the internal
 group, then **re-read `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`
 to prove the assignment stuck** and fail the run if it did not. Rules:
 
+- **A failed read during the processing wait is a tick, not the end of the wait.**
+  It keeps polling to the deadline, so an App Store Connect blip cannot red a
+  promote whose build is fine; `FAILED`/`INVALID` and an ambiguous build number
+  still fail immediately, and the timeout message says whether Apple never
+  finished processing or the API could never be read at all.
 - **Verification is a FRESH read after the POST, and the exit code reflects that
   read — never the POST's status code.** That is the whole point: the old failure
   was trusting a success signal that did not mean the build was installable. It
