@@ -19,6 +19,9 @@ export async function GET() {
     return NextResponse.json({ tours });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load tours.";
+    if (/resident_tour_links|schema cache/i.test(message)) {
+      return NextResponse.json({ tours: [], degraded: true });
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

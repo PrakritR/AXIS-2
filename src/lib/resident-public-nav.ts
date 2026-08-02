@@ -59,7 +59,12 @@ export function residentSignInHref(
   return `/auth/sign-in?${q.toString()}`;
 }
 
-/** Browse / portal CTA — signed-in residents land in portal; everyone else is routed to resident auth. */
+/** In-portal tour list → browse listings, then schedule from a property page. */
+export function residentBrowseForTourHref(): string {
+  const q = new URLSearchParams({ from: "resident-tour", return: "/resident/tour" });
+  return `${RESIDENT_BROWSE_PATH}?${q.toString()}`;
+}
+
 export function residentPortalPublicHref(opts: {
   signedIn: boolean;
   isResident: boolean;

@@ -1,14 +1,21 @@
 "use client";
 
+import { Calendar } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { Button } from "@/components/ui/button";
+import { DataList } from "@/components/ui/data-list";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { formatRangeLabel } from "@/lib/demo-admin-scheduling";
 import { formatTourContactPhoneDisplay } from "@/lib/tour-contact-quality";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { residentBrowseForTourHref } from "@/lib/resident-public-nav";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import type { ResidentTourView } from "@/lib/tour-resident-link.server";
 
@@ -27,16 +34,26 @@ function statusLabel(tour: ResidentTourView): string {
   return tour.status || "Pending";
 }
 
-function statusClass(tour: ResidentTourView): string {
-  if (tour.confirmed) return "bg-emerald-100 text-emerald-800";
-  if (tour.status.trim().toLowerCase() === "declined") return "bg-red-100 text-red-800";
-  return "bg-amber-100 text-amber-900";
+function statusBadgeClass(tour: ResidentTourView): string {
+  if (tour.confirmed) return "portal-badge-success";
+  if (tour.status.trim().toLowerCase() === "declined") return "portal-badge-danger";
+  return "portal-badge-pending";
 }
 
 function tourWhenLabel(tour: ResidentTourView): string {
   const whenStart = tour.confirmedStart ?? tour.proposedStart;
   const whenEnd = tour.confirmedEnd ?? tour.proposedEnd;
   return whenStart && whenEnd ? formatRangeLabel(whenStart, whenEnd) : "Time to be confirmed";
+}
+
+function TourStatusBadge({ tour }: { tour: ResidentTourView }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] ${statusBadgeClass(tour)}`}
+    >
+      {statusLabel(tour)}
+    </span>
+  );
 }
 
 function DetailField({ label, value }: { label: string; value: string | null | undefined }) {
@@ -74,11 +91,7 @@ function ResidentTourDetail({
       backHref={`${basePath}/tour`}
       backLabel="All tours"
       dataAttrBack="resident-tour-detail-back"
-      actions={
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(tour)}`}>
-          {statusLabel(tour)}
-        </span>
-      }
+      actions={<TourStatusBadge tour={tour} />}
     >
       <div className="space-y-5 px-1 pb-8">
         <PortalListControlStack
@@ -94,11 +107,11 @@ function ResidentTourDetail({
 
         {detailTab === "details" ? (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm">
+            <div className="rounded-2xl border border-border bg-accent/25 px-4 py-4 text-sm">
               <p className="font-semibold text-foreground">{tourWhenLabel(tour)}</p>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-                {statusLabel(tour)}
-              </p>
+              <div className="mt-2">
+                <TourStatusBadge tour={tour} />
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -114,39 +127,38 @@ function ResidentTourDetail({
             </div>
 
             {tour.notes?.trim() ? (
-              <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+              <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm shadow-[var(--shadow-sm)]">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Notes</p>
                 <p className="mt-1.5 whitespace-pre-wrap text-muted">{tour.notes}</p>
               </div>
             ) : null}
 
             {tour.instructions?.trim() ? (
-              <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-info">
+              <div className="rounded-2xl border px-4 py-4 text-sm portal-banner-info">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Before you arrive</p>
                 <p className="mt-1.5 whitespace-pre-wrap text-sky-950">{tour.instructions}</p>
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={applyHref}
-                data-attr="resident-tour-apply"
-                className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-              >
-                Apply for this property
-              </Link>
-              <Link
-                href={`${basePath}/communication/inbox/unopened`}
-                data-attr="resident-tour-message-manager"
-                className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-              >
-                Message your manager
-              </Link>
-            </div>
+            <PortalSectionActionRow variant="header">
+              <Button type="button" variant="primary" className="rounded-full" asChild>
+                <Link href={applyHref} data-attr="resident-tour-apply">
+                  Apply for this property
+                </Link>
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" asChild>
+                <Link
+                  href={`${basePath}/communication/inbox/unopened`}
+                  data-attr="resident-tour-message-manager"
+                >
+                  Message your manager
+                </Link>
+              </Button>
+            </PortalSectionActionRow>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm">
+            <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm shadow-[var(--shadow-sm)]">
               <p className="font-semibold text-foreground">What happens next</p>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-muted">
                 <li>Your property manager reviews the requested time.</li>
@@ -155,7 +167,7 @@ function ResidentTourDetail({
               </ul>
             </div>
             {tour.requestedWindows.length > 1 ? (
-              <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm">
+              <div className="rounded-2xl border border-border bg-card px-4 py-4 text-sm shadow-[var(--shadow-sm)]">
                 <p className="font-semibold text-foreground">Requested windows</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
                   {tour.requestedWindows.map((window) => (
@@ -168,6 +180,28 @@ function ResidentTourDetail({
         )}
       </div>
     </PortalRecordDetailPage>
+  );
+}
+
+function ResidentTourEmptyState({ onBrowse }: { onBrowse: () => void }) {
+  return (
+    <div className="space-y-4">
+      <PortalDataTableEmpty
+        icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} aria-hidden />}
+        message="No tours yet. Browse homes and schedule a visit — your requests will show up here."
+      />
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          variant="primary"
+          className="rounded-full"
+          data-attr="resident-tour-browse-homes"
+          onClick={onBrowse}
+        >
+          Browse homes
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -184,6 +218,8 @@ export function ResidentTourPanel({
   const [error, setError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<TourDetailTabId>("details");
 
+  const browseHref = residentBrowseForTourHref();
+
   const loadTours = useCallback(async () => {
     setError(null);
     try {
@@ -192,9 +228,14 @@ export function ResidentTourPanel({
         setTours([]);
         return;
       }
-      const data = (await res.json().catch(() => ({}))) as { tours?: ResidentTourView[]; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        tours?: ResidentTourView[];
+        error?: string;
+        degraded?: boolean;
+      };
       if (!res.ok) throw new Error(data.error ?? "Could not load tours.");
       setTours(Array.isArray(data.tours) ? data.tours : []);
+      if (data.degraded) setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load tours.");
       setTours([]);
@@ -219,11 +260,48 @@ export function ResidentTourPanel({
     }
   }, [basePath, detailTour, inquiryId, loading, navigate]);
 
+  const scheduleTourButton = (
+    <Button
+      type="button"
+      variant="primary"
+      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+      data-attr="resident-tour-schedule"
+      onClick={() => navigate(browseHref)}
+    >
+      Schedule a tour
+    </Button>
+  );
+
+  const tourList = (
+    <DataList
+      rows={tours.map((tour) => {
+        const subtitle = [tour.roomLabel ? `Room ${tour.roomLabel}` : null, tour.managerLabel ? `Host ${tour.managerLabel}` : null]
+          .filter(Boolean)
+          .join(" · ");
+        return {
+          id: tour.inquiryId,
+          data: tour,
+          primary: tour.propertyTitle ?? "Property tour",
+          meta: subtitle || tourWhenLabel(tour),
+          trailing: <TourStatusBadge tour={tour} />,
+          onClick: () => navigate(`${basePath}/tour/${encodeURIComponent(tour.inquiryId)}`),
+        };
+      })}
+      columns={[
+        { id: "property", header: "Property", cell: (tour) => tour.propertyTitle ?? "Property tour" },
+        { id: "when", header: "When", cell: (tour) => tourWhenLabel(tour) },
+        { id: "room", header: "Room", cell: (tour) => tour.roomLabel || "—" },
+        { id: "status", header: "Status", cell: (tour) => <TourStatusBadge tour={tour} /> },
+      ]}
+      emptyState={<ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />}
+    />
+  );
+
   if (inquiryId) {
     if (loading) {
       return (
         <ManagerPortalPageShell title="Tour details" subtitle="Loading your tour…" hideTitleOnMobileNav>
-          <p className="text-sm text-muted">Loading your tour…</p>
+          <PortalEmptyState title="Loading your tour…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />
         </ManagerPortalPageShell>
       );
     }
@@ -245,47 +323,23 @@ export function ResidentTourPanel({
       title="Tour"
       subtitle="Your scheduled property tours and requested times."
       hideTitleOnMobileNav
+      titleTrailing={scheduleTourButton}
     >
+      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-tour-mobile-actions">
+        {scheduleTourButton}
+      </div>
+
       {loading ? (
-        <p className="text-sm text-muted">Loading your tours…</p>
+        <PortalEmptyState title="Loading your tours…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />
       ) : error ? (
-        <p className="text-sm text-danger">{error}</p>
-      ) : tours.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-foreground">No tours linked yet</p>
-          <p className="mt-2 text-sm text-muted">
-            When you book a tour and link it to your account, it will appear here with status updates and confirmed
-            times.
-          </p>
+        <div className="space-y-4">
+          <p className="rounded-2xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{error}</p>
+          <ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />
         </div>
+      ) : tours.length === 0 ? (
+        <ResidentTourEmptyState onBrowse={() => navigate(browseHref)} />
       ) : (
-        <ul className="space-y-4" data-attr="resident-tour-list">
-          {tours.map((tour) => (
-            <li key={tour.inquiryId}>
-              <button
-                type="button"
-                data-attr="resident-tour-row"
-                onClick={() => navigate(`${basePath}/tour/${encodeURIComponent(tour.inquiryId)}`)}
-                className="w-full rounded-2xl border border-border bg-card px-5 py-4 text-left shadow-sm transition hover:border-primary/40 hover:bg-accent/20"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-foreground">{tour.propertyTitle ?? "Property tour"}</p>
-                    {tour.roomLabel ? <p className="mt-0.5 text-sm text-muted">Room: {tour.roomLabel}</p> : null}
-                    {tour.managerLabel ? <p className="mt-0.5 text-sm text-muted">Host: {tour.managerLabel}</p> : null}
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(tour)}`}>
-                    {statusLabel(tour)}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-foreground">
-                  <span className="font-medium">When:</span> {tourWhenLabel(tour)}
-                </p>
-                <p className="mt-2 text-sm font-semibold text-primary">View tour details</p>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div data-attr="resident-tour-list">{tourList}</div>
       )}
     </ManagerPortalPageShell>
   );
