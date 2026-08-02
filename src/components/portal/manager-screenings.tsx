@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import {
   ApplicationScreeningPanel,
@@ -32,7 +33,7 @@ import {
   applicationVisibleToPortalUser,
   buildManagerPropertyFilterOptions,
 } from "@/lib/manager-portfolio-access";
-import { isManagerFreePlan } from "@/lib/manager-access";
+import { isManagerFreePlan, type ManagerSubscriptionTier } from "@/lib/manager-access";
 import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
@@ -46,6 +47,7 @@ import {
   sanitizePortalPropertyFilterIds,
 } from "@/lib/portal-property-list-filters";
 import { applicationScreeningDetailHref } from "@/lib/portal-detail-routes";
+import { cn } from "@/lib/utils";
 
 type ScreeningStatusFilter = "all" | "complete" | "pending" | "none";
 type ScreeningSort = "newest" | "oldest" | "name";
@@ -161,7 +163,7 @@ export function ManagerScreenings({
   useEffect(() => {
     if (!authReady) return;
     void loadManagerSubscriptionTierClient().then((tier) => {
-      setScreeningAllowed(!isManagerFreePlan(tier));
+      setScreeningAllowed(!isManagerFreePlan(tier as ManagerSubscriptionTier));
     });
   }, [authReady]);
 
@@ -387,6 +389,21 @@ export function ManagerScreenings({
           </Button>
         </div>
       ) : null}
+      {!embedded ? (
+        <div className="mb-2 sm:hidden">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search applicants"
+              className="h-9 w-full rounded-xl border border-border bg-background px-3 pl-9 text-sm outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+              data-attr="screenings-search-mobile"
+            />
+          </label>
+        </div>
+      ) : null}
       <PortalListControlStack
         className="mb-2"
         search={
@@ -397,13 +414,7 @@ export function ManagerScreenings({
                 placeholder: "Search screenings",
                 dataAttr: "screenings-search",
               }
-            : {
-                value: searchQuery,
-                onChange: setSearchQuery,
-                placeholder: "Search applicants",
-                dataAttr: "screenings-search-mobile",
-                className: "sm:hidden",
-              }
+            : undefined
         }
         activeFilterChips={
           propertyFilters.length > 0 || statusFilter !== "all" ? (
