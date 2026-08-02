@@ -59,13 +59,19 @@ describe("portal nav lock kinds", () => {
       expect(portalNavLockNavigable(params)).toBe(false);
     });
 
-    it("keeps tour and applications locked after approval", () => {
-      for (const stage of ["post_approval_pre_lease", "post_lease"] as const) {
-        for (const section of ["tour", "applications"]) {
-          expect(
-            portalNavLockKind({ kind: "resident", section, subscriptionTier: "paid", residentNavStage: stage }),
-          ).toBe("inert");
-        }
+    it("keeps a not-yet-reached stage's sections locked", () => {
+      // Tour and Applications stay UNLOCKED after approval (upstream
+      // "Keep resident Tour and Application nav unlocked after approval"), so
+      // the stage lock is about sections the resident has not reached yet.
+      for (const section of ["services", "move-in"]) {
+        expect(
+          portalNavLockKind({
+            kind: "resident",
+            section,
+            subscriptionTier: "paid",
+            residentNavStage: "post_approval_pre_lease",
+          }),
+        ).toBe("inert");
       }
     });
 
@@ -80,63 +86,6 @@ describe("portal nav lock kinds", () => {
       };
       expect(portalNavLockKind(params)).toBe("inert");
       expect(portalNavLockNavigable(params)).toBe(false);
-    });
-
-    describe("Documents on a free-tier household is NARROWED, not locked", () => {
-      // The Application tab is exempt server-side because `applications` is a
-      // RESIDENT_FREE_TIER_SECTION_ID. Calling the row "locked" on top of that
-      // left the exemption reachable only from the approval push notification.
-      const freeTierDocs = (residentNavStage: "pre_approval" | "post_approval_pre_lease" | "post_lease") => ({
-        kind: "resident" as const,
-        section: "documents",
-        subscriptionTier: "free" as const,
-        residentNavStage,
-      });
-
-      it("is a live link once the resident has an approved application", () => {
-        for (const stage of ["post_approval_pre_lease", "post_lease"] as const) {
-          expect(portalNavLockKind(freeTierDocs(stage))).toBe("none");
-          expect(portalNavSectionLocked(freeTierDocs(stage))).toBe(false);
-        }
-      });
-
-      it("stays inert before approval — there is no application to read yet", () => {
-        expect(portalNavLockKind(freeTierDocs("pre_approval"))).toBe("inert");
-      });
-
-      it("does not leak to the other free-tier-locked resident sections", () => {
-        // `services` is the other resident section absent from
-        // RESIDENT_FREE_TIER_SECTION_IDS; it has no per-tab exemption, so it
-        // stays a plain inert lock. (`move-in` and `lease` ARE free-tier
-        // sections, so they were never tier-locked to begin with.)
-        expect(
-          portalNavLockKind({
-            kind: "resident",
-            section: "services",
-            subscriptionTier: "free",
-            residentNavStage: "post_lease",
-          }),
-        ).toBe("inert");
-      });
-
-      it("leaves a paid-tier household unchanged", () => {
-        for (const stage of ["post_approval_pre_lease", "post_lease"] as const) {
-          expect(
-            portalNavLockKind({
-              kind: "resident",
-              section: "documents",
-              subscriptionTier: "paid",
-              residentNavStage: stage,
-            }),
-          ).toBe("none");
-        }
-      });
-
-      it("is still never an upsell — it is not a lock at all", () => {
-        for (const stage of ["pre_approval", "post_approval_pre_lease", "post_lease"] as const) {
-          expect(portalNavLockNavigable(freeTierDocs(stage))).toBe(false);
-        }
-      });
     });
 
     it("unlocked resident sections are not locked", () => {

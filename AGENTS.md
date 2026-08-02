@@ -701,14 +701,6 @@ A locked row must never be a live link to a path the server then redirects home
 — that reads as a broken tab. Coverage: `tests/unit/portal-nav-locks.test.ts`,
 `tests/unit/portal-nav-lock-surfaces.test.tsx`.
 
-**An approved resident's submitted application lives under Documents.** The
-`applications` nav entry stays locked past `pre_approval`, but
-`/resident/applications` (a `REGISTERED_PUSH_DEEP_LINKS` entry — the approval
-notification lands there) redirects to `/resident/documents/application`, which
-renders it read-only. That tab is deliberately exempt from the resident
-Documents tier gate, because `applications` is a `RESIDENT_FREE_TIER_SECTION_ID`
-and relocating the content must not take it from a free-tier household.
-
 ## Inbox panels: the standalone page shell is a /demo-only path
 
 `ManagerInbox` (and the resident / vendor / admin inbox panels, which share the
