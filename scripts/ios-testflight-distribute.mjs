@@ -407,12 +407,12 @@ async function findBuild(client, appId, buildNumber) {
   const body = await client.get(`builds?${query}`);
   const builds = body?.data ?? [];
   if (builds.length > 1) {
-    const ambiguous = new Error(
+    // Untagged on purpose: callers tolerate ONLY `retryable === true`, so this
+    // fails fast without needing a second classification channel.
+    throw new Error(
       `Build number ${buildNumber} matched ${builds.length} builds on app ${appId} ` +
         `(${builds.map((build) => build.id).join(", ")}); cannot pick one safely.`,
     );
-    ambiguous.fatal = true;
-    throw ambiguous;
   }
   return builds[0] ?? null;
 }
@@ -532,6 +532,12 @@ async function isBuildAssignedToGroup(client, buildId, groupId) {
  * write by a few seconds, so a single read would occasionally fail a promote for
  * a build that is genuinely assigned and installable. Re-polling keeps the API
  * read as the SOLE gate — it never softens the verdict, it only stops a false red.
+ *
+ * A retryable read failure is a tick here too, exactly as in the processing wait:
+ * without that, a 20-second Apple 5xx window during confirmation throws away the
+ * remaining re-poll budget and reds a promote whose build IS installable. Anything
+ * not tagged retryable — a 401 from a revoked key, a 403, a permanent 4xx —
+ * propagates immediately with its own message.
  */
 async function confirmAssignment(
   client,
@@ -539,10 +545,26 @@ async function confirmAssignment(
   groupId,
   { attempts = CONFIRM_ATTEMPTS, intervalMs = CONFIRM_INTERVAL_MS } = {},
 ) {
+  let lastReadError = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    if (await isBuildAssignedToGroup(client, buildId, groupId)) return true;
-    if (attempt === attempts) return false;
-    console.log(`  not visible in the group yet (read ${attempt}/${attempts}); re-reading in ${intervalMs / 1000}s`);
+    try {
+      if (await isBuildAssignedToGroup(client, buildId, groupId)) return true;
+      lastReadError = null;
+      if (attempt === attempts) return false;
+      console.log(`  not visible in the group yet (read ${attempt}/${attempts}); re-reading in ${intervalMs / 1000}s`);
+    } catch (error) {
+      if (error?.retryable !== true) throw error;
+      lastReadError = error;
+      if (attempt === attempts) {
+        throw new Error(
+          `Could not confirm group membership: every read failed. Last error: ${lastReadError.message}`,
+        );
+      }
+      console.log(
+        `  membership read failed (read ${attempt}/${attempts}), still confirming — ` +
+          `${error.message.slice(0, 160)}`,
+      );
+    }
     await sleep(intervalMs);
   }
   return false;
@@ -742,7 +764,17 @@ async function main() {
     throw new Error(`Build ${buildNumber} is already expired; it cannot be distributed.`);
   }
 
-  const alreadyAssigned = await isBuildAssignedToGroup(client, build.id, group.id);
+  // A blip on the pre-check must not red the run either: treat an unreadable
+  // pre-check as "not known to be assigned" and let the assignment (whose 409 is
+  // already tolerated) and the confirming read decide. A non-retryable error still
+  // propagates.
+  let alreadyAssigned = false;
+  try {
+    alreadyAssigned = await isBuildAssignedToGroup(client, build.id, group.id);
+  } catch (error) {
+    if (error?.retryable !== true) throw error;
+    console.log(`  pre-check read failed, proceeding to assign — ${error.message.slice(0, 160)}`);
+  }
   let assignError = null;
   if (alreadyAssigned) {
     console.log("Build is already assigned to the group; nothing to change.");
