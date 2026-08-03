@@ -32,14 +32,24 @@ vi.mock("unpdf/pdfjs", () => ({ getDocument: (...a: unknown[]) => getDocument(..
 
 const DATA_URL = "data:application/pdf;base64,JVBERi0xLjcK";
 
-/** jsdom has no canvas backend; the component only needs a context + toDataURL. */
-function stubCanvas() {
+let objectUrlSeq = 0;
+const createObjectURL = vi.fn(() => `blob:mock/${++objectUrlSeq}`);
+const revokeObjectURL = vi.fn();
+
+/** jsdom implements neither a canvas backend nor the blob-URL registry. */
+function stubCanvas(toBlobResult: Blob | null = new Blob(["page"], { type: "image/jpeg" })) {
   const proto = window.HTMLCanvasElement.prototype;
   vi.spyOn(proto, "getContext").mockReturnValue({
     fillStyle: "",
     fillRect: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
-  vi.spyOn(proto, "toDataURL").mockReturnValue("data:image/jpeg;base64,PAGE");
+  Object.defineProperty(proto, "toBlob", {
+    configurable: true,
+    writable: true,
+    value: (cb: BlobCallback) => cb(toBlobResult),
+  });
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, writable: true, value: createObjectURL });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, writable: true, value: revokeObjectURL });
 }
 
 function setUserAgent(ua: string) {
@@ -57,6 +67,8 @@ afterEach(() => {
   getDocument.mockClear();
   getPage.mockClear();
   renderPage.mockClear();
+  createObjectURL.mockClear();
+  revokeObjectURL.mockClear();
   document.documentElement.removeAttribute("data-native");
 });
 
@@ -108,6 +120,92 @@ describe("UploadedLeasePdfPreview", () => {
     const link = screen.getByRole("link", { name: /Open full document — Lease\.pdf/ });
     expect(link.getAttribute("href")).toBe(DATA_URL);
     expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("hands pages to <img> as object URLs and revokes them on unmount", async () => {
+    stubCanvas();
+    setUserAgent(IPHONE_UA);
+
+    const { unmount } = render(<UploadedLeasePdfPreview dataUrl={DATA_URL} title="Lease PDF preview" />);
+
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(2));
+    const srcs = screen.getAllByRole("img").map((el) => el.getAttribute("src"));
+    const revoked = () => revokeObjectURL.mock.calls.map((call) => call[0] as string);
+    expect(srcs.every((src) => src?.startsWith("blob:"))).toBe(true);
+    // A revoked URL must never be the src of a still-mounted <img>.
+    expect(srcs.some((src) => revoked().includes(src as string))).toBe(false);
+
+    unmount();
+    await waitFor(() => expect(srcs.every((src) => revoked().includes(src as string))).toBe(true));
+  });
+
+  it("shows progress copy — not the truncation copy — while later pages are still rendering", async () => {
+    stubCanvas();
+    setUserAgent(IPHONE_UA);
+    let releaseSecondPage = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseSecondPage = resolve;
+    });
+    let served = 0;
+    const gatedGetPage = vi.fn(async () => {
+      served += 1;
+      const holds = served === 2;
+      return {
+        getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
+        render: () => ({ promise: holds ? gate : Promise.resolve() }),
+        cleanup: vi.fn(),
+      };
+    });
+    getDocument.mockReturnValueOnce({
+      promise: Promise.resolve({ numPages: 3, getPage: gatedGetPage }),
+      destroy: () => Promise.resolve(),
+    } as unknown as ReturnType<typeof getDocument>);
+
+    render(<UploadedLeasePdfPreview dataUrl={DATA_URL} title="Lease PDF preview" />);
+
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(1));
+    expect(screen.getByText(/Loading more pages/)).toBeDefined();
+    expect(screen.queryByText(/Preview shows the first/)).toBeNull();
+
+    releaseSecondPage();
+    await waitFor(() => expect(screen.getAllByRole("img")).toHaveLength(3));
+    expect(screen.queryByText(/Loading more pages/)).toBeNull();
+    expect(screen.queryByText(/Preview shows the first/)).toBeNull();
+  });
+
+  it("surfaces a mid-document failure alongside the pages that did render", async () => {
+    stubCanvas();
+    setUserAgent(IPHONE_UA);
+    let served = 0;
+    const flakyGetPage = vi.fn(async () => {
+      served += 1;
+      const fails = served === 2;
+      return {
+        getViewport: ({ scale }: { scale: number }) => ({ width: 612 * scale, height: 792 * scale }),
+        render: () => ({ promise: fails ? Promise.reject(new Error("bad page")) : Promise.resolve() }),
+        cleanup: vi.fn(),
+      };
+    });
+    getDocument.mockReturnValueOnce({
+      promise: Promise.resolve({ numPages: 3, getPage: flakyGetPage }),
+      destroy: () => Promise.resolve(),
+    } as unknown as ReturnType<typeof getDocument>);
+
+    render(<UploadedLeasePdfPreview dataUrl={DATA_URL} title="Lease PDF preview" />);
+
+    await waitFor(() => expect(screen.getByText(/Page 2 could not be rendered/)).toBeDefined());
+    // The other pages still render — one bad page object does not cost the reader the document.
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+  });
+
+  it("reports pages that cannot be encoded instead of discarding the document", async () => {
+    stubCanvas(null);
+    setUserAgent(IPHONE_UA);
+
+    render(<UploadedLeasePdfPreview dataUrl={DATA_URL} title="Lease PDF preview" />);
+
+    await waitFor(() => expect(screen.getByText(/2 pages could not be rendered/)).toBeDefined());
+    expect(screen.getByText(/Use Open full document above/)).toBeDefined();
   });
 
   it("falls back to the escape-hatch message when the document cannot be parsed", async () => {
