@@ -3,6 +3,7 @@ import {
   parseLeaseHtmlSections,
   type LeaseHtmlSection,
 } from "@/lib/lease-html-sections";
+import { sanitizeManagerLeaseDocumentEdit } from "@/lib/lease-document-sanitizer";
 import {
   leaseAllowsManagerDocumentEdits,
   readLeasePipeline,
@@ -11,7 +12,9 @@ import {
 } from "@/lib/lease-pipeline-storage";
 
 export function leaseDocumentHtmlForSectionEdit(row: LeasePipelineRow): string | null {
-  if (row.managerUploadedPdf?.dataUrl) return null;
+  // P6 template rows materialize the manager's original PDF plus Terms Rider
+  // only at send time. Their temporary HTML preview is not the agreement body.
+  if (row.managerUploadedPdf?.dataUrl || row.templateDocumentUrl) return null;
   return row.generatedHtml?.trim() || null;
 }
 
@@ -57,7 +60,9 @@ function persistLeaseDocumentHtml(
   if (!baseHtml) {
     return { ok: false, error: "Upload a PDF lease or generate HTML before editing." };
   }
-  if (nextHtml.trim() === baseHtml.trim()) {
+  const sanitized = sanitizeManagerLeaseDocumentEdit(baseHtml, nextHtml);
+  if (!sanitized.ok) return { ok: false, error: sanitized.error };
+  if (sanitized.html.trim() === baseHtml.trim()) {
     return { ok: false, error: "No document changes to save." };
   }
 
@@ -66,10 +71,12 @@ function persistLeaseDocumentHtml(
   const saved = updateLeasePipelineRow(
     leaseId,
     {
-      generatedHtml: nextHtml,
+      generatedHtml: sanitized.html,
       generatedAtIso: iso,
       pdfVersion: version,
       versionNumber: version,
+      managerDocumentEditedAtIso: iso,
+      managerDocumentRegenerationRequiredAtIso: null,
       managerUploadedPdf: null,
       status: "Manager Review",
       currentActorRole: "manager",

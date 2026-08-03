@@ -97,6 +97,15 @@ export function rowHasAnySignature(row: Pick<LeasePipelineRow, "managerSignature
   return Boolean(row.managerSignature || row.residentSignature || (row.signatureName && row.signedAtIso));
 }
 
+/** Manager document-body changes stop when the lease leaves manager review. */
+export function leaseAllowsManagerDocumentEdits(
+  row: Pick<LeasePipelineRow, "bucket" | "status" | "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso">,
+): boolean {
+  if (row.status === "Voided" || row.status === "Fully Signed") return false;
+  if (rowHasAnySignature(row)) return false;
+  return row.bucket === "manager";
+}
+
 /**
  * The agreement bytes, excluding the certificate page that signing appends into
  * `managerUploadedPdf.dataUrl`. That page is derived from the signatures, so it
@@ -109,6 +118,12 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
   };
 }
 
+export function leaseDocumentBodyChanged(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
+  const before = leaseDocumentBody(stored);
+  const after = leaseDocumentBody(next);
+  return before.html !== after.html || before.pdf !== after.pdf;
+}
+
 /**
  * True when `next` replaces the document body of an already-signed `stored`
  * row. Clearing the signatures drops out by design, because that is a superseding
@@ -119,8 +134,7 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
   const before = leaseDocumentBody(stored);
-  const after = leaseDocumentBody(next);
-  if (before.html === after.html && before.pdf === after.pdf) return false;
+  if (!leaseDocumentBodyChanged(stored, next)) return false;
   if (!before.html && !before.pdf && stored.externallySignedLease) return false;
   return true;
 }

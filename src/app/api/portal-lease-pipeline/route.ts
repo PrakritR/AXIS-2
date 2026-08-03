@@ -6,7 +6,14 @@ import {
   type LeaseScopeRecord,
 } from "@/lib/auth/manager-lease-scope";
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
-import { replacesSignedLeaseDocument } from "@/lib/lease-execution-evidence";
+import {
+  leaseAllowsManagerDocumentEdits,
+  leaseDocumentBody,
+  leaseDocumentBodyChanged,
+  replacesSignedLeaseDocument,
+  rowHasAnySignature,
+} from "@/lib/lease-execution-evidence";
+import { sanitizeLeaseDocumentHtml, sanitizeManagerLeaseDocumentEdit } from "@/lib/lease-document-sanitizer";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -34,8 +41,10 @@ async function getUserContext() {
   };
 }
 
-function normalizeRow(row: Record<string, unknown>) {
-  return row;
+function normalizeRow(row: Record<string, unknown>, { sanitizeGeneratedHtml = false }: { sanitizeGeneratedHtml?: boolean } = {}) {
+  const generatedHtml =
+    sanitizeGeneratedHtml && typeof row.generatedHtml === "string" ? sanitizeLeaseDocumentHtml(row.generatedHtml) : row.generatedHtml;
+  return { ...row, generatedHtml };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -146,7 +155,7 @@ export async function POST(req: Request) {
     if (rows.length === 0) return NextResponse.json({ error: "row required" }, { status: 400 });
 
     for (const row of rows) {
-      const normalized = normalizeRow(row);
+      let normalized: Record<string, unknown> = normalizeRow(row, { sanitizeGeneratedHtml: true });
       let record = buildUpsert(normalized);
       if (!record.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
       const id = String(record.id);
@@ -160,6 +169,32 @@ export async function POST(req: Request) {
 
       const recordExists = Array.isArray(existing) && existing.length > 0;
       const existingRecord = (existing ?? [])[0] as (LeaseScopeRecord & { row_data?: Record<string, unknown> }) | undefined;
+
+      // The client edit helper restores P7 verbatim blocks too, but this is a
+      // public route. Re-run that comparison against the stored source before
+      // accepting a manager-authored replacement from devtools or another
+      // client, then build the row_data payload from the restored value.
+      const storedForSanitization = existingRecord?.row_data as LeasePipelineRow | undefined;
+      const storedGeneratedHtml = typeof storedForSanitization?.generatedHtml === "string" ? storedForSanitization.generatedHtml : null;
+      const incomingHasGeneratedHtml = Object.hasOwn(row, "generatedHtml");
+      const incomingClearsSignatures = Boolean(
+        storedForSanitization && rowHasAnySignature(storedForSanitization) && !rowHasAnySignature(normalized as LeasePipelineRow),
+      );
+      if (storedGeneratedHtml && incomingHasGeneratedHtml && !incomingClearsSignatures) {
+        if (typeof row.generatedHtml !== "string") {
+          const materializingTemplatePdf = Boolean(
+            storedForSanitization?.templateDocumentUrl && (normalized.managerUploadedPdf as { dataUrl?: unknown } | undefined)?.dataUrl,
+          );
+          if (!materializingTemplatePdf) {
+            return NextResponse.json({ error: "A generated lease body cannot be removed through this save path." }, { status: 400 });
+          }
+        } else {
+          const sanitized = sanitizeManagerLeaseDocumentEdit(storedGeneratedHtml, row.generatedHtml);
+          if (!sanitized.ok) return NextResponse.json({ error: sanitized.error }, { status: 400 });
+          normalized = { ...normalized, generatedHtml: sanitized.html };
+          record = buildUpsert(normalized);
+        }
+      }
 
       // Evidence integrity, authoritative copy. The client store runs the same
       // predicate, but it runs IN the browser against a store the browser owns,
@@ -175,6 +210,64 @@ export async function POST(req: Request) {
           { error: "This lease already carries a signature; its document cannot be replaced." },
           { status: 409 },
         );
+      }
+
+      // P4's signature check above is authoritative once signing begins. This
+      // companion check closes the earlier window too: a manager cannot use the
+      // public route to replace a document after it was sent to the resident,
+      // even before the first signature lands. Superseding flows deliberately
+      // clear signatures, and externally signed rows may still receive their
+      // previously absent body, matching P4's documented exemptions.
+      const nextRow = normalized as unknown as LeasePipelineRow;
+      const documentChanged = Boolean(storedRow && leaseDocumentBodyChanged(storedRow, nextRow));
+      if (documentChanged && ctx.user.role === "resident") {
+        return NextResponse.json({ error: "Only a manager can replace a lease document." }, { status: 403 });
+      }
+      if (storedRow && leaseDocumentBodyChanged(storedRow, nextRow) && !leaseAllowsManagerDocumentEdits(storedRow)) {
+        const clearingSignatures = rowHasAnySignature(storedRow) && !rowHasAnySignature(nextRow);
+        const previousBody = leaseDocumentBody(storedRow);
+        const filingExternalBody = storedRow.externallySignedLease && !previousBody.html && !previousBody.pdf;
+        if (!clearingSignatures && !filingExternalBody) {
+          return NextResponse.json(
+            { error: "This lease is no longer in manager review; its document cannot be replaced." },
+            { status: 409 },
+          );
+        }
+      }
+
+      if (storedGeneratedHtml && typeof nextRow.generatedHtml !== "string" && !incomingClearsSignatures) {
+        const materializingTemplatePdf = Boolean(storedRow?.templateDocumentUrl && nextRow.managerUploadedPdf?.dataUrl);
+        if (!materializingTemplatePdf) {
+          return NextResponse.json({ error: "A generated lease body cannot be removed through this save path." }, { status: 400 });
+        }
+      }
+
+      // A client may submit this generic row endpoint directly, so a generated
+      // body replacement must still carry the same exact version increment the
+      // dedicated edit path performs. The route stamps the server-confirmed
+      // generation time rather than trusting a browser-provided timestamp.
+      if (
+        storedRow &&
+        documentChanged &&
+        !incomingClearsSignatures &&
+        typeof storedRow.generatedHtml === "string" &&
+        typeof nextRow.generatedHtml === "string"
+      ) {
+        const expectedVersion = (storedRow.versionNumber ?? storedRow.pdfVersion ?? 1) + 1;
+        if (nextRow.versionNumber !== expectedVersion || nextRow.pdfVersion !== expectedVersion) {
+          return NextResponse.json({ error: "Replacing a generated lease requires the next document version." }, { status: 400 });
+        }
+        const editedAtIso = new Date().toISOString();
+        normalized = {
+          ...normalized,
+          generatedAtIso: editedAtIso,
+          // This public route cannot trust a browser-provided "generation"
+          // marker. Every in-place generated HTML replacement is conservatively
+          // treated as a manager edit, so automatic regeneration never erases it.
+          managerDocumentEditedAtIso: editedAtIso,
+          managerDocumentRegenerationRequiredAtIso: null,
+        };
+        record = buildUpsert(normalized);
       }
 
       if (recordExists && ctx.user.role !== "admin") {

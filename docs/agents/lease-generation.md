@@ -1188,3 +1188,58 @@ without a Washington citation.
 amount movement, absence of all new commercial clauses when unset, California output with
 an unset citation, summary values sourced from the billing snapshot, and byte-identical
 short-term output when only long-term fields change.
+
+## Manager lease-body edits (P8)
+
+The manager-side lease-pipeline editor is intentionally a small HTML-source editor with a
+side-by-side preview. It is available only for a generated HTML lease in Manager Review,
+while `leaseAllowsManagerDocumentEdits(row)` is true. Uploaded-template PDFs are excluded:
+their base document plus P6 Terms Rider remains the manager's original agreement bytes.
+
+### Stored HTML policy
+
+`src/lib/lease-document-sanitizer.ts` is the sole allowlist. It permits document structure
+and typography only: document, heading, text, list, table, and basic layout tags, plus a
+small set of structural attributes. It removes scripts, unsafe styles, event handlers, links and
+URL-bearing attributes, iframes, objects, images, forms, SVG, and external-resource tags.
+Existing document CSS is preserved byte-for-byte only when it contains no CSS escapes,
+URL-bearing syntax, external at-rules, or executable CSS constructs; unsafe styles are removed.
+It runs in three places:
+
+- `saveLeaseDocumentHtml` and section saves use it before a browser-store update.
+- `getLeaseDocumentHtml` uses it before an unsigned stored value is rendered anywhere in
+  the portal. After a signature, it renders the already-sanitized stored bytes unchanged,
+  because those bytes are P4 execution evidence.
+- `POST /api/portal-lease-pipeline` applies it before `row_data` is upserted, so a direct
+  route request cannot persist executable manager HTML.
+
+The preview iframe has an empty sandbox attribute. The sanitizer is still required because
+the same stored document is rendered for residents and exported as lease HTML.
+
+### Execution and regeneration
+
+Every saved body edit increments both `versionNumber` and `pdfVersion`, stamps
+`generatedAtIso`, and records `managerDocumentEditedAtIso`. The client persistence function
+rejects a row once either party has signed. The route refuses direct body replacements after
+the row leaves Manager Review, and its existing P4 `replacesSignedLeaseDocument` guard rejects
+the signed case with 409. The P4 hash therefore covers the edited body that was actually signed.
+
+Regeneration never silently replaces a manual edit. Both manager generate surfaces show a
+confirmation that says the current application/listing terms will replace the manager's
+saved body. Only the confirmed path passes `discardManagerEdits`. If application data changes
+through the automatic resident-sync path, the row records
+`managerDocumentRegenerationRequiredAtIso` and cannot be sent until the manager explicitly
+regenerates. This keeps the edited version visible without silently sending stale terms.
+
+### Verbatim disclosures
+
+P7's disclosure engine has not landed in this checkout, so no runtime clause is currently
+inserted from the catalog. P8 reserves immutable markers now:
+`<!-- proplane-verbatim-disclosure:start:<id> -->` and matching `end` markers. If a generated
+lease contains one, `sanitizeManagerLeaseDocumentEdit` restores the original marked block and
+rejects a save that removes or reorders it. P7 must emit those markers around each
+`verbatim_required` clause. P8 deliberately does not add or infer any statute text.
+
+Deliberately left out: a rich-text editor, arbitrary images/links/embedded documents, and
+editing of uploaded PDFs. The source textarea plus preview keeps the allowed document grammar
+visible and gives the persistence layer one narrow attack surface.
