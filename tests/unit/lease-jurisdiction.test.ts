@@ -222,3 +222,25 @@ describe("an explicit out-of-scope state is authoritative", () => {
     ).toBe("seattle");
   });
 });
+
+/**
+ * Round-4 CRITICAL. No property shape carries a `state` field in production, but the rental
+ * wizard REQUIRES the applicant's current state, so reading it here made the applicant's home
+ * state decide the property's jurisdiction: anyone relocating to Seattle from out of state
+ * could not get a lease at all.
+ */
+describe("the applicant's own state never decides the property's jurisdiction", () => {
+  const seattleProperty = { address: "5259 Brooklyn Ave NE, Seattle, WA", zip: "98105", neighborhood: "U District" };
+
+  it.each(["OR", "TX", "NY", "FL", "CA"])("resolves a Seattle property for an applicant currently in %s", (currentState) => {
+    expect(
+      resolveLeaseJurisdiction({ submission: seattleProperty, application: { currentCity: "Portland", currentState } }),
+    ).toBe("seattle");
+  });
+
+  it("ignores a garbage state value instead of refusing to generate", () => {
+    for (const state of ["n/a", "--", "Washington State", ""]) {
+      expect(resolveLeaseJurisdiction({ submission: { ...seattleProperty, state } })).toBe("seattle");
+    }
+  });
+});

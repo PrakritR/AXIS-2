@@ -189,9 +189,17 @@ export async function POST(req: Request) {
       // manager drop every statutory clause with no trick at all. Only an exact echo of the
       // stored body is left alone, because rewriting an UNCHANGED body silently mutates the
       // evidence bytes a signed lease's certificate hash describes.
+      if (incomingHasGeneratedHtml && row.generatedHtml != null && typeof row.generatedHtml !== "string") {
+        return NextResponse.json({ error: "Lease document must be text." }, { status: 400 });
+      }
       const bodyDiffersFromStored =
         typeof row.generatedHtml === "string" && row.generatedHtml !== storedGeneratedHtml;
-      const editableAgainstStored = Boolean(storedGeneratedHtml) && !incomingClearsSignatures;
+      // The clause gate runs whenever there IS a stored body, including a write that clears the
+      // signatures. Exempting that path let a manager drop every statutory disclosure simply by
+      // nulling the signatures in the same request. A legitimate renewal or amendment carries a
+      // freshly generated body for the same property, so it still contains those clauses and
+      // passes; a body that merely deletes them does not.
+      const editableAgainstStored = Boolean(storedGeneratedHtml);
       if (bodyDiffersFromStored && !editableAgainstStored) {
         const cleaned = sanitizeLeaseDocumentHtml(row.generatedHtml as string);
         if (cleaned !== row.generatedHtml) {
@@ -199,7 +207,7 @@ export async function POST(req: Request) {
           record = buildUpsert(normalized);
         }
       }
-      if (storedGeneratedHtml && incomingHasGeneratedHtml && !incomingClearsSignatures) {
+      if (storedGeneratedHtml && incomingHasGeneratedHtml) {
         if (typeof row.generatedHtml !== "string") {
           const materializingTemplatePdf = Boolean(
             storedForSanitization?.templateDocumentUrl && (normalized.managerUploadedPdf as { dataUrl?: unknown } | undefined)?.dataUrl,

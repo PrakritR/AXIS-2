@@ -121,6 +121,21 @@ function stateSignalFromHaystack(hay: string): string | null {
   return hasWashington ? "WA" : "CA";
 }
 
+/** USPS abbreviations and full names, so only a real state token can veto. */
+const US_STATE_TOKENS = new Set(
+  [
+    "AL","AK","AZ","AR","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+    "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI",
+    "SC","SD","TN","TX","UT","VT","VA","WV","WI","WY","DC",
+    "ALABAMA","ALASKA","ARIZONA","ARKANSAS","COLORADO","CONNECTICUT","DELAWARE","FLORIDA","GEORGIA",
+    "HAWAII","IDAHO","ILLINOIS","INDIANA","IOWA","KANSAS","KENTUCKY","LOUISIANA","MAINE","MARYLAND",
+    "MASSACHUSETTS","MICHIGAN","MINNESOTA","MISSISSIPPI","MISSOURI","MONTANA","NEBRASKA","NEVADA",
+    "NEW HAMPSHIRE","NEW JERSEY","NEW MEXICO","NEW YORK","NORTH CAROLINA","NORTH DAKOTA","OHIO",
+    "OKLAHOMA","OREGON","PENNSYLVANIA","RHODE ISLAND","SOUTH CAROLINA","SOUTH DAKOTA","TENNESSEE",
+    "TEXAS","UTAH","VERMONT","VIRGINIA","WEST VIRGINIA","WISCONSIN","WYOMING",
+  ],
+);
+
 /**
  * An explicit out-of-scope STATE, read from the structured field when the record has one.
  * String heuristics cannot do this job: a bare /\bor\b/ vetoed "Unit A or B" and any Seattle
@@ -128,13 +143,19 @@ function stateSignalFromHaystack(hay: string): string | null {
  * state lives in its own field with no comma anywhere in the joined text.
  */
 function explicitOutOfScopeState(ctx: LeaseJurisdictionInput): boolean {
-  const states = [ctx.submission?.state, ctx.listingProperty?.state, ctx.leasedRoom?.state, ctx.application?.currentState];
+  // PROPERTY fields only. Reading application.currentState here was catastrophic: no property
+  // shape carries a `state` field in production, while the wizard REQUIRES the applicant's
+  // current state, so the applicant's home state became the only structured state and decided
+  // the property's jurisdiction. Anyone relocating to Seattle from out of state could not get
+  // a lease at all. Where the applicant lives says nothing about where the property is.
+  const states = [ctx.listingProperty?.state, ctx.leasedRoom?.state, ctx.submission?.state];
   for (const raw of states) {
     const value = raw?.trim();
     if (!value) continue;
     if (normalizedState(value)) return false; // A supported state wins outright.
-    // Any other explicitly named state puts this property outside the registry.
-    if (/^[A-Za-z]{2}$/.test(value) || /^[A-Za-z][A-Za-z\s]+$/.test(value)) return true;
+    // Only a plausible state token vetoes. "n/a", "--" and free text are ignored rather than
+    // silently refusing to generate a lease.
+    if (US_STATE_TOKENS.has(value.toUpperCase())) return true;
   }
   return false;
 }

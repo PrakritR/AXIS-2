@@ -635,7 +635,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const leadDisclosureHtml =
     leadDisclosureFired ||
     (leadTriggerUnknown || !disclosureEvaluation
-      ? `<p>If the property was built before 1978, federal law (42 U.S.C. &sect; 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet &quot;Protect Your Family From Lead in Your Home&quot; or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>`
+      ? `<p data-disclosure-rule="fed-lead-paint">If the property was built before 1978, federal law (42 U.S.C. &sect; 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet &quot;Protect Your Family From Lead in Your Home&quot; or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>`
       : "");
   const moveInDisclosureHtml = disclosureHtml("Addendum A \u2014 Move-In Condition Report");
   const bedBugDisclosureHtml = disclosureHtml("Addendum B \u2014 Bed Bug Disclosure");
