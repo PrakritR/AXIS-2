@@ -12,7 +12,7 @@ import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-
 import { buildLeasePacketEditAssistantContext } from "@/lib/lease-assistant-context";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 import { leaseDocumentHtmlForSectionEdit } from "@/lib/lease-section-edit.client";
-import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { leaseAllowsManagerDocumentEdits, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { cn } from "@/lib/utils";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 
@@ -36,9 +36,9 @@ export function ManagerPipelineLeaseEditModal({
   const assistantContext = useMemo(() => buildLeasePacketEditAssistantContext(activeRow), [activeRow]);
   const [conversationInstance, setConversationInstance] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const editableHtml = leaseDocumentHtmlForSectionEdit(activeRow);
+  const canEdit = leaseAllowsManagerDocumentEdits(activeRow);
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +48,6 @@ export function ManagerPipelineLeaseEditModal({
     setBaselineHtml(html);
     setConversationInstance((n) => n + 1);
     setChatOpen(false);
-    setActiveSectionId(null);
   }, [open, row.id, row]);
 
   useEffect(() => {
@@ -90,7 +89,11 @@ export function ManagerPipelineLeaseEditModal({
     >
       <div className="flex h-[min(82dvh,48rem)] max-h-[min(82dvh,48rem)] flex-col gap-2">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {editableHtml && draftHtml ? (
+          {!canEdit ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-border bg-accent/30 px-4 py-6 text-center text-sm text-muted">
+              This lease has entered signing and its document body is locked.
+            </div>
+          ) : editableHtml && draftHtml ? (
             <LeaseDocumentDirectEditor
               row={activeRow}
               managerUserId={managerUserId}
@@ -98,12 +101,11 @@ export function ManagerPipelineLeaseEditModal({
               baselineHtml={baselineHtml}
               onChange={setDraftHtml}
               onSaved={handleSaved}
-              onSectionFocus={setActiveSectionId}
               className="min-h-0 flex-1"
             />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-border bg-accent/30 px-4 py-6 text-center text-sm text-muted">
-              No editable HTML lease document yet. Generate the lease or upload a PDF to preview it here.
+              Generate a PropLane lease before editing. Uploaded PDF templates are preserved as the manager’s original document and cannot be edited here.
             </div>
           )}
         </div>
@@ -117,7 +119,6 @@ export function ManagerPipelineLeaseEditModal({
               )}
               data-attr="lease-edit-assistant"
               data-expanded={chatOpen ? "true" : "false"}
-              data-lease-selected-section={activeSectionId ?? ""}
             >
               {chatOpen ? (
                 <AssistantDockPanel

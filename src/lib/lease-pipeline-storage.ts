@@ -18,11 +18,13 @@ import {
   LEASE_ESIGN_CONSENT_VERSION,
   asDocumentSha256,
   documentFingerprintLabel,
+  leaseAllowsManagerDocumentEdits,
   leaseDocumentSha256,
   replacesSignedLeaseDocument,
   rowHasAnySignature,
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
+import { sanitizeLeaseDocumentHtml } from "@/lib/lease-document-sanitizer";
 import { appendLeaseTermsRiderToPdf, mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
 import { leaseTemplateObjectPath, legacyLeaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import {
@@ -191,11 +193,7 @@ export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
 }
 
 /** True when the manager may generate, upload, or replace the lease document (manager review only). */
-export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean {
-  if (row.status === "Voided" || row.status === "Fully Signed") return false;
-  if (hasAnyLeaseSignature(row)) return false;
-  return row.bucket === "manager";
-}
+export { leaseAllowsManagerDocumentEdits } from "@/lib/lease-execution-evidence";
 
 /** True when editing a resident should refresh the lease document (manager-side review only). */
 export function leaseSyncsFromResidentEdit(row: LeasePipelineRow): boolean {
@@ -346,6 +344,10 @@ export type LeasePipelineRow = {
   versionNumber?: number;
   /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
   leaseDocumentRemovedAt?: string | null;
+  /** Set only after a manager saves an edit to generated lease HTML. */
+  managerDocumentEditedAtIso?: string | null;
+  /** Underlying terms changed after a manual edit. Sending is blocked until regeneration is confirmed. */
+  managerDocumentRegenerationRequiredAtIso?: string | null;
   /** Off-platform lease — both parties treated as signed; no e-sign workflow. */
   externallySignedLease?: boolean;
   /**
@@ -496,6 +498,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     roomChoice: typeof r.roomChoice === "string" ? r.roomChoice : null,
     signedRentLabel: typeof r.signedRentLabel === "string" ? r.signedRentLabel : null,
     application: r.application,
+    // Do not alter persisted historical bytes on read. The document hash is of
+    // the stored agreement, and new manager edits are sanitized before write.
     generatedHtml: stripLeaseAiDisclaimerFromHtml(r.generatedHtml ?? null),
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
@@ -521,6 +525,9 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
     versionNumber,
     leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
+    managerDocumentEditedAtIso: typeof r.managerDocumentEditedAtIso === "string" ? r.managerDocumentEditedAtIso : null,
+    managerDocumentRegenerationRequiredAtIso:
+      typeof r.managerDocumentRegenerationRequiredAtIso === "string" ? r.managerDocumentRegenerationRequiredAtIso : null,
     externallySignedLease: r.externallySignedLease === true,
     executedJurisdiction: optionalTrimmedString(r.executedJurisdiction),
     templateVersion: optionalTrimmedString(r.templateVersion),
@@ -1527,7 +1534,11 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
 
 export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
   const raw = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
-  return stripLeaseAiDisclaimerFromHtml(raw);
+  const documentHtml = stripLeaseAiDisclaimerFromHtml(raw);
+  // Once a signature exists the exact document bytes are execution evidence.
+  // New manual HTML is already sanitized on every write; do not mutate a
+  // signed historical document while rendering it.
+  return hasAnyLeaseSignature(row) ? documentHtml : sanitizeLeaseDocumentHtml(documentHtml);
 }
 
 export function appendLeaseThreadMessage(
@@ -1690,12 +1701,16 @@ async function prepareManagerTemplatePdfForSignature(
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
+  options?: { discardManagerEdits?: boolean },
 ): { ok: true; version: number } | { ok: false; error: string } {
   const rows = readLeasePipeline(managerUserId);
   const row = rows.find((r) => r.id === rowId);
   if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
   if (!leaseAllowsManagerDocumentEdits(row)) {
     return { ok: false, error: "Move the lease back to manager review before generating a new document." };
+  }
+  if (row.managerDocumentEditedAtIso && !options?.discardManagerEdits) {
+    return { ok: false, error: "This lease has manager edits. Confirm regeneration to replace them with current lease terms." };
   }
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) {
@@ -1721,6 +1736,9 @@ export function generateLeaseHtmlForRow(
       currentActorRole: "manager",
       leaseDocumentRemovedAt: null,
       executedJurisdiction: outcome.executedJurisdiction,
+      // A fresh generation is by definition unedited, so the edit stamps reset here.
+      managerDocumentEditedAtIso: null,
+      managerDocumentRegenerationRequiredAtIso: null,
       templateVersion: outcome.templateVersion,
       templateDocumentUrl: outcome.templateDocument?.url ?? null,
       templateDocumentName: outcome.templateDocument?.name ?? null,
@@ -1742,6 +1760,14 @@ export function regenerateEditableLeasesForResident(
   for (const lr of readLeasePipeline(managerUserId)) {
     if (lr.residentEmail.trim().toLowerCase() !== email) continue;
     if (!leaseSyncsFromResidentEdit(lr)) continue;
+    if (lr.managerDocumentEditedAtIso) {
+      updateLeasePipelineRow(
+        lr.id,
+        { managerDocumentRegenerationRequiredAtIso: new Date().toISOString() },
+        managerUserId,
+      );
+      continue;
+    }
     if (!leaseGenerationSupportedForRow(lr).ok) continue;
     if (applicationPatch) {
       updateLeasePipelineRow(
@@ -2092,6 +2118,9 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   }
   if (!logical.generatedHtml && !logical.managerUploadedPdf?.dataUrl) {
     return { ok: false, error: "Generate or upload a lease document first." };
+  }
+  if (logical.managerDocumentRegenerationRequiredAtIso) {
+    return { ok: false, error: "Lease terms changed after a manual edit. Regenerate the lease and confirm replacing the edit before sending." };
   }
   if (logical.status === "Fully Signed" || logical.status === "Voided") {
     return { ok: false, error: "This lease is already finalized." };

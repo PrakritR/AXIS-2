@@ -1189,74 +1189,57 @@ amount movement, absence of all new commercial clauses when unset, California ou
 an unset citation, summary values sourced from the billing snapshot, and byte-identical
 short-term output when only long-term fields change.
 
-## P7 disclosure rules engine
+## Manager lease-body edits (P8)
 
-`src/lib/lease-templates/disclosure-rules.ts` parses and validates the real
-`leases/disclosure-clause-rules.json` catalog at module load. It is the only source for
-rule ids, citations, trigger definitions, verbatim text, attachments, and section targets.
-Do not mirror a catalog rule in TypeScript. `evaluateDisclosureRules` accepts a resolved
-`JurisdictionKey`, merge fields, optional lifecycle, and an optional catalog fixture for
-tests. It returns fired rules, unknown triggers, attachment requirements, content gaps,
-non-lease lifecycle rules, and unverified-rule coverage counts.
+The manager-side lease-pipeline editor is intentionally a small HTML-source editor with a
+side-by-side preview. It is available only for a generated HTML lease in Manager Review,
+while `leaseAllowsManagerDocumentEdits(row)` is true. Uploaded-template PDFs are excluded:
+their base document plus P6 Terms Rider remains the manager's original agreement bytes.
 
-The evaluator supports exactly the trigger forms in the current catalog: `always`, event,
-and field comparisons `==`, `<`, `>`, `>=`, and `in`. It selects a rule when its own
-`jurisdiction` or one of its `applies_to` scopes is in `jurisdictionRuleScopes(key)`, so
-city inheritance remains owned by the registry and JSON inheritance data. Only
-`lease_signing` rules are evaluated by the long-form builder. Other lifecycle rules remain
-in the evaluator result for their future notice, screening, and buyout surfaces.
+### Stored HTML policy
 
-### Safety policy and manager completion state
+`src/lib/lease-document-sanitizer.ts` is the sole allowlist. It permits document structure
+and typography only: document, heading, text, list, table, and basic layout tags, plus a
+small set of structural attributes. It removes scripts, unsafe styles, event handlers, links and
+URL-bearing attributes, iframes, objects, images, forms, SVG, and external-resource tags.
+Existing document CSS is preserved byte-for-byte only when it contains no CSS escapes,
+URL-bearing syntax, external at-rules, or executable CSS constructs; unsafe styles are removed.
+It runs in three places:
 
-`DISCLOSURE_RULE_POLICY.includeUnverifiedRules` is the one policy switch. It defaults to
-`false`: rules with `cite_verified: false` are excluded from lease output. The evaluator
-still reports the number of applicable excluded rules and separately reports triggered
-unverified rules, so exclusion cannot look like completed coverage. A legal reviewer may
-change the catalog rule's `cite_verified` flag only after verifying the current authoritative
-source, citation, effective date, required text, font requirement, target section, and
-attachment requirement. If the source requires wording that is not in the catalog, add the
-verified wording to the catalog first. Do not compose it in the builder.
+- `saveLeaseDocumentHtml` and section saves use it before a browser-store update.
+- `getLeaseDocumentHtml` uses it before an unsigned stored value is rendered anywhere in
+  the portal. After a signature, it renders the already-sanitized stored bytes unchanged,
+  because those bytes are P4 execution evidence.
+- `POST /api/portal-lease-pipeline` applies it before `row_data` is upserted, so a direct
+  route request cannot persist executable manager HTML.
 
-An absent merge field is an explicit `unknown`, never a negative fact. An unknown trigger,
-including one for an excluded unverified rule, makes `canCompleteLease` false and appears in
-the manager review notice. The long-form document renders a
-manager-facing completion notice naming the missing field and marks it with
-`data-disclosure-complete="false"`. This protects `year_built` from being treated as a
-post-1978 answer and applies the same behavior to every other verified trigger. The current
-builder does not evaluate this state for short stays, preserving short-term agreements.
+The preview iframe has an empty sandbox attribute. The sanitizer is still required because
+the same stored document is rendered for residents and exported as lease HTML.
 
-Verbatim-required rules are inserted from `verbatim_text` without escaping, rewriting, or
-truncation. `font_min_pt` is applied directly when the catalog specifies it. The old
-hardcoded lead-paint paragraph was removed; the existing Lead-Based Paint Disclosure
-section now receives only the catalog's federal text, so it cannot duplicate that rule.
-The builder also exposes an explicit review notice for catalog rules that fire but have no
-catalog-provided verbatim body. That is a legal-content gap, not permission to write a new
-clause.
+### Execution and regeneration
 
-### Attachments not delivered by P7
+Every saved body edit increments both `versionNumber` and `pdfVersion`, stamps
+`generatedAtIso`, and records `managerDocumentEditedAtIso`. The client persistence function
+rejects a row once either party has signed. The route refuses direct body replacements after
+the row leaves Manager Review, and its existing P4 `replacesSignedLeaseDocument` guard rejects
+the signed case with 409. The P4 hash therefore covers the edited body that was actually signed.
 
-P7 detects and surfaces attachments but does not deliver, store, or obtain acknowledgements
-for them. The catalog currently names these attachment requirements: `fed-lead-paint` (EPA
-lead pamphlet), `ca-mold` (State DHS mold handbook), `ca-pest-control` (pest-control
-notice), `ca-translation` (translated lease), `sf-buyout-rights` (Rent Board form),
-`wa-mold` (Department of Health mold information), `wa-fire-safety` (fire-safety diagram),
-`wa-movein-checklist` (signed checklist), `wa-rent-increase-form` (state form),
-`seattle-renters-handbook`, and `seattle-edra-notice`. A later delivery workflow must make
-each required artifact available, record delivery or acknowledgement as applicable, and
-keep its version tied to the generated lease.
+Regeneration never silently replaces a manual edit. Both manager generate surfaces show a
+confirmation that says the current application/listing terms will replace the manager's
+saved body. Only the confirmed path passes `discardManagerEdits`. If application data changes
+through the automatic resident-sync path, the row records
+`managerDocumentRegenerationRequiredAtIso` and cannot be sent until the manager explicitly
+regenerates. This keeps the edited version visible without silently sending stale terms.
 
-### Still-uncollected trigger fields
+### Verbatim disclosures
 
-The five normalized listing inputs are `yearBuilt`, `sharedUtilityMetering`,
-`hasPeriodicPestService`, `certificateOfOccupancyDate`, and `rrioRegistrationNumber`.
-Still-uncollected direct inputs are `in_flood_zone`, `lease_negotiated_language`,
-`known_ordnance_within_mile`, `known_mold_hazard`, and `death_within_3yr`. The remaining
-dictionary fields are derived or belong to other workflows: `collects_deposit`,
-`has_nonrefundable_fee`, `city`, `lease_start_date`, `is_rent_ordinance_covered`,
-`ab1482_exempt`, and `rent_increase_pct`. In particular, the SF rent-control and AB 1482
-decision trees still need implementation before their verified clauses can fire.
+P7's disclosure engine has not landed in this checkout, so no runtime clause is currently
+inserted from the catalog. P8 reserves immutable markers now:
+`<!-- proplane-verbatim-disclosure:start:<id> -->` and matching `end` markers. If a generated
+lease contains one, `sanitizeManagerLeaseDocumentEdit` restores the original marked block and
+rejects a save that removes or reorders it. P7 must emit those markers around each
+`verbatim_required` clause. P8 deliberately does not add or infer any statute text.
 
-Coverage: `tests/unit/disclosure-rules.test.ts` reads the real catalog, checks the federal
-lead text character-for-character in the rendered output, covers CA and WA scope inheritance,
-unknown inputs, the unverified policy, and short-term non-regression. Its fixture appends a
-new catalog rule and proves that it fires without evaluator code changes.
+Deliberately left out: a rich-text editor, arbitrary images/links/embedded documents, and
+editing of uploaded PDFs. The source textarea plus preview keeps the allowed document grammar
+visible and gives the persistence layer one narrow attack surface.

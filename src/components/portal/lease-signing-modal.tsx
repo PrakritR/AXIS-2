@@ -6,7 +6,7 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { DEMO_LEASE_SIGN_PREPARE_EVENT } from "@/lib/demo/demo-playback";
 import { LEASE_ESIGN_CONSENT_TEXT, LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lease-execution-evidence";
-import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { getLeaseDocumentHtml, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
 export function LeaseSigningModal({
@@ -87,7 +87,7 @@ export function LeaseSigningModal({
           ) : (
             <iframe
               title="Lease document"
-              srcDoc={row.generatedHtml!}
+              srcDoc={getLeaseDocumentHtml(row) ?? ""}
               sandbox="allow-same-origin"
               className="h-[min(24vh,220px)] w-full bg-card"
             />
