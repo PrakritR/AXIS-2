@@ -98,10 +98,24 @@ describe("portal mobile shell conventions", () => {
     // #portal-main-content of every sticky-chrome / Communication surface, so
     // .portal-list-page-scroll never got a bounded height and phone pages taller
     // than the viewport could not scroll below the fold.
-    expect(GLOBALS_CSS).toContain(
-      "html:not([data-portal-sticky-chrome]):not([data-communication-surface]) .portal-main-inner > *",
+    const PAGE_SCROLLS_SCOPE =
+      "html:not([data-portal-sticky-chrome]):not([data-communication-surface])";
+    expect(GLOBALS_CSS).toContain(`${PAGE_SCROLLS_SCOPE} .portal-main-inner > *`);
+
+    const cssWithoutComments = GLOBALS_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    const childRules = [
+      ...cssWithoutComments.matchAll(/([^{}]*\.portal-main-inner\s*>\s*\*[^{}]*)\{([^{}]*)\}/g),
+    ].map((match) => ({ selector: match[1].trim(), declarations: match[2] }));
+    const pinnedRules = childRules.filter((rule) =>
+      /(^|;)\s*flex\s*:\s*0\s+0\s+auto\s*(;|$)/.test(rule.declarations),
     );
-    expect(GLOBALS_CSS).not.toMatch(/\n {2}\.portal-main-inner > \* \{\n {4}flex: 0 0 auto;/);
+
+    // Whitespace- and order-insensitive: only the page-scrolls-scoped rule may
+    // pin `.portal-main-inner > *` to `flex: 0 0 auto`.
+    expect(pinnedRules.length).toBeGreaterThan(0);
+    for (const rule of pinnedRules) {
+      expect(rule.selector).toContain(PAGE_SCROLLS_SCOPE);
+    }
   });
 
   it("drops the duplicate Settings page title behind the mobile app bar", () => {
@@ -109,6 +123,25 @@ describe("portal mobile shell conventions", () => {
       join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
       "utf8",
     );
-    expect(PROFILE_SOURCE).toContain("hideTitleOnMobileNav");
+
+    const shellTag = PROFILE_SOURCE.match(/<ManagerPortalPageShell\b[\s\S]*?>/);
+    expect(shellTag).not.toBeNull();
+    expect(shellTag?.[0]).toContain('title="Settings"');
+    expect(shellTag?.[0]).toContain("hideTitleOnMobileNav");
+  });
+
+  it("hides the admin Settings heading block below the mobile app bar breakpoint", () => {
+    const PROFILE_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
+      "utf8",
+    );
+
+    const headingWrapper = PROFILE_SOURCE.match(
+      /<div className="([^"]*)">\s*<h1 className=\{PORTAL_PAGE_TITLE\}>Settings<\/h1>/,
+    );
+    expect(headingWrapper).not.toBeNull();
+    // The wrapper itself carries `mb-8`, so hiding only its children would leave
+    // dead whitespace under the app bar.
+    expect(headingWrapper?.[1].split(/\s+/)).toContain("max-md:hidden");
   });
 });
