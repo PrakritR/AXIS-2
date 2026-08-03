@@ -12,7 +12,7 @@ import {
   PORTAL_TOOLBAR_PILL_BUTTON,
   PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
@@ -245,7 +245,7 @@ function ManagerDetailContent({
           type="button"
           variant="outline"
           className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
-          onClick={() => void toggle()}
+          onClick={() => toggle()}
           disabled={busy}
         >
           {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
@@ -288,7 +288,7 @@ function ManagerDetailContent({
           type="button"
           variant="outline"
           className="h-9 rounded-full px-4 text-xs"
-          onClick={() => void savePlan()}
+          onClick={() => savePlan()}
           disabled={busy || !planDirty}
         >
           {busy && planDirty ? "Saving…" : "Save plan"}
@@ -390,7 +390,7 @@ function SimpleAccountDetailContent({
           type="button"
           variant="outline"
           className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
-          onClick={() => void toggle()}
+          onClick={() => toggle()}
           disabled={busy}
         >
           {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}

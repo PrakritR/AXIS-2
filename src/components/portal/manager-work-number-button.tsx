@@ -66,7 +66,7 @@ export function ManagerWorkNumberButton({ className }: { className?: string }) {
               variant="primary"
               className="rounded-full"
               disabled={!workNumber}
-              onClick={() => void copyWorkNumber()}
+              onClick={() => copyWorkNumber()}
             >
               Copy number
             </Button>

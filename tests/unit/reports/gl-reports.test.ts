@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { primeSystemChartOfAccounts } from "@/lib/reports/chart-of-accounts-store";
 import { queryTrialBalance } from "@/lib/reports/queries/gl-reports";
 
 vi.mock("@/lib/reports/chart-of-accounts-store", async (importOriginal) => {

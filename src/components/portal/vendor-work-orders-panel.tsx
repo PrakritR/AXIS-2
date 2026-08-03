@@ -522,7 +522,7 @@ export function VendorWorkOrdersPanel() {
                     data-attr="vendor-auto-schedule-consultation"
                     className={`${PORTAL_DETAIL_BTN} rounded-full`}
                     disabled={schedulingId === row.id}
-                    onClick={() => void scheduleConsultation(row, "auto")}
+                    onClick={() => scheduleConsultation(row, "auto")}
                   >
                     {schedulingId === row.id ? "Finding a slot…" : "Auto-schedule from my availability"}
                   </Button>
@@ -541,7 +541,7 @@ export function VendorWorkOrdersPanel() {
                     data-attr="vendor-manual-schedule-consultation"
                     className={PORTAL_DETAIL_BTN}
                     disabled={schedulingId === row.id}
-                    onClick={() => void scheduleConsultation(row, "manual")}
+                    onClick={() => scheduleConsultation(row, "manual")}
                   >
                     Schedule
                   </Button>
@@ -627,7 +627,7 @@ export function VendorWorkOrdersPanel() {
               data-attr="vendor-submit-bid"
               className={`${PORTAL_DETAIL_BTN} rounded-full`}
               disabled={submittingId === row.id}
-              onClick={() => void submitBid(row)}
+              onClick={() => submitBid(row)}
             >
               {pricingPending ? "Submit price" : bid ? "Update bid" : "Submit bid"}
             </Button>
@@ -694,7 +694,7 @@ export function VendorWorkOrdersPanel() {
                   className={`${PORTAL_DETAIL_BTN} rounded-full`}
                   data-attr="vendor-save-scheduled-price"
                   disabled={savingPriceId === row.id}
-                  onClick={() => void saveScheduledPrice(row)}
+                  onClick={() => saveScheduledPrice(row)}
                 >
                   {savingPriceId === row.id ? "Saving…" : "Save price"}
                 </Button>
@@ -705,7 +705,7 @@ export function VendorWorkOrdersPanel() {
                 data-attr="vendor-mark-done"
                 className={`${PORTAL_DETAIL_BTN} rounded-full`}
                 disabled={markingDoneId === row.id}
-                onClick={() => void markDone(row)}
+                onClick={() => markDone(row)}
               >
                 {markingDoneId === row.id ? "Marking done…" : "Mark done"}
               </Button>

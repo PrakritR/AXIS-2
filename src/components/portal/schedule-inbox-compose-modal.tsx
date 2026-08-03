@@ -216,13 +216,12 @@ export function ScheduleInboxComposeForm({
         )}
 
         <div>
-          <label className="text-xs font-semibold text-muted">Send date & time</label>
           <Input
             type="datetime-local"
-            className="mt-1"
             value={sendAtLocal}
             onChange={(e) => setSendAtLocal(e.target.value)}
             disabled={busy}
+            aria-label="Send date and time"
           />
         </div>
 
@@ -254,7 +253,7 @@ export function ScheduleInboxComposeForm({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void submit()}>
+          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => submit()}>
             {busy ? "Saving…" : editMessage ? "Save changes" : "Schedule message"}
           </Button>
           {editMessage && editMessage.status === "scheduled" && onSendNow ? (
@@ -263,7 +262,7 @@ export function ScheduleInboxComposeForm({
               variant="outline"
               className="rounded-full"
               disabled={busy}
-              onClick={() => void onSendNow()}
+              onClick={() => onSendNow()}
             >
               Send now
             </Button>
@@ -275,7 +274,7 @@ export function ScheduleInboxComposeForm({
                 variant="outline"
                 className="rounded-full"
                 disabled={busy}
-                onClick={() => void onToggleCancelled(false)}
+                onClick={() => onToggleCancelled(false)}
               >
                 Restore send
               </Button>
@@ -285,7 +284,7 @@ export function ScheduleInboxComposeForm({
                 variant="outline"
                 className="rounded-full text-rose-700"
                 disabled={busy}
-                onClick={() => void onToggleCancelled(true)}
+                onClick={() => onToggleCancelled(true)}
               >
                 Cancel send
               </Button>

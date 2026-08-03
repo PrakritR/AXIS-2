@@ -51,6 +51,7 @@ import {
   suggestedExpiryDateInput,
   summarizeDocumentExpiration,
 } from "@/lib/documents/document-expiration";
+import { loadDocumentExpirationSummary } from "@/lib/manager-document-expiry-client";
 import { useSearchParams } from "next/navigation";
 import { MANAGER_VENDORS_EVENT, syncManagerVendorsFromServer, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
 
@@ -242,6 +243,18 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
 
+  /**
+   * A document write changes the dashboard's expiry counts, but that banner is
+   * now TTL-guarded, so without this it could show counts up to the TTL stale
+   * after an upload/edit/delete. Forcing a read on the SAME user key the
+   * dashboard reads guarantees its next read is newer than the write.
+   * Fire-and-forget: a failed refresh must never fail the write.
+   */
+  const refreshExpirySummary = useCallback(() => {
+    if (demo) return;
+    void loadDocumentExpirationSummary({ userId, force: true }).catch(() => {});
+  }, [demo, userId]);
+
   const categoryFilterOptions = useMemo(
     () => DOCUMENT_CATEGORIES.map((c) => ({ id: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
     [],
@@ -340,12 +353,13 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? "Failed to delete document.");
         setDocuments((cur) => cur.filter((d) => d.id !== doc.id));
+        refreshExpirySummary();
         showToast("Document deleted.");
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Failed to delete document.");
       }
     },
-    [showToast],
+    [refreshExpirySummary, showToast],
   );
 
   const handleShareLink = useCallback(
@@ -459,7 +473,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN}
-          onClick={() => void handleRequestSignature(doc)}
+          onClick={() => handleRequestSignature(doc)}
           data-attr="document-request-signature"
         >
           Request signature
@@ -469,7 +483,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="outline"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleShareLink(doc)}
+        onClick={() => handleShareLink(doc)}
         data-attr="document-share-link"
       >
         Share link
@@ -478,7 +492,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="danger"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleDelete(doc)}
+        onClick={() => handleDelete(doc)}
         data-attr="document-delete"
       >
         Delete
@@ -712,6 +726,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         vendorRows={vendorRows.filter((v) => v.active !== false)}
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur]);
+          refreshExpirySummary();
           setUploadOpen(false);
         }}
       />
@@ -726,6 +741,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         versionMode
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur.filter((row) => row.id !== versionTarget?.id)]);
+          refreshExpirySummary();
           setVersionTarget(null);
         }}
       />
@@ -736,6 +752,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         onClose={() => setRenameTarget(null)}
         onSaved={(updated) => {
           setDocuments((cur) => cur.map((d) => (d.id === updated.id ? updated : d)));
+          refreshExpirySummary();
           setRenameTarget(null);
         }}
       />
@@ -851,7 +868,7 @@ function UploadModal({
       title={title}
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
         </ModalFooter>
@@ -1072,7 +1089,7 @@ function EditDocumentModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>
         </ModalFooter>
@@ -1197,7 +1214,7 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
-              onClick={() => void handleDownload()}
+              onClick={() => handleDownload()}
               disabled={downloading}
               data-attr="document-download"
             >

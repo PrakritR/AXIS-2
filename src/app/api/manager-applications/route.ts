@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { prepareGuestApplicationUpsert, resolveManagerUserIdForProperty } from "@/lib/auth/guest-application-upsert";
+import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
 import { buildResidentSetupHref } from "@/lib/auth/resident-setup-token";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";

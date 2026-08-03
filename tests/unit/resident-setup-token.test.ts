@@ -48,10 +48,10 @@ describe("resident-setup-token", () => {
 
   it("builds setup href and absolute URL", () => {
     expect(buildResidentSetupHref("tok_abc", "AXIS-1")).toBe(
-      "/auth/resident-setup?token=tok_abc&proplane_id=AXIS-1",
+      "/auth/resident-setup?token=tok_abc&proplane_id=PROPLANE-1",
     );
     expect(residentSetupAccountUrl("https://prop-lane.space", "tok_abc", "AXIS-1")).toBe(
-      "https://prop-lane.space/auth/resident-setup?token=tok_abc&proplane_id=AXIS-1",
+      "https://prop-lane.space/auth/resident-setup?token=tok_abc&proplane_id=PROPLANE-1",
     );
   });
 

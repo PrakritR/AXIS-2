@@ -64,6 +64,7 @@ import {
   linkedPropertyOwnerId,
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
+import { isServerSyncOriginatedEvent } from "@/lib/property-pipeline-events";
 
 function propertyIdIsLinked(pid: string, linkedIds: Set<string>): boolean {
   if (!pid) return false;
@@ -994,8 +995,11 @@ export function ManagerHousePropertiesPanel({
     } else {
       setTick((t) => t + 1);
     }
-    const on = () => {
-      if (isDemoModeActive()) {
+    const on = (e: Event) => {
+      // Demo mode has no server, and a sync-originated event has already written
+      // the fresh snapshot locally — in both cases just re-read local state.
+      // Forcing a sync on the sync's own event is a request feedback loop.
+      if (isDemoModeActive() || isServerSyncOriginatedEvent(e)) {
         setTick((t) => t + 1);
         return;
       }

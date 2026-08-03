@@ -111,7 +111,7 @@ export function ApplicationFeeInlinePayment({
     return (
       <div ref={rootRef} className="space-y-3 rounded-2xl border border-border bg-card p-4" data-attr="application-fee-inline-error">
         <p className="text-sm font-medium text-red-600">{error}</p>
-        <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={() => void start()}>
+        <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={() => start()}>
           Try again
         </Button>
       </div>

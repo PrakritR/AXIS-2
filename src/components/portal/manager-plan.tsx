@@ -628,7 +628,7 @@ export function ManagerPlan({
                     variant="outline"
                     className="rounded-full text-[13px]"
                     disabled={anyBusy}
-                    onClick={() => void openBillingPortal()}
+                    onClick={() => openBillingPortal()}
                   >
                     {billingPortalBusy ? "Opening…" : "Payment & invoices"}
                   </Button>
@@ -701,7 +701,7 @@ export function ManagerPlan({
                       variant="outline"
                       className="rounded-full text-[13px]"
                       disabled={resumeBusy}
-                      onClick={() => void resumeSubscription()}
+                      onClick={() => resumeSubscription()}
                     >
                       {resumeBusy ? "Resuming…" : "Keep my plan"}
                     </Button>
@@ -712,7 +712,7 @@ export function ManagerPlan({
                       variant="outline"
                       className="rounded-full text-[13px]"
                       disabled={cancelDowngradeBusy}
-                      onClick={() => void cancelScheduledDowngrade()}
+                      onClick={() => cancelScheduledDowngrade()}
                     >
                       {cancelDowngradeBusy ? "Cancelling…" : "Cancel downgrade"}
                     </Button>
@@ -827,7 +827,7 @@ export function ManagerPlan({
                           variant={isUpgrade ? "primary" : "outline"}
                           className="h-[52px] w-full rounded-xl text-[15px] font-semibold"
                           disabled={anyBusy && !busyHere}
-                          onClick={() => void changePlan(tierId)}
+                          onClick={() => changePlan(tierId)}
                         >
                           {busyHere ? "Processing…" : actionLabel}
                         </Button>
@@ -909,7 +909,7 @@ export function ManagerPlan({
                   variant="outline"
                   className="rounded-full text-[13px]"
                   disabled={promoBusy || !promoCode.trim()}
-                  onClick={() => void applyPromoCode()}
+                  onClick={() => applyPromoCode()}
                   data-attr="plan-promo-code-apply"
                 >
                   {promoBusy ? "Applying…" : "Apply"}
@@ -944,7 +944,7 @@ export function ManagerPlan({
               saved card will be charged with proration. Changes apply immediately in your PropLane portal.
             </p>
             <div className="flex flex-wrap justify-start gap-2">
-              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmPlanUpgrade()}>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => confirmPlanUpgrade()}>
                 Confirm upgrade
               </Button>
             </div>
@@ -968,7 +968,7 @@ export function ManagerPlan({
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep {tierLabel(currentTier)}
               </Button>
-              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmPlanDowngrade()}>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => confirmPlanDowngrade()}>
                 Schedule downgrade
               </Button>
             </div>
@@ -992,7 +992,7 @@ export function ManagerPlan({
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep monthly
               </Button>
-              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmAnnualBilling()}>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => confirmAnnualBilling()}>
                 Switch to annual
               </Button>
             </div>
@@ -1034,7 +1034,7 @@ export function ManagerPlan({
                 variant="primary"
                 className="rounded-full"
                 disabled={feedbackBusy}
-                onClick={() => void confirmAnnualToMonthly()}
+                onClick={() => confirmAnnualToMonthly()}
               >
                 {feedbackBusy ? "Scheduling…" : "Schedule monthly billing"}
               </Button>
@@ -1077,7 +1077,7 @@ export function ManagerPlan({
                 variant="primary"
                 className="rounded-full"
                 disabled={feedbackBusy}
-                onClick={() => void confirmCancelPlan()}
+                onClick={() => confirmCancelPlan()}
               >
                 {feedbackBusy ? "Cancelling…" : "Confirm cancellation"}
               </Button>

@@ -75,7 +75,7 @@ export function AdminCreateManagerClient() {
           </label>
           <PasswordInput id="cm-pw" className="mt-1.5 rounded-xl" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
         </div>
-        <Button type="button" className="rounded-full px-8" disabled={busy} onClick={() => void submit()}>
+        <Button type="button" className="rounded-full px-8" disabled={busy} onClick={() => submit()}>
           {busy ? "Creating…" : "Create manager"}
         </Button>
       </div>

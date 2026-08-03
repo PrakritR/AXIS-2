@@ -282,7 +282,7 @@ export function ResidentAddDocumentModal({
       onClose={onClose}
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" className="rounded-full" onClick={() => void onSave()} disabled={busy || !file}>
+          <Button type="button" variant="primary" className="rounded-full" onClick={() => onSave()} disabled={busy || !file}>
             {busy ? "Saving…" : "Save"}
           </Button>
         </ModalFooter>
@@ -317,7 +317,7 @@ export function ResidentAddDocumentModal({
             variant="outline"
             className="rounded-full"
             disabled={busy}
-            onClick={() => void onCapturePhoto()}
+            onClick={() => onCapturePhoto()}
           >
             Take photo
           </Button>

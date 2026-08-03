@@ -149,7 +149,7 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
             className="px-4 text-[13px]"
             data-attr={settingFirstPassword ? "set-password" : "update-password"}
             disabled={passwordBusy || resetBusy}
-            onClick={() => void changePassword()}
+            onClick={() => changePassword()}
           >
             {passwordBusy
               ? settingFirstPassword

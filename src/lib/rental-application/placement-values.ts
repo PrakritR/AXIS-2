@@ -10,7 +10,7 @@ import {
   isEntireHomeListing,
   normalizeManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { ensureSubmissionListingFees, listingPresetFeeAmount } from "@/lib/listing-fees";
+import { listingPresetFeeAmount } from "@/lib/listing-fees";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { residentLeaseTermToApplicationFields } from "@/lib/resident-manual-lease-terms";

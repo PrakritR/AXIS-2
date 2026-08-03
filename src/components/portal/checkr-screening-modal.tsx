@@ -473,7 +473,7 @@ export function CheckrScreeningModal({
               type="button"
               data-attr="run-screening-checkr"
               disabled={busy || !canRun}
-              onClick={() => void confirm()}
+              onClick={() => confirm()}
             >
               {busy ? "Starting…" : bg ? "Re-run screening" : "Confirm · $0.00"}
             </Button>

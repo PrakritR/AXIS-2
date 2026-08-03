@@ -333,16 +333,11 @@ export function PortalMessageScheduleFields({
 }) {
   if (disabled) return null;
   return (
-    <div
-      className={cn(
-        "flex gap-4",
-        scheduleLater ? "flex-col sm:flex-row sm:items-end" : "flex-row items-center",
-      )}
-    >
-      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm sm:min-h-10">
+    <div className="flex flex-nowrap items-center gap-3">
+      <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
         <input
           type="checkbox"
-          className="h-4 w-4 rounded border-border accent-primary"
+          className="h-4 w-4 shrink-0 rounded border-border accent-primary"
           checked={scheduleLater}
           onChange={(e) => onScheduleLaterChange(e.target.checked)}
           data-attr={scheduleDataAttr}
@@ -350,16 +345,14 @@ export function PortalMessageScheduleFields({
         <span className="font-medium text-foreground">Schedule for later</span>
       </label>
       {scheduleLater ? (
-        <label className="block min-w-0 flex-1 text-sm">
-          <span className={portalMessageFieldLabel()}>Send date & time</span>
-          <Input
-            type="datetime-local"
-            className="mt-1"
-            value={sendAt}
-            onChange={(e) => onSendAtChange(e.target.value)}
-            data-attr={sendAtDataAttr}
-          />
-        </label>
+        <Input
+          type="datetime-local"
+          className="min-w-0 flex-1"
+          value={sendAt}
+          onChange={(e) => onSendAtChange(e.target.value)}
+          aria-label="Send date and time"
+          data-attr={sendAtDataAttr}
+        />
       ) : null}
     </div>
   );

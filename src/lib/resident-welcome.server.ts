@@ -8,6 +8,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { formatProplaneIdForDisplay } from "@/lib/manager-id";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildResidentWelcomeEmailBody,
@@ -260,7 +261,7 @@ export async function deliverResidentWelcome(
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const senderName = String(managerProfile?.full_name ?? actor.email ?? "Your property manager").trim() || "Your property manager";
-        const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready. Your PropLane ID: ${axisId}. — ${senderName}`;
+        const smsBody = `Welcome${residentName ? `, ${residentName}` : ""}! Your PropLane resident portal is ready. Your PropLane ID: ${formatProplaneIdForDisplay(axisId)}. — ${senderName}`;
         await sendSms(residentPhone, smsBody, smsFromNumber);
       }
     }
@@ -421,7 +422,7 @@ export async function deliverExistingResidentWelcome(
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const senderName = String(managerProfile?.full_name ?? actor.email ?? "Your property manager").trim() || "Your property manager";
-        const smsBody = `Your PropLane resident portal is ready${residentName ? `, ${residentName}` : ""}. Pay rent and manage your home online. PropLane ID: ${axisId}. — ${senderName}`;
+        const smsBody = `Your PropLane resident portal is ready${residentName ? `, ${residentName}` : ""}. Pay rent and manage your home online. PropLane ID: ${formatProplaneIdForDisplay(axisId)}. — ${senderName}`;
         await sendSms(residentPhone, smsBody, smsFromNumber);
       }
     }

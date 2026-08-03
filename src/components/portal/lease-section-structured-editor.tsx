@@ -9,7 +9,6 @@ import {
   rebuildBodyHtmlFromParts,
   type LeaseSectionEditablePart,
 } from "@/lib/lease-section-structured-edit";
-import { cn } from "@/lib/utils";
 
 type Props = {
   sectionId: string;

@@ -143,7 +143,7 @@ export function ManagerOutgoingPaymentsPanel({
             className={PORTAL_DETAIL_BTN}
             disabled={deletingId === row.id}
             data-attr="outgoing-payment-delete"
-            onClick={() => void deleteExpense(row)}
+            onClick={() => deleteExpense(row)}
           >
             {deletingId === row.id ? "Deleting…" : "Delete"}
           </Button>

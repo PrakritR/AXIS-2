@@ -136,7 +136,7 @@ export default function ResetPasswordPage() {
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
         disabled={busy}
-        onClick={() => void submit()}
+        onClick={() => submit()}
       >
         {busy ? "Saving…" : "Save new password"}
       </Button>

@@ -172,7 +172,7 @@ export function ManagerSecurityDepositsPanel() {
         footer={
           disposeTarget ? (
             <ModalFooter>
-              <Button variant="primary" onClick={() => void submitDispose()} data-attr="deposit-dispose-submit">
+              <Button variant="primary" onClick={() => submitDispose()} data-attr="deposit-dispose-submit">
                 Record disposition
               </Button>
             </ModalFooter>

@@ -13,28 +13,21 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -142,7 +135,6 @@ import {
   runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
-  updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
@@ -160,7 +152,7 @@ import {
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
@@ -191,7 +183,6 @@ import {
   EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildExistingResidentWelcomeEmailBody,
 } from "@/lib/existing-resident-welcome-email";
-import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
@@ -204,8 +195,6 @@ import { applicationShowsBackgroundCheck } from "@/lib/application-background-ch
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
-import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
-import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
 } from "@/components/portal/resident-services-panel";
@@ -370,8 +359,6 @@ export function ManagerResidents({
   const [svcReqBucket, setSvcReqBucket] = useState<ManagerServiceRequestBucket>("pending");
   const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
-
-  const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
 
   const activeDetailTab = parseResidentDetailTab(detailTabProp);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
@@ -1023,7 +1010,7 @@ export function ManagerResidents({
 
   useCommunicationSurfaceChrome({
     active: Boolean(residentIdProp && resolvedDetailTab === "communication"),
-    threadReading: false,
+    threadReading: true,
   });
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
@@ -2277,7 +2264,7 @@ export function ManagerResidents({
                 className={PORTAL_DETAIL_BTN}
                 data-attr="resident-application-send-reminder"
                 disabled={applicationReminderPreviewBusyId !== null || applicationReminderBusyId !== null}
-                onClick={() => void openApplicationCompletionReminderPreview(selectedApplicationRow)}
+                onClick={() => openApplicationCompletionReminderPreview(selectedApplicationRow)}
               >
                 {applicationReminderPreviewBusyId === selectedApplicationRow.id ? "Loading…" : "Send reminder"}
               </Button>
@@ -2287,7 +2274,7 @@ export function ManagerResidents({
               variant="outline"
               className={PORTAL_DETAIL_BTN}
               data-attr="resident-application-reject"
-              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+              onClick={() => setApplicationBucket(selectedApplicationRow.id, "rejected")}
             >
               Reject
             </Button>
@@ -2310,7 +2297,7 @@ export function ManagerResidents({
             variant="outline"
             className={PORTAL_DETAIL_BTN}
             data-attr="resident-application-move-pending"
-            onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+            onClick={() => setApplicationBucket(selectedApplicationRow.id, "pending")}
           >
             <span className="max-md:hidden">To pending</span>
             <span className="md:hidden">Pending</span>
@@ -2741,23 +2728,13 @@ export function ManagerResidents({
                             ) : null}
 
                             {resolvedDetailTab === "communication" ? (
-                            <ResidentDetailTabPanel>
-                              <div className="flex flex-col gap-3">
-                                <ManagerResidentDetailInbox
-                                  residentEmail={selected.email}
-                                  residentName={selected.name}
-                                  portalBase={portalBase}
-                                  smsUiEnabled={smsUiEnabled}
-                                  smsRef={residentSmsPanelRef}
-                                />
-                                <ModalAssistantStrip
-                                  contextHint={`Resident communication · ${selected.name || selected.email}`}
-                                  storageScopeKey={`resident-communication-${selected.id}`}
-                                  conversationInstance={hcTick}
-                                  defaultExpanded={false}
-                                  className="shrink-0"
-                                />
-                              </div>
+                            <ResidentDetailTabPanel fill>
+                              <ManagerResidentDetailInbox
+                                residentEmail={selected.email}
+                                residentName={selected.name}
+                                portalBase={portalBase}
+                                smsUiEnabled={smsUiEnabled}
+                              />
                             </ResidentDetailTabPanel>
                             ) : null}
 

@@ -8,7 +8,6 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
@@ -700,7 +699,7 @@ export function ResidentApplicationsPanel({
             variant="danger"
             className="rounded-full"
             data-attr="resident-application-withdraw-confirm"
-            onClick={() => void confirmWithdraw()}
+            onClick={() => confirmWithdraw()}
             disabled={withdrawBusy}
           >
             {withdrawBusy ? "Withdrawing…" : "Withdraw application"}

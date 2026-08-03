@@ -1097,7 +1097,7 @@ export function ResidentPaymentsPanel({
                 className="rounded-full"
                 disabled={setupLoading !== null}
                 data-attr="resident-payments-add-bank"
-                onClick={() => { void startAddPaymentMethod("ach"); }}
+                onClick={() => { return startAddPaymentMethod("ach"); }}
               >
                 {setupLoading === "ach" ? "Loading…" : "Bank (ACH)"}
               </Button>
@@ -1107,7 +1107,7 @@ export function ResidentPaymentsPanel({
                 className="rounded-full"
                 disabled={setupLoading !== null}
                 data-attr="resident-payments-add-card"
-                onClick={() => { void startAddPaymentMethod("card"); }}
+                onClick={() => { return startAddPaymentMethod("card"); }}
               >
                 {setupLoading === "card" ? "Loading…" : "Credit card"}
               </Button>

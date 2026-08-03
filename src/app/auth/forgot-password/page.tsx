@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
         type="button"
         className="mt-8 w-full rounded-full py-3 text-base font-semibold"
         disabled={busy}
-        onClick={() => void sendResetLink()}
+        onClick={() => sendResetLink()}
       >
         {busy ? "Sending…" : "Send reset link"}
       </Button>

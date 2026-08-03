@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  MANAGER_TABLE_TH,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -37,7 +36,6 @@ import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   generateLeaseHtmlForRow,
-  getLeaseDocumentHtml,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   managerSignLease,
@@ -576,7 +574,7 @@ export function ManagerLeasesPipelinePanel({
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
         disabled={emailBusyForRow === row.id}
-        onClick={() => void sendAccountEmail(row)}
+        onClick={() => sendAccountEmail(row)}
       >
         {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
       </Button>

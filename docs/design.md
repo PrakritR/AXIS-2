@@ -222,6 +222,11 @@ Pill shape (`rounded-full`), min-height **44px**, 14px semibold. Variants in `Bu
 | **ghost** | Text only | Nav-adjacent, low emphasis |
 | **danger** | Red text, no fill | Reject, unlist — **never** filled red |
 
+**Loading state.** A button doing async work shows an inline `currentColor` spinner before its
+label (so it reads on every variant), sets `aria-busy`, and is disabled until the work settles.
+It is automatic whenever `onClick` returns a promise, so a button that awaits its own work needs
+no hand-rolled spinner. See `Button` in `src/components/ui/button.tsx`.
+
 ### Badges
 
 10px bold pill with semantic status tokens. Tones: `pending`, `approved`, `confirmed`, `overdue`, `info`, `success`, `warning`, `danger`, `neutral`.

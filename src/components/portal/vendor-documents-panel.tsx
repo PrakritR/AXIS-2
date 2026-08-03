@@ -40,7 +40,6 @@ import {
   type VendorDocumentKind,
   type VendorDocumentRecord,
 } from "@/lib/vendor-documents";
-import { shouldNotifyVendorDocumentsLoadFailure } from "@/lib/vendor-documents-client";
 
 const DEMO_VENDOR_DOCUMENTS: VendorDocumentRecord[] = [
   {
@@ -264,7 +263,7 @@ export function VendorDocumentsPanel({
               variant="outline"
               className={`${PORTAL_DETAIL_BTN} text-danger`}
               data-attr={`vendor-documents-remove-${kind}`}
-              onClick={() => void removeDocument(kind)}
+              onClick={() => removeDocument(kind)}
             >
               Remove
             </Button>

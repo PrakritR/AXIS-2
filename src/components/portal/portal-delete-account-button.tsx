@@ -79,7 +79,7 @@ export function PortalDeleteAccountButton({ className }: { className?: string })
               type="button"
               variant="danger"
               disabled={busy}
-              onClick={() => void deleteAccount()}
+              onClick={() => deleteAccount()}
               data-attr="portal-delete-account-confirm"
             >
               {busy ? "Deleting…" : "Yes, permanently delete"}

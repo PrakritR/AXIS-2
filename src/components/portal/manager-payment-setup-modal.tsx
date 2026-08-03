@@ -297,7 +297,7 @@ function ChannelPaymentSetupModal({
                       variant="outline"
                       className="shrink-0 rounded-full px-4 text-[13px]"
                       onClick={() =>
-                        void navigator.clipboard?.writeText(filterFrom).then(() => showToast("Copied."))
+                        navigator.clipboard?.writeText(filterFrom).then(() => showToast("Copied."))
                       }
                     >
                       Copy
@@ -323,7 +323,7 @@ function ChannelPaymentSetupModal({
                       className="shrink-0 rounded-full px-4 text-[13px]"
                       data-attr={`manager-payment-${channel}-inbox-copy`}
                       onClick={() =>
-                        void navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))
+                        navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))
                       }
                     >
                       Copy

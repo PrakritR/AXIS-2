@@ -170,7 +170,7 @@ export function ResidentProfilePanel() {
           title="Personal information"
           description="Your name and contact details."
           action={
-            <Button type="button" variant="primary" className="px-4 text-[13px]" onClick={() => void saveProfile()}>
+            <Button type="button" variant="primary" className="px-4 text-[13px]" onClick={() => saveProfile()}>
               Save
             </Button>
           }

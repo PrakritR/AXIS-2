@@ -26,7 +26,6 @@ import {
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { generateWorkOrderPaymentReference } from "@/lib/payment-reference";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
-import { safeFormatDateTime } from "@/lib/pacific-time";
 
 function approvePayDefaults(row: DemoManagerWorkOrderRow) {
   return {
@@ -274,7 +273,7 @@ export function ManagerOutgoingPaymentDetail({
               className={PORTAL_DETAIL_BTN}
               data-attr="manager-outgoing-payment-confirm-pay"
               disabled={busy || (paymentMethod !== "ach" && !manualSentConfirmed)}
-              onClick={() => void submitPay()}
+              onClick={() => submitPay()}
             >
               {busy ? "Processing…" : paymentMethod === "ach" ? "Approve & pay" : "Mark as paid"}
             </Button>

@@ -257,7 +257,7 @@ export function VendorSignupForm({
           data-attr="vendor-signup-submit"
           className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
           disabled={locked}
-          onClick={() => void submit()}
+          onClick={() => submit()}
           event="vendor_signup_submitted"
         >
           {busy ? "Creating…" : signedInEmail ? "Set up vendor account" : "Create vendor account"}
@@ -288,7 +288,7 @@ export function VendorSignupForm({
       <Button
         type="button"
         className="w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => void submit()}
+        onClick={() => submit()}
         disabled={locked}
         data-attr="vendor-signup-submit"
         event="vendor_signup_submitted"

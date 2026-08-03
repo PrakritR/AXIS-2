@@ -3,12 +3,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input, NativeSelect, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
@@ -25,7 +19,6 @@ import {
   buildTourNotificationContext,
 } from "@/lib/tour-notifications";
 import {
-  ADMIN_AVAILABILITY_STORAGE_KEY,
   DEFAULT_EVENT_DURATION_MINUTES,
   EVENT_DURATION_PRESET_MINUTES,
   MAX_EVENT_DURATION_MINUTES,
@@ -38,12 +31,9 @@ import {
   dateSlotKey,
   deletePartnerInquiryFromServer,
   deletePlannedEventFromServer,
-  durationMinutesBetweenIso,
   endIsoForDuration,
   formatRangeLabel,
   formatAvailabilitySlotLabel,
-  getPartnerInquiryWindows,
-  readPartnerInquiries,
   readPlannedEvents,
   readAvailabilityDateSetForStorageKey,
   startOfWeekMonday,
@@ -54,8 +44,6 @@ import {
 import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
 import { cn } from "@/lib/utils";
 import {
-  plannedTourVisibleToViewer,
-  tourInquiryVisibleToViewer,
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
@@ -948,7 +936,7 @@ export function PortalCalendarPanels({
         onClick={closeSelectedBlock}
       />
       <div
-        className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
+        className="modal-panel relative z-[81] w-full max-w-[420px] rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
@@ -996,7 +984,7 @@ export function PortalCalendarPanels({
             {selectedBlock.meeting.email ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Email</p>
-                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.email}</p>
+                <p className="mt-1 break-words font-medium text-foreground">{selectedBlock.meeting.email}</p>
               </div>
             ) : null}
             {selectedBlock.meeting.phone ? (
@@ -1010,7 +998,7 @@ export function PortalCalendarPanels({
             {selectedBlock.meeting.propertyTitle ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Property</p>
-                <p className="mt-1 font-medium text-foreground">
+                <p className="mt-1 break-words font-medium text-foreground">
                   {selectedBlock.meeting.propertyTitle}
                   {selectedBlock.meeting.roomLabel ? ` · ${selectedBlock.meeting.roomLabel}` : ""}
                 </p>
@@ -1103,14 +1091,14 @@ export function PortalCalendarPanels({
             </>
           )}
 
-          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
             {calendarMeetingSupportsDelete(selectedBlock.meeting) ? (
               <>
             <Button
               type="button"
               variant="outline"
               className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
-              onClick={() => void deleteSelectedMeeting()}
+              onClick={() => deleteSelectedMeeting()}
             >
               {selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting)
                 ? "Delete event"
@@ -1132,7 +1120,7 @@ export function PortalCalendarPanels({
                   type="button"
                   variant="primary"
                   className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
-                  onClick={() => void approveSelectedInquiry()}
+                  onClick={() => approveSelectedInquiry()}
                 >
                   Approve
                 </Button>

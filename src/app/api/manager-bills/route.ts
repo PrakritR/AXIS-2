@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { assertManagerFinancialsCoManagerAccess } from "@/lib/auth/co-manager-access";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import { mapManagerBillRow, MANAGER_BILL_SELECT } from "@/lib/manager-bills";
-import { approveManagerBill, createManagerBill, payManagerBill } from "@/lib/manager-bills.server";
+import { createManagerBill } from "@/lib/manager-bills.server";
 import { track } from "@/lib/analytics/posthog";
 
 export const runtime = "nodejs";

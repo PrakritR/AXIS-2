@@ -705,7 +705,7 @@ export function ManagerPromotion({
         assistantStorageScopeKey="Edit promotion flyer"
         footer={
           <ModalFooter>
-            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+            <Button type="button" variant="primary" onClick={() => generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>
           </ModalFooter>
