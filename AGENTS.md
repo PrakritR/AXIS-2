@@ -610,6 +610,31 @@ Do **not** stop at unit tests. For the feature that changed:
 `/demo` is **not** a substitute for production-like testing. Prefer `/portal`,
 `/rent/apply`, and real auth against the **dev/test** Supabase project.
 
+### A green PR run is NOT e2e coverage
+
+The `e2e` job in `.github/workflows/test.yml` is gated on
+`github.event_name == 'push' && github.ref == 'refs/heads/main' || schedule`, so
+it is **skipped on every pull request**. A PR whose Test workflow is green has
+had zero e2e signal; the first real run happens after the merge lands on `main`.
+That gap is why e2e breakage is only ever discovered post-merge, and why a long
+tail of e2e failures has been able to persist unnoticed.
+
+Run the suite locally before promoting anything that touches portal UI or
+routes — pin the dev/test project first (see "A local `npm run build` bakes in
+the PRODUCTION Supabase project"), then:
+
+```
+npm run test:seed
+PLAYWRIGHT_SKIP_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://localhost:<port> \
+  E2E_TESTS_ENABLED=1 node --env-file=.env.test node_modules/.bin/playwright test
+```
+
+Locally `retries: 0` while CI uses `retries: 2`, so a local run surfaces flaky
+tests that CI hides in its `flaky` bucket. Note `npm run test:seed` currently
+aborts partway with a `profiles_manager_id_key` duplicate on a workflow resident
+— the core role accounts are already provisioned by then, so the suite still
+runs, but the later fixtures it would have created are missing.
+
 ## 3. Promote checklist
 
 ```
@@ -703,6 +728,24 @@ npm run seed:env -- --dry-run
 
 Note: the AI agent reads `ANTHROPIC_API_KEY` (via `new Anthropic()`); add it to
 `.env` if it isn't there yet. `POSTHOG_*` and `LANGFUSE_*` are optional.
+
+## A local `npm run build` bakes in the PRODUCTION Supabase project
+
+`seed:env` also copies `.env.production.local`, and Next loads that file for any
+production build. It outranks `.env`, and `NEXT_PUBLIC_*` values are inlined into
+the bundle at build time — so a plain `npm run build && npm run start` serves a
+site whose browser client talks to **production**, not dev/test, no matter what
+`.env` / `.env.test` say. The symptom is quiet and misleading: seeded
+`@test.…local` accounts get "Invalid login credentials", which reads as a broken
+seed rather than a wrong project.
+
+Confirm which project a build actually points at, and pin it when running E2E
+locally (CI does the same by passing `TEST_SUPABASE_*` into the e2e step):
+
+```
+grep -rho 'https://[a-z]\{20\}\.supabase\.co' .next/static | sort -u
+set -a; . ./.env.test; set +a           # then build + start in that same shell
+```
 
 # Database environments
 
