@@ -49,6 +49,9 @@ export function leaseCss(): string {
     th { background: #f0f0f0; font-weight: 700; }
     .total-row td { font-weight: 700; background: #f9f9f9; }
     .addendum { border-top: 3px double #333; margin-top: 3rem; padding-top: 1.5rem; }
+    .disclosure-review { border: 2px solid #7f1d1d; padding: 10px 12px; margin: 0 0 1.25rem; background: #fff7ed; }
+    .disclosure-review p:first-child { margin-top: 0; }
+    .disclosure-review p:last-child, .disclosure-review ul:last-child { margin-bottom: 0; }
     .page-break { page-break-before: always; }
     @media print { body { padding: 12px; font-size: 10pt; } }
   `;

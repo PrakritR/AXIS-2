@@ -21,6 +21,13 @@ import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
+import { resolveJurisdiction } from "@/lib/lease-jurisdiction";
+import {
+  disclosureRulesCatalog,
+  disclosureVerbatimHtmlForSection,
+  evaluateDisclosureRules,
+  type DisclosureRuleEvaluation,
+} from "@/lib/lease-templates/disclosure-rules";
 import { resolveStayPricing } from "@/lib/room-pricing";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
 import {
@@ -43,6 +50,22 @@ type LeaseApplicationWithRentSnapshot = Partial<RentalWizardFormState> & {
  */
 const HOLDING_DEPOSIT_CREDIT_NOTE =
   "Any holding deposit already paid for this placement is credited against the security deposit stated above. The charge ledger in the PropLane portal reflects the resulting balance.";
+
+const DISCLOSURE_TEMPLATE_SECTIONS = new Set([
+  "Premises",
+  "Premises / Municipal compliance",
+  "Rent",
+  "Rent / Notices",
+  "Security Deposit & Move-In Charges",
+  "Utilities & Services",
+  "House Rules",
+  "Default & Remedies / Governing Law",
+  "Statutory Disclosures",
+  "Lead-Based Paint Disclosure",
+  "Addendum A \u2014 Move-In Condition Report",
+  "Addendum B \u2014 Bed Bug Disclosure",
+  "Addendum C \u2014 Mold & Moisture Policy",
+]);
 
 function escapeHtml(s: string): string {
   return s
@@ -89,6 +112,46 @@ function customTermsAddendumHtml(sub: ManagerListingSubmissionV1 | undefined, he
 ${body}
 </div>
 `;
+}
+
+function unplacedDisclosureRules(evaluation: DisclosureRuleEvaluation): string[] {
+  return evaluation.firedRules
+    .filter((rule) => rule.template_section && !DISCLOSURE_TEMPLATE_SECTIONS.has(rule.template_section))
+    .map((rule) => rule.id);
+}
+
+function disclosureReviewNoticeHtml(
+  evaluation: DisclosureRuleEvaluation | null,
+  canCompleteLease: boolean,
+): string {
+  if (!evaluation) return "";
+  const fieldLabel = (field: string) =>
+    disclosureRulesCatalog.trigger_field_dictionary[field]?.description ?? field.replace(/_/g, " ");
+  const missing = [...evaluation.unknownTriggers, ...evaluation.unknownUnverifiedTriggers]
+    .map(
+      ({ rule, field }) =>
+        `<li>${escapeHtml(fieldLabel(field))} is required for ${escapeHtml(rule.name)}${rule.cite_verified ? "" : " (citation verification is still pending)"}.</li>`,
+    )
+    .join("");
+  const attachments = evaluation.attachmentRequirements
+    .map((rule) => `<li>${escapeHtml(rule.name)}: ${escapeHtml(rule.attachment ?? "")}</li>`)
+    .join("");
+  const incomplete = missing || attachments;
+  const unverified = evaluation.excludedUnverifiedRuleCount
+    ? `<p>${evaluation.excludedUnverifiedRuleCount} applicable rule${evaluation.excludedUnverifiedRuleCount === 1 ? " is" : "s are"} excluded because ${evaluation.excludedUnverifiedRuleCount === 1 ? "its citation has" : "their citations have"} not been verified.</p>`
+    : "";
+  const contentGapCount = evaluation.contentGaps.length + unplacedDisclosureRules(evaluation).length;
+  const contentGaps = contentGapCount
+    ? `<p>${contentGapCount} verified rule${contentGapCount === 1 ? " has" : "s have"} no safe rendered catalog placement or verbatim body. Legal review must confirm the existing template satisfies ${contentGapCount === 1 ? "it" : "them"}.</p>`
+    : "";
+  if (!incomplete && !unverified && !contentGaps) return "";
+  return `<aside class="disclosure-review" data-disclosure-complete="${canCompleteLease ? "true" : "false"}">
+<p><strong>${canCompleteLease ? "Disclosure review" : "Lease completion required"}</strong></p>
+${missing ? `<p>This lease cannot be completed until the following information is supplied:</p><ul>${missing}</ul>` : ""}
+${attachments ? `<p>These required attachments are not delivered by PropLane and must be provided before completion:</p><ul>${attachments}</ul>` : ""}
+${unverified}
+${contentGaps}
+</aside>`;
 }
 
 /**
@@ -505,6 +568,47 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0) + customFeesTotalNum;
   const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
 
+  // The catalog receives only facts available to lease generation. Fields that the product
+  // does not collect stay undefined so the evaluator can report them as unknown rather than
+  // silently treating a missing answer as a negative answer.
+  const disclosureJurisdiction = stay.stayKind === "long" ? resolveJurisdiction(ctx) : null;
+  const disclosureEvaluation = disclosureJurisdiction
+    ? evaluateDisclosureRules({
+        jurisdiction: disclosureJurisdiction,
+        fields: {
+          year_built: subNorm?.yearBuilt,
+          shared_utility_metering: subNorm?.sharedUtilityMetering,
+          has_periodic_pest_service: subNorm?.hasPeriodicPestService,
+          certificate_of_occupancy_date: subNorm?.certificateOfOccupancyDate,
+          rrio_registration_number: subNorm?.rrioRegistrationNumber,
+          city: disclosureJurisdiction.city,
+          lease_start_date: a.leaseStart,
+          ab1482_exempt: (a as { ab1482Exempt?: unknown }).ab1482Exempt,
+          is_rent_ordinance_covered: (a as { isRentOrdinanceCovered?: unknown }).isRentOrdinanceCovered,
+          collects_deposit: (stay.deposit ?? 0) > 0,
+          has_nonrefundable_fee: (parseAmount(moveInFee) ?? 0) > 0 || billableOneTimeCustomFees.length > 0,
+        },
+      })
+    : null;
+  const disclosureCanCompleteLease =
+    disclosureEvaluation?.canCompleteLease === true && unplacedDisclosureRules(disclosureEvaluation).length === 0;
+  const disclosureReviewNotice = disclosureReviewNoticeHtml(disclosureEvaluation, disclosureCanCompleteLease);
+  const disclosureHtml = (templateSection: string) =>
+    disclosureEvaluation ? disclosureVerbatimHtmlForSection(disclosureEvaluation, templateSection) : "";
+  const premisesDisclosureHtml = disclosureHtml("Premises / Municipal compliance");
+  const premisesBaseDisclosureHtml = disclosureHtml("Premises");
+  const rentDisclosureHtml = disclosureHtml("Rent");
+  const depositDisclosureHtml = disclosureHtml("Security Deposit & Move-In Charges");
+  const utilitiesDisclosureHtml = disclosureHtml("Utilities & Services");
+  const houseRulesDisclosureHtml = disclosureHtml("House Rules");
+  const defaultDisclosureHtml = disclosureHtml("Default & Remedies / Governing Law");
+  const noticesDisclosureHtml = disclosureHtml("Rent / Notices");
+  const statutoryDisclosureHtml = disclosureHtml("Statutory Disclosures");
+  const leadDisclosureHtml = disclosureHtml("Lead-Based Paint Disclosure");
+  const moveInDisclosureHtml = disclosureHtml("Addendum A \u2014 Move-In Condition Report");
+  const bedBugDisclosureHtml = disclosureHtml("Addendum B \u2014 Bed Bug Disclosure");
+  const moldDisclosureHtml = disclosureHtml("Addendum C \u2014 Mold & Moisture Policy");
+
   // ── Dates ─────────────────────────────────────────────────────────────────
   const leaseTerm = dash(a.leaseTerm);
   const leaseStart = dash(a.leaseStart);
@@ -795,6 +899,7 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 ${longTermTitleHtml}
 <p class="generated">Generated ${generatedDate} via PropLane</p>
 ${leaseSummaryHtml}
+${disclosureReviewNotice}
 
 <h2>${nextSection()}. Parties</h2>
 <table>
@@ -813,6 +918,8 @@ ${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
   <tr><th>Full description</th><td>${fullPremises}</td></tr>
 </table>
 ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplianceParagraph)}</p>` : ""}
+${premisesBaseDisclosureHtml}
+${premisesDisclosureHtml}
 
 <h2>${nextSection()}. Lease Term</h2>
 <p>The initial term is <strong>${leaseTerm}</strong>, beginning <strong>${leaseStart}</strong> and ending <strong>${leaseEnd}</strong>. ${leaseTermsBody}</p>
@@ -839,6 +946,7 @@ ${
 ${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</strong>. Each month's rent is the actual number of days of the term falling in that month multiplied by the daily base rent above. No fixed monthly rent total applies. The utilities estimate is billed monthly and is prorated for any partial month.</p>` : ""}
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 ${lateFeeUsd != null ? `<p><strong>Late fee:</strong> If rent is not received after the listing's configured grace period, a late fee of <strong>${fmtUsd(lateFeeUsd)}</strong> (non-refundable) may be assessed. Acceptance of late payment does not waive Landlord&apos;s right to enforce late fees or pursue other remedies under this Agreement or applicable law.</p>` : ""}
+${rentDisclosureHtml}
 
 ${proratedSection ? proratedSection.replace(PRORATED_SECTION_TOKEN, String(nextSection())) : ""}
 
@@ -863,6 +971,7 @@ ${customFeeSigningRows}
   <li>${longTermDepositLaborRate != null && longTermDepositLaborRate > 0 ? `Reasonable labor costs at <strong>${fmtUsd(longTermDepositLaborRate)} per hour</strong> or third-party actual cost.` : "Reasonable and documented labor or third-party costs."}</li>
 </ul>
 ${longTermDepositReissueFee != null && longTermDepositReissueFee > 0 ? `<p>A <strong>${fmtUsd(longTermDepositReissueFee)}</strong> stop-payment or reissuance fee may be deducted if a refund must be reissued due to an incorrect or missing address, where permitted by law.</p>` : ""}
+${depositDisclosureHtml}
 
 <h2>${nextSection()}. Returned Payments</h2>
 <p>If any payment is dishonored, reversed, or returned unpaid, Resident shall promptly pay the original amount due and any actual bank or processing charges.${longTermReturnedPaymentFee != null && longTermReturnedPaymentFee > 0 ? ` A returned-payment fee of <strong>${fmtUsd(longTermReturnedPaymentFee)}</strong> may also be charged${config.returnedPaymentStatuteRef ? ` subject to ${escapeHtml(config.returnedPaymentStatuteRef)}` : ""}.` : ""} Repeated returned payments may require future payment by certified funds or another method approved in writing by Landlord.</p>
@@ -872,6 +981,7 @@ ${utilitiesBreakdown}
 <p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesEstimateSentence} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 ${longTermTrashViolationFee != null && longTermTrashViolationFee > 0 ? `<p><strong>Trash rules:</strong> Resident must bag trash, use designated containers, break down boxes, and keep trash and recyclables out of hallways. A documented violation may result in a <strong>${fmtUsd(longTermTrashViolationFee)}</strong> fee per occurrence, to the extent permitted by applicable law.</p>` : ""}
 <p>Resident remains responsible for cleaning up after personal use of shared spaces and providing reasonable access for scheduled cleaning services.</p>
+${utilitiesDisclosureHtml}
 
 <h2>${nextSection("useOccupancy")}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>
@@ -900,6 +1010,7 @@ ${houseRules
   <li><strong>Noise &amp; conflict:</strong> Disputes between residents should be addressed respectfully. Persistent nuisance behavior is grounds for lease termination.</li>
 </ul>`}
 ${houseRules && longTermQuietHours ? `<p><strong>Quiet hours:</strong> ${longTermQuietHours}. No loud music, TV, or gatherings that disturb other residents during these hours.</p>` : ""}
+${houseRulesDisclosureHtml}
 
 <h2>${nextSection()}. Pets</h2>
 <p>${escapeHtml(petPolicy)}</p>
@@ -952,6 +1063,7 @@ ${longTermProfessionalCleaningRequired ? `<h2>${nextSection()}. Move-Out &amp; S
   <li>If uncured, Landlord may pursue eviction (unlawful detainer), monetary damages, and attorneys' fees.</li>
   <li>Resident remains liable for rent through the end of the lease term or until a qualified replacement tenant begins paying rent, whichever occurs first.</li>
 </ul>
+${defaultDisclosureHtml}
 
 <h2>${nextSection()}. Early Termination</h2>
 ${
@@ -965,9 +1077,11 @@ ${
 
 <h2>${nextSection()}. Notices</h2>
 <p>All notices shall be in writing. Delivery by email to the address on file or via PropLane portal messaging is acceptable and shall be deemed received upon sending during business hours. Legal notices may also be delivered in person or by first-class mail to the mailing addresses listed in Section 1. Either party may update their notice address in writing.</p>
+${noticesDisclosureHtml}
 
-<h2>${nextSection()}. Lead-Based Paint Disclosure</h2>
-<p>If the property was built before 1978, federal law (42 U.S.C. § 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet "Protect Your Family From Lead in Your Home" or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>
+${statutoryDisclosureHtml ? `<h2>${nextSection()}. Statutory Disclosures</h2>\n${statutoryDisclosureHtml}` : ""}
+
+${leadDisclosureHtml ? `<h2>${nextSection()}. Lead-Based Paint Disclosure</h2>\n${leadDisclosureHtml}` : ""}
 
 <h2>${nextSection()}. Governing Law; Severability; Entire Agreement</h2>
 <p>${config.governingLawParagraph}</p>
@@ -1028,16 +1142,19 @@ ${customFeeExhibitRows}
   <tr><td>Other / notes</td><td colspan="2">&nbsp;</td></tr>
 </table>
 <p>When you sign this Agreement in the PropLane portal, those electronic signatures apply to this checklist as well. No separate signature lines are required on this page.</p>
+${moveInDisclosureHtml}
 </div>
 
 <div class="addendum">
 <h2>Addendum B — Bed Bug Disclosure</h2>
 <p>Landlord discloses that, to Landlord's knowledge as of the date of this Agreement, there is <strong>no known active bed bug infestation</strong> in the unit or building. Resident shall inspect the room upon move-in and report any signs of bed bugs immediately. If an infestation is discovered during the tenancy, Resident shall notify Landlord in writing within 24 hours and cooperate with any required inspection or treatment. Resident shall not introduce second-hand mattresses, upholstered furniture, or bedding without prior written approval. Resident is responsible for infestation caused by Resident's belongings or guests.</p>
+${bedBugDisclosureHtml}
 </div>
 
 <div class="addendum">
 <h2>Addendum C — Mold &amp; Moisture Policy</h2>
 <p>Resident agrees to maintain adequate ventilation in the room and bathroom (open windows when possible, use exhaust fans). Resident shall promptly report visible mold, moisture intrusion, or condensation to Landlord in writing. Resident shall wipe down surfaces subject to moisture (shower walls, windowsills) regularly. Resident shall not dry laundry inside the room or any space without adequate ventilation. Failure to report mold or moisture conditions within 24 hours of discovery may result in Resident being held liable for resulting damage (${escapeHtml(config.residentMaintenanceStatuteRef)}).</p>
+${moldDisclosureHtml}
 </div>
 
 <div class="addendum">
