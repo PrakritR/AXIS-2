@@ -204,8 +204,6 @@ import { applicationShowsBackgroundCheck } from "@/lib/application-background-ch
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
-import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
-import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
 } from "@/components/portal/resident-services-panel";
@@ -370,8 +368,6 @@ export function ManagerResidents({
   const [svcReqBucket, setSvcReqBucket] = useState<ManagerServiceRequestBucket>("pending");
   const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
-
-  const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
 
   const activeDetailTab = parseResidentDetailTab(detailTabProp);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
@@ -1023,7 +1019,7 @@ export function ManagerResidents({
 
   useCommunicationSurfaceChrome({
     active: Boolean(residentIdProp && resolvedDetailTab === "communication"),
-    threadReading: false,
+    threadReading: true,
   });
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
@@ -2741,23 +2737,13 @@ export function ManagerResidents({
                             ) : null}
 
                             {resolvedDetailTab === "communication" ? (
-                            <ResidentDetailTabPanel>
-                              <div className="flex flex-col gap-3">
-                                <ManagerResidentDetailInbox
-                                  residentEmail={selected.email}
-                                  residentName={selected.name}
-                                  portalBase={portalBase}
-                                  smsUiEnabled={smsUiEnabled}
-                                  smsRef={residentSmsPanelRef}
-                                />
-                                <ModalAssistantStrip
-                                  contextHint={`Resident communication · ${selected.name || selected.email}`}
-                                  storageScopeKey={`resident-communication-${selected.id}`}
-                                  conversationInstance={hcTick}
-                                  defaultExpanded={false}
-                                  className="shrink-0"
-                                />
-                              </div>
+                            <ResidentDetailTabPanel fill>
+                              <ManagerResidentDetailInbox
+                                residentEmail={selected.email}
+                                residentName={selected.name}
+                                portalBase={portalBase}
+                                smsUiEnabled={smsUiEnabled}
+                              />
                             </ResidentDetailTabPanel>
                             ) : null}
 

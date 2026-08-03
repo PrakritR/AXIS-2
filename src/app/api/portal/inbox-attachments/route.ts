@@ -16,8 +16,9 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
 
 async function resolveUser() {
   const supabase = await createSupabaseServerClient();
@@ -92,12 +93,16 @@ export async function POST(req: Request) {
     const mimeMatch = header.match(/data:([^;]+)/);
     const mime = mimeMatch?.[1] ?? "image/jpeg";
     if (!ALLOWED_MIME.has(mime)) {
-      return NextResponse.json({ error: "Only JPEG, PNG, WebP, and GIF images are allowed." }, { status: 400 });
+      return NextResponse.json({ error: "Only JPEG, PNG, WebP, GIF images, and PDF documents are allowed." }, { status: 400 });
     }
 
     const bytes = Buffer.from(b64, "base64");
-    if (bytes.length > MAX_BYTES) {
-      return NextResponse.json({ error: "Image must be 5 MB or smaller." }, { status: 400 });
+    const maxBytes = mime === "application/pdf" ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+    if (bytes.length > maxBytes) {
+      return NextResponse.json(
+        { error: mime === "application/pdf" ? "PDF must be 10 MB or smaller." : "Image must be 5 MB or smaller." },
+        { status: 400 },
+      );
     }
 
     const ext = sanitizeInboxAttachmentExt(body.ext, mime);

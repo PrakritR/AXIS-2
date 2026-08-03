@@ -50,6 +50,9 @@ import {
 import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import {
   INBOX_MAX_ATTACHMENTS,
+  attachmentMetaFromUrls,
+  createPendingInboxAttachment,
+  revokeInboxAttachmentPreview,
   uploadInboxAttachment,
   type InboxComposerAttachment,
 } from "@/lib/inbox-attachments";
@@ -187,7 +190,10 @@ export const ResidentInboxPanel = forwardRef<
     setReplyDraft("");
     setReplyViaEmail(true);
     setReplyViaSms(false);
-    setReplyAttachments([]);
+    setReplyAttachments((prev) => {
+      prev.forEach(revokeInboxAttachmentPreview);
+      return [];
+    });
   }, [expandedId]);
 
   useEffect(() => {
@@ -662,7 +668,7 @@ export const ResidentInboxPanel = forwardRef<
       if (!thread) return;
       if (!channels.email && !channels.sms) throw new Error("no channel");
       const replyId = `reply-${Date.now().toString(36)}`;
-      const attachmentMeta = attachmentUrls.map((url, i) => ({ url, name: `Attachment ${i + 1}` }));
+      const attachmentMeta = attachmentMetaFromUrls(attachmentUrls);
       const reply: InboxThreadMessage = {
         id: replyId,
         from: "Resident",
@@ -1013,24 +1019,25 @@ export const ResidentInboxPanel = forwardRef<
       if (!files?.length) return;
       const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
       if (room <= 0) {
-        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} images.`);
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} files.`);
         return;
       }
       const batch = Array.from(files).slice(0, room);
       for (const file of batch) {
-        const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const previewUrl = URL.createObjectURL(file);
-        setReplyAttachments((prev) => [...prev, { id, fileName: file.name, previewUrl, uploading: true }]);
+        const pending = createPendingInboxAttachment(file);
+        setReplyAttachments((prev) => [...prev, pending]);
         void uploadInboxAttachment(file)
           .then((url) => {
             setReplyAttachments((prev) =>
-              prev.map((a) => (a.id === id ? { ...a, uploadUrl: url, uploading: false } : a)),
+              prev.map((a) => (a.id === pending.id ? { ...a, uploadUrl: url, uploading: false } : a)),
             );
           })
           .catch((e) => {
             setReplyAttachments((prev) =>
               prev.map((a) =>
-                a.id === id ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" } : a,
+                a.id === pending.id
+                  ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" }
+                  : a,
               ),
             );
           });
@@ -1083,7 +1090,10 @@ export const ResidentInboxPanel = forwardRef<
         attachmentUrls,
       );
       setReplyDraft("");
-      setReplyAttachments([]);
+      setReplyAttachments((prev) => {
+        prev.forEach(revokeInboxAttachmentPreview);
+        return [];
+      });
       showToast(viaEmail && viaSms ? "Reply sent via email and text." : viaSms ? "Reply sent via text." : "Reply sent.");
     } catch {
       showToast("Could not send reply.");
@@ -1236,7 +1246,13 @@ export const ResidentInboxPanel = forwardRef<
                       channelControl={replyChannelPicker}
                       attachments={replyAttachments}
                       onAttachmentsPick={pickReplyAttachments}
-                      onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                      onAttachmentRemove={(id) => {
+                        setReplyAttachments((prev) => {
+                          const target = prev.find((a) => a.id === id);
+                          if (target) revokeInboxAttachmentPreview(target);
+                          return prev.filter((a) => a.id !== id);
+                        });
+                      }}
                       maxAttachments={INBOX_MAX_ATTACHMENTS}
                       autoSend={autoSend}
                       onAutoSendChange={setAutoSend}
@@ -1379,7 +1395,13 @@ export const ResidentInboxPanel = forwardRef<
                         channelControl={replyChannelPicker}
                         attachments={replyAttachments}
                         onAttachmentsPick={pickReplyAttachments}
-                        onAttachmentRemove={(id) => setReplyAttachments((prev) => prev.filter((a) => a.id !== id))}
+                        onAttachmentRemove={(id) => {
+                        setReplyAttachments((prev) => {
+                          const target = prev.find((a) => a.id === id);
+                          if (target) revokeInboxAttachmentPreview(target);
+                          return prev.filter((a) => a.id !== id);
+                        });
+                      }}
                         maxAttachments={INBOX_MAX_ATTACHMENTS}
                         autoSend={autoSend}
                         onAutoSendChange={setAutoSend}

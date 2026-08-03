@@ -1,91 +1,74 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
-import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
-import { InboxThreadAssistantStrip, buildInboxThreadAssistantContext } from "@/components/portal/inbox-thread-assistant-strip";
 import {
   InboxComposer,
   InboxReplyChannelPicker,
+  InboxScheduledCard,
+  InboxScheduledThreadList,
   InboxThreadView,
   InboxTwoPane,
+  type InboxBubbleMessage,
 } from "@/components/portal/portal-inbox-ui";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { InboxThreadAssistantStrip, buildInboxThreadAssistantContext } from "@/components/portal/inbox-thread-assistant-strip";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
   inboxThreadMessages,
-  inboxThreadSortMs,
   loadPersistedInbox,
+  type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
-import {
-  mergeUnifiedInboxItems,
-  parseUnifiedInboxKey,
-  unifiedInboxKey,
-  type UnifiedInboxListItem,
-} from "@/lib/unified-inbox-merge";
+import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
 import {
   normalizeManagerSmsConversationsPayload,
-  smsConversationDisplayName,
-  smsConversationSubtitle,
-  smsThreadHasUnread,
   type ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
+import {
+  type ScheduledInboxMessageRecord,
+} from "@/lib/scheduled-inbox-messages";
+import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
+import { sendManualScheduledMessageNow } from "@/components/portal/portal-inbox-selection";
+import {
+  INBOX_MAX_ATTACHMENTS,
+  createPendingInboxAttachment,
+  revokeInboxAttachmentPreview,
+  uploadInboxAttachment,
+  type InboxComposerAttachment,
+} from "@/lib/inbox-attachments";
 
-function previewLine(body: string, max = 80) {
-  const t = body.trim().replace(/\s+/g, " ");
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
-}
-
-function smsConversationId(resident: ManagerSmsResidentConversation): string {
-  return (
-    resident.conversationKey ??
-    resident.phone ??
-    resident.residentUserId ??
-    resident.residentEmail ??
-    resident.name
-  );
-}
-
-function loadSmsOpenedIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem("axis_manager_sms_opened_v1");
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((id): id is string => typeof id === "string" && id.trim().length > 0));
-  } catch {
-    return new Set();
+function loadResidentThreadBubbles(email: string): InboxBubbleMessage[] {
+  const norm = email.trim().toLowerCase();
+  if (!norm) return [];
+  const threads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+  const bubbles: InboxBubbleMessage[] = [];
+  for (const thread of threads) {
+    if (thread.email.trim().toLowerCase() !== norm || thread.folder === "trash") continue;
+    const folder = thread.folder === "sent" ? "sent" : "inbox";
+    for (const [i, m] of inboxThreadMessages(thread).entries()) {
+      const outbound = m.outbound ?? (i === 0 ? folder === "sent" : true);
+      bubbles.push({
+        id: m.id,
+        author: m.from,
+        body: m.body,
+        at: m.at,
+        direction: outbound ? "outbound" : "inbound",
+        channel: "email",
+        attachments: m.attachments,
+      });
+    }
   }
+  return bubbles.sort((a, b) => {
+    const ta = Date.parse(a.at ?? "") || 0;
+    const tb = Date.parse(b.at ?? "") || 0;
+    return ta - tb;
+  });
 }
 
-function iosListTimestamp(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const now = new Date();
-  const dayDiff = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
-      86_400_000,
-  );
-  if (dayDiff === 0) {
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  }
-  if (dayDiff === 1) return "Yesterday";
-  if (dayDiff > 1 && dayDiff < 7) {
-    return d.toLocaleDateString(undefined, { weekday: "short" });
-  }
-  return d.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
-}
-
-const RESIDENT_DETAIL_DIRECT_CHAT_KEY = "__resident_direct__";
-
-function ResidentDirectChatPane({
+/** Direct chat when this resident has no inbox thread yet — same shell as Communication. */
+export function ResidentDirectChatPane({
   residentEmail,
   residentName,
   smsResident,
@@ -100,7 +83,16 @@ function ResidentDirectChatPane({
 }) {
   const { showToast } = useAppUi();
   const [draft, setDraft] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<InboxComposerAttachment[]>([]);
   const [sending, setSending] = useState(false);
+  const [inboxTick, setInboxTick] = useState(0);
+  const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+  const [expandedScheduledId, setExpandedScheduledId] = useState<string | null>(null);
+  const [scheduledBusyId, setScheduledBusyId] = useState<string | null>(null);
+  const { messages: scheduledPaymentMessages, reload: reloadAutomationScheduled } = useScheduledPaymentMessages({
+    includeHidden: false,
+  });
+
   const email = residentEmail.trim();
   const displayName = residentName?.trim() || email || "Resident";
   const subtitle = smsResident?.propertyLabel?.trim() || email;
@@ -109,21 +101,100 @@ function ResidentDirectChatPane({
   const [replyViaEmail, setReplyViaEmail] = useState(!smsAvailable && emailAvailable);
   const [replyViaSms, setReplyViaSms] = useState(smsAvailable);
 
+  const reloadScheduled = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
+    } catch {
+      /* keep */
+    }
+    void reloadAutomationScheduled();
+  }, [reloadAutomationScheduled]);
+
+  useEffect(() => {
+    void reloadScheduled();
+  }, [reloadScheduled]);
+
+  useEffect(() => {
+    const sync = () => setInboxTick((n) => n + 1);
+    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    return () => window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+  }, []);
+
   useEffect(() => {
     setReplyViaSms(smsAvailable);
     setReplyViaEmail(!smsAvailable && emailAvailable);
     setDraft("");
+    setReplyAttachments((prev) => {
+      prev.forEach(revokeInboxAttachmentPreview);
+      return [];
+    });
   }, [email, smsAvailable, emailAvailable]);
 
-  // The compiler declines to re-memoize this one and reports the bailout as an error. It is
-  // an optimization notice, not a correctness problem: the explicit useCallback below still
-  // does the memoizing, exactly as it did before the compiler was introduced.
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const messages = useMemo(() => {
+    void inboxTick;
+    return loadResidentThreadBubbles(email);
+  }, [email, inboxTick]);
+
+  const threadScheduledItems = useMemo(
+    () => scheduledItemsForRecipient(email, manualScheduledMessages, scheduledPaymentMessages),
+    [email, manualScheduledMessages, scheduledPaymentMessages],
+  );
+
+  const pickReplyAttachments = useCallback(
+    (files: FileList | null) => {
+      if (!files?.length) return;
+      const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
+      if (room <= 0) {
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} files.`);
+        return;
+      }
+      const batch = Array.from(files).slice(0, room);
+      for (const file of batch) {
+        const pending = createPendingInboxAttachment(file);
+        setReplyAttachments((prev) => [...prev, pending]);
+        void uploadInboxAttachment(file)
+          .then((url) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) => (a.id === pending.id ? { ...a, uploadUrl: url, uploading: false } : a)),
+            );
+          })
+          .catch((e) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) =>
+                a.id === pending.id
+                  ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" }
+                  : a,
+              ),
+            );
+          });
+      }
+    },
+    [replyAttachments.length, showToast],
+  );
+
+  const removeReplyAttachment = useCallback((id: string) => {
+    setReplyAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target) revokeInboxAttachmentPreview(target);
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = draft.trim();
-    if (!text) return;
+    const attachmentUrls = replyAttachments
+      .filter((a) => a.uploadUrl && !a.uploading && !a.error)
+      .map((a) => a.uploadUrl!);
+    if (!text && attachmentUrls.length === 0) return;
     if (!replyViaEmail && !replyViaSms) {
       showToast("Choose Email, SMS, or both.");
+      return;
+    }
+    if (replyAttachments.some((a) => a.uploading)) {
+      showToast("Wait for uploads to finish.");
       return;
     }
     setSending(true);
@@ -143,7 +214,7 @@ function ResidentDirectChatPane({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             toPhone: phone,
-            text,
+            text: text || "(attachment)",
             residentUserId: smsResident?.residentUserId ?? null,
             conversationKey: smsResident?.conversationKey ?? null,
           }),
@@ -168,6 +239,7 @@ function ResidentDirectChatPane({
             text,
             deliverToPortalInbox: true,
             eventCategory: "messages",
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
           }),
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
@@ -179,6 +251,10 @@ function ResidentDirectChatPane({
       }
 
       setDraft("");
+      setReplyAttachments((prev) => {
+        prev.forEach(revokeInboxAttachmentPreview);
+        return [];
+      });
       if (replyViaEmail && replyViaSms) showToast("Sent via email and SMS.");
       else if (replyViaEmail) showToast("Email sent.");
       else showToast("SMS sent.");
@@ -192,6 +268,7 @@ function ResidentDirectChatPane({
     draft,
     email,
     onSent,
+    replyAttachments,
     replyViaEmail,
     replyViaSms,
     showToast,
@@ -200,17 +277,69 @@ function ResidentDirectChatPane({
     smsResident?.residentUserId,
   ]);
 
+  const scheduledCards =
+    threadScheduledItems.length > 0 ? (
+      <InboxScheduledThreadList
+        count={threadScheduledItems.length}
+        nextSendLabel={threadScheduledItems[0]?.sendLabel}
+        defaultCollapsed={threadScheduledItems.length > 2}
+      >
+        {threadScheduledItems.map((item) => (
+          <InboxScheduledCard
+            key={item.id}
+            sendLabel={item.sendLabel}
+            subject={item.subject}
+            body={item.body}
+            meta={item.meta}
+            channel={item.channel}
+            source={item.source}
+            editable={item.editable}
+            busy={scheduledBusyId === item.id}
+            expanded={expandedScheduledId === item.id}
+            onToggleExpand={() => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))}
+            onCancel={() => {
+              setScheduledBusyId(item.id);
+              void fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ status: "cancelled" }),
+              }).finally(() => {
+                setScheduledBusyId(null);
+                void reloadScheduled();
+              });
+            }}
+            onSendNow={() => {
+              setScheduledBusyId(item.id);
+              void sendManualScheduledMessageNow(item.id).finally(() => {
+                setScheduledBusyId(null);
+                void reloadScheduled();
+                onSent();
+              });
+            }}
+          />
+        ))}
+      </InboxScheduledThreadList>
+    ) : null;
+
   return (
     <InboxThreadView
-      title={displayName}
-      avatarName={displayName}
-      subtitle={subtitle}
-      messages={[]}
-      emptyLabel="No messages yet. Send the first message below."
+      title=""
+      messages={messages}
       threadKey={`direct-${email}`}
-      scrollMode="page"
+      scrollMode="pane"
+      hideIdentityHeader
+      emptyLabel="No messages yet. Send the first message below."
       composer={
         <>
+          {scheduledCards ? (
+            <div
+              className="shrink-0 border-t border-border bg-card/90 px-2 py-2 md:px-3"
+              data-attr="resident-direct-scheduled-pin"
+            >
+              {scheduledCards}
+            </div>
+          ) : null}
           <InboxThreadAssistantStrip
             contextHint={buildInboxThreadAssistantContext({
               subject: "Resident conversation",
@@ -225,7 +354,7 @@ function ResidentDirectChatPane({
             onSubmit={() => void sendMessage()}
             sending={sending}
             disabled={!replyViaEmail && !replyViaSms}
-            placeholder={replyViaSms && !replyViaEmail ? "Text message" : "Write a message…"}
+            placeholder="Write a reply…"
             maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
             dataAttr="resident-direct-chat-compose"
             channelControl={
@@ -238,6 +367,10 @@ function ResidentDirectChatPane({
                 smsAvailable={smsAvailable}
               />
             }
+            attachments={replyAttachments}
+            onAttachmentsPick={pickReplyAttachments}
+            onAttachmentRemove={removeReplyAttachment}
+            maxAttachments={INBOX_MAX_ATTACHMENTS}
           />
         </>
       }
@@ -246,8 +379,7 @@ function ResidentDirectChatPane({
 }
 
 /**
- * Unified conversation inbox for one resident inside the manager Residents detail
- * panel — direct chat with this resident (no conversation list sidebar).
+ * Single-page chat for one resident inside the manager Residents detail panel.
  */
 export function ManagerResidentDetailInbox({
   residentEmail,
@@ -255,28 +387,20 @@ export function ManagerResidentDetailInbox({
   portalBase,
   smsUiEnabled = false,
   inboxRef,
-  smsRef,
+  emptyThreadFallback,
 }: {
   residentEmail: string;
   residentName?: string;
   portalBase: string;
   smsUiEnabled?: boolean;
   inboxRef?: RefObject<ManagerInboxHandle | null>;
-  smsRef?: RefObject<ManagerSmsPanelHandle | null>;
+  emptyThreadFallback?: ReactNode;
 }) {
   const commBase = `${portalBase}/communication`;
   const emailNorm = residentEmail.trim().toLowerCase();
-  const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
-  const [smsResidents, setSmsResidents] = useState<ManagerSmsResidentConversation[]>([]);
-  const [smsOpenedIds, setSmsOpenedIds] = useState<Set<string>>(() => loadSmsOpenedIds());
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-
-  useEffect(() => {
-    const sync = () => setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
-    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
-    return () => window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
-  }, []);
+  const [smsResidents, setSmsResidents] = useState<ManagerSmsResidentConversation[]>([]);
+  const [inboxTick, setInboxTick] = useState(0);
 
   const loadSms = useCallback(async () => {
     if (!smsUiEnabled) return;
@@ -294,94 +418,26 @@ export function ManagerResidentDetailInbox({
     void loadSms();
   }, [loadSms]);
 
-  const handleSmsConversationOpened = useCallback(() => {
-    setSmsOpenedIds(loadSmsOpenedIds());
+  useEffect(() => {
+    const sync = () => setInboxTick((n) => n + 1);
+    window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
+    return () => window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, sync as EventListener);
   }, []);
 
-  const filteredEmail = useMemo(() => {
-    const scoped = emailThreads.filter((t) => t.email.trim().toLowerCase() === emailNorm);
-    return filterEmailInboxThreads(scoped, { keepSmsLike: !smsUiEnabled });
-  }, [emailNorm, smsUiEnabled, emailThreads]);
-
-  const emailListItems = useMemo((): UnifiedInboxListItem[] => {
-    let rows = filteredEmail;
-    if (showArchived) {
-      rows = rows.filter((t) => t.folder === "trash");
-    } else {
-      rows = rows.filter((t) => t.folder !== "trash");
-    }
-
-    return rows.map((t) => {
-      const msgs = inboxThreadMessages(t);
-      const lastMsg = msgs[msgs.length - 1];
-      const sentSemantics = t.folder === "sent";
-      const displayName = sentSemantics ? t.email || "Unknown recipient" : t.from || t.email || "Unknown sender";
-      const lastOutbound = lastMsg?.outbound ?? (msgs.length > 1 ? true : t.folder === "sent");
-      return {
-        key: unifiedInboxKey("email", t.id),
-        channel: "email" as const,
-        threadId: t.id,
-        name: displayName,
-        subtitle: t.subject,
-        preview: previewLine(lastMsg?.body ?? t.preview ?? "", 80),
-        previewPrefix: lastOutbound ? "You: " : undefined,
-        time: t.time,
-        unread: t.folder === "inbox" && t.unread,
-        sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
-      };
-    });
-  }, [filteredEmail, showArchived]);
-
-  const smsListItems = useMemo((): UnifiedInboxListItem[] => {
-    if (!smsUiEnabled || showArchived) return [];
-    const scoped = smsResidents.filter((r) => r.residentEmail?.trim().toLowerCase() === emailNorm);
-    return scoped
-      .map((resident) => {
-        const messages = Array.isArray(resident.messages) ? resident.messages : [];
-        const lastMessage = messages[messages.length - 1] ?? null;
-        if (!lastMessage) return null;
-        const rowId = smsConversationId(resident);
-        const unread = smsThreadHasUnread(messages, smsOpenedIds);
-        const lastOutbound = lastMessage.direction === "outbound";
-        const item: UnifiedInboxListItem = {
-          key: unifiedInboxKey("sms", rowId),
-          channel: "sms",
-          threadId: rowId,
-          name: smsConversationDisplayName(resident),
-          subtitle: smsConversationSubtitle(resident) || undefined,
-          preview: previewLine(lastMessage.body, 80),
-          previewPrefix: lastOutbound ? "You: " : undefined,
-          time: iosListTimestamp(lastMessage.createdAt),
-          unread,
-          sortMs: Date.parse(lastMessage.createdAt) || 0,
-        };
-        return item;
-      })
-      .filter((x): x is UnifiedInboxListItem => x !== null);
-  }, [emailNorm, showArchived, smsOpenedIds, smsResidents, smsUiEnabled]);
-
-  const mergedRows = useMemo(
-    () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems]),
-    [emailListItems, smsListItems],
-  );
-
-  const archivedCount = useMemo(
-    () => filteredEmail.filter((t) => t.folder === "trash").length,
-    [filteredEmail],
-  );
+  const archivedCount = useMemo(() => {
+    void inboxTick;
+    return (loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[]).filter(
+      (t) => t.email.trim().toLowerCase() === emailNorm && t.folder === "trash",
+    ).length;
+  }, [emailNorm, inboxTick]);
 
   const smsResidentForEmail = useMemo(
     () => smsResidents.find((r) => r.residentEmail?.trim().toLowerCase() === emailNorm) ?? null,
     [emailNorm, smsResidents],
   );
 
-  const selection = useMemo(() => {
-    if (!selectedKey || selectedKey === RESIDENT_DETAIL_DIRECT_CHAT_KEY) return null;
-    return parseUnifiedInboxKey(selectedKey);
-  }, [selectedKey]);
-
   const refreshConversations = useCallback(() => {
-    setEmailThreads(loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []));
+    setInboxTick((n) => n + 1);
     void loadSms();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event(PORTAL_INBOX_CHANGED_EVENT));
@@ -392,80 +448,22 @@ export function ManagerResidentDetailInbox({
     setShowArchived(false);
   }, [emailNorm]);
 
-  useEffect(() => {
-    if (showArchived) {
-      if (mergedRows.length === 0) {
-        setSelectedKey(null);
-      } else {
-        setSelectedKey((cur) => (cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0]!.key));
-      }
-      return;
-    }
-    if (mergedRows.length === 0) {
-      setSelectedKey(RESIDENT_DETAIL_DIRECT_CHAT_KEY);
-      return;
-    }
-    setSelectedKey((cur) => {
-      if (cur === RESIDENT_DETAIL_DIRECT_CHAT_KEY) return mergedRows[0]!.key;
-      return cur && mergedRows.some((r) => r.key === cur) ? cur : mergedRows[0]!.key;
-    });
-  }, [mergedRows, showArchived, emailNorm]);
-
-  const showDirectChat =
-    !showArchived &&
-    (selectedKey === RESIDENT_DETAIL_DIRECT_CHAT_KEY || (mergedRows.length === 0 && !selection));
-
-  const threadPane = showDirectChat ? (
-    <ResidentDirectChatPane
-      residentEmail={residentEmail}
-      residentName={residentName}
-      smsResident={smsResidentForEmail}
-      smsUiEnabled={smsUiEnabled}
-      onSent={refreshConversations}
-    />
-  ) : selection?.channel === "email" ? (
-      <ManagerInbox
-        ref={inboxRef}
-        tabId={showArchived ? "trash" : "unopened"}
-        embeddedInCommunication
-        externalTitleActions
-        suppressCompose={false}
-        suppressListPane
-        pageScroll
-        commBase={commBase}
+  const directFallback =
+    emptyThreadFallback ??
+    (
+      <ResidentDirectChatPane
+        residentEmail={residentEmail}
+        residentName={residentName}
+        smsResident={smsResidentForEmail}
         smsUiEnabled={smsUiEnabled}
-        smsRecipients={smsResidents}
-        controlledExpandedId={selection.threadId}
-        onControlledExpandedIdChange={(id) => {
-          if (!id) setSelectedKey(null);
-        }}
+        onSent={refreshConversations}
       />
-    ) : selection?.channel === "sms" ? (
-      <ManagerSmsPanel
-        ref={smsRef}
-        filterResidentEmail={residentEmail}
-        allowInlineCompose={false}
-        suppressListPane
-        pageScroll
-        controlledActiveId={selection.threadId}
-        onControlledActiveIdChange={(id) => {
-          if (!id) setSelectedKey(null);
-        }}
-        onConversationOpened={handleSmsConversationOpened}
-      />
-    ) : (
-      <div className="flex min-h-[min(16rem,40vh)] flex-1 flex-col items-center justify-center px-6 py-12 text-center">
-        <p className="text-sm font-semibold text-foreground">No archived messages</p>
-        <p className="mt-1 text-xs text-muted">Archived conversations with this resident will appear here.</p>
-      </div>
     );
 
-  const threadOpen = showDirectChat || Boolean(selection);
-
   return (
-    <div className="portal-resident-detail-inbox flex flex-col">
+    <div className="portal-resident-detail-inbox flex min-h-0 flex-1 flex-col">
       {archivedCount > 0 ? (
-        <PortalSectionActionRow className="mb-2">
+        <PortalSectionActionRow className="mb-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowArchived((v) => !v)}
@@ -482,13 +480,28 @@ export function ManagerResidentDetailInbox({
         </PortalSectionActionRow>
       ) : null}
       <InboxTwoPane
-        className="w-full"
-        heightMode="flow"
-        fillViewport={false}
+        className="w-full flex-1"
+        heightMode="viewport"
+        fillParent
+        fillViewport
         listHidden
-        threadOpen={threadOpen}
+        threadOpen
         list={null}
-        thread={threadPane}
+        thread={
+          <ManagerInbox
+            ref={inboxRef}
+            tabId={showArchived ? "trash" : "unopened"}
+            embeddedInCommunication
+            externalTitleActions
+            suppressCompose
+            suppressListPane
+            filterResidentEmail={residentEmail}
+            emptyThreadFallback={directFallback}
+            commBase={commBase}
+            smsUiEnabled={smsUiEnabled}
+            smsRecipients={smsResidents}
+          />
+        }
       />
     </div>
   );

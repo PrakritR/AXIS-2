@@ -948,7 +948,7 @@ export function PortalCalendarPanels({
         onClick={closeSelectedBlock}
       />
       <div
-        className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
+        className="modal-panel relative z-[81] w-full max-w-[420px] rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
@@ -996,7 +996,7 @@ export function PortalCalendarPanels({
             {selectedBlock.meeting.email ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Email</p>
-                <p className="mt-1 font-medium text-foreground">{selectedBlock.meeting.email}</p>
+                <p className="mt-1 break-words font-medium text-foreground">{selectedBlock.meeting.email}</p>
               </div>
             ) : null}
             {selectedBlock.meeting.phone ? (
@@ -1010,7 +1010,7 @@ export function PortalCalendarPanels({
             {selectedBlock.meeting.propertyTitle ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Property</p>
-                <p className="mt-1 font-medium text-foreground">
+                <p className="mt-1 break-words font-medium text-foreground">
                   {selectedBlock.meeting.propertyTitle}
                   {selectedBlock.meeting.roomLabel ? ` · ${selectedBlock.meeting.roomLabel}` : ""}
                 </p>
@@ -1103,7 +1103,7 @@ export function PortalCalendarPanels({
             </>
           )}
 
-          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border pt-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-2">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
             {calendarMeetingSupportsDelete(selectedBlock.meeting) ? (
               <>
             <Button

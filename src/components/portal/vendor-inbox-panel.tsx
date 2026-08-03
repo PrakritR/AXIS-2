@@ -15,7 +15,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRo
 import { PortalListToolbar } from "@/components/portal/portal-list-toolbar";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { buildInboxThreadAssistantContext, InboxThreadAssistantStrip } from "@/components/portal/inbox-thread-assistant-strip";
-import { INBOX_MAX_ATTACHMENTS, uploadInboxAttachment, type InboxComposerAttachment } from "@/lib/inbox-attachments";
+import { INBOX_MAX_ATTACHMENTS, createPendingInboxAttachment, revokeInboxAttachmentPreview, uploadInboxAttachment, type InboxComposerAttachment } from "@/lib/inbox-attachments";
 import { markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -692,21 +692,22 @@ export const VendorInboxPanel = forwardRef<
       if (!files?.length) return;
       const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
       if (room <= 0) {
-        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} images.`);
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} files.`);
         return;
       }
       for (const file of Array.from(files).slice(0, room)) {
-        const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const previewUrl = URL.createObjectURL(file);
-        setReplyAttachments((prev) => [...prev, { id, fileName: file.name, previewUrl, uploading: true }]);
+        const pending = createPendingInboxAttachment(file);
+        setReplyAttachments((prev) => [...prev, pending]);
         void uploadInboxAttachment(file)
           .then((url) => {
-            setReplyAttachments((prev) => prev.map((a) => (a.id === id ? { ...a, uploadUrl: url, uploading: false } : a)));
+            setReplyAttachments((prev) => prev.map((a) => (a.id === pending.id ? { ...a, uploadUrl: url, uploading: false } : a)));
           })
           .catch((e) => {
             setReplyAttachments((prev) =>
               prev.map((a) =>
-                a.id === id ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" } : a,
+                a.id === pending.id
+                  ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" }
+                  : a,
               ),
             );
           });
