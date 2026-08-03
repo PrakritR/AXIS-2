@@ -612,16 +612,12 @@ Do **not** stop at unit tests. For the feature that changed:
 
 ### A green PR run is NOT e2e coverage
 
-The `e2e` job in `.github/workflows/test.yml` is gated on
-`github.event_name == 'push' && github.ref == 'refs/heads/main' || schedule`, so
-it is **skipped on every pull request**. A PR whose Test workflow is green has
-had zero e2e signal; the first real run happens after the merge lands on `main`.
-That gap is why e2e breakage is only ever discovered post-merge, and why a long
-tail of e2e failures has been able to persist unnoticed.
-
-So run the suite locally before promoting anything that touches portal UI or
-routes. The command, the dev/test pinning it needs, and the current list of
-known-failing / flaky specs (do not re-triage those) live in
+The `e2e` job in `.github/workflows/test.yml` runs only on `push` to `main` and
+on `schedule`, so it is **skipped on every pull request** — a PR whose Test
+workflow is green has had zero e2e signal, and the first real run happens after
+the merge lands. So run the suite locally before promoting anything that touches
+portal UI or routes. The command, the dev/test pinning it needs, and the current
+list of known-failing / flaky specs (do not re-triage those) live in
 [`docs/ship-gate.md`](docs/ship-gate.md#run-e2e-locally-before-you-promote).
 
 ## 3. Promote checklist
