@@ -53,6 +53,130 @@ const SPLIT_SHAPE_PANELS = [
  */
 const RENDERS_MOBILE_ROW = /<PortalPageHeaderMobileActionsRow|data-slot="[a-z-]*mobile-actions"/;
 
+/**
+ * The gate has to be read off the `titleAside` the shell actually receives, never off the
+ * file. A panel may hold any number of incidental `hidden … md:flex` blocks that have
+ * nothing to do with its header — `manager-applications.tsx` has one on its detail-row
+ * action group — and a file-wide scan treats each of them as proof the band is gated,
+ * silently exempting the panel from the whole check.
+ */
+function skipStringLiteral(src: string, index: number): number {
+  const quote = src[index];
+  let i = index + 1;
+  while (i < src.length && src[i] !== quote) {
+    if (src[i] === "\\") i += 1;
+    i += 1;
+  }
+  return i;
+}
+
+/** Text between the braces of `prefix{ … }`, honouring nesting and quotes. */
+function readBracedExpression(src: string, prefix: string, from: number): { text: string; end: number } | null {
+  const start = src.indexOf(prefix, from);
+  if (start === -1) return null;
+  let depth = 0;
+  let i = start + prefix.length;
+  for (; i < src.length; i += 1) {
+    const char = src[i];
+    if (char === '"' || char === "'" || char === "`") {
+      i = skipStringLiteral(src, i);
+      continue;
+    }
+    if (char === "{") depth += 1;
+    else if (char === "}") {
+      if (depth === 0) break;
+      depth -= 1;
+    }
+  }
+  return { text: src.slice(start + prefix.length, i), end: i };
+}
+
+/** The opening tag (`<Name … >`) whose props contain the character at `propIndex`. */
+function enclosingOpeningTag(src: string, propIndex: number): { name: string; props: string } | null {
+  let start = -1;
+  for (let i = propIndex; i >= 0; i -= 1) {
+    if (src[i] === ">") break;
+    if (src[i] === "<" && /[A-Za-z]/.test(src[i + 1] ?? "")) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) return null;
+  let depth = 0;
+  let i = start + 1;
+  for (; i < src.length; i += 1) {
+    const char = src[i];
+    if (char === '"' || char === "'" || char === "`") {
+      i = skipStringLiteral(src, i);
+      continue;
+    }
+    if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+    else if (char === ">" && depth === 0) break;
+  }
+  return { name: /^<([A-Za-z][\w.]*)/.exec(src.slice(start))?.[1] ?? "?", props: src.slice(start, i) };
+}
+
+/** The `const <name> = …;` initializer, so an identifier `titleAside` can be inspected. */
+function resolveBinding(src: string, identifier: string): string | null {
+  const decl = new RegExp(`\\bconst\\s+${identifier}\\s*=`).exec(src);
+  if (!decl) return null;
+  let depth = 0;
+  let i = decl.index + decl[0].length;
+  const start = i;
+  for (; i < src.length; i += 1) {
+    const char = src[i];
+    if (char === '"' || char === "'" || char === "`") {
+      i = skipStringLiteral(src, i);
+      continue;
+    }
+    if (char === "{" || char === "(" || char === "[") depth += 1;
+    else if (char === "}" || char === ")" || char === "]") depth -= 1;
+    else if (char === ";" && depth === 0) break;
+  }
+  return src.slice(start, i);
+}
+
+/** The className of the ROOT element the aside renders — a gate on a child proves nothing. */
+function rootClassName(expression: string): string | null {
+  const stringAt = expression.indexOf('className="');
+  const exprAt = expression.indexOf("className={");
+  if (stringAt === -1 && exprAt === -1) return null;
+  if (exprAt === -1 || (stringAt !== -1 && stringAt < exprAt)) {
+    const from = stringAt + 'className="'.length;
+    const end = expression.indexOf('"', from);
+    return expression.slice(from, end === -1 ? undefined : end);
+  }
+  return readBracedExpression(expression, "className={", exprAt)?.text ?? null;
+}
+
+const DESKTOP_GATE = /(\bhidden\b[\s\S]*\bmd:flex\b)|(\bmd:flex\b[\s\S]*\bhidden\b)|\bmax-md:hidden\b/;
+
+/**
+ * Every shell call site that lands on the `useInlineTitleBand` path — `hideTitleOnMobileNav`
+ * with a `titleAside` and no `filterRow`, the props that make `ManagerPortalPageShell` draw
+ * its band at every breakpoint. With a `filterRow` the shell desktop-gates the aside itself
+ * (`titleAsideDesktopOnly`), so those call sites need no manual gate.
+ */
+function inlineBandTitleAsides(src: string): { tag: string; gated: boolean }[] {
+  const found: { tag: string; gated: boolean }[] = [];
+  let cursor = 0;
+  for (;;) {
+    const at = src.indexOf("titleAside={", cursor);
+    if (at === -1) break;
+    const expression = readBracedExpression(src, "titleAside={", at);
+    cursor = expression ? expression.end : at + "titleAside={".length;
+    const tag = enclosingOpeningTag(src, at);
+    if (!tag || !expression) continue;
+    if (!tag.props.includes("hideTitleOnMobileNav") || tag.props.includes("filterRow")) continue;
+    const bare = expression.text.trim().replace(/\s*(\?\?|\|\|)\s*undefined$/, "");
+    const resolved = /^[A-Za-z_$][\w$]*$/.test(bare) ? resolveBinding(src, bare) : bare;
+    const className = resolved === null ? null : rootClassName(resolved);
+    found.push({ tag: tag.name, gated: className !== null && DESKTOP_GATE.test(className) });
+  }
+  return found;
+}
+
 describe("header controls reach mobile exactly once", () => {
   it("every panel with a mobile actions row keeps a desktop-gated titleAside", () => {
     const offenders: string[] = [];
@@ -60,9 +184,10 @@ describe("header controls reach mobile exactly once", () => {
       if (!file.endsWith(".tsx")) continue;
       const src = readFileSync(join(PORTAL_DIR, file), "utf8");
       if (!RENDERS_MOBILE_ROW.test(src)) continue;
-      if (!src.includes("hideTitleOnMobileNav")) continue;
       // Band-only sections must not ALSO ship a mobile row; split sections must gate the band.
-      if (!/hidden[^"]*\bmd:flex\b/.test(src)) offenders.push(file);
+      for (const aside of inlineBandTitleAsides(src)) {
+        if (!aside.gated) offenders.push(`${file} <${aside.tag}>`);
+      }
     }
     expect(offenders).toEqual([]);
   });
@@ -71,8 +196,29 @@ describe("header controls reach mobile exactly once", () => {
     for (const file of SPLIT_SHAPE_PANELS) {
       const src = readFileSync(join(PORTAL_DIR, file), "utf8");
       expect(src, `${file} lost its mobile actions row`).toMatch(RENDERS_MOBILE_ROW);
-      expect(src, `${file} lost its desktop gate`).toMatch(/hidden[^"]*\bmd:flex\b/);
+      const asides = inlineBandTitleAsides(src);
+      expect(asides.length, `${file} lost its inline-band titleAside`).toBeGreaterThan(0);
+      expect(
+        asides.every((aside) => aside.gated),
+        `${file} lost its desktop gate`,
+      ).toBe(true);
     }
+  });
+
+  it("reads the gate off the titleAside binding, not off an unrelated block in the file", () => {
+    const ungated = [
+      'const headerActions = (\n  <>\n    <button type="button">Send</button>\n  </>\n);',
+      '<div className="hidden max-w-full flex-nowrap items-center gap-1 md:flex">detail row</div>',
+      "<ManagerPortalPageShell title=\"Applications\" hideTitleOnMobileNav titleAside={headerActions}>",
+      "<PortalPageHeaderMobileActionsRow actions={headerActions} />",
+    ].join("\n");
+    expect(inlineBandTitleAsides(ungated)).toEqual([{ tag: "ManagerPortalPageShell", gated: false }]);
+
+    const gated = ungated.replace(
+      "const headerActions = (\n  <>",
+      'const headerActions = (\n  <PortalSectionActionRow className="ml-auto hidden gap-3 md:flex">',
+    );
+    expect(inlineBandTitleAsides(gated)).toEqual([{ tag: "ManagerPortalPageShell", gated: true }]);
   });
 
   it("a band-only shell renders the primary action once, from the band", () => {

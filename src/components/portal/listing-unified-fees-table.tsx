@@ -73,11 +73,27 @@ const FEE_CADENCE_SELECT_WIDTH = "w-full min-w-[6rem] max-w-[7.5rem]";
  * useful size: `px-3` (24px) + checkbox (14px) + gap (8px) + money-input floor (88px)
  * + gap (8px) + cadence-select floor (96px) = 238px ≈ 15rem. Short-term carries no
  * cadence select, so it floors 8.5rem.
+ *
+ * The remove column floors on what the Remove button MEASURES at, not on
+ * `FEE_REMOVE_BTN`: `Button` composes its base with a template literal rather than
+ * `cn`, so `px-2.5`/`text-xs` lose to the base `px-5`/`text-sm` and the button renders
+ * ~96px wide. Plus the cell's `px-3` (24px) that is 120px, so the track is 7.75rem
+ * (124px) — below that the button overflows leftward over the long-term column.
  */
 function feeGridCols(showShortTerm: boolean) {
   return showShortTerm
-    ? "grid-cols-[minmax(7rem,1.1fr)_minmax(8.5rem,1fr)_minmax(15rem,1.35fr)_4.5rem]"
-    : "grid-cols-[minmax(7rem,1.15fr)_minmax(15rem,1.65fr)_4.5rem]";
+    ? "grid-cols-[minmax(7rem,1.1fr)_minmax(8.5rem,1fr)_minmax(15rem,1.35fr)_7.75rem]"
+    : "grid-cols-[minmax(7rem,1.15fr)_minmax(15rem,1.65fr)_7.75rem]";
+}
+
+/**
+ * The table can never be narrower than the sum of its own column floors, and that sum
+ * depends on whether the short-term column is drawn: 7 + 8.5 + 15 + 7.75 = 38.25rem with
+ * it, 7 + 15 + 7.75 = 29.75rem without. Deriving it here rather than hard-coding the
+ * wider figure keeps a single-term listing from scrolling 8.5rem it does not use.
+ */
+function feeGridMinWidth(showShortTerm: boolean) {
+  return showShortTerm ? "min-w-[38.25rem]" : "min-w-[29.75rem]";
 }
 
 function feeColSpan(showShortTerm: boolean) {
@@ -109,7 +125,7 @@ function FeeMoneyInput({
   dataField?: string;
 }) {
   return (
-    <div className={cn("relative min-w-0", FEE_MONEY_INPUT_WIDTH)} data-wizard-field={dataField}>
+    <div className={cn("relative", FEE_MONEY_INPUT_WIDTH)} data-wizard-field={dataField}>
       <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs font-medium text-muted">
         $
       </span>
@@ -367,7 +383,7 @@ export function ListingUnifiedFeesTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <div className={cn("grid min-w-[35rem] text-sm", feeGridCols(showShortTerm))}>
+      <div className={cn("grid text-sm", feeGridMinWidth(showShortTerm), feeGridCols(showShortTerm))}>
         <FeeTableHeader showShortTerm={showShortTerm} />
 
         {sections.map((section) => (
