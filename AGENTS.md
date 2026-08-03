@@ -1157,11 +1157,47 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Lease templates + the anonymous listing payload | `docs/agents/lease-generation.md` | The public listing payload is an explicit ALLOWLIST (`publicListingProjection`) — a submission field reaches a prospect ONLY by being named there, and BOTH anonymous readers (`getPublicListings()` and `/api/public/property-lead`) must run through it. Lease templates live in the PRIVATE `lease-templates` bucket behind a stable `/api/portal/lease-template?path=…` URL that re-authorizes every request; never a public storage URL, never a persisted base64 `data:` URL. |
 | Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.proplane.local` accounts via the mirror, never a fictional fixture in code. |
-| Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. |
+| Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. `manager_property_records.manager_user_id` is `on delete set null`, so an OWNERLESS row is a real production state: it is never a create (an unauthorized account must not adopt it), the co-manager branch preserves that absence as `null` — `""` is not a uuid and Postgres 500s the whole save — and ownership still changes only via `transferPropertyOwnership`. See `src/app/api/property-records/route.ts` + `tests/unit/property-records-owner-not-reassignable.test.ts`. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
 | Inbound support email → admin inbox | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Receive-only — an in-app reply never emails the sender. Never widen the founder identity — attribute TO it. |
+
+## A consent tick must not outlive what it consented to
+
+Both lease gates — the review attestation (`uploaded-lease-review-modal.tsx`) and
+the e-signature affirmation (`lease-signing-modal.tsx`) — are mounted **without a
+`key` at a stable position** by every call site (`manager-residents.tsx`,
+`manager-leases-pipeline-panel.tsx`, `resident-lease-panel.tsx`). A new `parse` /
+`row` prop therefore RE-RENDERS rather than remounts, and `useState` initializers
+do not re-run. Nothing resets on its own.
+
+That shipped two ways to agree to something you never saw: retrying a failed
+parse carried the weaker "I have read the original PDF myself" tick onto the
+stronger "I have compared this against the original PDF. The terms above are
+correct", and a live `row` let a re-upload swap the document under an already
+ticked signing affirmation. `lease-execution-evidence.ts` hashes whatever is
+current AT signature time, so it records the substitution faithfully — **the
+evidence layer cannot catch this; the reset is the control.**
+
+Rules for any new consent/attestation control:
+
+- Reset the tick — and anything else staged against the old subject, such as the
+  review modal's `drafts`/`note`, which are submitted as human-confirmed
+  overrides — whenever a **content-derived** identity of what is being attested
+  to changes. Each component has a documented `…Subject()` helper; extend that
+  rather than adding a second scheme.
+- **Never key on object identity.** The pipeline re-syncs on a cadence and hands
+  back an equal-but-new object; clearing the box under a manager's fingers on a
+  background refresh is its own bug. Equally, keep the identity narrow enough
+  that an unrelated field (a new thread message) does not clear it.
+- **Reset during render**, not in an effect — an effect runs after paint, so the
+  new subject would be painted with the old consent still ticked.
+- A featureless parse is not a unique document: `pending`/`failed` carry
+  `sourceSha256: null`, no `extractedAtIso` and no fields, so identity must also
+  include the upload (`managerUploadedPdf` file name + `uploadedAt`).
+- Coverage: `tests/unit/uploaded-lease-attestation-carryover.test.tsx`,
+  `tests/unit/lease-signing-consent-carryover.test.tsx`.
 
 ## Per-room rent basis: monthly (default) vs daily
 

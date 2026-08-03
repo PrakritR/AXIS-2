@@ -54,6 +54,48 @@ function placementFor(row: LeasePipelineRow) {
   };
 }
 
+/**
+ * A stable description of WHAT the manager is being asked to attest to.
+ *
+ * The attestation is a legal statement about one document and one reading of
+ * it, so the tick must not survive either changing. Both call sites
+ * (`manager-residents.tsx`, `manager-leases-pipeline-panel.tsx`) render this
+ * modal without a `key` at a stable position, so a new `parse` prop re-renders
+ * rather than remounts — nothing resets on its own.
+ *
+ * Every part earns its place, and the two branches fail differently:
+ *
+ * - `status` — the branches ask for materially different things. `failed` says
+ *   "I have read the original PDF myself"; `parsed` says "I have compared this
+ *   against the original PDF. The terms above are correct." A retry that turns
+ *   one into the other must not arrive pre-ticked.
+ * - `sourceFileName` + the row's uploaded-PDF identity — a `failed` (or
+ *   `pending`) parse carries `sourceSha256: null`, no `extractedAtIso` and no
+ *   fields, so every failed parse otherwise looks alike and a tick made against
+ *   one unreadable document would carry onto a different one.
+ * - `sourceSha256` — which bytes the reading describes.
+ * - `extractedAtIso` — a re-read of the SAME bytes keeps the digest, so the
+ *   digest alone would miss a new reading of the same PDF.
+ * - the resolved field values — what "the terms above are correct" actually
+ *   points at, including stored overrides, since those change the value shown.
+ *
+ * Deliberately derived from CONTENT rather than object identity: the pipeline
+ * re-syncs on a cadence and hands back an equal-but-new `parse` object, and
+ * clearing the box under a manager's fingers on a background refresh would be
+ * its own bug.
+ */
+function attestationSubject(parse: UploadedLeaseParse, row: LeasePipelineRow): string {
+  return [
+    parse.status,
+    parse.sourceFileName,
+    row.managerUploadedPdf?.fileName ?? "",
+    row.managerUploadedPdf?.uploadedAt ?? "",
+    parse.sourceSha256 ?? "",
+    parse.extractedAtIso ?? "",
+    parse.fields.map((f) => `${f.key}:${f.status}:${resolvedFieldValue(f, parse.review).value}`).join("|"),
+  ].join("~");
+}
+
 /** PropLane's own value for a field, so the manager can spot a disagreement. */
 function proplaneValueFor(key: UploadedLeaseFieldKey, row: LeasePipelineRow): string {
   switch (key) {
@@ -92,6 +134,25 @@ export function UploadedLeaseReviewModal({
   const [note, setNote] = useState(parse.review.note ?? "");
   const [attested, setAttested] = useState(uploadedLeaseReviewIsConfirmed(parse));
   const [tab, setTab] = useState<"terms" | "document">("terms");
+
+  // Reset everything the manager staged whenever what they are attesting to
+  // changes. Done during render (React's documented "adjust state when props
+  // change" pattern) rather than in an effect on purpose: an effect runs after
+  // paint, so the stronger attestation would render ticked for a frame before
+  // clearing — on the gate whose entire job is to stop an un-agreed
+  // attestation. React re-runs this component immediately without committing.
+  const subject = attestationSubject(parse, row);
+  const [attestedSubject, setAttestedSubject] = useState(subject);
+  if (attestedSubject !== subject) {
+    setAttestedSubject(subject);
+    setAttested(uploadedLeaseReviewIsConfirmed(parse));
+    // `drafts` are submitted by `onConfirm` as overrides and badged "Manager
+    // entered", so carrying them would attribute a value to the manager that
+    // they never typed for this document; `note` is recorded as part of the
+    // confirmation. Both re-seed from the new parse, exactly like mount.
+    setDrafts({ ...(parse.review.overrides ?? {}) });
+    setNote(parse.review.note ?? "");
+  }
 
   const confirmed = uploadedLeaseReviewIsConfirmed(parse);
 

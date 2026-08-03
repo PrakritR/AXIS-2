@@ -49,6 +49,14 @@ vi.mock("@/lib/supabase/service", () => ({
       }),
       upsert: async (row: Record<string, unknown>) => {
         UPSERTS.push(row);
+        // Faithful to the column: `manager_user_id` is a uuid, and Postgres
+        // REJECTS a blank one rather than coercing it to null. Emulating that
+        // is what makes the orphaned-listing 500 reproducible here — a mock
+        // that accepts anything reports a cheerful 200 on a save that dies in
+        // production.
+        if (row.manager_user_id === "") {
+          return { error: { message: 'invalid input syntax for type uuid: ""' } };
+        }
         return { error: null };
       },
       delete: () => ({
@@ -236,5 +244,62 @@ describe("POST /api/property-records — an EXISTING ownerless row is not a crea
 
     expect(res.status).toBe(200);
     expect(UPSERTS[0].manager_user_id).toBe(OWNER);
+  });
+
+  /**
+   * The co-manager branch preserved the stored owner verbatim, and on an
+   * orphaned row that value is `""`. An empty string is not a uuid, so Postgres
+   * rejected the whole upsert and an ORDINARY save — a permitted co-manager
+   * editing a listing they have the `properties` edit grant on — came back 500.
+   */
+  it("lets a permitted co-manager save an orphaned listing instead of erroring", async () => {
+    CO_MANAGER_ACCESS = { ok: true };
+    getUser.mockResolvedValue({ data: { user: { id: CO_MANAGER } } });
+
+    const res = await post({
+      action: "upsert",
+      id: PROPERTY_ID,
+      managerUserId: CO_MANAGER,
+      status: "live",
+      propertyData: { id: PROPERTY_ID },
+    });
+
+    expect(res.status).toBe(200);
+    // The row stays ownerless — writing `""` is what broke, and writing
+    // `CO_MANAGER` would be the silent adoption this route was hardened against.
+    expect(UPSERTS[0].manager_user_id).toBeNull();
+  });
+
+  it("does not let a permitted co-manager adopt the orphaned listing", async () => {
+    CO_MANAGER_ACCESS = { ok: true };
+    getUser.mockResolvedValue({ data: { user: { id: CO_MANAGER } } });
+
+    await post({
+      action: "upsert",
+      id: PROPERTY_ID,
+      managerUserId: CO_MANAGER,
+      status: "live",
+      propertyData: { id: PROPERTY_ID },
+    });
+
+    expect(UPSERTS[0].manager_user_id).not.toBe(CO_MANAGER);
+    expect(UPSERTS[0].manager_user_id).not.toBe("");
+  });
+
+  it("never sends a blank uuid for any caller who reaches the upsert", async () => {
+    // The chokepoint before the write: whatever branch resolved the owner, the
+    // value handed to a uuid column is a uuid or `null`, never `""`.
+    for (const caller of [ADMIN, CO_MANAGER]) {
+      UPSERTS = [];
+      IS_ADMIN = caller === ADMIN;
+      CO_MANAGER_ACCESS = { ok: true };
+      getUser.mockResolvedValue({ data: { user: { id: caller } } });
+
+      const res = await post({ action: "upsert", id: PROPERTY_ID, status: "live", propertyData: {} });
+
+      expect(res.status).toBe(200);
+      expect(UPSERTS[0].manager_user_id === null || typeof UPSERTS[0].manager_user_id === "string").toBe(true);
+      expect(UPSERTS[0].manager_user_id).not.toBe("");
+    }
   });
 });

@@ -155,7 +155,13 @@ export async function POST(req: Request) {
     //    application/lease rows — kept showing the same houses. Ownership changes
     //    have exactly one door: `transferPropertyOwnership` (linked co-manager,
     //    audited, notifies both sides).
-    let ownerForWrite: string;
+    // `null` is a REAL value here, not "unknown": `manager_user_id` is
+    // `references auth.users(id) on delete set null`, so a deleted manager
+    // leaves live listings genuinely ownerless. It is never `""` — an empty
+    // string is not a uuid and Postgres rejects the whole upsert with
+    // `invalid input syntax for type uuid`, which surfaced as a 500 on an
+    // ordinary co-manager save.
+    let ownerForWrite: string | null;
     if (!existing) {
       // Creating a brand-new record. An admin may attribute it to a manager —
       // the admin inventory publishes on a manager's behalf — but a co-manager
@@ -182,7 +188,15 @@ export async function POST(req: Request) {
       if (!access.ok) {
         return NextResponse.json({ error: access.error }, { status: access.status });
       }
-      ownerForWrite = existingOwnerId;
+      // Preserve the stored owner verbatim, INCLUDING an absent one. The grant
+      // that authorized this write is the accepted link's
+      // `assigned_property_ids` — `assertCoManagerModuleAccess` never consults
+      // the owner — so an ownerless listing stays ownerless and the co-manager
+      // keeps their access through that grant. Writing `user.id` here instead
+      // would let a linked co-manager silently ADOPT an orphaned listing, which
+      // is exactly the transfer this route was hardened to prevent; ownership
+      // still has one door, `transferPropertyOwnership`.
+      ownerForWrite = existingOwnerId || null;
     }
 
     if (isDelete) {
@@ -200,10 +214,18 @@ export async function POST(req: Request) {
 
     if (!body.status) return NextResponse.json({ error: "status required" }, { status: 400 });
 
+    // One chokepoint between owner resolution and the uuid column. Every branch
+    // above already resolves to a uuid or an explicit `null`, so this only ever
+    // fires if a future branch reintroduces a blank — and a blank must become
+    // `null` (the row's true state) rather than a 500 on a routine save. It
+    // cannot launder a client-supplied owner: `body.managerUserId` only ever
+    // reaches `ownerForWrite` on the create and admin branches.
+    const managerUserIdForWrite = ownerForWrite?.trim() ? ownerForWrite.trim() : null;
+
     const { error } = await db.from("manager_property_records").upsert(
       {
         id,
-        manager_user_id: ownerForWrite,
+        manager_user_id: managerUserIdForWrite,
         status: body.status,
         row_data: body.rowData ?? null,
         property_data: body.propertyData ?? null,
