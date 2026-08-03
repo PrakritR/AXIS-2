@@ -1010,3 +1010,86 @@ reintroduce a local lookup.
 | `tests/unit/daily-rent-charges.test.ts` | the monthly charge path is unmoved (`$851.61`, `Rent — April 2026`, no `/day`) |
 | `tests/unit/lease-jurisdiction.test.ts` | address to jurisdiction, including the statewide fallbacks |
 | `tests/unit/generated-lease.test.ts` | long-form document content |
+
+## P9 long-term lease parity
+
+### Measured reference and generated-document gap list
+
+On 2026-08-02, the Seattle reference at
+`/Users/akhilvemuri/Downloads/FILE_6215.pdf` was extracted with `pdftotext` and
+read in full. The comparison target was a Seattle long-term room placement from
+the generated builder, using the same room, rent, utilities, deposit, move-in
+fee, and charge snapshot inputs used by the new unit coverage.
+
+| Reference topic | Result in generated long form |
+| --- | --- |
+| Lease Summary | Already present for branded Seattle leases with billing data. P9 adds Landlord and reads rent, utilities, total monthly payment, and payment due at signing from the billing snapshot. First partial month is one combined ledger-derived amount. |
+| Parties, premises, lease term, rent, deposits, returned payments, utilities, occupancy, shared spaces, rules, pets, maintenance, entry, assignment, insurance, default, early termination, payment order, notices, lead paint, governing law, attorney fees, application, schedule, signature, Addenda A-E | Already present, with stable tested order. |
+| Delivery of possession | Added. It states delayed-possession rent abatement and defers remedies to applicable law. The reference's fourteen-day termination interval is deliberately not copied. |
+| Early termination economics | Added only when the listing configures a break-lease fee or lease-up percentage. Continuing liability remains until replacement possession or end of term. |
+| Holdover | Added only when the listing configures a daily rate. It explicitly says the fixed term does not convert to month-to-month. |
+| Deposit labor and reissue fees | The deduction categories were present. Labor and reissue amounts now render only from optional listing fields. |
+| Move-in condition | Existing Addendum A supplies the area-by-area report. P9 removes the unrelated five-day default and makes a signed report supersede the baseline acknowledgement. |
+| Utility usage, trash, cleaning access | Existing usage language is retained. Trash fee is listing-configured; cleaning and access responsibilities are now explicit. |
+| Bathroom sharing, quiet hours, guest cap | Bathroom wording now derives from the room-to-bathroom listing assignment. Quiet hours and guest cap render only when configured. |
+| Safety devices and fire safety | Maintenance now includes smoke alarms, CO alarms, egress, and water-heater controls. Citations are optional config fields and are unset pending verification. |
+| Keys and access devices | Already present in Landlord Entry. |
+| Move-out and professional cleaning | Added only when the listing requires it. It requires a paid invoice and limits any deduction to a documented invoice and applicable law. |
+| Venue | Renders only from the optional listing venue field. |
+
+### New optional listing fields
+
+All fields below live on `ManagerListingSubmissionV1`. Empty, invalid, or absent values
+normalize to `undefined`. The builder omits the associated term rather than printing a
+zero, a default amount, or a term borrowed from another listing.
+
+| Field | Renders when set | Unset behavior |
+| --- | --- | --- |
+| `longTermBreakLeaseFee` | fixed early-termination fee | fee sentence absent |
+| `longTermLeaseUpFeePercent` | percentage lease-up fee | fee sentence absent |
+| `longTermHoldoverDailyRate` | daily holdover rate and no-conversion statement | whole holdover clause absent |
+| `longTermReturnedPaymentFee` | returned-payment fee | fee sentence absent; general actual-cost language remains |
+| `longTermDepositLaborRate` | manager labor rate in deposit deductions | generic documented-cost language |
+| `longTermDepositReissueFee` | stop-payment or refund reissue fee | sentence absent |
+| `longTermTrashViolationFee` | per-occurrence trash fee | fee sentence absent |
+| `longTermQuietHours` | quiet-hours rule and Addendum E rule | quiet-hours rule absent |
+| `longTermGuestCap` | gathering cap and Addendum E rule | cap rule absent |
+| `longTermDisputeVenue` | venue sentence | sentence absent |
+| `longTermProfessionalCleaningRequired` | professional-cleaning move-out section | whole move-out section absent |
+
+`lateFeeAmount` and `lateFeeEnabled` already existed. The long form uses the listing's
+configured late fee when supplied and omits the late-fee paragraph when it is disabled.
+The existing `monthToMonthSurcharge` is not rendered because the billing snapshot and
+household-charge ledger do not charge it.
+
+### Citations added in the template config
+
+P9 adds optional config slots only: `returnedPaymentStatuteRef`,
+`earlyTerminationStatuteRef`, `smokeAlarmStatuteRef`, and
+`carbonMonoxideAlarmStatuteRef`. No new citation value was populated. The reference PDF
+is a source for this manager's commercial terms, not verification for a state statute.
+The regression test proves an unset citation still renders the returned-payment clause
+without a Washington citation.
+
+### Deliberately deferred clauses
+
+- The reference's fourteen-day delayed-possession termination, its 14-day move-in report
+  deadline, detailed liability cap and indemnity, crime, package, parking, bike-storage
+  allocation, and the complete lettered maintenance list are not default platform terms.
+  They need manager-controlled data and legal review before they can be emitted.
+- The reference's Washington citations for late possession, early termination, smoke
+  alarms, CO alarms, and cure procedures were not added or inferred. A verified official
+  source is required before populating a jurisdiction config.
+- The disclosure rules engine owns lead-paint disclosure content. P9 does not add a second
+  disclosure or change its trigger.
+- These optional fields have a normalization and generation path, but the manager listing
+  form does not yet expose controls for them. They are therefore available to trusted listing
+  imports and persisted submissions only. A manager-facing configuration surface is required
+  before presenting these terms as self-serve product functionality.
+
+### P9 coverage
+
+`tests/unit/long-term-lease-parity.test.ts` pins the long-form heading order, configured
+amount movement, absence of all new commercial clauses when unset, California output with
+an unset citation, summary values sourced from the billing snapshot, and byte-identical
+short-term output when only long-term fields change.
