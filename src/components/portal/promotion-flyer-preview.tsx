@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import { Modal } from "@/components/ui/modal";
 import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
-import { X } from "lucide-react";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
 import { computeFlyerFit, type FlyerFit } from "@/lib/promotion-flyer-fit";

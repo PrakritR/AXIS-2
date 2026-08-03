@@ -4,7 +4,6 @@ import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { PortalPropertyFilter } from "@/components/portal/manager-section-shell";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalPageShell,
   PortalKpiTabStrip,
   PORTAL_KPI_LABEL,
   PORTAL_KPI_VALUE,

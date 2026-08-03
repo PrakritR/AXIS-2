@@ -153,7 +153,7 @@ describe("Button loading state", () => {
   it("does not inject a second child under asChild (Slot takes exactly one)", () => {
     render(
       <Button asChild loading>
-        <a href="/portal">Open</a>
+        <a href="https://example.test/open">Open</a>
       </Button>,
     );
     const link = screen.getByRole("link", { name: /open/i });

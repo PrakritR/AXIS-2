@@ -27,7 +27,6 @@ import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 import {
-  appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
   deleteInboxThreadIds,

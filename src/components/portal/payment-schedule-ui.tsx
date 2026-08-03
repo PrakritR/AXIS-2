@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
 import { CheckboxMultiSelect, FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
@@ -16,7 +16,6 @@ import {
 import {
   HOUSEHOLD_CHARGES_EVENT,
   isUnpaidHouseholdCharge,
-  parseMoneyAmount,
   readHouseholdCharges,
 } from "@/lib/household-charges";
 import {

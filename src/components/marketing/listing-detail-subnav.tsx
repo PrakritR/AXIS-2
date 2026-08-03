@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getPortalScrollRoot, syncPortalDetailDestinationOffset, syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
+import { getPortalScrollRoot, syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 
 type ListingSubnavMode = "page" | "modal" | "portal";
 

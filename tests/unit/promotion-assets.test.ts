@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   flattenPromotionAssets,
   makePromotionAssetId,
-  nextPromotionAssetDefaultTitle,
   promotionAssetListTitle,
   sortPromotionAssets,
 } from "@/lib/promotion-assets";

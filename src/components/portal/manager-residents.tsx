@@ -13,28 +13,21 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -142,7 +135,6 @@ import {
   runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
-  updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 import {
@@ -160,7 +152,7 @@ import {
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
@@ -191,7 +183,6 @@ import {
   EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildExistingResidentWelcomeEmailBody,
 } from "@/lib/existing-resident-welcome-email";
-import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {

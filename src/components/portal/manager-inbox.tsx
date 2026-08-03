@@ -366,8 +366,8 @@ export const ManagerInbox = forwardRef<
     // already clears it on tab change; clearing here would ALSO fire on mount —
     // when the parent has just selected a thread and mounted this pane — and
     // immediately wipe that selection back to "Select a conversation".
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     if (controlledExpandedId === undefined) setExpandedId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);

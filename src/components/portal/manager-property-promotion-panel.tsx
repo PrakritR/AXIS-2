@@ -70,7 +70,6 @@ import { type PromotionTextFormat } from "@/lib/promotion-text";
 import {
   fileToPromotionUpload,
   makePromotionUploadId,
-  readPromotionUploadEntries,
   type PromotionUploadEntry,
 } from "@/lib/promotion-upload";
 
