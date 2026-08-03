@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { formatProplaneIdForDisplay, proplaneIdLookupVariants } from "@/lib/manager-id";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Default lifetime for resident account-setup links emailed after apply / approval. */
@@ -34,7 +35,7 @@ export function residentSetupIdFromUrlParams(params: { get(name: string): string
 }
 
 export function buildResidentSetupHref(token: string, axisId: string): string {
-  const id = normalizeApplicationAxisId(axisId);
+  const id = formatProplaneIdForDisplay(normalizeApplicationAxisId(axisId));
   const params = new URLSearchParams({
     token: token.trim(),
     proplane_id: id,
@@ -113,7 +114,7 @@ export async function findApplicationForResidentSetup(
     return { ok: false, status: 400, error: "Setup link is missing required details." };
   }
 
-  const variants = [...new Set([params.axisId.trim(), axisId].filter(Boolean))];
+  const variants = proplaneIdLookupVariants(axisId);
   const { data, error } = await db
     .from("manager_application_records")
     .select("id, resident_email, row_data, manager_user_id")
@@ -216,9 +217,7 @@ export async function consumeResidentSetupTokenOnApplication(
 }
 
 function idVariants(id: string): string[] {
-  const trimmed = id.trim();
-  const normalized = normalizeApplicationAxisId(trimmed);
-  return [...new Set([trimmed, normalized].filter(Boolean))];
+  return proplaneIdLookupVariants(id);
 }
 
 /**

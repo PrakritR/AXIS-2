@@ -4,6 +4,7 @@
 
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { residentSetupAccountUrl } from "@/lib/auth/resident-setup-token";
+import { formatProplaneIdForDisplay } from "@/lib/manager-id";
 
 export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your PropLane resident portal — account setup";
 
@@ -14,10 +15,11 @@ export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your PropLane resident portal —
  */
 export function residentAccountCreationUrl(_origin: string, axisId: string, setupToken?: string): string {
   const base = resolveEmailLinkBaseUrl();
+  const displayId = formatProplaneIdForDisplay(axisId);
   if (setupToken?.trim()) {
-    return residentSetupAccountUrl(base, setupToken, axisId);
+    return residentSetupAccountUrl(base, setupToken, displayId);
   }
-  const id = axisId.trim();
+  const id = displayId.trim();
   const params = new URLSearchParams({ proplane_id: id });
   return `${base}/auth/resident-setup?${params.toString()}`;
 }
@@ -29,7 +31,7 @@ export function buildResidentWelcomeEmailBody(params: {
   signupUrl: string;
 }): string {
   const greeting = params.residentName?.trim() ? `Hi ${params.residentName.trim()},` : "Hi,";
-  const id = params.axisId.trim();
+  const id = formatProplaneIdForDisplay(params.axisId);
   return [
     greeting,
     "",
@@ -69,7 +71,7 @@ export function buildResidentWelcomeEmailHtml(params: {
   const greeting = params.residentName?.trim()
     ? `Hi ${escapeHtmlText(params.residentName.trim())},`
     : "Hi,";
-  const id = escapeHtmlText(params.axisId.trim());
+  const id = escapeHtmlText(formatProplaneIdForDisplay(params.axisId));
   const href = escapeHtmlAttr(params.signupUrl);
   const urlPlain = escapeHtmlText(params.signupUrl);
   /* Table-based CTA: best support across Gmail, Outlook, Apple Mail. */
@@ -104,7 +106,7 @@ function buildResidentWelcomeMailtoBody(params: {
   signupUrl: string;
 }): string {
   const greeting = params.residentName?.trim() ? `Hi ${params.residentName.trim()},` : "Hi,";
-  const id = params.axisId.trim();
+  const id = formatProplaneIdForDisplay(params.axisId);
   return [
     greeting,
     "",

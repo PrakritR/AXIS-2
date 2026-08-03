@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** Private bucket for portal Communication message attachments. */
 export const INBOX_ATTACHMENTS_BUCKET = "portal-inbox-attachments";
 
-const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "pdf"]);
 
 export function inboxAttachmentStoragePrefix(userId: string): string {
   return `${userId.trim()}/`;
@@ -31,6 +31,8 @@ export function contentTypeForInboxAttachmentPath(path: string): string {
       return "image/webp";
     case "gif":
       return "image/gif";
+    case "pdf":
+      return "application/pdf";
     default:
       return "image/jpeg";
   }
@@ -43,6 +45,7 @@ export function sanitizeInboxAttachmentExt(ext: unknown, mime: string): string |
     .replace(/[^a-z0-9]/g, "");
   if (ALLOWED_EXT.has(raw)) return raw;
   if (mime === "image/jpeg") return "jpg";
+  if (mime === "application/pdf") return "pdf";
   return null;
 }
 
