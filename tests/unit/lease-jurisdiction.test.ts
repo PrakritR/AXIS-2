@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { snapshotJordanLee } from "@/data/manager-application-snapshots";
 import { leaseContextFromApplication } from "@/lib/generated-lease";
 import {
+  CALIFORNIA_LEASE_CONFIG,
+  SAN_FRANCISCO_LEASE_CONFIG,
+  SEATTLE_LEASE_CONFIG,
+  WASHINGTON_LEASE_CONFIG,
+} from "@/lib/lease-templates/types";
+import {
   isLeaseGenerationSupported,
+  jurisdictionConfig,
+  jurisdictionRuleScopes,
+  resolveJurisdiction,
   resolveLeaseJurisdiction,
   unsupportedJurisdictionMessage,
 } from "@/lib/lease-jurisdiction";
@@ -87,5 +96,76 @@ describe("lease-jurisdiction", () => {
       "san_francisco",
     );
     expect(resolveLeaseJurisdiction({ listingProperty: { address: "1500 Pike St, Seattle, WA" } })).toBe("seattle");
+  });
+
+  it.each([
+    ["Fremont, California", "3200 Walnut Ave, Fremont, CA 94538", { state: "CA" }],
+    ["San Francisco, California", "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102", { state: "CA", city: "san_francisco" }],
+    ["Seattle, Washington", "1500 Pike St, Seattle, WA 98101", { state: "WA", city: "seattle" }],
+    ["Spokane, Washington", "808 W Spokane Falls Blvd, Spokane, WA 99201", { state: "WA" }],
+    ["Austin, Texas", "301 W 2nd St, Austin, TX 78701", null],
+  ])("resolves %s to the typed jurisdiction key", (_name, address, expected) => {
+    expect(resolveJurisdiction({ listingProperty: { address } })).toEqual(expected);
+  });
+
+  it("prefers structured property city and state fields before the joined address fallback", () => {
+    const key = resolveJurisdiction({
+      listingProperty: {
+        address: "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102",
+        city: "Fremont",
+        state: "CA",
+      },
+    });
+    expect(key).toEqual({ state: "CA" });
+    expect(jurisdictionConfig(key!)).not.toBeNull();
+  });
+
+  it("treats the listing property as authoritative when structured sources differ", () => {
+    expect(
+      resolveJurisdiction({
+        listingProperty: { city: "Spokane", state: "WA" },
+        submission: { city: "San Francisco", state: "CA" },
+      }),
+    ).toEqual({ state: "WA" });
+  });
+
+  it("does not select a city overlay when an address explicitly names another supported state", () => {
+    expect(resolveJurisdiction({ listingProperty: { address: "123 San Francisco St, Spokane, WA 99201" } })).toEqual({
+      state: "WA",
+    });
+    expect(resolveJurisdiction({ listingProperty: { address: "94105 Market St, Seattle, WA 98101" } })).toEqual({
+      state: "WA",
+      city: "seattle",
+    });
+  });
+
+  it("uses a joined city match when state is structured but city is omitted", () => {
+    expect(
+      resolveJurisdiction({
+        listingProperty: { address: "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102", state: "CA" },
+      }),
+    ).toEqual({ state: "CA", city: "san_francisco" });
+  });
+
+  it("selects the registered state config or verified city overlay", () => {
+    expect(jurisdictionConfig({ state: "CA" })).toBe(CALIFORNIA_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "CA", city: "san_francisco" })).toBe(SAN_FRANCISCO_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "WA" })).toBe(WASHINGTON_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "WA", city: "seattle" })).toBe(SEATTLE_LEASE_CONFIG);
+  });
+
+  it("maps jurisdiction keys to the disclosure catalog inheritance scopes", () => {
+    expect(jurisdictionRuleScopes({ state: "CA", city: "san_francisco" })).toEqual([
+      "federal",
+      "california",
+      "san_francisco",
+    ]);
+    expect(jurisdictionRuleScopes({ state: "CA" })).toEqual(["federal", "california"]);
+    expect(jurisdictionRuleScopes({ state: "WA", city: "seattle" })).toEqual([
+      "federal",
+      "washington",
+      "seattle",
+    ]);
+    expect(jurisdictionRuleScopes({ state: "WA" })).toEqual(["federal", "washington"]);
   });
 });
