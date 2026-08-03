@@ -1857,7 +1857,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" className="rounded-full" disabled={lookupBusy || atLinkCap}>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="rounded-full"
+                  loading={lookupBusy}
+                  disabled={lookupBusy || atLinkCap}
+                >
                   {lookupBusy ? "Checking…" : "Continue"}
                 </Button>
               </div>
