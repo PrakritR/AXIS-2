@@ -2,11 +2,7 @@
 
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import {
-  PortalInlineTitleBandContext,
-  PortalPageFooterActions,
-  PortalPageTitleBand,
-} from "@/components/portal/portal-section-action-row";
+import { PortalPageFooterActions, PortalPageTitleBand } from "@/components/portal/portal-section-action-row";
 import { Fragment, type ReactNode } from "react";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Select } from "@/components/ui/input";
@@ -666,7 +662,6 @@ export function ManagerPortalPageShell({
   const chromeShrink = viewportFillBody || pinChrome ? "shrink-0" : "";
   const bodyChildren = pinChrome ? renderPortalStickyBody(children) : children;
   return (
-    <PortalInlineTitleBandContext.Provider value={useInlineTitleBand}>
       <div
         className={cn(
           surfaceCard ? PORTAL_SECTION_SURFACE : PORTAL_PAGE_SHELL_BARE,
@@ -768,7 +763,6 @@ export function ManagerPortalPageShell({
           <PortalPageFooterActions className="md:hidden">{titleAside}</PortalPageFooterActions>
         ) : null}
       </div>
-    </PortalInlineTitleBandContext.Provider>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import { PAGE_HEADER_COUNT_CLASS, PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
@@ -79,19 +79,6 @@ export function PortalPageTitleBand({
   );
 }
 
-/**
- * Set by `ManagerPortalPageShell` when its inline {@link PortalPageTitleBand} renders at
- * EVERY breakpoint (the `useInlineTitleBand` path). The band already carries the filter and
- * primary actions on phones, so a {@link PortalPageHeaderMobileActionsRow} rendered inside
- * one draws the same controls a second time.
- *
- * That is not hypothetical: it shipped to production as two overlapping "Apply to property"
- * buttons on resident Applications and two "Schedule a tour" on resident Tour. The context is
- * the mechanical backstop — a section can no longer reintroduce the duplicate by passing a
- * mobile actions row that its title band already covers.
- */
-export const PortalInlineTitleBandContext = createContext(false);
-
 /** Mobile — filter + primary actions grouped on the right (below the nav title). */
 export function PortalPageHeaderMobileActionsRow({
   filter,
@@ -102,8 +89,6 @@ export function PortalPageHeaderMobileActionsRow({
   actions?: ReactNode;
   className?: string;
 }) {
-  const insideInlineTitleBand = useContext(PortalInlineTitleBandContext);
-  if (insideInlineTitleBand) return null;
   if (!filter && !actions) return null;
 
   return (
