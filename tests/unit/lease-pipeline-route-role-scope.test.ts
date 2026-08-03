@@ -59,6 +59,7 @@ vi.mock("@/lib/supabase/service", () => ({ createSupabaseServiceRoleClient: () =
 vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: (...a: unknown[]) => isAdminUser(...(a as [])) }));
 vi.mock("@/lib/auth/portal-access", () => ({
   ACTIVE_PORTAL_COOKIE: "axis_active_portal",
+  hasRole: (ctx: { roles: string[] }, role: string) => ctx.roles.includes(role),
   getPortalAccessContext: async () => ({
     user: null,
     profile: null,
@@ -69,6 +70,7 @@ vi.mock("@/lib/auth/portal-access", () => ({
 vi.mock("@/lib/auth/manager-lease-scope", () => ({
   fetchLeasesForManagerUser: (...a: unknown[]) => fetchLeasesForManagerUser(...(a as [])),
   managerCanAccessLeaseRecord: async () => true,
+  managerMayFileLeaseUnderProperty: async () => ({ ok: true, allowed: true }),
 }));
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,

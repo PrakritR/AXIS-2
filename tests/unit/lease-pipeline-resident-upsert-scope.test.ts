@@ -23,6 +23,9 @@ const isAdminUser = vi.fn(async () => false);
 const upsert = vi.fn(async () => ({ error: null }));
 const deleteEq = vi.fn(async () => ({ error: null }));
 const managerCanAccessLeaseRecord = vi.fn(async () => true);
+const managerMayFileLeaseUnderProperty = vi.fn(async () => ({ ok: true, allowed: true }) as
+  | { ok: true; allowed: boolean }
+  | { ok: false; error: string });
 
 let PROFILE: { email: string; role: string | null } | null = null;
 let PROFILE_ROLES: string[] = [];
@@ -47,6 +50,7 @@ vi.mock("@/lib/supabase/service", () => ({ createSupabaseServiceRoleClient: () =
 vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: (...a: unknown[]) => isAdminUser(...(a as [])) }));
 vi.mock("@/lib/auth/portal-access", () => ({
   ACTIVE_PORTAL_COOKIE: "axis_active_portal",
+  hasRole: (ctx: { roles: string[] }, role: string) => ctx.roles.includes(role),
   getPortalAccessContext: async () => ({
     user: null,
     profile: null,
@@ -57,6 +61,7 @@ vi.mock("@/lib/auth/portal-access", () => ({
 vi.mock("@/lib/auth/manager-lease-scope", () => ({
   fetchLeasesForManagerUser: async () => [],
   managerCanAccessLeaseRecord: (...a: unknown[]) => managerCanAccessLeaseRecord(...(a as [])),
+  managerMayFileLeaseUnderProperty: (...a: unknown[]) => managerMayFileLeaseUnderProperty(...(a as [])),
 }));
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,
@@ -127,6 +132,7 @@ beforeEach(() => {
   RECORD_EXISTS = true;
   isAdminUser.mockResolvedValue(false);
   managerCanAccessLeaseRecord.mockResolvedValue(true);
+  managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true });
   upsert.mockResolvedValue({ error: null });
   getUser.mockResolvedValue({ data: { user: { id: RESIDENT_ID, email: RESIDENT_EMAIL } }, error: null });
 });
@@ -317,6 +323,164 @@ describe("portal-lease-pipeline admin — unchanged", () => {
     const deleted = await post({ action: "delete", id: LEASE_ID });
     expect(deleted.status).toBe(200);
     expect(deleteEq).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Naming ANOTHER person as the resident is a manager capability. The create
+ * branch was otherwise merely "not admin, not resident", which a vendor — or an
+ * authenticated account with no profile row and no roles — also satisfies.
+ */
+describe("portal-lease-pipeline CREATE — only a manager may name someone else", () => {
+  const plant = () =>
+    post({
+      action: "upsert",
+      row: {
+        id: "lease_app_planted",
+        residentEmail: "victim@example.com",
+        status: "Fully Signed",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+  beforeEach(() => {
+    RECORD_EXISTS = false;
+  });
+
+  it("refuses a vendor-role account", async () => {
+    PROFILE = { email: "vendor@example.com", role: "vendor" };
+    PROFILE_ROLES = [];
+    PORTAL_ROLES = ["vendor"];
+    EFFECTIVE_ROLE = "vendor";
+    getUser.mockResolvedValue({ data: { user: { id: "vendor-user", email: "vendor@example.com" } }, error: null });
+
+    const res = await plant();
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Only a property manager can create a lease record." });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses an authenticated account with no profile row and no roles", async () => {
+    PROFILE = null;
+    PROFILE_ROLES = [];
+    PORTAL_ROLES = [];
+    EFFECTIVE_ROLE = null;
+    getUser.mockResolvedValue({ data: { user: { id: "drifter", email: "drifter@example.com" } }, error: null });
+
+    const res = await plant();
+    expect(res.status).toBe(403);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("still lets a real manager create a lease naming their tenant", async () => {
+    PROFILE = { email: "manager@example.com", role: "manager" };
+    PROFILE_ROLES = ["manager"];
+    PORTAL_ROLES = ["manager"];
+    EFFECTIVE_ROLE = "manager";
+    getUser.mockResolvedValue({ data: { user: { id: OWNER_MANAGER, email: "manager@example.com" } }, error: null });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "prop-1" },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe("tenant@example.com");
+    expect(written.manager_user_id).toBe(OWNER_MANAGER);
+  });
+
+  it("leaves admin unchanged", async () => {
+    PROFILE = { email: "admin@example.com", role: "admin" };
+    PROFILE_ROLES = [];
+    PORTAL_ROLES = ["admin"];
+    EFFECTIVE_ROLE = "admin";
+    isAdminUser.mockResolvedValue(true);
+    getUser.mockResolvedValue({ data: { user: { id: "admin-user", email: "admin@example.com" } }, error: null });
+
+    const res = await plant();
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe("victim@example.com");
+  });
+});
+
+/**
+ * `property_id` is a scope SELECTOR, not a resident field:
+ * `fetchLeasesForManagerUser` pulls every row whose property is in the caller's
+ * linked set, so naming a stranger's property moves the row into their pipeline.
+ */
+describe("portal-lease-pipeline — client-named property_id is validated against ownership", () => {
+  beforeEach(() => {
+    PROFILE = { email: "manager@example.com", role: "manager" };
+    PROFILE_ROLES = ["manager"];
+    PORTAL_ROLES = ["manager"];
+    EFFECTIVE_ROLE = "manager";
+    getUser.mockResolvedValue({ data: { user: { id: OWNER_MANAGER, email: "manager@example.com" } }, error: null });
+  });
+
+  it("refuses an update that moves the lease onto a property the caller neither owns nor is linked to", async () => {
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, propertyId: "someone-elses-property" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "That property is not yours to file a lease under." });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses a create naming a property the caller neither owns nor is linked to", async () => {
+    RECORD_EXISTS = false;
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "someone-elses-property" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("allows a property the ownership check accepts — owner or co-manager alike", async () => {
+    RECORD_EXISTS = false;
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "linked-prop" },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.property_id).toBe("linked-prop");
+  });
+
+  it("does not re-validate an unchanged property, so a deleted property still saves", async () => {
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, propertyId: STORED.property_id },
+    });
+
+    expect(res.status).toBe(200);
+    expect(managerMayFileLeaseUnderProperty).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the ownership lookup errors", async () => {
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: false, error: "boom" });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, propertyId: "another-property" },
+    });
+
+    expect(res.status).toBe(500);
+    expect(upsert).not.toHaveBeenCalled();
   });
 });
 
