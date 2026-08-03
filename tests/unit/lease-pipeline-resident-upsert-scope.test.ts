@@ -535,6 +535,7 @@ describe("portal-lease-pipeline — one plan per id in a batch", () => {
   });
 
   it("auto-files once when one replace batch carries the same id twice", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA, generatedHtml: "<p>Lease</p>" };
     const signed = {
       id: LEASE_ID,
       residentEmail: RESIDENT_EMAIL,
@@ -584,6 +585,27 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
     expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 
+  /**
+   * `fullySignedAt` alone is what auto-file keys on, so a payload carrying it
+   * with NO signature object used to slip past a signature-keyed guard and
+   * still render into the owner's library. One predicate now answers both.
+   */
+  it("refuses a body change carrying only fullySignedAt, with no signature object", async () => {
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>arbitrary</p>",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+    expect(res.status).toBe(409);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
   it("still lets the resident countersign the document the manager authored", async () => {
     const res = await post({
       action: "upsert",
@@ -620,6 +642,57 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
     });
 
     expect(res.status).toBe(200);
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `syncApprovedApplications` seeds the existing-resident onboarding row —
+   * both signatures, the manager's off-platform PDF, `externallySignedLease` —
+   * onto a row that carries NO document yet, and that materialization runs in
+   * the RESIDENT's browser too. Filling an absent body with an already-executed
+   * paper lease is not authoring one, so it must still sync.
+   */
+  it("still lets the resident's browser seed an externally-signed onboarding lease", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: null,
+        managerUploadedPdf: {
+          dataUrl: "data:application/pdf;base64,PAPER",
+          fileName: "signed-lease.pdf",
+          uploadedAt: "2026-05-01T00:00:00Z",
+        },
+        managerSignature: { role: "manager", name: "Property Manager", signedAtIso: "2026-05-01T00:00:00Z" },
+        residentSignature: { role: "resident", name: "Resident", signedAtIso: "2026-05-01T00:00:00Z" },
+        signatureName: "Resident",
+        signedAtIso: "2026-05-01T00:00:00Z",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+        externallySignedLease: true,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(autoFileLeaseDocument).toHaveBeenCalledTimes(1);
+  });
+
+  /** The carve-out is for an off-platform PDF, never for newly introduced HTML. */
+  it("does not let the externallySignedLease flag smuggle in a generated body", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>arbitrary</p>",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+        externallySignedLease: true,
+      },
+    });
+
+    expect(res.status).toBe(409);
     expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 });
