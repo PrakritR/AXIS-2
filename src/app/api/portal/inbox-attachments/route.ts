@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
   INBOX_ATTACHMENTS_BUCKET,
+  contentDispositionForInboxAttachmentPath,
   contentTypeForInboxAttachmentPath,
   inboxAttachmentServeUrl,
   inboxAttachmentStoragePrefix,
   isInboxAttachmentPath,
   sanitizeInboxAttachmentExt,
+  sanitizeInboxAttachmentFileName,
   userCanAccessInboxAttachment,
 } from "@/lib/inbox-attachments.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
@@ -59,9 +61,21 @@ export async function GET(req: Request) {
     return new NextResponse(bytes, {
       headers: {
         "Content-Type": contentTypeForInboxAttachmentPath(path),
-        "Content-Disposition": `inline; filename="${path.split("/").pop()?.replace(/"/g, "") ?? "attachment"}"`,
+        // NEVER `inline`. These bytes are attacker-controllable — any authenticated
+        // user can upload one and send it to anyone — and this route answers on the
+        // APP's own origin, so an inline response is a same-origin document under
+        // the uploader's control. That was survivable only while every allowed type
+        // was an inert raster image; `application/pdf` (an active document format
+        // that runs in whatever handler the browser has registered) made it a real
+        // escalation. The disposition deliberately does NOT branch on content type,
+        // so widening ALLOWED_MIME again can never silently reopen this.
+        "Content-Disposition": contentDispositionForInboxAttachmentPath(path),
         "Cache-Control": "private, no-store",
+        // Defense in depth if a client ever ignores the disposition: no scripts, no
+        // subresources, no form posts, opaque origin, and not loadable cross-site.
+        "Content-Security-Policy": "default-src 'none'; sandbox; base-uri 'none'; form-action 'none'",
         "X-Content-Type-Options": "nosniff",
+        "Cross-Origin-Resource-Policy": "same-origin",
       },
     });
   } catch {
@@ -81,7 +95,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Too many uploads. Please slow down." }, { status: 429 });
     }
 
-    const body = (await req.json()) as { dataUrl?: string; ext?: string };
+    const body = (await req.json()) as { dataUrl?: string; ext?: string; fileName?: string };
     const dataUrl = body.dataUrl;
     if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
       return NextResponse.json({ error: "dataUrl required." }, { status: 400 });
@@ -109,7 +123,10 @@ export async function POST(req: Request) {
     if (!ext) {
       return NextResponse.json({ error: "Invalid file extension." }, { status: 400 });
     }
-    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${randomUUID()}.${ext}`;
+    // `<userId>/<ts>-<uuid>/<original name>` — the uuid segment keeps the key
+    // unique, the last segment preserves the uploader's file name so the chip in
+    // a message bubble can show it. Ownership checks still read `path[0]`.
+    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${randomUUID()}/${sanitizeInboxAttachmentFileName(body.fileName, ext)}`;
     const db = createSupabaseServiceRoleClient();
     const { error } = await db.storage.from(INBOX_ATTACHMENTS_BUCKET).upload(path, bytes, {
       contentType: mime,

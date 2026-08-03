@@ -935,8 +935,13 @@ export function PortalCalendarPanels({
         className="absolute inset-0 modal-overlay"
         onClick={closeSelectedBlock}
       />
+      {/* The height cap and `overflow-y-auto` are load-bearing, not styling: the
+          parent is `fixed inset-0` (so the PAGE cannot scroll) and `.modal-panel`
+          sets no cap of its own. Without them a tour inquiry carrying
+          name/email/phone/property/room/notes renders taller than a 667px phone
+          and the Approve/Delete row is simply unreachable. */}
       <div
-        className="modal-panel relative z-[81] w-full max-w-[420px] rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
+        className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">

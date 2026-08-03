@@ -331,9 +331,18 @@ export const ManagerInbox = forwardRef<
     if (embeddedInCommunication) onTabCountsChange?.(counts);
   }, [counts, embeddedInCommunication, onTabCountsChange]);
 
+  // Resident-scoped chat (Residents → detail → Communication) has no list pane to
+  // pick from, so this effect IS the selection: it opens the newest conversation
+  // that belongs to the active view. `tabId` is the archived toggle here —
+  // "trash" is the archived view and must select an ARCHIVED thread, every other
+  // tab a live one; selecting across the two would show a live conversation under
+  // "Archived". The tab-change reset below must not run in this mode or it
+  // clobbers this in the same commit — see the comment there.
   useEffect(() => {
     if (!residentEmailNorm || controlledExpandedId !== undefined) return;
-    const candidates = emailThreads.filter((t) => t.folder !== "trash" || tabId === "trash");
+    const candidates = emailThreads.filter((t) =>
+      tabId === "trash" ? t.folder === "trash" : t.folder !== "trash",
+    );
     if (candidates.length === 0) {
       setInternalExpandedId(null);
       return;
@@ -397,7 +406,12 @@ export const ManagerInbox = forwardRef<
     // already clears it on tab change; clearing here would ALSO fire on mount —
     // when the parent has just selected a thread and mounted this pane — and
     // immediately wipe that selection back to "Select a conversation".
-    if (controlledExpandedId === undefined) setExpandedId(null);
+    // In RESIDENT-SCOPED mode the auto-select effect above owns selection and has
+    // already picked the right thread for the new tab in THIS commit; this effect
+    // is declared later so its `null` would win and nothing would ever open
+    // (clicking "Archived (1)" landed on a blank pane). There is no list to strand
+    // in that mode either — the pane is the whole surface.
+    if (controlledExpandedId === undefined && !embeddedResidentChat) setExpandedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId]);
 

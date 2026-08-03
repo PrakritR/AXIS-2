@@ -46,7 +46,7 @@ export async function uploadInboxAttachment(file: File): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ dataUrl, ext: "pdf" }),
+      body: JSON.stringify({ dataUrl, ext: "pdf", fileName: file.name }),
     });
     const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
     if (!res.ok || !body.url) {
@@ -66,7 +66,11 @@ export async function uploadInboxAttachment(file: File): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ dataUrl, ext: file.name.split(".").pop() ?? undefined }),
+    body: JSON.stringify({
+      dataUrl,
+      ext: file.name.split(".").pop() ?? undefined,
+      fileName: file.name,
+    }),
   });
   const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
   if (!res.ok || !body.url) {
@@ -75,10 +79,33 @@ export async function uploadInboxAttachment(file: File): Promise<string> {
   return body.url;
 }
 
+/** Storage path carried by an inbox-attachment serve URL (`""` when it has none). */
+export function inboxAttachmentPathFromServeUrl(url: string): string {
+  try {
+    return new URL(url, "http://localhost").searchParams.get("path")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Label shown on an attachment chip.
+ *
+ * The uploader's file name is the LAST segment of the storage key (see
+ * `sanitizeInboxAttachmentFileName`), so it must be read out of `?path=` — the
+ * URL's own last path segment is the route name, not the file. Sender-side and
+ * recipient-side chips both go through here so they can never disagree.
+ */
+export function inboxAttachmentDisplayName(url: string): string | undefined {
+  const fromPath = inboxAttachmentPathFromServeUrl(url).split("/").pop()?.trim();
+  if (fromPath) return fromPath;
+  const fromUrl = url.split("/").pop()?.split("?")[0]?.trim();
+  return fromUrl || undefined;
+}
+
 export function attachmentMetaFromUrls(urls: string[]): { url: string; name?: string }[] {
   return urls.map((url) => {
-    const raw = decodeURIComponent(url.split("path=")[1]?.split("&")[0] ?? "");
-    const name = raw.split("/").pop()?.trim() || url.split("/").pop()?.split("?")[0]?.trim();
+    const name = inboxAttachmentDisplayName(url);
     return name ? { url, name } : { url };
   });
 }

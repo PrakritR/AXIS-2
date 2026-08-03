@@ -40,7 +40,7 @@ import {
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { TabItem } from "@/components/ui/tabs";
 import type { InboxThreadMessage } from "@/lib/portal-inbox-storage";
-import { INBOX_ATTACHMENT_ACCEPT } from "@/lib/inbox-attachments";
+import { INBOX_ATTACHMENT_ACCEPT, inboxAttachmentPathFromServeUrl } from "@/lib/inbox-attachments";
 
 /** Same chrome as other portal data tables */
 export const PORTAL_INBOX_TABLE_WRAP = PORTAL_DATA_TABLE_WRAP;
@@ -561,9 +561,15 @@ export type InboxBubbleMessage = {
   attachments?: { url: string; name?: string }[];
 };
 
-function inboxAttachmentLooksLikePdf(att: { url: string; name?: string }): boolean {
-  const label = `${att.name ?? ""} ${att.url}`.toLowerCase();
-  return label.includes(".pdf");
+/**
+ * Suffix, never substring: an image named `floorplan.pdf.png` is a PNG, and a
+ * substring test rendered it as a document link instead of a preview. Matches
+ * how `InboxComposer` decides below (`/\.pdf$/i` on the file name).
+ */
+export function inboxAttachmentLooksLikePdf(att: { url: string; name?: string }): boolean {
+  const name = att.name?.trim();
+  if (name) return /\.pdf$/i.test(name);
+  return /\.pdf$/i.test(inboxAttachmentPathFromServeUrl(att.url) || att.url.split("?")[0] || "");
 }
 
 /** Small omnichannel channel tag rendered on a bubble / scheduled card. */

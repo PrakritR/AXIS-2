@@ -1020,9 +1020,20 @@ export function ManagerResidents({
     ? activeDetailTab
     : (residentDetailTabsAvailable[0] ?? "payments");
 
+  // `threadReading` must stay FALSE here. Under
+  // `html[data-communication-thread-reading]` globals.css hides the mobile nav
+  // bar and locks `#portal-main-content` to the viewport with `overflow:hidden`,
+  // which is only survivable on a surface that renders the inbox back header —
+  // and this one deliberately does not: `ManagerResidentDetailInbox` passes no
+  // `controlledExpandedId`, so `ManagerInbox` sets `onBack={undefined}` and the
+  // resident-detail chrome (Back to residents + the profile tab strip) is the
+  // only way out. With the lock on, that chrome and the composer are both pushed
+  // outside a page that can no longer scroll, so the manager is stranded on a
+  // phone. globals.css already assumes this: its resident-detail Communication
+  // rules are scoped `:not([data-communication-thread-reading])`.
   useCommunicationSurfaceChrome({
     active: Boolean(residentIdProp && resolvedDetailTab === "communication"),
-    threadReading: true,
+    threadReading: false,
   });
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
@@ -2874,6 +2885,11 @@ export function ManagerResidents({
           dataAttrBack="resident-detail-back"
           actions={residentProfileHeaderActions}
           inlineActions
+          // Communication is a fill-height chat that scrolls internally; every
+          // other tab flows. Without this the chat has no bounded height, so it
+          // overflows the clipped Communication surface and shoves the back
+          // button and the profile tabs off a page that cannot scroll.
+          fillBody={resolvedDetailTab === "communication"}
         >
           {residentDetailPanel}
         </PortalRecordDetailPage>
