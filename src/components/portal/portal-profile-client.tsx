@@ -221,7 +221,7 @@ export function PortalProfileClient({
 
   return (
     <div className="relative z-0 w-full min-w-0">
-      <div className="mb-8">
+      <div className="mb-8 max-md:hidden">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <p className="mt-1 text-sm text-muted">Manage your account settings and preferences.</p>
       </div>
