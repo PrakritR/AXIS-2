@@ -125,7 +125,9 @@ import {
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
-  managerUploadLeasePdf,
+  confirmUploadedLeaseParse,
+  leaseAwaitsUploadedLeaseReview,
+  UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   readLeasePipeline,
   residentCanViewLeaseRow,
   sendLeaseBackToManager,
@@ -137,6 +139,9 @@ import {
   residentHasSignedLease,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
+import { uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
+import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
+import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   deleteManagerWorkOrdersForResident,
@@ -316,6 +321,7 @@ export function ManagerResidents({
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
+  const [importReviewLeaseId, setImportReviewLeaseId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -853,6 +859,12 @@ export function ManagerResidents({
     if (!selected?.email) return [];
     return readChargesForManagerResident(selected.email, userId ?? null);
   }, [selected, hcTick, userId]);
+
+  const importReviewLease = useMemo<LeasePipelineRow | null>(() => {
+    void leaseTick;
+    if (!importReviewLeaseId) return null;
+    return readLeasePipeline(userId).find((row) => row.id === importReviewLeaseId) ?? null;
+  }, [importReviewLeaseId, leaseTick, userId]);
 
   const residentLease = useMemo<LeasePipelineRow | null>(() => {
     void leaseTick;
@@ -2338,7 +2350,10 @@ export function ManagerResidents({
         sendToResidentBusy={leaseSendBusy}
         sendToResidentDisabled={
           !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
-          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl) ||
+          // An imported lease is not signable until a person has confirmed the
+          // extraction. `sendLeaseToResident` refuses too; this is the affordance.
+          leaseAwaitsUploadedLeaseReview(residentLease)
         }
         onMoveToManagerReview={() => {
           const moveResult = sendLeaseBackToManager(residentLease.id, userId);
@@ -2364,16 +2379,26 @@ export function ManagerResidents({
         generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
         onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
         uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
+        onReviewImportedLease={() => setImportReviewLeaseId(residentLease.id)}
         onUploadPdf={async (file) => {
           setUploadingLeaseRowId(residentLease.id);
-          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+          const result = await uploadAndParseLeasePdf(residentLease.id, file, userId);
           setUploadingLeaseRowId(null);
-          if (result.ok) {
-            setLeaseTick((n) => n + 1);
-            showToast("Lease PDF uploaded.");
-          } else {
+          if (!result.ok) {
             showToast(result.error ?? "Upload failed.");
+            return;
           }
+          setLeaseTick((n) => n + 1);
+          if (!result.parse) {
+            showToast("Lease PDF uploaded.");
+            return;
+          }
+          setImportReviewLeaseId(residentLease.id);
+          showToast(
+            result.parse.status === "parsed"
+              ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+              : `Lease PDF uploaded, but PropLane could not read its text. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+          );
         }}
         deleteLabel="Delete lease"
         deleteDataAttr="resident-lease-delete"
@@ -2802,6 +2827,28 @@ export function ManagerResidents({
           signerRoleLabel="Manager / authorized agent name"
           onSign={handleManagerModalSign}
           onClose={() => setSigningLease(null)}
+        />
+      ) : null}
+      {importReviewLease?.uploadedLeaseParse ? (
+        <UploadedLeaseReviewModal
+          open
+          row={importReviewLease}
+          parse={importReviewLease.uploadedLeaseParse}
+          onClose={() => setImportReviewLeaseId(null)}
+          onConfirm={({ overrides, note }) => {
+            const result = confirmUploadedLeaseParse(importReviewLease.id, {
+              managerUserId: userId,
+              overrides: overrides as Partial<Record<UploadedLeaseFieldKey, string>>,
+              note,
+            });
+            if (!result.ok) {
+              showToast(result.error ?? "Could not confirm the imported lease.");
+              return;
+            }
+            setLeaseTick((n) => n + 1);
+            setImportReviewLeaseId(null);
+            showToast("Imported lease confirmed. It can now be sent for signature.");
+          }}
         />
       ) : null}
       {residentIdProp && selected ? (

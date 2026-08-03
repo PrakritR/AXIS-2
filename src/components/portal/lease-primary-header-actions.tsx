@@ -222,6 +222,8 @@ type LeasePrimaryHeaderActionsProps = {
   generateLeaseTitle?: string;
   onUploadPdf?: (file: File) => Promise<void>;
   uploadPdfBusy?: boolean;
+  /** Opens the imported-lease review. Shown whenever the row carries a parse. */
+  onReviewImportedLease?: () => void;
   canEditDocument?: boolean;
   downloadDataAttr?: string;
   signManagerDataAttr?: string;
@@ -256,6 +258,7 @@ export function LeasePrimaryHeaderActions({
   generateLeaseTitle,
   onUploadPdf,
   uploadPdfBusy = false,
+  onReviewImportedLease,
   canEditDocument = false,
   downloadDataAttr = "lease-primary-download",
   signManagerDataAttr = "lease-primary-sign-manager",
@@ -276,6 +279,11 @@ export function LeasePrimaryHeaderActions({
   const showMoveToReview = row.status === "Resident Signature Pending" && Boolean(onMoveToManagerReview);
   const showGenerate = canEditDocument && Boolean(onGenerateLease);
   const showUpload = canEditDocument && Boolean(onUploadPdf);
+  // Not gated on `canEditDocument`: once a lease is out for signature the
+  // manager can no longer replace the document, but they must still be able to
+  // read what PropLane extracted from it.
+  const showReviewImport = Boolean(row.uploadedLeaseParse) && Boolean(onReviewImportedLease);
+  const importNeedsReview = row.uploadedLeaseParse?.review.status !== "confirmed";
 
   const compactBtnClass = cn(btnClass, FOOTER_ACTION_BTN);
   const deleteBtnClass = cn(
@@ -457,6 +465,29 @@ export function LeasePrimaryHeaderActions({
       });
     }
 
+    if (showReviewImport) {
+      const label = importNeedsReview ? "Review import" : "Imported lease";
+      actions.push({
+        id: "review-import",
+        button: (
+          <Button
+            type="button"
+            variant={importNeedsReview ? "primary" : "outline"}
+            className={compactBtnClass}
+            data-attr="lease-primary-review-import"
+            onClick={onReviewImportedLease}
+          >
+            {label}
+          </Button>
+        ),
+        menuItem: (
+          <DropdownMenuItem data-attr="lease-primary-review-import" onClick={onReviewImportedLease}>
+            {label}
+          </DropdownMenuItem>
+        ),
+      });
+    }
+
     if (showUpload) {
       actions.push({
         id: "upload",
@@ -536,6 +567,9 @@ export function LeasePrimaryHeaderActions({
     generateLeaseTitle,
     onGenerateLease,
     uploadPdfBusy,
+    showReviewImport,
+    importNeedsReview,
+    onReviewImportedLease,
     deleteDataAttr,
     deleteLabel,
   ]);
