@@ -26,13 +26,14 @@ import {
 } from "./domains/automation";
 import {
   listLeasesTool,
+  listLeaseSectionsTool,
   amendLeaseTool,
   voidLeaseTool,
   sendLeaseForSignatureTool,
   createLeaseDraftTool,
   updateLeaseDraftTool,
   updateLeasePacketTool,
-  updateLeaseDocumentSectionsTool,
+  proposeLeaseSectionEditTool,
 } from "./domains/leases";
 import {
   listWorkOrdersTool,
@@ -129,6 +130,7 @@ export const agentRegistry = buildRegistry([
   getOverdueChargesTool,
   listChargesTool,
   listLeasesTool,
+  listLeaseSectionsTool,
   listWorkOrdersTool,
   suggestVendorsForWorkOrderTool,
   listWorkOrderBidsTool,
@@ -205,7 +207,7 @@ export const agentRegistry = buildRegistry([
   createLeaseDraftTool,
   updateLeaseDraftTool,
   updateLeasePacketTool,
-  updateLeaseDocumentSectionsTool,
+  proposeLeaseSectionEditTool,
   amendLeaseTool,
   voidLeaseTool,
   sendLeaseForSignatureTool,

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { getLeaseDocumentHtml, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
-import { injectLeasePreviewSectionMarkers } from "@/lib/lease-html-sections";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
 
@@ -20,9 +19,6 @@ type Props = {
   fill?: boolean;
   /** Grow to fill the parent while keeping the lease document label (resident profile). */
   stretch?: boolean;
-  /** Enable double-click section selection (posts section id to parent). */
-  interactive?: boolean;
-  onSectionSelect?: (sectionId: string) => void;
 };
 
 function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | undefined): string | null {
@@ -46,8 +42,6 @@ export function LeaseDocumentPreview({
   peek = false,
   fill = false,
   stretch = false,
-  interactive = false,
-  onSectionSelect,
 }: Props) {
   const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
   const html = getLeaseDocumentHtml(row);
@@ -61,22 +55,7 @@ export function LeaseDocumentPreview({
   }, [pdfSrc, html, row.application, row.leaseDocumentRemovedAt, suppressApplicationDraft]);
 
   const showSynthetic = Boolean(syntheticHtml);
-  const previewHtml = useMemo(() => {
-    const source = html ?? syntheticHtml;
-    if (!source) return null;
-    return interactive ? injectLeasePreviewSectionMarkers(source) : source;
-  }, [html, syntheticHtml, interactive]);
-
-  useEffect(() => {
-    if (!interactive || !onSectionSelect) return;
-    const onMessage = (event: MessageEvent) => {
-      if (event.data?.type !== "lease-preview-section-dblclick") return;
-      const sectionId = typeof event.data.sectionId === "string" ? event.data.sectionId : "";
-      if (sectionId) onSectionSelect(sectionId);
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [interactive, onSectionSelect]);
+  const previewHtml = html ?? syntheticHtml;
   const flexibleHeight = fill || stretch;
   const frameClass = flexibleHeight
     ? "absolute inset-0 h-full w-full border-0 bg-card"
@@ -94,17 +73,9 @@ export function LeaseDocumentPreview({
     <div
       className={`mt-4 overflow-hidden rounded-2xl border border-border bg-accent/30 ${peek || flexibleHeight ? "mt-0" : ""} ${flexibleHeight ? "flex flex-1 flex-col" : ""} ${className ?? ""}`}
     >
-      {fill && interactive ? (
-        <p className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] text-muted">
-          Double-click any highlighted section to edit
-        </p>
-      ) : null}
       {!fill ? (
         <p className="border-b border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
           Lease document
-          {interactive ? (
-            <span className="ml-2 font-medium normal-case tracking-normal text-primary">· double-click a section to edit</span>
-          ) : null}
         </p>
       ) : null}
       {showSynthetic ? (
@@ -133,13 +104,7 @@ export function LeaseDocumentPreview({
             <iframe
               title="Lease document"
               srcDoc={previewHtml}
-              // NEVER allow-scripts together with allow-same-origin: that combination lets the
-              // frame reach out of the sandbox into the parent origin, and this preview is
-              // mounted in the RESIDENT portal. Scripts are granted only for the manager's
-              // interactive section picker, which talks back over postMessage and does not
-              // need same-origin. Everything else, including every resident view, gets no
-              // scripting at all.
-              sandbox={interactive ? "allow-scripts" : ""}
+              sandbox=""
               scrolling={frameScroll}
               className={frameClass}
             />

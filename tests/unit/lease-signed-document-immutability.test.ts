@@ -14,7 +14,7 @@ import {
   updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import { saveLeaseDocumentHtml } from "@/lib/lease-section-edit.client";
+import { saveLeaseSectionEdits } from "@/lib/lease-section-edit.client";
 
 const MANAGER_ID = "manager-evidence-test";
 
@@ -32,7 +32,7 @@ function signedRow(overrides: Partial<LeasePipelineRow> = {}): LeasePipelineRow 
     updatedAtIso: "2026-07-01T00:00:00.000Z",
     managerUserId: MANAGER_ID,
     thread: [],
-    generatedHtml: "<html><body>EXECUTED LEASE TEXT</body></html>",
+    generatedHtml: "<html><body><h2>Terms</h2><p>EXECUTED LEASE TEXT</p></body></html>",
     generatedAtIso: "2026-07-01T00:00:00.000Z",
     status: "Fully Signed",
     residentSignature: { role: "resident", name: "Jordan Lee", signedAtIso: "2026-07-01T00:00:00.000Z" },
@@ -66,9 +66,9 @@ describe("signed lease documents are immutable", () => {
   it("blocks the manager-edit persistence path after either party has signed", () => {
     seedDemoLeasePipeline([signedRow()], MANAGER_ID);
 
-    const result = saveLeaseDocumentHtml(
+    const result = saveLeaseSectionEdits(
       "lease_evidence_1",
-      "<html><body>FORGED LEASE TEXT</body></html>",
+      { terms: { format: "text", value: "FORGED LEASE TEXT" } },
       MANAGER_ID,
     );
 
@@ -76,7 +76,7 @@ describe("signed lease documents are immutable", () => {
     expect(readLeasePipeline(MANAGER_ID)[0]?.generatedHtml).toContain("EXECUTED LEASE TEXT");
   });
 
-  it("versions and sanitizes every saved manager edit", () => {
+  it("stores manager text as a typed section override", () => {
     const unsigned = signedRow({
       residentSignature: null,
       managerSignature: null,
@@ -87,24 +87,23 @@ describe("signed lease documents are immutable", () => {
     });
     seedDemoLeasePipeline([unsigned], MANAGER_ID);
 
-    const result = saveLeaseDocumentHtml(
+    const result = saveLeaseSectionEdits(
       "lease_evidence_1",
-      '<html><body><p onclick="alert(1)">Edited text</p><script>alert(2)</script><a href="javascript:alert(3)">bad</a></body></html>',
+      { terms: { format: "rich", value: "**Edited text**\n<script>alert(2)</script>" } },
       MANAGER_ID,
     );
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.row.versionNumber).toBe(3);
-      expect(result.row.pdfVersion).toBe(3);
-      expect(result.row.generatedAtIso).toBeTruthy();
-      expect(result.row.managerDocumentEditedAtIso).toBeTruthy();
-      expect(result.row.generatedHtml).toContain("Edited text");
-      expect(result.row.generatedHtml).not.toMatch(/script|onclick|javascript:|<a\b/i);
+      expect(result.row.versionNumber).toBe(2);
+      expect(result.row.managerSectionEdits).toEqual({
+        terms: { format: "rich", value: "**Edited text**\n<script>alert(2)</script>" },
+      });
+      expect(result.row.generatedHtml).toContain("EXECUTED LEASE TEXT");
     }
   });
 
-  it("requires confirmation before regeneration replaces manual body edits", () => {
+  it("does not block regeneration on the retired manager body-edit marker", () => {
     const unsigned = signedRow({
       residentSignature: null,
       managerSignature: null,
@@ -116,7 +115,7 @@ describe("signed lease documents are immutable", () => {
 
     expect(generateLeaseHtmlForRow("lease_evidence_1", MANAGER_ID)).toEqual({
       ok: false,
-      error: "This lease has manager edits. Confirm regeneration to replace them with current lease terms.",
+      error: "No application data on file — approve an application with saved answers first.",
     });
   });
 

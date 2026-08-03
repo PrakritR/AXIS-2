@@ -79,12 +79,6 @@ export async function patchLeasePacketForManagerReview(
 
   const iso = new Date().toISOString();
   const shouldRegenerate = Boolean(input.application && Object.keys(input.application).length > 0);
-  if (shouldRegenerate && leaseRow.managerDocumentEditedAtIso) {
-    return {
-      ok: false,
-      error: "This lease has manager body edits. Regenerate from the lease screen and confirm replacing them before changing lease terms.",
-    };
-  }
   const newHtml = shouldRegenerate
     ? await regenerateLeaseHtmlForApplication(db, record, leaseRow, updatedApplication)
     : null;
