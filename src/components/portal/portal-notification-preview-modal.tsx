@@ -4,19 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter, MODAL_INSET_BOX_CLASS, MODAL_WARNING_BOX_CLASS } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
-import { portalMessageFieldLabel } from "@/components/portal/portal-message-compose-fields";
 import {
   defaultPortalMessageChannelSelection,
   defaultPortalMessageScheduleAt,
+  PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS,
+  PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS,
   PortalMessageBodyField,
+  PortalMessageComposeModalBody,
   PortalMessagePhoneReadonly,
   PortalMessageRecipientReadonly,
   PortalMessageScheduleFields,
-  PortalMessageSendViaField,
+  PortalMessageSendViaDropdown,
   PortalMessageSubjectField,
   portalMessageChannelsFromSelection,
   PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE,
   PORTAL_MESSAGE_SEND_VIA_OPTIONS,
+  portalMessageFieldLabel,
 } from "@/components/portal/portal-message-compose-fields";
 
 export type NotificationDeliveryChannels = {
@@ -169,9 +172,9 @@ export function PortalNotificationPreviewModal({
       onClose={onClose}
       dense
       footer={footer}
-      panelClassName={cn("max-w-lg", panelClassName)}
+      panelClassName={cn(PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS, panelClassName)}
     >
-      <div className="space-y-4">
+      <PortalMessageComposeModalBody>
         {warning ? (
           <p className={`${MODAL_WARNING_BOX_CLASS} py-1.5 text-xs`}>
             <strong>AI-generated draft.</strong> {warning}
@@ -182,23 +185,33 @@ export function PortalNotificationPreviewModal({
         <PortalMessageRecipientReadonly recipient={recipient} />
         <PortalMessagePhoneReadonly phone={recipientPhone} />
 
-        <PortalMessageSubjectField
-          value={draftSubject}
-          onChange={setDraftSubject}
-          disabled={skipMessage}
-          readOnly={!editableSubject}
-          dataAttr="portal-notification-subject"
-        />
-
-        {showChannelPicker && !skipMessage ? (
-          <PortalMessageSendViaField
-            selected={sendVia}
-            onChange={setSendVia}
-            emailAvailable={emailAvailable}
-            smsAvailable={smsAvailable}
-            footerNote={footerNote?.trim() || PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE}
-            dataAttr="portal-notification-send-via"
+        <div
+          className={
+            showChannelPicker && !skipMessage ? PORTAL_MESSAGE_COMPOSE_TWO_COL_CLASS : undefined
+          }
+        >
+          <PortalMessageSubjectField
+            value={draftSubject}
+            onChange={setDraftSubject}
+            disabled={skipMessage}
+            readOnly={!editableSubject}
+            dataAttr="portal-notification-subject"
           />
+
+          {showChannelPicker && !skipMessage ? (
+            <PortalMessageSendViaDropdown
+              selected={sendVia}
+              onChange={setSendVia}
+              emailAvailable={emailAvailable}
+              smsAvailable={smsAvailable}
+              footerNote={footerNote?.trim() || PORTAL_MESSAGE_DEFAULT_FOOTER_NOTE}
+              dataAttr="portal-notification-send-via"
+            />
+          ) : null}
+        </div>
+
+        {showChannelPicker && !skipMessage && !channelsOk ? (
+          <p className="text-xs font-medium text-red-600">Choose at least one channel.</p>
         ) : null}
 
         <PortalMessageBodyField
@@ -206,7 +219,8 @@ export function PortalNotificationPreviewModal({
           onChange={setDraftBody}
           disabled={skipMessage}
           readOnly={!editableBody}
-          placeholder="Write a message to the resident…"
+          placeholder="Write your message…"
+          minHeightClass="min-h-[7rem]"
           dataAttr="portal-notification-body"
         />
 
@@ -241,7 +255,7 @@ export function PortalNotificationPreviewModal({
         {skipMessage ? (
           <p className="text-xs text-muted">The action will complete without sending this message.</p>
         ) : null}
-      </div>
+      </PortalMessageComposeModalBody>
     </Modal>
   );
 }
@@ -288,7 +302,7 @@ export function PortalBulkPaymentReminderPreviewModal({
   );
 
   return (
-    <Modal open={open} title={title} onClose={onClose} dense footer={footer} panelClassName="max-w-lg">
+    <Modal open={open} title={title} onClose={onClose} dense footer={footer} panelClassName={PORTAL_MESSAGE_COMPOSE_MODAL_PANEL_CLASS}>
       <p className="mb-4 text-sm leading-snug text-muted">
         Review each message below. Reminders are saved to PropLane inbox and sent by email when an address is on file.
       </p>

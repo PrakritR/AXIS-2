@@ -216,13 +216,12 @@ export function ScheduleInboxComposeForm({
         )}
 
         <div>
-          <label className="text-xs font-semibold text-muted">Send date & time</label>
           <Input
             type="datetime-local"
-            className="mt-1"
             value={sendAtLocal}
             onChange={(e) => setSendAtLocal(e.target.value)}
             disabled={busy}
+            aria-label="Send date and time"
           />
         </div>
 
