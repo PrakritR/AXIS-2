@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
 // `<html>` is the document root, so nothing can contain it. A selector that puts
 // `html[...]` in a descendant position therefore never matches anything, and the
@@ -13,11 +13,23 @@ import { join } from "node:path";
 // (`html[data-theme="dark"][data-portal-sticky-chrome]`). Only the dark-mode e2e
 // spec caught it, and that job is skipped on every PR (see AGENTS.md).
 
-const STYLESHEETS = [
-  "src/app/globals.css",
-  "src/components/marketing/landing-applications-pipeline.css",
-  "src/components/marketing/landing-proplane.css",
-];
+// Discovered rather than listed, so a stylesheet added or renamed tomorrow is
+// covered without anyone remembering to extend this file — the same silence the
+// guard exists to break.
+function findStylesheets(root: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".css")) found.push(relative(root, full).split(sep).join("/"));
+    }
+  };
+  walk(join(root, "src"));
+  return found.sort();
+}
+
+const STYLESHEETS = findStylesheets(process.cwd());
 
 function splitTopLevel(selector: string, separator: string): string[] {
   const parts: string[] = [];
@@ -66,6 +78,10 @@ function selectorsWithDescendantHtml(css: string): string[] {
 }
 
 describe("stylesheet root-element selectors", () => {
+  it("found stylesheets to check", () => {
+    expect(STYLESHEETS.length, "no .css files found under src/ — the guard would pass vacuously").toBeGreaterThan(0);
+  });
+
   for (const stylesheet of STYLESHEETS) {
     it(`never places html in a descendant position in ${stylesheet}`, () => {
       const css = readFileSync(join(process.cwd(), stylesheet), "utf8");

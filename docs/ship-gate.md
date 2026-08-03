@@ -91,15 +91,19 @@ still runs, but the later fixtures it would have created are missing.
 
 As of `main` @`94cfc09f` (run `30778729243`) 18 of the 20 failures are
 **long-standing**, and they are not a long tail of unrelated bugs — they are
-**two root causes**. Evidence: each one also fails in the four earlier `main`
+**three root causes**. Evidence: each one also fails in the four earlier `main`
 runs that got as far as executing `e2e` (`30766248350`, `30741321358`,
 `30739338457`, `30736186602`), while the two dark-mode cases fail only in this
-run. So neither cause is CI infrastructure, and neither came from the
+run. So none of the causes is CI infrastructure, and none came from the
 Communication/portal work. Tracked externally as
 `axis-ci-e2e-persistent-failure`, which has no in-repo counterpart.
 
+Causes 1 and 2 share a *symptom* — a Playwright strict-mode violation reading
+"resolved to 2 elements" — but not a cause, and a fix for one does nothing for
+the other. Read the locator in the failure, not just the message.
+
 **Cause 1 — one `data-attr` is in the DOM twice, so Playwright strict mode
-throws (12 cases).** Portal headers render the *same* action node twice and let
+throws (10 cases).** Portal headers render the *same* action node twice and let
 CSS hide one per breakpoint — e.g. `manager-promotion.tsx` passes one
 `promotionNewButton` to both `PortalPageHeaderMobileActionsRow` and the desktop
 `titleAside`. `locator('[data-attr="promotion-new"]')` therefore resolves to 2
@@ -109,8 +113,6 @@ elements and the call throws before asserting anything.
 promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] ×2      (desktop+mobile = 8 cases)
 manual-payment-verification.spec.ts:9      [data-attr=payments-setup] ×2
 new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] ×2
-manager-portal.spec.ts:35                  getByRole('heading').first().or(locator('main')) ×2
-resident-portal.spec.ts:33                 same ×2
 ```
 
 To fix: scope the specs to the rendered twin with `:visible` — the pattern
@@ -119,7 +121,25 @@ double-rendering the node. Note the duplicate is *also* an analytics defect: a
 `data-attr` is meant to name one element for PostHog autocapture (see
 `AGENTS.md`), and two nodes double-count the Action.
 
-**Cause 2 — the e2e web server is a production runtime, which deliberately hides
+**Cause 2 — the spec's own locator asks for a union of two present elements
+(2 cases).** No `data-attr` and no duplicated markup is involved, so neither
+Cause 1 remedy applies here.
+
+```text
+manager-portal.spec.ts:35     getByRole('heading').first().or(page.locator('main'))   (spec line 41)
+resident-portal.spec.ts:33    same                                                   (spec line 37)
+```
+
+`.or()` matches **both** sides, not "the first one that exists" — the trailing
+`.first()` binds to `getByRole("heading")`, not to the union. Every portal page
+renders a heading *and* a `<main>`, so the union is 2 elements and strict mode
+throws before the visibility assertion runs. To fix, put the `.first()` outside
+the union so it selects one of the two matches:
+`page.getByRole("heading").first().or(page.locator("main")).first()`. That is
+not a weakened assertion — the specs already assert "a heading **or** a main
+landmark is visible", and this is the locator that expresses it.
+
+**Cause 3 — the e2e web server is a production runtime, which deliberately hides
 the seeded fixtures (6 cases).** `playwright.config.ts` starts
 `npm run build && npm run start`, so `NODE_ENV=production` and `VERCEL_ENV` is
 unset, making `isProductionRuntime()` true. Every seeded property is owned by a
@@ -137,11 +157,28 @@ bundle-group-manual-chrome.spec.ts:53
 ```
 
 This is why the specs fail even though the row is present and `status = 'live'`
-— confirm with a direct query before assuming the seed is at fault. To fix:
-either give the `e2e` job a non-production runtime (`VERCEL_ENV: preview` in
-`.github/workflows/test.yml`) or seed the public-facing fixtures under a
-non-sandbox manager domain. The guard itself is correct and must not be relaxed:
-it is what keeps test listings off the real rent catalog.
+— confirm with a direct query before assuming the seed is at fault. The guard
+itself is correct and must not be relaxed: it is what keeps test listings off
+the real rent catalog.
+
+The two candidate fixes are **not** equivalent, and the cheaper-looking one is
+the broad one:
+
+- **Seed the public-facing fixtures under a non-sandbox manager domain** —
+  narrow. Changes only which listings `isPortalSandboxEmail()` classifies, which
+  is exactly the thing these 6 cases trip over.
+- **Set `VERCEL_ENV: preview` on the `e2e` job** — one line, but it flips
+  `isProductionRuntime()` for the whole suite, and 11 modules read it: not just
+  `public/property-lead`, but `src/lib/auth/portal-access.ts`
+  (`adminBlockedFromManagerPortal` stops blocking admin→manager portal crossing),
+  `src/lib/public-listings.server.ts`, `src/lib/listing-cta-phone.server.ts`
+  (listing CTA falls back to the shared dev line), `src/lib/server-env.ts`
+  (the admin-register key and the `FREE100` payment waiver gain dev fallbacks,
+  and `assertNonProdDatabase` starts enforcing), and six `/api/cron/*` routes
+  (which begin accepting unauthenticated calls when `CRON_SECRET` is unset).
+  Several of those are the behaviours other specs assert, so this can mask or
+  alter failures well outside the 6 cases it targets. Don't apply it as a
+  one-liner without re-reading the whole suite's result set.
 
 `admin-portal.spec.ts:68` and `mobile-portal-layout.spec.ts:22` are **flaky**,
 not failing — they pass on CI retry and pass locally. Do not file them as
