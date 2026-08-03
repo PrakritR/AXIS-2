@@ -118,6 +118,46 @@ describe("portal mobile shell conventions", () => {
     }
   });
 
+  it("gives fixed-chrome surfaces their FAB clearance inside the scroller, not as dead padding", () => {
+    // `#portal-main-content` is `overflow: hidden` on sticky-chrome surfaces, so
+    // its padding-bottom can never become trailing scroll room the way it does on
+    // a page-scrolls surface — it only shrinks the scroll viewport. Reserving the
+    // FAB half of `--portal-mobile-scroll-bottom-inset` there left a dead 56px
+    // strip of the shell gradient between the last row and the bottom nav, with
+    // the assistant FAB parked in it, which read as an opaque banner behind the
+    // button. The nav bar is reserved on the clipped element; the FAB clearance
+    // belongs to `.portal-list-page-scroll`, which can actually scroll it.
+    const cssWithoutComments = GLOBALS_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    const declarationsFor = (selector: string) =>
+      [...cssWithoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((match) =>
+          match[1]
+            .split(",")
+            .some((part) => part.trim().replace(/\s+/g, " ") === selector),
+        )
+        .map((match) => match[2]);
+
+    const mainContent = declarationsFor("html[data-portal-sticky-chrome] #portal-main-content");
+    const padded = mainContent.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(padded.length).toBeGreaterThan(0);
+    for (const declarations of padded) {
+      // Only the bottom nav — never the combined inset that also covers the FAB.
+      expect(declarations).toMatch(
+        /padding-bottom:\s*var\(--portal-native-bottom-nav-inset[^)]*\)/,
+      );
+      expect(declarations).not.toContain("--portal-mobile-scroll-bottom-inset");
+    }
+
+    const scroller = declarationsFor("html[data-portal-sticky-chrome] .portal-list-page-scroll");
+    const scrollerPadded = scroller.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(scrollerPadded.length).toBeGreaterThan(0);
+    for (const declarations of scrollerPadded) {
+      expect(declarations).toMatch(
+        /padding-bottom:\s*var\(--portal-assistant-fab-clearance[^)]*\)/,
+      );
+    }
+  });
+
   it("drops the duplicate Settings page title behind the mobile app bar", () => {
     const PROFILE_SOURCE = readFileSync(
       join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
