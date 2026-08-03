@@ -21,6 +21,7 @@ import {
   loadPersistedInbox,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
+import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import { scheduledItemsForRecipient } from "@/lib/inbox-scheduled-thread";
 import {
   normalizeManagerSmsConversationsPayload,
@@ -424,7 +425,8 @@ export function ManagerResidentDetailInbox({
 
   const archivedCount = useMemo(() => {
     void inboxTick;
-    return (loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[]).filter(
+    const rows = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+    return filterEmailInboxThreads(rows).filter(
       (t) => t.email.trim().toLowerCase() === emailNorm && t.folder === "trash",
     ).length;
   }, [emailNorm, inboxTick]);

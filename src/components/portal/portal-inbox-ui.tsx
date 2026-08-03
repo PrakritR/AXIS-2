@@ -40,7 +40,11 @@ import {
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { TabItem } from "@/components/ui/tabs";
 import type { InboxThreadMessage } from "@/lib/portal-inbox-storage";
-import { INBOX_ATTACHMENT_ACCEPT, inboxAttachmentPathFromServeUrl } from "@/lib/inbox-attachments";
+import {
+  INBOX_ATTACHMENT_ACCEPT,
+  inboxAttachmentDisplayName,
+  inboxAttachmentPathFromServeUrl,
+} from "@/lib/inbox-attachments";
 
 /** Same chrome as other portal data tables */
 export const PORTAL_INBOX_TABLE_WRAP = PORTAL_DATA_TABLE_WRAP;
@@ -562,12 +566,27 @@ export type InboxBubbleMessage = {
 };
 
 /**
+ * Label for an attachment chip, derived from the storage key FIRST.
+ *
+ * The uploader's file name is the last segment of that key, so the URL is the
+ * authoritative source and the copy persisted in `row_data` is only a fallback
+ * for non-serve URLs — every message sent before the key carried the name has
+ * the literal string `inbox-attachments` stored there and is never backfilled.
+ */
+export function inboxAttachmentChipName(att: { url: string; name?: string }): string | undefined {
+  const derived = inboxAttachmentDisplayName(att.url);
+  if (derived) return derived;
+  return att.name?.trim() || undefined;
+}
+
+/**
  * Suffix, never substring: an image named `floorplan.pdf.png` is a PNG, and a
  * substring test rendered it as a document link instead of a preview. Matches
- * how `InboxComposer` decides below (`/\.pdf$/i` on the file name).
+ * how `InboxComposer` decides below (`/\.pdf$/i` on the file name), and reads
+ * the same label the chip shows so the icon can never contradict the name.
  */
 export function inboxAttachmentLooksLikePdf(att: { url: string; name?: string }): boolean {
-  const name = att.name?.trim();
+  const name = inboxAttachmentChipName(att);
   if (name) return /\.pdf$/i.test(name);
   return /\.pdf$/i.test(inboxAttachmentPathFromServeUrl(att.url) || att.url.split("?")[0] || "");
 }
@@ -803,13 +822,13 @@ export function InboxBubble({
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.body || " "}</p>
         {message.attachments?.length ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {message.attachments.map((att) =>
-              inboxAttachmentLooksLikePdf(att) ? (
+            {message.attachments.map((att) => {
+              const label = inboxAttachmentChipName(att);
+              return inboxAttachmentLooksLikePdf(att) ? (
                 <a
                   key={att.url}
                   href={att.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download={label ?? ""}
                   className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
                     outbound
                       ? "border-white/30 bg-white/10 text-white hover:bg-white/15"
@@ -817,21 +836,20 @@ export function InboxBubble({
                   }`}
                 >
                   <FileText className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="truncate">{att.name ?? "PDF document"}</span>
+                  <span className="truncate">{label ?? "PDF document"}</span>
                 </a>
               ) : (
                 <a
                   key={att.url}
                   href={att.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download={label ?? ""}
                   className="block overflow-hidden rounded-lg border border-border/60"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={att.url} alt={att.name ?? "Attachment"} className="max-h-40 max-w-full object-cover" />
+                  <img src={att.url} alt={label ?? "Attachment"} className="max-h-40 max-w-full object-cover" />
                 </a>
-              ),
-            )}
+              );
+            })}
           </div>
         ) : null}
       </div>
