@@ -28,7 +28,8 @@ type Props = {
 function draftHtmlFromApplication(application: Partial<RentalWizardFormState> | undefined): string | null {
   if (!application || !Object.keys(application).length) return null;
   try {
-    return buildAiGeneratedLeaseHtml(leaseContextFromApplication(application as RentalWizardFormState));
+    const outcome = buildAiGeneratedLeaseHtml(leaseContextFromApplication(application as RentalWizardFormState));
+    return outcome.kind === "generated" ? outcome.html : null;
   } catch {
     return null;
   }

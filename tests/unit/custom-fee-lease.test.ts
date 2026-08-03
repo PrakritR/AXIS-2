@@ -3,6 +3,12 @@ import { snapshotJordanLee } from "@/data/manager-application-snapshots";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 
+function generatedLeaseHtml(ctx: Parameters<typeof buildAiGeneratedLeaseHtml>[0]): string {
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") throw new Error(outcome.error);
+  return outcome.html;
+}
+
 /**
  * Custom-fee billing must reach the LEASE ([key=custom-fee-billing], captain: "make sure it
  * updates lease aswell"). A one-time custom fee that bills must appear in the generated lease
@@ -12,7 +18,7 @@ describe("custom fees in the generated lease", () => {
   function leaseHtmlWithCustomFees(customFees: { id: string; label: string; amount: string; frequency: "one-time" | "monthly" }[]) {
     const ctx = leaseContextFromApplication(snapshotJordanLee());
     const sub = ctx.submission ?? createDefaultListingSubmission();
-    return buildAiGeneratedLeaseHtml({
+    return generatedLeaseHtml({
       ...ctx,
       leasedRoom: undefined,
       submission: { ...sub, customFees },
@@ -40,7 +46,7 @@ describe("custom fees in the generated lease", () => {
   it("lists a short-term custom fee in the short-term stay's Payment table", () => {
     const ctx = leaseContextFromApplication(snapshotJordanLee());
     const sub = ctx.submission ?? createDefaultListingSubmission();
-    const html = buildAiGeneratedLeaseHtml({
+    const html = generatedLeaseHtml({
       ...ctx,
       leasedRoom: undefined,
       application: { ...ctx.application, rentalType: "short_term", leaseStart: "2026-03-10", leaseEnd: "2026-03-16" },

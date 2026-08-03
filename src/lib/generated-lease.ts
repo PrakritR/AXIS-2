@@ -23,12 +23,14 @@ import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms
 import { leaseCss } from "@/lib/lease-templates/types";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
-import { resolveLeaseJurisdiction, unsupportedJurisdictionMessage } from "@/lib/lease-jurisdiction";
-import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
-import { buildSeattleLeaseHtml } from "@/lib/lease-templates/seattle";
+import {
+  jurisdictionConfig,
+  resolveJurisdiction,
+  unsupportedJurisdictionMessage,
+  type JurisdictionKey,
+} from "@/lib/lease-jurisdiction";
 import type { JointLeaseMember } from "@/lib/bundle-group/types";
-import { buildCaliforniaLeaseHtml } from "@/lib/lease-templates/california";
-import { buildWashingtonLeaseHtml } from "@/lib/lease-templates/washington";
+import { buildLeaseHtml } from "@/lib/lease-templates/build-lease-html";
 import type { LeaseBillingSnapshot } from "@/lib/lease-billing-snapshot";
 import { formatRoomPriceAmount, resolveStayPricing, type StayKind } from "@/lib/room-pricing";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -305,24 +307,69 @@ ${isPdf ? `<object class="doc-embed" data="${docUrl}" type="application/pdf"><p>
 </body></html>`;
 }
 
-/** Full HTML document suitable for download and "Print to PDF". */
-export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
-  const templateDoc = leaseTemplateDocForContext(ctx);
-  if (templateDoc) return buildManagerTemplateLeaseHtml(ctx, templateDoc);
-  const jurisdiction = resolveLeaseJurisdiction(ctx);
-  if (jurisdiction === "san_francisco") return buildSanFranciscoLeaseHtml(ctx);
-  if (jurisdiction === "seattle") return buildSeattleLeaseHtml(ctx);
-  if (jurisdiction === "california") return buildCaliforniaLeaseHtml(ctx);
-  if (jurisdiction === "washington") return buildWashingtonLeaseHtml(ctx);
-  throw new Error(unsupportedJurisdictionMessage(jurisdiction));
+export type LeaseGenerationOutcome =
+  | {
+      kind: "generated";
+      html: string;
+      executedJurisdiction: string | null;
+      templateVersion: string | null;
+      templateDocument: LeaseTemplateDocument | null;
+    }
+  | {
+      kind: "unsupported_jurisdiction";
+      error: string;
+    };
+
+function executedJurisdictionFor(key: JurisdictionKey | null): string | null {
+  if (!key) return null;
+  return `US-${key.state}${key.city ? `/${key.city}` : ""}`;
 }
 
-export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): void {
-  if (typeof window === "undefined") return;
-  const html = buildAiGeneratedLeaseHtml(ctx);
+/**
+ * Build the placement's lease and return a state callers can render without
+ * relying on exceptions. A manager template remains available outside the
+ * built-in jurisdictions, while a short stay selects only a short-stay template.
+ */
+export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): LeaseGenerationOutcome {
+  const room = resolveSubmissionRoom(ctx.submission, {
+    roomChoices: [ctx.application.roomChoice1],
+    unitLabel: ctx.leasedRoom?.unitLabel,
+  });
+  const pricing = resolveStayPricing({ room, submission: ctx.submission, application: ctx.application });
+  const templateDoc = selectLeaseTemplateDoc(ctx, pricing.stayKind);
+  const jurisdiction = resolveJurisdiction(ctx);
+  const executedJurisdiction = executedJurisdictionFor(jurisdiction);
+
+  if (templateDoc) {
+    return {
+      kind: "generated",
+      html: buildManagerTemplateLeaseHtml(ctx, templateDoc),
+      executedJurisdiction,
+      templateVersion: leaseTemplateVersionForContext(ctx),
+      templateDocument: templateDoc,
+    };
+  }
+
+  const config = jurisdiction ? jurisdictionConfig(jurisdiction) : null;
+  if (!config) {
+    return { kind: "unsupported_jurisdiction", error: unsupportedJurisdictionMessage() };
+  }
+
+  return {
+    kind: "generated",
+    html: buildLeaseHtml(ctx, config),
+    executedJurisdiction,
+    templateVersion: null,
+    templateDocument: null,
+  };
+}
+
+export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): LeaseGenerationOutcome {
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated" || typeof window === "undefined") return outcome;
   const rawName = (ctx.application.fullLegalName ?? "resident").trim() || "resident";
   const safe = rawName.replace(/[^\w\-]+/g, "_").slice(0, 60) || "resident";
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const blob = new Blob([outcome.html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -332,4 +379,5 @@ export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): void 
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  return outcome;
 }

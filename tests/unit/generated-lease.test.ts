@@ -8,6 +8,32 @@ import {
 import { LEASE_AI_REVIEW_DISCLAIMER } from "@/lib/lease-templates/types";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 
+function generatedLeaseHtml(ctx: Parameters<typeof buildAiGeneratedLeaseHtml>[0]): string {
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") throw new Error(outcome.error);
+  return outcome.html;
+}
+
+function listingAt(address: string, neighborhood: string) {
+  return {
+    id: "location-test",
+    title: "Location test",
+    tagline: "",
+    address,
+    zip: "00000",
+    neighborhood,
+    beds: 1,
+    baths: 1,
+    rentLabel: "$1,000 / month",
+    available: "Now",
+    petFriendly: false,
+    buildingId: "location-building",
+    buildingName: "Location test",
+    unitLabel: "Room 1",
+    adminPublishLive: true,
+  };
+}
+
 describe("generated-lease", () => {
   it("selects uploaded templates only for their configured stay kind", () => {
     const base = leaseContextFromApplication(snapshotJordanLee());
@@ -65,6 +91,35 @@ describe("generated-lease", () => {
 
     expect(selectLeaseTemplateDoc(ctx, "long")).toMatchObject({ name: "Legacy long-term.pdf" });
     expect(selectLeaseTemplateDoc(ctx, "short")).toBeNull();
+  });
+
+  it("builds the generated stay agreement when a short stay has only a long-term upload", () => {
+    const base = leaseContextFromApplication({
+      ...snapshotJordanLee(),
+      rentalType: "short_term",
+      leaseStart: "2026-03-10",
+      leaseEnd: "2026-03-16",
+    });
+    const ctx = {
+      ...base,
+      leasedRoom: undefined,
+      listingProperty: base.listingProperty
+        ? { ...base.listingProperty, address: "5259 Brooklyn Ave NE, Seattle, WA", neighborhood: "Seattle" }
+        : undefined,
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        shortTermRentalsAllowed: true,
+        shortTermDailyCost: "85",
+        leaseConfigMode: "custom" as const,
+        leaseCustomKind: "document" as const,
+        leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/legacy.pdf",
+        leaseTemplateDocName: "Legacy long-term.pdf",
+      },
+    };
+
+    const html = generatedLeaseHtml(ctx);
+    expect(html).toContain("SHORT-TERM ROOM STAY AGREEMENT");
+    expect(html).not.toContain("legacy.pdf");
   });
 
   it("does not mirror a short-only template into the long-term document", () => {
@@ -141,7 +196,7 @@ describe("generated-lease", () => {
       },
     };
 
-    const html = buildAiGeneratedLeaseHtml(ctx);
+    const html = generatedLeaseHtml(ctx);
     expect(html).toContain("TERMS RIDER");
     expect(html).toContain("this Terms Rider controls for that conflict");
     expect(html).toContain("$1,250");
@@ -164,7 +219,7 @@ describe("generated-lease", () => {
     };
     expect(withSeattle.application.fullLegalName).toContain("Jordan");
     expect(withSeattle.generatedAtIso).toBeTruthy();
-    const html = buildAiGeneratedLeaseHtml(withSeattle);
+    const html = generatedLeaseHtml(withSeattle);
     expect(html).not.toContain(LEASE_AI_REVIEW_DISCLAIMER);
     expect(html).toContain("State of Washington");
   });
@@ -179,7 +234,7 @@ describe("generated-lease", () => {
         ? { ...ctx.listingProperty, address: "5259 Brooklyn Ave NE, Seattle, WA", neighborhood: "Seattle" }
         : undefined,
     };
-    const html = buildAiGeneratedLeaseHtml(withSeattle);
+    const html = generatedLeaseHtml(withSeattle);
     expect(html).toContain("(206) 555-0142");
     expect(html).toContain("jordan.lee@example.com");
     expect(html).toContain("1998-03-14");
@@ -214,10 +269,52 @@ describe("generated-lease", () => {
         neighborhood: "SOMA",
       },
     };
-    const html = buildAiGeneratedLeaseHtml(sfCtx);
+    const html = generatedLeaseHtml(sfCtx);
     expect(html).toContain("State of California");
     expect(html).toContain("San Francisco");
     expect(html).not.toContain(LEASE_AI_REVIEW_DISCLAIMER);
+  });
+
+  it("uses statewide California terms for Fremont and records the state jurisdiction", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      leasedRoom: undefined,
+      listingProperty: listingAt("39100 Civic Center Dr, Fremont, CA", "Fremont"),
+    };
+    const outcome = buildAiGeneratedLeaseHtml(ctx);
+    expect(outcome.kind).toBe("generated");
+    if (outcome.kind !== "generated") return;
+    expect(outcome.html).toContain("State of California");
+    expect(outcome.html).not.toContain("San Francisco Rent Ordinance");
+    expect(outcome.executedJurisdiction).toBe("US-CA");
+  });
+
+  it("uses statewide Washington terms for Spokane without Seattle branding", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      leasedRoom: undefined,
+      listingProperty: listingAt("808 W Spokane Falls Blvd, Spokane, WA", "Spokane"),
+    };
+    const html = generatedLeaseHtml(ctx);
+    expect(html).toContain("State of Washington");
+    expect(html).not.toContain("PROPLANE SEATTLE HOUSING");
+    expect(html).not.toContain("ordinances of the City of Seattle");
+  });
+
+  it("returns a typed unsupported outcome for Austin without rendering a partial document", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      leasedRoom: undefined,
+      listingProperty: listingAt("301 W 2nd St, Austin, TX", "Austin"),
+    };
+
+    expect(buildAiGeneratedLeaseHtml(ctx)).toEqual({
+      kind: "unsupported_jurisdiction",
+      error: expect.stringMatching(/Upload a PDF lease/),
+    });
   });
 
   it("fills personal fields from row-level fallbacks when application snapshot is sparse", () => {
@@ -262,7 +359,7 @@ describe("generated-lease", () => {
         },
       ],
     } as unknown as NonNullable<typeof ctx.submission>;
-    const html = buildAiGeneratedLeaseHtml({ ...ctx, leasedRoom: undefined, submission });
+    const html = generatedLeaseHtml({ ...ctx, leasedRoom: undefined, submission });
     expect(html).toContain("Two or more rooms");
     expect(html).toContain("Room 1, Room 2");
     expect(html).toContain("$2,150/mo");
@@ -287,7 +384,7 @@ describe("generated-lease", () => {
       v: 1,
       ...(leaseUtilities ? { leaseUtilities } : {}),
     } as unknown as NonNullable<typeof ctx.submission>;
-    return buildAiGeneratedLeaseHtml({
+    return generatedLeaseHtml({
       ...ctx,
       submission,
       leasedRoom: undefined,
@@ -374,7 +471,7 @@ describe("generated-lease", () => {
       rooms: [],
       bundles: [],
     } as unknown as NonNullable<typeof ctx.submission>;
-    const html = buildAiGeneratedLeaseHtml({ ...ctx, leasedRoom: undefined, submission });
+    const html = generatedLeaseHtml({ ...ctx, leasedRoom: undefined, submission });
     expect(html).toContain("Entire home");
     expect(html).toContain("$2800.00 / month");
   });

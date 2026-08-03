@@ -187,20 +187,12 @@ function customFormatNoticeHtml(docName: string): string {
 
 function tryBuildFullLeasePreview(
   ctx: LeaseGenerationContext,
-  source: PropertyLeaseSource,
 ): { html: string; plainText: string; jurisdictionLabel: string } | null {
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   const jLabel = jurisdictionLabel(jurisdiction);
-  if (!isLeaseGenerationSupported(jurisdiction)) return null;
-  try {
-    const html = buildAiGeneratedLeaseHtml(ctx);
-    return { html, plainText: stripLeaseHtmlToPlainText(html), jurisdictionLabel: jLabel };
-  } catch {
-    if (source === "axis_default") {
-      return null;
-    }
-    return null;
-  }
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") return null;
+  return { html: outcome.html, plainText: stripLeaseHtmlToPlainText(outcome.html), jurisdictionLabel: jLabel };
 }
 
 export type PropertyLeasePreviewResult = {
@@ -245,17 +237,15 @@ export function buildPropertyLeasePreview(
   const jLabel = jurisdictionLabel(jurisdiction);
   const supported = isLeaseGenerationSupported(jurisdiction);
 
-  if (supported) {
-    const built = tryBuildFullLeasePreview(ctx, source);
-    if (built) {
-      return {
-        source,
-        html: built.html,
-        plainText: built.plainText,
-        unsupportedJurisdiction: false,
-        jurisdictionLabel: built.jurisdictionLabel,
-      };
-    }
+  const built = tryBuildFullLeasePreview(ctx);
+  if (built) {
+    return {
+      source,
+      html: built.html,
+      plainText: built.plainText,
+      unsupportedJurisdiction: false,
+      jurisdictionLabel: built.jurisdictionLabel,
+    };
   }
 
   if (source === "custom_comments") {

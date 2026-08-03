@@ -214,7 +214,7 @@ export async function regenerateLeaseHtmlForApplication(
   leaseRecord: { property_id?: string | null },
   leaseRow: LeasePipelineRow,
   updatedApplication: NonNullable<LeasePipelineRow["application"]>,
-): Promise<string | null> {
+): Promise<{ html: string; executedJurisdiction: string | null; templateVersion: string | null } | null> {
   try {
     const propertyId = leaseRecord.property_id ?? leaseRow.propertyId ?? "";
     const propertyRecord = propertyId
@@ -235,7 +235,13 @@ export async function regenerateLeaseHtmlForApplication(
               ? normalizeManagerListingSubmissionV1(prop.listingSubmission as ManagerListingSubmissionV1)
               : ctx.submission,
         };
-    return buildAiGeneratedLeaseHtml(finalCtx);
+    const outcome = buildAiGeneratedLeaseHtml(finalCtx);
+    if (outcome.kind !== "generated") return null;
+    return {
+      html: outcome.html,
+      executedJurisdiction: outcome.executedJurisdiction,
+      templateVersion: outcome.templateVersion,
+    };
   } catch {
     return null; /* best-effort */
   }
@@ -272,7 +278,7 @@ export async function amendLeaseMoveOutDate(
 
   const updatedApplication = { ...(leaseRow.application ?? {}), leaseEnd: newLeaseEnd };
   const iso = new Date().toISOString();
-  const newHtml = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
+  const regeneratedDocument = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
 
   const updatedRow: Partial<LeasePipelineRow> = {
     ...leaseRow,
@@ -286,7 +292,14 @@ export async function amendLeaseMoveOutDate(
     currentActorRole: "manager",
     updatedAtIso: iso,
     updated: "just now",
-    ...(newHtml ? { generatedHtml: newHtml, generatedAtIso: iso } : {}),
+    ...(regeneratedDocument
+      ? {
+          generatedHtml: regeneratedDocument.html,
+          generatedAtIso: iso,
+          executedJurisdiction: regeneratedDocument.executedJurisdiction,
+          templateVersion: regeneratedDocument.templateVersion,
+        }
+      : {}),
   };
 
   const { error: upsertError } = await db.from("portal_lease_pipeline_records").upsert({
@@ -404,7 +417,7 @@ export async function renewLease(
     (updatedApplication as Record<string, unknown>).__signedRentLabel = rentLabel;
   }
 
-  const newHtml = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
+  const regeneratedDocument = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
 
   const updatedRow: Partial<LeasePipelineRow> = {
     ...leaseRow,
@@ -420,7 +433,14 @@ export async function renewLease(
     currentActorRole: "manager",
     updatedAtIso: iso,
     updated: "just now",
-    ...(newHtml ? { generatedHtml: newHtml, generatedAtIso: iso } : {}),
+    ...(regeneratedDocument
+      ? {
+          generatedHtml: regeneratedDocument.html,
+          generatedAtIso: iso,
+          executedJurisdiction: regeneratedDocument.executedJurisdiction,
+          templateVersion: regeneratedDocument.templateVersion,
+        }
+      : {}),
   };
 
   const { error: upsertError } = await db.from("portal_lease_pipeline_records").upsert({
