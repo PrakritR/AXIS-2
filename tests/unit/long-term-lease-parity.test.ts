@@ -21,6 +21,7 @@ function longTermContext(overrides: Partial<ManagerListingSubmissionV1> = {}): L
     ...createDefaultListingSubmission(),
     buildingName: "Brooklyn House",
     address: "5259 Brooklyn Ave NE, Seattle, WA 98105",
+    yearBuilt: 1977,
     securityDeposit: "400",
     moveInFee: "200",
     lateFeeAmount: "75",
