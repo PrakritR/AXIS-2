@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 
 const MAX_RENDERED_PAGES = 48;
+/** Cap the raster edge so a phone never allocates a canvas iOS will silently blank. */
+const MAX_CANVAS_EDGE = 2000;
+const BASE_RENDER_SCALE = 1.5;
 
 function prefersRasterPreview(): boolean {
   if (typeof window === "undefined") return false;
@@ -12,26 +15,90 @@ function prefersRasterPreview(): boolean {
   return ios || document.documentElement.hasAttribute("data-native");
 }
 
-async function fetchRasterPages(dataUrl: string): Promise<{ pages: string[]; totalPages: number }> {
-  const res = await fetch("/api/lease-pdf-preview-pages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ dataUrl }),
-  });
-  const body = (await res.json().catch(() => null)) as
-    | { pages?: string[]; totalPages?: number; error?: string }
-    | null;
-  if (!res.ok || !body?.pages) {
-    throw new Error(body?.error ?? "Could not render PDF preview.");
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.includes(",") ? (dataUrl.split(",")[1] ?? "") : dataUrl;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Yield to the event loop so main-thread page rendering cannot lock up the UI. */
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Rasterize a PDF to page images in the BROWSER.
+ *
+ * iOS WKWebView (and therefore the Capacitor shell) does not render PDFs inside
+ * an iframe/embed/object, so the native app needs real pixels. pdf.js ships
+ * inside `unpdf`, which we already depend on for server-side PDF work, and its
+ * bundle carries the worker inline — so it runs with no separate worker asset
+ * and no new dependency. It is imported dynamically, so the ~1.6 MB minified
+ * chunk is fetched only when a lease PDF preview actually mounts.
+ *
+ * Each page is drawn into ONE reused canvas and immediately flattened to a JPEG
+ * data URL: keeping 48 live canvases would blow past the per-tab canvas memory
+ * limit on a phone, whereas decoded <img> elements can be evicted by the browser.
+ */
+async function renderPdfPagesInBrowser(
+  dataUrl: string,
+  onPage: (page: string, totalPages: number) => void,
+  isCancelled: () => boolean,
+): Promise<void> {
+  const pdfjs = await import("unpdf/pdfjs");
+  if (isCancelled()) return;
+
+  const source = dataUrl.startsWith("data:") ? { data: dataUrlToBytes(dataUrl) } : { url: dataUrl };
+  const loadingTask = pdfjs.getDocument({ ...source, disableAutoFetch: true });
+
+  try {
+    const pdf = await loadingTask.promise;
+    if (isCancelled()) return;
+
+    const totalPages = pdf.numPages;
+    const limit = Math.min(totalPages, MAX_RENDERED_PAGES);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas 2D is unavailable.");
+
+    for (let pageNumber = 1; pageNumber <= limit; pageNumber++) {
+      if (isCancelled()) return;
+      const page = await pdf.getPage(pageNumber);
+      try {
+        const base = page.getViewport({ scale: 1 });
+        const density = Math.min(window.devicePixelRatio || 1, 2);
+        const wanted = BASE_RENDER_SCALE * density;
+        const fit = MAX_CANVAS_EDGE / Math.max(base.width, base.height);
+        const viewport = page.getViewport({ scale: Math.min(wanted, fit) });
+
+        canvas.width = Math.max(1, Math.floor(viewport.width));
+        canvas.height = Math.max(1, Math.floor(viewport.height));
+        // PDF pages are transparent; without this text renders onto black in JPEG.
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvas, canvasContext: context, viewport }).promise;
+        if (isCancelled()) return;
+
+        onPage(canvas.toDataURL("image/jpeg", 0.85), totalPages);
+      } finally {
+        page.cleanup();
+      }
+      await yieldToBrowser();
+    }
+
+    canvas.width = 0;
+    canvas.height = 0;
+  } finally {
+    void loadingTask.destroy().catch(() => {});
   }
-  return { pages: body.pages, totalPages: body.totalPages ?? body.pages.length };
 }
 
 /**
  * Scrollable preview for manager- or resident-uploaded lease PDFs.
- * Desktop uses an embedded PDF viewer; iOS / native WebViews rasterize pages
- * via a server route because embedded PDFs often show only the first page.
+ * Desktop keeps the browser's own embedded PDF viewer; iOS / native WebViews
+ * rasterize pages in-page because those engines do not render embedded PDFs.
  */
 export function UploadedLeasePdfPreview({
   dataUrl,
@@ -59,16 +126,22 @@ export function UploadedLeasePdfPreview({
   useEffect(() => {
     if (!useRaster) return;
     let cancelled = false;
+    const isCancelled = () => cancelled;
     setLoading(true);
     setError(null);
     setPages([]);
     setTotalPages(0);
-    void fetchRasterPages(dataUrl)
-      .then((result) => {
+    void renderPdfPagesInBrowser(
+      dataUrl,
+      (page, count) => {
         if (cancelled) return;
-        setPages(result.pages);
-        setTotalPages(result.totalPages);
-      })
+        // Show each page as it finishes rather than blocking on the whole document.
+        setTotalPages(count);
+        setPages((prev) => [...prev, page]);
+        setLoading(false);
+      },
+      isCancelled,
+    )
       .catch(() => {
         if (!cancelled) setError("Could not render this PDF in the preview.");
       })
@@ -119,13 +192,13 @@ export function UploadedLeasePdfPreview({
     <div className={className}>
       {header}
       <div className={scrollClass}>
-        {loading ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">Loading lease pages…</p>
-        ) : error ? (
+        {error && !pages.length ? (
           <div className="space-y-2 px-4 py-8 text-center text-sm text-muted">
             <p>{error}</p>
             <p>Use Open full document above to view the complete file.</p>
           </div>
+        ) : !pages.length && loading ? (
+          <p className="px-4 py-8 text-center text-sm text-muted">Loading lease pages…</p>
         ) : (
           <div className="space-y-2 bg-white p-2">
             {pages.map((src, index) => (
@@ -137,7 +210,9 @@ export function UploadedLeasePdfPreview({
                 className="block w-full rounded border border-border/60 bg-white"
               />
             ))}
-            {totalPages > pages.length ? (
+            {loading ? (
+              <p className="px-2 py-3 text-center text-xs text-muted">Loading more pages…</p>
+            ) : totalPages > pages.length ? (
               <p className="px-2 py-3 text-center text-xs text-muted">
                 Preview shows the first {Math.min(pages.length, MAX_RENDERED_PAGES)} pages. Open the full
                 document to read the rest.
