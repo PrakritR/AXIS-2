@@ -422,6 +422,75 @@ signature.
   That is correct (nothing was executed through the portal), but it means a
   present signature does not imply a present fingerprint.
 
+# Uploaded leases: parsed into PropLane format, held until a human confirms (Aug 2026)
+
+A manager-uploaded lease (`managerUploadLeasePdf` → `LeasePipelineRow.managerUploadedPdf`)
+used to be an opaque PDF: nothing was read out of it, and it was signable the
+moment it landed. It is now read in full, mapped into PropLane's structure,
+rendered in PropLane's own lease format, and **kept out of the signature flow
+until a manager confirms the reading**.
+
+**The upload is still the executed artifact.** The parse is a new, additive,
+derived field (`LeasePipelineRow.uploadedLeaseParse`) that sits ALONGSIDE
+`managerUploadedPdf`, never in place of it. Signing still appends the
+certificate page to `originalDataUrl` and `leaseSignedDocumentBytes` still
+hashes those bytes — a machine-derived document must never become the thing the
+parties execute. Do not move the parsed HTML into `generatedHtml`.
+
+Three rules, each with a test that goes red if it is broken
+(`tests/unit/uploaded-lease-{extraction,proplane-format,confirm-gate,parse-server}.test.ts`):
+
+- **Nothing invented.** `extractLeaseFields` emits a value only when the
+  document states it exactly once. Two disagreeing readings →
+  `status: "ambiguous"` with an EMPTY value and both candidates listed; no
+  reading → `not_found`, also empty. There is no default and no best guess.
+  `normalizeLeaseDate` refuses `03/04/2026` (two different days by convention)
+  and keeps the document's own wording as the value.
+- **Nothing authored.** Section bodies are the source's bytes. No clause is
+  written, no wording tidied, and no statute cited — the same bar as
+  `landlordMaintenanceStatuteRef` above.
+- **Nothing lost.** `splitLeasePagesIntoSections` PARTITIONS the extracted text;
+  `assertSectionsPartition` throws if the spans gap, overlap, or drop a
+  character, so unmapped and unrecognized content still reaches the reader
+  verbatim. An oversized or unreadable PDF fails LOUDLY (`status: "failed"`)
+  rather than being truncated.
+
+**The gate.** `managerUploadLeasePdf` writes a `pending` parse *synchronously*,
+before any text is read, so a parse that fails or never returns still holds the
+lease. `sendLeaseToResident` — the only path to signability — refuses while
+`leaseAwaitsUploadedLeaseReview(row)`, and both manager surfaces
+(`manager-residents.tsx`, `manager-leases-pipeline-panel.tsx`) disable Send and
+offer "Review import" (`UploadedLeaseReviewModal`). Confirming records who,
+when, and which values the human typed (`review.overrides`), and every surface
+renders manager-entered values differently from machine-extracted ones. **A row
+with NO parse is untouched** — legacy uploads, `externallySignedLease` filings,
+and generated leases all behave exactly as before, and `/demo` writes no parse
+at all.
+
+Extraction is deterministic regex over `unpdf` page text, server-side
+(`/api/portal/parse-uploaded-lease`, manager-authenticated + rate limited). No
+new dependency, nothing added to the client bundle, and **no lease text leaves
+the process** — sending private tenant documents to a third party is a decision
+for a human, not for this path. Note that the older lease-*template* parser
+(`lease-pdf-parse.server.ts`, used by the create-listing wizard) DOES call
+Anthropic to split sections; that is a separate, pre-existing path.
+
+Deliberately NOT done, for whoever picks this up:
+
+- **Confirming writes nothing back into PropLane's records.** The review table
+  shows PropLane's value beside the extracted one so a disagreement is visible,
+  but rent, dates and deposits are not overwritten. Auto-applying an extracted
+  money figure to the ledger is exactly the failure mode the blank-payment-terms
+  defect warns about; it needs a deliberate product decision.
+- **`landlordName`, `propertyAddress`, `rentDueDay` and `lateFee` map to
+  nothing** — PropLane derives the landlord from the manager account, `unit`
+  from the listing, due dates from the charge schedule, and late fees from
+  automation settings. They are review-only and labelled as such.
+- **Resident-side rendering still shows the raw PDF.** The PropLane-format view
+  is manager-only; `lease-document-preview.tsx` was left alone.
+- **Scanned/image-only PDFs produce a `failed` parse** (no OCR). The manager can
+  still confirm after reading the original, so it is a gap, not a dead end.
+
 # Lease templates are private (Jul 2026)
 
 A manager-uploaded lease template is the manager's own legal document — often
