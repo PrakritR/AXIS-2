@@ -15,11 +15,11 @@ import {
  * section records the page it came from, and a reviewer with no page number
  * cannot check the machine's work — which would make the confirm step theatre.
  *
- * `unpdf` is already a dependency (`lease-pdf-parse.server.ts`,
- * `uploaded-lease-pdf-render.server.ts`) and runs server-side only, so this
- * adds nothing to the client bundle. Nothing here leaves the process: field
- * extraction is deterministic regex in `uploaded-lease-extraction.ts`, and no
- * lease text is sent to any third-party service.
+ * `unpdf` is already a dependency (`lease-pdf-parse.server.ts`) and this module
+ * is `server-only`, so it adds nothing to the client bundle. Nothing here leaves
+ * the process: field extraction is deterministic regex in
+ * `uploaded-lease-extraction.ts`, and no lease text is sent to any third-party
+ * service.
  */
 export async function extractLeasePdfPages(bytes: Uint8Array): Promise<string[]> {
   const pdf = await getDocumentProxy(new Uint8Array(bytes));

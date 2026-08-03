@@ -227,8 +227,9 @@ or resize the panel.
   single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
   / `FieldSingleSelect` (`checkbox-multi-select.tsx`) are the same pattern for
   form/toolbar/scope pickers — prefer them over a bare `<select>`.
-  `menuOptionCount` is REQUIRED on `FilterCollapsibleSection` because the menu is
-  sized from it (see the next bullet).
+  `menuOptionCount` is REQUIRED on `FilterCollapsibleSection`: it sizes the portaled
+  menu until the child list reports the rows it actually renders (see the row-count
+  bullet below).
 - **5 rows, then scroll:** the cap lives on the portaled SHELL — its `maxHeight`
   is `fieldSelectMenuContentPx(<the field's OWN option count>, …)`, which clamps
   that count to 1..5, and `FIELD_SELECT_MENU_VISIBLE_ITEMS` (aliased as
