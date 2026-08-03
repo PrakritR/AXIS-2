@@ -32,8 +32,6 @@ export function VaulBottomSheet({
    * the bottom nav with a large empty gap above.
    */
   autoElevate = false,
-  /** When true with autoElevate, always lift the sheet (tall filter panels). */
-  alwaysElevate = false,
   flushBody = false,
   lockBodyScroll = false,
   /** Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. */
@@ -47,7 +45,6 @@ export function VaulBottomSheet({
   footer?: ReactNode;
   fullScreen?: boolean;
   autoElevate?: boolean;
-  alwaysElevate?: boolean;
   flushBody?: boolean;
   /** When true, the sheet body does not scroll (e.g. an open filter field menu). */
   lockBodyScroll?: boolean;
@@ -60,10 +57,6 @@ export function VaulBottomSheet({
   useLayoutEffect(() => {
     if (!open || !autoElevate || fullScreen) {
       setElevated(false);
-      return;
-    }
-    if (alwaysElevate) {
-      setElevated(true);
       return;
     }
     const sheet = sheetRef.current;
@@ -83,13 +76,13 @@ export function VaulBottomSheet({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [open, autoElevate, alwaysElevate, fullScreen, children, footer, title, description]);
+  }, [open, autoElevate, fullScreen, children, footer, title, description]);
 
   const elevatedPlacement =
     autoElevate &&
-    (alwaysElevate || elevated) &&
+    elevated &&
     !fullScreen &&
-    "bottom-[max(42vh,calc(var(--portal-native-bottom-nav-inset,0px)+7rem))] top-auto";
+    "bottom-[max(32vh,calc(var(--portal-native-bottom-nav-inset,0px)+6rem))] top-auto";
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>

@@ -26,7 +26,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
@@ -1230,16 +1230,6 @@ export function ManagerApplications({
     </>
   );
 
-  const applicationsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={applicationsFilterSort}
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {applicationsHeaderActions}
-        </PortalSectionActionRow>
-      }
-    />
-  );
 
   const applicationModals = (
     <>
@@ -1379,7 +1369,6 @@ export function ManagerApplications({
       titleAside={applicationsHeaderActions}
       compactFilterRow
     >
-      {applicationsMobileActionsRow}
       <PortalListControlStack
         className="mb-2 max-lg:mb-2"
         destinationRow={

@@ -8,7 +8,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import {
@@ -832,9 +831,6 @@ export function ManagerPromotion({
     />
   );
 
-  const promotionMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={promotionFilterSheet} actions={promotionNewButton} />
-  );
 
   return (
     <ManagerPortalPageShell
@@ -844,7 +840,6 @@ export function ManagerPromotion({
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {promotionMobileActionsRow}
       <div data-attr="promotion-content-direct">
         {propertyScopedAssets.length === 0 ? (
           <div className="space-y-3">

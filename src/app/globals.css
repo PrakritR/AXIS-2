@@ -2466,9 +2466,12 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     max-height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
   }
 
-  /* Thread view uses the inbox back header — hide duplicate section chrome. */
+  /* Thread view uses the inbox back header — hide duplicate section chrome.
+     Communication renders the inline title band, NOT `page-header`, so both slots must be
+     listed: matching only `page-header` left this rule inert and the duplicate title visible. */
   html[data-communication-thread-reading] .portal-mobile-nav-bar,
-  html[data-communication-thread-reading] [data-slot="page-header"] {
+  html[data-communication-thread-reading] [data-slot="page-header"],
+  html[data-communication-thread-reading] [data-slot="portal-page-title-band"] {
     display: none;
   }
 

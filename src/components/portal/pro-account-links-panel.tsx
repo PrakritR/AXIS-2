@@ -6,7 +6,6 @@ import { Modal } from "@/components/ui/modal";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -1461,9 +1460,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     />
   );
 
-  const teamMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={teamFilterSheet} actions={teamLinkButton} />
-  );
 
   const teamActiveFilterChips = teamPropertyFilters.length > 0 ? (
     <div className="mb-3">
@@ -1487,7 +1483,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {teamMobileActionsRow}
       {teamActiveFilterChips}
       <div className="space-y-4" data-attr="co-manager-unified-view">
         {loadError ? (

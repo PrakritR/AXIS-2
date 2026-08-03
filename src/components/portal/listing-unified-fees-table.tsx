@@ -56,13 +56,14 @@ export type FeeExpandableSection = {
   emptyHint?: ReactNode;
 };
 
-const FEE_MONEY_INPUT_WIDTH = "w-[7.25rem]";
+/** Fluid, not fixed — a hard `w-` here is what pushed the table's min width to 44rem. */
+const FEE_MONEY_INPUT_WIDTH = "w-full min-w-[5.5rem] max-w-[9.5rem]";
 
 /** Grid columns: label | short-term | long-term | remove */
 function feeGridCols(showShortTerm: boolean) {
   return showShortTerm
-    ? "grid-cols-[minmax(8rem,1.1fr)_minmax(10.5rem,1fr)_minmax(14.5rem,1.35fr)_4.75rem]"
-    : "grid-cols-[minmax(8rem,1.15fr)_minmax(15rem,1.65fr)_4.75rem]";
+    ? "grid-cols-[minmax(7rem,1.1fr)_minmax(8.5rem,1fr)_minmax(12rem,1.35fr)_4.5rem]"
+    : "grid-cols-[minmax(7rem,1.15fr)_minmax(12rem,1.65fr)_4.5rem]";
 }
 
 function feeColSpan(showShortTerm: boolean) {
@@ -94,7 +95,7 @@ function FeeMoneyInput({
   dataField?: string;
 }) {
   return (
-    <div className={cn("relative shrink-0", FEE_MONEY_INPUT_WIDTH)} data-wizard-field={dataField}>
+    <div className={cn("relative min-w-0", FEE_MONEY_INPUT_WIDTH)} data-wizard-field={dataField}>
       <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs font-medium text-muted">
         $
       </span>
@@ -161,7 +162,7 @@ function FeeCadenceSelect({
 }) {
   return (
     <select
-      className="h-9 shrink-0 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+      className="h-9 min-w-0 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
       value={value}
       onChange={(e) => onChange(e.target.value === "one-time" ? "one-time" : "monthly")}
       aria-label={ariaLabel}
@@ -349,7 +350,7 @@ export function ListingUnifiedFeesTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <div className={cn("grid min-w-[44rem] gap-x-2 text-sm", feeGridCols(showShortTerm))}>
+      <div className={cn("grid min-w-[34rem] text-sm", feeGridCols(showShortTerm))}>
         <FeeTableHeader showShortTerm={showShortTerm} />
 
         {sections.map((section) => (
@@ -508,6 +509,11 @@ export function ListingUnifiedFeesTable({
             );
           })}
 
+          {/* Only genuinely custom rows belong here. Preset-backed rows are already
+              rendered above as standard fees, so listing them again duplicated every
+              fee once the legacy->unified migration started materializing presets
+              into customFees. Indices are captured before filtering because the
+              change/remove callbacks address the unfiltered array. */}
           {customFees
             .map((fee, i) => ({ fee, i }))
             .filter(({ fee }) => {
@@ -577,7 +583,7 @@ export function ListingUnifiedFeesTable({
             ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
         {readdableRows.length > 0 ? (
           <select
             className="h-8 rounded-full border border-border bg-card px-3 text-xs text-foreground"

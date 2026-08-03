@@ -87,8 +87,12 @@ function FilterPanelFields({
   onReset: () => void;
   compact?: boolean;
 }) {
+  /* `fields` is shared by ALL THREE presentations (mobile sheet, desktop dropdown, desktop
+     panel). The dropdown gives it a FIXED inline height inside `overflow-hidden`, so without
+     `min-h-0 flex-1` here plus a real scroll region below, a long field list is silently
+     clipped with no scrollbar instead of scrolling to its last option. */
   return (
-    <div className={compact ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={compact ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
@@ -97,7 +101,7 @@ function FilterPanelFields({
       <div
         className={
           compact
-            ? undefined
+            ? "min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
             : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
         }
       >
@@ -283,7 +287,6 @@ export function PortalFilterSortSheet({
           title="Filter"
           flushBody={mobileFlushBody}
           autoElevate={compactPanel}
-          alwaysElevate={compactPanel}
           lockBodyScroll={filterMenuOpen}
           maxHeightClass={
             mobileSheetClassName
@@ -303,7 +306,7 @@ export function PortalFilterSortSheet({
           <FilterSheetScrollLockContext.Provider value={setFilterMenuOpen}>
             <div
               className={cn(
-                "flex w-full max-w-full flex-col",
+                "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
                 mobileFlushBody && "px-4",
                 resolvedMobileSheetClass,
               )}

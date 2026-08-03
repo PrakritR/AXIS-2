@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
@@ -459,18 +459,6 @@ export function PortalCalendar({
       </>
     ) : null;
 
-  const calendarMobileActionsRow =
-    portal === "manager" ? (
-      <PortalPageHeaderMobileActionsRow
-        filter={calendarFilterSheet}
-        actions={
-          <PortalSectionActionRow variant="header" className="gap-2">
-            {calendarGoogleCalendarButton}
-            {calendarShareTourButton}
-          </PortalSectionActionRow>
-        }
-      />
-    ) : null;
 
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
 
@@ -504,7 +492,6 @@ export function PortalCalendar({
         titleAside={calendarHeaderActions ?? undefined}
         compactFilterRow={portal === "manager"}
       >
-        {calendarMobileActionsRow}
         {portal === "manager" ? (
           <PortalListControlStack
             className="mb-2"

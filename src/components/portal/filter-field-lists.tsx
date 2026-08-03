@@ -92,8 +92,6 @@ export const PORTAL_FILTER_ICON_CLASS = "size-3.5 shrink-0";
 const FILTER_TRIGGER_CLASS =
   "flex h-11 max-h-11 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
 
-/** Fixed portaled filter menu width — never shrink to a narrow trigger. */
-export const FILTER_FIELD_MENU_MIN_WIDTH_PX = 352;
 /** Portal filter menus always show the search row (consistent with Resident/House pickers). */
 export const FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH = true;
 

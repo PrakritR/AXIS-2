@@ -18,7 +18,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalListAddRow, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PORTAL_DATA_TABLE,
@@ -1229,11 +1228,6 @@ export function ResidentServicesPanel({
       </Button>
     );
 
-  const servicesMobileActionsRow = (
-    <div data-attr="resident-services-mobile-actions">
-      <PortalPageHeaderMobileActionsRow actions={servicesHeaderAction} className="[&_button]:w-full" />
-    </div>
-  );
 
   const servicesListChrome = (
     <PortalListControlStack
@@ -1299,7 +1293,6 @@ export function ResidentServicesPanel({
       titleAside={servicesHeaderAction}
       compactFilterRow
     >
-      {servicesMobileActionsRow}
       {servicesListChrome}
       <div
         className={lockedEmpty ? "space-y-0" : undefined}

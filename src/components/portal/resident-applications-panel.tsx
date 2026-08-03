@@ -12,7 +12,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -80,10 +80,7 @@ import {
   residentApplicationListHref,
   type ResidentApplicationBucketId,
 } from "@/lib/portal-detail-routes";
-import {
-  ResidentApplicationWorkspaceActions,
-  ResidentApplicationWorkspaceMobileApply,
-} from "@/components/portal/resident-application-workspace";
+import { ResidentApplicationWorkspaceActions } from "@/components/portal/resident-application-workspace";
 import { buildResidentApplicationWorkspaceState } from "@/lib/rental-application/resident-application-workspace";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 
@@ -879,9 +876,6 @@ export function ResidentApplicationsPanel({
       </Button>
     ) : null;
 
-  const applicationsMobileActionsRow = newApplicationButton ? (
-    <PortalPageHeaderMobileActionsRow actions={newApplicationButton} />
-  ) : null;
 
   const renderRoutedList = () => (
     <DataList
@@ -1064,12 +1058,6 @@ export function ResidentApplicationsPanel({
         }
         compactFilterRow
       >
-        <ResidentApplicationWorkspaceMobileApply
-          workspace={workspace}
-          sessionReady={sessionReady}
-          onApplyClick={openPropertyPicker}
-          canOpenPropertyPicker={canOpenPropertyPicker}
-        />
         {renderResidentApplicationList()}
       </ManagerPortalPageShell>
     );
@@ -1083,7 +1071,6 @@ export function ResidentApplicationsPanel({
         titleAside={newApplicationButton ?? undefined}
         compactFilterRow
       >
-        {applicationsMobileActionsRow}
         <PortalListControlStack className="mb-2 max-lg:mb-2" destinationRow={filterRow} />
         {!sessionReady ? (
           <div className={PORTAL_DATA_TABLE_WRAP}>

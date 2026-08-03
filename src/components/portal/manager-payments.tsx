@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort-fields";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -667,16 +667,6 @@ export function ManagerPayments({
 
   const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
 
-  const paymentsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={paymentsFilterControl}
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {paymentsHeaderActions}
-        </PortalSectionActionRow>
-      }
-    />
-  );
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     const chips: PortalActiveFilterChip[] = [];
@@ -836,7 +826,6 @@ export function ManagerPayments({
       titleAside={paymentsHeaderActions}
       compactFilterRow
     >
-      {paymentsMobileActionsRow}
       <PortalListControlStack
         className="mb-2"
         destinationRow={paymentsListDestinations}

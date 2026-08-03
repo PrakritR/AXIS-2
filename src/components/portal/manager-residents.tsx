@@ -41,7 +41,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageFooterActions, PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   RESIDENT_DETAIL_TAB_LABELS,
   RESIDENT_DETAIL_TAB_SHORT_LABELS,
@@ -2804,12 +2804,6 @@ export function ManagerResidents({
       </PortalFilterSortSheet>
     ) : null;
 
-  const residentsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={residentsFilterSheet}
-      actions={residentsAddButton}
-    />
-  );
 
   return (
     <>
@@ -2892,7 +2886,6 @@ export function ManagerResidents({
         titleAside={residentsAddButton}
         compactFilterRow
       >
-      {residentsMobileActionsRow}
       <PortalListControlStack
         className="mb-2 max-lg:mb-1.5"
         search={{

@@ -189,12 +189,38 @@ describe("resident portal redesign completeness", () => {
       expect(services.match(/className="w-full"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     });
 
-    it("stranded header actions are duplicated in mobile action rows", () => {
+    /**
+     * A header action must reach the phone EXACTLY ONCE. There are two correct shapes and
+     * mixing them is what shipped two overlapping "Apply to property" / "Schedule a tour"
+     * buttons to production:
+     *   a) the shell's inline title band carries it at every breakpoint (no mobile row), or
+     *   b) a `hidden md:flex` titleAside pairs with an `md:hidden` mobile row.
+     * Never both an ungated title band AND a mobile row.
+     */
+    it("header actions reach mobile exactly once — band OR mobile row, never both", () => {
+      // (a) Services + Tour + Applications: title band only, mobile row removed.
       const services = readPanel("resident-services-panel.tsx");
-      expect(services).toContain("resident-services-mobile-actions");
-      expect(services).toMatch(/\[&_button\]:w-full/);
+      expect(services).toContain("titleAside={servicesHeaderAction}");
+      expect(services).not.toContain("resident-services-mobile-actions");
+      expect(services).not.toContain("PortalPageHeaderMobileActionsRow");
+
+      const tour = readPanel("resident-tour-panel.tsx");
+      expect(tour).toContain("titleAside={scheduleTourButton}");
+      expect(tour).not.toContain("PortalPageHeaderMobileActionsRow");
+
+      const applications = readPanel("resident-applications-panel.tsx");
+      expect(applications).toContain("ResidentApplicationWorkspaceActions");
+      expect(applications).not.toContain("ResidentApplicationWorkspaceMobileApply");
+      expect(applications).not.toContain("PortalPageHeaderMobileActionsRow");
+
+      // …but the control itself must still exist — the failure mode worse than a duplicate.
+      expect(services).toContain("servicesHeaderAction");
+      expect(tour).toContain("scheduleTourButton");
+
+      // (b) Lease keeps the desktop-gated pairing, which renders exactly one row per breakpoint.
       const lease = readPanel("resident-lease-panel.tsx");
-      expect(lease).toMatch(/leaseMobileActionsRow|md:hidden/);
+      expect(lease).toMatch(/leaseMobileActionsRow/);
+      expect(lease).toMatch(/hidden gap-2 md:flex/);
     });
 
     it("application phase includes dashboard; limited omits services; approved adds it", () => {

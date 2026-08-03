@@ -9,7 +9,6 @@ import {
 } from "@/lib/portal-detail-routes";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
@@ -483,9 +482,6 @@ export function ManagerAllServicesPanel({
       </Button>
     );
 
-  const servicesMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={servicesFilterSheet} actions={servicesAddButton} />
-  );
 
   // Hoisted above the early returns below. It sat after them, so on a render that took an
   // early return this hook did not run and the hook COUNT changed between renders, which
@@ -597,7 +593,6 @@ export function ManagerAllServicesPanel({
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {servicesMobileActionsRow}
       <PortalListControlStack
         className="mb-2"
         destinationRow={servicesListDestinations}

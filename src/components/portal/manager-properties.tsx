@@ -12,7 +12,7 @@ import {
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
@@ -254,16 +254,6 @@ export function ManagerProperties({
     </>
   );
 
-  const propertiesMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {propertiesShareButton}
-          {propertiesAddButton}
-        </PortalSectionActionRow>
-      }
-    />
-  );
 
   const isDetailView = Boolean(propertyKeyProp);
 
@@ -294,7 +284,6 @@ export function ManagerProperties({
           titleAside={propertiesDesktopHeaderActions}
           compactFilterRow
         >
-          {propertiesMobileActionsRow}
           <PortalListControlStack
             className="mb-2"
             destinations={MANAGER_STAGES.map((stage) => ({
