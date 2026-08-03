@@ -26,7 +26,9 @@ last `PortalListControlStack` — and wraps everything below it in the scroll bo
 (`portal-page-chrome-layout.tsx`). Rows above that split stay fixed with the
 title and filters. Wrap the table yourself in `PortalPageScrollBody` when the
 inferred split is wrong; pass `stickyPageChrome={false}` for a page that should
-scroll whole.
+scroll whole. On phones this makes `.portal-list-page-scroll` — not the window —
+the scroller, which is easy to break from CSS: see
+[`portal-ui-system.md`](portal-ui-system.md#a-portal-pages-scroller-is-portal-list-page-scroll-not-the-window).
 
 Use `PortalListSectionShell` as a thin alias when building new sections:
 

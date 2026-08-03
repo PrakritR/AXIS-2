@@ -2583,7 +2583,8 @@ html[data-native] [data-listing-sections-root] {
      unscoped, this rule (unlayered, so it beats the Tailwind utility) pinned the
      shell to its full content height inside a clipped parent and every phone
      surface taller than the viewport became unscrollable below the fold. The
-     thread-reading override at the top of this file exists for the same reason. */
+     `html[data-communication-thread-reading] .portal-main-inner > *` override
+     earlier in this file exists for the same reason. */
   html:not([data-portal-sticky-chrome]):not([data-communication-surface]) .portal-main-inner > * {
     flex: 0 0 auto;
   }
