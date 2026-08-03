@@ -33,6 +33,8 @@ describe("managerMayFileLeaseUnderProperty", () => {
   };
 
   let ownedIds: string[] = [];
+  /** Property records that EXIST but belong to another manager. */
+  let foreignIds: string[] = [];
   let linkRows: LinkRow[] = [];
   let ownershipError: { message: string } | null = null;
 
@@ -55,10 +57,14 @@ describe("managerMayFileLeaseUnderProperty", () => {
             if (table === "profiles") return Promise.resolve({ data: { email: "manager@example.com" }, error: null });
             if (table === "manager_property_records") {
               if (ownershipError) return Promise.resolve({ data: null, error: ownershipError });
-              const id = filters.find(([column]) => column === "id")?.[1];
-              const owner = filters.find(([column]) => column === "manager_user_id")?.[1];
-              const match = owner === MANAGER && ownedIds.includes(String(id));
-              return Promise.resolve({ data: match ? { id } : null, error: null });
+              const id = String(filters.find(([column]) => column === "id")?.[1] ?? "");
+              if (ownedIds.includes(id)) {
+                return Promise.resolve({ data: { id, manager_user_id: MANAGER }, error: null });
+              }
+              if (foreignIds.includes(id)) {
+                return Promise.resolve({ data: { id, manager_user_id: "other-manager" }, error: null });
+              }
+              return Promise.resolve({ data: null, error: null });
             }
             return Promise.resolve({ data: null, error: null });
           },
@@ -86,6 +92,7 @@ describe("managerMayFileLeaseUnderProperty", () => {
 
   beforeEach(() => {
     ownedIds = [];
+    foreignIds = [];
     linkRows = [];
     ownershipError = null;
     vi.restoreAllMocks();
@@ -94,37 +101,58 @@ describe("managerMayFileLeaseUnderProperty", () => {
 
   it("allows a property the manager owns directly", async () => {
     ownedIds = ["prop-own"];
-    expect(await check("prop-own")).toEqual({ ok: true, allowed: true });
+    expect(await check("prop-own")).toEqual({ ok: true, allowed: true, propertyExists: true });
   });
 
   it("allows a co-manager holding the leases grant at edit level", async () => {
+    foreignIds = ["prop-linked"];
     linkRows = linkedWith({ "prop-linked": { leases: { read: true, edit: true } } });
-    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true, propertyExists: true });
   });
 
   it("allows a co-manager whose assignment has no checked permissions (full grant)", async () => {
+    foreignIds = ["prop-linked"];
     linkRows = linkedWith(undefined);
-    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true, propertyExists: true });
   });
 
   it("refuses a co-manager with read-only leases access — filing a lease is a write", async () => {
+    foreignIds = ["prop-linked"];
     linkRows = linkedWith({ "prop-linked": { leases: { read: true } } });
-    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false, propertyExists: true });
   });
 
   it("refuses a co-manager whose explicit permissions omit leases entirely", async () => {
+    foreignIds = ["prop-linked"];
     linkRows = linkedWith({ "prop-linked": { payments: { read: true, edit: true } } });
-    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false, propertyExists: true });
   });
 
-  it("refuses a property that is neither owned nor linked", async () => {
+  it("refuses a property owned by another manager and not linked", async () => {
     ownedIds = ["prop-own"];
+    foreignIds = ["prop-stranger"];
     linkRows = linkedWith({ "prop-linked": { leases: true } });
-    expect(await check("prop-stranger")).toEqual({ ok: true, allowed: false });
+    expect(await check("prop-stranger")).toEqual({ ok: true, allowed: false, propertyExists: true });
+  });
+
+  /**
+   * "Not allowed" and "provably someone else's" are different answers. A
+   * deleted listing — and any id that was never persisted as a property record
+   * — has no row at all, and the route must be able to tell that apart so an
+   * ordinary lease save is not 403'd.
+   */
+  it("reports an absent property record as not-existing rather than someone else's", async () => {
+    ownedIds = ["prop-own"];
+    expect(await check("prop-deleted")).toEqual({ ok: true, allowed: false, propertyExists: false });
+  });
+
+  it("still honors a linked grant when the property record cannot be read back", async () => {
+    linkRows = linkedWith({ "prop-linked": { leases: { read: true, edit: true } } });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true, propertyExists: false });
   });
 
   it("refuses an empty id without a lookup", async () => {
-    expect(await check("  ")).toEqual({ ok: true, allowed: false });
+    expect(await check("  ")).toEqual({ ok: true, allowed: false, propertyExists: false });
   });
 
   it("fails closed and logs when the ownership read errors", async () => {
@@ -135,8 +163,9 @@ describe("managerMayFileLeaseUnderProperty", () => {
 
   /** The co-manager-only path: a swallowed linked-read failure must still be correlatable. */
   it("logs the refusal so a co-manager 403 is not silent", async () => {
+    foreignIds = ["prop-linked"];
     linkRows = linkedWith({ "prop-linked": { leases: { read: true } } });
-    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false, propertyExists: true });
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("Lease property filing refused"),
       expect.objectContaining({ userId: MANAGER, propertyId: "prop-linked" }),

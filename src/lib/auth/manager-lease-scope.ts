@@ -251,35 +251,46 @@ export async function fetchLeasesForManagerUser(
  * lookups below swallow their failures into "no access", and that path lands
  * only on co-managers, so without a line here a transient failure reads as
  * "managers mysteriously cannot save leases" with nothing to correlate against.
+ *
+ * `propertyExists` reports whether `manager_property_records` holds a row with
+ * that id AT ALL, which is a different question from ownership: a deleted
+ * listing, and any id that was never persisted as a property record, are absent
+ * rather than someone else's. Callers that want to REFUSE must key on
+ * `!allowed && propertyExists` — "provably another manager's" — because a bare
+ * `!allowed` also catches every absent id and turns an ordinary save into a 403.
+ * The co-manager grant is still consulted for an absent row, so a linked
+ * assignment keeps working even if the property record cannot be read back.
  */
 export async function managerMayFileLeaseUnderProperty(
   db: ServiceClient,
   userId: string,
   propertyId: string,
-): Promise<{ ok: true; allowed: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; allowed: boolean; propertyExists: boolean } | { ok: false; error: string }> {
   const id = String(propertyId ?? "").trim();
-  if (!id) return { ok: true, allowed: false };
+  if (!id) return { ok: true, allowed: false, propertyExists: false };
 
   const { data, error } = await db
     .from("manager_property_records")
-    .select("id")
-    .eq("manager_user_id", userId)
+    .select("id, manager_user_id")
     .eq("id", id)
     .maybeSingle();
   if (error) {
     console.error("Lease property ownership lookup failed:", { userId, propertyId: id, message: error.message });
     return { ok: false, error: error.message };
   }
-  if (data) return { ok: true, allowed: true };
+  const propertyExists = Boolean(data);
+  if (data && String((data as { manager_user_id?: string | null }).manager_user_id ?? "").trim() === userId) {
+    return { ok: true, allowed: true, propertyExists: true };
+  }
 
   const allowed = await managerHasCoManagerPermissionForProperty(db, userId, id, "leases", "edit");
-  if (!allowed) {
+  if (!allowed && propertyExists) {
     console.error("Lease property filing refused: not owned, and no leases edit grant", {
       userId,
       propertyId: id,
     });
   }
-  return { ok: true, allowed };
+  return { ok: true, allowed, propertyExists };
 }
 
 /**
