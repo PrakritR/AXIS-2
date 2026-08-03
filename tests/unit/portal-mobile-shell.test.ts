@@ -90,4 +90,25 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain('html[data-native] nextjs-portal');
     expect(GLOBALS_CSS).toContain("display: none !important");
   });
+
+  it("leaves fixed-chrome page shells free to flex on phones", () => {
+    // `.portal-main-inner > * { flex: 0 0 auto }` is unlayered, so it beats the
+    // Tailwind `flex-1` utility on the page shell. Unscoped, it pinned the shell
+    // to its full content height inside the `overflow: hidden`
+    // #portal-main-content of every sticky-chrome / Communication surface, so
+    // .portal-list-page-scroll never got a bounded height and phone pages taller
+    // than the viewport could not scroll below the fold.
+    expect(GLOBALS_CSS).toContain(
+      "html:not([data-portal-sticky-chrome]):not([data-communication-surface]) .portal-main-inner > *",
+    );
+    expect(GLOBALS_CSS).not.toMatch(/\n {2}\.portal-main-inner > \* \{\n {4}flex: 0 0 auto;/);
+  });
+
+  it("drops the duplicate Settings page title behind the mobile app bar", () => {
+    const PROFILE_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
+      "utf8",
+    );
+    expect(PROFILE_SOURCE).toContain("hideTitleOnMobileNav");
+  });
 });
