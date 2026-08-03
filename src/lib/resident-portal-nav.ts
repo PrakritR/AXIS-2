@@ -130,22 +130,10 @@ export function residentNavLockReason(
   stage: ResidentPortalNavStage,
 ): string | null {
   if (!residentSectionLockedForStage(section, stage)) return null;
-  if (stage === "pre_approval") {
-    if (section === "lease" || section === "payments") {
-      return "Available after you submit an application";
-    }
-    return "Available after your application is approved";
-  }
-  if (stage === "application_submitted") {
-    if (section === "lease" || section === "payments") {
-      return "Available after your application is approved";
-    }
+  if (stage === "pre_approval" || stage === "application_submitted") {
     return "Available after your application is approved";
   }
   if (stage === "post_approval_pre_lease") {
-    if (section === "services" || section === "move-in") {
-      return "Available after your lease is signed";
-    }
     return "Available after your lease is signed";
   }
   return "Unavailable";

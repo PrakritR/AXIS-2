@@ -774,8 +774,9 @@ A locked row must never be a live link to a path the server then redirects home
 `src/lib/resident-portal-nav.ts` holds BOTH resident nav tables, and they are
 read by every surface — sidebar, mobile strip, phone bottom bar, and the route
 guard. **Application approved unlocks Lease + Payments; a fully-signed lease
-unlocks Services** (Documents and House details are deliberately not on that
-ladder — House details stays locked until signing).
+unlocks Services** (Documents unlocks alongside Lease + Payments at approval;
+House details is deliberately not on that ladder and stays locked until the
+lease is signed).
 
 - `STAGE_UNLOCKED_SECTIONS` decides what is reachable; `RESIDENT_BOTTOM_NAV_PRIMARY`
   decides the four phone tabs. **Every section in the second must be unlocked in

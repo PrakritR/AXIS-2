@@ -76,8 +76,13 @@ function readOwnedApplications(
       : null;
     if (!row) return [];
     const recordEmail = normalizeEmail(record.resident_email);
-    // Mirror the resident-scoped API: the stored column is the resident's address.
-    const rowForOwnership = { ...row, email: recordEmail || row.email } as Parameters<
+    // Mirror the resident-scoped API: the stored column is the resident's address,
+    // so `email` is pinned to it and a non-string `row_data.email` never reaches
+    // `normalizeEmail`. Re-checking with the shared predicate is intentionally
+    // belt-and-braces over the already-scoped query above, so widening that query
+    // later cannot silently widen this resolver's scope.
+    const rowEmail = typeof row.email === "string" ? row.email : "";
+    const rowForOwnership = { ...row, email: recordEmail || rowEmail } as Parameters<
       typeof residentOwnsApplicationRow
     >[0];
     if (!residentOwnsApplicationRow(rowForOwnership, { email, userId }, { recordEmail })) return [];

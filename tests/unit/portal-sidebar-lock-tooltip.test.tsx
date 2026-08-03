@@ -2,7 +2,7 @@
 //
 // An inert locked row has no destination and no visible reason text, so without
 // a `title` a SIGHTED resident taps a dead row and learns nothing — the lock
-// reason ("Available after you submit an application", "Available after your
+// reason ("Available after your application is approved", "Available after your
 // lease is signed") reached assistive tech only. Every resident lock reason must be
 // hoverable, not just the new one.
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -64,7 +64,7 @@ describe("inert locked nav rows expose their reason on hover", () => {
   it("puts the lock reason in the tooltip, not only in aria-label", () => {
     render(<PortalSidebar definition={RESIDENT_DEFINITION} residentNavStage="pre_approval" />);
 
-    const reason = "Lease: Available after you submit an application";
+    const reason = "Lease: Available after your application is approved";
     const row = desktopNav().getByRole("link", { name: reason });
     expect(row.tagName.toLowerCase()).toBe("span");
     expect(row.getAttribute("aria-disabled")).toBe("true");
