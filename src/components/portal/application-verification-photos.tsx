@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { formatBytes } from "@/lib/rental-application/application-photos";
 import type { ApplicationPhotoAttachment, ApplicationPhotoSlot } from "@/lib/rental-application/types";
 
@@ -78,14 +77,8 @@ export function ApplicationVerificationPhotos({ row }: { row: DemoApplicantRow }
   if (!front && !back && income.length === 0) return null;
 
   return (
-    <PortalCollapsibleSection
-      title="Verification photos"
-      defaultExpanded={false}
-      surfaceMuted={false}
-      className="mt-4"
-      contentClassName="p-4 pt-0"
-      toggleDataAttr="application-verification-photos-toggle"
-    >
+    <section className="mt-4 space-y-4" data-attr="application-verification-photos">
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Verification photos</p>
       <div className="space-y-4">
         {front || back ? (
           <div>
@@ -118,6 +111,6 @@ export function ApplicationVerificationPhotos({ row }: { row: DemoApplicantRow }
           </div>
         ) : null}
       </div>
-    </PortalCollapsibleSection>
+    </section>
   );
 }

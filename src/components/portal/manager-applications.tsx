@@ -41,7 +41,6 @@ import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationReviewLauncherRow, type ApplicationReviewView } from "@/components/portal/application-review-launcher-row";
 import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
-import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
@@ -1158,7 +1157,6 @@ export function ManagerApplications({
         onOpenScreeningModal={(opts) => openDetailScreeningModal(row, opts)}
       />
 
-      <ApplicationVerificationPhotos row={row} />
     </>
     );
   };
