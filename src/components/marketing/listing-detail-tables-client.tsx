@@ -25,6 +25,7 @@ import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
+import { formatRoomPriceAmount } from "@/lib/room-pricing";
 
 const LISTING_TABLE_HEAD =
   "text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]";
@@ -259,6 +260,33 @@ function ListingModalStatGrid({ items }: { items: { label: string; value: React.
       ))}
     </div>
   );
+}
+
+/**
+ * The room's rent for the detail modal, in the SAME format as
+ * `roomHeadlinePriceLabel` ("$1,200/mo", "$40.50/day"). It reads the exact
+ * `priceHeadlineAmount` the row already carries — never re-parsing the display
+ * `price` string, whose monthly form differs per builder — and returns null when
+ * the room genuinely has no rent set, so the card can say so instead of printing
+ * "$0" (an unpriced room really does occur, e.g. a short-term-stay listing that
+ * ships blank payment terms).
+ */
+function roomRentLabel(room: ListingRoomRow): string | null {
+  const amount = room.priceHeadlineAmount;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return null;
+  return `${formatRoomPriceAmount(amount)}${room.pricePeriod === "day" ? "/day" : "/mo"}`;
+}
+
+/**
+ * An entire-home room carries a descriptive price label ("Included") rather than
+ * a number, and reporting that as "Not set" would be wrong. Anything containing a
+ * digit is a price `roomRentLabel` already rejected as unpriced, so it never
+ * reaches this fallback.
+ */
+function roomRentDescriptiveLabel(room: ListingRoomRow): string | null {
+  const raw = room.price?.trim();
+  if (!raw || raw === "—" || /\d/.test(raw)) return null;
+  return raw;
 }
 
 function ListingModalTags({ tags }: { tags: readonly string[] }) {
@@ -535,6 +563,28 @@ export function ListingDetailModal({
                   />
                   <ListingModalStatGrid
                     items={[
+                      {
+                        // Rent leads the grid, and is the one stat rendered at
+                        // headline size: it is the number a renter came for, and
+                        // the utilities estimate sitting beside it reads as the
+                        // price of the room when nothing outranks it.
+                        label: "Rent",
+                        value: (() => {
+                          const rent = roomRentLabel(state.room);
+                          if (rent) {
+                            return (
+                              <span className="text-base font-bold tabular-nums text-foreground sm:text-lg">
+                                {rent}
+                              </span>
+                            );
+                          }
+                          const descriptive = roomRentDescriptiveLabel(state.room);
+                          if (descriptive) {
+                            return <span className="text-sm font-semibold text-foreground">{descriptive}</span>;
+                          }
+                          return <span className="text-sm font-semibold text-muted">Not set</span>;
+                        })(),
+                      },
                       {
                         label: "Floor / level",
                         value: state.room.modal.floorLine?.trim() || "—",
