@@ -38,9 +38,20 @@ const PORTAL_DIR = join(process.cwd(), "src/components/portal");
 const SPLIT_SHAPE_PANELS = [
   "manager-finances-panel.tsx",
   "manager-documents-panel.tsx",
+  "resident-documents-panel.tsx",
   "resident-lease-panel.tsx",
   "resident-payments-panel.tsx",
 ];
+
+/**
+ * A hand-rolled mobile row is identified by its `data-slot` alone, NOT by scanning the
+ * className for `md:hidden`. Panels build that className however they like — a template
+ * literal with an embedded ternary (`resident-payments-panel.tsx`) contains quotes, so any
+ * `[^"]*` bridge from the class list to the attribute terminates early and the panel goes
+ * invisible to this sweep. The slot name is the stable marker; a row that forgot `md:hidden`
+ * duplicates at every breakpoint and should be caught here too.
+ */
+const RENDERS_MOBILE_ROW = /<PortalPageHeaderMobileActionsRow|data-slot="[a-z-]*mobile-actions"/;
 
 describe("header controls reach mobile exactly once", () => {
   it("every panel with a mobile actions row keeps a desktop-gated titleAside", () => {
@@ -48,9 +59,7 @@ describe("header controls reach mobile exactly once", () => {
     for (const file of readdirSync(PORTAL_DIR)) {
       if (!file.endsWith(".tsx")) continue;
       const src = readFileSync(join(PORTAL_DIR, file), "utf8");
-      const rendersMobileRow =
-        /<PortalPageHeaderMobileActionsRow/.test(src) || /md:hidden[^"]*"\s*data-slot="[a-z-]*mobile-actions/.test(src);
-      if (!rendersMobileRow) continue;
+      if (!RENDERS_MOBILE_ROW.test(src)) continue;
       if (!src.includes("hideTitleOnMobileNav")) continue;
       // Band-only sections must not ALSO ship a mobile row; split sections must gate the band.
       if (!/hidden[^"]*\bmd:flex\b/.test(src)) offenders.push(file);
@@ -61,7 +70,7 @@ describe("header controls reach mobile exactly once", () => {
   it("the split-shape panels still render their mobile row (never zero controls)", () => {
     for (const file of SPLIT_SHAPE_PANELS) {
       const src = readFileSync(join(PORTAL_DIR, file), "utf8");
-      expect(src, `${file} lost its mobile actions row`).toMatch(/mobile-actions|MobileActionsRow/);
+      expect(src, `${file} lost its mobile actions row`).toMatch(RENDERS_MOBILE_ROW);
       expect(src, `${file} lost its desktop gate`).toMatch(/hidden[^"]*\bmd:flex\b/);
     }
   });

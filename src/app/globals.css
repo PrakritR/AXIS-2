@@ -2585,17 +2585,14 @@ html[data-native] [data-listing-sections-root] {
 }
 
 /* Inline page title band (Communication, etc.): hide duplicate section label in mobile nav.
-   The nav-bar h1 carries Tailwind's `flex-1` (`flex: 1 1 0%`), which makes it grow to fill
-   its flex row no matter what `width` says — so the sr-only block below matched but changed
-   nothing, and every inline-band section shipped the section name twice on phones. `flex`
-   must be neutralised for the rest of the recipe to take effect. */
+   `position: absolute` takes the h1 out of flow, so the nav bar's Tailwind `flex-1` on it
+   stops applying and the sr-only recipe below is sufficient on its own — do not add
+   `flex`/`min-width` overrides here expecting them to do anything. */
 @media (max-width: 1023px) {
   .portal-main-inner:has([data-slot="portal-page-title-band"]) > .portal-mobile-nav-bar h1 {
     position: absolute;
-    flex: 0 0 auto;
     width: 1px;
     height: 1px;
-    min-width: 0;
     padding: 0;
     margin: -1px;
     overflow: hidden;

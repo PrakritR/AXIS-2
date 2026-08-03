@@ -59,11 +59,25 @@ export type FeeExpandableSection = {
 /** Fluid, not fixed — a hard `w-` here is what pushed the table's min width to 44rem. */
 const FEE_MONEY_INPUT_WIDTH = "w-full min-w-[5.5rem] max-w-[9.5rem]";
 
-/** Grid columns: label | short-term | long-term | remove */
+/**
+ * Fluid like the money input, but with its own floor: the cadence select is the only
+ * control here whose text cannot wrap or ellipsize, so without a min width it shrinks
+ * inside `FEE_CONTROL_ROW` until "One-time" clips behind the native arrow.
+ */
+const FEE_CADENCE_SELECT_WIDTH = "w-full min-w-[6rem] max-w-[7.5rem]";
+
+/**
+ * Grid columns: label | short-term | long-term | remove.
+ *
+ * The long-term floor is the sum of what its cell actually holds at the narrowest
+ * useful size: `px-3` (24px) + checkbox (14px) + gap (8px) + money-input floor (88px)
+ * + gap (8px) + cadence-select floor (96px) = 238px ≈ 15rem. Short-term carries no
+ * cadence select, so it floors 8.5rem.
+ */
 function feeGridCols(showShortTerm: boolean) {
   return showShortTerm
-    ? "grid-cols-[minmax(7rem,1.1fr)_minmax(8.5rem,1fr)_minmax(12rem,1.35fr)_4.5rem]"
-    : "grid-cols-[minmax(7rem,1.15fr)_minmax(12rem,1.65fr)_4.5rem]";
+    ? "grid-cols-[minmax(7rem,1.1fr)_minmax(8.5rem,1fr)_minmax(15rem,1.35fr)_4.5rem]"
+    : "grid-cols-[minmax(7rem,1.15fr)_minmax(15rem,1.65fr)_4.5rem]";
 }
 
 function feeColSpan(showShortTerm: boolean) {
@@ -162,7 +176,10 @@ function FeeCadenceSelect({
 }) {
   return (
     <select
-      className="h-9 min-w-0 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+      className={cn(
+        "h-9 rounded-lg border border-border bg-card px-2 text-xs text-foreground",
+        FEE_CADENCE_SELECT_WIDTH,
+      )}
       value={value}
       onChange={(e) => onChange(e.target.value === "one-time" ? "one-time" : "monthly")}
       aria-label={ariaLabel}
@@ -350,7 +367,7 @@ export function ListingUnifiedFeesTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <div className={cn("grid min-w-[34rem] text-sm", feeGridCols(showShortTerm))}>
+      <div className={cn("grid min-w-[35rem] text-sm", feeGridCols(showShortTerm))}>
         <FeeTableHeader showShortTerm={showShortTerm} />
 
         {sections.map((section) => (

@@ -81,11 +81,14 @@ function FilterPanelFields({
   extraModalContent,
   onReset,
   compact = false,
+  scrollLocked = false,
 }: {
   children: ReactNode;
   extraModalContent?: ReactNode;
   onReset: () => void;
   compact?: boolean;
+  /** A portaled field menu is open — freeze this scroll region so it cannot drift under it. */
+  scrollLocked?: boolean;
 }) {
   /* `fields` is shared by ALL THREE presentations (mobile sheet, desktop dropdown, desktop
      panel). The dropdown gives it a FIXED inline height inside `overflow-hidden`, so without
@@ -99,11 +102,11 @@ function FilterPanelFields({
         </div>
       ) : null}
       <div
-        className={
-          compact
-            ? "min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
-            : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
-        }
+        className={cn(
+          "min-h-0 overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]",
+          !compact && "flex-1",
+          scrollLocked ? "overflow-y-hidden" : "overflow-y-auto",
+        )}
       >
         <div className="flex min-w-0 max-w-full flex-col gap-3 max-lg:gap-2">
           {children}
@@ -177,8 +180,15 @@ export function PortalFilterSortSheet({
   const resolvedMobileSheetClass =
     mobileSheetClassName ??
     (compactPanel ? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS : "h-auto max-h-[min(14rem,45vh)]");
+  /* `filterMenuOpen` is only ever set from inside the mobile sheet's provider, so on the
+     desktop dropdown/panel this stays false and their scroll regions are untouched. */
   const fields = (
-    <FilterPanelFields onReset={onReset} extraModalContent={extraModalContent} compact={compactPanel}>
+    <FilterPanelFields
+      onReset={onReset}
+      extraModalContent={extraModalContent}
+      compact={compactPanel}
+      scrollLocked={filterMenuOpen}
+    >
       {children}
     </FilterPanelFields>
   );
@@ -306,7 +316,12 @@ export function PortalFilterSortSheet({
           <FilterSheetScrollLockContext.Provider value={setFilterMenuOpen}>
             <div
               className={cn(
-                "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+                "flex w-full max-w-full flex-col overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]",
+                /* `VaulBottomSheet`'s `lockBodyScroll` works by putting `overflow-hidden` on
+                   its own body div, which a descendant's own `overflow-y-auto` defeats. So the
+                   sheet's scroll containers have to stand down while a portaled field menu is
+                   open, or the prop is inert for this caller. */
+                filterMenuOpen ? "overflow-y-hidden" : "overflow-y-auto",
                 mobileFlushBody && "px-4",
                 resolvedMobileSheetClass,
               )}
