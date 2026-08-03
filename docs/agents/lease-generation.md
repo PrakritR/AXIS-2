@@ -467,6 +467,34 @@ with NO parse is untouched** — legacy uploads, `externallySignedLease` filings
 and generated leases all behave exactly as before, and `/demo` writes no parse
 at all.
 
+**The gate is on the transition, not on a button, so the agent layer is inside
+it.** `send_lease_for_signature` performs the same transition from the assistant
+that the Leases UI performs, so `sendForSignatureBlocker`
+(`src/lib/tools/domains/leases.ts`) calls the SAME
+`leaseAwaitsUploadedLeaseReview` predicate and returns the same
+`UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE`. Any future path that writes
+`bucket: "resident"` must clear this gate too — greying out a button is not the
+gate.
+
+**The reading is derived, so it may not outlive the upload.**
+`normalizeLeasePipelineRow` drops `uploadedLeaseParse` whenever the row has no
+`managerUploadedPdf.dataUrl`. Every path that swaps a generated document in for
+the upload (`generateLeaseHtmlForRow`, the agent's `update_lease` regenerate,
+section and packet edits) already writes `managerUploadedPdf: null` through that
+function, so one choke point covers all of them instead of a list to keep in
+sync — otherwise a manager is held forever, asked to attest against a PDF the
+row no longer has. `residentUploadLeasePdf` clears it explicitly, because there
+the upload is *replaced* rather than removed.
+
+**`normalizeUploadedLeaseParse` fails CLOSED.** `row_data` is client-writable,
+so the stored blob is untrusted: section titles/bodies and field values are
+coerced, an unknown field status reads as `not_found` (blank and flagged, never
+a term), unknown keys and uncoercible rows are dropped, and a `version` this
+build does not know degrades the whole parse to `failed` with its confirmation
+discarded. What it must never do is return `null` for a parse that is present
+but unreadable — that would unblock signing. Absent still means absent (`null`
+→ `null`), which is what keeps pre-parse rows behaving as before.
+
 Extraction is deterministic regex over `unpdf` page text, server-side
 (`/api/portal/parse-uploaded-lease`, manager-authenticated + rate limited). No
 new dependency, nothing added to the client bundle, and **no lease text leaves

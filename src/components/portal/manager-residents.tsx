@@ -2389,6 +2389,10 @@ export function ManagerResidents({
             return;
           }
           setLeaseTick((n) => n + 1);
+          if (result.saveError) {
+            showToast(`Lease PDF uploaded, but its PropLane reading was not stored: ${result.saveError}`);
+            return;
+          }
           if (!result.parse) {
             showToast("Lease PDF uploaded.");
             return;

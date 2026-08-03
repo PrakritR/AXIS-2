@@ -16,6 +16,7 @@ vi.mock("@/lib/vendor-invite.server", () => ({
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { sendVendorInvite } from "@/lib/vendor-invite.server";
 import { listLeasesTool, amendLeaseTool, voidLeaseTool, sendLeaseForSignatureTool } from "@/lib/tools/domains/leases";
+import { buildUploadedLeaseParse } from "@/lib/uploaded-lease-extraction";
 import { addVendorTool, updateVendorTool, inviteVendorTool } from "@/lib/tools/domains/vendors";
 import { executeWrite, previewWrite } from "./fake-agent-ctx";
 
@@ -413,6 +414,61 @@ describe("send_lease_for_signature", () => {
     expect(done.ok).toBe(false);
     const foreign = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_foreign" });
     expect(foreign.ok).toBe(false);
+  });
+
+  // The assistant reaches the same transition the Leases UI does, so it has to
+  // clear the same gate: a machine reading of an uploaded contract that no
+  // person has confirmed must not become signable through the tool layer.
+  function importedLease(id: string, reviewStatus: "needs_review" | "confirmed"): Row {
+    return draftLease(id, {
+      generatedHtml: null,
+      managerUploadedPdf: {
+        dataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+        originalDataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+        fileName: "third-party-lease.pdf",
+        uploadedAt: "2026-08-01T00:00:00.000Z",
+      },
+      uploadedLeaseParse: {
+        ...buildUploadedLeaseParse({
+          pages: ["1. RENT\nMonthly rent is $2,150.00."],
+          fileName: "third-party-lease.pdf",
+          sourceSha256: "d".repeat(64),
+          extractedAtIso: "2026-08-01T00:00:00.000Z",
+        }),
+        review: { status: reviewStatus },
+      },
+    });
+  }
+
+  it("preview and execute both refuse an imported lease no manager has confirmed", async () => {
+    const { ctx, store } = makeCtx({
+      portal_lease_pipeline_records: [leaseRecord("manager_a", importedLease("lease_import", "needs_review"))],
+    });
+
+    const preview = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_import" });
+    expect(preview.ok).toBe(false);
+    if (!preview.ok) expect(preview.error).toContain("confirm it before sending");
+
+    const executed = await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_import" });
+    expect(executed.ok).toBe(false);
+
+    const rowData = store.tables.portal_lease_pipeline_records![0]!.row_data as Row;
+    expect(rowData.bucket).toBe("manager");
+    expect(rowData.status).toBeUndefined();
+    expect(store.tables.audit_log ?? []).toHaveLength(0);
+    expect(deliverPortalInboxMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends an imported lease once a manager has confirmed the reading", async () => {
+    const { ctx, store } = makeCtx({
+      portal_lease_pipeline_records: [leaseRecord("manager_a", importedLease("lease_import", "confirmed"))],
+    });
+
+    const res = await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_import" });
+
+    expect(res.ok).toBe(true);
+    const rowData = store.tables.portal_lease_pipeline_records![0]!.row_data as Row;
+    expect(rowData.status).toBe("Resident Signature Pending");
   });
 
   it("execute moves the lease to the resident-signature stage and notifies the resident", async () => {

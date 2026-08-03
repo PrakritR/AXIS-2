@@ -103,6 +103,11 @@ export function UploadedLeaseReviewModal({
     setDrafts((d) => ({ ...d, [key]: value }));
 
   if (parse.status !== "parsed") {
+    // A read that is still running has no result to attest to, and confirming
+    // now would make the parse that lands a moment later unstorable — leaving
+    // the row on an empty reading of a document that structured fine. So the
+    // confirm affordance exists only once the read has finished and failed.
+    const stillReading = parse.status === "pending";
     return (
       <Modal
         open={open}
@@ -111,48 +116,63 @@ export function UploadedLeaseReviewModal({
         onClose={onClose}
         panelClassName={MODAL_LARGE_PANEL_CLASS}
         footer={
-          <ModalFooter>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={!attested}
-              data-attr="uploaded-lease-confirm"
-              onClick={() => onConfirm({ overrides: {}, note })}
-            >
-              Confirm and allow signing
-            </Button>
-          </ModalFooter>
+          stillReading || confirmed ? undefined : (
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                disabled={!attested}
+                data-attr="uploaded-lease-confirm"
+                onClick={() => onConfirm({ overrides: {}, note })}
+              >
+                Confirm and allow signing
+              </Button>
+            </ModalFooter>
+          )
         }
       >
         <div className="space-y-4 text-sm">
-          <div className="rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+          <div
+            className={
+              stillReading
+                ? "rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+                : "rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+            }
+            data-attr={stillReading ? "uploaded-lease-still-reading" : "uploaded-lease-unreadable"}
+          >
             <p className="font-semibold">
-              {parse.status === "pending" ? "Still reading this document…" : "This document could not be structured."}
+              {stillReading ? "Still reading this document…" : "This document could not be structured."}
             </p>
             {parse.failureReason ? <p className="mt-1">{parse.failureReason}</p> : null}
             <p className="mt-2">
-              The uploaded PDF is stored unchanged and is still the document that gets signed. Nothing was
-              shortened or rewritten — PropLane simply could not read it into sections.
+              The uploaded PDF is stored unchanged and is still the document that gets signed.
+              {stillReading
+                ? " This lease stays held until the read finishes — reopen this from Review import in a moment."
+                : " Nothing was shortened or rewritten — PropLane simply could not read it into sections."}
             </p>
           </div>
-          <label className="flex items-start gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={attested}
-              data-attr="uploaded-lease-attest"
-              onChange={(e) => setAttested(e.target.checked)}
-            />
-            <span>I have read the original PDF myself and it is the lease I intend to send for signature.</span>
-          </label>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={2}
-            placeholder="Optional note recorded with your confirmation"
-            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-          />
+          {stillReading || confirmed ? null : (
+            <>
+              <label className="flex items-start gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={attested}
+                  data-attr="uploaded-lease-attest"
+                  onChange={(e) => setAttested(e.target.checked)}
+                />
+                <span>I have read the original PDF myself and it is the lease I intend to send for signature.</span>
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder="Optional note recorded with your confirmation"
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+              />
+            </>
+          )}
         </div>
       </Modal>
     );

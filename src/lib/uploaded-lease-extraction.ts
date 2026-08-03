@@ -232,12 +232,13 @@ export function splitLeasePagesIntoSections(doc: UploadedLeaseText): UploadedLea
     if (isHeadingLine(line)) headingStarts.push(start);
   }
 
+  const headingStartSet = new Set(headingStarts);
   const cuts = headingStarts[0] === 0 ? [...headingStarts] : [0, ...headingStarts];
   const sections: UploadedLeaseSection[] = [];
   cuts.forEach((start, i) => {
     const end = i + 1 < cuts.length ? cuts[i + 1]! : text.length;
     const slice = text.slice(start, end);
-    const isHeading = headingStarts.includes(start);
+    const isHeading = headingStartSet.has(start);
     const firstBreak = slice.indexOf("\n");
     const title = isHeading ? slice.slice(0, firstBreak === -1 ? slice.length : firstBreak).trim() : "";
     const body = isHeading ? slice.slice(firstBreak === -1 ? slice.length : firstBreak + 1) : slice;
@@ -597,11 +598,115 @@ export function confirmedUploadedLeaseReview(
 }
 
 const FIELD_KEYS = new Set<string>(FIELD_MATCHERS.map((m) => m.key));
+const FIELD_LABELS = new Map<string, string>(FIELD_MATCHERS.map((m) => [m.key, m.label]));
+const FIELD_MAPS_TO = new Map<string, string | null>(FIELD_MATCHERS.map((m) => [m.key, m.mapsTo]));
+const FIELD_STATUSES = new Set<string>(["extracted", "ambiguous", "not_found"]);
 
-/** Coerce a parse blob arriving from storage; anything unrecognized becomes null. */
-export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | null {
+/** The parse could not be interpreted, so it holds the lease instead of releasing it. */
+const UNREADABLE_PARSE_REASON =
+  "PropLane's stored reading of this document could not be interpreted, so nothing from it is shown. The uploaded PDF is unchanged — read the original and confirm it yourself.";
+
+function unreadableVersionReason(version: unknown): string {
+  const printed = typeof version === "number" && Number.isFinite(version) ? String(version) : "unknown";
+  return `PropLane's stored reading of this document is in format version ${printed}, which this build cannot interpret, so nothing from it is shown. The uploaded PDF is unchanged — read the original and confirm it yourself.`;
+}
+
+function coerceText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function coerceOffset(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function coercePage(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+function normalizeSourceRef(raw: unknown): UploadedLeaseSourceRef | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as Partial<UploadedLeaseParse>;
+  const s = raw as Record<string, unknown>;
+  return {
+    page: coercePage(s.page),
+    charStart: coerceOffset(s.charStart),
+    charEnd: coerceOffset(s.charEnd),
+    snippet: coerceText(s.snippet),
+  };
+}
+
+function normalizeCandidate(raw: unknown): UploadedLeaseFieldCandidate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c = raw as Record<string, unknown>;
+  const value = coerceText(c.value).trim();
+  if (!value) return null;
+  return { value, source: normalizeSourceRef(c.source) ?? { page: 1, charStart: 0, charEnd: 0, snippet: "" } };
+}
+
+/**
+ * One stored field, coerced so no renderer can be handed a missing string, an
+ * unknown status, or a missing candidate list. A row this shape cannot be
+ * repaired into (wrong key, not an object) is dropped rather than guessed at.
+ *
+ * `value` is cleared for anything but `extracted`, which is the module's own
+ * blank-and-flagged rule enforced on the way IN as well as on the way out — a
+ * tampered blob must not be able to present an unread term as a read one.
+ */
+function normalizeStoredField(raw: unknown): UploadedLeaseField | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const key = typeof f.key === "string" ? f.key : "";
+  if (!FIELD_KEYS.has(key)) return null;
+  const status = (FIELD_STATUSES.has(String(f.status)) ? f.status : "not_found") as UploadedLeaseFieldStatus;
+  const candidates = Array.isArray(f.candidates)
+    ? f.candidates.map(normalizeCandidate).filter((c): c is UploadedLeaseFieldCandidate => c !== null).slice(0, 6)
+    : [];
+  return {
+    key: key as UploadedLeaseFieldKey,
+    label: FIELD_LABELS.get(key) ?? key,
+    mapsTo: FIELD_MAPS_TO.get(key) ?? null,
+    status,
+    value: status === "extracted" ? coerceText(f.value).trim() : "",
+    normalized: typeof f.normalized === "string" ? f.normalized : null,
+    source: status === "extracted" ? normalizeSourceRef(f.source) : null,
+    candidates: status === "ambiguous" ? candidates : [],
+  };
+}
+
+function normalizeStoredSection(raw: unknown, index: number): UploadedLeaseSection | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Record<string, unknown>;
+  return {
+    index,
+    title: coerceText(s.title),
+    body: coerceText(s.body),
+    page: coercePage(s.page),
+    charStart: coerceOffset(s.charStart),
+    charEnd: coerceOffset(s.charEnd),
+  };
+}
+
+/**
+ * Coerce a parse blob arriving from storage.
+ *
+ * Absent means absent: `null`/`undefined` returns null, so a lease that never
+ * had a parse keeps behaving exactly as it always did. Anything else PRESENT
+ * but unreadable — not an object, a version this build does not know, sections
+ * or fields that cannot be coerced — degrades to a `failed`, unconfirmed parse
+ * rather than to null. That direction matters: null would silently unblock
+ * signing, and the whole point of this record is to hold the lease until a
+ * person has read the document. The manager can still confirm after reading the
+ * original PDF, so failing closed is not a dead end.
+ */
+export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object") return failedUploadedLeaseParse("Uploaded lease.pdf", UNREADABLE_PARSE_REASON);
+  const r = raw as Partial<UploadedLeaseParse> & Record<string, unknown>;
+  const sourceFileName = String(r.sourceFileName ?? "").trim() || "Uploaded lease.pdf";
+  if (r.version !== UPLOADED_LEASE_PARSE_VERSION) {
+    return failedUploadedLeaseParse(sourceFileName, unreadableVersionReason(r.version));
+  }
   const status = r.status === "parsed" || r.status === "failed" ? r.status : "pending";
   const reviewRaw = (r.review ?? {}) as Partial<UploadedLeaseReview>;
   const overridesRaw = (reviewRaw.overrides ?? {}) as Record<string, unknown>;
@@ -612,15 +717,22 @@ export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | 
     }
   }
   const sections = Array.isArray(r.sections)
-    ? r.sections.filter((s): s is UploadedLeaseSection => Boolean(s) && typeof s === "object")
+    ? r.sections
+        .map((s, i) => normalizeStoredSection(s, i))
+        .filter((s): s is UploadedLeaseSection => s !== null)
+        .map((s, i) => ({ ...s, index: i }))
     : [];
+  const seenFieldKeys = new Set<string>();
   const fields = Array.isArray(r.fields)
-    ? r.fields.filter((f): f is UploadedLeaseField => Boolean(f) && typeof f === "object" && FIELD_KEYS.has(String(f.key)))
+    ? r.fields
+        .map(normalizeStoredField)
+        .filter((f): f is UploadedLeaseField => f !== null)
+        .filter((f) => (seenFieldKeys.has(f.key) ? false : (seenFieldKeys.add(f.key), true)))
     : [];
   return {
     version: UPLOADED_LEASE_PARSE_VERSION,
     status,
-    sourceFileName: String(r.sourceFileName ?? "").trim() || "Uploaded lease.pdf",
+    sourceFileName,
     sourceSha256: typeof r.sourceSha256 === "string" && /^[0-9a-f]{64}$/.test(r.sourceSha256) ? r.sourceSha256 : null,
     pageCount: Number.isFinite(r.pageCount) ? Number(r.pageCount) : 0,
     characterCount: Number.isFinite(r.characterCount) ? Number(r.characterCount) : 0,

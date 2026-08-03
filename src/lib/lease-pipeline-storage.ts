@@ -529,7 +529,13 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     generatedHtml: stripLeaseAiDisclaimerFromHtml(r.generatedHtml ?? null),
     generatedAtIso: r.generatedAtIso ?? null,
     managerUploadedPdf: r.managerUploadedPdf ?? null,
-    uploadedLeaseParse: normalizeUploadedLeaseParse(r.uploadedLeaseParse),
+    // The parse describes ONE uploaded document, so it cannot outlive it. Every
+    // path that replaces the upload with generated HTML (the agent's
+    // regenerate, section edits, packet edits) writes `managerUploadedPdf:
+    // null` through this function, so clearing the derived reading here covers
+    // all of them at once instead of leaving a list to keep in sync — and a
+    // manager can never be asked to attest against a PDF the row no longer has.
+    uploadedLeaseParse: r.managerUploadedPdf?.dataUrl ? normalizeUploadedLeaseParse(r.uploadedLeaseParse) : null,
     thread: safeThread,
     managerSignature,
     residentSignature,
@@ -1979,6 +1985,11 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
           fileName: file.name,
           uploadedAt: iso,
         },
+        // The resident swapped in a different document, so the reading of the
+        // manager's file no longer describes what is on this row — keeping it
+        // would let an old `sourceSha256` and file name claim to belong to
+        // bytes nobody read.
+        uploadedLeaseParse: null,
         generatedHtml: null,
         generatedAtIso: null,
         pdfVersion: nextVersion,

@@ -410,6 +410,10 @@ export function ManagerLeasesPipelinePanel({
       showToast(res.error ?? "Upload failed.");
       return;
     }
+    if (res.saveError) {
+      showToast(`PDF saved, but its PropLane reading was not stored: ${res.saveError}`);
+      return;
+    }
     if (!res.parse) {
       showToast("PDF saved. Resident sees this on their Lease tab.");
       return;

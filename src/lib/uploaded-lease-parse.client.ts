@@ -42,6 +42,13 @@ export type UploadAndParseResult = {
   error?: string;
   /** Null in demo mode, where no parse round trip runs. */
   parse?: UploadedLeaseParse | null;
+  /**
+   * The PDF landed but its reading did not: the row already carries a confirmed
+   * review, or the upload went missing under us. The returned `parse` is then
+   * NOT what the row holds, so a caller must say so rather than report the
+   * import as stored.
+   */
+  saveError?: string;
 };
 
 /**
@@ -71,6 +78,6 @@ export async function uploadAndParseLeasePdf(
     parse = failedUploadedLeaseParse(file.name, err instanceof Error ? err.message : "Could not read that lease PDF.");
   }
   const saved = saveUploadedLeaseParse(rowId, parse, managerUserId);
-  if (!saved.ok) return { ok: true, parse, error: saved.error };
+  if (!saved.ok) return { ok: true, saveError: saved.error ?? "The imported reading could not be stored." };
   return { ok: true, parse };
 }

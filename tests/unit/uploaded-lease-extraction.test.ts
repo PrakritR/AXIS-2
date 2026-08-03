@@ -18,6 +18,7 @@ import {
   pageForOffset,
   splitLeasePagesIntoSections,
   uploadedLeaseNeedsManagerConfirmation,
+  UPLOADED_LEASE_PARSE_VERSION,
   type UploadedLeaseFieldKey,
 } from "@/lib/uploaded-lease-extraction";
 
@@ -180,6 +181,7 @@ describe("parse assembly and review state", () => {
 
   it("drops unknown override keys when rehydrating from storage", () => {
     const rehydrated = normalizeUploadedLeaseParse({
+      version: UPLOADED_LEASE_PARSE_VERSION,
       status: "parsed",
       sourceFileName: "x.pdf",
       sections: [],
