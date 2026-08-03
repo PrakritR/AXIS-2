@@ -35,11 +35,17 @@ let EFFECTIVE_ROLE: string | null = null;
 let VISIBLE_TO_RESIDENT = true;
 let RECORD_EXISTS = true;
 
+const APPLICATION_ID = "app-1";
+const MANAGER_FILED_PDF = "data:application/pdf;base64,MANAGERFILED";
+
 const DEFAULT_STORED_ROW_DATA: Record<string, unknown> = {
   id: LEASE_ID,
   residentEmail: RESIDENT_EMAIL,
   managerUserId: OWNER_MANAGER,
+  axisId: APPLICATION_ID,
 };
+
+let APPLICATION_RECORD: { id: string; row_data: Record<string, unknown> } | null = null;
 
 const STORED: {
   id: string;
@@ -87,12 +93,19 @@ function storedFor(id: string) {
   return [];
 }
 
+/** The application record the manager filed the off-platform lease onto. */
+function applicationFor(id: string, owner: string) {
+  if (!APPLICATION_RECORD || id !== APPLICATION_ID || owner !== OWNER_MANAGER) return [];
+  return [APPLICATION_RECORD];
+}
+
 function makeDb() {
   return {
     from(table: string) {
       let orFiltered = false;
       let selected = "";
       let requestedId = "";
+      let requestedOwner = "";
       const builder: Record<string, unknown> = {
         select: (cols: string) => {
           selected = cols;
@@ -100,6 +113,7 @@ function makeDb() {
         },
         eq: (column: string, value: unknown) => {
           if (column === "id") requestedId = String(value ?? "");
+          if (column === "manager_user_id") requestedOwner = String(value ?? "");
           return builder;
         },
         order: () => builder,
@@ -108,6 +122,9 @@ function makeDb() {
           return builder;
         },
         limit: () => {
+          if (table === "manager_application_records") {
+            return Promise.resolve({ data: applicationFor(requestedId, requestedOwner), error: null });
+          }
           if (table !== "portal_lease_pipeline_records") return Promise.resolve({ data: [], error: null });
           if (orFiltered) {
             return Promise.resolve({ data: VISIBLE_TO_RESIDENT ? [{ id: LEASE_ID }] : [], error: null });
@@ -155,6 +172,10 @@ beforeEach(() => {
   VISIBLE_TO_RESIDENT = true;
   RECORD_EXISTS = true;
   STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+  APPLICATION_RECORD = {
+    id: APPLICATION_ID,
+    row_data: { id: APPLICATION_ID, manualResidentDetails: { signedLeaseDataUrl: MANAGER_FILED_PDF } },
+  };
   isAdminUser.mockResolvedValue(false);
   managerCanAccessLeaseRecord.mockResolvedValue(true);
   autoFileLeaseDocument.mockResolvedValue("doc-1");
@@ -650,18 +671,20 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
    * both signatures, the manager's off-platform PDF, `externallySignedLease` —
    * onto a row that carries NO document yet, and that materialization runs in
    * the RESIDENT's browser too. Filling an absent body with an already-executed
-   * paper lease is not authoring one, so it must still sync.
+   * paper lease is not authoring one, so it must still sync. What admits it is
+   * the BYTES matching the PDF the manager filed on the application record, not
+   * the flag in the request.
    */
-  it("still lets the resident's browser seed an externally-signed onboarding lease", async () => {
-    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
-    const res = await post({
+  const seedOnboardingLease = (pdfDataUrl: string) =>
+    post({
       action: "upsert",
       row: {
         id: LEASE_ID,
         residentEmail: RESIDENT_EMAIL,
+        axisId: APPLICATION_ID,
         generatedHtml: null,
         managerUploadedPdf: {
-          dataUrl: "data:application/pdf;base64,PAPER",
+          dataUrl: pdfDataUrl,
           fileName: "signed-lease.pdf",
           uploadedAt: "2026-05-01T00:00:00Z",
         },
@@ -674,8 +697,35 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
       },
     });
 
+  it("still lets the resident's browser seed an externally-signed onboarding lease", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    const res = await seedOnboardingLease(MANAGER_FILED_PDF);
+
     expect(res.status).toBe(200);
     expect(autoFileLeaseDocument).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The same payload shape carrying bytes the manager never filed. Nothing in
+   * the request may grant the trust — the flag is set, the signatures are set,
+   * and it is still refused.
+   */
+  it("refuses the same shape when the PDF is not the one the manager filed", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    const res = await seedOnboardingLease("data:application/pdf;base64,ATTACKER");
+
+    expect(res.status).toBe(409);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  it("refuses the manager-filed bytes when they belong to another manager's application", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    APPLICATION_RECORD = null;
+    const res = await seedOnboardingLease(MANAGER_FILED_PDF);
+
+    expect(res.status).toBe(409);
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 
   /** The carve-out is for an off-platform PDF, never for newly introduced HTML. */
@@ -694,6 +744,41 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
 
     expect(res.status).toBe(409);
     expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Two writes, no manager cooperation: mark the row executed while the body
+   * still matches (which the first guard allows, since nothing is replaced),
+   * then replace the body on a row the product now shows as fully signed. Both
+   * guards read the same execution predicate, so the second write is refused.
+   */
+  it("refuses a body replacement on a row the resident just marked executed", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA, generatedHtml: "<p>Manager's lease</p>" };
+
+    const first = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>Manager's lease</p>",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+    expect(first.status).toBe(200);
+    STORED.row_data = (upsert.mock.calls[0]![0] as Record<string, unknown>).row_data as Record<string, unknown>;
+
+    const second = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>Resident's own text</p>",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+    expect(second.status).toBe(409);
+    expect(upsert).toHaveBeenCalledTimes(1);
   });
 });
 

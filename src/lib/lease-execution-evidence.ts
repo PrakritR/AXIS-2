@@ -144,13 +144,17 @@ export function leaseClaimsExecution(
  * the guard and the action it protects cannot key on different signals.
  *
  * Legitimate shapes stay out of it. `residentUploadLeasePdf` clears every
- * signature and `fullySignedAt` first, so `next` claims nothing; countersigning
- * leaves the body untouched; and filling an ABSENT body with an already-executed
- * off-platform PDF is the existing-resident onboarding shape
- * `syncApprovedApplications` seeds (`externallySignedLease`, PDF only), which is
- * carved out exactly as `replacesSignedLeaseDocument` carves it out. That
- * carve-out does not extend to HTML: the seeded row never introduces one, and
- * generated HTML is what auto-file would render into someone else's library.
+ * signature and `fullySignedAt` first, so `next` claims nothing, and
+ * countersigning leaves the body untouched.
+ *
+ * Every carve-out reads the STORED row only. `next` is the request body, and on
+ * a resident-scoped POST every field in it is attacker-controlled, so a flag
+ * there deciding whether the write is trusted just moves which client field
+ * grants the trust. The one shape that legitimately fills an ABSENT body with an
+ * already-executed off-platform PDF — the existing-resident onboarding row
+ * `syncApprovedApplications` seeds — is admitted by CORROBORATING those bytes
+ * against the manager-filed PDF on the application record, server side, rather
+ * than by believing `next.externallySignedLease`.
  */
 export function introducesUntrustedLeaseDocument(
   stored: LeasePipelineRow | undefined,
@@ -158,29 +162,28 @@ export function introducesUntrustedLeaseDocument(
 ): boolean {
   if (!stored) return false;
   if (leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
-  const before = leaseDocumentBody(stored);
-  const after = leaseDocumentBody(next);
-  if (before.html === after.html && before.pdf === after.pdf) return false;
-  if (
-    !before.html &&
-    !before.pdf &&
-    !after.html &&
-    (stored.externallySignedLease || next.externallySignedLease)
-  ) {
-    return false;
-  }
-  return true;
+  return leaseDocumentBodyReplaced(stored, next);
 }
 
 /**
- * True when `next` replaces the document body of an already-signed `stored`
- * row. Clearing the signatures drops out by design, because that is a superseding
- * document (void, send back, renew, amend), not a silent edit to an executed
- * one. Filling in an absent body on an `externallySignedLease` row is how
- * existing-resident onboarding files an already-executed off-platform PDF.
+ * True when `next` replaces the document body of an already-executed `stored`
+ * row. Clearing the execution claim drops out by design, because that is a
+ * superseding document (void, send back, renew, amend), not a silent edit to an
+ * executed one. Filling in an absent body on an `externallySignedLease` row is
+ * how existing-resident onboarding files an already-executed off-platform PDF.
+ *
+ * Keyed on `leaseClaimsExecution`, the same predicate
+ * `introducesUntrustedLeaseDocument` bows out on, so the two partition every row
+ * shape between them. Keyed on the narrower `rowHasAnySignature`, a row carrying
+ * `fullySignedAt` with no signature object was "executed" to one and "unsigned"
+ * to the other, and neither protected its body.
  */
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
-  if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
+  if (!leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
+  return leaseDocumentBodyReplaced(stored, next);
+}
+
+function leaseDocumentBodyReplaced(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   const before = leaseDocumentBody(stored);
   const after = leaseDocumentBody(next);
   if (before.html === after.html && before.pdf === after.pdf) return false;
