@@ -2423,10 +2423,23 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
      own background gradient, with the assistant FAB parked in it: that strip is
      what read as an opaque "banner" behind the button. Reserve only the nav bar
      here so the page background runs continuously under the floating FAB, and
-     hand the FAB clearance to the scroller below, which can actually scroll it. */
-  html[data-portal-sticky-chrome] #portal-main-content {
+     hand the FAB clearance to the scroller below, which can actually scroll it.
+
+     The `:not([data-bulk-action-bar])` is load-bearing, not decorative: the
+     bulk-bar rule above is the same specificity, so without it this rule would
+     win purely on source order and silently strip the fixed bulk bar's 3.75rem
+     of reserved clearance. The two cases are spelled out as disjoint selectors
+     so neither depends on its position in this file. */
+  html[data-portal-sticky-chrome]:not([data-bulk-action-bar]) #portal-main-content {
     padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
     scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+  }
+
+  /* Bulk bar open: still drop the dead FAB band, but keep the clearance the
+     fixed selection bar needs so the last row is not stranded underneath it. */
+  html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content {
+    padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
+    scroll-padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
   }
 
   /* Trailing room INSIDE the scroller so the last row still clears the FAB

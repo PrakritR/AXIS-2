@@ -137,13 +137,40 @@ describe("portal mobile shell conventions", () => {
         )
         .map((match) => match[2]);
 
-    const mainContent = declarationsFor("html[data-portal-sticky-chrome] #portal-main-content");
+    // The nav-inset-only rule must exclude the bulk-action-bar case. It is the
+    // same specificity as `html[data-bulk-action-bar] #portal-main-content` and
+    // sits later in the file, so an unscoped version wins on source order and
+    // strips the fixed selection bar's 3.75rem of clearance, stranding the last
+    // ledger row underneath it on phone-width Payments / Residents.
+    const mainContent = declarationsFor(
+      "html[data-portal-sticky-chrome]:not([data-bulk-action-bar]) #portal-main-content",
+    );
     const padded = mainContent.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
     expect(padded.length).toBeGreaterThan(0);
     for (const declarations of padded) {
       // Only the bottom nav — never the combined inset that also covers the FAB.
       expect(declarations).toMatch(
         /padding-bottom:\s*var\(--portal-native-bottom-nav-inset[^)]*\)/,
+      );
+      expect(declarations).not.toContain("--portal-mobile-scroll-bottom-inset");
+    }
+
+    // No unscoped sticky-chrome rule may reserve bottom padding — that is the
+    // shape that would shadow the bulk bar again.
+    expect(
+      declarationsFor("html[data-portal-sticky-chrome] #portal-main-content").filter((d) =>
+        /(^|;)\s*padding-bottom\s*:/.test(d),
+      ),
+    ).toHaveLength(0);
+
+    // Bulk bar open: dead FAB band still gone, bulk clearance still reserved.
+    const withBulkBar = declarationsFor(
+      "html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content",
+    ).filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(withBulkBar.length).toBeGreaterThan(0);
+    for (const declarations of withBulkBar) {
+      expect(declarations).toMatch(
+        /padding-bottom:\s*calc\(\s*var\(--portal-native-bottom-nav-inset[^)]*\)\s*\+\s*3\.75rem\s*\)/,
       );
       expect(declarations).not.toContain("--portal-mobile-scroll-bottom-inset");
     }
