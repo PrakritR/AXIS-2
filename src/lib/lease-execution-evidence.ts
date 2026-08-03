@@ -147,14 +147,18 @@ export function leaseClaimsExecution(
  * signature and `fullySignedAt` first, so `next` claims nothing, and
  * countersigning leaves the body untouched.
  *
- * Every carve-out reads the STORED row only. `next` is the request body, and on
- * a resident-scoped POST every field in it is attacker-controlled, so a flag
- * there deciding whether the write is trusted just moves which client field
- * grants the trust. The one shape that legitimately fills an ABSENT body with an
- * already-executed off-platform PDF — the existing-resident onboarding row
- * `syncApprovedApplications` seeds — is admitted by CORROBORATING those bytes
- * against the manager-filed PDF on the application record, server side, rather
- * than by believing `next.externallySignedLease`.
+ * It has NO carve-out, deliberately — not even one keyed on the stored row.
+ * `row_data` is written verbatim from whatever the client last sent apart from
+ * the four scope mirrors, so a stored flag is prior-request client input, not
+ * server-established state; honouring `stored.externallySignedLease` here would
+ * only move the attacker's write one earlier. (Its sibling may honour that flag
+ * because it is reached only when the stored row is ALREADY executed, which is a
+ * state the evidence rules have protected up to that point.) The one shape that
+ * legitimately fills an ABSENT body with an already-executed off-platform PDF —
+ * the existing-resident onboarding row `syncApprovedApplications` seeds — is
+ * admitted by the CALLER corroborating those bytes against the manager-filed PDF
+ * on the application record, server side; see
+ * `leaseBodyMatchesManagerFiledLease`.
  */
 export function introducesUntrustedLeaseDocument(
   stored: LeasePipelineRow | undefined,
@@ -180,15 +184,16 @@ export function introducesUntrustedLeaseDocument(
  */
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   if (!leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
-  return leaseDocumentBodyReplaced(stored, next);
+  if (!leaseDocumentBodyReplaced(stored, next)) return false;
+  const before = leaseDocumentBody(stored);
+  if (!before.html && !before.pdf && stored.externallySignedLease) return false;
+  return true;
 }
 
 function leaseDocumentBodyReplaced(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   const before = leaseDocumentBody(stored);
   const after = leaseDocumentBody(next);
-  if (before.html === after.html && before.pdf === after.pdf) return false;
-  if (!before.html && !before.pdf && stored.externallySignedLease) return false;
-  return true;
+  return before.html !== after.html || before.pdf !== after.pdf;
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
