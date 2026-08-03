@@ -29,6 +29,7 @@ let PROFILE_ROLES: string[] = [];
 let PORTAL_ROLES: string[] = [];
 let EFFECTIVE_ROLE: string | null = null;
 let VISIBLE_TO_RESIDENT = true;
+let RECORD_EXISTS = true;
 
 const STORED = {
   id: LEASE_ID,
@@ -83,7 +84,7 @@ function makeDb() {
             return Promise.resolve({ data: VISIBLE_TO_RESIDENT ? [{ id: LEASE_ID }] : [], error: null });
           }
           SELECTS.push(selected);
-          return Promise.resolve({ data: [STORED], error: null });
+          return Promise.resolve({ data: RECORD_EXISTS ? [STORED] : [], error: null });
         },
         upsert: (record: unknown) => upsert(record as never),
         delete: () => ({ eq: (...a: unknown[]) => deleteEq(...(a as [])) }),
@@ -123,6 +124,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   SELECTS.length = 0;
   VISIBLE_TO_RESIDENT = true;
+  RECORD_EXISTS = true;
   isAdminUser.mockResolvedValue(false);
   managerCanAccessLeaseRecord.mockResolvedValue(true);
   upsert.mockResolvedValue({ error: null });
@@ -191,6 +193,48 @@ describe("portal-lease-pipeline resident upsert — scope columns are server-pin
     expect(await res.json()).toEqual({ error: "Residents cannot delete lease records." });
     expect(deleteEq).not.toHaveBeenCalled();
   });
+
+  /**
+   * The refusal is a per-REQUEST fact. Answering 403 only when a requested id
+   * happens to exist would make the route a lease-record existence oracle.
+   */
+  it("answers the same refusal for an id that does not exist", async () => {
+    RECORD_EXISTS = false;
+    const res = await post({ action: "deleteIds", ids: ["lease_app_does-not-exist"] });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Residents cannot delete lease records." });
+    expect(deleteEq).not.toHaveBeenCalled();
+  });
+});
+
+describe("portal-lease-pipeline resident CREATE — cannot plant a row in another scope", () => {
+  beforeEach(() => {
+    asResident();
+    RECORD_EXISTS = false;
+  });
+
+  it("pins a fabricated signed lease to the creator, never the named victim", async () => {
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: "lease_app_planted",
+        residentEmail: "victim@example.com",
+        residentUserId: "99999999-9999-9999-9999-999999999999",
+        managerUserId: "attacker-manager",
+        propertyId: "victim-managers-property",
+        status: "Fully Signed",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe(RESIDENT_EMAIL);
+    expect(written.resident_user_id).toBe(RESIDENT_ID);
+    expect(written.resident_email).not.toBe("victim@example.com");
+    // property_id also selects rows into a co-manager's linked pipeline.
+    expect(written.property_id).toBeNull();
+    expect(written.manager_user_id).toBe(RESIDENT_ID);
+  });
 });
 
 describe("portal-lease-pipeline manager upsert — unchanged", () => {
@@ -219,6 +263,34 @@ describe("portal-lease-pipeline manager upsert — unchanged", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(deleteEq).toHaveBeenCalled();
+  });
+
+  it("still no-ops on an absent record so retries stay idempotent", async () => {
+    RECORD_EXISTS = false;
+    const res = await post({ action: "delete", id: "lease_app_gone" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(deleteEq).not.toHaveBeenCalled();
+  });
+
+  it("may still create a lease naming their tenant", async () => {
+    RECORD_EXISTS = false;
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: "lease_app_new",
+        residentEmail: "tenant@example.com",
+        residentUserId: RESIDENT_ID,
+        propertyId: "prop-1",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe("tenant@example.com");
+    expect(written.resident_user_id).toBe(RESIDENT_ID);
+    expect(written.property_id).toBe("prop-1");
+    expect(written.manager_user_id).toBe(OWNER_MANAGER);
   });
 });
 
