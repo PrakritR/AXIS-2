@@ -619,54 +619,10 @@ had zero e2e signal; the first real run happens after the merge lands on `main`.
 That gap is why e2e breakage is only ever discovered post-merge, and why a long
 tail of e2e failures has been able to persist unnoticed.
 
-Run the suite locally before promoting anything that touches portal UI or
-routes — pin the dev/test project first (see "A local `npm run build` bakes in
-the PRODUCTION Supabase project"), then:
-
-```
-npm run test:seed
-PLAYWRIGHT_SKIP_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://localhost:<port> \
-  E2E_TESTS_ENABLED=1 node --env-file=.env.test node_modules/.bin/playwright test
-```
-
-Locally `retries: 0` while CI uses `retries: 2`, so a local run surfaces flaky
-tests that CI hides in its `flaky` bucket. Note `npm run test:seed` currently
-aborts partway with a `profiles_manager_id_key` duplicate on a workflow resident
-— the core role accounts are already provisioned by then, so the suite still
-runs, but the later fixtures it would have created are missing.
-
-#### The 18 known-failing specs — expect these, don't re-triage them
-
-As of `main` @`94cfc09f` (run `30778729243`) the failures below are
-**long-standing**: they are present in the 18h-earlier nightly run, were NOT
-caused by the Communication/portal work, and reproduce locally against a
-correctly seeded dev/test project — so they are product/test drift, not CI
-infrastructure.
-
-```
-bundle-group-manual-chrome.spec.ts:53      [data-wizard-field=applyingAsGroup] never visible
-manager-portal.spec.ts:35                  a manager section renders no heading or main landmark
-manual-payment-verification.spec.ts:9      [data-attr=payments-setup] resolves to 2 elements (desktop + mobile copies)
-new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] never enabled
-promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] / heading "Promotion" never visible (×desktop+mobile = 8 cases)
-public-apply.spec.ts:13                    Continue button never visible
-resident-login-and-application.spec.ts:10  "applying as part of a group" never visible
-resident-login-and-application.spec.ts:19  searchbox never visible on tours-contact
-resident-portal.spec.ts:33                 a resident section renders no heading or main landmark
-tour-scheduling.spec.ts:10                 Continue button never visible
-tour-scheduling.spec.ts:17                 "what do you need help with" never visible
-```
-
-The markup these selectors target **does** exist in `src` (verified by grep), so
-these are runtime/data-state or duplicate-element problems — a section not
-reaching a rendered state, tier/paywall gating, or one component rendering twice
-— rather than deleted markup. Fixing them needs per-spec triage against a seeded
-local run. They are tracked externally as `axis-ci-e2e-persistent-failure`, which
-has no in-repo counterpart.
-
-`admin-portal.spec.ts:68` and `mobile-portal-layout.spec.ts:22` are **flaky**,
-not failing — they pass on CI retry and pass locally. Do not file them as
-failures.
+So run the suite locally before promoting anything that touches portal UI or
+routes. The command, the dev/test pinning it needs, and the current list of
+known-failing / flaky specs (do not re-triage those) live in
+[`docs/ship-gate.md`](docs/ship-gate.md#run-e2e-locally-before-you-promote).
 
 ## 3. Promote checklist
 
@@ -762,23 +718,11 @@ npm run seed:env -- --dry-run
 Note: the AI agent reads `ANTHROPIC_API_KEY` (via `new Anthropic()`); add it to
 `.env` if it isn't there yet. `POSTHOG_*` and `LANGFUSE_*` are optional.
 
-## A local `npm run build` bakes in the PRODUCTION Supabase project
-
-`seed:env` also copies `.env.production.local`, and Next loads that file for any
-production build. It outranks `.env`, and `NEXT_PUBLIC_*` values are inlined into
-the bundle at build time — so a plain `npm run build && npm run start` serves a
-site whose browser client talks to **production**, not dev/test, no matter what
-`.env` / `.env.test` say. The symptom is quiet and misleading: seeded
-`@test.…local` accounts get "Invalid login credentials", which reads as a broken
-seed rather than a wrong project.
-
-Confirm which project a build actually points at, and pin it when running E2E
-locally (CI does the same by passing `TEST_SUPABASE_*` into the e2e step):
-
-```
-grep -rho 'https://[a-z]\{20\}\.supabase\.co' .next/static | sort -u
-set -a; . ./.env.test; set +a           # then build + start in that same shell
-```
+`seed:env` copies **every** gitignored `.env*` file, including
+`.env.production.local` if the primary checkout has one — and Next loads that
+file for any production build, so a local `npm run build` can silently target
+the **production** Supabase project. How to confirm and pin the project:
+[`docs/database-environments.md`](docs/database-environments.md#a-local-production-build-can-silently-target-production).
 
 # Database environments
 

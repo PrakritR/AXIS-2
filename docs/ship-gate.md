@@ -61,6 +61,64 @@ Automated tests: <commands + result>
 
 Do **not** use `/demo` as the only proof for production-like flows.
 
+## Run e2e locally before you promote
+
+The `e2e` job in `.github/workflows/test.yml` is gated on
+`github.event_name == 'push' && github.ref == 'refs/heads/main' || schedule`, so
+it is **skipped on every pull request** — a PR whose Test workflow is green has
+had zero e2e signal, and the first real run happens after the merge lands on
+`main`. That gap is why e2e breakage is only ever found post-merge, and why a
+long tail of failures can persist unnoticed.
+
+Pin the dev/test Supabase project first (a plain production build silently uses
+the **production** project — see
+[`docs/database-environments.md`](database-environments.md#a-local-production-build-can-silently-target-production)),
+then:
+
+```bash
+npm run test:seed
+PLAYWRIGHT_SKIP_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://localhost:<port> \
+  E2E_TESTS_ENABLED=1 node --env-file=.env.test node_modules/.bin/playwright test
+```
+
+Locally `retries: 0` while CI uses `retries: 2`, so a local run surfaces flaky
+tests that CI hides in its `flaky` bucket. Note `npm run test:seed` currently
+aborts partway with a `profiles_manager_id_key` duplicate on a workflow
+resident — the core role accounts are already provisioned by then, so the suite
+still runs, but the later fixtures it would have created are missing.
+
+### Known-failing specs — expect these, don't re-triage them
+
+As of `main` @`94cfc09f` (run `30778729243`) the 18 failures below are
+**long-standing**: present in the 18h-earlier nightly run, not caused by the
+Communication/portal work, and reproducible locally against a correctly seeded
+dev/test project — so they are product/test drift, not CI infrastructure.
+
+```text
+bundle-group-manual-chrome.spec.ts:53      [data-wizard-field=applyingAsGroup] never visible
+manager-portal.spec.ts:35                  a manager section renders no heading or main landmark
+manual-payment-verification.spec.ts:9      [data-attr=payments-setup] resolves to 2 elements (desktop + mobile copies)
+new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] never enabled
+promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] / heading "Promotion" never visible (×desktop+mobile = 8 cases)
+public-apply.spec.ts:13                    Continue button never visible
+resident-login-and-application.spec.ts:10  "applying as part of a group" never visible
+resident-login-and-application.spec.ts:19  searchbox never visible on tours-contact
+resident-portal.spec.ts:33                 a resident section renders no heading or main landmark
+tour-scheduling.spec.ts:10                 Continue button never visible
+tour-scheduling.spec.ts:17                 "what do you need help with" never visible
+```
+
+The markup these selectors target **does** exist in `src`, so these are
+runtime/data-state or duplicate-element problems — a section not reaching a
+rendered state, tier/paywall gating, or one component rendering twice — rather
+than deleted markup. Fixing them needs per-spec triage against a seeded local
+run. Tracked externally as `axis-ci-e2e-persistent-failure`, which has no
+in-repo counterpart.
+
+`admin-portal.spec.ts:68` and `mobile-portal-layout.spec.ts:22` are **flaky**,
+not failing — they pass on CI retry and pass locally. Do not file them as
+failures.
+
 ## Promote prakrit → main (Vercel Preview)
 
 Captain yes required. Never push `fm/*` branches.
