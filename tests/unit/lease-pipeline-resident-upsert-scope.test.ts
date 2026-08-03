@@ -23,6 +23,7 @@ const isAdminUser = vi.fn(async () => false);
 const upsert = vi.fn(async () => ({ error: null }));
 const deleteEq = vi.fn(async () => ({ error: null }));
 const managerCanAccessLeaseRecord = vi.fn(async () => true);
+const autoFileLeaseDocument = vi.fn(async () => "doc-1");
 const managerMayFileLeaseUnderProperty = vi.fn(async () => ({ ok: true, allowed: true, propertyExists: true }) as
   | { ok: true; allowed: boolean; propertyExists: boolean }
   | { ok: false; error: string });
@@ -34,13 +35,26 @@ let EFFECTIVE_ROLE: string | null = null;
 let VISIBLE_TO_RESIDENT = true;
 let RECORD_EXISTS = true;
 
-const STORED = {
+const DEFAULT_STORED_ROW_DATA: Record<string, unknown> = {
+  id: LEASE_ID,
+  residentEmail: RESIDENT_EMAIL,
+  managerUserId: OWNER_MANAGER,
+};
+
+const STORED: {
+  id: string;
+  manager_user_id: string;
+  resident_user_id: string;
+  resident_email: string;
+  property_id: string;
+  row_data: Record<string, unknown>;
+} = {
   id: LEASE_ID,
   manager_user_id: OWNER_MANAGER,
   resident_user_id: RESIDENT_ID,
   resident_email: RESIDENT_EMAIL,
   property_id: "prop-1",
-  row_data: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, managerUserId: OWNER_MANAGER },
+  row_data: { ...DEFAULT_STORED_ROW_DATA },
 };
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -64,7 +78,7 @@ vi.mock("@/lib/auth/manager-lease-scope", () => ({
   managerMayFileLeaseUnderProperty: (...a: unknown[]) => managerMayFileLeaseUnderProperty(...(a as [])),
 }));
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
-  autoFileLeaseDocument: async () => undefined,
+  autoFileLeaseDocument: (...a: unknown[]) => autoFileLeaseDocument(...(a as [])),
 }));
 
 /** The stored row is looked up by id, so a batch can mix existing and new rows. */
@@ -140,8 +154,10 @@ beforeEach(() => {
   SELECTS.length = 0;
   VISIBLE_TO_RESIDENT = true;
   RECORD_EXISTS = true;
+  STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
   isAdminUser.mockResolvedValue(false);
   managerCanAccessLeaseRecord.mockResolvedValue(true);
+  autoFileLeaseDocument.mockResolvedValue("doc-1");
   managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true, propertyExists: true });
   upsert.mockResolvedValue({ error: null });
   getUser.mockResolvedValue({ data: { user: { id: RESIDENT_ID, email: RESIDENT_EMAIL } }, error: null });
@@ -460,6 +476,151 @@ describe("portal-lease-pipeline admin — unchanged", () => {
     const deleted = await post({ action: "delete", id: LEASE_ID });
     expect(deleted.status).toBe(200);
     expect(deleteEq).toHaveBeenCalled();
+  });
+
+  /**
+   * Admin GET returns the whole table, and an admin previewing a manager portal
+   * drives the same browser store that posts `action: "replace"`. Rebuilding
+   * scope from those rows blanked `manager_user_id` AND `property_id` — the only
+   * two columns `fetchLeasesForManagerUser` matches on — so the lease went
+   * invisible to the manager who owns it.
+   */
+  it("keeps the stored scope for fields an ordinary client row does not name", async () => {
+    const res = await post({
+      action: "replace",
+      rows: [{ id: LEASE_ID, residentEmail: RESIDENT_EMAIL, managerUserId: null, residentUserId: null }],
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.property_id).toBe("prop-1");
+    expect(written.manager_user_id).toBe(OWNER_MANAGER);
+    expect(written.resident_user_id).toBe(RESIDENT_ID);
+    expect(written.resident_email).toBe(RESIDENT_EMAIL);
+  });
+
+  it("selects every scope column the admin branch falls back to", async () => {
+    await post({ action: "upsert", row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL } });
+    const select = SELECTS.find((cols) => cols.includes("row_data")) ?? "";
+    for (const column of ["manager_user_id", "resident_user_id", "resident_email", "property_id"]) {
+      expect(select).toContain(column);
+    }
+  });
+
+  it("may still re-point a scope column it names outright", async () => {
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: "elsewhere@example.com", propertyId: "prop-2" },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe("elsewhere@example.com");
+    expect(written.property_id).toBe("prop-2");
+  });
+});
+
+/**
+ * `previouslySigned` is read from the pre-batch SELECT, so a repeated id used to
+ * capture `false` twice once validation and persistence became two passes —
+ * filing the same lease into the manager's library as a duplicate.
+ */
+describe("portal-lease-pipeline — one plan per id in a batch", () => {
+  beforeEach(() => {
+    PROFILE = { email: "manager@example.com", role: "manager" };
+    PROFILE_ROLES = ["manager"];
+    PORTAL_ROLES = ["manager"];
+    EFFECTIVE_ROLE = "manager";
+    getUser.mockResolvedValue({ data: { user: { id: OWNER_MANAGER, email: "manager@example.com" } }, error: null });
+  });
+
+  it("auto-files once when one replace batch carries the same id twice", async () => {
+    const signed = {
+      id: LEASE_ID,
+      residentEmail: RESIDENT_EMAIL,
+      fullySignedAt: "2026-05-01T00:00:00Z",
+      generatedHtml: "<p>Lease</p>",
+    };
+
+    const res = await post({ action: "replace", rows: [signed, { ...signed, notes: "later" }] });
+
+    expect(res.status).toBe(200);
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(autoFileLeaseDocument).toHaveBeenCalledTimes(1);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect((written.row_data as Record<string, unknown>).notes).toBe("later");
+  });
+});
+
+/**
+ * Auto-file renders the row's document into the PROPERTY OWNER's library, and
+ * `reconcileRowScope` now pins `managerUserId` to the stored owner so it fires
+ * reliably on a resident-initiated countersign. That is the intended outcome —
+ * but it makes the document body on that transition tenant-supplied text
+ * heading into someone else's library, so a resident may sign a lease and may
+ * replace one, never both in the same write.
+ */
+describe("portal-lease-pipeline resident — cannot author and sign in one write", () => {
+  beforeEach(() => {
+    asResident();
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA, generatedHtml: "<p>Manager's lease</p>" };
+  });
+
+  it("refuses a write that supplies the document body and the signature together", async () => {
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>Resident's own text</p>",
+        signatureName: "Resident",
+        signedAtIso: "2026-05-01T00:00:00Z",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+    expect(res.status).toBe(409);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  it("still lets the resident countersign the document the manager authored", async () => {
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: "<p>Manager's lease</p>",
+        signatureName: "Resident",
+        signedAtIso: "2026-05-01T00:00:00Z",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(autoFileLeaseDocument).toHaveBeenCalledTimes(1);
+    // Auto-file lands in the OWNER's library, not the signer's.
+    const filed = autoFileLeaseDocument.mock.calls[0]![1] as Record<string, unknown>;
+    expect(filed.managerUserId).toBe(OWNER_MANAGER);
+    expect(filed.generatedHtml).toBe("<p>Manager's lease</p>");
+  });
+
+  /** `residentUploadLeasePdf` replaces the body but clears every signature. */
+  it("still lets the resident upload a replacement document with the signatures cleared", async () => {
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        generatedHtml: null,
+        managerUploadedPdf: { dataUrl: "data:application/pdf;base64,AAA", originalDataUrl: "data:application/pdf;base64,AAA", fileName: "lease.pdf", uploadedAt: "2026-05-01T00:00:00Z" },
+        signatureName: null,
+        signedAtIso: null,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 });
 
