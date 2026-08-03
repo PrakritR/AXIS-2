@@ -31,6 +31,18 @@ const RAISED_SHEET_STYLE = {
   "--initial-transform": `calc(100% + var(${RAISED_SHEET_OFFSET_VAR}))`,
 } as CSSProperties;
 
+/**
+ * Vaul ships `[data-vaul-drawer]{touch-action:none}`, and a browser resolves touch-action by
+ * INTERSECTING the values up the ancestor chain — so `none` on the drawer disables finger
+ * panning for every descendant, no matter that the scroll region itself says `auto`. A
+ * sheet taller than the viewport therefore scrolled with a mouse wheel and not with a
+ * thumb, which is the only way anyone actually uses it. `pan-y` restores vertical scrolling
+ * while still blocking the horizontal pans vaul does not want; drag-to-dismiss is
+ * unaffected because every sheet here is `handleOnly`, so a drag can only start on
+ * `[data-vaul-handle]`, which carries its own `touch-action`.
+ */
+const SHEET_TOUCH_ACTION: CSSProperties = { touchAction: "pan-y" };
+
 /** Keep portaled FieldSingleSelect / CheckboxMultiSelect menus clickable inside sheets. */
 function allowPortaledFieldSelectInteraction(event: Event) {
   if (isPortaledFieldSelectMenuTarget(event.target)) {
@@ -109,7 +121,9 @@ export function VaulBottomSheet({
                 ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
-          style={elevated ? RAISED_SHEET_STYLE : undefined}
+          style={
+            elevated ? { ...RAISED_SHEET_STYLE, ...SHEET_TOUCH_ACTION } : SHEET_TOUCH_ACTION
+          }
           data-slot="vaul-bottom-sheet"
           data-elevated={elevated ? "true" : "false"}
           data-full-screen={fullScreen ? "true" : "false"}

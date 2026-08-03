@@ -183,10 +183,11 @@ export function computeFieldSelectMenuRectInHost(
     preferOpenDown?: boolean;
     matchTriggerWidth?: boolean;
     /**
-     * Viewport y (px) the menu may grow down to, when the host is `overflow-visible` and
-     * the menu is allowed to spill past its bottom edge. Without this a field near the
-     * bottom of a short shell — the last field of a filter sheet — gets a one-row menu,
-     * which breaks the "every dropdown shows 5" rule. Omit to clamp to the host.
+     * Viewport y (px) the menu may grow down to — a LAST RESORT, used only when the host
+     * cannot fit `contentPx` on either side of the trigger. Containment is preferred: a
+     * menu escaping its sheet onto the dimmed page reads as broken. But a host shorter than
+     * the menu (a one-field sheet) would otherwise crush it to a single row, and showing
+     * all five rows outranks staying inside. Omit to clamp to the host unconditionally.
      */
     bottomBoundPx?: number;
   },
@@ -207,18 +208,41 @@ export function computeFieldSelectMenuRectInHost(
     left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
   }
 
+  const spaceAbove = rect.top - hostRect.top - gap;
+  const hostSpaceBelow = hostRect.bottom - rect.bottom - gap;
+  const triggerTopInHost = rect.top - hostRect.top;
+  const triggerBottomInHost = rect.bottom - hostRect.top;
+  const preferOpenDown = options?.preferOpenDown ?? false;
+
+  /*
+   * Containment first. A menu that escapes its sheet onto the dimmed page reads as broken,
+   * so whenever the HOST is tall enough to hold the whole menu we keep it inside — even
+   * when neither side of the trigger alone has room, by sliding it back into the host's
+   * box. That can overlap the trigger by the shortfall, which is the lesser cost: the
+   * alternative is a menu hanging off the sheet, or one crushed below five rows.
+   */
+  const hostCanContainMenu = hostRect.height - gap * 2 >= contentPx;
+  if (hostCanContainMenu) {
+    const openUpInside = resolveOpenUp(hostSpaceBelow, spaceAbove, contentPx, preferOpenDown);
+    const anchored = openUpInside
+      ? triggerTopInHost - contentPx - gap
+      : triggerBottomInHost + gap;
+    const top = Math.min(Math.max(gap, anchored), hostRect.height - contentPx - gap);
+    return { top, left, width, maxHeight: contentPx, position: "absolute" };
+  }
+
+  /* Host too short to hold the menu at all (a one-field sheet). Showing all five rows
+     outranks staying inside, so fall back to the viewport bound when one was offered. */
   const bottomBound = options?.bottomBoundPx ?? hostRect.bottom;
   const spaceBelow = bottomBound - rect.bottom - gap;
-  const spaceAbove = rect.top - hostRect.top - gap;
-  const preferOpenDown = options?.preferOpenDown ?? false;
   const openUp = resolveOpenUp(spaceBelow, spaceAbove, contentPx, preferOpenDown);
   const maxHeight = Math.min(
     contentPx,
     Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, openUp ? spaceAbove - gap : spaceBelow - gap),
   );
   const top = openUp
-    ? Math.max(gap, rect.top - hostRect.top - maxHeight - gap)
-    : rect.bottom - hostRect.top + gap;
+    ? Math.max(gap, triggerTopInHost - maxHeight - gap)
+    : triggerBottomInHost + gap;
 
   return { top, left, width, maxHeight, position: "absolute" };
 }
@@ -373,7 +397,12 @@ export function useFieldSelectMenu({
   return { listId, isClient, wrapRef, buttonRef, menuRect, portalHost };
 }
 
-/** Search box shown at the top of a menu once its option list is long enough to scroll. */
+/**
+ * Search box shown at the top of a menu once its option list is long enough to scroll.
+ * Its row uses `field-dropdown-menu-surface`, never `bg-card`: that token resolves to
+ * `rgba(255,255,255,.94)` on some themes, which is invisible over the opaque menu shell
+ * but plainly see-through wherever the menu overhangs the page behind it.
+ */
 export function FieldSelectMenuSearch({
   query,
   onQueryChange,
@@ -386,7 +415,7 @@ export function FieldSelectMenuSearch({
   dataAttr?: string;
 }) {
   return (
-    <div className="relative shrink-0 border-b border-border bg-card px-2 py-2">
+    <div className="field-dropdown-menu-surface relative shrink-0 border-b border-border px-2 py-2">
       <Search
         className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
         aria-hidden

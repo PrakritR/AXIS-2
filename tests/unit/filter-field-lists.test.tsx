@@ -396,8 +396,11 @@ describe("portal filter dropdown positioning", () => {
 
     const rect = computeFieldSelectMenuRectInHost(button, 252, host, { minWidth: 328, preferOpenDown: true });
     expect(rect.position).toBe("absolute");
-    expect(rect.top).toBeGreaterThanOrEqual(224 - 100 + 4);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304 + 252);
+    // The 304px host can hold a 252px menu, so the menu is slid back inside its box rather
+    // than hanging off the bottom — full height, wholly within the host.
+    expect(rect.maxHeight).toBe(252);
+    expect(rect.top).toBeGreaterThanOrEqual(0);
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304);
 
     document.body.removeChild(host);
   });
@@ -444,20 +447,25 @@ describe("portal filter dropdown positioning", () => {
     // sheet path); here nothing fits below, so forcing down would render a one-row menu.
     const rect = computeFieldSelectMenuRectInHost(button, 252, host, { preferOpenDown: true });
     const triggerTopInHost = 348 - 100;
+    // Opens upward and keeps its full height, clamped inside the host. It may overlap the
+    // trigger by the shortfall (244px above vs a 252px menu) — the lesser cost against
+    // hanging the menu off the panel or crushing it below five rows.
     expect(rect.top).toBeLessThan(triggerTopInHost);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(triggerTopInHost);
-    expect(rect.maxHeight).toBeGreaterThan(4 * 40);
+    expect(rect.maxHeight).toBe(252);
+    expect(rect.top).toBeGreaterThanOrEqual(0);
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304);
 
     document.body.removeChild(host);
   });
 
-  it("lets a menu spill past an overflow-visible host and clamp to the viewport instead", () => {
-    // The sheet/panel is `overflow-visible`, so the bottom-most field is bounded by the
-    // VIEWPORT, not by the shell. Without this the last field of a short sheet opened a
-    // one-row menu — every dropdown owes its user 5 rows.
+  it("keeps a menu INSIDE its sheet when the sheet can seat it, even offered a viewport bound", () => {
+    // A menu escaping its sheet onto the dimmed page reads as broken, so containment wins
+    // whenever the host can seat the whole menu on either side of the trigger — the
+    // viewport bound is a last resort, not the default.
     const host = document.createElement("div");
     host.setAttribute("data-slot", "vaul-bottom-sheet");
     document.body.appendChild(host);
+    // A tall sheet: 395px, so 319px sits above this bottom-most trigger.
     host.getBoundingClientRect = () =>
       ({ top: 179, left: 0, right: 390, bottom: 574, width: 390, height: 395, x: 0, y: 179, toJSON: () => ({}) }) as DOMRect;
 
@@ -469,24 +477,49 @@ describe("portal filter dropdown positioning", () => {
     Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
 
     const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
-    const triggerBottomInHost = 546 - 179;
+    const hostHeight = 395;
 
-    // Clamped to the host there is no room below, so the menu has to flip upward to keep
-    // its 5 rows — correct, but it covers the fields above it.
-    const clampedToHost = computeFieldSelectMenuRectInHost(button, contentPx, host, {
-      preferOpenDown: true,
-    });
-    expect(clampedToHost.maxHeight).toBe(contentPx);
-    expect(clampedToHost.top).toBeLessThan(triggerBottomInHost);
-
-    // Bounded by the viewport, the space under the raised sheet is real, so the menu keeps
-    // BOTH its 5 rows and the preferred downward direction.
-    const clampedToViewport = computeFieldSelectMenuRectInHost(button, contentPx, host, {
+    const rect = computeFieldSelectMenuRectInHost(button, contentPx, host, {
       preferOpenDown: true,
       bottomBoundPx: window.innerHeight - 12,
     });
-    expect(clampedToViewport.maxHeight).toBe(contentPx);
-    expect(clampedToViewport.top).toBe(triggerBottomInHost + 4);
+    // Full five rows, opened upward, and wholly within the host's own box.
+    expect(rect.maxHeight).toBe(contentPx);
+    expect(rect.top).toBeGreaterThanOrEqual(0);
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(hostHeight);
+
+    document.body.removeChild(host);
+  });
+
+  it("spills to the viewport ONLY when the host is too short to seat the menu at all", () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "vaul-bottom-sheet");
+    document.body.appendChild(host);
+    // A one-field sheet, 179px tall — shorter than a 5-row menu, so containment is
+    // impossible and clipping to it would crush the menu to a row or two.
+    host.getBoundingClientRect = () =>
+      ({ top: 395, left: 0, right: 390, bottom: 574, width: 390, height: 179, x: 0, y: 395, toJSON: () => ({}) }) as DOMRect;
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({ top: 486, left: 16, right: 374, bottom: 530, width: 358, height: 44, x: 16, y: 486, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+
+    const contained = computeFieldSelectMenuRectInHost(button, contentPx, host, {
+      preferOpenDown: true,
+    });
+    expect(contained.maxHeight).toBeLessThan(contentPx); // crushed with no escape offered
+
+    const spilled = computeFieldSelectMenuRectInHost(button, contentPx, host, {
+      preferOpenDown: true,
+      bottomBoundPx: window.innerHeight - 12,
+    });
+    // Showing all five rows outranks staying inside a sheet that cannot hold them.
+    expect(spilled.maxHeight).toBe(contentPx);
+    expect(spilled.top).toBe(530 - 395 + 4);
 
     document.body.removeChild(host);
   });

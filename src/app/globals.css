@@ -796,6 +796,13 @@ html {
   -webkit-backdrop-filter: none;
 }
 
+/* Any opaque surface INSIDE a floating menu (the search row). The shell is already opaque,
+   so a translucent child is invisible until the menu overhangs the page — then it is
+   plainly see-through. Every layer of a floating menu stays solid. */
+.field-dropdown-menu-surface {
+  background-color: #ffffff !important;
+}
+
 .field-dropdown-menu-option {
   background-color: #ffffff !important;
 }
@@ -814,6 +821,7 @@ html {
   background-color: #111827 !important;
 }
 
+[data-theme="dark"] .field-dropdown-menu-surface,
 [data-theme="dark"] .field-dropdown-menu-option {
   background-color: #111827 !important;
 }
