@@ -190,3 +190,35 @@ describe("Oregon is matched as a state token, not as English", () => {
     expect(resolve("Unit A or B, 1200 Brooklyn Ave NE, Seattle, WA 98105")).not.toBe("unsupported");
   });
 });
+
+/**
+ * Round-3 regression: narrowing the Oregon veto to a comma or ZIP position missed a record
+ * whose state lives in its own structured field, so a Portland property on SW Washington St
+ * generated a Washington lease citing the RCW.
+ */
+describe("an explicit out-of-scope state is authoritative", () => {
+  it("refuses Oregon given as a structured state, with no comma or zip anywhere", () => {
+    expect(
+      resolveLeaseJurisdiction({
+        submission: { address: "1200 SW Washington St", city: "Portland", state: "OR", zip: "" },
+      }),
+    ).toBe("unsupported");
+    expect(
+      resolveLeaseJurisdiction({
+        submission: { address: "800 SW California Dr", city: "Portland", state: "OR", zip: "" },
+      }),
+    ).toBe("unsupported");
+  });
+
+  it("refuses Oregon in free text with no comma before it", () => {
+    expect(
+      resolveLeaseJurisdiction({ submission: { address: "1200 SW Washington St Portland Oregon", zip: "", neighborhood: "" } }),
+    ).toBe("unsupported");
+  });
+
+  it("still allows a supported state given structurally", () => {
+    expect(
+      resolveLeaseJurisdiction({ submission: { address: "5259 Brooklyn Ave NE", city: "Seattle", state: "WA", zip: "98105" } }),
+    ).toBe("seattle");
+  });
+});

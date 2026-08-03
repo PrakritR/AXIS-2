@@ -121,6 +121,24 @@ function stateSignalFromHaystack(hay: string): string | null {
   return hasWashington ? "WA" : "CA";
 }
 
+/**
+ * An explicit out-of-scope STATE, read from the structured field when the record has one.
+ * String heuristics cannot do this job: a bare /\bor\b/ vetoed "Unit A or B" and any Seattle
+ * address on SW Oregon St, while narrowing it to a comma or ZIP position missed a record whose
+ * state lives in its own field with no comma anywhere in the joined text.
+ */
+function explicitOutOfScopeState(ctx: LeaseJurisdictionInput): boolean {
+  const states = [ctx.submission?.state, ctx.listingProperty?.state, ctx.leasedRoom?.state, ctx.application?.currentState];
+  for (const raw of states) {
+    const value = raw?.trim();
+    if (!value) continue;
+    if (normalizedState(value)) return false; // A supported state wins outright.
+    // Any other explicitly named state puts this property outside the registry.
+    if (/^[A-Za-z]{2}$/.test(value) || /^[A-Za-z][A-Za-z\s]+$/.test(value)) return true;
+  }
+  return false;
+}
+
 function resolveFromHaystack(hay: string): JurisdictionKey | null {
   if (!hay.trim()) return null;
   // An explicitly out-of-scope state wins over every other signal, so an Oregon address on
@@ -129,7 +147,18 @@ function resolveFromHaystack(hay: string): JurisdictionKey | null {
   // addresses on SW Oregon St and any address written "Unit A or B", generating no lease at
   // all. Both forms are only accepted where an address actually puts a state: after a comma,
   // or immediately before a ZIP. "SW Oregon St" is a street, not a state.
-  if (/,\s*(?:or|oregon)\b/i.test(hay) || /\b(?:or|oregon)\s+\d{5}\b/i.test(hay)) return null;
+  // "Oregon" as a STATE, not as a street. Accepted in a state position (after a comma, before
+  // a ZIP, or at the end of the text), and never when a street suffix follows it.
+  if (/\boregon\s+(?:st|street|ave|avenue|blvd|dr|drive|rd|road|way|ln|lane|ct|pl|place)\b/i.test(hay)) {
+    // A street named Oregon says nothing about the state.
+  } else if (
+    /,\s*(?:or|oregon)\b/i.test(hay) ||
+    /\b(?:or|oregon)\s+\d{5}\b/i.test(hay) ||
+    /\boregon\s*$/i.test(hay.trim()) ||
+    /\bor\s*$/i.test(hay.trim())
+  ) {
+    return null;
+  }
   const stateSignal = stateSignalFromHaystack(hay);
   if (SF_RE.test(hay)) return stateSignal && stateSignal !== "CA" ? { state: stateSignal } : { state: "CA", city: "san_francisco" };
   if (SEATTLE_RE.test(hay) || SEATTLE_STREET_RE.test(hay)) {
@@ -146,6 +175,8 @@ function resolveFromHaystack(hay: string): JurisdictionKey | null {
 
 /** Resolve a property location to a supported state config and optional city overlay. */
 export function resolveJurisdiction(ctx: LeaseJurisdictionInput): JurisdictionKey | null {
+  // A structured state field is authoritative; no string heuristic can override it.
+  if (explicitOutOfScopeState(ctx)) return null;
   const structured = structuredPropertyJurisdiction(ctx);
   if (structured) return structured;
   const propertyHay = propertyHaystack(ctx);

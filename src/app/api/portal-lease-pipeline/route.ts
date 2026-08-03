@@ -183,8 +183,17 @@ export async function POST(req: Request) {
       const incomingClearsSignatures = Boolean(
         storedForSanitization && rowHasAnySignature(storedForSanitization) && !rowHasAnySignature(normalized as LeasePipelineRow),
       );
-      if (!storedGeneratedHtml && typeof row.generatedHtml === "string") {
-        const cleaned = sanitizeLeaseDocumentHtml(row.generatedHtml);
+      // EVERY body that differs from the stored one is sanitized, whatever else the write does.
+      // Making this conditional on `!incomingClearsSignatures` meant a request that nulled the
+      // signatures stored raw HTML, which removed the server half of the XSS defense and let a
+      // manager drop every statutory clause with no trick at all. Only an exact echo of the
+      // stored body is left alone, because rewriting an UNCHANGED body silently mutates the
+      // evidence bytes a signed lease's certificate hash describes.
+      const bodyDiffersFromStored =
+        typeof row.generatedHtml === "string" && row.generatedHtml !== storedGeneratedHtml;
+      const editableAgainstStored = Boolean(storedGeneratedHtml) && !incomingClearsSignatures;
+      if (bodyDiffersFromStored && !editableAgainstStored) {
+        const cleaned = sanitizeLeaseDocumentHtml(row.generatedHtml as string);
         if (cleaned !== row.generatedHtml) {
           normalized = { ...normalized, generatedHtml: cleaned };
           record = buildUpsert(normalized);

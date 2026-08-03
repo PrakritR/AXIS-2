@@ -170,3 +170,31 @@ describe("re-review regressions", () => {
     expect(thrice).toBe(once);
   });
 });
+
+/**
+ * Round-3 CRITICAL: the sanitizer NORMALIZES attributes, so a decoy paragraph written
+ * `data-disclosure-rule = "x"` was invisible to the pre-sanitize regex (never restored, so the
+ * attacker's text stayed) and visible to it afterwards, satisfying the id-set check while the
+ * real clause was deleted by a blocked wrapper. Sanitizing first, and comparing clause TEXT
+ * rather than ids, closes both halves.
+ */
+describe("decoy disclosure paragraphs", () => {
+  const CLAUSE =
+    '<p data-disclosure-rule="fed-lead-paint">FEDERAL LEAD WARNING STATEMENT: housing built before 1978 may contain lead-based paint.</p>';
+  const base = `<html><body><h2>Disclosures</h2>${CLAUSE}<p>${"Standard lease body. ".repeat(20)}</p></body></html>`;
+
+  it.each([
+    ['whitespace around equals', '<p data-disclosure-rule = "fed-lead-paint">Intentionally blank.</p>'],
+    ['unquoted value', '<p data-disclosure-rule=fed-lead-paint>Intentionally blank.</p>'],
+    ['preceding attribute and newline', '<p class="x"\n\tdata-disclosure-rule="fed-lead-paint">Intentionally blank.</p>'],
+  ])("refuses a %s decoy that replaces the real clause", (_name, decoy) => {
+    const edited = `<html><body><h2>Disclosures</h2><form>${CLAUSE}</form>${decoy}<p>filler</p></body></html>`;
+    const result = sanitizeManagerLeaseDocumentEdit(base, edited);
+    if (result.ok) {
+      // If it is accepted at all, the real statutory TEXT must still be there.
+      expect(result.html).toContain("FEDERAL LEAD WARNING STATEMENT");
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+});

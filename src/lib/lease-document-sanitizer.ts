@@ -295,38 +295,36 @@ export function preserveVerbatimDisclosureClauses(originalHtml: string, editedHt
 
 /** Apply the persisted allowlist after restoring any P7 immutable disclosure blocks. */
 export function sanitizeManagerLeaseDocumentEdit(originalHtml: string, editedHtml: string): VerbatimClauseResult {
-  const protectedClauses = preserveVerbatimDisclosureClauses(originalHtml, editedHtml);
+  // ORDER MATTERS, and getting it wrong reopened the hole twice.
+  //
+  // Checking clauses BEFORE sanitizing let a blocked wrapper (<form>, unclosed <style>) delete
+  // a clause that had just been restored. Checking after, but matching with a regex while the
+  // sanitizer NORMALIZES attributes, let a decoy `data-disclosure-rule = "x"` be invisible
+  // going in and visible coming out, satisfying the check while the real clause was deleted.
+  //
+  // Sanitizing FIRST removes that discrepancy at the source: both sides are then in the
+  // sanitizer's own normal form, so the regex sees exactly what the sanitizer produced.
+  const sanitizedOriginal = sanitizeLeaseDocumentHtml(originalHtml) ?? "";
+  const sanitizedEdit = sanitizeLeaseDocumentHtml(editedHtml);
+  if (!sanitizedEdit) return { ok: false, error: "Lease HTML must contain allowed document content." };
+
+  const protectedClauses = preserveVerbatimDisclosureClauses(sanitizedOriginal, sanitizedEdit);
   if (!protectedClauses.ok) return protectedClauses;
-  const html = sanitizeLeaseDocumentHtml(protectedClauses.html);
-  if (!html) return { ok: false, error: "Lease HTML must contain allowed document content." };
+  const html = protectedClauses.html;
 
   // Re-verify AFTER sanitizing, not only before. Sanitizing deletes a blocked element and
   // everything inside it, so wrapping a protected clause in one (<form>, <button>, <template>,
   // an unclosed <style>, ...) let it be restored and then deleted, and the save was accepted.
   // Checking the FINAL bytes is the only check that cannot be routed around this way.
-  const requiredRules = new Set(
-    [...originalHtml.matchAll(DISCLOSURE_PARAGRAPH)].map((match) => (match[1] ?? match[2])!.toLowerCase()),
-  );
-  if (requiredRules.size > 0) {
-    const survivingRules = new Set(
-      [...html.matchAll(DISCLOSURE_PARAGRAPH)].map((match) => (match[1] ?? match[2])!.toLowerCase()),
-    );
-    for (const rule of requiredRules) {
-      if (!survivingRules.has(rule)) {
-        return {
-          ok: false,
-          error: "Required disclosure clauses cannot be removed. Edit the surrounding text only.",
-        };
-      }
+  // Verify the FINAL bytes carry each required clause's TEXT, not merely its id. Comparing id
+  // sets let an empty decoy paragraph supply the id while the real clause was deleted.
+  for (const match of sanitizedOriginal.matchAll(DISCLOSURE_PARAGRAPH)) {
+    if (!html.includes(match[0])) {
+      return {
+        ok: false,
+        error: "Required disclosure clauses cannot be removed. Edit the surrounding text only.",
+      };
     }
-  }
-
-  // A save that destroys the document is never an edit. An unclosed <style> truncates
-  // everything after it, so this also catches that whole class.
-  const originalTextLength = originalHtml.replace(/<[^>]*>/g, "").trim().length;
-  const survivingTextLength = html.replace(/<[^>]*>/g, "").trim().length;
-  if (originalTextLength > 200 && survivingTextLength < originalTextLength / 4) {
-    return { ok: false, error: "That edit would remove most of the lease. Review the document and try again." };
   }
   return { ok: true, html };
 }
