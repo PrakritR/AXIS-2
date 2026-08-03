@@ -530,11 +530,11 @@ the second is true of a reading that dropped a row.
 **The reading is derived, so it may not outlive the upload.**
 `normalizeLeasePipelineRow` drops `uploadedLeaseParse` whenever the row has no
 `managerUploadedPdf.dataUrl`. Every path that swaps a generated document in for
-the upload (`generateLeaseHtmlForRow`, the agent's `update_lease` regenerate,
-section and packet edits) already writes `managerUploadedPdf: null` through that
-function, so one choke point covers all of them instead of a list to keep in
-sync — otherwise a manager is held forever, asked to attest against a PDF the
-row no longer has. `residentUploadLeasePdf` clears it explicitly, because there
+the upload (`generateLeaseHtmlForRow`, and the packet and section edits behind
+`update_lease_packet` / `update_lease_document_sections`) already writes
+`managerUploadedPdf: null` through that function, so one choke point covers all
+of them instead of a list to keep in sync — otherwise a manager is held forever,
+asked to attest against a PDF the row no longer has. `residentUploadLeasePdf` clears it explicitly, because there
 the upload is *replaced* rather than removed.
 
 **`normalizeUploadedLeaseParse` fails CLOSED.** `row_data` is client-writable,
