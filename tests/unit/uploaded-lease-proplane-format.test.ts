@@ -98,11 +98,19 @@ describe("uploaded lease rendered in PropLane format", () => {
         userId: "mgr-1",
         name: "Pat Manager",
         atIso: "2026-08-02T00:00:00.000Z",
+        documentSha256: parse.sourceSha256,
       }),
     };
     const text = textOf(buildUploadedLeaseProplaneHtml({ parse: confirmed }));
     expect(text).toContain("Reviewed and confirmed by the property manager (Pat Manager)");
     expect(text).not.toContain("not yet available for signature");
+
+    // The gate and the document must never disagree: a confirmation that no
+    // longer binds to this reading renders as awaiting review, not as signable.
+    const drifted: UploadedLeaseParse = { ...confirmed, sourceSha256: "f".repeat(64) };
+    expect(textOf(buildUploadedLeaseProplaneHtml({ parse: drifted }))).toContain(
+      "Awaiting manager review — not yet available for signature",
+    );
   });
 
   it("distinguishes a manager-entered value from a machine-extracted one", () => {

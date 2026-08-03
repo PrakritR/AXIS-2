@@ -22,6 +22,7 @@ import {
   buildUploadedLeaseParse,
   failedUploadedLeaseParse,
   pendingUploadedLeaseParse,
+  uploadedLeaseReviewIsConfirmed,
 } from "@/lib/uploaded-lease-extraction";
 import { retryUploadedLeaseParse } from "@/lib/uploaded-lease-parse.client";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
@@ -273,6 +274,34 @@ describe("a confirmation is bound to the document it was made against", () => {
     );
     expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
     expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+  });
+
+  /**
+   * A lease the gate is holding must never read as confirmed anywhere. Every
+   * surface asks one predicate; a second, weaker rule at a call site produces a
+   * lease that is unsendable AND un-confirmable behind a banner claiming it is
+   * ready, which the manager cannot diagnose.
+   */
+  it("reads as needs-review at every surface when the confirmation no longer binds", async () => {
+    seedDemoLeasePipeline([uploadedRow({ uploadedLeaseParse: parseFixture() })], MANAGER_ID);
+    confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat Manager" });
+    const confirmed = storedRow()!.uploadedLeaseParse!;
+    seedDemoLeasePipeline(
+      [uploadedRow({ uploadedLeaseParse: { ...confirmed, sourceSha256: "e".repeat(64) } })],
+      MANAGER_ID,
+    );
+    const drifted = storedRow()!.uploadedLeaseParse!;
+
+    // The raw status still says confirmed — which is exactly why no surface
+    // may read it directly.
+    expect(drifted.review.status).toBe("confirmed");
+    expect(uploadedLeaseReviewIsConfirmed(drifted)).toBe(false);
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(true);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(false);
+    // The rendered document agrees with the gate rather than contradicting it.
+    expect(buildUploadedLeaseProplaneHtml({ parse: drifted })).toContain("Awaiting manager review");
+    // And a re-read is still reachable, so the row is not a dead end.
+    expect(saveUploadedLeaseParse(ROW_ID, parseFixture(), MANAGER_ID).ok).toBe(true);
   });
 });
 

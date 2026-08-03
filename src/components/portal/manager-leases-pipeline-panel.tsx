@@ -534,7 +534,7 @@ export function ManagerLeasesPipelinePanel({
     ) : null;
 
     const showReviewImport = Boolean(row.uploadedLeaseParse);
-    const importNeedsReview = row.uploadedLeaseParse?.review.status !== "confirmed";
+    const importNeedsReview = leaseAwaitsUploadedLeaseReview(row);
     const reviewImportLabel = importNeedsReview ? "Review import" : "Imported lease";
     const reviewImportButton = showReviewImport ? (
       <Button

@@ -589,24 +589,58 @@ export function resolvedFieldValue(
 /**
  * True while a parsed lease still needs a manager to confirm it.
  *
+ * This and its inverse `uploadedLeaseReviewIsConfirmed` are THE decision for
+ * "has a human confirmed this reading". Every consumer — the gate, the review
+ * modal, the header buttons, the rendered document — must go through one of
+ * them. Reading `review.status` directly anywhere else re-implements a weaker
+ * rule and lets the UI claim a lease is confirmed while the gate holds it.
+ *
  * A confirmation counts only when it is bound to the document it was made
  * against: `review.confirmedDocumentSha256` must equal the parse's current
- * `sourceSha256`. An absent or mismatched digest reads as `needs_review`, never
- * as confirmed, so an attestation cannot follow the row onto different bytes.
+ * `sourceSha256`. An absent or mismatched digest reads as `needs_review`.
  *
- * The one deliberate exception is a parse that HAS no digest of its own
- * (`sourceSha256: null` — a `pending` parse written before any text was read,
- * a `failed` one, or a row from before this field existed). There is nothing to
- * bind such a confirmation to, and requiring a digest there would make those
- * leases permanently unconfirmable with no way out — a dead end, not a gate. So
- * they keep the pre-existing who-and-when confirmation. This never loosens a
- * parse that does carry a digest.
+ * What that binding proves, and what it does not:
+ *
+ * - It proves the confirmation belongs to the PARSE it was made against. A
+ *   re-read that produces a different digest, or a parse swapped for one
+ *   describing other bytes, drops back to `needs_review`.
+ * - It does NOT prove the parse describes the bytes currently in
+ *   `managerUploadedPdf`. Both values live inside the same
+ *   `row_data.uploadedLeaseParse` blob, so this is an internal-consistency
+ *   check, not a byte-level one. A real byte check would need to hash the
+ *   upload, which this synchronous render-path predicate cannot do.
+ * - It does NOT close the `row_data` trust problem. That blob is writable by
+ *   the row's own resident through the lease-pipeline route, and a forged blob
+ *   can satisfy this check by naming its own digest on both sides. Closing that
+ *   belongs to the lease-pipeline route lane, not here.
+ *
+ * The one deliberate exception is a parse that has no digest of its own
+ * (`sourceSha256: null` — a `pending` parse written before any text was read, a
+ * `failed` one, a row from before this field existed, or a stored digest that
+ * failed the 64-hex check in `normalizeUploadedLeaseParse` and so normalized to
+ * null). There is nothing to bind such a confirmation to, so it reads as
+ * confirmed on the who-and-when alone. Requiring a digest there would make
+ * those leases permanently unconfirmable with no way out — a dead end, not a
+ * gate. This never loosens a parse that does carry a digest.
  */
 export function uploadedLeaseNeedsManagerConfirmation(parse: UploadedLeaseParse | null | undefined): boolean {
   if (!parse) return false;
   if (parse.review.status !== "confirmed") return true;
   if (!parse.sourceSha256) return false;
   return parse.review.confirmedDocumentSha256 !== parse.sourceSha256;
+}
+
+/**
+ * Whether a human has confirmed THIS reading — the one question every surface
+ * asks. See `uploadedLeaseNeedsManagerConfirmation` for what the underlying
+ * digest binding does and does not prove.
+ *
+ * A parse that is absent is not "confirmed": a row with no parse has nothing to
+ * confirm, and its callers gate on the parse's presence first.
+ */
+export function uploadedLeaseReviewIsConfirmed(parse: UploadedLeaseParse | null | undefined): boolean {
+  if (!parse) return false;
+  return !uploadedLeaseNeedsManagerConfirmation(parse);
 }
 
 export function confirmedUploadedLeaseReview(

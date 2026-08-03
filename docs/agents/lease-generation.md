@@ -476,19 +476,39 @@ that the Leases UI performs, so `sendForSignatureBlocker`
 `bucket: "resident"` must clear this gate too — greying out a button is not the
 gate.
 
-**A confirmation is bound to the bytes it was made against.**
+**One predicate decides "has a human confirmed this reading".**
+`uploadedLeaseReviewIsConfirmed` (and its inverse
+`uploadedLeaseNeedsManagerConfirmation`, wrapped row-side as
+`leaseAwaitsUploadedLeaseReview`) is that decision. The review modal, both
+"Review import" buttons, the rendered PropLane document, `saveUploadedLeaseParse`
+and the send gate all route through it. **Never compare `review.status` to
+`"confirmed"` at a call site** — that re-implements a weaker rule, and the last
+time five sites did, a lease could render a green "Confirmed … can be sent for
+signature" banner with no Confirm button while every send path refused it. A
+manager cannot debug a Send button that is dead for a reason the UI denies.
+
+**A confirmation is bound to the parse it was made against.**
 `confirmUploadedLeaseParse` stamps the parse's `sourceSha256` onto
-`review.confirmedDocumentSha256`, and `uploadedLeaseNeedsManagerConfirmation`
-honours a confirmation ONLY when that digest equals the parse's current
-`sourceSha256`. Absent or mismatched reads as `needs_review` — an attestation
-against one lease can never authorize signing another. The ONE deliberate
-exception: a parse that has no digest of its own (a `pending` parse written
-before any text was read, a `failed` one, a row from before the field existed)
-has nothing to bind to, so it keeps the who-and-when confirmation; requiring a
-digest there would make those leases permanently unconfirmable, which is a dead
-end rather than a gate. This does not close the wider `row_data`
-trust-model question (that lane is owned elsewhere) — it makes the attestation
-specific on this side of it.
+`review.confirmedDocumentSha256`, and the predicate honours a confirmation ONLY
+when that digest equals the parse's current `sourceSha256`. Absent or mismatched
+reads as `needs_review`. Be precise about its reach:
+
+- It proves the confirmation matches the PARSE it was made against — a re-read
+  producing a new digest, or a parse swapped for one describing other bytes,
+  drops back to `needs_review`.
+- It does NOT prove the parse matches the bytes now in `managerUploadedPdf`.
+  Both values live inside the same `row_data.uploadedLeaseParse` blob, so this
+  is an internal-consistency check. A byte-level check would have to hash the
+  upload, which the synchronous render-path predicate cannot do.
+- It does NOT close the `row_data` trust problem. A forged blob can satisfy it
+  by naming its own digest on both sides. That belongs to the lease-pipeline
+  route lane, not here.
+- The ONE deliberate exception: a parse with no digest of its own — a `pending`
+  parse written before any text was read, a `failed` one, a row from before the
+  field existed, or a stored `sourceSha256` that failed the 64-hex check in
+  `normalizeUploadedLeaseParse` and so normalized to null — has nothing to bind
+  to and reads as confirmed on the who-and-when alone. Requiring a digest there
+  would make those leases permanently unconfirmable: a dead end, not a gate.
 
 **`pending` is not a one-way door.** The parse is written synchronously at
 upload time, so a manager who closes the tab mid-read would otherwise own a row

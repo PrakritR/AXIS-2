@@ -7,6 +7,7 @@ import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import {
   resolvedFieldValue,
+  uploadedLeaseReviewIsConfirmed,
   type UploadedLeaseField,
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
@@ -89,10 +90,10 @@ export function UploadedLeaseReviewModal({
     () => ({ ...(parse.review.overrides ?? {}) }),
   );
   const [note, setNote] = useState(parse.review.note ?? "");
-  const [attested, setAttested] = useState(parse.review.status === "confirmed");
+  const [attested, setAttested] = useState(uploadedLeaseReviewIsConfirmed(parse));
   const [tab, setTab] = useState<"terms" | "document">("terms");
 
-  const confirmed = parse.review.status === "confirmed";
+  const confirmed = uploadedLeaseReviewIsConfirmed(parse);
 
   const previewHtml = useMemo(() => {
     const withDrafts: UploadedLeaseParse = {

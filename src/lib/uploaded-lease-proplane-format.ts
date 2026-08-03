@@ -17,6 +17,7 @@
 import { leaseCss } from "@/lib/lease-templates/types";
 import {
   resolvedFieldValue,
+  uploadedLeaseReviewIsConfirmed,
   type UploadedLeaseField,
   type UploadedLeaseParse,
   type UploadedLeaseSection,
@@ -125,7 +126,7 @@ export function buildUploadedLeaseProplaneHtml(args: {
 }): string {
   const { parse } = args;
   const p = args.placement ?? {};
-  const confirmed = parse.review.status === "confirmed";
+  const confirmed = uploadedLeaseReviewIsConfirmed(parse);
   const title = `Lease Agreement — ${(p.residentName ?? "Resident").trim() || "Resident"}`;
 
   const banner = confirmed
