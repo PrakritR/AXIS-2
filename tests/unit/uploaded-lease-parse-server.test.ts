@@ -88,9 +88,11 @@ describe("parsing a real multi-page lease PDF", () => {
     const rendered = html
       .replace(/<style[\s\S]*?<\/style>/g, " ")
       .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
+      // `&amp;` is unescaped LAST so an escaped entity (`&amp;quot;`) decodes to
+      // the literal `&quot;` rather than being double-unescaped into `"`.
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&")
       .replace(/\s+/g, "");
 
     for (const line of PAGE_LINES.flat().filter(Boolean)) {
