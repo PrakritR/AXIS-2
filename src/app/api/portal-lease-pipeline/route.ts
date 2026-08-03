@@ -9,7 +9,7 @@ import {
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { resolveResidentScopedActorRole } from "@/lib/auth/resident-role-access";
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
-import { replacesSignedLeaseDocument, signsAReplacedLeaseDocument } from "@/lib/lease-execution-evidence";
+import { introducesUntrustedLeaseDocument, replacesSignedLeaseDocument } from "@/lib/lease-execution-evidence";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -352,7 +352,12 @@ export async function POST(req: Request) {
      */
     const planned = new Map<
       string,
-      { row: Record<string, unknown>; record: ReturnType<typeof buildUpsert>; previouslySigned: boolean }
+      {
+        row: Record<string, unknown>;
+        record: ReturnType<typeof buildUpsert>;
+        previouslySigned: boolean;
+        storedRow: LeasePipelineRow | undefined;
+      }
     >();
 
     for (const row of rows) {
@@ -410,12 +415,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Record not found." }, { status: 404 });
           }
           // A resident signs a lease; they never author one. Auto-file renders
-          // the row's document into the PROPERTY OWNER's library on the
-          // transition into fully-signed, and tenant-supplied text is untrusted,
-          // so a resident-scoped actor must not be able to supply the body and
-          // the signature in the same write — the state in which
-          // `replacesSignedLeaseDocument` above cannot see a replacement.
-          if (storedRow && signsAReplacedLeaseDocument(storedRow, normalized as unknown as LeasePipelineRow)) {
+          // the row's document into the PROPERTY OWNER's library, and
+          // tenant-supplied text is untrusted, so a resident-scoped actor must
+          // not be able to supply the body and the execution claim in the same
+          // write — the state in which `replacesSignedLeaseDocument` above
+          // cannot see a replacement. Auto-file declines on the SAME predicate.
+          if (introducesUntrustedLeaseDocument(storedRow, normalized as unknown as LeasePipelineRow)) {
             return NextResponse.json(
               { error: "A lease document cannot be replaced and signed in the same request." },
               { status: 409 },
@@ -474,6 +479,7 @@ export async function POST(req: Request) {
         previouslySigned: Boolean(
           (existingRecord?.row_data as { fullySignedAt?: unknown } | undefined)?.fullySignedAt,
         ),
+        storedRow,
       });
     }
 
@@ -485,9 +491,15 @@ export async function POST(req: Request) {
 
       // Auto-file the signed lease into the document library on the transition
       // into fully-signed (once), so repeated syncs of the same row don't
-      // duplicate. No-op unless the manager opted the "lease" category in.
+      // duplicate. No-op unless the manager opted the "lease" category in, and
+      // never for a body the server did not already hold — the same predicate
+      // the resident guard above refuses on, so the two cannot disagree.
       const nowSigned = Boolean((plan.row as { fullySignedAt?: unknown }).fullySignedAt);
-      if (nowSigned && !plan.previouslySigned) {
+      const untrustedBody = introducesUntrustedLeaseDocument(
+        plan.storedRow,
+        plan.row as unknown as LeasePipelineRow,
+      );
+      if (nowSigned && !plan.previouslySigned && !untrustedBody) {
         await autoFileLeaseDocument(ctx.db, plan.record.row_data as AutoFileLeaseRow).catch(() => undefined);
       }
     }

@@ -110,35 +110,75 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
 }
 
 /**
+ * Every signal that says "this row is executed", as ONE predicate.
+ *
+ * `rowHasAnySignature` and `fullySignedAt` used to be read by different guards,
+ * and each disagreement was a bypass: a payload carrying `fullySignedAt` but no
+ * signature object satisfied a signature-keyed guard while still tripping a
+ * `fullySignedAt`-keyed action. Anything that decides what an executed row may
+ * do reads this, so the two signals can never drift apart again.
+ */
+export function leaseClaimsExecution(
+  row: Pick<
+    LeasePipelineRow,
+    "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso" | "fullySignedAt"
+  >,
+): boolean {
+  return Boolean(row.fullySignedAt) || rowHasAnySignature(row);
+}
+
+/**
+ * True when `next` turns an unexecuted stored row into an executed one while
+ * ALSO changing the document body — claiming execution of a document the server
+ * never held.
+ *
+ * This is the sibling `replacesSignedLeaseDocument` cannot cover: that one
+ * requires the STORED row to already be executed, because it assumes the
+ * signature was applied to a body the server had. A caller that supplies the
+ * body and the execution claim in the SAME write never trips it, so the executed
+ * text is whatever that one request said it was.
+ *
+ * It is the single trust decision behind two behaviours: a resident-scoped write
+ * of this shape is refused outright, and auto-file declines to render such a
+ * body into the property owner's document library. Both read this function, so
+ * the guard and the action it protects cannot key on different signals.
+ *
+ * Legitimate shapes stay out of it. `residentUploadLeasePdf` clears every
+ * signature and `fullySignedAt` first, so `next` claims nothing; countersigning
+ * leaves the body untouched; and filling an ABSENT body with an already-executed
+ * off-platform PDF is the existing-resident onboarding shape
+ * `syncApprovedApplications` seeds (`externallySignedLease`, PDF only), which is
+ * carved out exactly as `replacesSignedLeaseDocument` carves it out. That
+ * carve-out does not extend to HTML: the seeded row never introduces one, and
+ * generated HTML is what auto-file would render into someone else's library.
+ */
+export function introducesUntrustedLeaseDocument(
+  stored: LeasePipelineRow | undefined,
+  next: LeasePipelineRow,
+): boolean {
+  if (!stored) return false;
+  if (leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
+  const before = leaseDocumentBody(stored);
+  const after = leaseDocumentBody(next);
+  if (before.html === after.html && before.pdf === after.pdf) return false;
+  if (
+    !before.html &&
+    !before.pdf &&
+    !after.html &&
+    (stored.externallySignedLease || next.externallySignedLease)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * True when `next` replaces the document body of an already-signed `stored`
  * row. Clearing the signatures drops out by design, because that is a superseding
  * document (void, send back, renew, amend), not a silent edit to an executed
  * one. Filling in an absent body on an `externallySignedLease` row is how
  * existing-resident onboarding files an already-executed off-platform PDF.
  */
-/**
- * True when `next` introduces a signature AND a different document body than
- * the stored row carries — signing and authoring in a single write.
- *
- * `replacesSignedLeaseDocument` is inert here by construction: it requires the
- * STORED row to already carry a signature, because it assumes the signature was
- * applied to a body the server already held. A caller that supplies the body
- * and the signature together never trips it, so the executed text is whatever
- * that one request said it was.
- *
- * That gap only matters for an actor who may edit a lease but does not own it —
- * a resident. Uploading a replacement document is still legitimate for them
- * (`residentUploadLeasePdf` clears every signature first, so `next` is
- * unsigned), and countersigning is too (the body is unchanged); it is the
- * combination that has no legitimate shape.
- */
-export function signsAReplacedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
-  if (rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
-  const before = leaseDocumentBody(stored);
-  const after = leaseDocumentBody(next);
-  return before.html !== after.html || before.pdf !== after.pdf;
-}
-
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
   const before = leaseDocumentBody(stored);
