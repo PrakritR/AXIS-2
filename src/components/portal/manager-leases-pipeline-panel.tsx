@@ -51,7 +51,7 @@ import {
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import { uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
+import { retryUploadedLeaseParse, uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
 import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
 import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
 
@@ -761,6 +761,19 @@ export function ManagerLeasesPipelinePanel({
             setImportReviewRowId(null);
             void syncLeasePipelineFromServer(managerUserId, { force: true });
             showToast("Imported lease confirmed. It can now be sent for signature.");
+          }}
+          onRetryRead={async () => {
+            const result = await retryUploadedLeaseParse(importReviewRow.id, managerUserId);
+            if (!result.ok) {
+              showToast(result.error ?? "Could not read that lease PDF.");
+              return;
+            }
+            await syncLeasePipelineFromServer(managerUserId, { force: true });
+            showToast(
+              result.parse?.status === "parsed"
+                ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+                : `PropLane still could not read this PDF. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+            );
           }}
         />
       ) : null}

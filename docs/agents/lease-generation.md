@@ -476,6 +476,37 @@ that the Leases UI performs, so `sendForSignatureBlocker`
 `bucket: "resident"` must clear this gate too — greying out a button is not the
 gate.
 
+**A confirmation is bound to the bytes it was made against.**
+`confirmUploadedLeaseParse` stamps the parse's `sourceSha256` onto
+`review.confirmedDocumentSha256`, and `uploadedLeaseNeedsManagerConfirmation`
+honours a confirmation ONLY when that digest equals the parse's current
+`sourceSha256`. Absent or mismatched reads as `needs_review` — an attestation
+against one lease can never authorize signing another. The ONE deliberate
+exception: a parse that has no digest of its own (a `pending` parse written
+before any text was read, a `failed` one, a row from before the field existed)
+has nothing to bind to, so it keeps the who-and-when confirmation; requiring a
+digest there would make those leases permanently unconfirmable, which is a dead
+end rather than a gate. This does not close the wider `row_data`
+trust-model question (that lane is owned elsewhere) — it makes the attestation
+specific on this side of it.
+
+**`pending` is not a one-way door.** The parse is written synchronously at
+upload time, so a manager who closes the tab mid-read would otherwise own a row
+that can never be sent. `retryUploadedLeaseParse`
+(`src/lib/uploaded-lease-parse.client.ts`, surfaced as "Retry read" / "Read it
+again" in `UploadedLeaseReviewModal`) re-reads `managerUploadedPdf.originalDataUrl`
+— the bytes already on the row, never a re-upload — and stores the result
+through the same `saveUploadedLeaseParse`. It never confirms: the fresh parse
+lands `needs_review`, so the human step still happens. `saveUploadedLeaseParse`
+refuses on the same predicate the gate uses, so a confirmation that no longer
+binds cannot lock a re-read out.
+
+**Every canonical term is always listed.** `normalizeUploadedLeaseParse`
+backfills any `FIELD_MATCHERS` key a stored blob lost as `not_found` with an
+empty value, in matcher order. An absent row reads as "this term does not apply
+to this lease"; a blank flagged row reads as "nobody found this, go check". Only
+the second is true of a reading that dropped a row.
+
 **The reading is derived, so it may not outlive the upload.**
 `normalizeLeasePipelineRow` drops `uploadedLeaseParse` whenever the row has no
 `managerUploadedPdf.dataUrl`. Every path that swaps a generated document in for

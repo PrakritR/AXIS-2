@@ -110,6 +110,15 @@ export type UploadedLeaseReview = {
   confirmedByName?: string | null;
   confirmedAtIso?: string | null;
   /**
+   * WHAT the manager confirmed: the `sourceSha256` of the parse they attested
+   * to. A confirmation that records only who and when survives the document
+   * underneath it changing, which would let an attestation against one lease
+   * authorize the signing of another — so the digest is stamped here at confirm
+   * time and re-checked on every read
+   * (`uploadedLeaseNeedsManagerConfirmation`).
+   */
+  confirmedDocumentSha256?: string | null;
+  /**
    * Values a human typed. Presence of a key is what marks a value
    * human-confirmed rather than machine-extracted, and the review UI and the
    * rendered document both distinguish the two.
@@ -577,15 +586,39 @@ export function resolvedFieldValue(
   return { value: field.value, confirmedByHuman: false };
 }
 
-/** True while a parsed lease still needs a manager to confirm it. */
+/**
+ * True while a parsed lease still needs a manager to confirm it.
+ *
+ * A confirmation counts only when it is bound to the document it was made
+ * against: `review.confirmedDocumentSha256` must equal the parse's current
+ * `sourceSha256`. An absent or mismatched digest reads as `needs_review`, never
+ * as confirmed, so an attestation cannot follow the row onto different bytes.
+ *
+ * The one deliberate exception is a parse that HAS no digest of its own
+ * (`sourceSha256: null` — a `pending` parse written before any text was read,
+ * a `failed` one, or a row from before this field existed). There is nothing to
+ * bind such a confirmation to, and requiring a digest there would make those
+ * leases permanently unconfirmable with no way out — a dead end, not a gate. So
+ * they keep the pre-existing who-and-when confirmation. This never loosens a
+ * parse that does carry a digest.
+ */
 export function uploadedLeaseNeedsManagerConfirmation(parse: UploadedLeaseParse | null | undefined): boolean {
   if (!parse) return false;
-  return parse.review.status !== "confirmed";
+  if (parse.review.status !== "confirmed") return true;
+  if (!parse.sourceSha256) return false;
+  return parse.review.confirmedDocumentSha256 !== parse.sourceSha256;
 }
 
 export function confirmedUploadedLeaseReview(
   review: UploadedLeaseReview,
-  by: { userId?: string | null; name?: string | null; atIso: string; note?: string | null },
+  by: {
+    userId?: string | null;
+    name?: string | null;
+    atIso: string;
+    note?: string | null;
+    /** The `sourceSha256` of the parse being confirmed; null when it has none. */
+    documentSha256?: string | null;
+  },
 ): UploadedLeaseReview {
   return {
     ...review,
@@ -593,6 +626,7 @@ export function confirmedUploadedLeaseReview(
     confirmedByUserId: by.userId ?? null,
     confirmedByName: by.name ?? null,
     confirmedAtIso: by.atIso,
+    confirmedDocumentSha256: by.documentSha256 ?? null,
     note: by.note?.trim() || null,
   };
 }
@@ -674,6 +708,27 @@ function normalizeStoredField(raw: unknown): UploadedLeaseField | null {
   };
 }
 
+/**
+ * The blank-and-flagged row for a term the stored blob does not carry.
+ *
+ * An ABSENT row reads as "this term does not apply to this lease"; a blank
+ * `not_found` row reads as "nobody found this, go check". Only the second is
+ * true of a reading that simply lost the row, so every canonical term is always
+ * present in the table.
+ */
+function blankNotFoundField(matcher: Pick<FieldMatcher, "key" | "label" | "mapsTo">): UploadedLeaseField {
+  return {
+    key: matcher.key,
+    label: matcher.label,
+    mapsTo: matcher.mapsTo,
+    status: "not_found",
+    value: "",
+    normalized: null,
+    source: null,
+    candidates: [],
+  };
+}
+
 function normalizeStoredSection(raw: unknown, index: number): UploadedLeaseSection | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as Record<string, unknown>;
@@ -722,13 +777,14 @@ export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | 
         .filter((s): s is UploadedLeaseSection => s !== null)
         .map((s, i) => ({ ...s, index: i }))
     : [];
-  const seenFieldKeys = new Set<string>();
-  const fields = Array.isArray(r.fields)
-    ? r.fields
-        .map(normalizeStoredField)
-        .filter((f): f is UploadedLeaseField => f !== null)
-        .filter((f) => (seenFieldKeys.has(f.key) ? false : (seenFieldKeys.add(f.key), true)))
-    : [];
+  const storedFields = new Map<UploadedLeaseFieldKey, UploadedLeaseField>();
+  if (Array.isArray(r.fields)) {
+    for (const rawField of r.fields) {
+      const field = normalizeStoredField(rawField);
+      if (field && !storedFields.has(field.key)) storedFields.set(field.key, field);
+    }
+  }
+  const fields = FIELD_MATCHERS.map((matcher) => storedFields.get(matcher.key) ?? blankNotFoundField(matcher));
   return {
     version: UPLOADED_LEASE_PARSE_VERSION,
     status,
@@ -745,6 +801,10 @@ export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | 
       confirmedByUserId: typeof reviewRaw.confirmedByUserId === "string" ? reviewRaw.confirmedByUserId : null,
       confirmedByName: typeof reviewRaw.confirmedByName === "string" ? reviewRaw.confirmedByName : null,
       confirmedAtIso: typeof reviewRaw.confirmedAtIso === "string" ? reviewRaw.confirmedAtIso : null,
+      confirmedDocumentSha256:
+        typeof reviewRaw.confirmedDocumentSha256 === "string" && /^[0-9a-f]{64}$/.test(reviewRaw.confirmedDocumentSha256)
+          ? reviewRaw.confirmedDocumentSha256
+          : null,
       overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
       note: typeof reviewRaw.note === "string" ? reviewRaw.note : null,
     },

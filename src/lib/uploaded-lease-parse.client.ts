@@ -81,3 +81,42 @@ export async function uploadAndParseLeasePdf(
   if (!saved.ok) return { ok: true, saveError: saved.error ?? "The imported reading could not be stored." };
   return { ok: true, parse };
 }
+
+/**
+ * Read an already-uploaded lease again, from the bytes the row already holds.
+ *
+ * Without this, `pending` is a terminal state: the parse is written
+ * synchronously at upload time, so a manager who closes the tab mid-read leaves
+ * a row that can never be sent and offers no way forward but deleting the lease.
+ * Retry re-reads `originalDataUrl` — the PDF is never re-uploaded, replaced, or
+ * touched — and stores the result through the same `saveUploadedLeaseParse`.
+ *
+ * It never confirms anything: the fresh parse lands `needs_review`, so the
+ * human step the gate exists for is still required.
+ */
+export async function retryUploadedLeaseParse(
+  rowId: string,
+  managerUserId?: string | null,
+): Promise<{ ok: boolean; error?: string; parse?: UploadedLeaseParse }> {
+  if (isDemoModeActive()) return { ok: false, error: "Reading an uploaded lease is disabled in the demo." };
+  const row = readLeasePipeline(managerUserId).find((r) => r.id === rowId);
+  const upload = row?.managerUploadedPdf;
+  const dataUrl = upload?.originalDataUrl ?? upload?.dataUrl ?? "";
+  if (!dataUrl) return { ok: false, error: "No uploaded lease document on this record." };
+
+  let parse: UploadedLeaseParse;
+  try {
+    parse = await parseUploadedLeaseDataUrl({
+      dataUrl,
+      fileName: upload?.fileName || row?.uploadedLeaseParse?.sourceFileName || "Uploaded lease.pdf",
+    });
+  } catch (err) {
+    parse = failedUploadedLeaseParse(
+      upload?.fileName || "Uploaded lease.pdf",
+      err instanceof Error ? err.message : "Could not read that lease PDF.",
+    );
+  }
+  const saved = saveUploadedLeaseParse(rowId, parse, managerUserId);
+  if (!saved.ok) return { ok: false, error: saved.error ?? "The imported reading could not be stored." };
+  return { ok: true, parse };
+}

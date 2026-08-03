@@ -1874,7 +1874,10 @@ export function managerUploadLeasePdf(
  *
  * Refuses once a signature exists and refuses to overwrite a review a human has
  * already confirmed — a late-arriving parse must never silently reopen or
- * replace what a manager signed off on.
+ * replace what a manager signed off on. "Confirmed" is the same judgement the
+ * gate makes (`leaseAwaitsUploadedLeaseReview`), so a confirmation that no
+ * longer binds to the document does not lock a re-read out; the fresh parse
+ * lands unconfirmed and the manager reviews it again.
  */
 export function saveUploadedLeaseParse(
   rowId: string,
@@ -1887,7 +1890,7 @@ export function saveUploadedLeaseParse(
   const row = rows[idx]!;
   if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
   if (hasAnyLeaseSignature(row)) return { ok: false, error: "This lease already has signatures." };
-  if (row.uploadedLeaseParse?.review.status === "confirmed") {
+  if (row.uploadedLeaseParse && !uploadedLeaseNeedsManagerConfirmation(row.uploadedLeaseParse)) {
     return { ok: false, error: "This imported lease has already been confirmed." };
   }
   if (!row.managerUploadedPdf?.dataUrl) return { ok: false, error: "No uploaded lease document on this record." };
@@ -1940,7 +1943,13 @@ export function confirmUploadedLeaseParse(
       ...parse,
       review: confirmedUploadedLeaseReview(
         { ...parse.review, overrides: Object.keys(cleaned).length > 0 ? cleaned : undefined },
-        { userId: args.managerUserId ?? null, name: args.confirmedByName ?? null, atIso: iso, note: args.note },
+        {
+          userId: args.managerUserId ?? null,
+          name: args.confirmedByName ?? null,
+          atIso: iso,
+          note: args.note,
+          documentSha256: parse.sourceSha256,
+        },
       ),
     },
     updatedAtIso: iso,

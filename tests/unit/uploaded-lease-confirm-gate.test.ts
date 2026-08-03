@@ -18,7 +18,12 @@ import {
   updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import { buildUploadedLeaseParse, pendingUploadedLeaseParse } from "@/lib/uploaded-lease-extraction";
+import {
+  buildUploadedLeaseParse,
+  failedUploadedLeaseParse,
+  pendingUploadedLeaseParse,
+} from "@/lib/uploaded-lease-extraction";
+import { retryUploadedLeaseParse } from "@/lib/uploaded-lease-parse.client";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
 
 const MANAGER_ID = "manager-import-gate";
@@ -202,6 +207,76 @@ describe("parsing never touches the uploaded artifact", () => {
 });
 
 /**
+ * A confirmation says WHO and WHEN; without WHAT it was a confirmation OF, a
+ * manager's attestation against one document silently authorizes signing
+ * another. The digest binding is what makes it specific, and a `pending` parse
+ * must never be a one-way door — both are pinned here.
+ */
+describe("a confirmation is bound to the document it was made against", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/portal/leases");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+  });
+
+  it("stamps the reviewed document's digest at confirm time", () => {
+    seedDemoLeasePipeline([uploadedRow({ uploadedLeaseParse: parseFixture() })], MANAGER_ID);
+
+    confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat Manager" });
+
+    expect(storedRow()?.uploadedLeaseParse?.review.confirmedDocumentSha256).toBe("c".repeat(64));
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
+  });
+
+  it("reverts to needs-review when the parse it confirmed describes different bytes", async () => {
+    seedDemoLeasePipeline([uploadedRow({ uploadedLeaseParse: parseFixture() })], MANAGER_ID);
+    confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat Manager" });
+
+    const confirmed = storedRow()!.uploadedLeaseParse!;
+    seedDemoLeasePipeline(
+      [uploadedRow({ uploadedLeaseParse: { ...confirmed, sourceSha256: "e".repeat(64) } })],
+      MANAGER_ID,
+    );
+
+    expect(storedRow()?.uploadedLeaseParse?.review.status).toBe("confirmed");
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(true);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(false);
+  });
+
+  it("does not let a confirmation that names no document unblock signing", async () => {
+    seedDemoLeasePipeline(
+      [
+        uploadedRow({
+          uploadedLeaseParse: {
+            ...parseFixture(),
+            review: { status: "confirmed", confirmedByName: "Forged" },
+          },
+        }),
+      ],
+      MANAGER_ID,
+    );
+
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(true);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(false);
+    expect(storedRow()?.status).toBe("Manager Review");
+  });
+
+  it("keeps a digest-less parse confirmable, so it is never a dead end", async () => {
+    seedDemoLeasePipeline(
+      [uploadedRow({ uploadedLeaseParse: failedUploadedLeaseParse("harbour-point.pdf", "Image-only PDF.") })],
+      MANAGER_ID,
+    );
+
+    expect(confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat Manager" }).ok).toBe(
+      true,
+    );
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+  });
+});
+
+/**
  * The reading is DERIVED from one upload, so it may never outlive that upload
  * nor claim more than the stored blob can support. Both failures are silent in
  * the UI — a lease held against a document that is gone, or a renderer handed a
@@ -292,16 +367,87 @@ describe("a stored reading cannot outlive or misrepresent its document", () => {
     expect(parse.sections).toHaveLength(2);
     expect(parse.sections.map((s) => s.title)).toEqual(["", "RENT"]);
     expect(parse.sections.every((s) => typeof s.body === "string")).toBe(true);
-    // An unknown status reads as not_found — blank and flagged, never a term.
-    expect(parse.fields.map((f) => [f.key, f.status, f.value])).toEqual([
-      ["monthlyRent", "not_found", ""],
-      ["securityDeposit", "not_found", ""],
-    ]);
+    // An unknown status reads as not_found — blank and flagged, never a term —
+    // and a term the blob lost is still listed rather than silently absent.
+    expect(parse.fields).toHaveLength(9);
+    expect(parse.fields.every((f) => f.status === "not_found" && f.value === "")).toBe(true);
+    expect(parse.fields.map((f) => f.key)).toContain("securityDeposit");
+    expect(parse.fields.map((f) => f.key)).not.toContain("not-a-field");
     expect(parse.fields.every((f) => Array.isArray(f.candidates))).toBe(true);
 
     expect(() =>
       buildUploadedLeaseProplaneHtml({ parse, placement: { residentName: "Dana Whitfield" } }),
     ).not.toThrow();
   });
+});
 
+/**
+ * `pending` is written before any text is read, so a manager who closed the tab
+ * mid-read owns a lease that can never be sent. Re-reading the bytes the row
+ * already holds is the way out — and it must not hand out a confirmation.
+ */
+describe("an unread import can be read again from the bytes already on the row", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/portal/leases");
+  });
+
+  function stubParseRoute(parse: unknown) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/portal/parse-uploaded-lease")) {
+        return new Response(JSON.stringify({ parse }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("re-reads a stranded pending parse and leaves it unconfirmed", async () => {
+    seedDemoLeasePipeline([uploadedRow({ uploadedLeaseParse: pendingUploadedLeaseParse("harbour-point.pdf") })], MANAGER_ID);
+    const fetchMock = stubParseRoute(parseFixture());
+
+    const result = await retryUploadedLeaseParse(ROW_ID, MANAGER_ID);
+
+    expect(result.ok).toBe(true);
+    const posted = fetchMock.mock.calls.find(([url]) => String(url).includes("parse-uploaded-lease"));
+    // Re-read from the stored bytes — never a re-upload.
+    expect(JSON.parse(String((posted?.[1] as RequestInit).body)).dataUrl).toBe(ORIGINAL_PDF);
+
+    const stored = storedRow()!;
+    expect(stored.uploadedLeaseParse?.status).toBe("parsed");
+    expect(stored.uploadedLeaseParse?.sections.length).toBeGreaterThan(0);
+    // Reading is not confirming: the human step is still required.
+    expect(stored.uploadedLeaseParse?.review.status).toBe("needs_review");
+    expect(leaseAwaitsUploadedLeaseReview(stored)).toBe(true);
+    expect(stored.managerUploadedPdf?.originalDataUrl).toBe(ORIGINAL_PDF);
+  });
+
+  it("records a still-unreadable document as failed rather than releasing the lease", async () => {
+    seedDemoLeasePipeline([uploadedRow({ uploadedLeaseParse: pendingUploadedLeaseParse("harbour-point.pdf") })], MANAGER_ID);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/api/portal/parse-uploaded-lease")
+          ? new Response(JSON.stringify({ error: "No text could be read from this PDF." }), { status: 422 })
+          : new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      ),
+    );
+
+    expect((await retryUploadedLeaseParse(ROW_ID, MANAGER_ID)).ok).toBe(true);
+
+    expect(storedRow()?.uploadedLeaseParse?.status).toBe("failed");
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(true);
+  });
+
+  it("refuses to re-read a lease with no uploaded document", async () => {
+    seedDemoLeasePipeline([uploadedRow({ managerUploadedPdf: null, generatedHtml: "<html>x</html>" })], MANAGER_ID);
+    stubParseRoute(parseFixture());
+
+    const result = await retryUploadedLeaseParse(ROW_ID, MANAGER_ID);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no uploaded lease document/i);
+  });
 });

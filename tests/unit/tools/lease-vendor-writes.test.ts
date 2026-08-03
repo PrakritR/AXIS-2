@@ -419,6 +419,8 @@ describe("send_lease_for_signature", () => {
   // The assistant reaches the same transition the Leases UI does, so it has to
   // clear the same gate: a machine reading of an uploaded contract that no
   // person has confirmed must not become signable through the tool layer.
+  const IMPORT_SHA = "d".repeat(64);
+
   function importedLease(id: string, reviewStatus: "needs_review" | "confirmed"): Row {
     return draftLease(id, {
       generatedHtml: null,
@@ -432,10 +434,13 @@ describe("send_lease_for_signature", () => {
         ...buildUploadedLeaseParse({
           pages: ["1. RENT\nMonthly rent is $2,150.00."],
           fileName: "third-party-lease.pdf",
-          sourceSha256: "d".repeat(64),
+          sourceSha256: IMPORT_SHA,
           extractedAtIso: "2026-08-01T00:00:00.000Z",
         }),
-        review: { status: reviewStatus },
+        review:
+          reviewStatus === "confirmed"
+            ? { status: reviewStatus, confirmedDocumentSha256: IMPORT_SHA }
+            : { status: reviewStatus },
       },
     });
   }
@@ -457,6 +462,17 @@ describe("send_lease_for_signature", () => {
     expect(rowData.status).toBeUndefined();
     expect(store.tables.audit_log ?? []).toHaveLength(0);
     expect(deliverPortalInboxMessage).not.toHaveBeenCalled();
+  });
+
+  it("refuses a confirmation that is not bound to the document on the row", async () => {
+    const forged = importedLease("lease_forged", "confirmed");
+    (forged.uploadedLeaseParse as Row).review = { status: "confirmed", confirmedByName: "Forged" };
+    const { ctx } = makeCtx({ portal_lease_pipeline_records: [leaseRecord("manager_a", forged)] });
+
+    const preview = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_forged" });
+
+    expect(preview.ok).toBe(false);
+    if (!preview.ok) expect(preview.error).toContain("confirm it before sending");
   });
 
   it("sends an imported lease once a manager has confirmed the reading", async () => {

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertSectionsPartition,
   buildUploadedLeaseParse,
+  confirmedUploadedLeaseReview,
   extractLeaseFields,
   joinLeasePages,
   normalizeLeaseDate,
@@ -188,9 +189,44 @@ describe("parse assembly and review state", () => {
       fields: [{ key: "monthlyRent" }, { key: "notAField" }],
       review: { status: "confirmed", overrides: { monthlyRent: "$1,000.00", notAField: "hack" } },
     });
-    expect(rehydrated?.fields.map((f) => f.key)).toEqual(["monthlyRent"]);
+    // The unknown key is dropped, and every canonical term is still listed: a
+    // missing row would read as "does not apply", a blank one as "go check".
+    expect(rehydrated?.fields.map((f) => f.key)).toEqual([
+      "landlordName",
+      "tenantName",
+      "propertyAddress",
+      "leaseStart",
+      "leaseEnd",
+      "monthlyRent",
+      "securityDeposit",
+      "rentDueDay",
+      "lateFee",
+    ]);
+    expect(rehydrated?.fields.filter((f) => f.status !== "not_found")).toEqual([]);
+    expect(rehydrated?.fields.every((f) => f.value === "")).toBe(true);
     expect(rehydrated?.review.overrides).toEqual({ monthlyRent: "$1,000.00" });
+    // No sourceSha256 to bind to, so the who-and-when confirmation still counts.
     expect(uploadedLeaseNeedsManagerConfirmation(rehydrated)).toBe(false);
+  });
+
+  it("only honours a confirmation bound to the document it was made against", () => {
+    const digest = "a".repeat(64);
+    const parse = buildUploadedLeaseParse({
+      pages: ["1. RENT\nMonthly rent is $2,150.00."],
+      fileName: "x.pdf",
+      sourceSha256: digest,
+      extractedAtIso: "2026-08-01T00:00:00.000Z",
+    });
+
+    const bound = { ...parse, review: confirmedUploadedLeaseReview(parse.review, { atIso: "2026-08-01T00:00:00.000Z", documentSha256: digest }) };
+    expect(uploadedLeaseNeedsManagerConfirmation(bound)).toBe(false);
+
+    // The same attestation must not carry over to different bytes.
+    expect(uploadedLeaseNeedsManagerConfirmation({ ...bound, sourceSha256: "b".repeat(64) })).toBe(true);
+    // A confirmation that names no document at all is not a confirmation.
+    expect(
+      uploadedLeaseNeedsManagerConfirmation({ ...parse, review: { status: "confirmed", confirmedByName: "Forged" } }),
+    ).toBe(true);
   });
 
   it("treats a row with no parse as unaffected", () => {

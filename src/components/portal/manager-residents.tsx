@@ -139,7 +139,7 @@ import {
   residentHasSignedLease,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
-import { uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
+import { retryUploadedLeaseParse, uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
 import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
 import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
 import {
@@ -2852,6 +2852,19 @@ export function ManagerResidents({
             setLeaseTick((n) => n + 1);
             setImportReviewLeaseId(null);
             showToast("Imported lease confirmed. It can now be sent for signature.");
+          }}
+          onRetryRead={async () => {
+            const result = await retryUploadedLeaseParse(importReviewLease.id, userId);
+            setLeaseTick((n) => n + 1);
+            if (!result.ok) {
+              showToast(result.error ?? "Could not read that lease PDF.");
+              return;
+            }
+            showToast(
+              result.parse?.status === "parsed"
+                ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+                : `PropLane still could not read this PDF. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+            );
           }}
         />
       ) : null}

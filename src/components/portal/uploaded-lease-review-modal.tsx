@@ -75,12 +75,15 @@ export function UploadedLeaseReviewModal({
   parse,
   onClose,
   onConfirm,
+  onRetryRead,
 }: {
   open: boolean;
   row: LeasePipelineRow;
   parse: UploadedLeaseParse;
   onClose: () => void;
   onConfirm: (args: { overrides: Partial<Record<UploadedLeaseFieldKey, string>>; note: string }) => Promise<void> | void;
+  /** Re-read the PDF already on the row. Never confirms; the review stays open. */
+  onRetryRead?: () => Promise<void> | void;
 }) {
   const [drafts, setDrafts] = useState<Partial<Record<UploadedLeaseFieldKey, string>>>(
     () => ({ ...(parse.review.overrides ?? {}) }),
@@ -108,6 +111,22 @@ export function UploadedLeaseReviewModal({
     // the row on an empty reading of a document that structured fine. So the
     // confirm affordance exists only once the read has finished and failed.
     const stillReading = parse.status === "pending";
+    // `pending` is written before any text is read, so a manager who closed the
+    // tab mid-read owns a row that can never be sent. Re-reading the bytes
+    // already on the row is the way out — no re-upload, so the executed
+    // artifact is untouched.
+    const canRetry = Boolean(onRetryRead) && !confirmed && Boolean(row.managerUploadedPdf?.dataUrl);
+    const retryButton = canRetry ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="rounded-full"
+        data-attr="uploaded-lease-retry-read"
+        onClick={() => onRetryRead?.()}
+      >
+        {stillReading ? "Retry read" : "Read it again"}
+      </Button>
+    ) : null;
     return (
       <Modal
         open={open}
@@ -116,8 +135,11 @@ export function UploadedLeaseReviewModal({
         onClose={onClose}
         panelClassName={MODAL_LARGE_PANEL_CLASS}
         footer={
-          stillReading || confirmed ? undefined : (
+          stillReading || confirmed ? (
+            retryButton ? <ModalFooter>{retryButton}</ModalFooter> : undefined
+          ) : (
             <ModalFooter>
+              {retryButton}
               <Button
                 type="button"
                 variant="primary"
@@ -148,8 +170,11 @@ export function UploadedLeaseReviewModal({
             <p className="mt-2">
               The uploaded PDF is stored unchanged and is still the document that gets signed.
               {stillReading
-                ? " This lease stays held until the read finishes — reopen this from Review import in a moment."
+                ? " This lease stays held until the read finishes."
                 : " Nothing was shortened or rewritten — PropLane simply could not read it into sections."}
+              {canRetry
+                ? " Read it again to run the same document through PropLane once more — the PDF is not re-uploaded or altered."
+                : null}
             </p>
           </div>
           {stillReading || confirmed ? null : (
