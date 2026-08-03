@@ -116,6 +116,29 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
  * one. Filling in an absent body on an `externallySignedLease` row is how
  * existing-resident onboarding files an already-executed off-platform PDF.
  */
+/**
+ * True when `next` introduces a signature AND a different document body than
+ * the stored row carries — signing and authoring in a single write.
+ *
+ * `replacesSignedLeaseDocument` is inert here by construction: it requires the
+ * STORED row to already carry a signature, because it assumes the signature was
+ * applied to a body the server already held. A caller that supplies the body
+ * and the signature together never trips it, so the executed text is whatever
+ * that one request said it was.
+ *
+ * That gap only matters for an actor who may edit a lease but does not own it —
+ * a resident. Uploading a replacement document is still legitimate for them
+ * (`residentUploadLeasePdf` clears every signature first, so `next` is
+ * unsigned), and countersigning is too (the body is unchanged); it is the
+ * combination that has no legitimate shape.
+ */
+export function signsAReplacedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
+  if (rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
+  const before = leaseDocumentBody(stored);
+  const after = leaseDocumentBody(next);
+  return before.html !== after.html || before.pdf !== after.pdf;
+}
+
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
   const before = leaseDocumentBody(stored);

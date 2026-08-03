@@ -9,7 +9,7 @@ import {
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { resolveResidentScopedActorRole } from "@/lib/auth/resident-role-access";
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
-import { replacesSignedLeaseDocument } from "@/lib/lease-execution-evidence";
+import { replacesSignedLeaseDocument, signsAReplacedLeaseDocument } from "@/lib/lease-execution-evidence";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -350,11 +350,10 @@ export async function POST(req: Request) {
      * a 403 that named no row. Validation and persistence are therefore two
      * passes: nothing is written unless the whole batch is allowed.
      */
-    const planned: Array<{
-      row: Record<string, unknown>;
-      record: ReturnType<typeof buildUpsert>;
-      previouslySigned: boolean;
-    }> = [];
+    const planned = new Map<
+      string,
+      { row: Record<string, unknown>; record: ReturnType<typeof buildUpsert>; previouslySigned: boolean }
+    >();
 
     for (const row of rows) {
       const normalized = normalizeRow(row);
@@ -391,7 +390,14 @@ export async function POST(req: Request) {
 
       let scope: LeaseScopeColumns;
       if (ctx.user.role === "admin") {
-        scope = clientNamedScope(normalized);
+        // Admin may re-point scope, but an omitted field still falls back to
+        // the stored column. Admin GET returns the whole table, and an admin
+        // previewing a manager portal drives the same browser store that posts
+        // `action: "replace"`, so rebuilding scope from those rows could blank
+        // `manager_user_id` AND `property_id` at once — the only two columns
+        // `fetchLeasesForManagerUser` matches on, making the lease invisible to
+        // the manager who owns it.
+        scope = { ...storedScopeColumns(existingRecord), ...clientNamedScopeParts(normalized) };
       } else if (recordExists) {
         if (ctx.user.role === "resident") {
           const { data: visible } = await ctx.db
@@ -402,6 +408,18 @@ export async function POST(req: Request) {
             .limit(1);
           if (!Array.isArray(visible) || visible.length === 0) {
             return NextResponse.json({ error: "Record not found." }, { status: 404 });
+          }
+          // A resident signs a lease; they never author one. Auto-file renders
+          // the row's document into the PROPERTY OWNER's library on the
+          // transition into fully-signed, and tenant-supplied text is untrusted,
+          // so a resident-scoped actor must not be able to supply the body and
+          // the signature in the same write — the state in which
+          // `replacesSignedLeaseDocument` above cannot see a replacement.
+          if (storedRow && signsAReplacedLeaseDocument(storedRow, normalized as unknown as LeasePipelineRow)) {
+            return NextResponse.json(
+              { error: "A lease document cannot be replaced and signed in the same request." },
+              { status: 409 },
+            );
           }
           scope = storedScopeColumns(existingRecord);
         } else {
@@ -447,7 +465,10 @@ export async function POST(req: Request) {
         scope = { ...named, manager_user_id: ctx.user.id };
       }
 
-      planned.push({
+      // Keyed by id, last wins: `previouslySigned` is read from the pre-batch
+      // SELECT, so a repeated id would capture `false` twice and auto-file the
+      // same lease into the library twice.
+      planned.set(id, {
         row: normalized,
         record: buildUpsert(normalized, scope, existingRecord?.row_data),
         previouslySigned: Boolean(
@@ -456,7 +477,7 @@ export async function POST(req: Request) {
       });
     }
 
-    for (const plan of planned) {
+    for (const plan of planned.values()) {
       const { error } = await ctx.db
         .from("portal_lease_pipeline_records")
         .upsert(plan.record, { onConflict: "id" });
