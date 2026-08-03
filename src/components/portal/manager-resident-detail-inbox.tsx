@@ -195,9 +195,7 @@ function ResidentDirectChatPane({
     replyViaEmail,
     replyViaSms,
     showToast,
-    smsResident?.conversationKey,
-    smsResident?.phone,
-    smsResident?.residentUserId,
+    smsResident,
   ]);
 
   return (
