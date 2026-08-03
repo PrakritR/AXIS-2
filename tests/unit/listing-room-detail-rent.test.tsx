@@ -81,6 +81,21 @@ describe("room detail modal — rent", () => {
     expect(card.textContent).not.toContain("$0");
   });
 
+  it.each(["$0.00", "$0/mo", "—", "   "])(
+    "says 'Not set' for the meaningless price label %j",
+    (price) => {
+      renderRoom(roomRow({ price, priceHeadlineAmount: undefined }));
+      expect(within(statCard("Rent")).getByText("Not set")).toBeTruthy();
+    },
+  );
+
+  it("falls back to the row's own price when the row carries no headline amount", () => {
+    renderRoom(roomRow({ price: "$775/month", priceHeadlineAmount: undefined }));
+    const card = statCard("Rent");
+    expect(within(card).getByText("$775/month")).toBeTruthy();
+    expect(card.textContent).not.toContain("Not set");
+  });
+
   it("keeps an entire-home room's descriptive label instead of reporting it as unset", () => {
     renderRoom(roomRow({ price: "Included", priceHeadlineAmount: undefined }));
     expect(within(statCard("Rent")).getByText("Included")).toBeTruthy();

@@ -267,9 +267,8 @@ function ListingModalStatGrid({ items }: { items: { label: string; value: React.
  * `roomHeadlinePriceLabel` ("$1,200/mo", "$40.50/day"). It reads the exact
  * `priceHeadlineAmount` the row already carries — never re-parsing the display
  * `price` string, whose monthly form differs per builder — and returns null when
- * the room genuinely has no rent set, so the card can say so instead of printing
- * "$0" (an unpriced room really does occur, e.g. a short-term-stay listing that
- * ships blank payment terms).
+ * the row carries no headline number, leaving the decision to
+ * `roomRentFallbackLabel`.
  */
 function roomRentLabel(room: ListingRoomRow): string | null {
   const amount = room.priceHeadlineAmount;
@@ -278,14 +277,21 @@ function roomRentLabel(room: ListingRoomRow): string | null {
 }
 
 /**
- * An entire-home room carries a descriptive price label ("Included") rather than
- * a number, and reporting that as "Not set" would be wrong. Anything containing a
- * digit is a price `roomRentLabel` already rejected as unpriced, so it never
- * reaches this fallback.
+ * The row's own display price, shown verbatim whenever there is no headline
+ * number to format. Both an entire-home room's descriptive label ("Included")
+ * and a builder that ships only a pre-formatted string (the generic fallback
+ * content's "$775/month") land here, so the modal can never disagree with the
+ * room row rendered from the same data on the same page.
+ *
+ * Returns null only when the label carries no meaningful price — blank, "—", or
+ * one whose every number is zero ("$0", "$0.00", "$0/mo") — so the card shows
+ * its empty state rather than printing "$0" as a rent.
  */
-function roomRentDescriptiveLabel(room: ListingRoomRow): string | null {
+function roomRentFallbackLabel(room: ListingRoomRow): string | null {
   const raw = room.price?.trim();
-  if (!raw || raw === "—" || /\d/.test(raw)) return null;
+  if (!raw || raw === "—") return null;
+  const numbers = raw.match(/\d+(?:[.,]\d+)*/g);
+  if (numbers && !numbers.some((n) => Number.parseFloat(n.replace(/,/g, "")) > 0)) return null;
   return raw;
 }
 
@@ -578,9 +584,9 @@ export function ListingDetailModal({
                               </span>
                             );
                           }
-                          const descriptive = roomRentDescriptiveLabel(state.room);
-                          if (descriptive) {
-                            return <span className="text-sm font-semibold text-foreground">{descriptive}</span>;
+                          const fallback = roomRentFallbackLabel(state.room);
+                          if (fallback) {
+                            return <span className="text-sm font-semibold text-foreground">{fallback}</span>;
                           }
                           return <span className="text-sm font-semibold text-muted">Not set</span>;
                         })(),
