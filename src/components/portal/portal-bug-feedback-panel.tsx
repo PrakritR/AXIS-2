@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   PortalSettingsGroup,
   PortalSettingsSection,

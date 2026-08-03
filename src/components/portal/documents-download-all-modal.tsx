@@ -23,7 +23,6 @@ import {
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
-  resolveResidentPortalAxisId,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import {

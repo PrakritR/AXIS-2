@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
 import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } from "@/lib/listing-assistant-events";
 import { Input, Select, Textarea } from "@/components/ui/input";
-import { DateField } from "@/components/ui/date-field";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
   ListingUnifiedFeesTable,
@@ -112,7 +111,6 @@ import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
   LISTING_BEDROOM_SLOT_OPTIONS,
-  LISTING_PLACE_CATEGORY_OPTIONS,
   LISTING_PROPERTY_TYPE_OPTIONS,
   LISTING_STORIES_OPTIONS,
   LISTING_TOTAL_BATH_OPTIONS,
@@ -140,7 +138,6 @@ import {
   sanitizeBuildingNameInput,
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
-  sanitizePaymentContactInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,

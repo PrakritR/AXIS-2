@@ -151,7 +151,7 @@ export function ManagerProperties({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [refreshPortfolio, userId]);
+  }, [refreshPortfolio, userId, scopeUserId]);
 
   const stageCounts = useMemo(() => {
     void portfolioTick;

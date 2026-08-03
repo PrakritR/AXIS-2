@@ -15,7 +15,6 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   deriveListingLtFeeToggles,
-  deriveListingStFeeToggles,
 } from "@/lib/listing-fee-term-toggles";
 import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import {

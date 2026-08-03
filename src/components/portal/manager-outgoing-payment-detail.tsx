@@ -26,7 +26,6 @@ import {
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { generateWorkOrderPaymentReference } from "@/lib/payment-reference";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
-import { safeFormatDateTime } from "@/lib/pacific-time";
 
 function approvePayDefaults(row: DemoManagerWorkOrderRow) {
   return {

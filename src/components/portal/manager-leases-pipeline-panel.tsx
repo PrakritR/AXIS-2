@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  MANAGER_TABLE_TH,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -37,7 +36,6 @@ import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   generateLeaseHtmlForRow,
-  getLeaseDocumentHtml,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   managerSignLease,

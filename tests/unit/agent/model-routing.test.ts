@@ -6,7 +6,6 @@ import {
   estimateCostUsd,
   TIER_MODELS,
 } from "@/lib/agent/model";
-import { visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
 
 const userTurn = (content: string): Anthropic.MessageParam => ({ role: "user", content });
 

@@ -6,7 +6,7 @@
 // lease is signed") reached assistive tech only. Every resident lock reason must be
 // hoverable, not just the new one.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/resident/dashboard",

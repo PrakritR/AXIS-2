@@ -40,7 +40,6 @@ import {
   type VendorDocumentKind,
   type VendorDocumentRecord,
 } from "@/lib/vendor-documents";
-import { shouldNotifyVendorDocumentsLoadFailure } from "@/lib/vendor-documents-client";
 
 const DEMO_VENDOR_DOCUMENTS: VendorDocumentRecord[] = [
   {

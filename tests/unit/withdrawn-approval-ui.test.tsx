@@ -6,7 +6,7 @@
 // provisions a resident account + rent/deposit charges for someone who withdrew).
 // A normal pending row is the control: it still offers Approve.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 /** Rows the mocked storage layer hands the manager panel; swapped per scenario. */
