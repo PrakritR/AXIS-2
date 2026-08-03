@@ -153,8 +153,9 @@ export async function POST(req: Request) {
     // `clearHousingAccessForDeletedProperty` with the SERVICE-ROLE client —
     // a globally scoped helper that scans and rewrites `account_link_invites`,
     // `manager_application_records` and `portal_pro_relationship_records`
-    // across EVERY manager, matching ids by a normalized token rather than an
-    // exact string. Any signed-in account could aim that at an arbitrary id.
+    // across EVERY manager. Any signed-in account could aim that at an
+    // arbitrary id. (The helper now also matches ids EXACTLY, which closes the
+    // neighbouring step of the same attack — see its own doc comment.)
     //
     // Refusing here is what keeps the invariant simple: the cleanup helper is
     // reachable only after `existing` is a real row AND the authorization below

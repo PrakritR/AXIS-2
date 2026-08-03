@@ -1239,9 +1239,23 @@ either.
   it let a stale local bucket keyed by another user id silently hand live
   listings to that account. Ownership changes have exactly one door:
   `transferPropertyOwnership` (requires an accepted co-manager link, audited,
-  notifies both sides). Only a MISSING row is a create, and only there does the
-  body's `managerUserId` win (the admin inventory publishes on a manager's
-  behalf; a non-admin naming anyone else gets 403). An EXISTING row whose
+  notifies both sides). Only a MISSING row on an UPSERT is a create, and only
+  there does the body's `managerUserId` win (the admin inventory publishes on a
+  manager's behalf; a non-admin naming anyone else gets 403). A **DELETE of a
+  missing row is 404, refused before owner resolution — never a create.** The
+  create branch has no stored owner to authorize against and only 403s a caller
+  who NAMES someone else, so a delete that fell into it was unchecked, and the
+  delete branch then ran `clearHousingAccessForDeletedProperty` with the
+  SERVICE-ROLE client — a globally scoped helper that strips co-manager grants
+  and scrubs residents' housing fields to "Moved out" across EVERY manager. That
+  helper matches property ids EXACTLY for the same reason (a normalizing token
+  folded one manager's id onto another's, so deleting a listing you legitimately
+  own reached a victim's rows). Deliberately a 404 rather than a silent 200
+  no-op; the client reads it as "already gone"
+  (`deletePropertyRecordFromServer`) so the refusal cannot strand an unclearable
+  local draft. A FAILED owner lookup is a 500, never an absent row — falling
+  through would 404 a delete whose row is still there, which the client reports
+  as success. An EXISTING row whose
   `manager_user_id` is blank — the column is `on delete set null`, so an
   OWNERLESS row is a real production state — is still an edit, not a create: an
   admin may adopt it onto a manager, and every other caller goes through the
@@ -1250,7 +1264,9 @@ either.
   never writes `""` (not a uuid — Postgres rejects the whole upsert, which
   surfaced as a 500 on an ordinary save) and never `user.id` (that would be the
   silent adoption this route was hardened against). Coverage:
-  `tests/unit/property-records-owner-not-reassignable.test.ts`.
+  `tests/unit/property-records-owner-not-reassignable.test.ts`,
+  `tests/unit/property-records-delete-missing-row.test.ts`,
+  `tests/unit/clear-property-housing-access-exact-id-match.test.ts`.
 - **The seed reclaims drifted owners before anything else reads ownership.**
   `tests/helpers/reclaim-canonical-property-owners.mjs` (called from
   `seed-test-db.mjs`, also runnable as `npm run test:seed:reclaim-properties`)
