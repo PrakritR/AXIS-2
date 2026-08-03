@@ -14,11 +14,6 @@ import {
   leaseTemplateVersionForContext,
 } from "@/lib/generated-lease";
 import {
-  isLeaseGenerationSupported,
-  resolveLeaseJurisdiction,
-  unsupportedJurisdictionMessage,
-} from "@/lib/lease-jurisdiction";
-import {
   LEASE_ESIGN_CONSENT_TEXT,
   LEASE_ESIGN_CONSENT_VERSION,
   asDocumentSha256,
@@ -1614,13 +1609,8 @@ export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: tru
   if (!ctx) {
     return { ok: false, error: "No application data on file." };
   }
-  // Properties with a manager-uploaded lease template can generate anywhere.
-  if (leaseTemplateDocForContext(ctx)) return { ok: true };
-  const jurisdiction = resolveLeaseJurisdiction(ctx);
-  if (!isLeaseGenerationSupported(jurisdiction)) {
-    return { ok: false, error: unsupportedJurisdictionMessage(jurisdiction) };
-  }
-  return { ok: true };
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  return outcome.kind === "generated" ? { ok: true } : { ok: false, error: outcome.error };
 }
 
 async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<LeasePipelineRow["managerUploadedPdf"]> {
@@ -1711,26 +1701,18 @@ export function generateLeaseHtmlForRow(
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  const supported = leaseGenerationSupportedForRow(row);
-  if (!supported.ok) return { ok: false, error: supported.error };
   const ctx = leaseGenerationContextForRow(row, managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  let html: string;
-  try {
-    html = buildAiGeneratedLeaseHtml(ctx);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not build lease from saved application.";
-    return { ok: false, error: msg };
-  }
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") return { ok: false, error: outcome.error };
   const version = (row.versionNumber ?? row.pdfVersion) + 1;
-  const selectedTemplate = leaseTemplateDocForContext(ctx);
   const ok = updateLeasePipelineRow(
     rowId,
     {
       application: app,
-      generatedHtml: html,
+      generatedHtml: outcome.html,
       managerUploadedPdf: null,
       generatedAtIso: new Date().toISOString(),
       pdfVersion: version,
@@ -1738,9 +1720,10 @@ export function generateLeaseHtmlForRow(
       status: "Manager Review",
       currentActorRole: "manager",
       leaseDocumentRemovedAt: null,
-      templateVersion: selectedTemplate ? leaseTemplateVersionForContext(ctx) : null,
-      templateDocumentUrl: selectedTemplate?.url ?? null,
-      templateDocumentName: selectedTemplate?.name ?? null,
+      executedJurisdiction: outcome.executedJurisdiction,
+      templateVersion: outcome.templateVersion,
+      templateDocumentUrl: outcome.templateDocument?.url ?? null,
+      templateDocumentName: outcome.templateDocument?.name ?? null,
     },
     managerUserId,
   );

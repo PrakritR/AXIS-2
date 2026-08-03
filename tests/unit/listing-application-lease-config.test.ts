@@ -20,6 +20,12 @@ import { buildLeaseHtml } from "@/lib/lease-templates/build-lease-html";
 import { SEATTLE_LEASE_CONFIG } from "@/lib/lease-templates/types";
 import { buildAiGeneratedLeaseHtml, type LeaseGenerationContext } from "@/lib/generated-lease";
 
+function generatedLeaseHtml(ctx: LeaseGenerationContext): string {
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") throw new Error(outcome.error);
+  return outcome.html;
+}
+
 function subWith(patch: Partial<ManagerListingSubmissionV1>): ManagerListingSubmissionV1 {
   return { ...createDefaultListingSubmission(), ...patch };
 }
@@ -168,7 +174,7 @@ describe("lease generation with custom config", () => {
       leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/lease-template.pdf",
       leaseTemplateDocName: "House lease.pdf",
     });
-    const html = buildAiGeneratedLeaseHtml(leaseCtx(sub));
+    const html = generatedLeaseHtml(leaseCtx(sub));
     expect(html).toContain("lease-template.pdf");
     expect(html).toContain("House lease.pdf");
     expect(html).toContain("TERMS RIDER");
@@ -176,7 +182,10 @@ describe("lease generation with custom config", () => {
     expect(html).toContain("Electronic Signature");
   });
 
-  it("still rejects unsupported jurisdictions for the standard generated lease", () => {
-    expect(() => buildAiGeneratedLeaseHtml(leaseCtx(subWith({})))).toThrow(/California and Washington/);
+  it("returns an unsupported jurisdiction outcome for the standard generated lease", () => {
+    expect(buildAiGeneratedLeaseHtml(leaseCtx(subWith({})))).toEqual({
+      kind: "unsupported_jurisdiction",
+      error: expect.stringMatching(/California and Washington/),
+    });
   });
 });

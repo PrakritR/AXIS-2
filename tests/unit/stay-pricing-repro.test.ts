@@ -127,7 +127,9 @@ function documentTotalDue(html: string): number {
 }
 
 function leaseHtml(app: Partial<RentalWizardFormState>): string {
-  return buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+  const outcome = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+  if (outcome.kind !== "generated") throw new Error(outcome.error);
+  return outcome.html;
 }
 
 beforeEach(() => {
@@ -421,7 +423,7 @@ describe("stay pricing: document and ledger agree", () => {
     expect(securityCharge?.amountLabel).toBe("$650.00");
 
     // The document does not move: same deposit, same total, same standing sentence.
-    const after = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+    const after = leaseHtml(app);
     expect(after.replace(/Generated [^<]*/, "")).toBe(before.replace(/Generated [^<]*/, ""));
     expect(documentTotalDue(after)).toBe(605 + 900);
   });
