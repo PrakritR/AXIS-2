@@ -10,46 +10,66 @@
  *
  * This wraps the fetch in the same TTL + coalescing guard the other portal sync
  * helpers use, so a burst of bumps costs one request while a genuinely later
- * change still refetches. Coverage: `tests/unit/manager-document-expiry-client.test.ts`.
+ * change still refetches.
+ *
+ * The cache is keyed on the signed-in manager's user id, exactly like
+ * `propertyPipelineRefreshers` / `relationshipsRefreshers`. These are
+ * per-manager document counts, so a module-global cache would serve the
+ * PREVIOUS manager's numbers for the length of the TTL after an in-session
+ * account switch — a cross-tenant read, which must be impossible rather than
+ * merely short-lived. Coverage: `tests/unit/manager-document-expiry-client.test.ts`.
  */
-import { createCoalescedRefresher } from "@/lib/coalesced-refresh";
-
-export type DocumentExpirationSummaryShape = {
-  expired: number;
-  expiringSoon: number;
-};
+import { createCoalescedRefresher, type CoalescedRefresher } from "@/lib/coalesced-refresh";
+import type { DocumentExpirationSummary } from "@/lib/documents/document-expiration";
 
 const EXPIRY_SUMMARY_TTL_MS = 15_000;
 
-let cached: unknown = null;
-let lastLoadedAt = 0;
+type ExpiryCacheEntry = {
+  summary: DocumentExpirationSummary | null;
+  lastLoadedAt: number;
+  refresher: CoalescedRefresher<DocumentExpirationSummary | null>;
+};
 
-const refresher = createCoalescedRefresher(async () => {
-  const res = await fetch("/api/manager-documents/expiration-summary", { credentials: "include" });
-  if (!res.ok) return cached;
-  const body = (await res.json()) as { summary?: unknown };
-  if (body?.summary) {
-    cached = body.summary;
-    lastLoadedAt = Date.now();
-  }
-  return cached;
-});
+const entriesByUser = new Map<string, ExpiryCacheEntry>();
 
-/**
- * Returns the summary, reusing a cached one inside the TTL. Pass `force` after a
- * document write to guarantee a read newer than the write.
- */
-export async function loadDocumentExpirationSummary(opts?: { force?: boolean }): Promise<unknown> {
-  const force = opts?.force === true;
-  if (!force && lastLoadedAt > 0 && Date.now() - lastLoadedAt < EXPIRY_SUMMARY_TTL_MS) {
-    return cached;
-  }
-  return refresher.run(force);
+function entryFor(userKey: string): ExpiryCacheEntry {
+  const existing = entriesByUser.get(userKey);
+  if (existing) return existing;
+  const entry: ExpiryCacheEntry = {
+    summary: null,
+    lastLoadedAt: 0,
+    refresher: createCoalescedRefresher(async () => {
+      const res = await fetch("/api/manager-documents/expiration-summary", { credentials: "include" });
+      if (!res.ok) return entry.summary;
+      const body = (await res.json()) as { summary?: DocumentExpirationSummary };
+      if (body?.summary) {
+        entry.summary = body.summary;
+        entry.lastLoadedAt = Date.now();
+      }
+      return entry.summary;
+    }),
+  };
+  entriesByUser.set(userKey, entry);
+  return entry;
 }
 
-/** Test hook: clears the cache so each case starts cold. */
+/**
+ * Returns the summary for `userId`, reusing a cached one inside the TTL. Pass
+ * `force` after a document write to guarantee a read newer than the write.
+ */
+export async function loadDocumentExpirationSummary(opts?: {
+  userId?: string | null;
+  force?: boolean;
+}): Promise<DocumentExpirationSummary | null> {
+  const entry = entryFor(opts?.userId?.trim() ?? "");
+  const force = opts?.force === true;
+  if (!force && entry.lastLoadedAt > 0 && Date.now() - entry.lastLoadedAt < EXPIRY_SUMMARY_TTL_MS) {
+    return entry.summary;
+  }
+  return entry.refresher.run(force);
+}
+
+/** Drops every cached summary (account switch, and test setup). */
 export function resetDocumentExpirationSummaryCache(): void {
-  cached = null;
-  lastLoadedAt = 0;
-  refresher.reset();
+  entriesByUser.clear();
 }

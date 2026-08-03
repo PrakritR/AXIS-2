@@ -7,10 +7,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics/track-client";
+
+vi.mock("@/lib/analytics/track-client", () => ({ track: vi.fn() }));
 
 // `globals` is off in vitest.config, so testing-library's auto-cleanup is not
 // registered — without this, one test's spinner is still in the DOM for the next.
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.mocked(track).mockClear();
+});
 
 /** A promise this test resolves by hand, so "in flight" is a real state. */
 function deferred<T = void>() {
@@ -148,6 +154,8 @@ describe("Button loading state", () => {
     fireEvent.click(btn);
     // The blocked second click must not double-count the funnel event either.
     expect(btn.getAttribute("aria-busy")).toBe("true");
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(track).toHaveBeenCalledWith("charge_created", undefined);
   });
 
   it("does not inject a second child under asChild (Slot takes exactly one)", () => {

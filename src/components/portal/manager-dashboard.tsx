@@ -572,9 +572,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     }
     // TTL-guarded: `tick` is bumped by ~10 unrelated store events, so an
     // unguarded fetch here refetched this banner 6x during first paint.
-    void loadDocumentExpirationSummary()
+    void loadDocumentExpirationSummary({ userId })
       .then((summary) => {
-        if (summary) setDocExpirySummary(summary as DocumentExpirationSummary);
+        if (summary) setDocExpirySummary(summary);
       })
       .catch(() => setDocExpirySummary(null));
   }, [authReady, userId, tick]);
