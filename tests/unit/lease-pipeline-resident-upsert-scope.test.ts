@@ -23,8 +23,8 @@ const isAdminUser = vi.fn(async () => false);
 const upsert = vi.fn(async () => ({ error: null }));
 const deleteEq = vi.fn(async () => ({ error: null }));
 const managerCanAccessLeaseRecord = vi.fn(async () => true);
-const managerMayFileLeaseUnderProperty = vi.fn(async () => ({ ok: true, allowed: true }) as
-  | { ok: true; allowed: boolean }
+const managerMayFileLeaseUnderProperty = vi.fn(async () => ({ ok: true, allowed: true, propertyExists: true }) as
+  | { ok: true; allowed: boolean; propertyExists: boolean }
   | { ok: false; error: string });
 
 let PROFILE: { email: string; role: string | null } | null = null;
@@ -67,17 +67,27 @@ vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,
 }));
 
+/** The stored row is looked up by id, so a batch can mix existing and new rows. */
+function storedFor(id: string) {
+  if (RECORD_EXISTS && id === LEASE_ID) return [STORED];
+  return [];
+}
+
 function makeDb() {
   return {
     from(table: string) {
       let orFiltered = false;
       let selected = "";
+      let requestedId = "";
       const builder: Record<string, unknown> = {
         select: (cols: string) => {
           selected = cols;
           return builder;
         },
-        eq: () => builder,
+        eq: (column: string, value: unknown) => {
+          if (column === "id") requestedId = String(value ?? "");
+          return builder;
+        },
         order: () => builder,
         or: () => {
           orFiltered = true;
@@ -89,7 +99,7 @@ function makeDb() {
             return Promise.resolve({ data: VISIBLE_TO_RESIDENT ? [{ id: LEASE_ID }] : [], error: null });
           }
           SELECTS.push(selected);
-          return Promise.resolve({ data: RECORD_EXISTS ? [STORED] : [], error: null });
+          return Promise.resolve({ data: storedFor(requestedId), error: null });
         },
         upsert: (record: unknown) => upsert(record as never),
         delete: () => ({ eq: (...a: unknown[]) => deleteEq(...(a as [])) }),
@@ -132,7 +142,7 @@ beforeEach(() => {
   RECORD_EXISTS = true;
   isAdminUser.mockResolvedValue(false);
   managerCanAccessLeaseRecord.mockResolvedValue(true);
-  managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true });
+  managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true, propertyExists: true });
   upsert.mockResolvedValue({ error: null });
   getUser.mockResolvedValue({ data: { user: { id: RESIDENT_ID, email: RESIDENT_EMAIL } }, error: null });
 });
@@ -300,6 +310,133 @@ describe("portal-lease-pipeline manager upsert — unchanged", () => {
   });
 });
 
+/**
+ * A manager may RE-POINT a lease's scope, never blank it by omission. The
+ * browser store posts the ENTIRE row set as one `replace`, and its rows carry
+ * `propertyId` only when it was ever set (`undefined` otherwise, so the key is
+ * absent after JSON) while normalizing `managerUserId` / `residentUserId` to an
+ * explicit `null`. Rebuilding the scope from that row wrote null over the
+ * stored columns: `property_id` gone drops the lease out of every co-manager's
+ * linked view, `resident_email` / `resident_user_id` gone orphans the resident
+ * from their own lease.
+ */
+describe("portal-lease-pipeline manager edit — stored scope survives an unnaming row", () => {
+  beforeEach(() => {
+    PROFILE = { email: "manager@example.com", role: "manager" };
+    PROFILE_ROLES = ["manager"];
+    PORTAL_ROLES = ["manager"];
+    EFFECTIVE_ROLE = "manager";
+    getUser.mockResolvedValue({ data: { user: { id: OWNER_MANAGER, email: "manager@example.com" } }, error: null });
+  });
+
+  it("keeps the stored property_id / resident scope through an ordinary full-row sync", async () => {
+    const res = await post({
+      action: "replace",
+      rows: [
+        {
+          id: LEASE_ID,
+          residentEmail: RESIDENT_EMAIL,
+          residentName: "Resident",
+          managerUserId: null,
+          residentUserId: null,
+          notes: "edited",
+        },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.property_id).toBe("prop-1");
+    expect(written.resident_user_id).toBe(RESIDENT_ID);
+    expect(written.resident_email).toBe(RESIDENT_EMAIL);
+    expect(written.manager_user_id).toBe(OWNER_MANAGER);
+    // An unchanged property is not a move, so no ownership round trip.
+    expect(managerMayFileLeaseUnderProperty).not.toHaveBeenCalled();
+  });
+
+  /** The fallback is only as good as the SELECT it reads from. */
+  it("selects every scope column the manager branch falls back to", async () => {
+    await post({ action: "upsert", row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL } });
+    const select = SELECTS.find((cols) => cols.includes("row_data")) ?? "";
+    for (const column of ["manager_user_id", "resident_user_id", "resident_email", "property_id"]) {
+      expect(select).toContain(column);
+    }
+  });
+
+  it("still lets the manager re-point the resident when the row names one", async () => {
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: "new-tenant@example.com" },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.resident_email).toBe("new-tenant@example.com");
+  });
+});
+
+/**
+ * The columns are only half the scope surface: `row_data` is what the manager's
+ * browser store reads back from GET and re-sends on its next `replace`, where
+ * the client-named scope would promote it into the columns. So a resident who
+ * may edit the BODY of their own lease could launder a stranger's address in
+ * through `row_data` one hop later.
+ */
+describe("portal-lease-pipeline — row_data can never decide scope", () => {
+  it("survives the full resident-writes → manager-syncs loop", async () => {
+    asResident();
+    const residentRes = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: "victim@example.com",
+        residentUserId: "99999999-9999-9999-9999-999999999999",
+        managerUserId: "attacker-manager",
+        propertyId: "victim-managers-property",
+        notes: "hello",
+      },
+    });
+    expect(residentRes.status).toBe(200);
+
+    const residentWrite = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    const persistedRowData = residentWrite.row_data as Record<string, unknown>;
+    expect(persistedRowData.residentEmail).toBe(RESIDENT_EMAIL);
+    expect(persistedRowData.residentUserId).toBe(RESIDENT_ID);
+    expect(persistedRowData.managerUserId).toBe(OWNER_MANAGER);
+    expect(persistedRowData.propertyId).toBe("prop-1");
+    expect(persistedRowData.notes).toBe("hello");
+
+    // Hop two: the manager's store reads that row_data back and re-syncs it.
+    upsert.mockClear();
+    PROFILE = { email: "manager@example.com", role: "manager" };
+    PROFILE_ROLES = ["manager"];
+    PORTAL_ROLES = ["manager"];
+    EFFECTIVE_ROLE = "manager";
+    getUser.mockResolvedValue({ data: { user: { id: OWNER_MANAGER, email: "manager@example.com" } }, error: null });
+
+    const managerRes = await post({ action: "replace", rows: [persistedRowData] });
+    expect(managerRes.status).toBe(200);
+    const managerWrite = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(managerWrite.resident_email).toBe(RESIDENT_EMAIL);
+    expect(managerWrite.resident_user_id).toBe(RESIDENT_ID);
+    expect(managerWrite.property_id).toBe("prop-1");
+    expect(managerWrite.manager_user_id).toBe(OWNER_MANAGER);
+  });
+
+  it("drops snake_case scope aliases so they cannot smuggle a value past the mirror", async () => {
+    asResident();
+    const res = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, resident_email: "victim@example.com" },
+    });
+
+    expect(res.status).toBe(200);
+    const rowData = (upsert.mock.calls[0]![0] as Record<string, unknown>).row_data as Record<string, unknown>;
+    expect(rowData.resident_email).toBeUndefined();
+    expect(rowData.residentEmail).toBe(RESIDENT_EMAIL);
+  });
+});
+
 describe("portal-lease-pipeline admin — unchanged", () => {
   beforeEach(() => {
     PROFILE = { email: "admin@example.com", role: "admin" };
@@ -420,7 +557,7 @@ describe("portal-lease-pipeline — client-named property_id is validated agains
   });
 
   it("refuses an update that moves the lease onto a property the caller neither owns nor is linked to", async () => {
-    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: true });
 
     const res = await post({
       action: "upsert",
@@ -434,7 +571,7 @@ describe("portal-lease-pipeline — client-named property_id is validated agains
 
   it("refuses a create naming a property the caller neither owns nor is linked to", async () => {
     RECORD_EXISTS = false;
-    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: true });
 
     const res = await post({
       action: "upsert",
@@ -447,7 +584,7 @@ describe("portal-lease-pipeline — client-named property_id is validated agains
 
   it("allows a property the ownership check accepts — owner or co-manager alike", async () => {
     RECORD_EXISTS = false;
-    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true });
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: true, propertyExists: true });
 
     const res = await post({
       action: "upsert",
@@ -460,7 +597,7 @@ describe("portal-lease-pipeline — client-named property_id is validated agains
   });
 
   it("does not re-validate an unchanged property, so a deleted property still saves", async () => {
-    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false });
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: true });
 
     const res = await post({
       action: "upsert",
@@ -481,6 +618,62 @@ describe("portal-lease-pipeline — client-named property_id is validated agains
 
     expect(res.status).toBe(500);
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  /**
+   * "Not allowed" is not the same answer as "someone else's". A deleted
+   * listing — and any id that was never persisted as a property record — has no
+   * `manager_property_records` row at all, and refusing those would 403 an
+   * ordinary save.
+   */
+  it("saves a row whose property record is absent rather than refusing it", async () => {
+    RECORD_EXISTS = false;
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: false });
+
+    const res = await post({
+      action: "upsert",
+      row: { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "deleted-property" },
+    });
+
+    expect(res.status).toBe(200);
+    const written = upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(written.property_id).toBe("deleted-property");
+  });
+
+  /**
+   * The browser store posts the manager's ENTIRE row set as one `replace`, so a
+   * refusal that fires mid-loop leaves the earlier rows already written — a
+   * partial save behind a 403 that names no row.
+   */
+  it("writes nothing when a later row in the batch names an unowned property", async () => {
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: true });
+
+    const res = await post({
+      action: "replace",
+      rows: [
+        { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, notes: "fine" },
+        { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "someone-elses-property" },
+      ],
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "That property is not yours to file a lease under." });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("still writes a whole batch containing a row whose property record is absent", async () => {
+    managerMayFileLeaseUnderProperty.mockResolvedValue({ ok: true, allowed: false, propertyExists: false });
+
+    const res = await post({
+      action: "replace",
+      rows: [
+        { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, notes: "fine" },
+        { id: "lease_app_new", residentEmail: "tenant@example.com", propertyId: "deleted-property" },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    expect(upsert).toHaveBeenCalledTimes(2);
   });
 });
 

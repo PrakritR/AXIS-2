@@ -100,6 +100,37 @@ function storedScopeColumns(stored: StoredLeaseScopeColumns | undefined): LeaseS
   };
 }
 
+function namedString(row: Record<string, unknown>, camel: string, snake: string): string | null {
+  const raw = row[camel] ?? row[snake];
+  const value = typeof raw === "string" ? raw.trim() : "";
+  return value || null;
+}
+
+/**
+ * The scope fields the CLIENT row actually NAMES, as a partial: a field the row
+ * does not name is ABSENT from the result rather than present-as-null, so a
+ * caller can fall back to what the server already stored.
+ *
+ * "Names" means "carries a usable value", not "carries the key". The browser
+ * store normalizes `managerUserId` / `residentUserId` to an explicit `null` and
+ * drops `propertyId` to `undefined`, so a plain `key in row` test would read a
+ * routine full-row sync as an intentional request to CLEAR the scope — which is
+ * the wipe this partial exists to prevent. Clearing a scope column is not a
+ * product operation; re-pointing one is, and that always carries a value.
+ */
+function clientNamedScopeParts(row: Record<string, unknown>): Partial<LeaseScopeColumns> {
+  const parts: Partial<LeaseScopeColumns> = {};
+  const manager = namedString(row, "managerUserId", "manager_user_id");
+  if (manager) parts.manager_user_id = manager;
+  const residentUser = asUuidOrNull(row.residentUserId ?? row.resident_user_id);
+  if (residentUser) parts.resident_user_id = residentUser;
+  const residentEmail = namedString(row, "residentEmail", "resident_email");
+  if (residentEmail) parts.resident_email = residentEmail;
+  const property = namedString(row, "propertyId", "property_id");
+  if (property) parts.property_id = property;
+  return parts;
+}
+
 /**
  * Scope named by the CLIENT row. Legitimate only for an actor who owns the
  * lease: a manager creating or editing one must be able to name the resident it
@@ -107,10 +138,11 @@ function storedScopeColumns(stored: StoredLeaseScopeColumns | undefined): LeaseS
  */
 function clientNamedScope(row: Record<string, unknown>): LeaseScopeColumns {
   return {
-    manager_user_id: (row.managerUserId ?? row.manager_user_id ?? null) as string | null,
-    resident_user_id: asUuidOrNull(row.residentUserId ?? row.resident_user_id),
-    resident_email: (row.residentEmail ?? row.resident_email ?? null) as string | null,
-    property_id: (row.propertyId ?? row.property_id ?? null) as string | null,
+    manager_user_id: null,
+    resident_user_id: null,
+    resident_email: null,
+    property_id: null,
+    ...clientNamedScopeParts(row),
   };
 }
 
@@ -131,7 +163,59 @@ function ownResidentScope(user: RecordUser): LeaseScopeColumns {
   };
 }
 
-function buildUpsert(row: Record<string, unknown>, scope: LeaseScopeColumns) {
+const ROW_SCOPE_MIRRORS = [
+  { camel: "managerUserId", snake: "manager_user_id", column: "manager_user_id" },
+  { camel: "residentUserId", snake: "resident_user_id", column: "resident_user_id" },
+  { camel: "residentEmail", snake: "resident_email", column: "resident_email" },
+  { camel: "propertyId", snake: "property_id", column: "property_id" },
+] as const satisfies ReadonlyArray<{ camel: string; snake: string; column: keyof LeaseScopeColumns }>;
+
+/**
+ * `row_data` is a MIRROR of the scope columns, never a second source of them.
+ *
+ * Pinning the columns alone left a laundering chute one hop wide: the columns
+ * are what scoped queries key on, but `row_data` is what the manager's browser
+ * store reads back from GET and re-sends on its next `replace` sync — where
+ * `clientNamedScopeParts` would promote it straight into the columns. So a
+ * resident who may edit the BODY of their own lease could write
+ * `row_data.residentEmail` = a stranger and have the manager's own client
+ * launder it into `resident_email` on the next save.
+ *
+ * The reconciliation: a scope key in `row_data` is overwritten with the
+ * server-resolved column whenever that column has a value. When it does not,
+ * an EXISTING row keeps what the server already stored (so the client copy can
+ * never be the thing that changes it), while a brand-new row keeps the
+ * creator's value — a row with no prior scope has nothing to launder, and its
+ * columns are server-resolved regardless. The snake_case aliases are dropped
+ * outright so they cannot smuggle a value past the camelCase mirror.
+ */
+function reconcileRowScope(
+  row: Record<string, unknown>,
+  scope: LeaseScopeColumns,
+  storedRow: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out = { ...row };
+  for (const { camel, snake, column } of ROW_SCOPE_MIRRORS) {
+    delete out[snake];
+    const resolved = scope[column];
+    if (resolved) {
+      out[camel] = resolved;
+      continue;
+    }
+    if (!storedRow) continue;
+    const stored = storedRow[camel];
+    if (stored === undefined) delete out[camel];
+    else out[camel] = stored;
+  }
+  return out;
+}
+
+function buildUpsert(
+  row: Record<string, unknown>,
+  scope: LeaseScopeColumns,
+  storedRow: Record<string, unknown> | undefined,
+) {
+  const rowData = reconcileRowScope(row, scope, storedRow);
   return {
     id: row.id,
     manager_user_id: scope.manager_user_id,
@@ -139,7 +223,7 @@ function buildUpsert(row: Record<string, unknown>, scope: LeaseScopeColumns) {
     resident_email: scope.resident_email,
     property_id: scope.property_id,
     status: row.bucket ?? row.status ?? null,
-    row_data: row,
+    row_data: rowData,
     updated_at: new Date().toISOString(),
   };
 }
@@ -235,6 +319,13 @@ export async function POST(req: Request) {
      * A client-named `property_id` is only honored when the caller owns or is
      * linked to that property. An unchanged value is not a move, so a row whose
      * property was since deleted still saves.
+     *
+     * Refusal is reserved for a property that PROVABLY belongs to someone else.
+     * An id with no `manager_property_records` row at all — a deleted listing,
+     * or an id that was never persisted as a property record — is not evidence
+     * of a takeover, and refusing it would 403 an ordinary save: the browser
+     * store posts the manager's ENTIRE row set as one `replace`, so a single
+     * such row would take the whole batch down with it.
      */
     const refuseUnownedProperty = async (
       namedPropertyId: string | null,
@@ -246,11 +337,24 @@ export async function POST(req: Request) {
       if (!check.ok) {
         return NextResponse.json({ error: "Could not verify property ownership." }, { status: 500 });
       }
-      if (!check.allowed) {
+      if (!check.allowed && check.propertyExists) {
         return NextResponse.json({ error: "That property is not yours to file a lease under." }, { status: 403 });
       }
       return null;
     };
+
+    /**
+     * Every row is authorized and resolved BEFORE any row is written. The check
+     * used to run inside the write loop, so a refusal on the last row of a
+     * `replace` left the earlier rows already upserted — a partial write, with
+     * a 403 that named no row. Validation and persistence are therefore two
+     * passes: nothing is written unless the whole batch is allowed.
+     */
+    const planned: Array<{
+      row: Record<string, unknown>;
+      record: ReturnType<typeof buildUpsert>;
+      previouslySigned: boolean;
+    }> = [];
 
     for (const row of rows) {
       const normalized = normalizeRow(row);
@@ -305,11 +409,22 @@ export async function POST(req: Request) {
             ? await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, existingRecord, "edit")
             : false;
           if (!allowed) return NextResponse.json({ error: "Record not found." }, { status: 404 });
-          const named = clientNamedScope(normalized);
-          const refusal = await refuseUnownedProperty(named.property_id, existingRecord?.property_id);
+          // A manager may RE-POINT scope, never blank it by omission. Every
+          // field the client row does not name falls back to the column the
+          // server already stored: clearing `property_id` would drop the lease
+          // out of every co-manager's linked-property view, and clearing
+          // `resident_email` / `resident_user_id` would orphan the resident
+          // from their own lease — the same failure `storedScopeColumns`
+          // prevents on the resident branch.
+          const candidate: LeaseScopeColumns = {
+            ...storedScopeColumns(existingRecord),
+            ...clientNamedScopeParts(normalized),
+            // Preserve server-trusted ownership on update.
+            manager_user_id: existingRecord?.manager_user_id ?? ctx.user.id,
+          };
+          const refusal = await refuseUnownedProperty(candidate.property_id, existingRecord?.property_id);
           if (refusal) return refusal;
-          // Preserve server-trusted ownership on update.
-          scope = { ...named, manager_user_id: existingRecord?.manager_user_id ?? ctx.user.id };
+          scope = candidate;
         }
       } else if (ctx.user.role === "resident") {
         scope = ownResidentScope(ctx.user);
@@ -332,17 +447,27 @@ export async function POST(req: Request) {
         scope = { ...named, manager_user_id: ctx.user.id };
       }
 
-      const record = buildUpsert(normalized, scope);
-      const { error } = await ctx.db.from("portal_lease_pipeline_records").upsert(record, { onConflict: "id" });
+      planned.push({
+        row: normalized,
+        record: buildUpsert(normalized, scope, existingRecord?.row_data),
+        previouslySigned: Boolean(
+          (existingRecord?.row_data as { fullySignedAt?: unknown } | undefined)?.fullySignedAt,
+        ),
+      });
+    }
+
+    for (const plan of planned) {
+      const { error } = await ctx.db
+        .from("portal_lease_pipeline_records")
+        .upsert(plan.record, { onConflict: "id" });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
       // Auto-file the signed lease into the document library on the transition
       // into fully-signed (once), so repeated syncs of the same row don't
       // duplicate. No-op unless the manager opted the "lease" category in.
-      const previouslySigned = Boolean((existingRecord?.row_data as { fullySignedAt?: unknown } | undefined)?.fullySignedAt);
-      const nowSigned = Boolean((normalized as { fullySignedAt?: unknown }).fullySignedAt);
-      if (nowSigned && !previouslySigned) {
-        await autoFileLeaseDocument(ctx.db, normalized as AutoFileLeaseRow).catch(() => undefined);
+      const nowSigned = Boolean((plan.row as { fullySignedAt?: unknown }).fullySignedAt);
+      if (nowSigned && !plan.previouslySigned) {
+        await autoFileLeaseDocument(ctx.db, plan.record.row_data as AutoFileLeaseRow).catch(() => undefined);
       }
     }
 
