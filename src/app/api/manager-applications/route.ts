@@ -114,7 +114,8 @@ async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceR
   if (oldId !== row.id) {
     await db.from("manager_application_records").delete().eq("id", oldId);
   }
-  if (isDraftApplicationRow(row)) {
+  const incomingDraft = { ...row, withdrawnAt: undefined };
+  if (isDraftApplicationRow(incomingDraft)) {
     await persistDraftRow(db, idVariants(row.id), values);
   } else {
     // Submit and every forward move stay authoritative and write unconditionally.
