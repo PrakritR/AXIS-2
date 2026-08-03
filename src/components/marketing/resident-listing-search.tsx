@@ -376,6 +376,7 @@ export function ResidentHousingChat({
         <Button
           type="submit"
           variant="primary"
+          loading={status === "loading"}
           disabled={status === "loading" || !query.trim()}
           data-attr="resident-search-ai-chat-submit"
           className="w-full shrink-0 sm:w-auto"
