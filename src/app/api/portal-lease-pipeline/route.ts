@@ -155,7 +155,10 @@ export async function POST(req: Request) {
     if (rows.length === 0) return NextResponse.json({ error: "row required" }, { status: 400 });
 
     for (const row of rows) {
-      let normalized: Record<string, unknown> = normalizeRow(row, { sanitizeGeneratedHtml: true });
+      // Sanitization is deferred until we can compare against the stored body: rewriting an
+      // UNCHANGED body on an unrelated save silently mutates a signed lease's evidence bytes,
+      // and the certificate's hash describes those exact bytes.
+      let normalized: Record<string, unknown> = normalizeRow(row);
       let record = buildUpsert(normalized);
       if (!record.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
       const id = String(record.id);
@@ -180,6 +183,13 @@ export async function POST(req: Request) {
       const incomingClearsSignatures = Boolean(
         storedForSanitization && rowHasAnySignature(storedForSanitization) && !rowHasAnySignature(normalized as LeasePipelineRow),
       );
+      if (!storedGeneratedHtml && typeof row.generatedHtml === "string") {
+        const cleaned = sanitizeLeaseDocumentHtml(row.generatedHtml);
+        if (cleaned !== row.generatedHtml) {
+          normalized = { ...normalized, generatedHtml: cleaned };
+          record = buildUpsert(normalized);
+        }
+      }
       if (storedGeneratedHtml && incomingHasGeneratedHtml && !incomingClearsSignatures) {
         if (typeof row.generatedHtml !== "string") {
           const materializingTemplatePdf = Boolean(
@@ -188,7 +198,10 @@ export async function POST(req: Request) {
           if (!materializingTemplatePdf) {
             return NextResponse.json({ error: "A generated lease body cannot be removed through this save path." }, { status: 400 });
           }
-        } else {
+        } else if (row.generatedHtml !== storedGeneratedHtml) {
+          // Only a body that actually CHANGED is a manager edit, and only that is sanitized.
+          // Echoing the stored body back is left byte-identical so an unrelated save cannot
+          // rewrite an executed lease underneath its own signature hash.
           const sanitized = sanitizeManagerLeaseDocumentEdit(storedGeneratedHtml, row.generatedHtml);
           if (!sanitized.ok) return NextResponse.json({ error: sanitized.error }, { status: 400 });
           normalized = { ...normalized, generatedHtml: sanitized.html };

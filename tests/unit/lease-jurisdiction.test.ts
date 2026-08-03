@@ -169,3 +169,24 @@ describe("lease-jurisdiction", () => {
     expect(jurisdictionRuleScopes({ state: "WA" })).toEqual(["federal", "washington"]);
   });
 });
+
+/**
+ * The Oregon exclusion matched the English word "or", so a real Seattle address on SW Oregon
+ * St, or any address written "Unit A or B", produced NO lease at all.
+ */
+describe("Oregon is matched as a state token, not as English", () => {
+  const resolve = (address: string) => resolveLeaseJurisdiction({ submission: { address, zip: "", neighborhood: "" } });
+
+  it("still refuses a genuine Oregon address", () => {
+    expect(resolve("123 Washington St, Portland, OR 97204")).toBe("unsupported");
+    expect(resolve("500 SW Oak, Portland, Oregon")).toBe("unsupported");
+  });
+
+  it("does not veto a Seattle street that merely contains the letters", () => {
+    expect(resolve("4200 SW Oregon St, Seattle, WA 98116")).not.toBe("unsupported");
+  });
+
+  it("does not veto free text containing the word or", () => {
+    expect(resolve("Unit A or B, 1200 Brooklyn Ave NE, Seattle, WA 98105")).not.toBe("unsupported");
+  });
+});

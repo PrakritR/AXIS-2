@@ -14,7 +14,6 @@
  * certificate page is a platform artifact; the agreement is the base document.
  */
 
-import { sanitizeLeaseDocumentHtml } from "@/lib/lease-document-sanitizer";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 
 /**
@@ -122,14 +121,11 @@ export function leaseDocumentBody(row: LeasePipelineRow): { html: string | null;
 export function leaseDocumentBodyChanged(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
   const before = leaseDocumentBody(stored);
   const after = leaseDocumentBody(next);
-  // Compare what each side RENDERS, not its raw bytes. The write path sanitizes incoming HTML
-  // while a row stored before the sanitizer existed is raw, so comparing raw-to-sanitized made
-  // every legacy signed row look edited and 409 on any write, including a thread message or a
-  // status change. Sanitizing both sides is also the honest question: "does the document a
-  // party sees change?"
-  const beforeHtml = before.html ? sanitizeLeaseDocumentHtml(before.html) : before.html;
-  const afterHtml = after.html ? sanitizeLeaseDocumentHtml(after.html) : after.html;
-  return beforeHtml !== afterHtml || before.pdf !== after.pdf;
+  // RAW comparison, deliberately. The signature hash covers the raw stored bytes, so anything
+  // looser lets a change the certificate would record slip past the guard. The legacy-row 409
+  // this used to cause is fixed at the source instead: the write path no longer rewrites a
+  // body that did not change.
+  return before.html !== after.html || before.pdf !== after.pdf;
 }
 
 /**

@@ -123,11 +123,13 @@ function stateSignalFromHaystack(hay: string): string | null {
 
 function resolveFromHaystack(hay: string): JurisdictionKey | null {
   if (!hay.trim()) return null;
-  // An explicitly out-of-scope state wins over every other signal. Without this an Oregon
-  // address on "Washington St" resolved to WASHINGTON and generated a lease citing the RCW,
-  // which is the wrong-governing-law failure this module exists to prevent. It also keeps a
-  // street or building name from dragging a property into a state it is not in.
-  if (/\b(or|oregon)\b/i.test(hay)) return null;
+  // An explicitly out-of-scope state wins over every other signal, so an Oregon address on
+  // "Washington St" cannot generate a lease citing the RCW. Matched as a STATE TOKEN, not as
+  // free text: a bare /\bor\b/ hits the English word "or", which vetoed real Seattle
+  // addresses on SW Oregon St and any address written "Unit A or B", generating no lease at
+  // all. Both forms are only accepted where an address actually puts a state: after a comma,
+  // or immediately before a ZIP. "SW Oregon St" is a street, not a state.
+  if (/,\s*(?:or|oregon)\b/i.test(hay) || /\b(?:or|oregon)\s+\d{5}\b/i.test(hay)) return null;
   const stateSignal = stateSignalFromHaystack(hay);
   if (SF_RE.test(hay)) return stateSignal && stateSignal !== "CA" ? { state: stateSignal } : { state: "CA", city: "san_francisco" };
   if (SEATTLE_RE.test(hay) || SEATTLE_STREET_RE.test(hay)) {

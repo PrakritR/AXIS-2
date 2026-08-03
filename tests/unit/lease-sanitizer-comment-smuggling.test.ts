@@ -128,3 +128,45 @@ describe("manager template embed survives sanitization", () => {
     expect(cleaned).not.toMatch(/<\/?a\b/);
   });
 });
+
+/**
+ * Defects found re-reviewing the first round of fixes. Each one was accepted by the code as
+ * shipped, so these fail without the follow-up.
+ */
+describe("re-review regressions", () => {
+  const CLAUSE = '<p data-disclosure-rule="fed-lead-paint">Housing built before 1978 may contain lead-based paint.</p>';
+  const base = `<html><body><h2>Disclosures</h2>${CLAUSE}<p>${"Manager notes. ".repeat(30)}</p></body></html>`;
+
+  it.each(["form", "button", "template", "canvas", "video", "audio", "iframe", "svg", "math"])(
+    "refuses an edit that hides a required clause inside <%s>",
+    (wrapper) => {
+      // preserve ran BEFORE sanitize, so the clause was restored and then deleted with its
+      // blocked wrapper, and the save was accepted.
+      const edited = base.replace(CLAUSE, `<${wrapper}>${CLAUSE}</${wrapper}>`);
+      const result = sanitizeManagerLeaseDocumentEdit(base, edited);
+      if (result.ok) expect(result.html).toContain("fed-lead-paint");
+      else expect(result.ok).toBe(false);
+    },
+  );
+
+  it("refuses an edit whose unclosed style tag destroys the document", () => {
+    const edited = base.replace("<h2>Disclosures</h2>", "<h2>Disclosures</h2><style>");
+    const result = sanitizeManagerLeaseDocumentEdit(base, edited);
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts a single-quoted disclosure attribute instead of hard-rejecting it", () => {
+    const singleQuoted = base.replace('data-disclosure-rule="fed-lead-paint"', "data-disclosure-rule='fed-lead-paint'");
+    const result = sanitizeManagerLeaseDocumentEdit(singleQuoted, singleQuoted);
+    expect(result.ok).toBe(true);
+  });
+
+  it("is idempotent, so read-modify-write cannot grow an entity", () => {
+    const doc = `<html><body><a href="/api/portal/lease-template?path=a&amp;b=c">x</a></body></html>`;
+    const once = sanitizeLeaseDocumentHtml(doc) ?? "";
+    const twice = sanitizeLeaseDocumentHtml(once) ?? "";
+    const thrice = sanitizeLeaseDocumentHtml(twice) ?? "";
+    expect(twice).toBe(once);
+    expect(thrice).toBe(once);
+  });
+});

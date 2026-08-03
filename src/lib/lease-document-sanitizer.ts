@@ -83,7 +83,7 @@ const VERBATIM_BLOCK = /<!--\s*proplane-verbatim-disclosure:start(?::([A-Za-z0-9
  * The comment-delimited form above was the anticipated shape and nothing emits it, so without
  * this pattern every statutory clause was freely editable and deletable through the editor.
  */
-const DISCLOSURE_PARAGRAPH = /<p\b[^>]*\bdata-disclosure-rule="([^"]+)"[^>]*>[\s\S]*?<\/p\s*>/gi;
+const DISCLOSURE_PARAGRAPH = /<p\b[^>]*\bdata-disclosure-rule=(?:"([^"]+)"|'([^']+)')[^>]*>[\s\S]*?<\/p\s*>/gi;
 
 function isSafeCss(value: string): boolean {
   // CSS escapes would turn a string-only denylist into an external-load bypass.
@@ -131,7 +131,12 @@ function sanitizeAttribute(name: string, value: string, tagName: string): string
 }
 
 function escapeAttribute(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  // Only escape a bare `&`, never one that already begins an entity. Sanitizing is applied on
+  // read AND on write, so a blind replace grew `&amp;` by one level on every cycle.
+  return value
+    .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
 }
 
 /**
@@ -246,11 +251,11 @@ function preserveDisclosureParagraphs(originalHtml: string, editedHtml: string):
 
   // Keyed by rule id, so reordering the surrounding text is fine but losing a clause is not.
   const byRule = new Map<string, string>();
-  for (const match of originals) byRule.set(match[1]!.toLowerCase(), match[0]);
+  for (const match of originals) byRule.set((match[1] ?? match[2])!.toLowerCase(), match[0]);
 
   const seen = new Set<string>();
-  const restored = editedHtml.replace(DISCLOSURE_PARAGRAPH, (whole, ruleId: string) => {
-    const key = String(ruleId).toLowerCase();
+  const restored = editedHtml.replace(DISCLOSURE_PARAGRAPH, (whole, dq: string, sq: string) => {
+    const key = String(dq ?? sq ?? "").toLowerCase();
     const original = byRule.get(key);
     if (!original) return whole; // A forged id the original never had; the count check rejects it.
     seen.add(key);
@@ -293,5 +298,35 @@ export function sanitizeManagerLeaseDocumentEdit(originalHtml: string, editedHtm
   const protectedClauses = preserveVerbatimDisclosureClauses(originalHtml, editedHtml);
   if (!protectedClauses.ok) return protectedClauses;
   const html = sanitizeLeaseDocumentHtml(protectedClauses.html);
-  return html ? { ok: true, html } : { ok: false, error: "Lease HTML must contain allowed document content." };
+  if (!html) return { ok: false, error: "Lease HTML must contain allowed document content." };
+
+  // Re-verify AFTER sanitizing, not only before. Sanitizing deletes a blocked element and
+  // everything inside it, so wrapping a protected clause in one (<form>, <button>, <template>,
+  // an unclosed <style>, ...) let it be restored and then deleted, and the save was accepted.
+  // Checking the FINAL bytes is the only check that cannot be routed around this way.
+  const requiredRules = new Set(
+    [...originalHtml.matchAll(DISCLOSURE_PARAGRAPH)].map((match) => (match[1] ?? match[2])!.toLowerCase()),
+  );
+  if (requiredRules.size > 0) {
+    const survivingRules = new Set(
+      [...html.matchAll(DISCLOSURE_PARAGRAPH)].map((match) => (match[1] ?? match[2])!.toLowerCase()),
+    );
+    for (const rule of requiredRules) {
+      if (!survivingRules.has(rule)) {
+        return {
+          ok: false,
+          error: "Required disclosure clauses cannot be removed. Edit the surrounding text only.",
+        };
+      }
+    }
+  }
+
+  // A save that destroys the document is never an edit. An unclosed <style> truncates
+  // everything after it, so this also catches that whole class.
+  const originalTextLength = originalHtml.replace(/<[^>]*>/g, "").trim().length;
+  const survivingTextLength = html.replace(/<[^>]*>/g, "").trim().length;
+  if (originalTextLength > 200 && survivingTextLength < originalTextLength / 4) {
+    return { ok: false, error: "That edit would remove most of the lease. Review the document and try again." };
+  }
+  return { ok: true, html };
 }
