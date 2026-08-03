@@ -5,6 +5,12 @@ import {
   upsertApplicationRowToServer,
   wouldDowngradeSubmittedApplication,
 } from "@/lib/manager-applications-storage";
+import {
+  INCOMPLETE_APPLICATION_LABEL,
+  IN_PROGRESS_APPLICATION_STAGE,
+  isDraftShapedApplicationRow,
+  isSubmittedStage,
+} from "@/lib/rental-application/draft-shape";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
@@ -15,45 +21,15 @@ import {
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 
-export const IN_PROGRESS_APPLICATION_STAGE = "In progress";
-
-/** User-facing label for draft applications (stored stage remains `In progress`). */
-export const INCOMPLETE_APPLICATION_LABEL = "Incomplete";
-
-function isSubmittedStage(row: Pick<DemoApplicantRow, "stage">): boolean {
-  return row.stage?.trim().toLowerCase() === "submitted";
-}
-
-/**
- * Draft SHAPE only — a pending, unsubmitted wizard snapshot. Withdrawal is
- * deliberately NOT considered here: a withdrawn row is no longer an *active*
- * draft (that is `isInProgressApplicationRow`), but a trailing autosave carrying
- * one is still a draft WRITE and must stay on the guarded conditional-update
- * path in `/api/manager-applications`, or it clobbers the withdrawn row.
- */
-export function isDraftShapedApplicationRow(row: DemoApplicantRow): boolean {
-  if (row.bucket !== "pending") return false;
-  if (isSubmittedStage(row)) return false;
-  const stage = row.stage?.trim().toLowerCase() ?? "";
-  if (
-    stage === IN_PROGRESS_APPLICATION_STAGE.toLowerCase() ||
-    stage === INCOMPLETE_APPLICATION_LABEL.toLowerCase() ||
-    stage === "draft" ||
-    stage === "started"
-  ) {
-    return true;
-  }
-  // Wizard snapshot without stage metadata (common on older rows) is still an incomplete draft.
-  const app = row.application;
-  if (app && (app.propertyId?.trim() || app.email?.trim() || app.fullLegalName?.trim())) {
-    return true;
-  }
-  // Pending listing metadata without an explicit submitted stage (legacy / partial row_data).
-  if (!stage && (row.propertyId?.trim() || row.property?.trim())) {
-    return true;
-  }
-  return false;
-}
+// The draft-shape vocabulary lives in `draft-shape.ts` so
+// `manager-applications-storage.ts` can read it without importing this module
+// back (this one already imports four runtime values from it). Re-exported here
+// so every existing import path keeps working.
+export {
+  IN_PROGRESS_APPLICATION_STAGE,
+  INCOMPLETE_APPLICATION_LABEL,
+  isDraftShapedApplicationRow,
+} from "@/lib/rental-application/draft-shape";
 
 /** Pending draft applications — stored as "In progress", shown in the UI as "Incomplete". */
 export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {

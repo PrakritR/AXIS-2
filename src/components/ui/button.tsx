@@ -21,6 +21,15 @@ const variants: Record<Variant, string> = {
     "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card active:scale-[0.99] [html[data-theme=dark]_&]:portal-outline-control",
 };
 
+/**
+ * The one shared Button. It forwards its ref, so callers can measure or anchor
+ * it (`portal-filter-sort-sheet` anchors its sheet off one); with `asChild`,
+ * Radix `Slot` forwards that ref on to the child element.
+ *
+ * On React 19 a function component takes `ref` as an ordinary prop, so no
+ * `forwardRef` wrapper is needed — `ref` rides the props spread onto `Comp`
+ * below. Coverage: `tests/unit/button-ref-forwarding.test.tsx`.
+ */
 export function Button({
   className = "",
   variant = "primary",
