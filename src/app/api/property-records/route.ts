@@ -135,14 +135,35 @@ export async function POST(req: Request) {
     const existingOwnerId = existing ? String(existing.manager_user_id ?? "").trim() : "";
     const isDelete = body.action === "delete";
 
+    // A delete of a row that is not there is NOT FOUND — never a create.
+    //
+    // The create branch below exists to attribute a brand-new record, so it has
+    // no stored owner to authorize against and (for a caller who simply omits
+    // `managerUserId`) issues no 403 at all. A delete that fell into it was
+    // therefore unauthenticated in everything but name, and still ran
+    // `clearHousingAccessForDeletedProperty` with the SERVICE-ROLE client —
+    // a globally scoped helper that scans and rewrites `account_link_invites`,
+    // `manager_application_records` and `portal_pro_relationship_records`
+    // across EVERY manager, matching ids by a normalized token rather than an
+    // exact string. Any signed-in account could aim that at an arbitrary id.
+    //
+    // Refusing here is what keeps the invariant simple: the cleanup helper is
+    // reachable only after `existing` is a real row AND the authorization below
+    // has passed on it.
+    if (isDelete && !existing) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+
     // Resolve who the write is attributed to, and authorize the caller. Two
     // invariants hold here:
     //
-    // 1. ONLY a missing row is a create. An existing row — including one whose
-    //    `manager_user_id` is blank because the column is
+    // 1. ONLY a missing row is a create, and only an UPSERT is. An existing row
+    //    — including one whose `manager_user_id` is blank because the column is
     //    `on delete set null` — is always routed through the authorization
     //    below, so an orphaned listing can never be adopted (or deleted) by
-    //    any signed-in account that happens to know its public listing id.
+    //    any signed-in account that happens to know its public listing id; and
+    //    a delete has already been refused above when the row is missing, so it
+    //    can never take the create branch's owner-less path.
     // 2. An EXISTING row that HAS an owner keeps that owner on every write, admins
     //    included. Every client that posts here mirrors `managerUserId` straight
     //    out of a browser-local pipeline bucket

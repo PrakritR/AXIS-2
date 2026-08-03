@@ -258,7 +258,18 @@ export function deleteMirroredPropertyRecord(id: string) {
 }
 
 /** Awaited counterpart of `deleteMirroredPropertyRecord`, for callers that must
- * know the row is gone before re-syncing (e.g. re-keying a draft record). */
+ * know the row is gone before re-syncing (e.g. re-keying a draft record).
+ *
+ * Resolves true when the row IS GONE, which is what every caller actually
+ * needs to know — not whether this particular request is the one that removed
+ * it. A 404 means the route found nothing to delete, so the goal state already
+ * holds: the server refuses a delete of a missing row rather than letting it
+ * fall into the create branch and reach the globally scoped housing-cleanup
+ * helper (see `POST /api/property-records`). Reporting that as a FAILURE would
+ * strand a local drafts row the manager can then never clear
+ * (`deleteManagerPropertyDraft` keeps the draft visible on a false). Any other
+ * non-ok status — 401, 403, 500 — is a genuine failure and still resolves
+ * false. */
 export async function deletePropertyRecordFromServer(id: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (isDemoModeActive()) return true;
@@ -269,7 +280,7 @@ export async function deletePropertyRecordFromServer(id: string): Promise<boolea
       credentials: "include",
       body: JSON.stringify({ action: "delete", id }),
     });
-    return res.ok;
+    return res.ok || res.status === 404;
   } catch {
     return false;
   }
