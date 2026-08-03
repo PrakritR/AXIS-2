@@ -135,34 +135,42 @@ export async function POST(req: Request) {
     const existingOwnerId = existing ? String(existing.manager_user_id ?? "").trim() : "";
     const isDelete = body.action === "delete";
 
-    // Resolve who the write is attributed to, and authorize the caller.
+    // Resolve who the write is attributed to, and authorize the caller. Two
+    // invariants hold here:
     //
-    // An EXISTING row's owner is never taken from the request body — not even
-    // for an admin. Every client that posts here mirrors `managerUserId`
-    // straight out of a browser-local pipeline bucket
-    // (`mirrorLocalPropertyPipelineToServer`, `mirrorAdminPropertyRecord`,
-    // `promoteLegacyPendingListingsToLive`), so honoring it let a stale local
-    // bucket keyed by another user id silently hand live listings to that
-    // account. The read path scopes strictly by `manager_user_id`, so the real
-    // manager's Properties tab then showed 0/0/0 while Residents, Applications,
-    // and the Communication filter — which read denormalized property labels off
-    // application/lease rows — kept showing the same houses. Ownership changes
-    // have exactly one door: `transferPropertyOwnership` (linked co-manager,
-    // audited, notifies both sides).
+    // 1. ONLY a missing row is a create. An existing row — including one whose
+    //    `manager_user_id` is blank because the column is
+    //    `on delete set null` — is always routed through the authorization
+    //    below, so an orphaned listing can never be adopted (or deleted) by
+    //    any signed-in account that happens to know its public listing id.
+    // 2. An EXISTING row that HAS an owner keeps that owner on every write, admins
+    //    included. Every client that posts here mirrors `managerUserId` straight
+    //    out of a browser-local pipeline bucket
+    //    (`mirrorLocalPropertyPipelineToServer`, `mirrorAdminPropertyRecord`,
+    //    `promoteLegacyPendingListingsToLive`), so honoring it let a stale local
+    //    bucket keyed by another user id silently hand live listings to that
+    //    account. The read path scopes strictly by `manager_user_id`, so the real
+    //    manager's Properties tab then showed 0/0/0 while Residents, Applications,
+    //    and the Communication filter — which read denormalized property labels off
+    //    application/lease rows — kept showing the same houses. Ownership changes
+    //    have exactly one door: `transferPropertyOwnership` (linked co-manager,
+    //    audited, notifies both sides).
     let ownerForWrite: string;
-    if (!existing || !existingOwnerId) {
-      // Creating a brand-new (or adopting an ownerless) record. An admin may
-      // attribute it to a manager — the admin inventory publishes on a
-      // manager's behalf — but a co-manager cannot create a property owned by
-      // someone else.
+    if (!existing) {
+      // Creating a brand-new record. An admin may attribute it to a manager —
+      // the admin inventory publishes on a manager's behalf — but a co-manager
+      // cannot create a property owned by someone else.
       ownerForWrite = body.managerUserId?.trim() || user.id;
       if (!admin && ownerForWrite !== user.id) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
-    } else if (admin || existingOwnerId === user.id) {
-      // Admin acting on a manager's listing, or the owner editing / deleting
-      // their own — the stored owner is authoritative either way.
-      ownerForWrite = existingOwnerId;
+    } else if (admin) {
+      // Never MOVE a row that still has an owner; an orphaned row (the column is
+      // `on delete set null`) may still be re-attributed by an admin.
+      ownerForWrite = existingOwnerId || body.managerUserId?.trim() || user.id;
+    } else if (existingOwnerId === user.id) {
+      // The owner editing / deleting their own listing.
+      ownerForWrite = user.id;
     } else {
       // Co-manager acting on a linked owner's listing: require the `properties`
       // module at edit (write) or delete level on THIS property. The owner is

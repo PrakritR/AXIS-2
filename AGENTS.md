@@ -1179,10 +1179,14 @@ either.
 - **The seed reclaims drifted owners before anything else reads ownership.**
   `tests/helpers/reclaim-canonical-property-owners.mjs` (called from
   `seed-test-db.mjs`, also runnable as `npm run test:seed:reclaim-properties`)
-  is the only check that can see this: every other seed check scopes
-  `.in("manager_user_id", testManagerIds)`, and the account prune deletes
-  property rows BY stray owner — so a canonical id still mis-owned at prune time
-  is deleted rather than reclaimed.
+  is not the only writer — the canonical catalog upsert earlier in the seed also
+  rewrites `manager_user_id` for those ids — but it is the only step that
+  *verifies*: it re-reads after writing and throws if a row is still mis-owned,
+  and it runs before the account prune, which deletes property rows BY stray
+  owner (a canonical id still mis-owned at prune time is deleted rather than
+  reclaimed). Every other cleanup check scopes
+  `.in("manager_user_id", testManagerIds)` and therefore cannot see a canonical
+  id parked on a stranger's account at all.
 
 # Property drafts (save add-property progress)
 

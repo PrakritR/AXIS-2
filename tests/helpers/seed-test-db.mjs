@@ -1711,8 +1711,12 @@ try {
   //    account prune in step 6, which removes property rows by stray owner. It
   //    also empties only the Properties tab — Residents / Applications /
   //    Communication read denormalized property labels off application and lease
-  //    rows, so they keep looking healthy. Reclaim before anything else reads
-  //    ownership.
+  //    rows, so they keep looking healthy. The canonical catalog upsert earlier
+  //    in this script already rewrites `manager_user_id` for these ids, so on a
+  //    full run this is not the first writer; what it adds is the re-read that
+  //    fails loudly if the row did not move, and running before the prune can
+  //    delete it. It is also the standalone repair
+  //    (`npm run test:seed:reclaim-properties`).
   await reclaimCanonicalPropertyOwners(
     supabase,
     Object.fromEntries([

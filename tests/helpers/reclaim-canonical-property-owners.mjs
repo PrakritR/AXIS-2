@@ -103,9 +103,13 @@ export async function reclaimCanonicalPropertyOwners(supabase, expectedOwnerByPr
     .select("id, manager_user_id")
     .in("id", ids);
   if (afterErr) throw new Error(`reclaim: verify manager_property_records: ${afterErr.message}`);
-  const stillWrong = (after ?? []).filter(
-    (row) => String(row.manager_user_id ?? "").trim() !== String(expectedOwnerByPropertyId[row.id] ?? "").trim(),
-  );
+  const stillWrong = (after ?? []).filter((row) => {
+    // Skip blank expectations exactly like the update loop does — the helper
+    // deliberately left those rows alone, so they cannot be "still mis-owned".
+    const expected = String(expectedOwnerByPropertyId[row.id] ?? "").trim();
+    if (!expected) return false;
+    return String(row.manager_user_id ?? "").trim() !== expected;
+  });
   if (stillWrong.length) {
     throw new Error(
       `reclaim: ${stillWrong.length} canonical properties are still mis-owned after the repair: ` +
