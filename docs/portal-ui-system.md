@@ -230,7 +230,14 @@ web-downloads on web and presents the native share sheet in the app shell.
 Fixed-width document previews (the flyer iframe) scale to fit the container
 width instead of relying on iframe-internal scrolling, which is unreliable in
 WKWebView — see `computeFlyerFit` + `useFlyerFit` in
-`promotion-flyer-preview.tsx`.
+`promotion-flyer-preview.tsx`. WKWebView also does not render a PDF embedded in
+an iframe/object at all, so `UploadedLeasePdfPreview`
+(`uploaded-lease-pdf-preview.tsx`) deliberately keeps TWO render paths: the
+browser's native viewer on desktop, and in-page rasterization with the pdf.js
+build that already ships inside `unpdf` (dynamically imported, so its chunk stays
+out of the initial bundle) on iOS / native. Rasterizing belongs in the client —
+the bytes are already there, so it costs no round trip. Coverage:
+`tests/unit/uploaded-lease-pdf-preview.test.tsx`.
 
 ## Checklist for new expandable UI
 
