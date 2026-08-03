@@ -35,7 +35,7 @@ export function PromotionFlyerHeaderActions({
         type="button"
         variant="outline"
         className={PROMOTION_ROW_ACTION_BUTTON_CLASS}
-        onClick={() => void downloadPromotionFlyer(flyerRowForEntry(asset.row, entry))}
+        onClick={() => downloadPromotionFlyer(flyerRowForEntry(asset.row, entry))}
         data-attr="promotion-flyer-download"
       >
         Download

@@ -774,7 +774,7 @@ export const ResidentInboxPanel = forwardRef<
               type="button"
               variant={cancelled ? "outline" : "danger"}
               className={PORTAL_DETAIL_BTN}
-              onClick={() => void toggleScheduledCancelled(row.id, !cancelled)}
+              onClick={() => toggleScheduledCancelled(row.id, !cancelled)}
             >
               {cancelled ? "Restore" : "Cancel send"}
             </Button>
@@ -1158,13 +1158,13 @@ export const ResidentInboxPanel = forwardRef<
         ) : (
           <div className="space-y-3">
             <PortalInboxSelectionToolbar count={scheduleSelection.selectedIds.size} onClear={scheduleSelection.clearSelection}>
-              <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleSendNow()}>
+              <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => bulkScheduleSendNow()}>
                 Send now
               </Button>
-              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleCancel()}>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => bulkScheduleCancel()}>
                 Cancel send
               </Button>
-              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleRestore()}>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => bulkScheduleRestore()}>
                 Restore send
               </Button>
             </PortalInboxSelectionToolbar>

@@ -265,7 +265,7 @@ function ResidentSetupInner() {
           type="button"
           className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
           disabled={busy}
-          onClick={() => void submit()}
+          onClick={() => submit()}
         >
           {busy ? "Creating…" : "Create resident account"}
         </Button>

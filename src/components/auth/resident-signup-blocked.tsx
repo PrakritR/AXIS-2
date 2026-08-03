@@ -84,7 +84,7 @@ export function ResidentSignupBlocked({ compact = false }: { compact?: boolean }
             variant="outline"
             className="w-full rounded-full py-2.5 text-[14px] font-semibold"
             disabled={busy}
-            onClick={() => void resend()}
+            onClick={() => resend()}
             data-attr="resident-blocked-resend-setup-link"
           >
             {busy ? "Sending…" : "Email my setup link"}

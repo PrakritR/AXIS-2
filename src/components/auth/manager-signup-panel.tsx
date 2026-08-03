@@ -292,7 +292,7 @@ export function ManagerSignupPanel({
             data-attr="manager-signup-submit"
             className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
             disabled={locked || paidBlocked}
-            onClick={() => void createManager()}
+            onClick={() => createManager()}
           >
             {busy ? "Creating…" : `Continue with ${selectedTier.label}`}
           </Button>

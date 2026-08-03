@@ -141,7 +141,7 @@ export function PortalBugFeedbackPanel({
           variant="outline"
           className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
           disabled={deletingId === row.id}
-          onClick={() => void handleDelete(row)}
+          onClick={() => handleDelete(row)}
         >
           {deletingId === row.id ? "Deleting…" : "Delete"}
         </Button>

@@ -84,6 +84,7 @@ import {
   usePortalPreviewSlice,
 } from "@/components/portal/portal-data-table";
 import type { DashboardSectionId } from "@/lib/dashboard-preferences";
+import { loadDocumentExpirationSummary } from "@/lib/manager-document-expiry-client";
 import { DashboardCustomizeModal } from "@/components/portal/dashboard-customize-modal";
 import { useDashboardVisibility } from "@/hooks/use-dashboard-visibility";
 import { useAgentPendingActions } from "@/hooks/use-agent-pending-actions";
@@ -569,10 +570,11 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       setDocExpirySummary(null);
       return;
     }
-    void fetch("/api/manager-documents/expiration-summary", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.summary) setDocExpirySummary(data.summary as DocumentExpirationSummary);
+    // TTL-guarded: `tick` is bumped by ~10 unrelated store events, so an
+    // unguarded fetch here refetched this banner 6x during first paint.
+    void loadDocumentExpirationSummary()
+      .then((summary) => {
+        if (summary) setDocExpirySummary(summary as DocumentExpirationSummary);
       })
       .catch(() => setDocExpirySummary(null));
   }, [authReady, userId, tick]);

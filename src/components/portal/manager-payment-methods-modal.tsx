@@ -155,7 +155,7 @@ export function ManagerPaymentMethodsModal({
             type="button"
             variant="primary"
             className="rounded-full"
-            onClick={() => void save()}
+            onClick={() => save()}
             disabled={saving || !propertyId}
             data-attr="manager-payment-methods-save"
           >

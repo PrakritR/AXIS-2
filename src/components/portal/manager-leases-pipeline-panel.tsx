@@ -576,7 +576,7 @@ export function ManagerLeasesPipelinePanel({
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
         disabled={emailBusyForRow === row.id}
-        onClick={() => void sendAccountEmail(row)}
+        onClick={() => sendAccountEmail(row)}
       >
         {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
       </Button>

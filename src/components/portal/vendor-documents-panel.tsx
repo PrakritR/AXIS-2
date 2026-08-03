@@ -264,7 +264,7 @@ export function VendorDocumentsPanel({
               variant="outline"
               className={`${PORTAL_DETAIL_BTN} text-danger`}
               data-attr={`vendor-documents-remove-${kind}`}
-              onClick={() => void removeDocument(kind)}
+              onClick={() => removeDocument(kind)}
             >
               Remove
             </Button>

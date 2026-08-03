@@ -118,7 +118,7 @@ export function MobileEmailSignIn({
         type="button"
         className="w-full rounded-full py-2.5 text-[15px] font-semibold"
         disabled={locked}
-        onClick={() => void signIn()}
+        onClick={() => signIn()}
       >
         {busy ? "Signing in…" : "Sign in"}
       </Button>

@@ -274,7 +274,7 @@ export function ManagerOutgoingPaymentDetail({
               className={PORTAL_DETAIL_BTN}
               data-attr="manager-outgoing-payment-confirm-pay"
               disabled={busy || (paymentMethod !== "ach" && !manualSentConfirmed)}
-              onClick={() => void submitPay()}
+              onClick={() => submitPay()}
             >
               {busy ? "Processing…" : paymentMethod === "ach" ? "Approve & pay" : "Mark as paid"}
             </Button>

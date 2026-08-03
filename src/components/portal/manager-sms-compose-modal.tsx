@@ -216,7 +216,7 @@ export function ManagerSmsComposeModal({
             className="rounded-full"
             disabled={sending || !body.trim()}
             data-attr="manager-sms-compose-send"
-            onClick={() => void send()}
+            onClick={() => send()}
           >
             {sending
               ? "Sending…"

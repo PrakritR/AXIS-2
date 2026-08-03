@@ -581,7 +581,7 @@ export function ManagerPropertyPromotionPanel({
         panelClassName="max-w-2xl"
         footer={
           <ModalFooter>
-            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+            <Button type="button" variant="primary" onClick={() => generate()} disabled={generating} data-attr="promotion-generate">
               {generating ? "Updating…" : "Update flyer"}
             </Button>
           </ModalFooter>

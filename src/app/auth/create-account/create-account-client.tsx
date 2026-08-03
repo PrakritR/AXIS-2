@@ -813,7 +813,7 @@ export default function CreateAccountClient() {
         <Button
           type="button"
           className="mt-8 w-full rounded-full py-3 text-base font-semibold"
-          onClick={() => void submit()}
+          onClick={() => submit()}
           disabled={
             busy ||
             googleSessionLoading ||

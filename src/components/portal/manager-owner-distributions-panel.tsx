@@ -173,11 +173,11 @@ export function ManagerOwnerDistributionsPanel() {
                     </td>
                     <td className={PORTAL_TABLE_TD}>
                       {dist.status === "draft" ? (
-                        <Button variant="secondary" onClick={() => void actOn(dist.id, "approve")}>
+                        <Button variant="secondary" onClick={() => actOn(dist.id, "approve")}>
                           Approve
                         </Button>
                       ) : dist.status === "approved" ? (
-                        <Button variant="secondary" onClick={() => void actOn(dist.id, "pay")}>
+                        <Button variant="secondary" onClick={() => actOn(dist.id, "pay")}>
                           Mark paid
                         </Button>
                       ) : (
@@ -198,7 +198,7 @@ export function ManagerOwnerDistributionsPanel() {
         title="New owner distribution"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void createDistribution()}>
+            <Button variant="primary" onClick={() => createDistribution()}>
               Create draft
             </Button>
           </ModalFooter>

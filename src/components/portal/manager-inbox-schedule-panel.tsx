@@ -304,7 +304,7 @@ export function ManagerInboxSchedulePanel({
               variant="primary"
               className="rounded-full"
               disabled={bulkBusy}
-              onClick={() => void bulkSendNow()}
+              onClick={() => bulkSendNow()}
             >
               Send now
             </Button>
@@ -313,7 +313,7 @@ export function ManagerInboxSchedulePanel({
               variant="outline"
               className="rounded-full"
               disabled={bulkBusy}
-              onClick={() => void bulkCancelSend()}
+              onClick={() => bulkCancelSend()}
             >
               Cancel send
             </Button>

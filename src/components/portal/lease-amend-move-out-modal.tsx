@@ -157,7 +157,7 @@ export function LeaseAmendMoveOutModal({
       onClose={onClose}
       footer={
         <ModalFooter className="w-full">
-          <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => void handleConfirm()}>
+          <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => handleConfirm()}>
             {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
           </Button>
         </ModalFooter>
@@ -399,7 +399,7 @@ export function LeaseRenewModal({
           variant="primary"
           className="flex-1 rounded-full"
           disabled={!canConfirm}
-          onClick={() => void handleConfirm()}
+          onClick={() => handleConfirm()}
           data-attr="lease-renew-confirm"
         >
           {submitting ? "Creating…" : "Create renewal"}

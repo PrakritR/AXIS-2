@@ -400,7 +400,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
             <code className="rounded bg-black/[0.06] px-1 py-0.5 text-xs [html[data-theme=dark]_&]:bg-white/15">DATABASE_URL</code> is configured on the server.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="rounded-full" disabled={applyingSchema} onClick={() => void applySchema()}>
+            <Button type="button" variant="outline" className="rounded-full" disabled={applyingSchema} onClick={() => applySchema()}>
               {applyingSchema ? "Setting up…" : "Set up feedback storage"}
             </Button>
             <Button

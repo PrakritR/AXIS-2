@@ -2277,7 +2277,7 @@ export function ManagerResidents({
                 className={PORTAL_DETAIL_BTN}
                 data-attr="resident-application-send-reminder"
                 disabled={applicationReminderPreviewBusyId !== null || applicationReminderBusyId !== null}
-                onClick={() => void openApplicationCompletionReminderPreview(selectedApplicationRow)}
+                onClick={() => openApplicationCompletionReminderPreview(selectedApplicationRow)}
               >
                 {applicationReminderPreviewBusyId === selectedApplicationRow.id ? "Loading…" : "Send reminder"}
               </Button>
@@ -2287,7 +2287,7 @@ export function ManagerResidents({
               variant="outline"
               className={PORTAL_DETAIL_BTN}
               data-attr="resident-application-reject"
-              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+              onClick={() => setApplicationBucket(selectedApplicationRow.id, "rejected")}
             >
               Reject
             </Button>
@@ -2310,7 +2310,7 @@ export function ManagerResidents({
             variant="outline"
             className={PORTAL_DETAIL_BTN}
             data-attr="resident-application-move-pending"
-            onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+            onClick={() => setApplicationBucket(selectedApplicationRow.id, "pending")}
           >
             <span className="max-md:hidden">To pending</span>
             <span className="md:hidden">Pending</span>

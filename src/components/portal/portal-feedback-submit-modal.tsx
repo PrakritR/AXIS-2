@@ -117,7 +117,7 @@ export function PortalFeedbackSubmitModal({
       description="Share ideas, report issues, or tell us what would make PropLane better for you."
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => void handleSubmit()}>
+          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => handleSubmit()}>
             {busy ? "Sending…" : "Send feedback"}
           </Button>
         </ModalFooter>

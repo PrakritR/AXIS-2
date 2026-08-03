@@ -199,7 +199,7 @@ export function LeaseSectionEditor({
                 disabled={
                   savingId !== null || (drafts[activeSection.id] ?? "") === activeSection.bodyHtml
                 }
-                onClick={() => void saveSection(activeSection.id)}
+                onClick={() => saveSection(activeSection.id)}
                 data-attr="lease-section-save"
               >
                 {savingId === activeSection.id ? "Saving…" : "Save changes"}
@@ -231,7 +231,7 @@ export function LeaseSectionEditor({
               variant="primary"
               className="rounded-full px-3 py-1.5 text-xs"
               disabled={savingId !== null}
-              onClick={() => void saveAllDirty()}
+              onClick={() => saveAllDirty()}
               data-attr="lease-section-save-all"
             >
               {savingId === "__all__" ? "Saving…" : `Save ${dirtySectionIds.length} change${dirtySectionIds.length === 1 ? "" : "s"}`}
@@ -245,7 +245,7 @@ export function LeaseSectionEditor({
             variant="outline"
             className="rounded-full px-3 py-1.5 text-xs"
             disabled={savingId !== null}
-            onClick={() => void saveAllDirty()}
+            onClick={() => saveAllDirty()}
             data-attr="lease-section-save-all"
           >
             {savingId === "__all__" ? "Saving…" : `Save ${dirtySectionIds.length} unsaved section${dirtySectionIds.length === 1 ? "" : "s"}`}
@@ -307,7 +307,7 @@ export function LeaseSectionEditor({
                       variant={dirty ? "primary" : "outline"}
                       className="rounded-full px-3 py-1.5 text-xs"
                       disabled={!dirty || savingId !== null}
-                      onClick={() => void saveSection(section.id)}
+                      onClick={() => saveSection(section.id)}
                     >
                       {savingId === section.id ? "Saving…" : "Save section"}
                     </Button>

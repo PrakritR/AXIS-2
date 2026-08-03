@@ -166,7 +166,7 @@ export function ManagerAddOutgoingPaymentModal({
             variant="primary"
             className="rounded-full"
             disabled={saving}
-            onClick={() => void save()}
+            onClick={() => save()}
             data-attr="outgoing-payment-save"
           >
             {saving ? "Saving…" : "Save"}

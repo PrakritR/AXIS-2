@@ -700,7 +700,7 @@ export function ResidentApplicationsPanel({
             variant="danger"
             className="rounded-full"
             data-attr="resident-application-withdraw-confirm"
-            onClick={() => void confirmWithdraw()}
+            onClick={() => confirmWithdraw()}
             disabled={withdrawBusy}
           >
             {withdrawBusy ? "Withdrawing…" : "Withdraw application"}

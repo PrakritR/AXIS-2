@@ -950,7 +950,7 @@ export function ManagerFinancesPanel({
         title="Add expense"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void saveExpense()}>
+            <Button variant="primary" onClick={() => saveExpense()}>
               Save expense
             </Button>
           </ModalFooter>
@@ -1047,7 +1047,7 @@ export function ManagerFinancesPanel({
         title="Add income"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void saveIncome()}>
+            <Button variant="primary" onClick={() => saveIncome()}>
               Save income
             </Button>
           </ModalFooter>
