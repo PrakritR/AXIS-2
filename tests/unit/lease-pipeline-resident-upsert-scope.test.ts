@@ -728,7 +728,7 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
     expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 
-  /** The carve-out is for an off-platform PDF, never for newly introduced HTML. */
+  /** The corroboration is for an off-platform PDF, never for HTML beside it. */
   it("does not let the externallySignedLease flag smuggle in a generated body", async () => {
     STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
     const res = await post({
@@ -743,6 +743,60 @@ describe("portal-lease-pipeline resident — cannot author and sign in one write
     });
 
     expect(res.status).toBe(409);
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A matching PDF corroborates the PDF, not whatever else rides along. The
+   * seeded onboarding row is PDF-only, so HTML beside the manager-filed bytes
+   * has no legitimate shape.
+   */
+  it("refuses arbitrary HTML riding along with the manager-filed PDF", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+    const res = await post({
+      action: "upsert",
+      row: {
+        id: LEASE_ID,
+        residentEmail: RESIDENT_EMAIL,
+        axisId: APPLICATION_ID,
+        generatedHtml: "<p>arbitrary</p>",
+        managerUploadedPdf: {
+          dataUrl: MANAGER_FILED_PDF,
+          fileName: "signed-lease.pdf",
+          uploadedAt: "2026-05-01T00:00:00Z",
+        },
+        signatureName: "Resident",
+        signedAtIso: "2026-05-01T00:00:00Z",
+        fullySignedAt: "2026-05-01T00:00:00Z",
+      },
+    });
+
+    expect(res.status).toBe(409);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(autoFileLeaseDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `externallySignedLease` reaches the stored row through `row_data`, which is
+   * persisted verbatim, so a stored flag is just an earlier client write. Setting
+   * it costs nothing on its own — the write claims no execution and replaces no
+   * body — and it must buy nothing on the next write either.
+   */
+  it("refuses an arbitrary PDF on a row the resident flagged externallySignedLease first", async () => {
+    STORED.row_data = { ...DEFAULT_STORED_ROW_DATA };
+
+    const first = await post({
+      action: "upsert",
+      row: { id: LEASE_ID, residentEmail: RESIDENT_EMAIL, externallySignedLease: true },
+    });
+    expect(first.status).toBe(200);
+    STORED.row_data = (upsert.mock.calls[0]![0] as Record<string, unknown>).row_data as Record<string, unknown>;
+    expect(STORED.row_data.externallySignedLease).toBe(true);
+
+    const second = await seedOnboardingLease("data:application/pdf;base64,ATTACKER");
+
+    expect(second.status).toBe(409);
+    expect(upsert).toHaveBeenCalledTimes(1);
     expect(autoFileLeaseDocument).not.toHaveBeenCalled();
   });
 

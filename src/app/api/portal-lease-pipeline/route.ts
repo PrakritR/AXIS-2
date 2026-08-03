@@ -176,7 +176,12 @@ const ROW_SCOPE_MIRRORS = [
 ] as const satisfies ReadonlyArray<{ camel: string; snake: string; column: keyof LeaseScopeColumns }>;
 
 /**
- * `row_data` is a MIRROR of the scope columns, never a second source of them.
+ * For the four SCOPE keys, and only those, `row_data` is a MIRROR of the scope
+ * columns rather than a second source of them. Every other field in `row_data`
+ * — `generatedHtml`, `managerUploadedPdf`, `fullySignedAt`, the signatures,
+ * `externallySignedLease` — is persisted verbatim as the client sent it, so a
+ * stored value there is prior-request client input and never evidence the server
+ * established. Anything making a trust decision has to corroborate it.
  *
  * Pinning the columns alone left a laundering chute one hop wide: the columns
  * are what scoped queries key on, but `row_data` is what the manager's browser
@@ -412,7 +417,7 @@ export async function POST(req: Request) {
           ctx.db,
           storedRow?.axisId,
           existingRecord?.manager_user_id,
-          leaseDocumentBody(normalized as unknown as LeasePipelineRow).pdf,
+          leaseDocumentBody(normalized as unknown as LeasePipelineRow),
         ));
 
       let scope: LeaseScopeColumns;

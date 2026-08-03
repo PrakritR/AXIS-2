@@ -5,8 +5,8 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
 
 /**
- * Whether `candidatePdf` is the already-executed lease the MANAGER filed onto
- * the application record (`manualResidentDetails.signedLeaseDataUrl`).
+ * Whether `body` is exactly the already-executed lease the MANAGER filed onto the
+ * application record (`manualResidentDetails.signedLeaseDataUrl`).
  *
  * `syncApprovedApplications` seeds the existing-resident onboarding lease from
  * that PDF, and it runs in the RESIDENT's browser too, so a resident's ordinary
@@ -17,11 +17,19 @@ import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding
  * document library. The bytes are the trust signal, so they are compared against
  * the copy the manager filed.
  *
- * `axisId` must come from the STORED lease row and `managerUserId` from its
- * stored owner column. Sourcing either from the request would let a caller aim
- * the corroboration at an application record of their choosing. Both writers of
- * this lease shape (`syncApprovedApplications` and `runExistingResidentOnboarding`)
- * set `axisId` to the application record's own id, so it is a direct lookup.
+ * The seeded row is PDF-ONLY (`needsPdf` requires no existing `generatedHtml`),
+ * so a body that also carries HTML is refused rather than let the matching PDF
+ * wave arbitrary markup through beside it.
+ *
+ * What is actually load-bearing: the lookup is pinned to `managerUserId`, which
+ * the caller reads from the lease record's stored `manager_user_id` COLUMN, and
+ * the verdict is byte equality against that manager's own filed PDF. `axisId`
+ * only selects which of that manager's applications to compare against — it is
+ * NOT server-derived (it comes from stored `row_data`, which is client-written on
+ * every prior upsert), so treat it as caller-influenced. That is harmless while
+ * the verdict is byte equality; if this is ever loosened to a hash, a filename,
+ * or mere presence, `axisId` becomes load-bearing and must be re-derived server
+ * side first.
  *
  * Fails CLOSED: an unreadable application record corroborates nothing.
  */
@@ -29,9 +37,10 @@ export async function leaseBodyMatchesManagerFiledLease(
   db: SupabaseClient,
   axisId: string | null | undefined,
   managerUserId: string | null | undefined,
-  candidatePdf: string | null | undefined,
+  body: { html: string | null; pdf: string | null },
 ): Promise<boolean> {
-  const candidate = String(candidatePdf ?? "").trim();
+  if (body.html) return false;
+  const candidate = String(body.pdf ?? "").trim();
   const applicationId = String(axisId ?? "").trim();
   const owner = String(managerUserId ?? "").trim();
   if (!candidate || !applicationId || !owner) return false;
