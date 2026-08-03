@@ -133,7 +133,13 @@ export function LeaseDocumentPreview({
             <iframe
               title="Lease document"
               srcDoc={previewHtml}
-              sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+              // NEVER allow-scripts together with allow-same-origin: that combination lets the
+              // frame reach out of the sandbox into the parent origin, and this preview is
+              // mounted in the RESIDENT portal. Scripts are granted only for the manager's
+              // interactive section picker, which talks back over postMessage and does not
+              // need same-origin. Everything else, including every resident view, gets no
+              // scripting at all.
+              sandbox={interactive ? "allow-scripts" : ""}
               scrolling={frameScroll}
               className={frameClass}
             />
@@ -145,7 +151,7 @@ export function LeaseDocumentPreview({
             <iframe
               title="Lease draft preview"
               srcDoc={syntheticHtml}
-              sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              sandbox=""
               scrolling={frameScroll}
               className={frameClass}
             />

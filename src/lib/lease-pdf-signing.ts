@@ -43,7 +43,16 @@ function riderLines(ctx: LeaseGenerationContext): string[] {
     unitLabel: property?.unitLabel,
   });
   const pricing = resolveStayPricing({ room, submission: ctx.submission, application });
-  const rate = pricing.basis === "daily" ? pricing.dailyRate : pricing.monthlyRate;
+  // The rider DECLARES ITSELF CONTROLLING and sits inside the signed hash, so the rate on it
+  // has to be the rate that will actually be billed. resolveStayPricing cannot see a
+  // negotiated or bundle rent from `application` alone: the signed rent travels separately,
+  // and a bundle prices the whole group rather than the room. leaseBilling carries the figure
+  // the ledger uses, so it wins when present, exactly as the long-form lease does.
+  const billedMonthly = ctx.leaseBilling?.monthlyRent;
+  const rate =
+    pricing.basis === "daily"
+      ? pricing.dailyRate
+      : (billedMonthly && billedMonthly > 0 ? billedMonthly : pricing.monthlyRate);
   const propertyName = property?.address?.trim() || ctx.submission?.address?.trim() || "Not set";
   const roomName = property?.unitLabel?.trim() || room?.name?.trim() || "Not set";
   const fees = [

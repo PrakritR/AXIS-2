@@ -1,3 +1,4 @@
+import { LEASE_TEMPLATE_ROUTE } from "@/lib/lease-template-storage";
 /**
  * The generated lease is rendered in an iframe for the resident and may be
  * exported as HTML. Manager edits therefore need a deliberately small HTML
@@ -8,6 +9,10 @@
  */
 
 const ALLOWED_TAGS = new Set([
+  // `a` and `object` carry the manager's uploaded lease. Their URL-bearing attributes are
+  // accepted ONLY for the app's own authorizing lease-template route; see sanitizeAttribute.
+  "a",
+  "object",
   "html",
   "head",
   "body",
@@ -57,13 +62,28 @@ const ALLOWED_ATTRIBUTES = new Set([
   "charset",
   "name",
   "content",
+  // Emitted by the disclosure engine to mark a legally required verbatim clause. It has to
+  // survive a save: it is what preserveVerbatimDisclosureClauses uses to find the block.
+  "data-disclosure-rule",
+  // URL-bearing, and gated to the lease-template route in sanitizeAttribute.
+  "href",
+  "data",
+  "target",
+  "rel",
+  "type",
 ]);
 
-const BLOCKED_ELEMENTS = /<(?:script|iframe|object|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\b[^>]*>[\s\S]*?<\/(?:script|iframe|object|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\s*>/gi;
-const BLOCKED_VOID_ELEMENTS = /<\/?(?:script|iframe|object|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\b[^>]*>/gi;
+const BLOCKED_ELEMENTS = /<(?:script|iframe|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\b[^>]*>[\s\S]*?<\/(?:script|iframe|object|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\s*>/gi;
+const BLOCKED_VOID_ELEMENTS = /<\/?(?:script|iframe|embed|link|base|img|image|svg|math|form|input|button|audio|video|source|track|canvas|template)\b[^>]*>/gi;
 const TAG_TOKEN = /<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/g;
 const VERBATIM_COMMENT = /^<!--\s*proplane-verbatim-disclosure:(?:start|end)(?::[A-Za-z0-9_-]+)?\s*-->$/i;
 const VERBATIM_BLOCK = /<!--\s*proplane-verbatim-disclosure:start(?::([A-Za-z0-9_-]+))?\s*-->([\s\S]*?)<!--\s*proplane-verbatim-disclosure:end(?::\1)?\s*-->/gi;
+/**
+ * How the disclosure engine ACTUALLY marks a required clause: `<p data-disclosure-rule="id">`.
+ * The comment-delimited form above was the anticipated shape and nothing emits it, so without
+ * this pattern every statutory clause was freely editable and deletable through the editor.
+ */
+const DISCLOSURE_PARAGRAPH = /<p\b[^>]*\bdata-disclosure-rule="([^"]+)"[^>]*>[\s\S]*?<\/p\s*>/gi;
 
 function isSafeCss(value: string): boolean {
   // CSS escapes would turn a string-only denylist into an external-load bypass.
@@ -81,12 +101,29 @@ function stripUnclosedStyleTail(value: string): string {
   return lastOpen > lastClose ? value.slice(0, lastOpen) : value;
 }
 
+/**
+ * A URL is acceptable only when it is the app's own lease-template route, root-relative and
+ * anchored. Anchoring matters: a substring test would accept
+ * `https://evil.example/?x=/api/portal/lease-template?path=…`.
+ */
+function isLeaseTemplateUrl(value: string): boolean {
+  return value.startsWith(`${LEASE_TEMPLATE_ROUTE}?`);
+}
+
 function sanitizeAttribute(name: string, value: string, tagName: string): string | null {
   const normalized = name.toLowerCase();
   if (!ALLOWED_ATTRIBUTES.has(normalized) || normalized.startsWith("on")) return null;
   if (normalized === "charset" || normalized === "name" || normalized === "content") {
     if (tagName !== "meta") return null;
   }
+  if (normalized === "href" || normalized === "data") {
+    if (tagName !== "a" && tagName !== "object") return null;
+    if (!isLeaseTemplateUrl(value)) return null;
+  }
+  if (normalized === "target" || normalized === "rel") {
+    if (tagName !== "a") return null;
+  }
+  if (normalized === "type" && tagName !== "object") return null;
   if (normalized === "style") {
     return isSafeCss(value) ? ` style="${escapeAttribute(value)}"` : null;
   }
@@ -97,13 +134,28 @@ function escapeAttribute(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
-function sanitizeTag(token: string): string {
+/**
+ * Per-pass tag sanitizer. `a` and `object` are dropped when their URL attribute did not
+ * survive, so their closing tags must drop with them and ONLY with them: a valid template
+ * link has to stay balanced. The count is per pass, which is why this is a factory.
+ */
+function makeTagSanitizer(): (token: string) => string {
+  const urlTagDepth = { a: 0, object: 0 };
+  return function sanitizeTag(token: string): string {
   if (token.startsWith("<!--")) return VERBATIM_COMMENT.test(token) ? token : "";
   const closing = /^<\//.test(token);
   const match = token.match(/^<\/?\s*([A-Za-z0-9-]+)/);
   const tagName = match?.[1]?.toLowerCase();
   if (!tagName || !ALLOWED_TAGS.has(tagName)) return "";
-  if (closing) return `</${tagName}>`;
+  if (closing) {
+    if (tagName === "a" || tagName === "object") {
+      const key = tagName as "a" | "object";
+      if (urlTagDepth[key] <= 0) return "";
+      urlTagDepth[key] -= 1;
+      return `</${tagName}>`;
+    }
+    return `</${tagName}>`;
+  }
 
   const rawAttributes = token.slice(match![0].length, token.endsWith("/>") ? -2 : -1);
   const attributes: string[] = [];
@@ -114,7 +166,29 @@ function sanitizeTag(token: string): string {
     const safe = sanitizeAttribute(name, value, tagName);
     if (safe) attributes.push(safe);
   }
+  // `a` and `object` exist here ONLY to carry the manager's uploaded lease through the
+  // authorizing route. One whose URL attribute did not survive validation has no purpose, so
+  // it is dropped rather than left behind as an inert shell. Its closing tag drops with it.
+  if (tagName === "a" || tagName === "object") {
+    if (!attributes.some((attr) => / (?:href|data)=/.test(attr))) return "";
+    urlTagDepth[tagName as "a" | "object"] += 1;
+  }
   return `<${tagName}${attributes.join("")}>`;
+  };
+}
+
+/**
+ * HTML ends a comment at `<!-->`, `<!--->` and `--!>` as well as at `-->`. A `<!--[\s\S]*?-->`
+ * tokenizer does not model those, so a browser treats everything after one as LIVE MARKUP
+ * while the tokenizer still sees a single opaque comment. That carried an event handler
+ * straight through the allowlist. Rewrite them into ordinary terminators before tokenizing,
+ * so whatever follows is sanitized like any other markup.
+ */
+function normalizeCommentTerminators(value: string): string {
+  return value
+    .replace(/<!--->/g, "<!---->")
+    .replace(/<!-->/g, "<!---->")
+    .replace(/--!>/g, "-->");
 }
 
 /** Whether the input already fits the document allowlist without byte changes. */
@@ -127,8 +201,13 @@ function isAlreadySafeLeaseDocument(value: string): boolean {
   if (styleBlocks.some((match) => !isSafeCss(match[1] ?? ""))) return false;
   for (const token of value.matchAll(TAG_TOKEN)) {
     const source = token[0];
-    if (source.startsWith("<!--")) continue;
-    const sanitized = sanitizeTag(source);
+    if (source.startsWith("<!--")) {
+      if (VERBATIM_COMMENT.test(source)) continue;
+      // A comment carrying angle brackets is markup smuggling, not a comment.
+      if (/[<>]/.test(source.slice(4, -3))) return false;
+      continue;
+    }
+    const sanitized = makeTagSanitizer()(source);
     if (!sanitized) return false;
     // Normalise only insignificant whitespace and a self-closing slash while
     // comparing. Returning the original below preserves the exact signed bytes.
@@ -142,12 +221,15 @@ function isAlreadySafeLeaseDocument(value: string): boolean {
 /** Remove executable markup, event handlers, URLs, and resource-loading tags. */
 export function sanitizeLeaseDocumentHtml(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
-  if (isAlreadySafeLeaseDocument(value)) return value;
-  const withoutBlockedElements = stripUnclosedStyleTail(value)
+  const normalized = normalizeCommentTerminators(value);
+  // Byte preservation is only sound when normalization changed nothing. If it did, the
+  // original still carries the abrupt terminator, so it must go through the rewrite.
+  if (normalized === value && isAlreadySafeLeaseDocument(value)) return value;
+  const withoutBlockedElements = stripUnclosedStyleTail(normalized)
     .replace(BLOCKED_ELEMENTS, "")
     .replace(BLOCKED_VOID_ELEMENTS, "")
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (block, css: string) => (isSafeCss(css) ? block : ""));
-  const sanitized = withoutBlockedElements.replace(TAG_TOKEN, sanitizeTag);
+  const sanitized = withoutBlockedElements.replace(TAG_TOKEN, makeTagSanitizer());
   return sanitized.trim() || null;
 }
 
@@ -158,7 +240,38 @@ type VerbatimClauseResult = { ok: true; html: string } | { ok: false; error: str
  * surrounding document but cannot remove or rewrite a marked clause. P7 has
  * not landed yet, so unmarked generated leases remain editable today.
  */
+function preserveDisclosureParagraphs(originalHtml: string, editedHtml: string): VerbatimClauseResult {
+  const originals = [...originalHtml.matchAll(DISCLOSURE_PARAGRAPH)];
+  if (originals.length === 0) return { ok: true, html: editedHtml };
+
+  // Keyed by rule id, so reordering the surrounding text is fine but losing a clause is not.
+  const byRule = new Map<string, string>();
+  for (const match of originals) byRule.set(match[1]!.toLowerCase(), match[0]);
+
+  const seen = new Set<string>();
+  const restored = editedHtml.replace(DISCLOSURE_PARAGRAPH, (whole, ruleId: string) => {
+    const key = String(ruleId).toLowerCase();
+    const original = byRule.get(key);
+    if (!original) return whole; // A forged id the original never had; the count check rejects it.
+    seen.add(key);
+    return original; // Restore the exact statutory bytes, whatever was typed over them.
+  });
+
+  for (const key of byRule.keys()) {
+    if (!seen.has(key)) {
+      return {
+        ok: false,
+        error: "Required disclosure clauses cannot be removed. Edit the surrounding text only.",
+      };
+    }
+  }
+  return { ok: true, html: restored };
+}
+
 export function preserveVerbatimDisclosureClauses(originalHtml: string, editedHtml: string): VerbatimClauseResult {
+  const paragraphs = preserveDisclosureParagraphs(originalHtml, editedHtml);
+  if (!paragraphs.ok) return paragraphs;
+  editedHtml = paragraphs.html;
   const originals = [...originalHtml.matchAll(VERBATIM_BLOCK)];
   if (originals.length === 0) return { ok: true, html: editedHtml };
   const edited = [...editedHtml.matchAll(VERBATIM_BLOCK)];

@@ -1535,10 +1535,12 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
 export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
   const raw = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
   const documentHtml = stripLeaseAiDisclaimerFromHtml(raw);
-  // Once a signature exists the exact document bytes are execution evidence.
-  // New manual HTML is already sanitized on every write; do not mutate a
-  // signed historical document while rendering it.
-  return hasAnyLeaseSignature(row) ? documentHtml : sanitizeLeaseDocumentHtml(documentHtml);
+  // Sanitize on the way OUT as well, signed or not. The stored bytes are untouched, so the
+  // execution evidence and its hash are unaffected; this only governs what gets rendered.
+  // Signed rows used to skip this, which left the write path as the sole defense, and rows
+  // written before the editor had a sanitizer at all were never sanitized on write. One of
+  // those, once signed, would have rendered raw into the resident's iframe.
+  return sanitizeLeaseDocumentHtml(documentHtml);
 }
 
 export function appendLeaseThreadMessage(

@@ -123,6 +123,11 @@ function stateSignalFromHaystack(hay: string): string | null {
 
 function resolveFromHaystack(hay: string): JurisdictionKey | null {
   if (!hay.trim()) return null;
+  // An explicitly out-of-scope state wins over every other signal. Without this an Oregon
+  // address on "Washington St" resolved to WASHINGTON and generated a lease citing the RCW,
+  // which is the wrong-governing-law failure this module exists to prevent. It also keeps a
+  // street or building name from dragging a property into a state it is not in.
+  if (/\b(or|oregon)\b/i.test(hay)) return null;
   const stateSignal = stateSignalFromHaystack(hay);
   if (SF_RE.test(hay)) return stateSignal && stateSignal !== "CA" ? { state: stateSignal } : { state: "CA", city: "san_francisco" };
   if (SEATTLE_RE.test(hay) || SEATTLE_STREET_RE.test(hay)) {
@@ -173,7 +178,14 @@ export function jurisdictionRuleScopes(key: JurisdictionKey): string[] {
   if (!entry) return [];
   const city = normalizedCity(key.city);
   const cityScope = city ? entry.cities?.[city]?.ruleScope : undefined;
-  if (cityScope) return [...(JURISDICTION_INHERITANCE[cityScope] ?? [])];
+  // Federal rules apply everywhere. Returning the raw inheritance list meant a jurisdiction
+  // missing from jurisdiction_inheritance produced an EMPTY scope list, which filtered out
+  // every rule, reported canCompleteLease true, and rendered a lease with no disclosures and
+  // no warning. Fail toward disclosing, never toward silence.
+  if (cityScope) {
+    const inherited = JURISDICTION_INHERITANCE[cityScope] ?? [];
+    return inherited.length ? [...inherited] : ["federal"];
+  }
   return ["federal", entry.ruleScope];
 }
 

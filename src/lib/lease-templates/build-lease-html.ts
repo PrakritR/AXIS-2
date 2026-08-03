@@ -290,6 +290,10 @@ type ProrateOptions = {
   utilitiesAmount?: number;
 };
 
+/** Cross-reference placeholders, resolved once every section has claimed its number. */
+const RENT_SECTION_TOKEN = "__RENT_SECTION__";
+const UTILITIES_SECTION_TOKEN = "__UTILITIES_SECTION__";
+
 /** Placeholder for the prorated section's number, swapped for a counter value at render. */
 const PRORATED_SECTION_TOKEN = "__PRORATED_SECTION__";
 
@@ -350,7 +354,7 @@ function proratedBlock(
       ? span
         ? ""
         : `<p>Beginning the first full month, the full monthly utilities estimate stated in Section 4 applies.</p>`
-      : `<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>`;
+      : `<p>Beginning the first full month, regular rent and utilities as stated in Sections ${RENT_SECTION_TOKEN} and ${UTILITIES_SECTION_TOKEN} apply.</p>`;
     return `
 <h2>${PRORATED_SECTION_TOKEN}. ${heading}</h2>
 <p>${intro}</p>
@@ -615,7 +619,24 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const defaultDisclosureHtml = disclosureHtml("Default & Remedies / Governing Law");
   const noticesDisclosureHtml = disclosureHtml("Rent / Notices");
   const statutoryDisclosureHtml = disclosureHtml("Statutory Disclosures");
-  const leadDisclosureHtml = disclosureHtml("Lead-Based Paint Disclosure");
+  const leadDisclosureFired = disclosureHtml("Lead-Based Paint Disclosure");
+  // A legally required disclosure must NEVER disappear because a trigger field is blank.
+  // fed-lead-paint keys on year_built, which is unknown on most listings, so keying the
+  // SECTION on firedRules dropped the federal lead-paint disclosure from every lease whose
+  // year is unset. That is precisely the fail-toward-silence this engine exists to prevent.
+  // When the trigger is unknown, fall back to the self-qualifying paragraph, which is correct
+  // whether or not the year is eventually supplied.
+  const leadTriggerUnknown = Boolean(
+    disclosureEvaluation &&
+      [...disclosureEvaluation.unknownTriggers, ...disclosureEvaluation.unknownUnverifiedTriggers].some(
+        (entry) => entry.rule.id === "fed-lead-paint",
+      ),
+  );
+  const leadDisclosureHtml =
+    leadDisclosureFired ||
+    (leadTriggerUnknown || !disclosureEvaluation
+      ? `<p>If the property was built before 1978, federal law (42 U.S.C. &sect; 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet &quot;Protect Your Family From Lead in Your Home&quot; or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>`
+      : "");
   const moveInDisclosureHtml = disclosureHtml("Addendum A \u2014 Move-In Condition Report");
   const bedBugDisclosureHtml = disclosureHtml("Addendum B \u2014 Bed Bug Disclosure");
   const moldDisclosureHtml = disclosureHtml("Addendum C \u2014 Mold & Moisture Policy");
@@ -949,7 +970,7 @@ ${
     : ""
 }
 
-<h2>${nextSection()}. Rent</h2>
+<h2>${nextSection("rent")}. Rent</h2>
 <table>
   <tr><th width="50%">${rentRowLabel}</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
@@ -988,7 +1009,7 @@ ${depositDisclosureHtml}
 <h2>${nextSection()}. Returned Payments</h2>
 <p>If any payment is dishonored, reversed, or returned unpaid, Resident shall promptly pay the original amount due and any actual bank or processing charges.${longTermReturnedPaymentFee != null && longTermReturnedPaymentFee > 0 ? ` A returned-payment fee of <strong>${fmtUsd(longTermReturnedPaymentFee)}</strong> may also be charged${config.returnedPaymentStatuteRef ? ` subject to ${escapeHtml(config.returnedPaymentStatuteRef)}` : ""}.` : ""} Repeated returned payments may require future payment by certified funds or another method approved in writing by Landlord.</p>
 
-<h2>${nextSection()}. Utilities &amp; Services</h2>
+<h2>${nextSection("utilities")}. Utilities &amp; Services</h2>
 ${utilitiesBreakdown}
 <p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesEstimateSentence} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 ${longTermTrashViolationFee != null && longTermTrashViolationFee > 0 ? `<p><strong>Trash rules:</strong> Resident must bag trash, use designated containers, break down boxes, and keep trash and recyclables out of hallways. A documented violation may result in a <strong>${fmtUsd(longTermTrashViolationFee)}</strong> fee per occurrence, to the extent permitted by applicable law.</p>` : ""}
@@ -1193,6 +1214,14 @@ ${longTermGuestCap ? `<p><strong>Guest violations:</strong> Gatherings beyond th
 ${customTermsAddendumHtml(subNorm, "Addendum F — Additional Provisions from Property Manager")}
 `;
 
+  // Cross-references are resolved LAST, because a section can be referenced by text that is
+  // emitted before it has claimed its number.
+  const bodyWithSectionRefs = body
+    .split(RENT_SECTION_TOKEN)
+    .join(String(sectionRefs.rent ?? 4))
+    .split(UTILITIES_SECTION_TOKEN)
+    .join(String(sectionRefs.utilities ?? 8));
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1202,7 +1231,7 @@ ${customTermsAddendumHtml(subNorm, "Addendum F — Additional Provisions from Pr
   <style>${leaseCss()}</style>
 </head>
 <body>
-${body}
+${bodyWithSectionRefs}
 </body>
 </html>`;
 }

@@ -287,6 +287,35 @@ describe("lease documents: generation, formatting and ledger agreement", () => {
     expect(leadHeadings.length).toBeLessThanOrEqual(1);
   });
 
+  it("an UNKNOWN year still carries the lead-paint disclosure", () => {
+    // The regression this guards: keying the section on firedRules dropped it entirely when
+    // year_built was blank, which is most listings. A required federal disclosure must never
+    // vanish because a field is empty.
+    const pid = "e2e-leadpaint-unknown";
+    seedListing(pid, PLACES.seattle, room({ monthlyRent: 825 }));
+    const body = html(application(pid));
+    save("10-seattle-unknown-year-lead-paint", body);
+    expect(headings(body).some((x) => /lead/i.test(x))).toBe(true);
+    expect(body).toContain("4852d");
+  });
+
+  it("the prorated cross-reference names the REAL rent and utilities sections", () => {
+    // A mid-month start adds the prorated section, which shifts every number after Rent. The
+    // reference used to be hardcoded "Sections 4 and 9" and pointed at Use/Occupancy.
+    const pid = "e2e-prorated-xref";
+    seedListing(pid, PLACES.seattle, room({ monthlyRent: 825, utilitiesEstimate: "175" }));
+    const body = html(application(pid, { leaseStart: "2026-09-14", leaseEnd: "2027-09-13" }));
+    save("11-seattle-prorated-crossref", body);
+
+    const ref = body.match(/Sections (\d+) and (\d+) apply/);
+    expect(ref).not.toBeNull();
+    const named = headings(body);
+    const rentNo = Number(named.find((x) => /^\d+\. Rent$/.test(x))!.split(".")[0]);
+    const utilNo = Number(named.find((x) => /^\d+\. Utilities/.test(x))!.split(".")[0]);
+    expect(Number(ref![1])).toBe(rentNo);
+    expect(Number(ref![2])).toBe(utilNo);
+  });
+
   it("a post-1978 property does not carry it", () => {
     const pid = "e2e-post1978";
     seedListing(pid, PLACES.seattle, room({ monthlyRent: 825 }), { yearBuilt: 2015 });
