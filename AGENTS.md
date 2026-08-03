@@ -375,6 +375,15 @@ resident, vendor, and admin portals:
 - **Section cards:** `PortalCollapsibleSection` with title + inline chevron,
   subtitle on the next line (`titleVariant="resident"` for property-portal detail).
 - **Mobile cards:** chevron beside title, not `justify-between` at far right.
+- **Header actions reach a phone EXACTLY ONCE** — `ManagerPortalPageShell` renders
+  `PortalPageTitleBand` at *every* breakpoint on the `useInlineTitleBand` path, so a
+  section is either **band-only** (ungated `titleAside`, no mobile actions row) or
+  **split** (`hidden md:flex` `titleAside` + an `md:hidden` row). Mixing them draws
+  every control twice on mobile — that shipped to production as two overlapping
+  "Apply to property" / "Schedule a tour" buttons — and deleting the row from a split
+  section leaves zero. The two shapes, and the five sections still on `split`, are in
+  [`docs/portal-list-section-layout.md`](docs/portal-list-section-layout.md) rule 3;
+  `tests/unit/portal-inline-title-band-duplicate-controls.test.tsx` enforces both halves.
 
 Reference: resident detail sections in `manager-residents.tsx`; inbox table in
 `portal-inbox-ui.tsx`.
