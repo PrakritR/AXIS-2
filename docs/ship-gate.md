@@ -89,31 +89,59 @@ still runs, but the later fixtures it would have created are missing.
 
 ### Known-failing specs — expect these, don't re-triage them
 
-As of `main` @`94cfc09f` (run `30778729243`) the 18 failures below are
-**long-standing**: present in the 18h-earlier nightly run, not caused by the
-Communication/portal work, and reproducible locally against a correctly seeded
-dev/test project — so they are product/test drift, not CI infrastructure.
+As of `main` @`94cfc09f` (run `30778729243`) 18 of the 20 failures are
+**long-standing**, and they are not a long tail of unrelated bugs — they are
+**two root causes**. Evidence: each one also fails in the four earlier `main`
+runs that got as far as executing `e2e` (`30766248350`, `30741321358`,
+`30739338457`, `30736186602`), while the two dark-mode cases fail only in this
+run. So neither cause is CI infrastructure, and neither came from the
+Communication/portal work. Tracked externally as
+`axis-ci-e2e-persistent-failure`, which has no in-repo counterpart.
+
+**Cause 1 — one `data-attr` is in the DOM twice, so Playwright strict mode
+throws (12 cases).** Portal headers render the *same* action node twice and let
+CSS hide one per breakpoint — e.g. `manager-promotion.tsx` passes one
+`promotionNewButton` to both `PortalPageHeaderMobileActionsRow` and the desktop
+`titleAside`. `locator('[data-attr="promotion-new"]')` therefore resolves to 2
+elements and the call throws before asserting anything.
 
 ```text
-bundle-group-manual-chrome.spec.ts:53      [data-wizard-field=applyingAsGroup] never visible
-manager-portal.spec.ts:35                  a manager section renders no heading or main landmark
-manual-payment-verification.spec.ts:9      [data-attr=payments-setup] resolves to 2 elements (desktop + mobile copies)
-new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] never enabled
-promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] / heading "Promotion" never visible (×desktop+mobile = 8 cases)
-public-apply.spec.ts:13                    Continue button never visible
-resident-login-and-application.spec.ts:10  "applying as part of a group" never visible
-resident-login-and-application.spec.ts:19  searchbox never visible on tours-contact
-resident-portal.spec.ts:33                 a resident section renders no heading or main landmark
-tour-scheduling.spec.ts:10                 Continue button never visible
-tour-scheduling.spec.ts:17                 "what do you need help with" never visible
+promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] ×2      (desktop+mobile = 8 cases)
+manual-payment-verification.spec.ts:9      [data-attr=payments-setup] ×2
+new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] ×2
+manager-portal.spec.ts:35                  getByRole('heading').first().or(locator('main')) ×2
+resident-portal.spec.ts:33                 same ×2
 ```
 
-The markup these selectors target **does** exist in `src`, so these are
-runtime/data-state or duplicate-element problems — a section not reaching a
-rendered state, tier/paywall gating, or one component rendering twice — rather
-than deleted markup. Fixing them needs per-spec triage against a seeded local
-run. Tracked externally as `axis-ci-e2e-persistent-failure`, which has no
-in-repo counterpart.
+To fix: scope the specs to the rendered twin with `:visible` — the pattern
+`promotion-new-modal.spec.ts:36` already uses for `demo-nav-promotion` — or stop
+double-rendering the node. Note the duplicate is *also* an analytics defect: a
+`data-attr` is meant to name one element for PostHog autocapture (see
+`AGENTS.md`), and two nodes double-count the Action.
+
+**Cause 2 — the e2e web server is a production runtime, which deliberately hides
+the seeded fixtures (6 cases).** `playwright.config.ts` starts
+`npm run build && npm run start`, so `NODE_ENV=production` and `VERCEL_ENV` is
+unset, making `isProductionRuntime()` true. Every seeded property is owned by a
+`@test.proplane.local` manager, which `isPortalSandboxEmail()` classifies as
+sandbox, so `/api/public/property-lead` returns **404 "Property not found."**
+(`src/app/api/public/property-lead/route.ts`, the `isSandboxPublicListing`
+branch) and every public prospect page renders `ManagerLinkGate` — "This
+property link is invalid or no longer active."
+
+```text
+tour-scheduling.spec.ts:10/:17             /rent/tours-contact?propertyId=mgr-test-fir
+public-apply.spec.ts:13                    /rent/apply?propertyId=mgr-test-fir
+resident-login-and-application.spec.ts:10/:19
+bundle-group-manual-chrome.spec.ts:53
+```
+
+This is why the specs fail even though the row is present and `status = 'live'`
+— confirm with a direct query before assuming the seed is at fault. To fix:
+either give the `e2e` job a non-production runtime (`VERCEL_ENV: preview` in
+`.github/workflows/test.yml`) or seed the public-facing fixtures under a
+non-sandbox manager domain. The guard itself is correct and must not be relaxed:
+it is what keeps test listings off the real rent catalog.
 
 `admin-portal.spec.ts:68` and `mobile-portal-layout.spec.ts:22` are **flaky**,
 not failing — they pass on CI retry and pass locally. Do not file them as
