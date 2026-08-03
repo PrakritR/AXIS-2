@@ -109,34 +109,27 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "communication",
 ] as const;
 
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY = [
-  "tour",
-  "applications",
-  "dashboard",
-  "communication",
-] as const;
+/**
+ * Resident primary sets are DERIVED from `RESIDENT_BOTTOM_NAV_PRIMARY`, the one
+ * stage→tabs table `primaryOrderFor` actually reads. They were literal copies,
+ * so the table could change while these — and the tests asserting against
+ * them — kept describing a bar that no longer shipped.
+ */
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY =
+  residentBottomNavPrimarySections("pre_approval");
 
 /** @deprecated Use NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY */
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY;
 
 /** Application approved — lease not yet fully signed. */
-export const NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY = [
-  "lease",
-  "payments",
-  "dashboard",
-  "communication",
-] as const;
+export const NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY =
+  residentBottomNavPrimarySections("post_approval_pre_lease");
 
 /** @deprecated Use NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY */
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_LEASE_PRIMARY = NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY;
 
 /** Post-lease (both parties signed). */
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
-  "services",
-  "payments",
-  "dashboard",
-  "communication",
-] as const;
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = residentBottomNavPrimarySections("post_lease");
 
 export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis-users", "events"] as const;
 

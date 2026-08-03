@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/service", () => ({
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 function makeDbMock(options: {
-  applicationRows?: Array<{ row_data: unknown; updated_at?: string }>;
+  applicationRows?: Array<{ row_data: unknown; updated_at?: string; resident_email?: string }>;
   profile?: { application_approved?: boolean; manager_id?: string | null } | null;
   axisRecord?: { row_data: unknown } | null;
 }) {
@@ -187,5 +187,114 @@ describe("resident portal access state", () => {
 
     expect(access.hasSubmittedApplication).toBe(true);
     expect(access.hasCompletedApplicationSubmission).toBe(false);
+  });
+
+  // The captain's bug: the Applications tab read "Approved 1" while the nav
+  // stayed at pre_approval, so Lease and Payments were locked in the sidebar AND
+  // the phone bottom bar still led with Tour / Application. The resident-scoped
+  // applications API keys off the `resident_email` COLUMN; this resolver used to
+  // re-filter on the embedded `row_data.email` copy, so any drift between the two
+  // made it blind to an approval the resident could plainly see.
+  it("approves on the resident_email column even when row_data.email has drifted", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      makeDbMock({
+        applicationRows: [
+          {
+            updated_at: "2026-02-01T00:00:00Z",
+            resident_email: "drifted@example.com",
+            row_data: {
+              id: "AXIS-DRIFT1",
+              email: "typed-a-different-address@example.com",
+              bucket: "approved",
+              stage: "Approved",
+              property: "Test House",
+              residentUserId: "user-drift",
+            },
+          },
+        ],
+        profile: { application_approved: false, manager_id: null },
+      }) as never,
+    );
+
+    const access = await loadResidentPortalAccessState({
+      userId: "user-drift",
+      role: "resident",
+      email: "drifted@example.com",
+    });
+
+    expect(access.applicationApproved).toBe(true);
+    expect(access.hasCompletedApplicationSubmission).toBe(true);
+  });
+
+  it("keeps an approval when a NEWER in-progress application exists", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      makeDbMock({
+        applicationRows: [
+          {
+            updated_at: "2026-03-02T00:00:00Z",
+            resident_email: "second-apply@example.com",
+            row_data: {
+              id: "AXIS-NEWDRAFT",
+              email: "second-apply@example.com",
+              bucket: "pending",
+              stage: "In progress",
+              property: "Another House",
+            },
+          },
+          {
+            updated_at: "2026-03-01T00:00:00Z",
+            resident_email: "second-apply@example.com",
+            row_data: {
+              id: "AXIS-APPROVED",
+              email: "second-apply@example.com",
+              bucket: "approved",
+              stage: "Approved",
+              property: "Test House",
+            },
+          },
+        ],
+        profile: { application_approved: false, manager_id: null },
+      }) as never,
+    );
+
+    const access = await loadResidentPortalAccessState({
+      userId: "user-second",
+      role: "resident",
+      email: "second-apply@example.com",
+    });
+
+    expect(access.applicationApproved).toBe(true);
+  });
+
+  it("ignores withdrawn applications, like the resident's own list does", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      makeDbMock({
+        applicationRows: [
+          {
+            updated_at: "2026-04-01T00:00:00Z",
+            resident_email: "withdrawn@example.com",
+            row_data: {
+              id: "AXIS-WITHDRAWN",
+              email: "withdrawn@example.com",
+              bucket: "pending",
+              stage: "Submitted",
+              property: "Test House",
+              withdrawnAt: "2026-04-02T00:00:00Z",
+            },
+          },
+        ],
+        profile: { application_approved: false, manager_id: null },
+      }) as never,
+    );
+
+    const access = await loadResidentPortalAccessState({
+      userId: "user-withdrawn",
+      role: "resident",
+      email: "withdrawn@example.com",
+    });
+
+    expect(access.hasSubmittedApplication).toBe(false);
+    expect(access.hasCompletedApplicationSubmission).toBe(false);
+    expect(access.applicationApproved).toBe(false);
   });
 });

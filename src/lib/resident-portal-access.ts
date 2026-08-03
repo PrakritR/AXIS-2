@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import type {
   ManagerSubscriptionTier,
   ResidentPortalAccessState,
@@ -35,53 +37,75 @@ function isInProgressApplicationStage(stage: string | null | undefined): boolean
   return stage?.trim().toLowerCase() === "in progress";
 }
 
-function readLatestApplication(
-  records: Array<{ row_data: unknown; updated_at?: string | null }>,
-  email: string,
-  userId?: string | null,
-): {
+type ApplicationRecord = {
+  row_data: unknown;
+  updated_at?: string | null;
+  resident_email?: string | null;
+};
+
+type OwnedApplication = {
   id: string | null;
   bucket: string | null;
   stage: string | null;
   property: string | null;
-} {
-  const matching = records
-    .map((record) => {
-      const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
-        ? (record.row_data as Record<string, unknown>)
-        : null;
-      const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
-      if (!row || residentEmail !== email) return null;
-      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
-      if (linkedUserId && userId && linkedUserId !== userId) return null;
-      return {
+  updatedAt: string;
+};
+
+/**
+ * The applications this resident owns — the SAME predicate the resident's own
+ * Applications tab uses (`GET /api/manager-applications`, which for a resident
+ * overrides `row_data.email` with the `resident_email` COLUMN and then filters
+ * with `residentOwnsApplicationRow`), plus that list's withdrawn-row exclusion.
+ *
+ * Matching on `row_data.email` alone instead is how the nav went blind to a
+ * plainly approved application: the column and the embedded copy drift (the
+ * manager typed a different address, the resident later changed theirs), so the
+ * Applications tab counted "Approved 1" while this resolver saw nothing at all
+ * and dropped the resident back to the `pre_approval` stage — Lease, Payments
+ * and the whole bottom bar locked. Scope on the column, which is what the query
+ * above already filters by, so the two surfaces can never disagree.
+ */
+function readOwnedApplications(
+  records: ApplicationRecord[],
+  email: string,
+  userId?: string | null,
+): OwnedApplication[] {
+  const owned = records.flatMap((record) => {
+    const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
+      ? (record.row_data as Record<string, unknown>)
+      : null;
+    if (!row) return [];
+    const recordEmail = normalizeEmail(record.resident_email);
+    // Mirror the resident-scoped API: the stored column is the resident's address.
+    const rowForOwnership = { ...row, email: recordEmail || row.email } as Parameters<
+      typeof residentOwnsApplicationRow
+    >[0];
+    if (!residentOwnsApplicationRow(rowForOwnership, { email, userId }, { recordEmail })) return [];
+    if (isWithdrawnApplicationRow(rowForOwnership)) return [];
+    return [
+      {
         id: typeof row.id === "string" ? row.id.trim() || null : null,
         bucket: typeof row.bucket === "string" ? row.bucket.trim().toLowerCase() || null : null,
         stage: typeof row.stage === "string" ? row.stage.trim() || null : null,
         property: typeof row.property === "string" ? row.property.trim() || null : null,
         updatedAt: typeof record.updated_at === "string" ? record.updated_at : "",
-      };
-    })
-    .filter(Boolean) as Array<{
-      id: string | null;
-      bucket: string | null;
-      stage: string | null;
-      property: string | null;
-      updatedAt: string;
-    }>;
+      },
+    ];
+  });
 
-  if (!matching.length) {
-    return { id: null, bucket: null, stage: null, property: null };
-  }
+  owned.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  return owned;
+}
 
-  matching.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const latest = matching[0]!;
-  return {
-    id: latest.id,
-    bucket: latest.bucket,
-    stage: latest.stage,
-    property: latest.property,
-  };
+function latestApplicationOf(owned: OwnedApplication[]): {
+  id: string | null;
+  bucket: string | null;
+  stage: string | null;
+  property: string | null;
+} {
+  const latest = owned[0];
+  if (!latest) return { id: null, bucket: null, stage: null, property: null };
+  return { id: latest.id, bucket: latest.bucket, stage: latest.stage, property: latest.property };
 }
 
 /** Server-side: returns true when the resident has a lease that both manager and resident signed. */
@@ -126,33 +150,20 @@ const loadResidentPortalAccessStateCached = cache(
     const db = createSupabaseServiceRoleClient();
     const { data: applicationRows } = await db
       .from("manager_application_records")
-      .select("row_data, updated_at")
+      .select("row_data, updated_at, resident_email")
       .eq("resident_email", email)
       .order("updated_at", { ascending: false });
 
-    let latestApplication = readLatestApplication(applicationRows ?? [], email, userId);
-    let hasSubmittedApplication = (applicationRows ?? []).some((record) => {
-      const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
-        ? (record.row_data as Record<string, unknown>)
-        : null;
-      const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
-      if (!row || residentEmail !== email) return false;
-      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
-      if (linkedUserId && userId && linkedUserId !== userId) return false;
-      return true;
-    });
-    let hasCompletedApplicationSubmission = (applicationRows ?? []).some((record) => {
-      const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
-        ? (record.row_data as Record<string, unknown>)
-        : null;
-      const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
-      if (!row || residentEmail !== email) return false;
-      const linkedUserId = typeof row.residentUserId === "string" ? row.residentUserId.trim() : "";
-      if (linkedUserId && userId && linkedUserId !== userId) return false;
-      const stage = typeof row.stage === "string" ? row.stage : null;
-      return !isInProgressApplicationStage(stage);
-    });
-    let applicationApproved = latestApplication.bucket === "approved";
+    const ownedApplications = readOwnedApplications(applicationRows ?? [], email, userId);
+    let latestApplication = latestApplicationOf(ownedApplications);
+    let hasSubmittedApplication = ownedApplications.length > 0;
+    let hasCompletedApplicationSubmission = ownedApplications.some(
+      (application) => !isInProgressApplicationStage(application.stage),
+    );
+    // ANY approved application unlocks the approved stage — not just the newest
+    // row. A resident who applies to a second property after being approved for
+    // the first must not be dropped back to the pre-approval nav.
+    let applicationApproved = ownedApplications.some((application) => application.bucket === "approved");
 
     if ((!latestApplication.id || !applicationApproved) && userId) {
       const { data: profile } = await db
@@ -184,7 +195,8 @@ const loadResidentPortalAccessStateCached = cache(
             stage: typeof axisRow.stage === "string" ? axisRow.stage.trim() || null : null,
             property: typeof axisRow.property === "string" ? axisRow.property.trim() || null : null,
           };
-          applicationApproved = latestApplication.bucket === "approved";
+          // Never let this legacy lookup CLEAR an approval already found above.
+          applicationApproved = applicationApproved || latestApplication.bucket === "approved";
         }
       }
 

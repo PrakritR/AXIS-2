@@ -19,10 +19,21 @@ export function resolveResidentPortalNavStage(
   return "pre_approval";
 }
 
-/** Fixed native bottom bar tabs per stage (Settings stays in the profile menu). */
+/**
+ * Fixed native bottom bar tabs per stage (Settings stays in the profile menu).
+ *
+ * INVARIANT: every section here must be unlocked at that stage in
+ * `STAGE_UNLOCKED_SECTIONS` below. The bottom bar is the resident's whole
+ * navigation on a phone, so a primary tab that is locked is a dead tab — which
+ * is exactly what `application_submitted` shipped: it promoted Lease and
+ * Payments a stage early, so a resident who had submitted an application got a
+ * bar whose first two tabs did nothing. Approval is what unlocks Lease and
+ * Payments; a signed lease is what unlocks Services.
+ * Enforced by `tests/unit/resident-portal-nav.test.ts`.
+ */
 export const RESIDENT_BOTTOM_NAV_PRIMARY: Record<ResidentPortalNavStage, readonly string[]> = {
   pre_approval: ["tour", "applications", "dashboard", "communication"],
-  application_submitted: ["lease", "payments", "dashboard", "communication"],
+  application_submitted: ["tour", "applications", "dashboard", "communication"],
   post_approval_pre_lease: ["lease", "payments", "dashboard", "communication"],
   post_lease: ["services", "payments", "dashboard", "communication"],
 };

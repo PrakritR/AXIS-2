@@ -45,13 +45,36 @@ describe("resident portal nav stages", () => {
     ]);
   });
 
-  it("submitted bottom bar switches to lease, payments, dashboard, communication", () => {
+  // Regression: this used to be lease/payments — two tabs the same stage locks —
+  // so the phone bottom bar went half-dead the moment an application was submitted.
+  // Approval, not submission, is what unlocks Lease and Payments.
+  it("submitted bottom bar stays on tour, application, dashboard, communication", () => {
     expect(residentBottomNavPrimarySections("application_submitted")).toEqual([
-      "lease",
-      "payments",
+      "tour",
+      "applications",
       "dashboard",
       "communication",
     ]);
+  });
+
+  it("never puts a section on the bottom bar that its own stage locks", () => {
+    const stages = ["pre_approval", "application_submitted", "post_approval_pre_lease", "post_lease"] as const;
+    for (const stage of stages) {
+      for (const section of residentBottomNavPrimarySections(stage)) {
+        expect(
+          { stage, section, locked: residentSectionLockedForStage(section, stage) },
+        ).toEqual({ stage, section, locked: false });
+      }
+    }
+  });
+
+  it("unlocks lease + payments on approval and services once the lease is signed", () => {
+    expect(residentBottomNavPrimarySections("post_approval_pre_lease")).toContain("lease");
+    expect(residentBottomNavPrimarySections("post_approval_pre_lease")).toContain("payments");
+    expect(residentBottomNavPrimarySections("post_approval_pre_lease")).not.toContain("services");
+    expect(residentSectionUnlockedForStage("services", "post_approval_pre_lease")).toBe(false);
+    expect(residentBottomNavPrimarySections("post_lease")).toContain("services");
+    expect(residentSectionUnlockedForStage("services", "post_lease")).toBe(true);
   });
 
   it("post-approval bottom bar is lease, payments, dashboard, communication", () => {
