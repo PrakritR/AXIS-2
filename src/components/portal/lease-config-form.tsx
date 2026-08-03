@@ -115,7 +115,7 @@ type LeaseConfigFormProps = {
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
-/** Lease document source (left) and agreement type (right) — shared by lease modals. */
+/** Lease document source (left) and agreement type (right) shared by lease modals. */
 export function LeaseDocumentAndTypeFields({
   source,
   onSourceChange,
@@ -154,7 +154,7 @@ export function LeaseDocumentAndTypeFields({
       </div>
       <div>
         <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-type`}>
-          Lease type
+          Agreement type
         </label>
         <NativeSelect
           id={`${dataAttrPrefix}-lease-type`}

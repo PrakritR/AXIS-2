@@ -165,13 +165,13 @@ describe("lease generation with custom config", () => {
     const sub = subWith({
       leaseConfigMode: "custom",
       leaseCustomKind: "document",
-      leaseTemplateDocUrl: "https://x/storage/lease-template.pdf",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/lease-template.pdf",
       leaseTemplateDocName: "House lease.pdf",
     });
     const html = buildAiGeneratedLeaseHtml(leaseCtx(sub));
     expect(html).toContain("lease-template.pdf");
     expect(html).toContain("House lease.pdf");
-    expect(html).toContain("Placement Summary");
+    expect(html).toContain("TERMS RIDER");
     expect(html).toContain("Test Resident");
     expect(html).toContain("Electronic Signature");
   });

@@ -275,10 +275,14 @@ export function ManagerLeaseEditorModal({
       <div className="space-y-4">
         {bulkIds.length > 1 ? (
           <p className="text-sm text-muted">
-            These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
-            replaced when you save.
+            These settings apply to the selected agreement type on all {bulkIds.length} properties. The other
+            agreement type stays unchanged.
           </p>
         ) : null}
+        <p className="text-sm text-muted">
+          Configure the short-term and long-term agreements independently. A short stay without its own uploaded
+          PDF uses the generated stay agreement, never the long-term PDF.
+        </p>
         {templateId ? (
           <div>
             <label
