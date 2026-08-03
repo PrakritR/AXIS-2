@@ -114,6 +114,20 @@ export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
   FIELD_SELECT_MENU_HEADER_PX + FILTER_FIELD_MENU_SEARCH_PX,
 );
 
+/**
+ * Floor height for a RAISED filter sheet, so its menus are always containable
+ * (`computeFieldSelectMenuRectInHost` contains only when `host.height - 8 >= contentPx`).
+ * Without it a one-field sheet is ~179px and a full menu hung ~241px onto the dimmed
+ * scrim — the exact look that was reported. Derived from the widest menu plus the
+ * containment gap and a small cushion against sub-pixel rounding, never a magic number.
+ *
+ * The cost is dead space under a lone field, and it is the honest price of "stationary AND
+ * contained": growing the sheet when a menu opens would move it, which is the defect this
+ * whole pattern exists to remove. Leave that space as plain sheet background — do not fill
+ * it with invented UI.
+ */
+export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX = FILTER_MENU_CONTENT_PX + 12;
+
 type Option = { value: string; label: string };
 
 type FilterFieldsAccordionContextValue = {

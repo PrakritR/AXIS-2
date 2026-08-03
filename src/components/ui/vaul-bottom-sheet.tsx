@@ -81,6 +81,12 @@ export function VaulBottomSheet({
    * than class order. Only pass this on a bottom-anchored sheet.
    */
   maxHeightClass,
+  /**
+   * Floor height for the RAISED sheet, so a portaled menu can always be contained inside it
+   * rather than hanging onto the scrim. Clamped against the raised max-height, so a short
+   * viewport can never push the sheet's top off screen. Ignored unless `autoElevate`.
+   */
+  minHeightPx,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,6 +100,7 @@ export function VaulBottomSheet({
   /** When true, the sheet body does not scroll (e.g. an open filter field menu). */
   lockBodyScroll?: boolean;
   maxHeightClass?: string;
+  minHeightPx?: number;
 }) {
   const contentHugging = !fullScreen;
   const elevated = autoElevate && !fullScreen;
@@ -105,6 +112,16 @@ export function VaulBottomSheet({
   const elevatedPlacement =
     "bottom-[var(--portal-raised-sheet-offset)] top-auto " +
     "max-h-[calc(100dvh-var(--portal-raised-sheet-offset)-1rem)]";
+
+  /* `min()` against the same raised max-height, not a bare pixel floor: on a short viewport
+     a bare floor would out-rank max-height (min-height always wins) and push the sheet's
+     top off screen. */
+  const raisedMinHeight =
+    elevated && minHeightPx
+      ? {
+          minHeight: `min(${minHeightPx}px, calc(100dvh - var(${RAISED_SHEET_OFFSET_VAR}) - 1rem))`,
+        }
+      : undefined;
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
@@ -122,7 +139,9 @@ export function VaulBottomSheet({
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
           style={
-            elevated ? { ...RAISED_SHEET_STYLE, ...SHEET_TOUCH_ACTION } : SHEET_TOUCH_ACTION
+            elevated
+              ? { ...RAISED_SHEET_STYLE, ...SHEET_TOUCH_ACTION, ...raisedMinHeight }
+              : SHEET_TOUCH_ACTION
           }
           data-slot="vaul-bottom-sheet"
           data-elevated={elevated ? "true" : "false"}

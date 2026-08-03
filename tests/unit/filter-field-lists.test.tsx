@@ -23,6 +23,7 @@ import {
   FILTER_MENU_CONTENT_PX,
   FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH,
   PORTAL_FILTER_COMMUNICATION_PANEL_CLASS,
+  PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX,
   FilterCheckboxList,
   FilterCollapsibleSection,
   FilterFieldsAccordion,
@@ -350,6 +351,33 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     expect(sheet.style.getPropertyValue("--initial-transform")).toBe(
       "calc(100% + var(--portal-raised-sheet-offset))",
     );
+  });
+
+  it("floors the raised sheet tall enough to contain its widest menu", () => {
+    // A one-field sheet measured ~179px and could not contain a 264px menu, so the menu
+    // hung ~241px onto the dimmed scrim — the reported defect. The floor is derived from
+    // the menu, not typed in, and must clear `hostCanContainMenu` (host - 2*gap >= content).
+    const containmentGap = 4 * 2;
+    expect(PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX - containmentGap).toBeGreaterThanOrEqual(
+      FILTER_MENU_CONTENT_PX,
+    );
+
+    render(
+      <VaulBottomSheet
+        open
+        onOpenChange={() => {}}
+        title="Filter"
+        autoElevate
+        minHeightPx={PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}
+      >
+        <p>one field</p>
+      </VaulBottomSheet>,
+    );
+    const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
+    // Clamped against the raised max-height: a bare pixel floor would out-rank max-height
+    // on a short viewport and push the sheet's top off screen.
+    expect(sheet.style.minHeight).toContain(`min(${PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}px,`);
+    expect(sheet.style.minHeight).toContain("--portal-raised-sheet-offset");
   });
 
   it("leaves a viewport-filling sheet bottom-anchored (raising it would clip its top)", () => {

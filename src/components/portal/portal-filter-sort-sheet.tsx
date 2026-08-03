@@ -12,6 +12,7 @@ import {
   PORTAL_FILTER_BODY_CLASS,
   PORTAL_FILTER_ICON_CLASS,
   PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS,
+  PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX,
   portalFilterDropdownHeightPx,
   portalFilterDropdownWidthPx,
   portalFilterPanelSizeClass,
@@ -309,6 +310,10 @@ export function PortalFilterSortSheet({
           title="Filter"
           flushBody={mobileFlushBody}
           autoElevate={!mobileSheetFillsViewport}
+          /* A one-field sheet is ~179px and could not contain its own 264px menu, so the
+             menu hung onto the dimmed scrim. The floor buys containment; the dead space
+             under a lone field is the price of "stationary AND contained". */
+          minHeightPx={PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}
           lockBodyScroll={filterMenuOpen}
           /* Only the bottom-anchored (viewport-filling) sheet can use this — an elevated
              sheet derives its max-height from the raised offset and ignores the prop. */
