@@ -15,6 +15,7 @@ import {
   portalFilterDropdownHeightPx,
   portalFilterDropdownWidthPx,
   portalFilterPanelSizeClass,
+  FilterFieldsAccordionScope,
   FilterSheetScrollLockContext,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -188,15 +189,20 @@ export function PortalFilterSortSheet({
   const resolvedMobileSheetClass = mobileSheetClassName ?? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
   /* `filterMenuOpen` is only ever set from inside the mobile sheet's provider, so on the
      desktop dropdown/panel this stays false and their scroll regions are untouched. */
+  /* One accordion scope per SHEET, not per field group: a sheet composed from sibling
+     groups (Finances = ReportFilterBar + FinancesRowFilters) would otherwise hold one open
+     menu per group and stack them over the panel. */
   const fields = (
-    <FilterPanelFields
-      onReset={onReset}
-      extraModalContent={extraModalContent}
-      compact={compactPanel}
-      scrollLocked={filterMenuOpen}
-    >
-      {children}
-    </FilterPanelFields>
+    <FilterFieldsAccordionScope>
+      <FilterPanelFields
+        onReset={onReset}
+        extraModalContent={extraModalContent}
+        compact={compactPanel}
+        scrollLocked={filterMenuOpen}
+      >
+        {children}
+      </FilterPanelFields>
+    </FilterFieldsAccordionScope>
   );
 
   const filterDropdownPanel = (

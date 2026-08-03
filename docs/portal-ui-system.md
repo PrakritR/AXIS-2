@@ -268,10 +268,27 @@ or resize the panel.
   `FIELD_SELECT_MENU_ITEM_HEIGHT_PX` row, so a 1px difference cannot throw the menu
   over the fields it was opened from. The hysteresis only arbitrates the leftover
   case where NEITHER side can show 5 rows. Forcing down unconditionally rendered a
-  one-row menu for a trigger low in the viewport. Because both the sheet and the
-  desktop panel are `overflow-visible`, menus inside them are bounded by the
-  VIEWPORT (`bottomBoundPx`), not by the shell, so the bottom-most field still
-  opens downward with its full 5 rows.
+  one-row menu for a trigger low in the viewport.
+- **Containment beats anchoring; the viewport bound is a last resort.** A menu that
+  escapes its sheet onto the dimmed page reads as broken, so whenever the HOST can
+  hold the whole menu it is slid back inside its box — even when neither side of the
+  trigger alone has room, which can overlap the trigger by the shortfall. Only a host
+  too short to hold the menu at all (a one-field sheet) falls back to `bottomBoundPx`
+  and overhangs, because showing five rows outranks staying inside a box that cannot
+  fit them. Both hosts are `overflow-visible` so that fallback can render at all.
+- **The menu names its own field** (`FieldSelectMenuHeader`), because it covers its
+  trigger and, on a tight host, every label in the panel — measured on the 3-field
+  panel, an open menu covered all three. The header is BUDGETED into
+  `fieldSelectMenuContentPx` alongside the search row, never paid for with an option
+  row. `FIELD_SELECT_MENU_HEADER_PX` is bounded by the 3-field panel (19rem/304px vs
+  a 264px menu): grow it past that headroom and menus silently start escaping the
+  panel again. Re-check both when changing either.
+- **One open field per SHEET, not per group.** `PortalFilterSortSheet` wraps its
+  children in `FilterFieldsAccordionScope`, and `FilterFieldsAccordion` defers to an
+  enclosing scope rather than opening a second one — Finances composes its sheet from
+  two sibling groups (`ReportFilterBar` + `FinancesRowFilters`) and used to hold one
+  open menu per group, stacking two over the panel. `sectionId` must therefore be
+  unique across the whole sheet, not merely within a group.
   Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
 
 ## Modals scroll in ONE place

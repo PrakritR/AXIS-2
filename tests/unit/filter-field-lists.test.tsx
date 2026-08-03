@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import {
+  FIELD_SELECT_MENU_HEADER_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   computeFieldSelectMenuRect,
   computeFieldSelectMenuRectInHost,
@@ -31,6 +32,13 @@ import {
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
 
 afterEach(cleanup);
+
+/**
+ * Non-option chrome a portal filter menu reserves: the field-name header plus the search
+ * row. Both are BUDGETED on top of the five option rows — never taken out of them — so
+ * this is what the shell's five-row cap is measured against.
+ */
+const FILTER_MENU_CHROME_PX = FIELD_SELECT_MENU_HEADER_PX + FIELD_SELECT_MENU_SEARCH_PX;
 
 function makeOptions(n: number) {
   return Array.from({ length: n }, (_, i) => ({ value: `p${i}`, label: `Property ${i}` }));
@@ -125,7 +133,7 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     // The 5-row cap lives on the portaled shell (search row + 5 option rows); the
     // listbox is the scrollable flex child that shrinks under it.
     const shell = listbox.closest("[data-field-select-menu]") as HTMLElement;
-    const expectedMenuHeight = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+    const expectedMenuHeight = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
     expect(shell.style.maxHeight).toBe(`${expectedMenuHeight}px`);
     expect(FILTER_MENU_CONTENT_PX).toBe(expectedMenuHeight);
     expect(FILTER_LIST_MAX_HEIGHT_PX).toBe(FILTER_LIST_VISIBLE_ROWS * 40);
@@ -141,18 +149,45 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
     const shell = screen.getByRole("listbox").closest("[data-field-select-menu]") as HTMLElement;
 
-    const threeRowCap = fieldSelectMenuContentPx(3, FIELD_SELECT_MENU_SEARCH_PX);
-    const fiveRowCap = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+    const threeRowCap = fieldSelectMenuContentPx(3, FILTER_MENU_CHROME_PX);
+    const fiveRowCap = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
     expect(threeRowCap).toBeLessThan(fiveRowCap);
     expect(shell.style.maxHeight).toBe(`${threeRowCap}px`);
     // `height: auto` under that cap is what lets the shell stop at its real content.
     expect(shell.style.height).toBe("auto");
   });
 
+  it("names the field inside the menu, and does NOT pay for that header with an option row", () => {
+    // The menu overlays its own trigger and, on a tight host, every label in the panel —
+    // measured on the 3-field panel, an open menu covered all three. Without a header the
+    // user faces a list with nothing saying what is being filtered.
+    render(<Harness optionCount={30} />);
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const shell = screen.getByRole("listbox").closest("[data-field-select-menu]") as HTMLElement;
+
+    expect(within(shell).getByText("Property")).toBeTruthy();
+    // The header is added to the budget, so the five option rows survive intact.
+    expect(shell.style.maxHeight).toBe(
+      `${fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX)}px`,
+    );
+    expect(FILTER_MENU_CHROME_PX).toBe(FIELD_SELECT_MENU_SEARCH_PX + FIELD_SELECT_MENU_HEADER_PX);
+  });
+
+  it("keeps the header small enough that the menu still fits inside a 3-field panel", () => {
+    // The binding geometry: `portalFilterPanelSizeClass(3)` is 19rem/304px, and
+    // `computeFieldSelectMenuRectInHost` only contains a menu when the host can seat it.
+    // If the header ever grows past that headroom the menu silently starts escaping the
+    // panel again — the exact defect this branch was opened to fix.
+    const panel3Px = 19 * 16;
+    const containmentGap = 4 * 2;
+    expect(portalFilterPanelSizeClass(3)).toContain("19rem");
+    expect(FILTER_MENU_CONTENT_PX + containmentGap).toBeLessThanOrEqual(panel3Px);
+  });
+
   it("never grows the menu past 5 rows no matter how many options a field has", () => {
-    const fiveRowCap = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+    const fiveRowCap = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
     for (const count of [6, 12, 30, 400]) {
-      expect(fieldSelectMenuContentPx(count, FIELD_SELECT_MENU_SEARCH_PX)).toBe(fiveRowCap);
+      expect(fieldSelectMenuContentPx(count, FILTER_MENU_CHROME_PX)).toBe(fiveRowCap);
     }
   });
 
@@ -476,7 +511,7 @@ describe("portal filter dropdown positioning", () => {
       ({ top: 502, left: 16, right: 374, bottom: 546, width: 358, height: 44, x: 16, y: 502, toJSON: () => ({}) }) as DOMRect;
     Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
 
-    const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+    const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
     const hostHeight = 395;
 
     const rect = computeFieldSelectMenuRectInHost(button, contentPx, host, {
@@ -506,7 +541,7 @@ describe("portal filter dropdown positioning", () => {
       ({ top: 486, left: 16, right: 374, bottom: 530, width: 358, height: 44, x: 16, y: 486, toJSON: () => ({}) }) as DOMRect;
     Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
 
-    const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FIELD_SELECT_MENU_SEARCH_PX);
+    const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
 
     const contained = computeFieldSelectMenuRectInHost(button, contentPx, host, {
       preferOpenDown: true,

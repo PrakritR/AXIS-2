@@ -22,6 +22,17 @@ export const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 export const FIELD_SELECT_MENU_SEARCH_PX = 52;
 
 /**
+ * Height reserved for the in-menu field-name header. Deliberately small: it must be paid
+ * for out of the menu's own box WITHOUT costing an option row (the five-row rule is not
+ * negotiable) and WITHOUT pushing the menu past what its host can contain. The binding
+ * constraint is the 3-field filter panel — 19rem/304px against a 5-row + search menu of
+ * 264px — which leaves 32px of headroom before containment breaks, so this stays under it.
+ * Changing it means re-checking `portalFilterPanelSizeClass` against
+ * `computeFieldSelectMenuRectInHost`'s `hostCanContainMenu`.
+ */
+export const FIELD_SELECT_MENU_HEADER_PX = 28;
+
+/**
  * Height of exactly 5 option rows. The cap is applied to the portaled SHELL (via
  * {@link fieldSelectMenuContentPx} → `menuRect.maxHeight`), not to the list itself,
  * so a short list keeps the menu sized to its real content.
@@ -395,6 +406,21 @@ export function useFieldSelectMenu({
 
   const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
   return { listId, isClient, wrapRef, buttonRef, menuRect, portalHost };
+}
+
+/**
+ * Field name shown at the top of a portaled filter menu. The menu overlays its own trigger
+ * and, on a tight host, every field label in the panel — measured on the 3-field panel, an
+ * open menu covered all three labels — so without this the user faces a list of options
+ * with nothing on screen saying what is being filtered. Budgeted as
+ * {@link FIELD_SELECT_MENU_HEADER_PX}; see that constant before restyling it.
+ */
+export function FieldSelectMenuHeader({ label }: { label: string }) {
+  return (
+    <p className="field-dropdown-menu-surface shrink-0 truncate border-b border-border px-3 py-1 text-[11px] font-semibold uppercase leading-4 tracking-wide text-muted">
+      {label}
+    </p>
+  );
 }
 
 /**

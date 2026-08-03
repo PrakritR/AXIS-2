@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
-import { PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS, PORTAL_FILTER_COMMUNICATION_PANEL_CLASS } from "@/components/portal/filter-field-lists";
+import { PORTAL_FILTER_COMMUNICATION_PANEL_CLASS } from "@/components/portal/filter-field-lists";
 import { CommunicationFilterSortFields } from "@/components/portal/communication-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
@@ -246,7 +246,6 @@ export function ManagerCommunication({
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
       mobileFlushBody={true}
-      mobileSheetClassName={PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS}
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
         setListSort("recent");

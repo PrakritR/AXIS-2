@@ -6,11 +6,13 @@ import { createPortal } from "react-dom";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import {
+  FIELD_SELECT_MENU_HEADER_PX,
   FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   FIELD_SELECT_MENU_SHELL_CLASS,
   FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS,
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
+  FieldSelectMenuHeader,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
   fieldSelectMenuListMaxHeightPx,
@@ -77,8 +79,6 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
 /** Communication filter — four fields (house, role, resident, sort). */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
   `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex ${PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS} flex-col overflow-hidden`;
-/** Mobile Communication / inbox filter sheet — scroll inside the elevated sheet body. */
-export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS = "min-h-0";
 /**
  * Default compact mobile sheet when callers do not override height. Deliberately imposes NO
  * max-height of its own: the raised sheet already caps itself at `100dvh - 32vh - 1rem` and
@@ -108,10 +108,10 @@ const FILTER_FIELD_MENU_SEARCH_PX = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH
   ? FIELD_SELECT_MENU_SEARCH_PX
   : 0;
 
-/** Estimated menu height (search row + 5 option rows) for open-up/positioning math. */
+/** Estimated menu height (field header + search row + 5 option rows) for positioning math. */
 export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
-  FILTER_FIELD_MENU_SEARCH_PX,
+  FIELD_SELECT_MENU_HEADER_PX + FILTER_FIELD_MENU_SEARCH_PX,
 );
 
 type Option = { value: string; label: string };
@@ -137,8 +137,14 @@ export function useFilterAccordionClose(): () => void {
   return () => accordion?.setOpenId(null);
 }
 
-/** One open dropdown at a time — Excel-style filter sheet behavior. */
-export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
+/**
+ * The "one open at a time" SCOPE, with no markup of its own. `PortalFilterSortSheet` wraps
+ * every filter surface in one, so the scope is the PANEL rather than whichever component
+ * happened to group some fields. Finances composes its sheet from two sibling groups
+ * (`ReportFilterBar` + `FinancesRowFilters`), each of which used to own its own scope — so
+ * Property and Resident could sit open at the same time, two menus stacked over one panel.
+ */
+export function FilterFieldsAccordionScope({ children }: { children: ReactNode }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const setSheetScrollLocked = useContext(FilterSheetScrollLockContext);
 
@@ -149,9 +155,21 @@ export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
 
   return (
     <FilterFieldsAccordionContext.Provider value={{ openId, setOpenId }}>
-      <div className="grid gap-3 max-lg:gap-2">{children}</div>
+      {children}
     </FilterFieldsAccordionContext.Provider>
   );
+}
+
+/**
+ * One open dropdown at a time — Excel-style filter sheet behavior. Deliberately DEFERS to an
+ * enclosing scope instead of opening a second one, so sibling groups inside a single sheet
+ * still share one open field. `sectionId` must therefore be unique across the whole sheet,
+ * not merely within a group.
+ */
+export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
+  const enclosingScope = useContext(FilterFieldsAccordionContext);
+  const grid = <div className="grid gap-3 max-lg:gap-2">{children}</div>;
+  return enclosingScope ? grid : <FilterFieldsAccordionScope>{grid}</FilterFieldsAccordionScope>;
 }
 
 export function filterMultiSelectSummary(
@@ -230,10 +248,12 @@ export function FilterCollapsibleSection({
     FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || menuOptionCount > FILTER_LIST_VISIBLE_ROWS;
   /* Size the menu to its OWN option count, capped at 5 rows by `fieldSelectMenuContentPx`.
      A field with 5+ options always shows exactly 5 and scrolls the rest; a field with
-     fewer ends the box after its last row instead of padding out empty rows. */
+     fewer ends the box after its last row instead of padding out empty rows. The header and
+     search row are BUDGETED here rather than taken out of the rows: neither chrome row may
+     be paid for with an option row. */
   const menuContentPx = fieldSelectMenuContentPx(
     menuOptionCount,
-    showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+    FIELD_SELECT_MENU_HEADER_PX + (showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0),
   );
 
   const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
@@ -271,7 +291,12 @@ export function FilterCollapsibleSection({
         onPointerDown={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
       >
-        <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
+        <FieldSelectMenuHeader label={label} />
+        {/* The child list sizes itself against the space left AFTER the header, so it still
+            gets its five rows and never has to know the header exists. */}
+        <FieldSelectMenuShellHeightContext.Provider
+          value={menuRect.maxHeight - FIELD_SELECT_MENU_HEADER_PX}
+        >
           {children}
         </FieldSelectMenuShellHeightContext.Provider>
       </div>
