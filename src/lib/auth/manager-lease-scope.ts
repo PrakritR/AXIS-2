@@ -34,6 +34,9 @@ export async function collectLinkedPropertyIdsForUser(db: ServiceClient, userId:
       .eq("status", "accepted")
       .eq("invitee_user_id", userId);
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
+      // Contract unchanged (still the empty set = no linked access), but a real
+      // read failure is otherwise indistinguishable from "this user has no links".
+      console.error("Co-manager link membership lookup failed:", { userId, message: error.message });
       return linkedPropertyIds;
     }
 
@@ -81,6 +84,7 @@ export async function collectLinkedPropertyPermissionsForUser(
       .eq("status", "accepted")
       .eq("invitee_user_id", userId);
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
+      console.error("Co-manager link permissions lookup failed:", { userId, message: error.message });
       return byProperty;
     }
     for (const row of linkRows ?? []) {
@@ -233,13 +237,19 @@ export async function fetchLeasesForManagerUser(
  * then passes because the named property genuinely is theirs. So a
  * client-supplied `property_id` moves the row into whoever owns that property.
  *
- * Validated against THIS module's ownership notion — owned rows UNION the
- * co-manager linked ids, the same union `fetchLeasesForManagerUser` reads —
- * rather than direct ownership alone (`findPropertyIdsNotOwnedByManager`), which
- * would refuse a legitimate co-manager working on a property assigned to them.
+ * Allowed for the property's direct owner, or for a co-manager whose assignment
+ * carries the `leases` grant at EDIT level. That is deliberately STRICTER than
+ * the set `fetchLeasesForManagerUser` lists with (`linkedLeasePropertyIds`,
+ * `leases` at READ): filing or moving a lease under a property is a write, and
+ * co-manager writes require the edit level. It is also strictly narrower than
+ * bare link membership, which would let a co-manager without the `leases` grant
+ * write a row they are not allowed to read back. An assignment with NO checked
+ * permissions is still a full grant, so the ordinary co-manager is unaffected.
  *
- * Fails CLOSED on a read failure and logs it, like
- * `findPropertyIdsNotOwnedByManager`: a transient failure otherwise reads as
+ * Fails CLOSED on a read failure, like `findPropertyIdsNotOwnedByManager`. Every
+ * refusal is logged, not just the ownership query's own error: the linked-grant
+ * lookups below swallow their failures into "no access", and that path lands
+ * only on co-managers, so without a line here a transient failure reads as
  * "managers mysteriously cannot save leases" with nothing to correlate against.
  */
 export async function managerMayFileLeaseUnderProperty(
@@ -257,13 +267,19 @@ export async function managerMayFileLeaseUnderProperty(
     .eq("id", id)
     .maybeSingle();
   if (error) {
-    console.error("Lease property ownership lookup failed:", error.message);
+    console.error("Lease property ownership lookup failed:", { userId, propertyId: id, message: error.message });
     return { ok: false, error: error.message };
   }
   if (data) return { ok: true, allowed: true };
 
-  const linked = await collectLinkedPropertyIdsForUser(db, userId);
-  return { ok: true, allowed: linked.has(id) };
+  const allowed = await managerHasCoManagerPermissionForProperty(db, userId, id, "leases", "edit");
+  if (!allowed) {
+    console.error("Lease property filing refused: not owned, and no leases edit grant", {
+      userId,
+      propertyId: id,
+    });
+  }
+  return { ok: true, allowed };
 }
 
 /**

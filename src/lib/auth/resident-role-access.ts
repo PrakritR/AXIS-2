@@ -98,6 +98,19 @@ export async function authorizeResidentRole(
  * `profiles.role`, yielding `effectiveRole: "manager"` with no thrown error —
  * so the mismatch between its role list and the service-role read above is the
  * signal that its answer cannot be trusted.
+ *
+ * ONE-DIRECTIONAL, on purpose. A legacy `"resident"` returns immediately with no
+ * `profile_roles` read and no active-portal tiebreak, which keeps the hot path
+ * query-free for the single-role resident. So this corrects an account CREATED
+ * as a manager that also holds the resident role, but not the mirror: an account
+ * created as a resident that later gains the manager role
+ * (`profiles.role='resident'`, `profile_roles=['resident','manager']`) resolves
+ * to `"resident"` on the dual-audience routes even while acting in the manager
+ * portal — those routes return only its own resident rows, and a lease create
+ * writes its own email rather than its tenant's. That is pre-existing rather
+ * than introduced here, the cohort is empty in production today, and closing it
+ * would add a `profile_roles` read to every single-role resident request.
+ * Tracked as `axis-legacy-resident-role-mirror-cohort`.
  */
 export async function resolveResidentScopedActorRole(
   db: ServiceRoleClient,
