@@ -79,7 +79,7 @@ export function VaulBottomSheet({
     autoElevate &&
     elevated &&
     !fullScreen &&
-    "bottom-[max(26vh,calc(var(--portal-native-bottom-nav-inset,0px)+5.5rem))] top-auto";
+    "bottom-[max(32vh,calc(var(--portal-native-bottom-nav-inset,0px)+6rem))] top-auto";
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>

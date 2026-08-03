@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import {
   FIELD_SELECT_MENU_SEARCH_PX,
+  computeFieldSelectMenuRect,
   computeFieldSelectMenuRectInHost,
   computePortalFilterDropdownRect,
   fieldSelectMenuContentPx,
@@ -338,5 +339,31 @@ describe("portal filter dropdown positioning", () => {
     expect(rect.top).toBe(triggerBottomInHost + 4);
 
     document.body.removeChild(host);
+  });
+
+  it("opens filter field menus below the trigger on body portal when preferOpenDown is set", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 620,
+        left: 16,
+        right: 360,
+        bottom: 664,
+        width: 344,
+        height: 44,
+        x: 16,
+        y: 620,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const contentPx = 252;
+    const rect = computeFieldSelectMenuRect(button, contentPx, document.body, { preferOpenDown: true });
+    expect(rect.position).toBe("fixed");
+    expect(rect.top).toBe(664 + 4);
+
+    document.body.removeChild(button);
   });
 });

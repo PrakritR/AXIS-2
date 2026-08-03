@@ -186,7 +186,7 @@ export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,
   _portalHost: HTMLElement,
-  options?: { minWidth?: number },
+  options?: { minWidth?: number; preferOpenDown?: boolean },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
@@ -195,12 +195,13 @@ export function computeFieldSelectMenuRect(
   const contentHeight = contentPx;
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
   const spaceAbove = rect.top - viewportPadding;
-  const openUp = spaceBelow < contentHeight && spaceAbove > spaceBelow;
+  const preferOpenDown = options?.preferOpenDown ?? false;
+  const openUp = !preferOpenDown && spaceBelow < contentHeight && spaceAbove > spaceBelow;
   const viewportCap = Math.max(
     FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
-  const maxHeight = Math.min(contentHeight, viewportCap);
+  const maxHeight = preferOpenDown ? contentHeight : Math.min(contentHeight, viewportCap);
   const minWidth = options?.minWidth ?? 0;
   const width = Math.min(
     minWidth > 0 ? minWidth : rect.width,
@@ -234,6 +235,7 @@ export function useFieldSelectMenu({
   contentPx,
   minMenuWidth,
   align = "start",
+  preferOpenDown = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -242,6 +244,8 @@ export function useFieldSelectMenu({
   minMenuWidth?: number;
   /** `end` right-aligns the menu to the trigger (portal filter dropdown). */
   align?: "start" | "end";
+  /** Portal filter fields always open below the trigger (mobile sheets, bottom fields). */
+  preferOpenDown?: boolean;
 }) {
   const listId = useId();
   const isClient = useIsClient();
@@ -273,7 +277,10 @@ export function useFieldSelectMenu({
                 minWidth: minMenuWidth,
                 preferOpenDown: true,
               })
-            : computeFieldSelectMenuRect(button, contentPx, portalHost, { minWidth: minMenuWidth }),
+            : computeFieldSelectMenuRect(button, contentPx, portalHost, {
+                minWidth: minMenuWidth,
+                preferOpenDown,
+              }),
       );
     };
     updateMenuRect();
@@ -283,7 +290,7 @@ export function useFieldSelectMenu({
       window.removeEventListener("resize", updateMenuRect);
       window.removeEventListener("scroll", updateMenuRect, true);
     };
-  }, [align, open, contentPx, minMenuWidth]);
+  }, [align, open, contentPx, minMenuWidth, preferOpenDown]);
 
   useEffect(() => {
     if (!open) return;

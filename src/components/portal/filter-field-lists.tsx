@@ -73,9 +73,9 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
 /** Communication filter — four fields (house, role, resident, sort). */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
   `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[19rem] flex-col overflow-hidden`;
-/** Mobile Communication / inbox filter sheet — room for 4 fields + open menus. */
+/** Mobile Communication / inbox filter sheet — hug content so auto-elevate can lift the sheet. */
 export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS =
-  "h-[min(24rem,55vh)] max-h-[min(24rem,55vh)]";
+  "h-auto max-h-[min(24rem,55vh)]";
 /** Default compact mobile sheet when callers do not override height. */
 export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "h-auto max-h-[min(20rem,52vh)]";
 /** Tall mobile sheet for browse-home filters (AI + manual fields). */
@@ -219,6 +219,7 @@ export function FilterCollapsibleSection({
     onOpenChange: setOpen,
     contentPx: menuContentPx,
     minMenuWidth: FILTER_FIELD_MENU_MIN_WIDTH_PX,
+    preferOpenDown: true,
   });
 
   const menu =
