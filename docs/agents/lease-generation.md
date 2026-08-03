@@ -256,6 +256,42 @@ client storage layer, and a browser-reported IP is worthless as evidence.
 Capturing it means routing signature writes through a route handler, which is
 outside this agent's files. Flagged, not attempted.
 
+### A consent tick must not outlive what it consented to
+
+Both lease gates — the e-signature affirmation (`lease-signing-modal.tsx`) and the
+uploaded-lease review attestation (`uploaded-lease-review-modal.tsx`, below) — are
+mounted **without a `key` at a stable position** by every call site
+(`resident-lease-panel.tsx`, `manager-residents.tsx`,
+`manager-leases-pipeline-panel.tsx`). A new `row` / `parse` prop therefore
+RE-RENDERS rather than remounts, and `useState` initializers do not re-run:
+nothing resets on its own. That allowed two ways to agree to something you never
+saw — a retried parse carrying the weaker "I have read the original PDF myself"
+tick onto the stronger "I have compared this against the original PDF. The terms
+above are correct", and a live `row` swapping the document under an already
+ticked signing affirmation. **The evidence layer structurally cannot catch this:**
+`lease-execution-evidence.ts` hashes whatever is current AT signature time, so it
+records the substitution faithfully. The reset is the control.
+
+Rules for any new consent/attestation control here:
+
+- Reset the tick — and anything else staged against the old subject, such as the
+  review modal's `drafts`/`note`, which are submitted as human-confirmed
+  overrides and badged "Manager entered" — whenever a **content-derived**
+  identity of what is being attested to changes. Each component has a documented
+  `…Subject()` helper; extend that rather than adding a second scheme.
+- **Never key on object identity.** The pipeline re-syncs on a cadence and hands
+  back an equal-but-new object; clearing the box under a manager's fingers on a
+  background refresh is its own bug. Equally, keep the identity narrow enough
+  that an unrelated field (a new thread message) does not clear it — the signing
+  modal's subject is only the fields that decide WHICH document renders.
+- **Reset during render**, not in an effect — an effect runs after paint, so the
+  new subject would be painted with the old consent still ticked.
+- A featureless parse is not a unique document: `pending`/`failed` carry
+  `sourceSha256: null`, no `extractedAtIso` and no fields, so identity must also
+  include the upload (`managerUploadedPdf` file name + `uploadedAt`).
+- Coverage: `tests/unit/lease-signing-consent-carryover.test.tsx`,
+  `tests/unit/uploaded-lease-attestation-carryover.test.tsx`.
+
 ### Signed documents are immutable in practice
 
 **The server check is the one that matters.** `POST /api/portal-lease-pipeline`
@@ -519,7 +555,9 @@ again" in `UploadedLeaseReviewModal`) re-reads `managerUploadedPdf.originalDataU
 through the same `saveUploadedLeaseParse`. It never confirms: the fresh parse
 lands `needs_review`, so the human step still happens. `saveUploadedLeaseParse`
 refuses on the same predicate the gate uses, so a confirmation that no longer
-binds cannot lock a re-read out.
+binds cannot lock a re-read out. A retry also changes WHAT the manager is being
+asked to attest to, so the modal's tick and staged overrides reset with it — see
+[A consent tick must not outlive what it consented to](#a-consent-tick-must-not-outlive-what-it-consented-to).
 
 **Every canonical term is always listed.** `normalizeUploadedLeaseParse`
 backfills any `FIELD_MATCHERS` key a stored blob lost as `not_found` with an

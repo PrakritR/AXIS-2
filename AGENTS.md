@@ -1152,52 +1152,16 @@ below always apply; the files carry the full rationale, schemas, and gotchas.
 | Vendor invoicing (Phase 4) | `docs/agents/vendor-invoicing.md` | Invoice totals recomputed server-side from line items; vendor tools live in `vendorAgentRegistry`, never the manager registry. |
 | Lease generation (stay pricing, short-term doc, jurisdiction) | `docs/agents/lease-generation.md` | `resolveStayPricing` (`room-pricing.ts`) is the ONE decision for short-vs-long, which rate is active, and which deposit applies — the lease document AND the charge ledger both read it, so they can never quote different numbers. Deposit keys on `rentalType`, rate precedence keys on the resolved stay. NEVER author, infer, or paraphrase a statute citation: no lodger statute exists in `leases/disclosure-clause-rules.json`, so CA cites nothing. |
 | Resident payments (resident-paid processing, ACH clearing) | `docs/agents/resident-payments.md` | The resident pays the processing/service fee on every method (card/Link and ACH) so the manager's payout equals the subtotal; `processing` charges are ignored by late fees/reminders/re-pay. |
-| Lease generation & execution evidence | `docs/agents/lease-generation.md` | Every signature records the SHA-256 of the document THAT party was shown: per-signature, at signature time, over the base document, and never the copy carrying the certificate page. A row that claims execution (`leaseClaimsExecution`: `fullySignedAt` or any signature) can never have its document body replaced — `preserveSignedLeaseDocuments` guards `write()` — and a write that supplies the body and the execution claim TOGETHER is untrusted unless its bytes match the manager-filed PDF. Provenance fields (`documentSha256` / `templateVersion` / `executedJurisdiction`) absent means unknown; never backfill a guess. |
+| Lease generation & execution evidence | `docs/agents/lease-generation.md` | Every signature records the SHA-256 of the document THAT party was shown: per-signature, at signature time, over the base document, and never the copy carrying the certificate page. A row that claims execution (`leaseClaimsExecution`: `fullySignedAt` or any signature) can never have its document body replaced — `preserveSignedLeaseDocuments` guards `write()` — and a write that supplies the body and the execution claim TOGETHER is untrusted unless its bytes match the manager-filed PDF. Provenance fields (`documentSha256` / `templateVersion` / `executedJurisdiction`) absent means unknown; never backfill a guess. A consent tick (the e-signature affirmation, the uploaded-lease review attestation) must reset when a CONTENT-derived identity of what it consents to changes — the modals mount without a `key`, so nothing resets on its own, and the evidence layer records a substitution rather than catching it. |
 | Uploaded (third-party) leases | `docs/agents/lease-generation.md` | The upload stays the executed artifact; `uploadedLeaseParse` is an additive DERIVED reading beside it, never in `generatedHtml`. Extraction emits a term only when the document states it exactly once — otherwise BLANK and flagged, never a guess; it authors no clause and no citation; sections PARTITION the source so nothing is dropped. `uploadedLeaseReviewIsConfirmed` is the ONE read of "has a human confirmed this" (never compare `review.status` at a call site), and `sendLeaseToResident` **and** the agent's `send_lease_for_signature` both refuse until it clears. Its digest binding is an internal-consistency check, NOT tamper-proofing — `row_data` is writable by the row's own resident, so the gate is defeatable until that trust model is fixed in the lease-pipeline route lane. A row with no parse behaves exactly as before. |
 | Documents module | `docs/agents/documents-module.md` | `manager-documents` bucket is PRIVATE — bytes only via server-minted signed URLs after an ownership check. |
 | Lease templates + the anonymous listing payload | `docs/agents/lease-generation.md` | The public listing payload is an explicit ALLOWLIST (`publicListingProjection`) — a submission field reaches a prospect ONLY by being named there, and BOTH anonymous readers (`getPublicListings()` and `/api/public/property-lead`) must run through it. Lease templates live in the PRIVATE `lease-templates` bucket behind a stable `/api/portal/lease-template?path=…` URL that re-authorizes every request; never a public storage URL, never a persisted base64 `data:` URL. |
 | Demo / sandbox accounts | `docs/agents/demo-sandbox.md` | `/demo` must never write real rows — every authed fetch from demo surfaces is `isDemoModeActive()`-gated. The static snapshot ships EMPTY; a demo portfolio comes from the canonical `@test.proplane.local` accounts via the mirror, never a fictional fixture in code. |
-| Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. `manager_property_records.manager_user_id` is `on delete set null`, so an OWNERLESS row is a real production state: it is never a create (an unauthorized account must not adopt it), the co-manager branch preserves that absence as `null` — `""` is not a uuid and Postgres 500s the whole save — and ownership still changes only via `transferPropertyOwnership`. See `src/app/api/property-records/route.ts` + `tests/unit/property-records-owner-not-reassignable.test.ts`. |
+| Co-manager access | `docs/agents/co-manager-access.md` | Writes require `assertCoManagerModuleAccess(..., { level: "edit" })`; empty permissions object = full grant on assigned properties. A co-manager write never changes ownership — see "Property ownership" below for the ownerless-row rules on `POST /api/property-records`. |
 | SMS / phone system | `docs/agents/sms-system.md` | Outbound sends only from a per-manager work number (never fake a personal number); relay numbers stay disjoint from work numbers. Conversation identity is `owner:role:person_ref` (`sms-conversation-identity.ts`), NOT the phone pair — two people on one shared line must never share a thread. Public listing CTAs get their number from `resolveListingCtaSmsPhone` — production texts that listing's own manager, dev/preview the shared Claw line — and the browser never substitutes one. |
 | Vendor dispatch + vendor agent | `docs/agents/vendor-dispatch-agent.md` | The vendor agent is answer-only: reads pinned to one work order + `escalate_to_manager` via explicit allowlist; `row_data.dispatch` is server-owned. |
 | Manager account creation ("Get started") | `docs/agents/manager-account-creation.md` | `/auth/create-account` NEVER auto-redirects to a portal — a signed-in user still gets the full create form, and the partner-pricing OAuth callback returns there on every branch (free tier included, `account_ready=1` when provisioned) instead of resolving a portal path. Entering a portal is always an explicit click. The email/password form must send `fullName` + `phone`; `/api/auth/manager-register` 400s without them. |
 | Inbound support email → admin inbox | `docs/agents/inbound-email-inbox.md` | `support@prop-lane.space` (Resend Inbound `email.received`) lands in the `scope="admin"` inbox via the existing upsert layer; webhook Svix-verifies and fails closed on Vercel; the insert of thread id `inbound_email_<email_id>` makes re-delivery idempotent (unique-violation = no-op) and runs inline from metadata alone so a failed write 500s and Resend retries; the body arrives via a best-effort `after()` pass that writes only while the stored body is still the placeholder. Receive-only — an in-app reply never emails the sender. Never widen the founder identity — attribute TO it. |
-
-## A consent tick must not outlive what it consented to
-
-Both lease gates — the review attestation (`uploaded-lease-review-modal.tsx`) and
-the e-signature affirmation (`lease-signing-modal.tsx`) — are mounted **without a
-`key` at a stable position** by every call site (`manager-residents.tsx`,
-`manager-leases-pipeline-panel.tsx`, `resident-lease-panel.tsx`). A new `parse` /
-`row` prop therefore RE-RENDERS rather than remounts, and `useState` initializers
-do not re-run. Nothing resets on its own.
-
-That shipped two ways to agree to something you never saw: retrying a failed
-parse carried the weaker "I have read the original PDF myself" tick onto the
-stronger "I have compared this against the original PDF. The terms above are
-correct", and a live `row` let a re-upload swap the document under an already
-ticked signing affirmation. `lease-execution-evidence.ts` hashes whatever is
-current AT signature time, so it records the substitution faithfully — **the
-evidence layer cannot catch this; the reset is the control.**
-
-Rules for any new consent/attestation control:
-
-- Reset the tick — and anything else staged against the old subject, such as the
-  review modal's `drafts`/`note`, which are submitted as human-confirmed
-  overrides — whenever a **content-derived** identity of what is being attested
-  to changes. Each component has a documented `…Subject()` helper; extend that
-  rather than adding a second scheme.
-- **Never key on object identity.** The pipeline re-syncs on a cadence and hands
-  back an equal-but-new object; clearing the box under a manager's fingers on a
-  background refresh is its own bug. Equally, keep the identity narrow enough
-  that an unrelated field (a new thread message) does not clear it.
-- **Reset during render**, not in an effect — an effect runs after paint, so the
-  new subject would be painted with the old consent still ticked.
-- A featureless parse is not a unique document: `pending`/`failed` carry
-  `sourceSha256: null`, no `extractedAtIso` and no fields, so identity must also
-  include the upload (`managerUploadedPdf` file name + `uploadedAt`).
-- Coverage: `tests/unit/uploaded-lease-attestation-carryover.test.tsx`,
-  `tests/unit/lease-signing-consent-carryover.test.tsx`.
 
 ## Per-room rent basis: monthly (default) vs daily
 
@@ -1278,10 +1242,14 @@ either.
   notifies both sides). Only a MISSING row is a create, and only there does the
   body's `managerUserId` win (the admin inventory publishes on a manager's
   behalf; a non-admin naming anyone else gets 403). An EXISTING row whose
-  `manager_user_id` is blank — the column is `on delete set null` — is still an
-  edit, not a create: an admin may adopt it onto a manager, and every other
-  caller goes through the same co-manager gate as an owned row, so knowing a
-  public listing id never adopts an orphan. Coverage:
+  `manager_user_id` is blank — the column is `on delete set null`, so an
+  OWNERLESS row is a real production state — is still an edit, not a create: an
+  admin may adopt it onto a manager, and every other caller goes through the
+  same co-manager gate as an owned row, so knowing a public listing id never
+  adopts an orphan. The co-manager branch preserves that absence as `null` and
+  never writes `""` (not a uuid — Postgres rejects the whole upsert, which
+  surfaced as a 500 on an ordinary save) and never `user.id` (that would be the
+  silent adoption this route was hardened against). Coverage:
   `tests/unit/property-records-owner-not-reassignable.test.ts`.
 - **The seed reclaims drifted owners before anything else reads ownership.**
   `tests/helpers/reclaim-canonical-property-owners.mjs` (called from
