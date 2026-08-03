@@ -10,7 +10,7 @@ import {
   PortalSettingsSection,
 } from "@/components/portal/portal-settings-ui";
 import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_MOBILE_DETAIL_EXPAND,

@@ -61,6 +61,29 @@ immutable Storage objects (unique filenames) should be cached long; client sync
 loaders should reuse the shared TTL + in-flight guard pattern rather than
 fetching unconditionally.
 
+**`{ force: true }` bypasses BOTH of those guards**, and several panels force a
+refresh on mount, so a forced sync goes through `createCoalescedRefresher`
+(`src/lib/coalesced-refresh.ts`) instead of fetching directly. N concurrent
+forced callers cost at most **two** requests, and two rather than one is the
+correctness floor on purpose: a forced caller is never handed the in-flight
+request, which may have started before a write that caller just made
+(save-then-refresh is a real pattern here), so mid-flight callers share one
+queued follow-up that begins only after the current run settles. Wired into
+property-pipeline, pro-relationships, household-charges, and the dashboard's
+document-expiry counts. Each refresher is keyed on whatever makes two runs
+non-interchangeable — the viewer id where the fetch is per-user (a module-global
+cache would serve the previous manager's rows after an in-session account
+switch), `skipReconcile` for household charges (the resident path must not run
+the manager's reconcile).
+
+A server sync dispatches its store event **tagged** (`serverSyncOriginatedEvent`
+/ `isServerSyncOriginatedEvent` in `src/lib/property-pipeline-events.ts`),
+because the fresh snapshot is already in the local store by then. A listener
+that reacts by forcing another sync must check that flag and re-read local state
+instead, or listener and sync refetch each other. Local mutations stay untagged,
+so a listener that genuinely needs a round trip after a local write still gets
+one.
+
 **Planned change (not yet done):** the portal calendar still polls
 `/api/portal-schedule-records` (visibility-gated, 60s) to stay fresh. When
 instant propagation becomes a product need or polling volume grows, replace the
@@ -1181,6 +1204,18 @@ supports `asChild` via `@radix-ui/react-slot` so it can wrap a `<Link>`. It has 
 translate an old `size="sm"`/`size="icon"` into utility classes (`h-9 min-h-0 px-4 text-[13px]` /
 `h-10 w-10 min-h-0 px-0`) at the call site. `danger` stays text-only red per `docs/design.md` —
 never reintroduce a filled-red destructive variant.
+
+**The Button owns its own loading state — do not hand-roll one.** An `onClick` that returns a
+promise is tracked automatically: spinner, `aria-busy`, disabled, and further clicks ignored
+until it settles (an internal ref, not the `disabled` attribute, is what actually blocks a
+second click in the same tick — that is the double-submit guard on money paths). Pass an
+explicit `loading={…}` only for a promise the button does not own, such as a `type="submit"`
+inside a `<form onSubmit>`. Two call-site traps: **`onClick={() => void save()}` discards the
+promise and silently opts the button out** (write `onClick={() => save()}`), and `asChild`
+renders its single child alone, so it gets `aria-busy`/`data-loading` but no injected spinner.
+The rationale — including why a failed action is logged rather than rethrown — is in the
+component's doc comment. Coverage: `tests/unit/button-loading-state.test.tsx`,
+`tests/unit/button-loading-form-submit.test.tsx`.
 
 **Tab/pill rule enforcement.** `PortalPanelTabs` (`panel-tab-strip.tsx`, unused) and
 `resident-financials-panel.tsx` (hand-rolled `bg-foreground text-background` tabs) were both
