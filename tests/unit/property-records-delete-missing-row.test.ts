@@ -13,10 +13,13 @@
  * and `portal_pro_relationship_records`, queries `manager_application_records`
  * by the caller-supplied id, and REWRITES every match — stripping co-manager
  * grants and scrubbing residents' housing/placement fields to "Moved out" —
- * across EVERY manager, matching ids through a normalizing token comparison
- * rather than an exact string. So any signed-in account could aim a privileged,
+ * across EVERY manager. So any signed-in account could aim a privileged,
  * destructive, portfolio-wide cleanup at an arbitrary id, precisely BECAUSE the
- * row did not exist.
+ * row did not exist. It compounded: ids used to match through a normalizing
+ * token rather than an exact string, so even a fully authorized delete of a
+ * record the caller had just created could fold onto a victim's id. Ids now
+ * match EXACTLY, and that neighbouring step is covered by
+ * `clear-property-housing-access-exact-id-match.test.ts`.
  *
  * A delete of something that is not there must authorize and then do nothing.
  * The route now refuses a missing row as 404 before owner resolution, so the
