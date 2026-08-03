@@ -136,18 +136,33 @@ export async function POST(req: Request) {
     const isDelete = body.action === "delete";
 
     // Resolve who the write is attributed to, and authorize the caller.
+    //
+    // An EXISTING row's owner is never taken from the request body — not even
+    // for an admin. Every client that posts here mirrors `managerUserId`
+    // straight out of a browser-local pipeline bucket
+    // (`mirrorLocalPropertyPipelineToServer`, `mirrorAdminPropertyRecord`,
+    // `promoteLegacyPendingListingsToLive`), so honoring it let a stale local
+    // bucket keyed by another user id silently hand live listings to that
+    // account. The read path scopes strictly by `manager_user_id`, so the real
+    // manager's Properties tab then showed 0/0/0 while Residents, Applications,
+    // and the Communication filter — which read denormalized property labels off
+    // application/lease rows — kept showing the same houses. Ownership changes
+    // have exactly one door: `transferPropertyOwnership` (linked co-manager,
+    // audited, notifies both sides).
     let ownerForWrite: string;
-    if (admin) {
-      ownerForWrite = body.managerUserId?.trim() || existingOwnerId || user.id;
-    } else if (!existing) {
-      // Creating a brand-new record — only ever under yourself. A co-manager
-      // cannot create a property owned by someone else.
+    if (!existing || !existingOwnerId) {
+      // Creating a brand-new (or adopting an ownerless) record. An admin may
+      // attribute it to a manager — the admin inventory publishes on a
+      // manager's behalf — but a co-manager cannot create a property owned by
+      // someone else.
       ownerForWrite = body.managerUserId?.trim() || user.id;
-      if (ownerForWrite !== user.id) {
+      if (!admin && ownerForWrite !== user.id) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
-    } else if (existingOwnerId === user.id) {
-      ownerForWrite = user.id; // owner editing / deleting their own listing
+    } else if (admin || existingOwnerId === user.id) {
+      // Admin acting on a manager's listing, or the owner editing / deleting
+      // their own — the stored owner is authoritative either way.
+      ownerForWrite = existingOwnerId;
     } else {
       // Co-manager acting on a linked owner's listing: require the `properties`
       // module at edit (write) or delete level on THIS property. The owner is
