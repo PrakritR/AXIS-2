@@ -492,9 +492,9 @@ export function PortalSidebar({
     if (locked && !isSectionLockNavigable(s.section)) {
       // `title` as well as `aria-label`: an inert row has no destination and no
       // visible reason text, so without a tooltip a SIGHTED user taps a dead
-      // row and learns nothing — the lock reason ("Available after you submit
-      // an application", "Available after your lease is signed") only ever reached
-      // assistive tech. Applies to every resident lock, not one string.
+      // row and learns nothing — the lock reason ("Available after your
+      // application is approved", "Available after your lease is signed") only
+      // ever reached assistive tech. Applies to every resident lock, not one string.
       return (
         <span
           key={s.section}
