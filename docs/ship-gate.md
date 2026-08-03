@@ -98,6 +98,12 @@ run. So none of the causes is CI infrastructure, and none came from the
 Communication/portal work. Tracked externally as
 `axis-ci-e2e-persistent-failure`, which has no in-repo counterpart.
 
+The other two — `dark-mode.spec.ts` on `/portal/calendar/all` and `/admin/events`
+— were the one genuine regression in that run and are **fixed**, so expect 18,
+not 20. Cause and guard live with the code: the comment on the sticky calendar
+toolbar rule in `src/app/globals.css` and
+`tests/unit/stylesheet-root-selectors.test.ts`.
+
 Causes 1 and 2 share a *symptom* — a Playwright strict-mode violation reading
 "resolved to 2 elements" — but not a cause, and a fix for one does nothing for
 the other. Read the locator in the failure, not just the message.
