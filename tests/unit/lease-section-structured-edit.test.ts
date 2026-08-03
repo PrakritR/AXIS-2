@@ -4,7 +4,7 @@ import {
   parseLeaseSectionEditableParts,
   rebuildBodyHtmlFromParts,
 } from "@/lib/lease-section-structured-edit";
-import { injectLeasePreviewSectionMarkers, injectLeaseVisualEditDocument, parseLeaseHtmlSections } from "@/lib/lease-html-sections";
+import { parseLeaseHtmlSections } from "@/lib/lease-html-sections";
 
 describe("lease-section-structured-edit", () => {
   const body = `
@@ -36,23 +36,10 @@ describe("lease-section-structured-edit", () => {
   });
 });
 
-describe("injectLeasePreviewSectionMarkers", () => {
-  it("wraps parsed sections with data-lease-section-id markers", () => {
+describe("parseLeaseHtmlSections", () => {
+  it("keeps section selection in React by exposing stable section ids", () => {
     const html = `<!DOCTYPE html><html><body><h1>Lease</h1><h2>1. Parties</h2><p>A</p><h2>2. Rent</h2><p>B</p></body></html>`;
-    const marked = injectLeasePreviewSectionMarkers(html);
     const sections = parseLeaseHtmlSections(html);
-    for (const section of sections) {
-      expect(marked).toContain(`data-lease-section-id="${section.id}"`);
-    }
-    expect(marked).toContain("lease-preview-section-dblclick");
-  });
-});
-
-describe("injectLeaseVisualEditDocument", () => {
-  it("wraps sections and posts focus on double-click", () => {
-    const html = `<!DOCTYPE html><html><body><h2>1. Parties</h2><p>A</p></body></html>`;
-    const marked = injectLeaseVisualEditDocument(html);
-    expect(marked).toContain("lease-visual-section-focus");
-    expect(marked).toContain('data-lease-section-id="1-parties"');
+    expect(sections.map((section) => section.id)).toEqual(["lease-document-header", "1-parties", "2-rent"]);
   });
 });

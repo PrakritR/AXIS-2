@@ -1,9 +1,5 @@
-import {
-  applyLeaseSectionBodyEdits,
-  parseLeaseHtmlSections,
-  type LeaseHtmlSection,
-} from "@/lib/lease-html-sections";
-import { sanitizeManagerLeaseDocumentEdit } from "@/lib/lease-document-sanitizer";
+import { isEditableLeaseSection, type LeaseSectionEdit } from "@/lib/lease-section-text";
+import { parseLeaseHtmlSections, type LeaseHtmlSection } from "@/lib/lease-html-sections";
 import {
   leaseAllowsManagerDocumentEdits,
   readLeasePipeline,
@@ -12,88 +8,40 @@ import {
 } from "@/lib/lease-pipeline-storage";
 
 export function leaseDocumentHtmlForSectionEdit(row: LeasePipelineRow): string | null {
-  // P6 template rows materialize the manager's original PDF plus Terms Rider
-  // only at send time. Their temporary HTML preview is not the agreement body.
   if (row.managerUploadedPdf?.dataUrl || row.templateDocumentUrl) return null;
   return row.generatedHtml?.trim() || null;
 }
 
 export function readLeaseSectionsForEdit(row: LeasePipelineRow): LeaseHtmlSection[] {
   const html = leaseDocumentHtmlForSectionEdit(row);
-  if (!html) return [];
-  return parseLeaseHtmlSections(html);
+  return html ? parseLeaseHtmlSections(html) : [];
 }
 
-export function saveLeaseSectionBodyEdits(
+export function saveLeaseSectionEdits(
   leaseId: string,
-  sectionEdits: Readonly<Record<string, string>>,
+  edits: Readonly<Record<string, LeaseSectionEdit>>,
   managerUserId?: string | null,
 ): { ok: true; row: LeasePipelineRow } | { ok: false; error: string } {
-  const row = readLeasePipeline(managerUserId).find((r) => r.id === leaseId);
+  const row = readLeasePipeline(managerUserId).find((candidate) => candidate.id === leaseId);
   if (!row) return { ok: false, error: "Lease not found." };
-  if (!leaseAllowsManagerDocumentEdits(row)) {
-    return { ok: false, error: "This lease can no longer be edited." };
-  }
-  const baseHtml = leaseDocumentHtmlForSectionEdit(row);
-  if (!baseHtml) {
-    return { ok: false, error: "Upload a PDF lease or generate HTML before editing sections." };
-  }
-  if (!Object.keys(sectionEdits).length) {
-    return { ok: false, error: "No section changes to save." };
-  }
+  if (!leaseAllowsManagerDocumentEdits(row)) return { ok: false, error: "This lease can no longer be edited." };
 
-  const nextHtml = applyLeaseSectionBodyEdits(baseHtml, sectionEdits);
-  return persistLeaseDocumentHtml(leaseId, nextHtml, managerUserId);
-}
+  const sections = readLeaseSectionsForEdit(row);
+  if (!sections.length) return { ok: false, error: "No lease sections are available to edit." };
+  const validEdits = Object.fromEntries(
+    Object.entries(edits).filter(([sectionId, edit]) => {
+      const section = sections.find((candidate) => candidate.id === sectionId);
+      return Boolean(section && isEditableLeaseSection(section) && (edit.format === "text" || edit.format === "rich"));
+    }),
+  );
+  if (!Object.keys(validEdits).length) return { ok: false, error: "Choose an editable lease section." };
 
-function persistLeaseDocumentHtml(
-  leaseId: string,
-  nextHtml: string,
-  managerUserId?: string | null,
-): { ok: true; row: LeasePipelineRow } | { ok: false; error: string } {
-  const row = readLeasePipeline(managerUserId).find((r) => r.id === leaseId);
-  if (!row) return { ok: false, error: "Lease not found." };
-  if (!leaseAllowsManagerDocumentEdits(row)) {
-    return { ok: false, error: "This lease can no longer be edited." };
-  }
-  const baseHtml = leaseDocumentHtmlForSectionEdit(row);
-  if (!baseHtml) {
-    return { ok: false, error: "Upload a PDF lease or generate HTML before editing." };
-  }
-  const sanitized = sanitizeManagerLeaseDocumentEdit(baseHtml, nextHtml);
-  if (!sanitized.ok) return { ok: false, error: sanitized.error };
-  if (sanitized.html.trim() === baseHtml.trim()) {
-    return { ok: false, error: "No document changes to save." };
-  }
-
-  const iso = new Date().toISOString();
-  const version = (row.versionNumber ?? row.pdfVersion ?? 0) + 1;
   const saved = updateLeasePipelineRow(
     leaseId,
-    {
-      generatedHtml: sanitized.html,
-      generatedAtIso: iso,
-      pdfVersion: version,
-      versionNumber: version,
-      managerDocumentEditedAtIso: iso,
-      managerDocumentRegenerationRequiredAtIso: null,
-      managerUploadedPdf: null,
-      status: "Manager Review",
-      currentActorRole: "manager",
-      bucket: "manager",
-    },
+    { managerSectionEdits: { ...(row.managerSectionEdits ?? {}), ...validEdits } },
     managerUserId,
   );
-  if (!saved) return { ok: false, error: "Could not save document edits." };
-  const updated = readLeasePipeline(managerUserId).find((r) => r.id === leaseId);
+  if (!saved) return { ok: false, error: "Could not save section edits." };
+  const updated = readLeasePipeline(managerUserId).find((candidate) => candidate.id === leaseId);
   return updated ? { ok: true, row: updated } : { ok: false, error: "Saved but could not reload the lease." };
-}
-
-/** Save the full generated HTML after visual or multi-section editing. */
-export function saveLeaseDocumentHtml(
-  leaseId: string,
-  documentHtml: string,
-  managerUserId?: string | null,
-): { ok: true; row: LeasePipelineRow } | { ok: false; error: string } {
-  return persistLeaseDocumentHtml(leaseId, documentHtml, managerUserId);
 }

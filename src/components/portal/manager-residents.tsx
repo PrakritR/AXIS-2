@@ -2810,9 +2810,7 @@ export function ManagerResidents({
       <LeaseRegenerateConfirmModal
         open={regenerateConfirmLeaseId !== null}
         busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
-        replacesManagerEdits={Boolean(
-          regenerateConfirmLeaseId && readLeasePipeline(userId).find((row) => row.id === regenerateConfirmLeaseId)?.managerDocumentEditedAtIso,
-        )}
+        replacesManagerEdits={false}
         onClose={() => {
           if (generatingLeaseRowId) return;
           setRegenerateConfirmLeaseId(null);

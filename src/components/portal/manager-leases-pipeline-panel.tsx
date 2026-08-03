@@ -789,7 +789,7 @@ export function ManagerLeasesPipelinePanel({
       <LeaseRegenerateConfirmModal
         open={regenerateLeaseRow !== null}
         busy={Boolean(regenerateLeaseRow && generatingRowId === regenerateLeaseRow.id)}
-        replacesManagerEdits={Boolean(regenerateLeaseRow?.managerDocumentEditedAtIso)}
+        replacesManagerEdits={false}
         onClose={() => {
           if (!generatingRowId) setRegenerateLeaseRow(null);
         }}
