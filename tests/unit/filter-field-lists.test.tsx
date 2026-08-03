@@ -504,10 +504,24 @@ describe("portal filter dropdown positioning", () => {
     // The preference has to MEAN something: without it the roomier side wins on a 1px
     // difference and the menu jumps over the very fields it was opened from. With it,
     // flipping up must gain a full option row (FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40).
+    // Every case here is the NEITHER-fits branch (both sides < contentPx), which is the
+    // only place the hysteresis is allowed to arbitrate.
     const contentPx = 264;
     expect(resolveOpenUp(100, 120, contentPx, true)).toBe(false); // +20px above → stay down
     expect(resolveOpenUp(100, 120, contentPx, false)).toBe(true); // no preference → roomier wins
     expect(resolveOpenUp(100, 140, contentPx, true)).toBe(true); // +40px buys a row → up
+  });
+
+  it("takes the space ABOVE when it fits whole and below would clip a row short", () => {
+    // The captain's requirement is non-negotiable: every dropdown always shows 5 entries.
+    // Stickiness is a nicety, so where the two conflict always-5 wins — a pure difference
+    // test opened this DOWN at 246px (~4.6 rows) while a full 264px sat above it.
+    const contentPx = 264;
+    expect(resolveOpenUp(250, 270, contentPx, true)).toBe(true);
+    expect(resolveOpenUp(250, 270, contentPx, false)).toBe(true);
+    // The fits-below rule still comes first, so a menu that fits below never flips up
+    // just because there is even more room above it.
+    expect(resolveOpenUp(264, 700, contentPx, true)).toBe(false);
   });
 
   it("opens filter field menus below the trigger on body portal when the menu fits there", () => {

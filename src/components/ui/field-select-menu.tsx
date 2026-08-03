@@ -105,17 +105,21 @@ export function fieldSelectMenuContentPx(count: number, extraPx = 0): number {
 }
 
 /**
- * Which way a menu opens. `preferOpenDown` is a PREFERENCE, not a lock: it wins whenever the
- * menu fits below, but a trigger low in the viewport has no room there, and forcing down
- * anyway produced a one- or two-row menu instead of the five rows every filter dropdown owes
- * its user.
+ * Which way a menu opens, in FOUR ordered rules. The order is the whole design — do not
+ * reorder them or fold them together:
  *
- * When neither side fits, the preference is hysteresis rather than a plain "roomier side
- * wins": flipping up costs the user the established "filter menus open BELOW the trigger"
- * placement, so it has to BUY at least one more whole option row
- * ({@link FIELD_SELECT_MENU_ITEM_HEIGHT_PX}). Without that margin a 1px difference between
- * the two sides flips the menu over the fields it was opened from for no visible gain.
- * Without the preference the roomier side simply wins.
+ * 1. Fits below → open down. `preferOpenDown` is a PREFERENCE, not a lock, and this is
+ *    where it is honoured.
+ * 2. Fits fully above → open UP, whatever the preference says. Rules 1 and 2 are the
+ *    always-five-rows guarantee, so they come FIRST: a menu that would be clipped a row
+ *    short below while the space above fits it whole must take the space above.
+ * 3. Neither side fits and there is no preference → the roomier side wins.
+ * 4. Neither side fits and down is preferred → hysteresis. Flipping up costs the user the
+ *    established "filter menus open BELOW the trigger" placement, so it has to BUY at least
+ *    one more whole option row ({@link FIELD_SELECT_MENU_ITEM_HEIGHT_PX}); otherwise a 1px
+ *    difference flips the menu over the fields it was opened from for no visible gain. This
+ *    arbitrates ONLY the leftover case where neither side can show five rows, which is
+ *    exactly where the stickiness cannot cost a row.
  */
 export function resolveOpenUp(
   spaceBelow: number,
@@ -124,8 +128,9 @@ export function resolveOpenUp(
   preferOpenDown: boolean,
 ): boolean {
   if (spaceBelow >= contentPx) return false;
-  if (preferOpenDown) return spaceAbove >= spaceBelow + FIELD_SELECT_MENU_ITEM_HEIGHT_PX;
-  return spaceAbove > spaceBelow;
+  if (spaceAbove >= contentPx) return true;
+  if (!preferOpenDown) return spaceAbove > spaceBelow;
+  return spaceAbove >= spaceBelow + FIELD_SELECT_MENU_ITEM_HEIGHT_PX;
 }
 
 /** Scrollable list height inside a portaled menu shell (search row excluded). */

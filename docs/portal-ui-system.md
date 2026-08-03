@@ -247,15 +247,25 @@ or resize the panel.
   open flipped placement and visibly JUMPED — a measured placement can always jump,
   which is why this one is a prop. Only a sheet that already fills the viewport
   (browse-homes, via `mobileSheetFillsViewport`) stays bottom-anchored, because
-  raising it would push its top off screen. Two consequences worth knowing:
+  raising it would push its top off screen. Three consequences worth knowing:
   a raised sheet must suppress Vaul's `::after` overscroll fill (`globals.css`,
-  keyed on `data-elevated`) or that fill paints across the gap below it; and the
+  keyed on `data-elevated`) or that fill paints across the gap below it; the
   sheet body must NOT impose its own smaller max-height, or the lower fields get
-  pushed past the sheet's bottom edge.
-- **`preferOpenDown` is a preference, not a lock** (`resolveOpenUp`). A menu opens
-  down whenever it fits, and flips up only when it cannot — forcing down for a
-  trigger low in the viewport rendered a one-row menu. Because both the sheet and
-  the desktop panel are `overflow-visible`, menus inside them are bounded by the
+  pushed past the sheet's bottom edge; and the raised content must publish
+  `--initial-transform: calc(100% + var(--portal-raised-sheet-offset))`
+  (`RAISED_SHEET_STYLE`), because Vaul's `slideToBottom` exit keyframe translates
+  only 100% of the drawer's OWN height — a raised sheet left on the default ends
+  the close animation still on screen and then unmounts abruptly. That `style`
+  prop looks unused; it is load-bearing.
+- **`preferOpenDown` is a preference, not a lock** (`resolveOpenUp`), and it never
+  costs a row. Four ordered rules: fits below → down; else fits fully above → UP
+  regardless of the preference (rules 1–2 are the always-5-rows guarantee); else
+  no preference → the roomier side; else hysteresis — flipping up must buy a full
+  `FIELD_SELECT_MENU_ITEM_HEIGHT_PX` row, so a 1px difference cannot throw the menu
+  over the fields it was opened from. The hysteresis only arbitrates the leftover
+  case where NEITHER side can show 5 rows. Forcing down unconditionally rendered a
+  one-row menu for a trigger low in the viewport. Because both the sheet and the
+  desktop panel are `overflow-visible`, menus inside them are bounded by the
   VIEWPORT (`bottomBoundPx`), not by the shell, so the bottom-most field still
   opens downward with its full 5 rows.
   Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
