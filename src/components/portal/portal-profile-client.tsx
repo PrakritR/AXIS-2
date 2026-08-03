@@ -210,6 +210,9 @@ export function PortalProfileClient({
       <ManagerPortalPageShell
         title="Settings"
         subtitle="Manage your account settings and preferences."
+        // The mobile/native app bar already reads "Settings" — same as every
+        // other manager section, drop the duplicate in-page title on phones.
+        hideTitleOnMobileNav
       >
         {settingsBody}
       </ManagerPortalPageShell>
