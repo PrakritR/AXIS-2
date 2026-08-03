@@ -35,7 +35,8 @@ Use this checklist (also in `src/lib/platform/parity.ts` as `PLATFORM_CHANGE_CHE
 | `src/lib/portals/pro.ts` | Pro/manager nav section order |
 | `src/lib/portals/admin.ts` | Admin nav section order |
 | `src/lib/portals/resident-sections.ts` | Resident nav sections, free-tier ids, smoke-test paths |
-| `src/lib/native/portal-bottom-nav.ts` | Native bottom bar — full order (pins Settings last) plus curated per-kind primary sets (`NATIVE_BOTTOM_NAV_*_PRIMARY`) for the fixed scroll strip |
+| `src/lib/native/portal-bottom-nav.ts` | Native bottom bar — full order (pins Settings last) plus curated per-kind primary sets (`NATIVE_BOTTOM_NAV_*_PRIMARY`) for the fixed scroll strip. The resident sets are **derived** from `RESIDENT_BOTTOM_NAV_PRIMARY`, not editable here |
+| `src/lib/resident-portal-nav.ts` | Resident stage unlocks (`STAGE_UNLOCKED_SECTIONS`) and the resident bottom-bar tabs per stage (`RESIDENT_BOTTOM_NAV_PRIMARY`) — see AGENTS.md § Resident stage unlocks |
 | `src/lib/auth/native-entry-paths.ts` | Re-exports deep-link helpers from parity |
 | `tests/unit/platform-parity.test.ts` | CI guard — sections, tier gating, push paths |
 | `tests/unit/portal-nav-order.test.ts` | CI guard — web/native nav order parity and free/paid grouping |
@@ -53,7 +54,7 @@ Portal navigation order has **one source of truth**: the section arrays in `pro.
 | Native bottom bar (fixed primary strip) | `splitNativeBottomNavItems()` intersects the registry with a curated per-kind primary set (`NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY`, `..._RESIDENT_PRIMARY`, `..._ADMIN_PRIMARY`, `..._VENDOR_PRIMARY`) — only those sections get a one-tap slot; the rest overflow to the "more" sheet |
 | Native "more sections" sheet | Full ordered list (`orderNativeBottomNavItems()`), unfiltered — includes primary-bar sections too, plus locked and overflowed ones |
 
-Do **not** add a second preferred-order list for native. When reordering tabs, update the registry only. To promote or demote which sections get a one-tap primary-bar slot, edit that kind's `NATIVE_BOTTOM_NAV_*_PRIMARY` array in `portal-bottom-nav.ts` — everything not in it still stays reachable via the "more" sheet.
+Do **not** add a second preferred-order list for native. When reordering tabs, update the registry only. To promote or demote which sections get a one-tap primary-bar slot, edit that kind's `NATIVE_BOTTOM_NAV_*_PRIMARY` array in `portal-bottom-nav.ts` — everything not in it still stays reachable via the "more" sheet. **Resident is the exception:** its bar is stage-dependent, so edit `RESIDENT_BOTTOM_NAV_PRIMARY` in `src/lib/resident-portal-nav.ts` (the `NATIVE_BOTTOM_NAV_RESIDENT_*_PRIMARY` constants are derived from it) and keep every promoted tab unlocked at that stage in `STAGE_UNLOCKED_SECTIONS`, or the tab is dead.
 
 **Pro/manager (Free tier UX):** free operational sections first (`dashboard` … `payments`), then a contiguous paid block (`documents` … `relationships`), then account items (`plan`, `bugs-feedback`), then `profile` (Settings). Only `properties`, `calendar`, `residents`, `documents`, and `inbox` get primary-bar slots; `services` and everything else in the paid block is reachable via the "more" sheet.
 

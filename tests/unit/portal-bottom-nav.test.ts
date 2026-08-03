@@ -95,10 +95,12 @@ describe("splitNativeBottomNavItems", () => {
     expect(primary.length + overflow.length).toBe(items.length - 2);
   });
 
-  it("curates the resident bar (application submitted) to the post-submission primary set", () => {
+  // Submitting is not approval: the bar must not promote Lease/Payments here, or
+  // its first two tabs are locked and the phone nav goes half-dead.
+  it("curates the resident bar (application submitted) to the pre-approval primary set", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary } = splitNativeBottomNavItems(items, "resident", "application_submitted");
-    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY]);
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPROVAL_PRIMARY]);
   });
 
   it("curates the resident bar (post-approval) to the post-approval primary set", () => {

@@ -769,6 +769,34 @@ A locked row must never be a live link to a path the server then redirects home
 — that reads as a broken tab. Coverage: `tests/unit/portal-nav-locks.test.ts`,
 `tests/unit/portal-nav-lock-surfaces.test.tsx`.
 
+### Resident stage unlocks: one stage, two tables that must agree
+
+`src/lib/resident-portal-nav.ts` holds BOTH resident nav tables, and they are
+read by every surface — sidebar, mobile strip, phone bottom bar, and the route
+guard. **Application approved unlocks Lease + Payments; a fully-signed lease
+unlocks Services** (Documents unlocks alongside Lease + Payments at approval;
+House details is deliberately not on that ladder and stays locked until the
+lease is signed).
+
+- `STAGE_UNLOCKED_SECTIONS` decides what is reachable; `RESIDENT_BOTTOM_NAV_PRIMARY`
+  decides the four phone tabs. **Every section in the second must be unlocked in
+  the first at that stage** — the bottom bar is the whole navigation on a phone,
+  so a locked primary tab is a dead tab. `application_submitted` shipped
+  promoting Lease/Payments a stage early and the bar went half-dead.
+  `tests/unit/resident-portal-nav.test.ts` enforces the invariant.
+- The `NATIVE_BOTTOM_NAV_RESIDENT_*` constants in
+  `src/lib/native/portal-bottom-nav.ts` are DERIVED from that table, not copies —
+  they used to be literals that drifted while tests still asserted them.
+- **The stage itself is only as good as `applicationApproved`.**
+  `loadResidentPortalAccessState` scopes applications on the `resident_email`
+  COLUMN via `residentOwnsApplicationRow` — the same predicate the resident's own
+  Applications tab gets from `GET /api/manager-applications`, which overrides
+  `row_data.email` with that column. Re-filtering on the embedded `row_data.email`
+  copy instead made the nav blind to approvals the resident could plainly see
+  ("Approved 1" on the tab, whole portal locked to `pre_approval`). Any approval
+  counts, not just the newest row, and withdrawn rows are excluded — both to
+  match that list.
+
 ## Inbox panels: the standalone page shell is a /demo-only path
 
 `ManagerInbox` (and the resident / vendor / admin inbox panels, which share the
