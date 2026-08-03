@@ -7,8 +7,14 @@
  * UPDATE's status.
  */
 import { describe, expect, it } from "vitest";
-// @ts-expect-error — plain-node seed helper, no types
-import { reclaimCanonicalPropertyOwners } from "../helpers/reclaim-canonical-property-owners.mjs";
+import {
+  // @ts-expect-error — plain-node seed helper, no types
+  CANONICAL_DEMO_MANAGER_EMAIL,
+  // @ts-expect-error — plain-node seed helper, no types
+  reclaimCanonicalPropertyOwners,
+  // @ts-expect-error — plain-node seed helper, no types
+  resolveCanonicalReclaimManagerEmail,
+} from "../helpers/reclaim-canonical-property-owners.mjs";
 
 type Row = { id: string; manager_user_id: string; property_data?: unknown; row_data?: unknown };
 
@@ -118,5 +124,38 @@ describe("reclaimCanonicalPropertyOwners", () => {
     await expect(
       reclaimCanonicalPropertyOwners(db.client, { "mgr-demo-cascade": OWNER }, { log }),
     ).rejects.toThrow(/still mis-owned/);
+  });
+});
+
+/**
+ * The standalone repair must never follow a stale `E2E_MANAGER_EMAIL`: doing so
+ * moves all five canonical properties onto that account, i.e. it performs the
+ * drift it exists to undo. The env var stays legitimate for the full seed (CI
+ * overrides it and passes its own owner map in), so the guard lives here only.
+ */
+describe("resolveCanonicalReclaimManagerEmail", () => {
+  const LEGACY = "manager@test.axis.local";
+
+  it("falls back to the canonical demo manager when E2E_MANAGER_EMAIL is unset", () => {
+    expect(resolveCanonicalReclaimManagerEmail({})).toBe(CANONICAL_DEMO_MANAGER_EMAIL);
+  });
+
+  it("falls back to the canonical demo manager when E2E_MANAGER_EMAIL is empty", () => {
+    expect(resolveCanonicalReclaimManagerEmail({ E2E_MANAGER_EMAIL: "   " })).toBe(CANONICAL_DEMO_MANAGER_EMAIL);
+  });
+
+  it("accepts an E2E_MANAGER_EMAIL that already names the canonical manager", () => {
+    expect(
+      resolveCanonicalReclaimManagerEmail({ E2E_MANAGER_EMAIL: `  ${CANONICAL_DEMO_MANAGER_EMAIL.toUpperCase()} ` }),
+    ).toBe(CANONICAL_DEMO_MANAGER_EMAIL);
+  });
+
+  it("throws naming BOTH accounts when E2E_MANAGER_EMAIL names a different manager", () => {
+    // Naming only one address is what makes such an error unactionable — the
+    // reader has to know what it IS and what it SHOULD BE without opening source.
+    expect(() => resolveCanonicalReclaimManagerEmail({ E2E_MANAGER_EMAIL: LEGACY })).toThrow(LEGACY);
+    expect(() => resolveCanonicalReclaimManagerEmail({ E2E_MANAGER_EMAIL: LEGACY })).toThrow(
+      CANONICAL_DEMO_MANAGER_EMAIL,
+    );
   });
 });

@@ -22,9 +22,14 @@
  * Standalone repair (dev/test project only — never production):
  *   node --env-file=.env.test tests/helpers/reclaim-canonical-property-owners.mjs
  *
- * That reclaims the canonical demo portfolio to E2E_MANAGER_EMAIL
- * (default manager@test.proplane.local) without running the full seed, so it
- * does not prune anyone else's sandbox accounts.
+ * That reclaims the canonical demo portfolio to the CANONICAL demo manager
+ * (manager@test.proplane.local) without running the full seed, so it does not
+ * prune anyone else's sandbox accounts. It always targets that account and
+ * REFUSES to run when E2E_MANAGER_EMAIL names a different one: the canonical
+ * portfolio belongs to the canonical manager by definition, so keying the
+ * repair on a mutable env override was the original mistake — a stale value
+ * (e.g. the legacy manager@test.axis.local) would make this script perform the
+ * exact drift it exists to repair.
  */
 import { createClient } from "@supabase/supabase-js";
 import { assertTestProjectUrl } from "./canonical-test-accounts.mjs";
@@ -41,6 +46,32 @@ export const CANONICAL_DEMO_PORTFOLIO_PROPERTY_IDS = [
   "mgr-demo-lakeview",
   "mgr-demo-ballard",
 ];
+
+// Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
+// can't import the TS module).
+export const CANONICAL_DEMO_MANAGER_EMAIL = "manager@test.proplane.local";
+
+/**
+ * The owner this script reclaims TO — always the canonical demo manager.
+ *
+ * `E2E_MANAGER_EMAIL` may legitimately be overridden for the full seed (CI does
+ * it, and the seed passes its own resolved owner map in here), but the
+ * STANDALONE repair must never follow it: pointing this script at another
+ * account makes it move all five canonical properties onto that account, which
+ * is precisely the drift it exists to undo. So a non-canonical value is a loud
+ * error rather than a silently inverted repair.
+ */
+export function resolveCanonicalReclaimManagerEmail(env = process.env) {
+  const configured = String(env?.E2E_MANAGER_EMAIL ?? "").trim().toLowerCase();
+  if (!configured || configured === CANONICAL_DEMO_MANAGER_EMAIL) return CANONICAL_DEMO_MANAGER_EMAIL;
+  throw new Error(
+    `E2E_MANAGER_EMAIL is set to ${configured} but the canonical demo portfolio belongs to ` +
+      `${CANONICAL_DEMO_MANAGER_EMAIL}. Reclaiming to ${configured} would move all ` +
+      `${CANONICAL_DEMO_PORTFOLIO_PROPERTY_IDS.length} canonical properties onto that account — ` +
+      `the exact drift this script exists to repair. Update E2E_MANAGER_EMAIL in .env.test to ` +
+      `${CANONICAL_DEMO_MANAGER_EMAIL} (or unset it) and re-run.`,
+  );
+}
 
 /**
  * Force every listed property back onto its intended owner.
@@ -129,7 +160,7 @@ async function main() {
   }
   assertTestProjectUrl(url);
 
-  const managerEmail = (process.env.E2E_MANAGER_EMAIL?.trim() || "manager@test.proplane.local").toLowerCase();
+  const managerEmail = resolveCanonicalReclaimManagerEmail(process.env);
   const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
   let managerUserId = "";
