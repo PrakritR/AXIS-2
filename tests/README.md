@@ -82,7 +82,7 @@ npm run test:cleanup -- <testRunId>
 
 ### Canonical demo portal accounts (`@test.proplane.local`)
 
-`npm run test:seed` provisions the sandbox accounts below. It seeds them with **no portfolio rows**: the shared portfolio seed sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose — there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch.
+`npm run test:seed` provisions the sandbox accounts below **and** writes the dev/test catalog it needs: the five canonical demo houses (`mgr-demo-ballard`, `-cascade`, `-emerald`, `-lakeview`, `-pioneer`) on `manager@`, plus the browse catalog on `manager2@`. The **shared** portfolio seed (`src/lib/demo/canonical-demo-portfolio-db.ts`, the one production provisioning runs) is what adds **no portfolio rows** — it sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose, since there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch, and `AGENTS.md` → "Property ownership" for why those five ids are reclaimed to `manager@` before any other seed cleanup step.
 
 | Role | Email | Password (default) |
 |------|-------|---------------------|
