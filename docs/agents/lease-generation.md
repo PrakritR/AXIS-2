@@ -262,10 +262,17 @@ outside this agent's files. Flagged, not attempted.
 stores whatever `row_data` the caller sends, so a browser-side guard on a
 browser-owned store is advisory at best: anyone with devtools could POST a
 rewritten executed lease. The route now loads the stored row and answers **409**
-when the request would replace the document body of a row that still carries a
-signature. It refuses rather than silently restoring, because a legitimate
+when the request would replace the document body of a row that already claims
+execution. It refuses rather than silently restoring, because a legitimate
 client never makes that request, and it does not exempt admins. The point is
 that executed text cannot change, not that only strangers may not change it.
+
+**"Claims execution" is one predicate, `leaseClaimsExecution`** — `fullySignedAt`
+OR any signature. Guards used to key on one signal or the other, and every
+disagreement was a bypass: a payload carrying `fullySignedAt` with no signature
+object was "executed" to one guard and "unsigned" to the next, so neither
+protected its body. Anything deciding what an executed row may do reads that one
+function.
 
 `preserveSignedLeaseDocuments(prev, next)` (`lease-pipeline-storage.ts`) is the
 client-side second line, applied in `write()`, `materializeLeasePipeline()`, and
@@ -288,9 +295,9 @@ Three deliberate exemptions:
   carrying only `dataUrl` would have the certificate appended to an
   already-merged copy on the second signature, and the guard could not tell a
   merge from a swap.
-- **Clearing the signatures.** Void, send-back-to-manager, renew, and amend all
-  null the signatures; that is a superseding document, not a silent edit to an
-  executed one, and it drops out of the guard by design.
+- **Clearing the execution claim.** Void, send-back-to-manager, renew, and amend
+  all null the signatures and `fullySignedAt`; that is a superseding document,
+  not a silent edit to an executed one, and it drops out of the guard by design.
 - **Filling in an absent body on an `externallySignedLease` row.** That is how
   existing-resident onboarding files an already-executed off-platform PDF onto
   a row that never carried a document.
@@ -299,6 +306,76 @@ Coverage, both verified by deleting the guard and watching them go red:
 `tests/unit/lease-pipeline-route-signed-document.test.ts` drives the real route
 handler (manager and resident), and
 `tests/unit/lease-signed-document-immutability.test.ts` drives the client store.
+
+#### The sibling case: body and execution claim in the SAME write
+
+`replacesSignedLeaseDocument` requires the STORED row to be executed already,
+because it assumes the signature was applied to a body the server held. A caller
+that supplies the body and the execution claim in one request never trips it, so
+the "executed" text would be whatever that single POST said it was.
+`introducesUntrustedLeaseDocument` (same pure module) is that shape: stored row
+unexecuted, `next` executed, body changed.
+
+It has **no flag carve-out**, deliberately. Apart from the four scope mirrors,
+`row_data` is persisted verbatim from the client, so a stored
+`externallySignedLease` is prior-request client input, not server-established
+state — honouring it here would just move the attacker's write one request
+earlier. (`replacesSignedLeaseDocument` may honour it, because it is only reached
+once the stored row is executed, a state the evidence rules have already
+protected.)
+
+Two behaviours read that one decision, so the guard and the action it protects
+cannot key on different signals:
+
+- a **resident-scoped** write of this shape is refused **409** — a resident signs
+  a lease, they never author one;
+- **auto-file declines** to render such a body into the property owner's document
+  library.
+
+The one legitimate shape — the existing-resident onboarding lease
+`syncApprovedApplications` seeds, which materializes in the RESIDENT's browser
+too — is admitted by corroborating the BYTES, not a flag:
+`leaseBodyMatchesManagerFiledLease`
+(`src/lib/lease-manager-filed-document.server.ts`) requires byte equality with
+the PDF the manager filed on the application record
+(`manualResidentDetails.signedLeaseDataUrl`), looked up pinned to the lease row's
+stored `manager_user_id` column, PDF-only (an accompanying HTML body is refused),
+failing closed. `axisId` only selects which application to compare against and is
+caller-influenced; that is harmless only while the verdict is byte equality — if
+this is ever loosened to a hash, a filename, or mere presence, re-derive `axisId`
+server side first.
+
+#### Who may write a lease row, and whose row it becomes
+
+The four scope columns (`manager_user_id`, `resident_user_id`, `resident_email`,
+`property_id`) are what every scoped query keys on, so they are a **required,
+server-resolved argument** to `buildUpsert` — never read off the client row. For
+those four keys `row_data` is a MIRROR reconciled from the resolved columns, not
+a second source: pinning the columns alone left the manager's own browser store
+to read a tampered `row_data.residentEmail` back from GET and launder it into the
+column on its next sync.
+
+- **Resident-scoped actor:** may edit the body of a lease they can already see;
+  scope is pinned to what the server stored, a row they create is pinned to
+  themselves, and a `delete` / `deleteIds` action is refused **403** outright
+  (it used to skip silently, reporting success).
+- **Manager:** may re-point scope but never blank it by omission — a field the
+  row does not NAME falls back to the stored column (a normalized `null` from the
+  browser store is not a request to clear). A named `property_id` is honored only
+  when they own it or hold the co-manager `leases` grant at EDIT level
+  (`managerMayFileLeaseUnderProperty`); refusal is reserved for a property that
+  provably belongs to someone else, since an absent record would 403 whole
+  ordinary `replace` batches.
+- **Creating a row that names another person as the resident requires the manager
+  role** (`hasRole`), not merely "not admin, not resident".
+- **Admin** keeps table-wide scope, with omitted fields still falling back to the
+  stored column.
+
+The whole batch is authorized and resolved BEFORE any row is written, so a
+refusal on the last row of a `replace` no longer leaves the earlier rows upserted.
+Coverage: `tests/unit/lease-pipeline-resident-upsert-scope.test.ts`,
+`tests/unit/lease-pipeline-route-role-scope.test.ts`,
+`tests/unit/manager-lease-scope.test.ts`.
 
 One related fix in `syncApprovedApplications`: the off-platform PDF is filed only
 onto a row carrying no document at all. It used to key on `!managerUploadedPdf`

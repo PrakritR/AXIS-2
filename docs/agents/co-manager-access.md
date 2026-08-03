@@ -48,7 +48,10 @@ GET paths of work orders, service requests, household charges, vendors, and
 manager documents; leases/applications/property-records already had their own
 (`fetchLeasesForManagerUser` etc.). Write enforcement goes through
 `assertCoManagerModuleAccess(..., { level: "edit" })`
-(`src/lib/auth/co-manager-access.ts`) — bills POST is the exemplar.
+(`src/lib/auth/co-manager-access.ts`) — bills POST is the exemplar. Filing a
+lease under a property is the per-property equivalent
+(`managerMayFileLeaseUnderProperty`, `leases` at EDIT); see
+[`lease-generation.md`](lease-generation.md).
 
 **Client mirrors** — `collectLinkedPropertyIdsForModule` /
 `collectLinkedOwnerIdsForModule` / `moduleRowVisibleToPortalUser` in
