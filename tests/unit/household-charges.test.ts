@@ -125,7 +125,14 @@ describe("household-charges pure helpers", () => {
 });
 
 describe("syncHouseholdChargesFromServer", () => {
-  it("starts a new request for forced syncs while another sync is in flight", async () => {
+  // The contract a forced sync must keep is about FRESHNESS, not parallelism:
+  // it may never be answered by a request that began before it asked, because
+  // the caller may have just written a charge. It is free to wait for an
+  // in-flight request and then issue its own — and it now does, so that the
+  // several panels that force a refresh on mount cost two requests rather than
+  // one each (measured: 3 `/api/portal-household-charges` on one
+  // `/portal/payments` load).
+  it("never serves a forced sync from a request that started before it asked", async () => {
     vi.resetModules();
 
     const session = new Map<string, string>();
@@ -145,31 +152,71 @@ describe("syncHouseholdChargesFromServer", () => {
         resolveFirst = resolve;
       },
     );
-    const fetchMock = vi.fn()
-      .mockReturnValueOnce(firstResponse)
-      .mockResolvedValueOnce({
+    // Dispatch on METHOD, not call order. A completed sync can write back
+    // (`postHouseholdPayload`), and once the reads are sequenced rather than
+    // parallel that POST lands between them — a call-ordered mock would hand
+    // the second READ the response meant for it and silently pass.
+    let reads = 0;
+    const fetchMock = vi.fn((_url: string, init?: { method?: string }) => {
+      if ((init?.method ?? "GET").toUpperCase() !== "GET") {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      reads += 1;
+      if (reads === 1) return firstResponse;
+      return Promise.resolve({
         ok: true,
-        json: async () => ({ charges: [makeCharge({ id: "mgr-b-charge", managerUserId: "mgr-b" })], rentProfiles: [] }),
+        // A DIFFERENT bill (own resident + month), so the local-wins merge keeps
+        // it alongside mgr-a instead of collapsing the two onto one business key
+        // — otherwise this assertion passes for the wrong reason.
+        json: async () => ({
+          charges: [
+            makeCharge({
+              id: "mgr-b-charge",
+              managerUserId: "mgr-b",
+              residentEmail: "b@test.com",
+              rentMonth: "2026-04",
+              dueDateLabel: "Apr 1, 2026",
+            }),
+          ],
+          rentProfiles: [],
+        }),
       });
+    });
     vi.stubGlobal("fetch", fetchMock);
+    const readCount = () => reads;
 
     const { syncHouseholdChargesFromServer } = await import("@/lib/household-charges");
 
     const firstSync = syncHouseholdChargesFromServer(false);
     const forcedSync = syncHouseholdChargesFromServer(true);
+    // A SECOND forced caller arriving in the same burst must not add a third
+    // request — it joins the one follow-up, which still starts after it asked.
+    const secondForcedSync = syncHouseholdChargesFromServer(true);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Still one READ in flight: the forced callers are queued behind it rather
+    // than each opening their own.
+    expect(readCount()).toBe(1);
 
     resolveFirst!({
       ok: true,
       json: async () => ({ charges: [makeCharge({ id: "mgr-a-charge", managerUserId: "mgr-a" })], rentProfiles: [] }),
     });
 
+    // The forced callers resolve with the SECOND response. That is the
+    // invariant: neither may be handed mgr-a, which was already being fetched
+    // when they asked.
     await expect(forcedSync).resolves.toEqual(
       expect.objectContaining({
         charges: expect.arrayContaining([expect.objectContaining({ managerUserId: "mgr-b" })]),
       }),
     );
+    await expect(secondForcedSync).resolves.toEqual(
+      expect.objectContaining({
+        charges: expect.arrayContaining([expect.objectContaining({ managerUserId: "mgr-b" })]),
+      }),
+    );
+    // Exactly two reads served three callers.
+    expect(readCount()).toBe(2);
     await firstSync;
   });
 });
