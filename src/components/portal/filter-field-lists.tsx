@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
@@ -56,7 +56,11 @@ export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[10.5rem]";
 export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
 export const PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS = "h-[14rem]";
 export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "h-[19rem]";
-export const PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS = "h-[19rem]";
+/* One field row measures 76px (label + 44px trigger + gap); four of them plus the panel
+   header and padding need ~23rem. At 19rem the fourth field rendered BELOW the panel's
+   bottom edge and was only reachable by scrolling — measured on Communication, whose
+   filter is house/role/resident/sort. */
+export const PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS = "h-[23rem]";
 
 /** Pick a fixed filter shell height from the number of filter rows (property, resident, sort, …). */
 export function portalFilterPanelSizeClass(fieldCount: number): string {
@@ -72,11 +76,16 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
 }
 /** Communication filter — four fields (house, role, resident, sort). */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
-  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[19rem] flex-col overflow-hidden`;
+  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex ${PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS} flex-col overflow-hidden`;
 /** Mobile Communication / inbox filter sheet — scroll inside the elevated sheet body. */
 export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS = "min-h-0";
-/** Default compact mobile sheet when callers do not override height. */
-export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "h-auto max-h-[min(20rem,52vh)]";
+/**
+ * Default compact mobile sheet when callers do not override height. Deliberately imposes NO
+ * max-height of its own: the raised sheet already caps itself at `100dvh - 32vh - 1rem` and
+ * scrolls internally, so a second, smaller cap here only pushed the lower filter fields past
+ * the sheet's bottom edge — where their dropdowns then had no room to open five rows.
+ */
+export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "min-h-0";
 /** Tall mobile sheet for browse-home filters (AI + manual fields). */
 export const PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS =
   "h-[min(82dvh,42rem)] min-h-[min(70dvh,34rem)]";
@@ -215,9 +224,11 @@ export function FilterCollapsibleSection({
 
   const showMenuSearch =
     FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || (menuOptionCount ?? 0) > FILTER_LIST_VISIBLE_ROWS;
-  /** Always size filter menus to search + 5 rows so open/close never changes dimensions. */
+  /* Size the menu to its OWN option count, capped at 5 rows by `fieldSelectMenuContentPx`.
+     A field with 5+ options always shows exactly 5 and scrolls the rest; a field with
+     fewer ends the box after its last row instead of padding out empty rows. */
   const menuContentPx = fieldSelectMenuContentPx(
-    FILTER_LIST_VISIBLE_ROWS,
+    menuOptionCount ?? FILTER_LIST_VISIBLE_ROWS,
     showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
   );
 
@@ -229,12 +240,9 @@ export function FilterCollapsibleSection({
     matchTriggerWidth: true,
   });
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    const button = buttonRef.current;
-    if (!button?.scrollIntoView) return;
-    button.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [open]);
+  /* No scroll-into-view on open: the menu is clamped to the VIEWPORT rather than to its
+     host shell, so a low field already gets its full 5 rows, and scrolling the sheet body
+     would move the very controls this pattern exists to keep stationary. */
 
   const menu =
     open && menuRect && isClient && portalHost ? (
@@ -248,7 +256,9 @@ export function FilterCollapsibleSection({
           top: menuRect.top,
           left: menuRect.left,
           width: menuRect.width,
-          height: menuRect.maxHeight,
+          /* `height: auto` under a hard cap is what makes a short list end early instead of
+             padding empty rows; the cap is what keeps a long list at exactly 5. */
+          height: "auto",
           minHeight: 0,
           maxHeight: menuRect.maxHeight,
           zIndex: fieldSelectMenuZIndex(portalHost),
@@ -326,7 +336,7 @@ export function FilterCheckboxList({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -339,7 +349,9 @@ export function FilterCheckboxList({
         role="listbox"
         aria-multiselectable="true"
         data-attr={dataAttr}
-        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
+        /* Never `flex-1` here — a zero flex-basis collapses the auto-height shell that
+           makes a short list end early. `flex-[0_1_auto]` shrinks only under the cap. */
+        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-[0_1_auto]")}
         style={{
           touchAction: "pan-y",
           maxHeight: fieldSelectMenuListMaxHeightPx(
@@ -414,7 +426,7 @@ export function FilterSingleSelectList({
   }, [options, query]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col">
       {showSearch ? (
         <FieldSelectMenuSearch
           query={query}
@@ -426,7 +438,9 @@ export function FilterSingleSelectList({
       <div
         role="listbox"
         data-attr={dataAttr}
-        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-1")}
+        /* Never `flex-1` here — a zero flex-basis collapses the auto-height shell that
+           makes a short list end early. `flex-[0_1_auto]` shrinks only under the cap. */
+        className={cn(FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS, "min-h-0 flex-[0_1_auto]")}
         style={{
           touchAction: "pan-y",
           maxHeight: fieldSelectMenuListMaxHeightPx(

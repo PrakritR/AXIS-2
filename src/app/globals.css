@@ -826,6 +826,14 @@ html {
   background-color: rgba(47, 107, 255, 0.22) !important;
 }
 
+/* Vaul paints a `::after` of `height: 200%` below a bottom drawer so an overscroll drag
+   never reveals the page behind it. A RAISED filter sheet deliberately leaves a gap below
+   itself, and that fill painted straight across it — the sheet still read as bottom-anchored
+   with a large empty band instead of a raised card. Only the raised sheets opt out. */
+[data-slot="vaul-bottom-sheet"][data-elevated="true"]::after {
+  display: none;
+}
+
 /* Opaque portal filter popover — bg-card is translucent on dashboard surfaces. */
 .portal-filter-dropdown-panel,
 [data-slot="portal-filter-dropdown-panel"] {

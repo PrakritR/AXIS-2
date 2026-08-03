@@ -104,6 +104,23 @@ export function fieldSelectMenuContentPx(count: number, extraPx = 0): number {
   return rows * FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12 + extraPx;
 }
 
+/**
+ * Which way a menu opens. `preferOpenDown` is a PREFERENCE, not a lock: it wins whenever the
+ * menu fits below, but a trigger low in the viewport has no room there, and forcing down
+ * anyway produced a one- or two-row menu instead of the five rows every filter dropdown owes
+ * its user. When neither side fits, the roomier side wins — same rule for both modes.
+ */
+export function resolveOpenUp(
+  spaceBelow: number,
+  spaceAbove: number,
+  contentPx: number,
+  preferOpenDown: boolean,
+): boolean {
+  if (spaceBelow >= contentPx) return false;
+  if (preferOpenDown && spaceAbove < contentPx) return spaceAbove > spaceBelow;
+  return spaceAbove > spaceBelow;
+}
+
 /** Scrollable list height inside a portaled menu shell (search row excluded). */
 export function fieldSelectMenuListMaxHeightPx(shellMaxHeight: number, searchPx = 0): number {
   return Math.max(
@@ -153,6 +170,13 @@ export function computeFieldSelectMenuRectInHost(
     hostPaddingPx?: number;
     preferOpenDown?: boolean;
     matchTriggerWidth?: boolean;
+    /**
+     * Viewport y (px) the menu may grow down to, when the host is `overflow-visible` and
+     * the menu is allowed to spill past its bottom edge. Without this a field near the
+     * bottom of a short shell — the last field of a filter sheet — gets a one-row menu,
+     * which breaks the "every dropdown shows 5" rule. Omit to clamp to the host.
+     */
+    bottomBoundPx?: number;
   },
 ): FieldSelectMenuRect {
   const hostRect = host.getBoundingClientRect();
@@ -171,19 +195,15 @@ export function computeFieldSelectMenuRectInHost(
     left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
   }
 
-  const spaceBelow = hostRect.bottom - rect.bottom - gap;
+  const bottomBound = options?.bottomBoundPx ?? hostRect.bottom;
+  const spaceBelow = bottomBound - rect.bottom - gap;
   const spaceAbove = rect.top - hostRect.top - gap;
   const preferOpenDown = options?.preferOpenDown ?? false;
-  const openUp = !preferOpenDown && spaceBelow < contentPx && spaceAbove > spaceBelow;
-  const maxHeight = preferOpenDown
-    ? Math.min(contentPx, Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, spaceBelow - gap))
-    : Math.min(
-        contentPx,
-        Math.max(
-          FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
-          openUp ? spaceAbove - gap : spaceBelow - gap,
-        ),
-      );
+  const openUp = resolveOpenUp(spaceBelow, spaceAbove, contentPx, preferOpenDown);
+  const maxHeight = Math.min(
+    contentPx,
+    Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, openUp ? spaceAbove - gap : spaceBelow - gap),
+  );
   const top = openUp
     ? Math.max(gap, rect.top - hostRect.top - maxHeight - gap)
     : rect.bottom - hostRect.top + gap;
@@ -206,14 +226,11 @@ export function computeFieldSelectMenuRect(
   const spaceAbove = rect.top - viewportPadding;
   const preferOpenDown = options?.preferOpenDown ?? false;
   const matchTriggerWidth = options?.matchTriggerWidth ?? false;
-  const openUp = !preferOpenDown && spaceBelow < contentHeight && spaceAbove > spaceBelow;
-  const viewportCap = Math.max(
-    FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
-    openUp ? spaceAbove - 8 : spaceBelow - 8,
+  const openUp = resolveOpenUp(spaceBelow, spaceAbove, contentHeight, preferOpenDown);
+  const maxHeight = Math.min(
+    contentHeight,
+    Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, openUp ? spaceAbove - 8 : spaceBelow - 8),
   );
-  const maxHeight = preferOpenDown
-    ? Math.min(contentHeight, Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, spaceBelow - 8))
-    : Math.min(contentHeight, viewportCap);
   const minWidth = options?.minWidth ?? 0;
   const width = matchTriggerWidth
     ? rect.width
@@ -293,6 +310,10 @@ export function useFieldSelectMenu({
                 preferOpenDown: preferOpenDown || inVaulSheet,
                 matchTriggerWidth: matchTriggerWidth || inVaulSheet,
                 hostPaddingPx: inVaulSheet ? 0 : undefined,
+                /* Both hosts are `overflow-visible`, so the menu may spill below them and
+                   is bounded by the viewport instead — otherwise the bottom-most field of
+                   a short sheet/panel opens a crushed one-row menu. */
+                bottomBoundPx: window.innerHeight - 12,
               })
             : computeFieldSelectMenuRect(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,

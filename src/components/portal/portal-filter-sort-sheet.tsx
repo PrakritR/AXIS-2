@@ -141,6 +141,12 @@ export function PortalFilterSortSheet({
   /** When false, sheet body uses horizontal padding like standard modals. */
   mobileFlushBody = false,
   mobileFooter,
+  /**
+   * Opt out of the raised mobile placement. Only for a sheet that already fills most of
+   * the viewport (browse-homes), where raising it would push its top off screen. Every
+   * other filter sheet opens raised and stays there — see {@link VaulBottomSheet.autoElevate}.
+   */
+  mobileSheetFillsViewport = false,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -155,6 +161,7 @@ export function PortalFilterSortSheet({
   mobileSheetClassName?: string;
   mobileFlushBody?: boolean;
   mobileFooter?: ReactNode | ((close: () => void) => ReactNode);
+  mobileSheetFillsViewport?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -177,9 +184,8 @@ export function PortalFilterSortSheet({
     minMenuWidth: panelWidthPx,
     align: "end",
   });
-  const resolvedMobileSheetClass =
-    mobileSheetClassName ??
-    (compactPanel ? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS : "h-auto max-h-[min(14rem,45vh)]");
+  /* Both branches leave the height to the sheet — see PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS. */
+  const resolvedMobileSheetClass = mobileSheetClassName ?? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
   /* `filterMenuOpen` is only ever set from inside the mobile sheet's provider, so on the
      desktop dropdown/panel this stays false and their scroll regions are untouched. */
   const fields = (
@@ -296,7 +302,7 @@ export function PortalFilterSortSheet({
           onOpenChange={setOpen}
           title="Filter"
           flushBody={mobileFlushBody}
-          autoElevate={compactPanel}
+          autoElevate={!mobileSheetFillsViewport}
           lockBodyScroll={filterMenuOpen}
           maxHeightClass={
             mobileSheetClassName

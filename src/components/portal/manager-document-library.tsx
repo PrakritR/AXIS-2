@@ -4,7 +4,10 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
+import {
+  FilterFieldsAccordion,
+  FilterSingleSelectDropdown,
+} from "@/components/portal/filter-field-lists";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -144,34 +147,58 @@ export function DocumentLibraryFilterFields({
         aria-label="Search documents"
         data-attr="document-search"
       />
-      <PortalFilterChipRow
-        ariaLabel="Filter by category"
-        value={categoryFilter}
-        onChange={onCategoryFilterChange}
-        allLabel="All categories"
-        options={categoryFilterOptions}
-        className="w-full"
-      />
-      <PortalFilterChipRow
-        ariaLabel="Filter by scope"
-        value={scopeFilter}
-        onChange={onScopeFilterChange}
-        allowAll={false}
-        options={scopeFilterOptions}
-        className="w-full"
-      />
-      {propertyOptions.length > 0 ? (
-        <PortalFilterChipRow
-          ariaLabel="Filter by property"
-          value={propertyFilter}
-          onChange={onPropertyFilterChange}
-          allLabel="All properties"
-          options={propertyFilterOptions}
-          className="w-full"
+      {/* Category / Scope / Property are the one portal filter dropdown pattern: closed by
+          default, opening portals an overlay so the fields below never shift. They stay
+          SINGLE-select because each maps to one server query param on
+          `GET /api/manager/documents` (`category` / `scope` / `propertyId`); widening any
+          of them to multi-select is an API change, not a presentation one. The expiry row
+          above stays status pills — an in-section status filter, like Pending/Overdue/Paid. */}
+      <FilterFieldsAccordion>
+        <FilterSingleSelectDropdown
+          sectionId="document-category"
+          label="Category"
+          value={categoryFilter}
+          onChange={onCategoryFilterChange}
+          placeholder="All categories"
+          options={toFilterOptions(categoryFilterOptions, "All categories")}
+          dataAttr="document-filter-category"
         />
-      ) : null}
+        <FilterSingleSelectDropdown
+          sectionId="document-scope"
+          label="Scope"
+          value={scopeFilter}
+          onChange={onScopeFilterChange}
+          placeholder="All scopes"
+          options={toFilterOptions(scopeFilterOptions, "All scopes")}
+          dataAttr="document-filter-scope"
+        />
+        {propertyOptions.length > 0 ? (
+          <FilterSingleSelectDropdown
+            sectionId="document-property"
+            label="Property"
+            value={propertyFilter}
+            onChange={onPropertyFilterChange}
+            placeholder="All properties"
+            options={toFilterOptions(propertyFilterOptions, "All properties")}
+            dataAttr="document-filter-property"
+          />
+        ) : null}
+      </FilterFieldsAccordion>
     </div>
   );
+}
+
+/**
+ * `{id,label}` filter options as `{value,label}`, with a leading "clear" row. Some option
+ * lists (SCOPE_FILTERS) already carry their own empty-id row, so prepending unconditionally
+ * would render "All scopes" twice — only add one when the list lacks it.
+ */
+function toFilterOptions(
+  options: { id: string; label: string }[],
+  allLabel: string,
+): { value: string; label: string }[] {
+  const mapped = options.map((o) => ({ value: o.id, label: o.label }));
+  return mapped.some((o) => o.value === "") ? mapped : [{ value: "", label: allLabel }, ...mapped];
 }
 
 export type ManagerDocumentLibraryHandle = {

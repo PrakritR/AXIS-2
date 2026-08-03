@@ -234,8 +234,30 @@ or resize the panel.
   (`FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS`, which also carries the touch-scroll
   affordances) that scrolls under it. The menu otherwise sizes to its real content, so a short or
   filtered list leaves no empty space below it; never give the listbox a fixed
-  height or `flex-1`, both of which break that. A search box appears only when a
-  field has MORE than 5 options and never drops an already-selected option.
+  height or `flex-1`, both of which break that. The shell's `maxHeight` is sized
+  from the FIELD'S OWN option count (`fieldSelectMenuContentPx` clamps to 1..5), so
+  5+ options give exactly 5 rows and scroll, and 3 options end the box after the
+  third row instead of padding two empty ones. A search box appears on portal
+  filter menus (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an
+  already-selected option.
+- **The mobile filter sheet is RAISED statically and never moves.** `autoElevate`
+  on `VaulBottomSheet` applies a fixed `bottom: max(32vh, …)` plus a max-height
+  derived from that same offset. It used to be gated on a
+  `height < viewport * 0.52` measurement, so a sheet whose content changed while
+  open flipped placement and visibly JUMPED — a measured placement can always jump,
+  which is why this one is a prop. Only a sheet that already fills the viewport
+  (browse-homes, via `mobileSheetFillsViewport`) stays bottom-anchored, because
+  raising it would push its top off screen. Two consequences worth knowing:
+  a raised sheet must suppress Vaul's `::after` overscroll fill (`globals.css`,
+  keyed on `data-elevated`) or that fill paints across the gap below it; and the
+  sheet body must NOT impose its own smaller max-height, or the lower fields get
+  pushed past the sheet's bottom edge.
+- **`preferOpenDown` is a preference, not a lock** (`resolveOpenUp`). A menu opens
+  down whenever it fits, and flips up only when it cannot — forcing down for a
+  trigger low in the viewport rendered a one-row menu. Because both the sheet and
+  the desktop panel are `overflow-visible`, menus inside them are bounded by the
+  VIEWPORT (`bottomBoundPx`), not by the shell, so the bottom-most field still
+  opens downward with its full 5 rows.
   Regression coverage: `tests/unit/filter-field-lists.test.tsx`.
 
 ## Modals scroll in ONE place
