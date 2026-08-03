@@ -62,19 +62,34 @@ type StoredLeaseScopeColumns = {
 };
 
 /**
- * The scope columns as the SERVER stored them. A resident may edit the body of
- * a lease they can see, never which account or manager it belongs to: those
- * four columns are what every scoped query keys on, so accepting the client's
- * copy lets a visible row be rewritten into someone else's resident query or
- * into an arbitrary manager's pipeline. The manager branch below already
- * re-pins `manager_user_id` for the same reason.
+ * The four columns every scoped query keys on: the resident GET matches
+ * `resident_user_id` / `resident_email`, and a manager's pipeline matches
+ * `manager_user_id` or a linked `property_id`. Whoever these name is who can
+ * see the row, so deriving them from the client row means a request can decide
+ * whose lease list it lands in.
+ *
+ * They are therefore a REQUIRED argument to `buildUpsert` rather than something
+ * it reads off the row: every branch must state, in server-resolved terms,
+ * whose row it is writing. A branch that forgets no longer inherits a
+ * client-controlled default — it fails to compile.
+ */
+type LeaseScopeColumns = {
+  manager_user_id: string | null;
+  resident_user_id: string | null;
+  resident_email: string | null;
+  property_id: string | null;
+};
+
+/**
+ * Scope as the SERVER stored it. Used when the actor may edit a row's body but
+ * not who it belongs to.
  *
  * Every key is read from a row the caller's own SELECT must name — see the
  * SELECT-coverage assertion in `lease-pipeline-resident-upsert-scope.test.ts`,
  * because a column missing from that list would silently pin `null` here and
  * orphan the resident from their own lease.
  */
-function storedScopeColumns(stored: StoredLeaseScopeColumns | undefined): StoredLeaseScopeColumns {
+function storedScopeColumns(stored: StoredLeaseScopeColumns | undefined): LeaseScopeColumns {
   return {
     manager_user_id: stored?.manager_user_id ?? null,
     resident_user_id: stored?.resident_user_id ?? null,
@@ -83,13 +98,44 @@ function storedScopeColumns(stored: StoredLeaseScopeColumns | undefined): Stored
   };
 }
 
-function buildUpsert(row: Record<string, unknown>) {
+/**
+ * Scope named by the CLIENT row. Legitimate only for an actor who owns the
+ * lease: a manager creating or editing one must be able to name the resident it
+ * is for. Never reachable from a resident-scoped actor.
+ */
+function clientNamedScope(row: Record<string, unknown>): LeaseScopeColumns {
+  return {
+    manager_user_id: (row.managerUserId ?? row.manager_user_id ?? null) as string | null,
+    resident_user_id: asUuidOrNull(row.residentUserId ?? row.resident_user_id),
+    resident_email: (row.residentEmail ?? row.resident_email ?? null) as string | null,
+    property_id: (row.propertyId ?? row.property_id ?? null) as string | null,
+  };
+}
+
+/**
+ * Scope for a row a resident-scoped actor creates. Pinned to the actor so a
+ * fabricated row can only ever land in their OWN lease list, never a stranger's
+ * (`resident_email` / `resident_user_id`) and never a manager's pipeline
+ * (`property_id`, which `fetchLeasesForManagerUser` also matches on for linked
+ * properties). `manager_user_id` keeps the caller's own id, as this path has
+ * always set it.
+ */
+function ownResidentScope(user: RecordUser): LeaseScopeColumns {
+  return {
+    manager_user_id: user.id,
+    resident_user_id: asUuidOrNull(user.id),
+    resident_email: user.email?.trim().toLowerCase() || null,
+    property_id: null,
+  };
+}
+
+function buildUpsert(row: Record<string, unknown>, scope: LeaseScopeColumns) {
   return {
     id: row.id,
-    manager_user_id: row.managerUserId ?? row.manager_user_id ?? null,
-    resident_user_id: asUuidOrNull(row.residentUserId ?? row.resident_user_id),
-    resident_email: row.residentEmail ?? row.resident_email ?? null,
-    property_id: row.propertyId ?? row.property_id ?? null,
+    manager_user_id: scope.manager_user_id,
+    resident_user_id: scope.resident_user_id,
+    resident_email: scope.resident_email,
+    property_id: scope.property_id,
     status: row.bucket ?? row.status ?? null,
     row_data: row,
     updated_at: new Date().toISOString(),
@@ -160,7 +206,9 @@ export async function POST(req: Request) {
       if (ids.length === 0 || ids.some((id) => !id)) {
         return NextResponse.json({ error: "id required" }, { status: 400 });
       }
-      let refusedForRole = false;
+      if (ctx.user.role === "resident") {
+        return NextResponse.json({ error: "Residents cannot delete lease records." }, { status: 403 });
+      }
       for (const id of ids) {
         const { data: existing } = await ctx.db
           .from("portal_lease_pipeline_records")
@@ -170,17 +218,10 @@ export async function POST(req: Request) {
         const record = (existing ?? [])[0] as LeaseScopeRecord | undefined;
         if (!record) continue;
         if (ctx.user.role !== "admin") {
-          if (ctx.user.role === "resident") {
-            refusedForRole = true;
-            continue;
-          }
           const allowed = await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, record, "delete");
           if (!allowed) continue;
         }
         await ctx.db.from("portal_lease_pipeline_records").delete().eq("id", id);
-      }
-      if (refusedForRole) {
-        return NextResponse.json({ error: "Residents cannot delete lease records." }, { status: 403 });
       }
       return NextResponse.json({ ok: true });
     }
@@ -190,9 +231,8 @@ export async function POST(req: Request) {
 
     for (const row of rows) {
       const normalized = normalizeRow(row);
-      let record = buildUpsert(normalized);
-      if (!record.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
-      const id = String(record.id);
+      if (!normalized.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
+      const id = String(normalized.id);
 
       const { data: existing, error: existingError } = await ctx.db
         .from("portal_lease_pipeline_records")
@@ -222,7 +262,10 @@ export async function POST(req: Request) {
         );
       }
 
-      if (recordExists && ctx.user.role !== "admin") {
+      let scope: LeaseScopeColumns;
+      if (ctx.user.role === "admin") {
+        scope = clientNamedScope(normalized);
+      } else if (recordExists) {
         if (ctx.user.role === "resident") {
           const { data: visible } = await ctx.db
             .from("portal_lease_pipeline_records")
@@ -233,24 +276,25 @@ export async function POST(req: Request) {
           if (!Array.isArray(visible) || visible.length === 0) {
             return NextResponse.json({ error: "Record not found." }, { status: 404 });
           }
-          record = { ...record, ...storedScopeColumns(existingRecord) };
+          scope = storedScopeColumns(existingRecord);
         } else {
           const allowed = existingRecord
             ? await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, existingRecord, "edit")
             : false;
           if (!allowed) return NextResponse.json({ error: "Record not found." }, { status: 404 });
           // Preserve server-trusted ownership on update.
-          record = {
-            ...record,
+          scope = {
+            ...clientNamedScope(normalized),
             manager_user_id: existingRecord?.manager_user_id ?? ctx.user.id,
           };
         }
+      } else if (ctx.user.role === "resident") {
+        scope = ownResidentScope(ctx.user);
+      } else {
+        scope = { ...clientNamedScope(normalized), manager_user_id: ctx.user.id };
       }
 
-      if (!recordExists && ctx.user.role !== "admin") {
-        record = { ...record, manager_user_id: ctx.user.id };
-      }
-
+      const record = buildUpsert(normalized, scope);
       const { error } = await ctx.db.from("portal_lease_pipeline_records").upsert(record, { onConflict: "id" });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
