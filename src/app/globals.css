@@ -2415,6 +2415,28 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
   }
 
+  /* Fixed-chrome surfaces clip #portal-main-content (`overflow: hidden` above),
+     so unlike a page-scrolls surface its padding-bottom can never become
+     trailing scroll room — it only shrinks the scroll viewport. The FAB half of
+     `--portal-mobile-scroll-bottom-inset` therefore rendered as a dead 56px
+     strip between the last row and the bottom nav, painted with this element's
+     own background gradient, with the assistant FAB parked in it: that strip is
+     what read as an opaque "banner" behind the button. Reserve only the nav bar
+     here so the page background runs continuously under the floating FAB, and
+     hand the FAB clearance to the scroller below, which can actually scroll it. */
+  html[data-portal-sticky-chrome] #portal-main-content {
+    padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+    scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+  }
+
+  /* Trailing room INSIDE the scroller so the last row still clears the FAB
+     rather than coming to rest underneath it. Collapses to 0 on its own when
+     the FAB is hidden (`--portal-assistant-fab-clearance: 0px`). */
+  html[data-portal-sticky-chrome] .portal-list-page-scroll {
+    padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
+    scroll-padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
+  }
+
   html[data-communication-thread-reading] #portal-main-content {
     overflow: hidden;
     padding-top: 0;
