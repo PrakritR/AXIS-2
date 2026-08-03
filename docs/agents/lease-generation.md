@@ -921,6 +921,49 @@ on an executed lease is the worst thing this module can produce.
 `resolveLeaseJurisdiction` (`src/lib/lease-jurisdiction.ts`) regex-matches the property address.
 It resolves five values: `seattle`, `san_francisco`, `california`, `washington`, `unsupported`.
 
+### Jurisdiction registry and disclosure bridge
+
+The typed contract is `JurisdictionKey` (`{ state: string; city?: string }`), where state is a
+two-letter USPS abbreviation and a city is a normalized registry key. New code calls
+`resolveJurisdiction(ctx)`, `jurisdictionConfig(key)`, and `jurisdictionRuleScopes(key)`.
+`resolveLeaseJurisdiction` remains only as a compatibility adapter for legacy string-union callers.
+
+`LEASE_JURISDICTION_TEMPLATE_REGISTRY` in `src/lib/lease-templates/types.ts` is code-owned. A
+state entry provides its verified config and rules-catalog state scope; city entries provide only
+verified local config overlays. Adding a state therefore means adding one verified config entry
+and its verified disclosure rules, without adding an HTML builder. Do not add a state without
+verified sources for every populated config value.
+
+`jurisdictionRuleScopes` reads city inheritance from
+`leases/disclosure-clause-rules.json#jurisdiction_inheritance`. Its current mappings are:
+
+| JurisdictionKey | Rule scopes |
+| --- | --- |
+| `{ state: "CA", city: "san_francisco" }` | `federal`, `california`, `san_francisco` |
+| `{ state: "CA" }` | `federal`, `california` |
+| `{ state: "WA", city: "seattle" }` | `federal`, `washington`, `seattle` |
+| `{ state: "WA" }` | `federal`, `washington` |
+
+Property records currently have joined `address`, `neighborhood`, and separate ZIP values, but
+not separate property city/state columns. The resolver still accepts structured `city`, `state`,
+and `postalCode` fields for a future record shape, and prefers them when present; joined-address
+matching remains the fallback today.
+
+There is still no lodger-statute config field. The CA and WA rules catalog contains no verified
+lodger statute for this purpose, so none is inferred or cited.
+
+#### Router integration status
+
+The registry contract is independent of manager-template selection. The router migration must
+wait for P6's `selectLeaseTemplateDoc(ctx, stayKind)` interface: it resolves stay pricing before
+template selection, returns a typed unsupported-jurisdiction outcome instead of throwing, routes
+standard documents through `jurisdictionConfig`, and updates these callers: lease pipeline
+generation/gating, property lease preview, and lease amendment regeneration. It also writes the
+generated standard document's `executedJurisdiction` as `US-CA`, `US-CA/san_francisco`, `US-WA`,
+or `US-WA/seattle`; it never writes `documentSha256`. An uploaded template on an unsupported
+state remains generatable, but no generated jurisdiction provenance is asserted for that manager
+document.
+
 The two statewide values were added because the state rules used to fall through to the CITY
 templates, so a Fremont CA property generated a lease claiming "City and County of San
 Francisco" and citing the SF Rent Ordinance. Explicit city names, the Ave NE street pattern,
