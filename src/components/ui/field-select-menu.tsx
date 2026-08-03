@@ -91,6 +91,25 @@ export function resolveFieldSelectMenuPortal(): HTMLElement {
   return document.body;
 }
 
+/**
+ * Marks a host's FIXED chrome (drag handle + title row, or the filter panel's
+ * Filter/Reset/✕ row) so a portaled menu is never placed over it. Measured at runtime
+ * rather than assumed, because the chrome differs per host and a stale constant would
+ * silently start hiding the close control again.
+ */
+export const FIELD_SELECT_HOST_CHROME_ATTR = "data-field-select-host-chrome";
+
+/** Height of the host's fixed chrome, measured from the host's top edge. */
+export function fieldSelectHostTopInsetPx(host: HTMLElement): number {
+  const chrome = [...host.querySelectorAll<HTMLElement>(`[${FIELD_SELECT_HOST_CHROME_ATTR}]`)];
+  if (chrome.length === 0) return 0;
+  const hostTop = host.getBoundingClientRect().top;
+  return chrome.reduce((lowest, el) => {
+    const { bottom, height } = el.getBoundingClientRect();
+    return height > 0 ? Math.max(lowest, bottom - hostTop) : lowest;
+  }, 0);
+}
+
 export function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
   if (portalHost === document.body) return 10000;
   if (portalHost.matches('[data-slot="vaul-bottom-sheet"]')) return 100;
@@ -201,6 +220,13 @@ export function computeFieldSelectMenuRectInHost(
      * all five rows outranks staying inside. Omit to clamp to the host unconditionally.
      */
     bottomBoundPx?: number;
+    /**
+     * Height of the host's FIXED chrome (drag handle, title, close, Reset) measured from
+     * the host's top. The menu is never placed over it. Without this the clamp treated
+     * chrome as free space and a contained menu covered the sheet's own close control —
+     * on a phone, where there is no Escape key, that can leave the sheet undismissable.
+     */
+    topInsetPx?: number;
   },
 ): FieldSelectMenuRect {
   const hostRect = host.getBoundingClientRect();
@@ -219,7 +245,12 @@ export function computeFieldSelectMenuRectInHost(
     left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
   }
 
-  const spaceAbove = rect.top - hostRect.top - gap;
+  /* The host's fixed chrome is NOT free space — placing a menu over it hides the sheet's
+     own close control, and a phone has no Escape key to fall back on. Every placement
+     below starts at `safeTop`, never at the host's top edge. */
+  const topInset = options?.topInsetPx ?? 0;
+  const safeTop = topInset + gap;
+  const spaceAbove = rect.top - hostRect.top - topInset - gap;
   const hostSpaceBelow = hostRect.bottom - rect.bottom - gap;
   const triggerTopInHost = rect.top - hostRect.top;
   const triggerBottomInHost = rect.bottom - hostRect.top;
@@ -227,18 +258,18 @@ export function computeFieldSelectMenuRectInHost(
 
   /*
    * Containment first. A menu that escapes its sheet onto the dimmed page reads as broken,
-   * so whenever the HOST is tall enough to hold the whole menu we keep it inside — even
-   * when neither side of the trigger alone has room, by sliding it back into the host's
-   * box. That can overlap the trigger by the shortfall, which is the lesser cost: the
+   * so whenever the HOST is tall enough to hold the whole menu BELOW ITS CHROME we keep it
+   * inside — even when neither side of the trigger alone has room, by sliding it back into
+   * that box. That can overlap the trigger by the shortfall, which is the lesser cost: the
    * alternative is a menu hanging off the sheet, or one crushed below five rows.
    */
-  const hostCanContainMenu = hostRect.height - gap * 2 >= contentPx;
+  const hostCanContainMenu = hostRect.height - topInset - gap * 2 >= contentPx;
   if (hostCanContainMenu) {
     const openUpInside = resolveOpenUp(hostSpaceBelow, spaceAbove, contentPx, preferOpenDown);
     const anchored = openUpInside
       ? triggerTopInHost - contentPx - gap
       : triggerBottomInHost + gap;
-    const top = Math.min(Math.max(gap, anchored), hostRect.height - contentPx - gap);
+    const top = Math.min(Math.max(safeTop, anchored), hostRect.height - contentPx - gap);
     return { top, left, width, maxHeight: contentPx, position: "absolute" };
   }
 
@@ -252,7 +283,7 @@ export function computeFieldSelectMenuRectInHost(
     Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, openUp ? spaceAbove - gap : spaceBelow - gap),
   );
   const top = openUp
-    ? Math.max(gap, triggerTopInHost - maxHeight - gap)
+    ? Math.max(safeTop, triggerTopInHost - maxHeight - gap)
     : triggerBottomInHost + gap;
 
   return { top, left, width, maxHeight, position: "absolute" };
@@ -357,6 +388,7 @@ export function useFieldSelectMenu({
                 preferOpenDown: preferOpenDown || inVaulSheet,
                 matchTriggerWidth: matchTriggerWidth || inVaulSheet,
                 hostPaddingPx: inVaulSheet ? 0 : undefined,
+                topInsetPx: fieldSelectHostTopInsetPx(portalHost),
                 /* Both hosts are `overflow-visible`, so the menu may spill below them and
                    is bounded by the viewport instead — otherwise the bottom-most field of
                    a short sheet/panel opens a crushed one-row menu. */

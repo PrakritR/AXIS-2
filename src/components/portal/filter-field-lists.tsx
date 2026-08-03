@@ -57,7 +57,18 @@ export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS
 export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[10.5rem]";
 export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
 export const PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS = "h-[14rem]";
-export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "h-[19rem]";
+/**
+ * Fixed chrome above a desktop filter panel's fields: the Filter / Reset / ✕ row.
+ * MEASURED (58px), not derived from the utility classes — my arithmetic said 37px and the
+ * 22rem panel it produced left 286px against a 292px menu, so menus quietly went back to
+ * spilling. Re-measure if `FilterDropdownHeader` changes.
+ */
+export const PORTAL_FILTER_PANEL_CHROME_PX = 58;
+
+/* 23rem, not 19rem: the panel must hold its own chrome (58px) PLUS a full menu (292px)
+   plus the containment gap — 358px minimum. At 19rem/304px the menu fit the panel but
+   painted over Reset and Close; at 22rem it cleared them but spilled below the panel. */
+export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "h-[23rem]";
 /* One field row measures 76px (label + 44px trigger + gap); four of them plus the panel
    header and padding need ~23rem. At 19rem the fourth field rendered BELOW the panel's
    bottom edge and was only reachable by scrolling — measured on Communication, whose
@@ -115,18 +126,28 @@ export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
 );
 
 /**
- * Floor height for a RAISED filter sheet, so its menus are always containable
- * (`computeFieldSelectMenuRectInHost` contains only when `host.height - 8 >= contentPx`).
- * Without it a one-field sheet is ~179px and a full menu hung ~241px onto the dimmed
- * scrim — the exact look that was reported. Derived from the widest menu plus the
- * containment gap and a small cushion against sub-pixel rounding, never a magic number.
- *
- * The cost is dead space under a lone field, and it is the honest price of "stationary AND
- * contained": growing the sheet when a menu opens would move it, which is the defect this
- * whole pattern exists to remove. Leave that space as plain sheet background — do not fill
- * it with invented UI.
+ * Fixed chrome above a raised filter sheet's scrolling body: drag handle plus the
+ * title/close row. Measured at 75px; this over-reserves slightly, which is the SAFE
+ * direction — under-reserving lets the menu paint over the sheet's only visible dismiss
+ * control, and a phone has no Escape key to fall back on.
  */
-export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX = FILTER_MENU_CONTENT_PX + 12;
+export const PORTAL_FILTER_SHEET_CHROME_PX = 88;
+
+/**
+ * Floor height for a RAISED filter sheet, so its menus are always containable
+ * (`computeFieldSelectMenuRectInHost` contains only when
+ * `host.height - chrome - 8 >= contentPx`). Without a floor a one-field sheet is ~179px and
+ * a full menu hung ~241px onto the dimmed scrim; without the chrome term the menu fitted
+ * but painted over the sheet's own close control, which on a phone — no Escape key — can
+ * leave the sheet undismissable. Derived from the widest menu plus the chrome plus the
+ * containment gap plus a cushion, never a magic number.
+ *
+ * The cost is dead space under a lone field, knowingly accepted: correctness first. Growing
+ * the sheet when a menu opens would move it, which is the defect this whole pattern exists
+ * to remove. Leave that space as plain sheet background — do not fill it with invented UI.
+ */
+export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX =
+  FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12;
 
 type Option = { value: string; label: string };
 

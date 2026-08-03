@@ -60,7 +60,10 @@ function FilterResetLink({ onReset }: { onReset: () => void }) {
 
 function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClose: () => void }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div
+      data-field-select-host-chrome=""
+      className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2"
+    >
       <p className="text-sm font-semibold text-foreground">Filter</p>
       <div className="flex items-center gap-3">
         <FilterResetLink onReset={onReset} />

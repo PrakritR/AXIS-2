@@ -152,7 +152,12 @@ export function VaulBottomSheet({
           {!fullScreen ? (
             <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
           ) : null}
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 pb-3 pt-2">
+          {/* Title + close: fixed chrome a portaled field menu must never cover, or the
+              sheet loses its only visible dismiss control on a phone. */}
+          <div
+            data-field-select-host-chrome=""
+            className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 pb-3 pt-2"
+          >
             <div className="min-w-0 flex-1">
               <Drawer.Title className="text-base font-semibold text-foreground">{title}</Drawer.Title>
               {description ? (

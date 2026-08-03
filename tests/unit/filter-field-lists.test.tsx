@@ -23,6 +23,7 @@ import {
   FILTER_MENU_CONTENT_PX,
   FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH,
   PORTAL_FILTER_COMMUNICATION_PANEL_CLASS,
+  PORTAL_FILTER_PANEL_CHROME_PX,
   PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX,
   FilterCheckboxList,
   FilterCollapsibleSection,
@@ -174,15 +175,18 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(FILTER_MENU_CHROME_PX).toBe(FIELD_SELECT_MENU_SEARCH_PX + FIELD_SELECT_MENU_HEADER_PX);
   });
 
-  it("keeps the header small enough that the menu still fits inside a 3-field panel", () => {
-    // The binding geometry: `portalFilterPanelSizeClass(3)` is 19rem/304px, and
-    // `computeFieldSelectMenuRectInHost` only contains a menu when the host can seat it.
-    // If the header ever grows past that headroom the menu silently starts escaping the
-    // panel again — the exact defect this branch was opened to fix.
-    const panel3Px = 19 * 16;
+  it("keeps the 3-field panel tall enough for its own chrome AND a full menu", () => {
+    // A host must hold the menu BELOW its Filter/Reset/✕ row. Sizing it for the menu alone
+    // let the menu fit while painting over Reset and Close — and the same class of bug on
+    // the mobile sheet hid the only visible dismiss control. If the header or the menu ever
+    // grows past this headroom, either the menu escapes the panel or it eats the chrome;
+    // both are silent, so the arithmetic is pinned here.
+    const panel3Px = 23 * 16;
     const containmentGap = 4 * 2;
-    expect(portalFilterPanelSizeClass(3)).toContain("19rem");
-    expect(FILTER_MENU_CONTENT_PX + containmentGap).toBeLessThanOrEqual(panel3Px);
+    expect(portalFilterPanelSizeClass(3)).toContain("23rem");
+    expect(
+      FILTER_MENU_CONTENT_PX + PORTAL_FILTER_PANEL_CHROME_PX + containmentGap,
+    ).toBeLessThanOrEqual(panel3Px);
   });
 
   it("never grows the menu past 5 rows no matter how many options a field has", () => {
@@ -306,7 +310,7 @@ describe("portalFilterPanelSizeClass", () => {
   it("uses shorter height for one field and taller for more", () => {
     expect(portalFilterPanelSizeClass(1)).toContain("10.5rem");
     expect(portalFilterPanelSizeClass(2)).toContain("14rem");
-    expect(portalFilterPanelSizeClass(3)).toContain("19rem");
+    expect(portalFilterPanelSizeClass(3)).toContain("23rem");
     // Four 76px field rows plus header/padding need 23rem; at 19rem the fourth field
     // rendered BELOW the panel and was only reachable by scrolling.
     expect(portalFilterPanelSizeClass(4)).toContain("23rem");
