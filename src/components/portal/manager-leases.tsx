@@ -254,7 +254,6 @@ export function ManagerLeases({
     </>
   );
 
-
   const modals = (
     <>
       <ManagerEditLeasesModal

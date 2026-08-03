@@ -109,11 +109,12 @@ Causes 1 and 2 share a *symptom* — a Playwright strict-mode violation reading
 the other. Read the locator in the failure, not just the message.
 
 **Cause 1 — one `data-attr` is in the DOM twice, so Playwright strict mode
-throws (10 cases).** Portal headers render the *same* action node twice and let
-CSS hide one per breakpoint — e.g. `manager-promotion.tsx` passes one
-`promotionNewButton` to both `PortalPageHeaderMobileActionsRow` and the desktop
-`titleAside`. `locator('[data-attr="promotion-new"]')` therefore resolves to 2
-elements and the call throws before asserting anything.
+throws (10 cases).** A portal section renders the *same* action node twice and
+lets CSS hide one per breakpoint — the "split" header shape: a `hidden md:flex`
+`titleAside` paired with an `md:hidden` mobile actions row (see
+[`portal-list-section-layout.md`](portal-list-section-layout.md) rule 3).
+`locator('[data-attr="…"]')` therefore resolves to 2 elements and the call
+throws before asserting anything.
 
 ```text
 promotion-new-modal.spec.ts:54/66/99/144   [data-attr=promotion-new] ×2      (desktop+mobile = 8 cases)
@@ -121,9 +122,18 @@ manual-payment-verification.spec.ts:9      [data-attr=payments-setup] ×2
 new-manager-full-journey.spec.ts:46        [data-attr=manager-properties-create] ×2
 ```
 
-To fix: scope the specs to the rendered twin with `:visible` — the pattern
-`promotion-new-modal.spec.ts:36` already uses for `demo-nav-promotion` — or stop
-double-rendering the node. Note the duplicate is *also* an analytics defect: a
+⚠️ **Those three sections have since moved to the band-only shape** — Promotion,
+Payments and Properties now render their header actions once, from
+`PortalPageTitleBand`, so re-run these cases before treating them as
+known-failing. The split shape survives only on Finances and the documents /
+lease / resident-payments panels, where the mobile row is a phone's only control.
+
+To fix a case that still reproduces: scope the spec to the rendered twin with
+`:visible` — the pattern `promotion-new-modal.spec.ts:36` already uses for
+`demo-nav-promotion`. Do NOT "fix" it by deleting one of the twins on a
+split-shape section; that leaves the section with zero controls on a phone
+(`tests/unit/portal-inline-title-band-duplicate-controls.test.tsx` fails
+closed on both halves). Note the duplicate is *also* an analytics defect: a
 `data-attr` is meant to name one element for PostHog autocapture (see
 `AGENTS.md`), and two nodes double-count the Action.
 

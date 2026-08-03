@@ -831,7 +831,6 @@ export function ManagerPromotion({
     />
   );
 
-
   return (
     <ManagerPortalPageShell
       title="Promotion"

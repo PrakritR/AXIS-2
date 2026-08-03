@@ -482,7 +482,6 @@ export function ManagerAllServicesPanel({
       </Button>
     );
 
-
   // Hoisted above the early returns below. It sat after them, so on a render that took an
   // early return this hook did not run and the hook COUNT changed between renders, which
   // is the rules-of-hooks violation. Its deps are all resolved by this point.

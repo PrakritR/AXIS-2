@@ -1460,7 +1460,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     />
   );
 
-
   const teamActiveFilterChips = teamPropertyFilters.length > 0 ? (
     <div className="mb-3">
       <PortalActiveFilterChips

@@ -615,7 +615,7 @@ export function ManagerPortalPageShell({
   title: string;
   subtitle?: string;
   titleAside?: ReactNode;
-  /** Filter pill immediately beside the page title (desktop title band). Pass `null` to opt into the band without a filter. */
+  /** Filter pill immediately beside the page title (the title band). Pass `null` to opt into the band without a filter. */
   titleInlineFilter?: ReactNode | null;
   /** Inline on the title row (Appendix D4 — direction switch beside page title). */
   titleTrailing?: ReactNode;
@@ -662,107 +662,107 @@ export function ManagerPortalPageShell({
   const chromeShrink = viewportFillBody || pinChrome ? "shrink-0" : "";
   const bodyChildren = pinChrome ? renderPortalStickyBody(children) : children;
   return (
-      <div
-        className={cn(
-          surfaceCard ? PORTAL_SECTION_SURFACE : PORTAL_PAGE_SHELL_BARE,
-          surfaceCard && "relative z-0 min-w-0 w-full shrink-0",
-          mobileFlush &&
-            "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
-          fillBody && "flex min-h-0 flex-1 flex-col",
-        )}
-      >
-        {useInlineTitleBand ? (
-          <PortalPageTitleBand
-            className={cn(
-              chromeShrink,
-              compactFilterRow && "max-lg:mb-0",
-              hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
-            )}
-            title={title}
-            count={count}
-            filter={titleInlineFilter}
-            titleTrailing={titleTrailing}
-            actions={titleAside}
-          />
-        ) : (
-          <PageHeader
-            title={title}
-            count={count}
-            titleTrailing={titleTrailing}
-            primaryAction={titleAside && !titleAsideDesktopOnly ? titleAside : undefined}
-            showTitleOnMobile={showTitleOnMobile}
-            className={cn(
-              chromeShrink,
-              compactFilterRow && "!space-y-1.5 max-lg:!space-y-1",
-              hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
-              !showTitleOnMobile && "max-md:[&_h1]:sr-only",
-              !showTitleOnMobile && titleAside && !titleAsideDesktopOnly && "max-md:mt-3 max-md:w-full [html[data-native]_&]:mt-2",
-            )}
-          />
-        )}
-        {subtitle ? (
-          <p
-            className={cn(
-              chromeShrink,
-              welcomeSubtitle
-                ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-lg [html[data-native]_&]:text-base"
-                : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:text-xs",
-              hideTitleOnNative && "[html[data-native]_&]:sr-only",
-              !showTitleOnMobile && !welcomeSubtitle && "max-md:sr-only",
-            )}
-          >
-            {subtitle}
-          </p>
-        ) : null}
-        {titleAside && titleAsideDesktopOnly ? (
-          <div className={cn("mt-2 flex w-full flex-wrap items-center justify-end gap-2 max-md:hidden", chromeShrink)}>
-            {titleAside}
-          </div>
-        ) : null}
-        {filterRow ? (
-          <>
-            <div
-              className={cn(
-                compactFilterRow
-                  ? `mt-2 ${filterRowBorder} pb-1.5 max-md:mt-0 max-md:pb-1 sm:mt-2 sm:pb-2 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2`
-                  : `mt-4 ${filterRowBorder} pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5`,
-                mobileHideFilterRow && "max-md:hidden",
-                mobileFlush && "max-md:mt-0 max-md:border-0 max-md:pb-0",
-                pinChrome && "shrink-0",
-              )}
-            >
-              <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>{filterRow}</div>
-            </div>
-            <div
-              className={cn(
-                compactFilterRow
-                  ? "mt-1.5 sm:mt-2 [html[data-native]_&]:mt-1.5"
-                  : "mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5",
-                mobileHideFilterRow && "max-md:mt-0",
-                mobileFlush && "max-md:mt-0",
-                fillBody && "flex min-h-0 flex-1 flex-col",
-              )}
-            >
-              {bodyChildren}
-            </div>
-          </>
-        ) : (
+    <div
+      className={cn(
+        surfaceCard ? PORTAL_SECTION_SURFACE : PORTAL_PAGE_SHELL_BARE,
+        surfaceCard && "relative z-0 min-w-0 w-full shrink-0",
+        mobileFlush &&
+          "max-md:rounded-xl max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none max-md:backdrop-blur-none",
+        fillBody && "flex min-h-0 flex-1 flex-col",
+      )}
+    >
+      {useInlineTitleBand ? (
+        <PortalPageTitleBand
+          className={cn(
+            chromeShrink,
+            compactFilterRow && "max-lg:mb-0",
+            hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
+          )}
+          title={title}
+          count={count}
+          filter={titleInlineFilter}
+          titleTrailing={titleTrailing}
+          actions={titleAside}
+        />
+      ) : (
+        <PageHeader
+          title={title}
+          count={count}
+          titleTrailing={titleTrailing}
+          primaryAction={titleAside && !titleAsideDesktopOnly ? titleAside : undefined}
+          showTitleOnMobile={showTitleOnMobile}
+          className={cn(
+            chromeShrink,
+            compactFilterRow && "!space-y-1.5 max-lg:!space-y-1",
+            hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
+            !showTitleOnMobile && "max-md:[&_h1]:sr-only",
+            !showTitleOnMobile && titleAside && !titleAsideDesktopOnly && "max-md:mt-3 max-md:w-full [html[data-native]_&]:mt-2",
+          )}
+        />
+      )}
+      {subtitle ? (
+        <p
+          className={cn(
+            chromeShrink,
+            welcomeSubtitle
+              ? "mt-1 text-base font-medium leading-snug text-foreground max-md:text-lg [html[data-native]_&]:text-base"
+              : "mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:text-xs",
+            hideTitleOnNative && "[html[data-native]_&]:sr-only",
+            !showTitleOnMobile && !welcomeSubtitle && "max-md:sr-only",
+          )}
+        >
+          {subtitle}
+        </p>
+      ) : null}
+      {titleAside && titleAsideDesktopOnly ? (
+        <div className={cn("mt-2 flex w-full flex-wrap items-center justify-end gap-2 max-md:hidden", chromeShrink)}>
+          {titleAside}
+        </div>
+      ) : null}
+      {filterRow ? (
+        <>
           <div
             className={cn(
-              tightChrome
-                ? "mt-1.5 max-lg:mt-0 sm:mt-2 [html[data-native]_&]:mt-0"
-                : "mt-4 sm:mt-6 max-lg:mt-0 [html[data-native]_&]:mt-0",
-              mobileThreadFill && !viewportFillBody && !pinChrome && "max-md:mt-0 max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
-              (viewportFillBody || pinChrome) && "mt-0 flex min-h-0 flex-1 flex-col",
+              compactFilterRow
+                ? `mt-2 ${filterRowBorder} pb-1.5 max-md:mt-0 max-md:pb-1 sm:mt-2 sm:pb-2 [html[data-native]_&]:mt-1.5 [html[data-native]_&]:pb-2`
+                : `mt-4 ${filterRowBorder} pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5`,
+              mobileHideFilterRow && "max-md:hidden",
+              mobileFlush && "max-md:mt-0 max-md:border-0 max-md:pb-0",
+              pinChrome && "shrink-0",
+            )}
+          >
+            <div className={cn(PORTAL_MOBILE_TOOLBAR_ROW_CLASS, "md:contents")}>{filterRow}</div>
+          </div>
+          <div
+            className={cn(
+              compactFilterRow
+                ? "mt-1.5 sm:mt-2 [html[data-native]_&]:mt-1.5"
+                : "mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5",
+              mobileHideFilterRow && "max-md:mt-0",
+              mobileFlush && "max-md:mt-0",
+              fillBody && "flex min-h-0 flex-1 flex-col",
             )}
           >
             {bodyChildren}
           </div>
-        )}
-        {showMobileFooterActions ? (
-          <PortalPageFooterActions className="md:hidden">{titleAside}</PortalPageFooterActions>
-        ) : null}
-      </div>
+        </>
+      ) : (
+        <div
+          className={cn(
+            tightChrome
+              ? "mt-1.5 max-lg:mt-0 sm:mt-2 [html[data-native]_&]:mt-0"
+              : "mt-4 sm:mt-6 max-lg:mt-0 [html[data-native]_&]:mt-0",
+            mobileThreadFill && !viewportFillBody && !pinChrome && "max-md:mt-0 max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col",
+            (viewportFillBody || pinChrome) && "mt-0 flex min-h-0 flex-1 flex-col",
+          )}
+        >
+          {bodyChildren}
+        </div>
+      )}
+      {showMobileFooterActions ? (
+        <PortalPageFooterActions className="md:hidden">{titleAside}</PortalPageFooterActions>
+      ) : null}
+    </div>
   );
 }
 

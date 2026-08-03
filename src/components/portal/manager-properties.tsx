@@ -253,7 +253,6 @@ export function ManagerProperties({
     </>
   );
 
-
   const isDetailView = Boolean(propertyKeyProp);
 
   const listPanel = (

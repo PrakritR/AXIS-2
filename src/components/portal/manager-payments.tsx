@@ -666,7 +666,6 @@ export function ManagerPayments({
 
   const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
 
-
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     const chips: PortalActiveFilterChip[] = [];
     if (propertyFilters.length > 0) {

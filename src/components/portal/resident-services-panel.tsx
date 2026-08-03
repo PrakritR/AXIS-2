@@ -1228,7 +1228,6 @@ export function ResidentServicesPanel({
       </Button>
     );
 
-
   const servicesListChrome = (
     <PortalListControlStack
       className="mb-2 max-lg:mb-2"

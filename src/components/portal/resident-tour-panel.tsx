@@ -336,7 +336,6 @@ export function ResidentTourPanel({
     </Button>
   );
 
-
   const filterRow = (
     <LocalDestinationNav
       items={tabs.map((t) => ({

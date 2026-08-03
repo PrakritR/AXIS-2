@@ -2804,7 +2804,6 @@ export function ManagerResidents({
       </PortalFilterSortSheet>
     ) : null;
 
-
   return (
     <>
       <LeaseRegenerateConfirmModal

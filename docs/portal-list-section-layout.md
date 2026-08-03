@@ -50,13 +50,31 @@ Use `PortalListSectionShell` as a thin alias when building new sections:
 |---|------|---------------|
 | 1 | **One shell surface** — no nested `PORTAL_SECTION_SURFACE` in `children` | `rg PORTAL_SECTION_SURFACE` in the panel file; only the shell should use it |
 | 2 | **Header actions** in `titleAside` via `PortalSectionPrimaryButton` / `PORTAL_HEADER_ACTION_BTN` | Primary CTAs not buried in body |
-| 3 | **Mobile actions** duplicated in `PORTAL_FILTER_ACTIONS_MOBILE` inside `filterRow` when header has CTAs | Match Inbox / Residents |
+| 3 | **Header actions reach mobile exactly once** — pick one of the two shapes below, never both | `tests/unit/portal-inline-title-band-duplicate-controls.test.tsx` |
 | 4 | **Section tabs** in `filterRow`, not in raw `children` | URL tabs → `TabNav`; status buckets → `ManagerPortalStatusPills` |
 | 5 | **Divider** below header/filter block | Provided by `ManagerPortalPageShell` (always-on `border-b`) |
 | 6 | **Table body** uses `PORTAL_DATA_TABLE_WRAP` + `PORTAL_DATA_TABLE_SCROLL` + table tokens | See `portal-data-table.tsx` |
 | 7 | **Empty state** is `PortalDataTableEmpty` directly — no extra bordered box around it | |
 | 8 | **Status badges** use `portal-badge-*` + ring, `text-[11px]`, `px-2.5 py-0.5` | Match Residents portal column |
 | 9 | **Secondary filters** (date, property) as flat toolbar rows in body (`mb-4`), not inside a nested card | Finances, Documents |
+
+### Rule 3 — the two legal header-action shapes
+
+`ManagerPortalPageShell` renders `PortalPageTitleBand` at **every** breakpoint once
+`hideTitleOnMobileNav` + `titleAside` are set with no `filterRow` (`useInlineTitleBand`).
+So a section's header controls can reach a phone exactly one of two ways:
+
+- **Band-only** — an ungated `titleAside` and **no** `PortalPageHeaderMobileActionsRow`.
+  This is the default for new sections (Applications, Residents, Properties, Tour).
+- **Split** — a `hidden md:flex` `titleAside` (invisible on phones) paired with an
+  `md:hidden` mobile actions row: `PortalPageHeaderMobileActionsRow` (Finances) or a
+  hand-rolled `data-slot="…mobile-actions"` block (the documents, lease and
+  resident-payments panels). Those five are the only sections still on this shape.
+
+Mixing them draws every control twice on a phone; deleting the mobile row from a split
+section leaves zero. Passing a `filterRow` sidesteps the choice — the shell desktop-gates
+the aside itself (`titleAsideDesktopOnly`) and moves the mobile copy into
+`PortalPageFooterActions`.
 
 ---
 

@@ -458,7 +458,6 @@ export function PortalCalendar({
       </>
     ) : null;
 
-
   const pageTitle = portal === "manager" ? "Calendar" : "Schedule meeting";
 
   if (portal === "manager" && !authReady) {

@@ -876,7 +876,6 @@ export function ResidentApplicationsPanel({
       </Button>
     ) : null;
 
-
   const renderRoutedList = () => (
     <DataList
       hideColumnHeaders
