@@ -46,10 +46,12 @@ let propertyPipelineSyncPromise: Promise<boolean> | null = null;
 // Keyed by the viewer id because that id SCOPES the snapshot — an unscoped call
 // and a scoped one must never share a run.
 const propertyPipelineRefreshers = new Map<string, CoalescedRefresher<boolean>>();
-const latestPipelineSyncOpts = new Map<
-  string,
-  { userId?: string | null; linkedPropertyIds?: Iterable<string> } | undefined
->();
+// Linked property ids accumulated from every caller queued for the next run of a
+// given viewer, drained when that run starts. A run must scope with the UNION of
+// its callers' ids, never just the last one's: several call sites force a sync
+// with no ids at all, and letting one of those win drops a joined caller's ids —
+// which is exactly how `runPropertyPipelineSync` wipes co-managed owner buckets.
+const pendingPipelineLinkedIds = new Map<string, Set<string>>();
 // Signature of the last snapshot we broadcast. The PROPERTY_PIPELINE_EVENT re-enters
 // listeners that can force another sync (e.g. manager-properties' refreshPortfolio),
 // so dispatching on every sync — even an unchanged one — is an infinite refetch loop.
@@ -347,15 +349,26 @@ export async function syncPropertyPipelineFromServer(opts?: {
     return true;
   }
   const viewerKey = opts?.userId?.trim() ?? "";
-  // The refresher outlives any one call, so it must read the LATEST caller's
-  // linked ids rather than closing over the first caller's — otherwise a joined
-  // caller's ids would be silently dropped from the union below.
-  latestPipelineSyncOpts.set(viewerKey, opts);
+  // The refresher outlives any one call, so it must scope with every queued
+  // caller's linked ids rather than closing over one caller's — otherwise a
+  // joined caller's ids would be silently dropped from the union below.
+  let pendingIds = pendingPipelineLinkedIds.get(viewerKey);
+  if (!pendingIds) {
+    pendingIds = new Set<string>();
+    pendingPipelineLinkedIds.set(viewerKey, pendingIds);
+  }
+  for (const id of opts?.linkedPropertyIds ?? []) {
+    const trimmed = String(id).trim();
+    if (trimmed) pendingIds.add(trimmed);
+  }
   let refresher = propertyPipelineRefreshers.get(viewerKey);
   if (!refresher) {
-    refresher = createCoalescedRefresher(() =>
-      runPropertyPipelineSync(latestPipelineSyncOpts.get(viewerKey)),
-    );
+    refresher = createCoalescedRefresher(() => {
+      // Drain at run start: ids accumulated from here on belong to the next run.
+      const linkedPropertyIds = [...(pendingPipelineLinkedIds.get(viewerKey) ?? [])];
+      pendingPipelineLinkedIds.delete(viewerKey);
+      return runPropertyPipelineSync({ userId: viewerKey || null, linkedPropertyIds });
+    });
     propertyPipelineRefreshers.set(viewerKey, refresher);
   }
   return refresher.run(force);
