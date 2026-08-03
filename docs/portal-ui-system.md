@@ -227,19 +227,23 @@ or resize the panel.
   single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
   / `FieldSingleSelect` (`checkbox-multi-select.tsx`) are the same pattern for
   form/toolbar/scope pickers — prefer them over a bare `<select>`.
+  `menuOptionCount` is REQUIRED on `FilterCollapsibleSection` because the menu is
+  sized from it (see the next bullet).
 - **5 rows, then scroll:** the cap lives on the portaled SHELL — its `maxHeight`
-  is `fieldSelectMenuContentPx(FIELD_SELECT_MENU_VISIBLE_ITEMS, …)`, and
-  `FIELD_SELECT_MENU_VISIBLE_ITEMS` (aliased as `FILTER_LIST_VISIBLE_ROWS`) stays
-  the single source of the "5" — and the option list is a shrinkable flex child
+  is `fieldSelectMenuContentPx(<the field's OWN option count>, …)`, which clamps
+  that count to 1..5, and `FIELD_SELECT_MENU_VISIBLE_ITEMS` (aliased as
+  `FILTER_LIST_VISIBLE_ROWS`) stays the single source of the "5". So 5+ options
+  give exactly 5 rows and scroll, and 3 options end the box after the third row
+  instead of padding two empty ones. The option list is a shrinkable flex child
   (`FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS`, which also carries the touch-scroll
-  affordances) that scrolls under it. The menu otherwise sizes to its real content, so a short or
-  filtered list leaves no empty space below it; never give the listbox a fixed
-  height or `flex-1`, both of which break that. The shell's `maxHeight` is sized
-  from the FIELD'S OWN option count (`fieldSelectMenuContentPx` clamps to 1..5), so
-  5+ options give exactly 5 rows and scroll, and 3 options end the box after the
-  third row instead of padding two empty ones. A search box appears on portal
-  filter menus (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an
-  already-selected option.
+  affordances) that scrolls under that cap, and the shell itself is `height: auto`
+  — so a short or filtered list leaves no empty space below it. Never give the
+  listbox a fixed height or `flex-1`, and never size the shell from
+  `FIELD_SELECT_MENU_VISIBLE_ITEMS` regardless of the field: both reintroduce the
+  empty padding. A search box appears on portal filter menus
+  (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an already-selected
+  option; the shared `CheckboxMultiSelect` / `FieldSingleSelect` still show one
+  only above 5 options.
 - **The mobile filter sheet is RAISED statically and never moves.** `autoElevate`
   on `VaulBottomSheet` applies a fixed `bottom: max(32vh, …)` plus a max-height
   derived from that same offset. It used to be gated on a
