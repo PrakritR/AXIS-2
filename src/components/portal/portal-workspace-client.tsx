@@ -8,7 +8,7 @@ import {
   PORTAL_KPI_LABEL,
   PORTAL_KPI_VALUE,
 } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,

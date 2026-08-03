@@ -27,7 +27,7 @@ import {
   ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
