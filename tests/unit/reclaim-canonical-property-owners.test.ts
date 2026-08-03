@@ -98,6 +98,16 @@ describe("reclaimCanonicalPropertyOwners", () => {
     expect(db.updates).toEqual([]);
   });
 
+  it("leaves a row with a blank expected owner alone instead of aborting the seed", async () => {
+    const db = makeSupabase([{ id: "mgr-demo-cascade", manager_user_id: STRAY }]);
+
+    const result = await reclaimCanonicalPropertyOwners(db.client, { "mgr-demo-cascade": "" }, { log });
+
+    expect(result.reclaimed).toEqual([]);
+    expect(db.updates).toEqual([]);
+    expect(db.store[0].manager_user_id).toBe(STRAY);
+  });
+
   it("throws when a row is STILL mis-owned after the write, rather than reporting success", async () => {
     // The UPDATE reports `error: null` but the row does not move — exactly the
     // "the write said ok" evidence that let this drift survive a seed run.

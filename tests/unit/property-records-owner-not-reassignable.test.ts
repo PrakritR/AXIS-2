@@ -177,16 +177,6 @@ describe("POST /api/property-records — creating a record still attributes norm
     expect(UPSERTS).toHaveLength(0);
   });
 
-  it("adopts an ownerless legacy row under the manager saving it", async () => {
-    EXISTING_ROW = { manager_user_id: "" };
-    getUser.mockResolvedValue({ data: { user: { id: OWNER } } });
-
-    const res = await post({ action: "upsert", id: PROPERTY_ID, status: "live", propertyData: {} });
-
-    expect(res.status).toBe(200);
-    expect(UPSERTS[0].manager_user_id).toBe(OWNER);
-  });
-
   it("keeps delete authorized by the stored owner, not the body", async () => {
     getUser.mockResolvedValue({ data: { user: { id: CO_MANAGER } } });
 
@@ -194,5 +184,57 @@ describe("POST /api/property-records — creating a record still attributes norm
 
     expect(res.status).toBe(403);
     expect(DELETED_IDS).toHaveLength(0);
+  });
+});
+
+/**
+ * `manager_user_id` is `references auth.users (id) on delete set null`, so an
+ * EXISTING row with a blank owner is a reachable production state, and the row
+ * id is the public listing id. Treating that row as a create would let any
+ * signed-in account take over — or destroy — the listing.
+ */
+describe("POST /api/property-records — an EXISTING ownerless row is not a create", () => {
+  beforeEach(() => {
+    EXISTING_ROW = { manager_user_id: "" };
+  });
+
+  it("refuses a non-admin upsert onto an orphaned listing", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: OTHER_MANAGER } } });
+
+    const res = await post({
+      action: "upsert",
+      id: PROPERTY_ID,
+      managerUserId: OTHER_MANAGER,
+      status: "live",
+      propertyData: { id: PROPERTY_ID },
+    });
+
+    expect(res.status).toBe(403);
+    expect(UPSERTS).toHaveLength(0);
+  });
+
+  it("refuses a non-admin delete of an orphaned listing and deletes nothing", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: OTHER_MANAGER } } });
+
+    const res = await post({ action: "delete", id: PROPERTY_ID });
+
+    expect(res.status).toBe(403);
+    expect(DELETED_IDS).toHaveLength(0);
+  });
+
+  it("lets an admin adopt an orphaned listing on a manager's behalf", async () => {
+    IS_ADMIN = true;
+    getUser.mockResolvedValue({ data: { user: { id: ADMIN } } });
+
+    const res = await post({
+      action: "upsert",
+      id: PROPERTY_ID,
+      managerUserId: OWNER,
+      status: "live",
+      propertyData: { id: PROPERTY_ID },
+    });
+
+    expect(res.status).toBe(200);
+    expect(UPSERTS[0].manager_user_id).toBe(OWNER);
   });
 });
