@@ -1,10 +1,154 @@
 import { describe, expect, it } from "vitest";
 import { snapshotJordanLee } from "@/data/manager-application-snapshots";
-import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
+import {
+  buildAiGeneratedLeaseHtml,
+  leaseContextFromApplication,
+  selectLeaseTemplateDoc,
+} from "@/lib/generated-lease";
 import { LEASE_AI_REVIEW_DISCLAIMER } from "@/lib/lease-templates/types";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 
 describe("generated-lease", () => {
+  it("selects uploaded templates only for their configured stay kind", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        propertyLeaseTemplates: [
+          {
+            id: "long-v1",
+            kind: "long-term",
+            label: "Long-term lease",
+            listingSeedKey: "primary",
+            leaseConfigMode: "custom",
+            leaseCustomKind: "document",
+            customLeaseTerms: "",
+            leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/long.pdf",
+            leaseTemplateDocName: "Long-term.pdf",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          },
+          {
+            id: "short-v1",
+            kind: "short-term",
+            label: "Short-term agreement",
+            listingSeedKey: "short-term",
+            leaseConfigMode: "custom",
+            leaseCustomKind: "document",
+            customLeaseTerms: "",
+            leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/short.pdf",
+            leaseTemplateDocName: "Short-term.pdf",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    expect(selectLeaseTemplateDoc(ctx, "long")).toMatchObject({ name: "Long-term.pdf" });
+    expect(selectLeaseTemplateDoc(ctx, "short")).toMatchObject({ name: "Short-term.pdf" });
+  });
+
+  it("does not fall back to a long-term upload for a short stay", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        leaseConfigMode: "custom" as const,
+        leaseCustomKind: "document" as const,
+        leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/legacy.pdf",
+        leaseTemplateDocName: "Legacy long-term.pdf",
+      },
+    };
+
+    expect(selectLeaseTemplateDoc(ctx, "long")).toMatchObject({ name: "Legacy long-term.pdf" });
+    expect(selectLeaseTemplateDoc(ctx, "short")).toBeNull();
+  });
+
+  it("does not mirror a short-only template into the long-term document", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const shortTemplate = {
+      id: "short-v1",
+      kind: "short-term" as const,
+      label: "Short-term agreement",
+      listingSeedKey: "short-term" as const,
+      leaseConfigMode: "custom" as const,
+      leaseCustomKind: "document" as const,
+      customLeaseTerms: "",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/short.pdf",
+      leaseTemplateDocName: "Short-term.pdf",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    };
+    const ctx = {
+      ...base,
+      // This mirrors submissionWithLeaseTemplateForApplication's legacy field
+      // overlay. The selector must still use the array's stay-kind boundary.
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        ...shortTemplate,
+        propertyLeaseTemplates: [shortTemplate],
+      },
+    };
+
+    expect(selectLeaseTemplateDoc(ctx, "short")).toMatchObject({ name: "Short-term.pdf" });
+    expect(selectLeaseTemplateDoc(ctx, "long")).toBeNull();
+  });
+
+  it("rejects an arbitrary URL stored in editable listing data", () => {
+    const base = leaseContextFromApplication(snapshotJordanLee());
+    const ctx = {
+      ...base,
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        leaseConfigMode: "custom" as const,
+        leaseCustomKind: "document" as const,
+        leaseTemplateDocUrl: "https://example.test/manager-lease.pdf",
+        leaseTemplateDocName: "Not a stored template.pdf",
+      },
+    };
+
+    expect(selectLeaseTemplateDoc(ctx, "long")).toBeNull();
+  });
+
+  it("renders one binding Terms Rider rather than a placement summary above an uploaded template", () => {
+    const base = leaseContextFromApplication({
+      ...snapshotJordanLee(),
+      managerRentOverride: "1250",
+      managerSecurityDepositOverride: "300",
+    });
+    const ctx = {
+      ...base,
+      submission: {
+        ...(base.submission ?? { v: 1, rooms: [], bathrooms: [], sharedSpaces: [], bundles: [], quickFacts: [] }),
+        propertyLeaseTemplates: [
+          {
+            id: "long-v1",
+            kind: "long-term",
+            label: "Long-term lease",
+            listingSeedKey: "primary",
+            leaseConfigMode: "custom",
+            leaseCustomKind: "document",
+            customLeaseTerms: "",
+            leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/long.pdf",
+            leaseTemplateDocName: "Long-term.pdf",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const html = buildAiGeneratedLeaseHtml(ctx);
+    expect(html).toContain("TERMS RIDER");
+    expect(html).toContain("this Terms Rider controls for that conflict");
+    expect(html).toContain("$1,250");
+    expect(html).toContain("$300");
+    expect(html).not.toContain("Placement Summary");
+  });
+
   it("builds lease context from application snapshot", () => {
     const app = snapshotJordanLee();
     const ctx = leaseContextFromApplication({

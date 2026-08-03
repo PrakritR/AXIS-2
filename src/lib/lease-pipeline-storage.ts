@@ -7,7 +7,12 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
-import { buildAiGeneratedLeaseHtml, leaseContextFromApplication, leaseTemplateDocForContext } from "@/lib/generated-lease";
+import {
+  buildAiGeneratedLeaseHtml,
+  leaseContextFromApplication,
+  leaseTemplateDocForContext,
+  leaseTemplateVersionForContext,
+} from "@/lib/generated-lease";
 import {
   isLeaseGenerationSupported,
   resolveLeaseJurisdiction,
@@ -23,7 +28,8 @@ import {
   rowHasAnySignature,
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
-import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import { appendLeaseTermsRiderToPdf, mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import { leaseTemplateObjectPath, legacyLeaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import {
   downloadDataUrl,
   downloadTextContent,
@@ -356,6 +362,10 @@ export type LeasePipelineRow = {
   executedJurisdiction?: string | null;
   /** Template identifier plus semver, e.g. "ca-residential@1.2.0". */
   templateVersion?: string | null;
+  /** PDF selection frozen when an unsigned manager-review document is generated. */
+  templateDocumentUrl?: string | null;
+  /** Display name paired with `templateDocumentUrl`; not an authorization value. */
+  templateDocumentName?: string | null;
   /** SHA-256 of the document as first executed (see `LeaseSignature.documentSha256`). */
   documentSha256?: string | null;
   /**
@@ -519,6 +529,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     externallySignedLease: r.externallySignedLease === true,
     executedJurisdiction: optionalTrimmedString(r.executedJurisdiction),
     templateVersion: optionalTrimmedString(r.templateVersion),
+    templateDocumentUrl: optionalTrimmedString(r.templateDocumentUrl),
+    templateDocumentName: optionalTrimmedString(r.templateDocumentName),
     // DERIVED, never carried forward from storage: it is the hash recorded by
     // the FIRST signature currently on the row. A stored copy went stale the
     // moment a document was replaced and the row re-signed (every reset path
@@ -1628,6 +1640,63 @@ async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<Leas
   }
 }
 
+function pdfDataUrl(bytes: ArrayBuffer): string {
+  const values = new Uint8Array(bytes);
+  let binary = "";
+  for (const value of values) binary += String.fromCharCode(value);
+  return `data:application/pdf;base64,${btoa(binary)}`;
+}
+
+/**
+ * A manager template remains byte-for-byte intact. Before the first signer sees
+ * it, attach the resolved Terms Rider and make that combined PDF the immutable
+ * agreement body. The certificate is added only after signatures are captured.
+ */
+async function prepareManagerTemplatePdfForSignature(
+  row: LeasePipelineRow,
+  managerUserId?: string | null,
+): Promise<{ row: LeasePipelineRow } | { error: string }> {
+  if (row.managerUploadedPdf?.dataUrl) return { row };
+  const ctx = leaseGenerationContextForRow(row, managerUserId);
+  if (!ctx) return { row };
+  const currentTemplate = leaseTemplateDocForContext(ctx);
+  const template = row.templateDocumentUrl
+    ? {
+        url: row.templateDocumentUrl,
+        name: row.templateDocumentName || currentTemplate?.name || "Lease template.pdf",
+      }
+    : currentTemplate;
+  if (!template) return { row };
+  if (!leaseTemplateObjectPath(template.url) && !legacyLeaseTemplateObjectPath(template.url)) {
+    return { error: "The selected lease template is not a stored manager document. Reopen the lease settings and try again." };
+  }
+
+  try {
+    const response = await fetch(template.url, { credentials: "include", cache: "no-store" });
+    if (!response.ok) {
+      return { error: "Could not read the selected lease template. Reopen the lease settings and try again." };
+    }
+    const originalDataUrl = await appendLeaseTermsRiderToPdf(pdfDataUrl(await response.arrayBuffer()), ctx);
+    const iso = new Date().toISOString();
+    return {
+      row: {
+        ...row,
+        generatedHtml: null,
+        generatedAtIso: iso,
+        managerUploadedPdf: {
+          dataUrl: originalDataUrl,
+          originalDataUrl,
+          fileName: template.name,
+          uploadedAt: iso,
+        },
+        templateVersion: row.templateVersion ?? leaseTemplateVersionForContext(ctx),
+      },
+    };
+  } catch {
+    return { error: "Could not prepare the lease terms rider. Check your connection and try again." };
+  }
+}
+
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
@@ -1656,6 +1725,7 @@ export function generateLeaseHtmlForRow(
     return { ok: false, error: msg };
   }
   const version = (row.versionNumber ?? row.pdfVersion) + 1;
+  const selectedTemplate = leaseTemplateDocForContext(ctx);
   const ok = updateLeasePipelineRow(
     rowId,
     {
@@ -1668,6 +1738,9 @@ export function generateLeaseHtmlForRow(
       status: "Manager Review",
       currentActorRole: "manager",
       leaseDocumentRemovedAt: null,
+      templateVersion: selectedTemplate ? leaseTemplateVersionForContext(ctx) : null,
+      templateDocumentUrl: selectedTemplate?.url ?? null,
+      templateDocumentName: selectedTemplate?.name ?? null,
     },
     managerUserId,
   );
@@ -2046,7 +2119,9 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   const raw = [...materializeLeasePipeline(managerUserId)];
   const idx = findRawLeaseRowIndex(rowId, managerUserId);
   if (idx === -1) return { ok: false, error: "Lease record could not be saved locally." };
-  const row = raw[idx]!;
+  const prepared = await prepareManagerTemplatePdfForSignature(raw[idx]!, managerUserId);
+  if ("error" in prepared) return { ok: false, error: prepared.error };
+  const row = prepared.row;
   const iso = new Date().toISOString();
   const updated = normalizeLeasePipelineRow({
     ...row,

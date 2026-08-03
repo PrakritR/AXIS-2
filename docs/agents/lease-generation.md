@@ -1001,6 +1001,58 @@ reintroduce a local lookup.
   own optional config field and a verified figure per jurisdiction.
 - **Dates render as raw ISO** (`2026-08-03`) on both documents rather than a written-out date.
 
+## Per-stay-kind templates and Terms Rider (P6)
+
+Lease configuration is already stored additively in `property_data` JSON through
+`ManagerListingSubmissionV1.propertyLeaseTemplates[]`. The auto-seeded rows use
+`listingSeedKey: "primary"` for long-term and `listingSeedKey: "short-term"`
+for short-term. Each row owns its own `leaseConfigMode`, `leaseCustomKind`,
+`customLeaseTerms`, `leaseTemplateDocUrl`, and `leaseTemplateDocName`. The legacy
+top-level fields remain the long-term compatibility representation for listings
+saved before the template array existed. No migration is needed.
+
+`selectLeaseTemplateDoc(ctx, stayKind)` in `generated-lease.ts` is the only
+uploaded-document selector for this path. Its behavior is intentional:
+
+| Long-term template | Short-term template | Long stay | Short stay |
+| --- | --- | --- | --- |
+| configured | configured | long-term PDF | short-term PDF |
+| configured | missing | long-term PDF | generated stay agreement |
+| missing | configured | generated long-form lease | short-term PDF |
+| missing | missing | generated long-form lease | generated stay agreement |
+| legacy single top-level PDF | no per-stay rows | legacy PDF | generated stay agreement |
+
+There is no long-term-to-short-term fallback. Serving a residential template to a
+guest is less safe than using PropLane's generated short-stay agreement. The manager
+lease modal states this rule and bulk editing applies only the selected agreement type,
+leaving the other type unchanged.
+
+For an uploaded PDF, PropLane does not rewrite, flatten, overlay, or otherwise edit
+the manager's source document. `buildManagerTemplateLeaseHtml` shows a Terms Rider
+instead of the old placement-summary table. The PDF path uses
+`appendLeaseTermsRiderToPdf`: base PDF, then rider, then the existing electronic
+signature certificate. The rider states the resident, property and room, stay dates,
+rent basis and resolved rate, deposit, any charge-backed fees, and this precedence
+clause: "If this Terms Rider conflicts with the base document, this Terms Rider
+controls for that conflict." Rates and deposits are resolved with `resolveStayPricing`;
+fees come only from the billing snapshot, so the rider does not invent a ledger value.
+
+The combined base-PDF-plus-rider bytes are stored in
+`managerUploadedPdf.originalDataUrl` before sending for signature. Therefore each
+signature's `documentSha256` covers both the uploaded legal document and the binding
+rider. The certificate stays outside that hash and is appended last because it is a
+post-signature platform artifact. A signed row cannot replace `originalDataUrl`, so
+the rider is never inserted after a party has signed. Manager-uploaded templates also
+record `templateVersion` as `<template id>@1.0.0` (or
+`legacy-manager-uploaded@1.0.0` for a pre-array listing). Generation freezes the
+selected template URL, display name, and version on the unsigned lease row, so a
+later listing-settings change cannot swap the reviewed PDF during send.
+
+Not built: AcroForm filling. A future upgrade can inspect
+`pdf.getForm().getFields().length`, set verified named text fields, and flatten the
+form when fields exist. PDFs without fields still use the rider. DOCX template upload
+remains out of scope.
+
 ## Coverage
 
 | Test | What it pins |

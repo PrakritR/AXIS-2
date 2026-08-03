@@ -113,6 +113,67 @@ describe("persistLeaseConfigToPropertyIds", () => {
     expect(result).toEqual({ saved: 0, failed: 1 });
     expect(resolveManagerListingSubmissionForPropertyId("mgr-1", "missing")).toBeNull();
   });
+
+  it("updates only the requested stay-kind template for every selected property", () => {
+    const longTemplate = {
+      id: "long-v1",
+      kind: "long-term" as const,
+      label: "Long-term lease",
+      listingSeedKey: "primary" as const,
+      leaseConfigMode: "custom" as const,
+      leaseCustomKind: "document" as const,
+      customLeaseTerms: "",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/long.pdf",
+      leaseTemplateDocName: "Long-term.pdf",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    };
+    const shortTemplate = {
+      ...longTemplate,
+      id: "short-v1",
+      kind: "short-term" as const,
+      label: "Short-term agreement",
+      listingSeedKey: "short-term" as const,
+      leaseConfigMode: "standard" as const,
+      leaseCustomKind: "terms" as const,
+      leaseTemplateDocUrl: null,
+      leaseTemplateDocName: "",
+    };
+    const sub = { ...createDefaultListingSubmission(), propertyLeaseTemplates: [longTemplate, shortTemplate] };
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([
+      {
+        id: "prop-a", title: "A", tagline: "", address: "1 Main", zip: "98101", neighborhood: "Downtown",
+        beds: 2, baths: 1, rentLabel: "$2000", available: "Now", petFriendly: true, buildingId: "b1",
+        buildingName: "A", unitLabel: "1", managerUserId: "mgr-1", adminPublishLive: true, listingSubmission: sub,
+      },
+      {
+        id: "prop-b", title: "B", tagline: "", address: "2 Main", zip: "98101", neighborhood: "Downtown",
+        beds: 2, baths: 1, rentLabel: "$2000", available: "Now", petFriendly: true, buildingId: "b2",
+        buildingName: "B", unitLabel: "1", managerUserId: "mgr-1", adminPublishLive: true, listingSubmission: sub,
+      },
+    ]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    const updateListing = vi.spyOn(propertyPipeline, "updateExtraListingFromSubmission").mockReturnValue(true);
+
+    const result = persistLeaseConfigToPropertyIds("mgr-1", ["prop-a", "prop-b"], {
+      leaseConfigMode: "custom",
+      leaseCustomKind: "document",
+      customLeaseTerms: "",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/short.pdf",
+      leaseTemplateDocName: "Short-term.pdf",
+    }, "short-term");
+
+    expect(result).toEqual({ saved: 2, failed: 0 });
+    for (const [, , saved] of updateListing.mock.calls) {
+      const templates = saved.propertyLeaseTemplates ?? [];
+      expect(templates.find((template) => template.listingSeedKey === "primary")).toMatchObject({
+        leaseTemplateDocName: "Long-term.pdf",
+      });
+      expect(templates.find((template) => template.listingSeedKey === "short-term")).toMatchObject({
+        leaseTemplateDocName: "Short-term.pdf",
+      });
+    }
+  });
 });
 
 describe("persistApplicationConfigToPropertyIds", () => {
