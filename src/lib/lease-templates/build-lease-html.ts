@@ -1,4 +1,4 @@
-import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
+import { formatLeaseDateLabel, parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import {
   activeCustomLeaseTerms,
   entireHomeMonthlyRentAmount,
@@ -74,6 +74,17 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * A date as a person reads it: "Sep 1, 2026", not "2026-09-01". Residents sign this document,
+ * and every date in it was rendering as a raw ISO string. Falls back to the original text when
+ * the value is not a parseable date, so a free-text term like "N/A (month-to-month)" survives.
+ */
+function leaseDate(value: string | undefined | null): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return "—";
+  return escapeHtml(formatLeaseDateLabel(raw) || raw);
 }
 
 function dash(s: string | undefined | null): string {
@@ -611,8 +622,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
   // ── Dates ─────────────────────────────────────────────────────────────────
   const leaseTerm = dash(a.leaseTerm);
-  const leaseStart = dash(a.leaseStart);
-  const leaseEnd = a.leaseTerm === "Month-to-Month" ? dash(a.leaseEnd || "N/A (month-to-month)") : dash(a.leaseEnd);
+  const leaseStart = leaseDate(a.leaseStart);
+  const leaseEnd =
+    a.leaseTerm === "Month-to-Month" ? leaseDate(a.leaseEnd || "N/A (month-to-month)") : leaseDate(a.leaseEnd);
   const generatedDate = escapeHtml(new Date(generatedAtIso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }));
 
   // ── Content blocks ────────────────────────────────────────────────────────
@@ -795,7 +807,7 @@ ${
 <h2>3. Length of Stay</h2>
 <table>
   <tr><th width="35%">Check-in date &amp; time</th><td>${leaseStart} @ ${checkInTime}</td></tr>
-  <tr><th>Check-out date &amp; time</th><td>${dash(a.leaseEnd)} @ ${checkOutTime}</td></tr>
+  <tr><th>Check-out date &amp; time</th><td>${leaseDate(a.leaseEnd)} @ ${checkOutTime}</td></tr>
   <tr><th>Total duration</th><td>${stayNights ? `${stayNights} ${stayUnitNoun.toLowerCase()}${stayNights === 1 ? "" : "s"}` : "—"}</td></tr>
 </table>
 
