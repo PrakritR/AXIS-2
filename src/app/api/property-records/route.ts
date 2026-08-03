@@ -127,11 +127,20 @@ export async function POST(req: Request) {
 
     // Look up the stored row's owner ONCE. All authorization anchors on this
     // server-read value, never on body.managerUserId (which a caller controls).
-    const { data: existing } = await db
+    const { data: existing, error: existingError } = await db
       .from("manager_property_records")
       .select("manager_user_id")
       .eq("id", id)
       .maybeSingle();
+    // A FAILED read is not an absent row. Falling through would answer 404 on a
+    // delete — which `deletePropertyRecordFromServer` reports as success, so the
+    // client then drops the local draft and permanently deletes its uploaded
+    // photos while the server row is still there — or take the create branch on
+    // an upsert, which resolves an owner with no stored owner to authorize
+    // against. Only a successful read that found nothing is "not found".
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    }
     const existingOwnerId = existing ? String(existing.manager_user_id ?? "").trim() : "";
     const isDelete = body.action === "delete";
 

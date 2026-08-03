@@ -35,6 +35,7 @@ const clearHousingAccess = vi.fn(async () => ({ invitesUpdated: 0, applicationsC
 
 let IS_ADMIN = false;
 let EXISTING_ROW: { manager_user_id: string } | null = null;
+let EXISTING_READ_ERROR: { message: string } | null = null;
 let CO_MANAGER_ACCESS: { ok: true } | { ok: false; error: string; status: number } = {
   ok: false,
   error: "Forbidden.",
@@ -60,7 +61,12 @@ vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: () => ({
     from: (table: string) => ({
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: EXISTING_ROW, error: null }) }),
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: EXISTING_READ_ERROR ? null : EXISTING_ROW,
+            error: EXISTING_READ_ERROR,
+          }),
+        }),
       }),
       upsert: async (row: Record<string, unknown>) => {
         WRITES.push({ table, op: "upsert", id: String(row.id ?? "") });
@@ -102,6 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   IS_ADMIN = false;
   EXISTING_ROW = null;
+  EXISTING_READ_ERROR = null;
   CO_MANAGER_ACCESS = { ok: false, error: "Forbidden.", status: 403 };
   WRITES = [];
 });
@@ -229,6 +236,45 @@ describe("POST /api/property-records — a legitimate delete still works end to 
 
     expect(res.status).toBe(403);
     expect(clearHousingAccess).not.toHaveBeenCalled();
+    expect(WRITES).toEqual([]);
+  });
+});
+
+/**
+ * A read that FAILED is not a row that is absent. Answering 404 there would be
+ * read by the client as success — `deletePropertyRecordFromServer` maps 404 to
+ * `true`, and `deleteManagerPropertyDraft` then drops the local drafts row and
+ * permanently deletes the draft's `listing-photos` objects while the server row
+ * is still there. Taking the create branch instead would resolve an owner with
+ * no stored owner to authorize against.
+ */
+describe("POST /api/property-records — the stored-row lookup fails", () => {
+  beforeEach(() => {
+    EXISTING_READ_ERROR = { message: "connection terminated unexpectedly" };
+  });
+
+  it("answers 500 on a delete rather than 404, and never reaches the global cleanup", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: OWNER } } });
+
+    const res = await post({ action: "delete", id: OWNED_PROPERTY_ID });
+
+    expect(clearHousingAccess).not.toHaveBeenCalled();
+    expect(WRITES).toEqual([]);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "connection terminated unexpectedly" });
+  });
+
+  it("answers 500 on an upsert rather than creating a record under the caller", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: OUTSIDER } } });
+
+    const res = await post({
+      action: "upsert",
+      id: OWNED_PROPERTY_ID,
+      status: "live",
+      propertyData: {},
+    });
+
+    expect(res.status).toBe(500);
     expect(WRITES).toEqual([]);
   });
 });
