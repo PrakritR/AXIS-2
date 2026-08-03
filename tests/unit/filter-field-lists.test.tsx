@@ -289,14 +289,32 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
     expect(sheet.getAttribute("data-elevated")).toBe("true");
     expect(sheet.className).toContain("top-auto");
-    // The raised offset AND the max-height derive from the same expression, so a raised
-    // sheet can never run off the top of the viewport — that is what the old
+    // The raised offset AND the max-height derive from the same custom property, so a
+    // raised sheet can never run off the top of the viewport — that is what the old
     // `height < viewport * 0.52` measurement was guarding, and the measurement is what
     // made the sheet jump when its content changed.
-    expect(sheet.className).toContain("bottom-[max(32vh,");
-    expect(sheet.className).toContain("max-h-[calc(100dvh-max(32vh,");
+    expect(sheet.className).toContain("bottom-[var(--portal-raised-sheet-offset)]");
+    expect(sheet.className).toContain("max-h-[calc(100dvh-var(--portal-raised-sheet-offset)-1rem)]");
+    expect(sheet.style.getPropertyValue("--portal-raised-sheet-offset")).toContain("32vh");
     // Exactly one max-height utility: two would resolve by CSS source order, not class order.
     expect(sheet.className.match(/max-h-\[/g)).toHaveLength(1);
+  });
+
+  it("travels its own height PLUS the raised offset so it still animates off screen on close", () => {
+    // Vaul's slideFromBottom/slideToBottom keyframes translate by
+    // `var(--initial-transform, 100%)` — 100% of the drawer's OWN height, which clears the
+    // viewport only for a bottom-anchored drawer. A raised sheet left at the default ends
+    // the close animation `offset` px short and then unmounts abruptly.
+    render(
+      <VaulBottomSheet open onOpenChange={() => {}} title="Filter" autoElevate>
+        <p>fields</p>
+      </VaulBottomSheet>,
+    );
+    const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
+    // Reads the same custom property the placement does, so the two can never disagree.
+    expect(sheet.style.getPropertyValue("--initial-transform")).toBe(
+      "calc(100% + var(--portal-raised-sheet-offset))",
+    );
   });
 
   it("leaves a viewport-filling sheet bottom-anchored (raising it would clip its top)", () => {
@@ -480,6 +498,16 @@ describe("portal filter dropdown positioning", () => {
     expect(resolveOpenUp(300, 700, contentPx, true)).toBe(false); // still fits below → down
     expect(resolveOpenUp(40, 700, contentPx, true)).toBe(true); // cannot fit below → up
     expect(resolveOpenUp(40, 20, contentPx, true)).toBe(false); // neither fits, down roomier
+  });
+
+  it("only flips a preferred-down menu up when that buys at least one more whole row", () => {
+    // The preference has to MEAN something: without it the roomier side wins on a 1px
+    // difference and the menu jumps over the very fields it was opened from. With it,
+    // flipping up must gain a full option row (FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40).
+    const contentPx = 264;
+    expect(resolveOpenUp(100, 120, contentPx, true)).toBe(false); // +20px above → stay down
+    expect(resolveOpenUp(100, 120, contentPx, false)).toBe(true); // no preference → roomier wins
+    expect(resolveOpenUp(100, 140, contentPx, true)).toBe(true); // +40px buys a row → up
   });
 
   it("opens filter field menus below the trigger on body portal when the menu fits there", () => {

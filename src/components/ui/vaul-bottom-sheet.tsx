@@ -1,11 +1,35 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
 import { MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { isPortaledFieldSelectMenuTarget } from "@/components/ui/field-select-portal-interaction";
 import { cn } from "@/lib/utils";
+
+/**
+ * Single source of the raised-sheet offset. It is published as a custom property on the
+ * elevated sheet so the placement (`bottom`), the max-height, and vaul's exit distance
+ * (`--initial-transform`) all read the SAME number — three literal copies of this
+ * expression would drift, and a sheet placed by one number and animated by another slides
+ * off screen short and then unmounts abruptly.
+ */
+const RAISED_SHEET_OFFSET_VAR = "--portal-raised-sheet-offset";
+const RAISED_SHEET_OFFSET =
+  "max(32vh, calc(var(--portal-native-bottom-nav-inset, 0px) + 6rem))";
+
+/**
+ * Vaul's `slideFromBottom` / `slideToBottom` keyframes both translate by
+ * `var(--initial-transform, 100%)` — 100% of the DRAWER's own height, which clears the
+ * viewport only for a bottom-anchored drawer. A raised sheet has to travel its own height
+ * PLUS the gap it leaves below itself, or it ends the close animation still on screen.
+ * This is vaul's own escape hatch for offset drawers; resetting the placement on close
+ * instead would reintroduce the mid-interaction jump this component exists to remove.
+ */
+const RAISED_SHEET_STYLE = {
+  [RAISED_SHEET_OFFSET_VAR]: RAISED_SHEET_OFFSET,
+  "--initial-transform": `calc(100% + var(${RAISED_SHEET_OFFSET_VAR}))`,
+} as CSSProperties;
 
 /** Keep portaled FieldSingleSelect / CheckboxMultiSelect menus clickable inside sheets. */
 function allowPortaledFieldSelectInteraction(event: Event) {
@@ -38,7 +62,12 @@ export function VaulBottomSheet({
   autoElevate = false,
   flushBody = false,
   lockBodyScroll = false,
-  /** Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. */
+  /**
+   * Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. IGNORED when
+   * `autoElevate` is set: an elevated sheet derives its max-height from the raised offset,
+   * and two `max-h-*` utilities on one element would resolve by CSS source order rather
+   * than class order. Only pass this on a bottom-anchored sheet.
+   */
   maxHeightClass,
 }: {
   open: boolean;
@@ -60,10 +89,10 @@ export function VaulBottomSheet({
   /* One raised placement, applied statically. The elevated max-height is the SAME offset
      subtracted from the viewport, so it replaces (rather than fights) the caller's
      `maxHeightClass` — two `max-h-*` utilities on one element would resolve by CSS source
-     order, not class order. */
+     order, not class order. Both read {@link RAISED_SHEET_OFFSET_VAR}. */
   const elevatedPlacement =
-    "bottom-[max(32vh,calc(var(--portal-native-bottom-nav-inset,0px)+6rem))] top-auto " +
-    "max-h-[calc(100dvh-max(32vh,calc(var(--portal-native-bottom-nav-inset,0px)+6rem))-1rem)]";
+    "bottom-[var(--portal-raised-sheet-offset)] top-auto " +
+    "max-h-[calc(100dvh-var(--portal-raised-sheet-offset)-1rem)]";
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
@@ -80,6 +109,7 @@ export function VaulBottomSheet({
                 ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
+          style={elevated ? RAISED_SHEET_STYLE : undefined}
           data-slot="vaul-bottom-sheet"
           data-elevated={elevated ? "true" : "false"}
           data-full-screen={fullScreen ? "true" : "false"}

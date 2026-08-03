@@ -350,6 +350,7 @@ export function ManagerAllServicesPanel({
             label="Property"
             summary={filterMultiSelectSummary(propertyFilters, servicePropertyListOptions, "All properties")}
             empty={propertyFilters.length === 0}
+            menuOptionCount={servicePropertyListOptions.length}
             dataAttr="services-filter-property-trigger"
           >
             <FilterCheckboxList
@@ -369,6 +370,7 @@ export function ManagerAllServicesPanel({
               label="Resident"
               summary={filterMultiSelectSummary(activeResidentFilters, residentListOptions, "All residents")}
               empty={activeResidentFilters.length === 0}
+              menuOptionCount={residentListOptions.length}
               dataAttr="services-filter-resident-trigger"
             >
               <FilterCheckboxList

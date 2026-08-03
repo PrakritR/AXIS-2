@@ -203,8 +203,12 @@ export function FilterCollapsibleSection({
   onOpenChange?: (open: boolean) => void;
   /** When true, summary uses placeholder styling (nothing selected). */
   empty?: boolean;
-  /** Option count for portaled menu height (search row + capped list). */
-  menuOptionCount?: number;
+  /**
+   * Option count for portaled menu height (search row + capped list). REQUIRED: a call site
+   * that omitted it fell back to a full 5 rows, so a 2-option menu reserved height it never
+   * uses and could flip upward where its real height would have fit below.
+   */
+  menuOptionCount: number;
 }) {
   const accordion = useContext(FilterFieldsAccordionContext);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -223,12 +227,12 @@ export function FilterCollapsibleSection({
   };
 
   const showMenuSearch =
-    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || (menuOptionCount ?? 0) > FILTER_LIST_VISIBLE_ROWS;
+    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || menuOptionCount > FILTER_LIST_VISIBLE_ROWS;
   /* Size the menu to its OWN option count, capped at 5 rows by `fieldSelectMenuContentPx`.
      A field with 5+ options always shows exactly 5 and scrolls the rest; a field with
      fewer ends the box after its last row instead of padding out empty rows. */
   const menuContentPx = fieldSelectMenuContentPx(
-    menuOptionCount ?? FILTER_LIST_VISIBLE_ROWS,
+    menuOptionCount,
     showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
   );
 

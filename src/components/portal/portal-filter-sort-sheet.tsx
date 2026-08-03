@@ -304,13 +304,9 @@ export function PortalFilterSortSheet({
           flushBody={mobileFlushBody}
           autoElevate={!mobileSheetFillsViewport}
           lockBodyScroll={filterMenuOpen}
-          maxHeightClass={
-            mobileSheetClassName
-              ? "max-h-[min(92dvh,44rem)]"
-              : compactPanel
-                ? "max-h-[min(78dvh,34rem)]"
-                : undefined
-          }
+          /* Only the bottom-anchored (viewport-filling) sheet can use this — an elevated
+             sheet derives its max-height from the raised offset and ignores the prop. */
+          maxHeightClass={mobileSheetFillsViewport ? "max-h-[min(92dvh,44rem)]" : undefined}
           footer={
             mobileFooter
               ? typeof mobileFooter === "function"

@@ -108,7 +108,14 @@ export function fieldSelectMenuContentPx(count: number, extraPx = 0): number {
  * Which way a menu opens. `preferOpenDown` is a PREFERENCE, not a lock: it wins whenever the
  * menu fits below, but a trigger low in the viewport has no room there, and forcing down
  * anyway produced a one- or two-row menu instead of the five rows every filter dropdown owes
- * its user. When neither side fits, the roomier side wins — same rule for both modes.
+ * its user.
+ *
+ * When neither side fits, the preference is hysteresis rather than a plain "roomier side
+ * wins": flipping up costs the user the established "filter menus open BELOW the trigger"
+ * placement, so it has to BUY at least one more whole option row
+ * ({@link FIELD_SELECT_MENU_ITEM_HEIGHT_PX}). Without that margin a 1px difference between
+ * the two sides flips the menu over the fields it was opened from for no visible gain.
+ * Without the preference the roomier side simply wins.
  */
 export function resolveOpenUp(
   spaceBelow: number,
@@ -117,7 +124,7 @@ export function resolveOpenUp(
   preferOpenDown: boolean,
 ): boolean {
   if (spaceBelow >= contentPx) return false;
-  if (preferOpenDown && spaceAbove < contentPx) return spaceAbove > spaceBelow;
+  if (preferOpenDown) return spaceAbove >= spaceBelow + FIELD_SELECT_MENU_ITEM_HEIGHT_PX;
   return spaceAbove > spaceBelow;
 }
 
