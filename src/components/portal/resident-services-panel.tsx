@@ -11,7 +11,6 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   PORTAL_HEADER_PRIMARY_ACTION_BTN,
   PORTAL_INLINE_UNLOCK_NOTICE_CLASS,
@@ -29,7 +28,6 @@ import {
   PORTAL_DETAIL_BTN,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalMobileSummaryCard,
@@ -1345,12 +1343,6 @@ export function ResidentServicesPanel({
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className={PORTAL_DATA_TABLE}>
                 <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-                  </tr>
-                </thead>
                 <tbody>
                   {filteredRequests.map((req) => {
                     const rowId = `request-${req.id}`;
@@ -1431,13 +1423,6 @@ export function ResidentServicesPanel({
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className={PORTAL_DATA_TABLE}>
                   <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
-                  <thead>
-                    <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-                    </tr>
-                  </thead>
                   <tbody>
                     {rows.map((row) => {
                       const isExpanded = expandedId === row.id;

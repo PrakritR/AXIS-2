@@ -7,6 +7,7 @@ import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { PortalContainerProvider } from "@/components/ui/portal-container-context";
+import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
 import { groupNavItems, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
 import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { proPortal } from "@/lib/portals/pro";
@@ -348,6 +349,7 @@ export function DemoPortalShell() {
 
   return (
     <PortalContainerProvider container={frameEl}>
+    <PortalAssistantConfigProvider endpoint="/api/agent/demo-chat" managerName={null}>
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-4 sm:px-4">
       {/* Controls bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -588,6 +590,7 @@ export function DemoPortalShell() {
         <DemoFrameAssistant />
       </div>
     </div>
+    </PortalAssistantConfigProvider>
     </PortalContainerProvider>
   );
 }

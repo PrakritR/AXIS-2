@@ -107,6 +107,7 @@ function ApplicationDocumentsTable() {
 
   return (
     <DocumentsTableShell
+      hideColumnHeaders
       colSpan={3}
       head={
         <>
@@ -300,6 +301,7 @@ function RentReceiptsTab() {
           <PortalDataTableEmpty icon="default" message="No rent receipts in this date range yet." />
         ) : (
           <DocumentsTableShell
+      hideColumnHeaders
             colSpan={3}
             head={
               <>
@@ -456,6 +458,7 @@ function SignedLeaseDocumentsTable() {
 
   return (
     <DocumentsTableShell
+      hideColumnHeaders
       colSpan={3}
       head={
         <>

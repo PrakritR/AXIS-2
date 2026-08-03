@@ -1,13 +1,12 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { type ReactNode } from "react";
 import {
   PORTAL_MOBILE_CARD_CLASS,
   PortalDataTableEmpty,
-  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PromotionEntryEditableTitle } from "@/components/portal/promotion-entry-title";
 import {
   promotionAssetKindIndices,
   promotionAssetListTitle,
@@ -16,19 +15,13 @@ import {
 
 export function PromotionAssetStack({
   assets,
-  expandedId,
-  onToggleExpand,
-  renderExpanded,
+  onOpen,
   renderHeaderActions,
-  onSaveTitle,
   emptyMessage = "No promotions yet.",
 }: {
   assets: PromotionAsset[];
-  expandedId: string | null;
-  onToggleExpand: (id: string) => void;
-  renderExpanded: (asset: PromotionAsset, indexWithinKind: number) => ReactNode;
+  onOpen: (asset: PromotionAsset) => void;
   renderHeaderActions?: (asset: PromotionAsset, indexWithinKind: number) => ReactNode;
-  onSaveTitle?: (asset: PromotionAsset, title: string, indexWithinKind: number) => void;
   emptyMessage?: string;
 }) {
   if (assets.length === 0) {
@@ -41,7 +34,6 @@ export function PromotionAssetStack({
     <div className="space-y-2">
       {assets.map((asset) => {
         const indexWithinKind = kindIndices.get(asset.id) ?? 0;
-        const isOpen = expandedId === asset.id;
         const fallbackTitle = promotionAssetListTitle(asset, indexWithinKind);
         const storedTitle =
           asset.kind === "flyer"
@@ -49,6 +41,7 @@ export function PromotionAssetStack({
             : asset.kind === "upload"
               ? (asset.uploadEntry?.title ?? "")
               : (asset.textEntry?.title ?? "");
+        const displayTitle = storedTitle.trim() || fallbackTitle;
 
         return (
           <div key={asset.id} className={PORTAL_MOBILE_CARD_CLASS}>
@@ -56,23 +49,13 @@ export function PromotionAssetStack({
               <button
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => onToggleExpand(asset.id)}
-                aria-expanded={isOpen}
+                onClick={() => onOpen(asset)}
                 data-attr="promotion-row"
               >
-                <PortalTableInlineExpand expanded={isOpen} className="text-sm font-semibold text-foreground">
-                  {onSaveTitle ? (
-                    <PromotionEntryEditableTitle
-                      value={storedTitle}
-                      fallback={fallbackTitle}
-                      onSave={(title) => onSaveTitle(asset, title, indexWithinKind)}
-                      className="text-sm font-semibold normal-case tracking-normal text-foreground"
-                      inputClassName="text-sm normal-case tracking-normal"
-                    />
-                  ) : (
-                    <span className="truncate">{fallbackTitle}</span>
-                  )}
-                </PortalTableInlineExpand>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                  {displayTitle}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} aria-hidden />
               </button>
               {renderHeaderActions ? (
                 <div
@@ -86,11 +69,6 @@ export function PromotionAssetStack({
                 </div>
               ) : null}
             </div>
-            {isOpen ? (
-              <div className="mt-3 border-t border-border pt-3">
-                {renderExpanded(asset, indexWithinKind)}
-              </div>
-            ) : null}
           </div>
         );
       })}

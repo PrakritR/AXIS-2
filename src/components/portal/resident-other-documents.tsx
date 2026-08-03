@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import type { ManagerDocumentDTO } from "@/lib/documents/manager-documents";
 import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableEmpty,
@@ -609,14 +607,6 @@ export function ResidentOtherDocumentsTable({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Source</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
-              </tr>
-            </thead>
             <tbody>
               {rows.map((row) => (
                 <Fragment key={row.id}>

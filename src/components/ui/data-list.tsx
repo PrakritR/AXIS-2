@@ -205,12 +205,15 @@ export function DataList<T>({
   rows,
   columns,
   selectable = false,
+  hideColumnHeaders = false,
   emptyState,
   className,
 }: {
   rows: DataListRow<T>[];
   columns: DataListColumn<T>[];
   selectable?: boolean;
+  /** Hide the desktop column header row (resident portal lists). */
+  hideColumnHeaders?: boolean;
   emptyState?: ReactNode;
   className?: string;
 }) {
@@ -231,6 +234,7 @@ export function DataList<T>({
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
         <table className={PORTAL_DATA_TABLE}>
+          {!hideColumnHeaders ? (
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {selectable ? (
@@ -248,6 +252,7 @@ export function DataList<T>({
               <th className={cn(MANAGER_TABLE_TH, "w-0")} scope="col" aria-label="Actions" />
             </tr>
           </thead>
+          ) : null}
           <tbody>
             {rows.map((row) => (
               <Fragment key={row.id}>

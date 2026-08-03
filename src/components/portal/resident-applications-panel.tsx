@@ -7,7 +7,6 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
-  MANAGER_TABLE_TH,
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN,
@@ -26,7 +25,6 @@ import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
 } from "@/components/portal/portal-data-table";
@@ -888,6 +886,7 @@ export function ResidentApplicationsPanel({
 
   const renderRoutedList = () => (
     <DataList
+      hideColumnHeaders
       rows={filteredRowsForBucket.map((row) => {
         const room = displayRoomForRow(row);
         const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room !== "—" ? `Room ${room}` : ""]
@@ -940,13 +939,6 @@ export function ResidentApplicationsPanel({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Application</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-              </tr>
-            </thead>
             <tbody>
               {rowsForBucket.map((row) => (
                 <tr

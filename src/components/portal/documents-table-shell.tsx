@@ -38,11 +38,14 @@ export function DocumentsTableShell({
   head,
   colSpan,
   rows,
+  hideColumnHeaders = false,
 }: {
   head: ReactNode;
   /** Column count, for the full-width detail row's `colSpan`. */
   colSpan: number;
   rows: DocumentsTableRow[];
+  /** Hide the desktop column header row (resident portal lists). */
+  hideColumnHeaders?: boolean;
 }) {
   return (
     <>
@@ -57,9 +60,11 @@ export function DocumentsTableShell({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
-            </thead>
+            {!hideColumnHeaders ? (
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
+              </thead>
+            ) : null}
             <tbody>
               {rows.map((row) => (
                 <Fragment key={row.key}>

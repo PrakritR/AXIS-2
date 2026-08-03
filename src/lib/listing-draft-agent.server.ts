@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isLeaseAssistantContext } from "@/lib/agent/assistant-turn-context";
 import { deriveLegacyFields } from "@/lib/demo-property-pipeline";
 import {
   createDefaultListingSubmission,
@@ -7,6 +8,11 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
+import {
+  LEASE_TEMPLATE_BUCKET,
+  LEASE_TEMPLATE_MAX_BYTES,
+  leaseTemplateUrlForPath,
+} from "@/lib/lease-template-storage";
 import { listingMediaObjectPath } from "@/lib/listing-media-storage";
 
 function slugPart(value: string): string {
@@ -44,6 +50,31 @@ export async function uploadListingPhotoBytes(
 export function imageBlocksFromUserMessage(message: Anthropic.MessageParam): Anthropic.ImageBlockParam[] {
   if (!message || message.role !== "user" || !Array.isArray(message.content)) return [];
   return message.content.filter((block): block is Anthropic.ImageBlockParam => block.type === "image");
+}
+
+export function documentBlocksFromUserMessage(
+  message: Anthropic.MessageParam,
+): Anthropic.DocumentBlockParam[] {
+  if (!message || message.role !== "user" || !Array.isArray(message.content)) return [];
+  return message.content.filter((block): block is Anthropic.DocumentBlockParam => block.type === "document");
+}
+
+export async function uploadLeaseTemplateBytes(
+  db: SupabaseClient,
+  managerUserId: string,
+  bytes: Buffer,
+): Promise<string> {
+  if (bytes.length === 0 || bytes.length > LEASE_TEMPLATE_MAX_BYTES) {
+    throw new Error("Lease template PDF is empty or too large.");
+  }
+  const path = `${managerUserId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`;
+  const { error } = await db.storage.from(LEASE_TEMPLATE_BUCKET).upload(path, bytes, {
+    contentType: "application/pdf",
+    cacheControl: "0",
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  return leaseTemplateUrlForPath(path);
 }
 
 export async function persistListingPhotoUrlsFromImageBlocks(
@@ -266,6 +297,45 @@ export async function enrichManagerChatImageAttachments(
   if (opts.purpose === "promotion" && blocks.length > 0) {
     next[next.length - 1] = appendPromotionVisionFallbackNote(last);
   }
+  return next;
+}
+
+/** Upload lease-template PDFs from chat and annotate the turn with durable URLs. */
+export async function enrichManagerChatDocumentAttachments(
+  db: SupabaseClient,
+  managerUserId: string,
+  messages: Anthropic.MessageParam[],
+  contextHint?: string | null,
+): Promise<Anthropic.MessageParam[]> {
+  if (!messages.length) return messages;
+  const last = messages[messages.length - 1]!;
+  const blocks = documentBlocksFromUserMessage(last);
+  if (!blocks.length) return messages;
+  const hint = contextHint?.trim() ?? "";
+  if (!isLeaseAssistantContext(hint)) return messages;
+
+  const urls: string[] = [];
+  for (const block of blocks) {
+    if (block.source.type !== "base64") continue;
+    const bytes = Buffer.from(block.source.data, "base64");
+    urls.push(await uploadLeaseTemplateBytes(db, managerUserId, bytes));
+  }
+  if (!urls.length) return messages;
+
+  const next = [...messages];
+  next[next.length - 1] = {
+    role: "user",
+    content: [
+      ...(Array.isArray(last.content) ? last.content : []),
+      {
+        type: "text",
+        text: [
+          "Uploaded lease template PDF(s). When proposing update_property_lease_config with custom_format, pass this exact leaseTemplateDocUrl:",
+          ...urls.map((url, index) => `${index + 1}. ${url}`),
+        ].join("\n"),
+      },
+    ],
+  };
   return next;
 }
 

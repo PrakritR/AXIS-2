@@ -229,6 +229,8 @@ export function PromotionTextGenerateModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       dense
+      assistantContext="Generate promotion text — channel, tone, notes, and property photos for listing copy"
+      assistantStorageScopeKey="Generate promotion text"
       footer={
         <ModalFooter>
           <Button
