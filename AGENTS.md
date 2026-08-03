@@ -1186,7 +1186,9 @@ either.
   owner (a canonical id still mis-owned at prune time is deleted rather than
   reclaimed). Every other cleanup check scopes
   `.in("manager_user_id", testManagerIds)` and therefore cannot see a canonical
-  id parked on a stranger's account at all.
+  id parked on a stranger's account at all. Standalone, it always reclaims to
+  the canonical demo manager and refuses to run when `E2E_MANAGER_EMAIL` names
+  a different account.
 
 # Property drafts (save add-property progress)
 
