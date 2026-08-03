@@ -17,15 +17,23 @@ describe("manager-lease-scope", () => {
 });
 
 /**
- * The route's ownership notion is WIDER than direct ownership: a co-manager
- * assigned a property may work on its leases, so validating a client-named
- * `property_id` with a direct-ownership-only helper would refuse a real flow.
+ * Filing or MOVING a lease under a property is a write, so the gate is the
+ * `leases` grant at EDIT level: wider than direct ownership (a real co-manager
+ * flow), narrower than bare link membership (which would let a co-manager write
+ * a row they are not allowed to read back). An assignment with no checked
+ * permissions is still a full grant, so the ordinary co-manager is unaffected.
  */
 describe("managerMayFileLeaseUnderProperty", () => {
   const MANAGER = "manager-1";
 
+  type LinkRow = {
+    inviter_user_id: string;
+    assigned_property_ids: string[];
+    property_co_manager_permissions?: unknown;
+  };
+
   let ownedIds: string[] = [];
-  let linkRows: Array<{ inviter_user_id: string; assigned_property_ids: string[] }> = [];
+  let linkRows: LinkRow[] = [];
   let ownershipError: { message: string } | null = null;
 
   /** Only the surface this helper and collectLinkedPropertyIdsForUser touch. */
@@ -66,11 +74,22 @@ describe("managerMayFileLeaseUnderProperty", () => {
   const check = (propertyId: string) =>
     managerMayFileLeaseUnderProperty(makeDb() as never, MANAGER, propertyId);
 
+  function linkedWith(permissions?: unknown): LinkRow[] {
+    return [
+      {
+        inviter_user_id: "other-manager",
+        assigned_property_ids: ["prop-linked"],
+        property_co_manager_permissions: permissions,
+      },
+    ];
+  }
+
   beforeEach(() => {
     ownedIds = [];
     linkRows = [];
     ownershipError = null;
     vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   it("allows a property the manager owns directly", async () => {
@@ -78,14 +97,29 @@ describe("managerMayFileLeaseUnderProperty", () => {
     expect(await check("prop-own")).toEqual({ ok: true, allowed: true });
   });
 
-  it("allows a property assigned via an accepted co-manager link", async () => {
-    linkRows = [{ inviter_user_id: "other-manager", assigned_property_ids: ["prop-linked"] }];
+  it("allows a co-manager holding the leases grant at edit level", async () => {
+    linkRows = linkedWith({ "prop-linked": { leases: { read: true, edit: true } } });
     expect(await check("prop-linked")).toEqual({ ok: true, allowed: true });
+  });
+
+  it("allows a co-manager whose assignment has no checked permissions (full grant)", async () => {
+    linkRows = linkedWith(undefined);
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: true });
+  });
+
+  it("refuses a co-manager with read-only leases access — filing a lease is a write", async () => {
+    linkRows = linkedWith({ "prop-linked": { leases: { read: true } } });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
+  });
+
+  it("refuses a co-manager whose explicit permissions omit leases entirely", async () => {
+    linkRows = linkedWith({ "prop-linked": { payments: { read: true, edit: true } } });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
   });
 
   it("refuses a property that is neither owned nor linked", async () => {
     ownedIds = ["prop-own"];
-    linkRows = [{ inviter_user_id: "other-manager", assigned_property_ids: ["prop-linked"] }];
+    linkRows = linkedWith({ "prop-linked": { leases: true } });
     expect(await check("prop-stranger")).toEqual({ ok: true, allowed: false });
   });
 
@@ -94,9 +128,18 @@ describe("managerMayFileLeaseUnderProperty", () => {
   });
 
   it("fails closed and logs when the ownership read errors", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     ownershipError = { message: "connection reset" };
     expect(await check("prop-own")).toEqual({ ok: false, error: "connection reset" });
-    expect(logged).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  /** The co-manager-only path: a swallowed linked-read failure must still be correlatable. */
+  it("logs the refusal so a co-manager 403 is not silent", async () => {
+    linkRows = linkedWith({ "prop-linked": { leases: { read: true } } });
+    expect(await check("prop-linked")).toEqual({ ok: true, allowed: false });
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Lease property filing refused"),
+      expect.objectContaining({ userId: MANAGER, propertyId: "prop-linked" }),
+    );
   });
 });

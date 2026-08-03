@@ -839,6 +839,18 @@ resident will pass while the same code is broken for everyone who also manages.
   service-role read resolves to `"resident"`, the narrower scope, never back to
   the legacy value.
 
+Both helpers are ONE-DIRECTIONAL by design: a legacy `profiles.role` of
+`"resident"` is accepted immediately, with no `profile_roles` read and no
+active-portal tiebreak, so the single-role resident's hot path stays query-free.
+The mirror cohort is therefore uncorrected — an account created as a resident
+that later gains the manager role (`profiles.role='resident'`,
+`profile_roles=['resident','manager']`) resolves to `"resident"` on the
+dual-audience routes even in the manager portal, so they return only its own
+resident rows and a lease create writes its own email rather than its tenant's.
+Pre-existing, empty in production today, and invisible to the drift guard below
+because the gap is inside the predicate rather than in a route. Tracked as
+`axis-legacy-resident-role-mirror-cohort`.
+
 `tests/unit/resident-role-authorization-surface.test.ts` scans `src/app/api` and
 fails a new route that branches on `"resident"` without consulting
 `profile_roles`. Its deferred-route allowlist is a shrinking record of known
