@@ -768,18 +768,31 @@ async function main() {
   // pre-check as "not known to be assigned" and let the assignment (whose 409 is
   // already tolerated) and the confirming read decide. A non-retryable error still
   // propagates.
+  // `preCheckRead` records whether the read actually returned a value. Without it
+  // a failed read is indistinguishable from a successful "no", and --verify-only
+  // (which skips `confirmAssignment` below) would report a membership state it
+  // never read as though it were a fact.
   let alreadyAssigned = false;
+  let preCheckRead = false;
   try {
     alreadyAssigned = await isBuildAssignedToGroup(client, build.id, group.id);
+    preCheckRead = true;
   } catch (error) {
     if (error?.retryable !== true) throw error;
-    console.log(`  pre-check read failed, proceeding to assign — ${error.message.slice(0, 160)}`);
+    console.log(
+      verifyOnly
+        ? `  pre-check read failed, re-reading before reporting — ${error.message.slice(0, 160)}`
+        : `  pre-check read failed, proceeding to assign — ${error.message.slice(0, 160)}`,
+    );
   }
   let assignError = null;
   if (alreadyAssigned) {
     console.log("Build is already assigned to the group; nothing to change.");
   } else if (verifyOnly) {
-    console.log("--verify-only: build is NOT assigned to the group. Not changing anything.");
+    // Only a read that succeeded may be reported as a state.
+    if (preCheckRead) {
+      console.log("--verify-only: build is NOT assigned to the group. Not changing anything.");
+    }
   } else {
     console.log("Assigning build to the internal group…");
     // Deliberately does not throw: the verification read decides, so a 409
@@ -791,7 +804,14 @@ async function main() {
   console.log("");
   console.log("Verification (fresh read of builds?filter[id]=…&filter[betaGroups]=…):");
   const assigned = verifyOnly
-    ? alreadyAssigned
+    ? preCheckRead
+      ? alreadyAssigned
+      // The pre-check never returned a value, so there is nothing to report yet.
+      // Spend ONE more read (still no polling) rather than asserting non-membership
+      // that was never observed: if this read also fails, `confirmAssignment` throws
+      // "Could not confirm group membership" instead of claiming the build is NOT
+      // in the group.
+      : await confirmAssignment(client, build.id, group.id, { attempts: 1 })
     : await confirmAssignment(client, build.id, group.id);
   console.log(`  build ${buildNumber} (${build.id}) in ${JSON.stringify(group.attributes.name)}: ${assigned}`);
   // --verify-only never polls: it reports the state as it stands right now. An
