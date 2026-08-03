@@ -9,11 +9,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import {
+  FIELD_SELECT_HOST_CHROME_ATTR,
   FIELD_SELECT_MENU_HEADER_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   computeFieldSelectMenuRect,
   computeFieldSelectMenuRectInHost,
   computePortalFilterDropdownRect,
+  fieldSelectHostTopInsetPx,
   fieldSelectMenuContentPx,
   resolveOpenUp,
 } from "@/components/ui/field-select-menu";
@@ -25,9 +27,11 @@ import {
   PORTAL_FILTER_COMMUNICATION_PANEL_CLASS,
   PORTAL_FILTER_PANEL_CHROME_PX,
   PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX,
+  PORTAL_FILTER_SHEET_CHROME_PX,
   FilterCheckboxList,
   FilterCollapsibleSection,
   FilterFieldsAccordion,
+  FilterSingleSelectList,
   filterMultiSelectSummary,
   portalFilterPanelSizeClass,
 } from "@/components/portal/filter-field-lists";
@@ -286,6 +290,48 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("sizes the menu from the rows the LIST renders, not the count the caller passed", () => {
+    // A hand-synced count that drifts from the array changes `menuContentPx`, which feeds
+    // `resolveOpenUp` — so it silently alters both the menu's height and its open
+    // direction. The list that renders the rows reports them instead, so the two cannot
+    // disagree. Both directions of drift are pinned.
+    const options = makeOptions(30);
+    render(
+      <FilterCollapsibleSection
+        label="Property"
+        summary="All properties"
+        menuOptionCount={1}
+      >
+        <FilterCheckboxList options={options} selected={[]} onChange={() => {}} dataAttr="drift" />
+      </FilterCollapsibleSection>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const shell = screen.getByRole("listbox").closest("[data-field-select-menu]") as HTMLElement;
+    expect(shell.style.maxHeight).toBe(
+      `${fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX)}px`,
+    );
+  });
+
+  it("counts the leading 'All …' row a single-select list injects, without the caller adding 1", () => {
+    // `application-filter-sort-fields` and `report-filter-bar` both build their options with
+    // a leading "All …" row, so a caller's raw array length is not the rendered row count.
+    const options = [
+      { value: "", label: "All properties" },
+      { value: "a", label: "Ballard House" },
+      { value: "b", label: "Emerald Court" },
+    ];
+    render(
+      <FilterCollapsibleSection label="Property" summary="All properties" menuOptionCount={99}>
+        <FilterSingleSelectList options={options} value="" onChange={() => {}} dataAttr="drift" />
+      </FilterCollapsibleSection>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const shell = screen.getByRole("listbox").closest("[data-field-select-menu]") as HTMLElement;
+    // Three rendered rows — the injected "All properties" plus the two real ones — and NOT
+    // the caller's 99, which would have reserved a full five-row box.
+    expect(shell.style.maxHeight).toBe(`${fieldSelectMenuContentPx(3, FILTER_MENU_CHROME_PX)}px`);
+  });
+
   it("uses a count summary for multi-select so the trigger width stays stable", () => {
     expect(filterMultiSelectSummary([], [{ value: "a", label: "Ballard House" }], "All properties")).toBe(
       "All properties",
@@ -338,6 +384,26 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     expect(sheet.style.getPropertyValue("--portal-raised-sheet-offset")).toContain("32vh");
     // Exactly one max-height utility: two would resolve by CSS source order, not class order.
     expect(sheet.className.match(/max-h-\[/g)).toHaveLength(1);
+    // …and exactly one `bottom-*`, for the same reason. `bottom-0` alongside the raised
+    // offset rendered correctly only because Tailwind happens to emit arbitrary values
+    // last; a reordering would drop the sheet back to the viewport bottom and take the
+    // containment guarantee — and therefore the uncoverable chrome — with it.
+    const bottomUtilities = sheet.className
+      .split(/\s+/)
+      .filter((token) => /^bottom-/.test(token));
+    expect(bottomUtilities).toEqual(["bottom-[var(--portal-raised-sheet-offset)]"]);
+  });
+
+  it("keeps the bottom-anchored sheet on bottom-0 (the branch that owns that utility)", () => {
+    render(
+      <VaulBottomSheet open onOpenChange={() => {}} title="Filter">
+        <p>fields</p>
+      </VaulBottomSheet>,
+    );
+    const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
+    expect(sheet.className.split(/\s+/).filter((token) => /^bottom-/.test(token))).toEqual([
+      "bottom-0",
+    ]);
   });
 
   it("travels its own height PLUS the raised offset so it still animates off screen on close", () => {
@@ -357,14 +423,18 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     );
   });
 
-  it("floors the raised sheet tall enough to contain its widest menu", () => {
-    // A one-field sheet measured ~179px and could not contain a 264px menu, so the menu
-    // hung ~241px onto the dimmed scrim — the reported defect. The floor is derived from
-    // the menu, not typed in, and must clear `hostCanContainMenu` (host - 2*gap >= content).
+  it("floors the raised sheet tall enough to contain its widest menu BELOW its own chrome", () => {
+    // A one-field sheet measured ~179px and could not contain a 292px menu, so the menu
+    // hung onto the dimmed scrim — the first defect. Dropping the chrome term then let the
+    // menu fit while painting over the sheet's own close ✕ — the second. The floor is
+    // derived from the menu, never typed in, and must clear the REAL predicate:
+    // `host.height - topInset - 2*gap >= contentPx`. Omitting the chrome term here is what
+    // let a raised PORTAL_FILTER_SHEET_CHROME_PX silently drop the sheet out of the
+    // contained branch with a green suite.
     const containmentGap = 4 * 2;
-    expect(PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX - containmentGap).toBeGreaterThanOrEqual(
-      FILTER_MENU_CONTENT_PX,
-    );
+    expect(
+      PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX - PORTAL_FILTER_SHEET_CHROME_PX - containmentGap,
+    ).toBeGreaterThanOrEqual(FILTER_MENU_CONTENT_PX);
 
     render(
       <VaulBottomSheet
@@ -589,6 +659,165 @@ describe("portal filter dropdown positioning", () => {
     expect(spilled.top).toBe(530 - 395 + 4);
 
     document.body.removeChild(host);
+  });
+
+  it("measures the host's tagged chrome from the host's own top edge", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    host.getBoundingClientRect = () =>
+      ({ top: 179, left: 0, right: 390, bottom: 574, width: 390, height: 395, x: 0, y: 179, toJSON: () => ({}) }) as DOMRect;
+
+    // Untagged host: nothing to clear, so no inset is invented.
+    expect(fieldSelectHostTopInsetPx(host)).toBe(0);
+
+    const handle = document.createElement("div");
+    handle.setAttribute(FIELD_SELECT_HOST_CHROME_ATTR, "");
+    host.appendChild(handle);
+    handle.getBoundingClientRect = () =>
+      ({ top: 183, left: 0, right: 390, bottom: 195, width: 390, height: 12, x: 0, y: 183, toJSON: () => ({}) }) as DOMRect;
+
+    const titleRow = document.createElement("div");
+    titleRow.setAttribute(FIELD_SELECT_HOST_CHROME_ATTR, "");
+    host.appendChild(titleRow);
+    titleRow.getBoundingClientRect = () =>
+      ({ top: 195, left: 0, right: 390, bottom: 254, width: 390, height: 59, x: 0, y: 195, toJSON: () => ({}) }) as DOMRect;
+
+    // The LOWEST tagged bottom wins, relative to the host — not a sum, and not the first
+    // one found: measured at runtime because the chrome differs per host and a stale
+    // constant would silently start hiding the close control again.
+    expect(fieldSelectHostTopInsetPx(host)).toBe(254 - 179);
+
+    // A collapsed (zero-height) chrome row reserves nothing.
+    const collapsed = document.createElement("div");
+    collapsed.setAttribute(FIELD_SELECT_HOST_CHROME_ATTR, "");
+    host.appendChild(collapsed);
+    collapsed.getBoundingClientRect = () =>
+      ({ top: 500, left: 0, right: 390, bottom: 500, width: 390, height: 0, x: 0, y: 500, toJSON: () => ({}) }) as DOMRect;
+    expect(fieldSelectHostTopInsetPx(host)).toBe(254 - 179);
+
+    document.body.removeChild(host);
+  });
+
+  it("never places a CONTAINED menu over the host's chrome, even when the anchor says so", () => {
+    // The reported defect: on the 1-field mobile sheet the close ✕, the Filter title, the
+    // drag handle and the trigger were ALL 100% covered. FilterCheckboxList does not close
+    // on pick and a phone has no Escape key, so hiding the only visible dismiss control can
+    // strand the user. Every placement starts at `topInset + gap`.
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "vaul-bottom-sheet");
+    document.body.appendChild(host);
+    host.getBoundingClientRect = () =>
+      ({ top: 179, left: 0, right: 390, bottom: 574, width: 390, height: 395, x: 0, y: 179, toJSON: () => ({}) }) as DOMRect;
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    // Bottom-most field: opening up anchors the menu at 27px into the host, which is well
+    // inside the 88px of chrome above it.
+    button.getBoundingClientRect = () =>
+      ({ top: 502, left: 16, right: 374, bottom: 546, width: 358, height: 44, x: 16, y: 502, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const contentPx = FILTER_MENU_CONTENT_PX;
+    const gap = 4;
+    const rect = computeFieldSelectMenuRectInHost(button, contentPx, host, {
+      preferOpenDown: true,
+      topInsetPx: PORTAL_FILTER_SHEET_CHROME_PX,
+      bottomBoundPx: window.innerHeight - 12,
+    });
+
+    expect(rect.top).toBeGreaterThanOrEqual(PORTAL_FILTER_SHEET_CHROME_PX + gap);
+    // The five-row guarantee and containment both survive the clamp — that is what the
+    // raised-sheet floor buys.
+    expect(rect.maxHeight).toBe(contentPx);
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(395);
+
+    document.body.removeChild(host);
+  });
+
+  it("floors the SPILLED open-down placement at the chrome too, not just the contained one", () => {
+    // The invariant is unconditional — contained and spilled, up and down. The spilled
+    // open-down branch used to return `triggerBottom + gap` raw, so the first host short
+    // enough to spill AND scrollable enough to put a trigger behind its chrome would have
+    // painted over the close control again.
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "vaul-bottom-sheet");
+    document.body.appendChild(host);
+    // 179px: too short to seat a 292px menu below 88px of chrome, so this is the spill branch.
+    host.getBoundingClientRect = () =>
+      ({ top: 395, left: 0, right: 390, bottom: 574, width: 390, height: 179, x: 0, y: 395, toJSON: () => ({}) }) as DOMRect;
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    // A trigger scrolled up behind the chrome: its bottom is 54px into a host reserving 88px.
+    button.getBoundingClientRect = () =>
+      ({ top: 405, left: 16, right: 374, bottom: 449, width: 358, height: 44, x: 16, y: 405, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const gap = 4;
+    const rect = computeFieldSelectMenuRectInHost(button, FILTER_MENU_CONTENT_PX, host, {
+      preferOpenDown: true,
+      topInsetPx: PORTAL_FILTER_SHEET_CHROME_PX,
+      bottomBoundPx: window.innerHeight - 12,
+    });
+
+    expect(rect.top).toBe(PORTAL_FILTER_SHEET_CHROME_PX + gap);
+    // Spilling is what buys the five rows here; the clamp must not cost them.
+    expect(rect.maxHeight).toBe(FILTER_MENU_CONTENT_PX);
+
+    document.body.removeChild(host);
+  });
+
+  it("honours host chrome in a MODAL host too — the rule has no 'except in a modal' carve-out", () => {
+    // `computeFieldSelectMenuRect` is the live path for browse-homes' desktop `panel`
+    // presentation, which portals into an open Radix dialog. Its Close was uncovered only
+    // because that modal happened to span 162..738 — a coincidence, not a guarantee.
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "modal-radix-dialog");
+    document.body.appendChild(host);
+    host.getBoundingClientRect = () =>
+      ({ top: 162, left: 400, right: 900, bottom: 738, width: 500, height: 576, x: 400, y: 162, toJSON: () => ({}) }) as DOMRect;
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({ top: 300, left: 416, right: 884, bottom: 344, width: 468, height: 44, x: 416, y: 300, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
+    // A short viewport, so nothing fits below and the menu is forced upward.
+    Object.defineProperty(window, "innerHeight", { value: 400, configurable: true });
+
+    const chromePx = 60;
+    const gap = 4;
+    const rect = computeFieldSelectMenuRect(button, FILTER_MENU_CONTENT_PX, host, {
+      matchTriggerWidth: true,
+      topInsetPx: chromePx,
+    });
+
+    // Without the inset the menu opened at viewport y=16 — above the modal's own top edge
+    // and squarely over its title/close row.
+    expect(rect.position).toBe("fixed");
+    expect(rect.top).toBeGreaterThanOrEqual(162 + chromePx + gap);
+    // Bounded by the space that is actually free, so it never grows back over the chrome.
+    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(300);
+
+    document.body.removeChild(host);
+  });
+
+  it("leaves body-portaled menus untouched when there is no host chrome to clear", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({ top: 300, left: 16, right: 360, bottom: 344, width: 344, height: 44, x: 16, y: 300, toJSON: () => ({}) }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const rect = computeFieldSelectMenuRect(button, 252, document.body, {
+      preferOpenDown: true,
+      matchTriggerWidth: true,
+    });
+    expect(rect.top).toBe(344 + 4);
+    expect(rect.maxHeight).toBe(252);
+
+    document.body.removeChild(button);
   });
 
   it("falls back to opening UP when a preferred-down menu cannot fit below", () => {

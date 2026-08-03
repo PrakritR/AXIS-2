@@ -1,7 +1,15 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
@@ -167,6 +175,23 @@ function useFieldSelectMenuShellHeight(fallbackPx: number): number {
   return useContext(FieldSelectMenuShellHeightContext) ?? fallbackPx;
 }
 
+const FilterMenuOptionCountContext = createContext<((count: number) => void) | null>(null);
+
+/**
+ * The menu's row count is REPORTED BY THE LIST THAT RENDERS IT, never mirrored beside it.
+ * The count feeds `menuContentPx`, which feeds `resolveOpenUp`, so a hand-synced number that
+ * drifted from the array silently changed a menu's height and its open direction with no
+ * test failure — and two call sites inject their own leading "All" row, so the raw options
+ * array a caller holds is not the rendered row count either. Registering runs in a LAYOUT
+ * effect, so the corrected height is in place before the browser paints the menu.
+ */
+export function useRegisterFilterMenuOptionCount(renderedRowCount: number): void {
+  const register = useContext(FilterMenuOptionCountContext);
+  useLayoutEffect(() => {
+    register?.(renderedRowCount);
+  }, [register, renderedRowCount]);
+}
+
 export function useFilterAccordionClose(): () => void {
   const accordion = useContext(FilterFieldsAccordionContext);
   return () => accordion?.setOpenId(null);
@@ -257,14 +282,17 @@ export function FilterCollapsibleSection({
   /** When true, summary uses placeholder styling (nothing selected). */
   empty?: boolean;
   /**
-   * Option count for portaled menu height (search row + capped list). REQUIRED: a call site
-   * that omitted it fell back to a full 5 rows, so a 2-option menu reserved height it never
-   * uses and could flip upward where its real height would have fit below.
+   * Option count used to size the portaled menu until the child list reports the rows it
+   * actually renders (see {@link useRegisterFilterMenuOptionCount}, which overrides this
+   * before paint). REQUIRED: a call site that omitted it fell back to a full 5 rows, so a
+   * 2-option menu reserved height it never uses and could flip upward where its real
+   * height would have fit below.
    */
   menuOptionCount: number;
 }) {
   const accordion = useContext(FilterFieldsAccordionContext);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const [renderedOptionCount, setRenderedOptionCount] = useState<number | null>(null);
 
   const openFromAccordion = sectionId && accordion ? accordion.openId === sectionId : undefined;
   const open = openFromAccordion ?? controlledOpen ?? uncontrolledOpen;
@@ -279,15 +307,18 @@ export function FilterCollapsibleSection({
     }
   };
 
+  /* The rendered row count, once the child list has reported it, always wins over the
+     caller's prop — the two can no longer disagree about how tall the menu is. */
+  const optionCount = renderedOptionCount ?? menuOptionCount;
   const showMenuSearch =
-    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || menuOptionCount > FILTER_LIST_VISIBLE_ROWS;
+    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || optionCount > FILTER_LIST_VISIBLE_ROWS;
   /* Size the menu to its OWN option count, capped at 5 rows by `fieldSelectMenuContentPx`.
      A field with 5+ options always shows exactly 5 and scrolls the rest; a field with
      fewer ends the box after its last row instead of padding out empty rows. The header and
      search row are BUDGETED here rather than taken out of the rows: neither chrome row may
      be paid for with an option row. */
   const menuContentPx = fieldSelectMenuContentPx(
-    menuOptionCount,
+    optionCount,
     FIELD_SELECT_MENU_HEADER_PX + (showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0),
   );
 
@@ -299,9 +330,11 @@ export function FilterCollapsibleSection({
     matchTriggerWidth: true,
   });
 
-  /* No scroll-into-view on open: the menu is clamped to the VIEWPORT rather than to its
-     host shell, so a low field already gets its full 5 rows, and scrolling the sheet body
-     would move the very controls this pattern exists to keep stationary. */
+  /* No scroll-into-view on open: containment comes first, so a low field is slid back
+     inside its host — and only a host too short to seat the menu below its own chrome
+     falls through to the viewport bound. Either way the field already gets its full 5
+     rows, while scrolling the sheet body would move the very controls this pattern
+     exists to keep stationary. */
 
   const menu =
     open && menuRect && isClient && portalHost ? (
@@ -332,7 +365,9 @@ export function FilterCollapsibleSection({
         <FieldSelectMenuShellHeightContext.Provider
           value={menuRect.maxHeight - FIELD_SELECT_MENU_HEADER_PX}
         >
-          {children}
+          <FilterMenuOptionCountContext.Provider value={setRenderedOptionCount}>
+            {children}
+          </FilterMenuOptionCountContext.Provider>
         </FieldSelectMenuShellHeightContext.Provider>
       </div>
     ) : null;
@@ -387,6 +422,9 @@ export function FilterCheckboxList({
   const [query, setQuery] = useState("");
   const showSearch = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || options.length > FILTER_LIST_VISIBLE_ROWS;
   const shellMaxHeightPx = useFieldSelectMenuShellHeight(FILTER_MENU_CONTENT_PX);
+  /* The UNFILTERED list: the shell is sized for the rows this field can show, and a menu
+     that resized itself while the user typed in its own search box would be worse. */
+  useRegisterFilterMenuOptionCount(options.length);
 
   // Filtering only hides rows; `selected` is never mutated, so searching never
   // drops an already-selected option from the selection.
@@ -483,6 +521,9 @@ export function FilterSingleSelectList({
   const [query, setQuery] = useState("");
   const showSearch = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || options.length > FILTER_LIST_VISIBLE_ROWS;
   const shellMaxHeightPx = useFieldSelectMenuShellHeight(FILTER_MENU_CONTENT_PX);
+  /* Counts the rows this list RENDERS — which for the single-select callers includes the
+     leading "All …" row they inject into `options` before passing it here. */
+  useRegisterFilterMenuOptionCount(options.length);
 
   const visibleOptions = useMemo(() => {
     if (!query.trim()) return options;

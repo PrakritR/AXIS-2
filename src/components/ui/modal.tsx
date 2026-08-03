@@ -261,7 +261,11 @@ function ModalPanelInner({
   const bodyFillsPanel = scrollableContent || Boolean(footer);
   return (
     <div className={cn("flex flex-col overflow-hidden", bodyFillsPanel ? "min-h-0 flex-1" : "shrink-0")}>
+      {/* Title + close: fixed chrome a portaled field menu must never cover. A modal that
+          is tall enough today to leave it clear is a coincidence, not a guarantee — the
+          rule is universal, with no "except in a modal" carve-out. */}
       <div
+        data-field-select-host-chrome=""
         className={cn(
           "flex shrink-0 flex-col border-b border-border",
           dense ? "gap-2 pb-2" : "gap-3 pb-4",

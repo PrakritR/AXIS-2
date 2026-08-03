@@ -24,11 +24,14 @@ export const FIELD_SELECT_MENU_SEARCH_PX = 52;
 /**
  * Height reserved for the in-menu field-name header. Deliberately small: it must be paid
  * for out of the menu's own box WITHOUT costing an option row (the five-row rule is not
- * negotiable) and WITHOUT pushing the menu past what its host can contain. The binding
- * constraint is the 3-field filter panel — 19rem/304px against a 5-row + search menu of
- * 264px — which leaves 32px of headroom before containment breaks, so this stays under it.
+ * negotiable) and WITHOUT pushing the menu past what its host can contain BELOW ITS CHROME.
+ * The binding constraint is the 3-field filter panel, and the headroom is far tighter than
+ * it looks: the panel is 23rem/368px, its own Filter/Reset/✕ chrome is a MEASURED 58px
+ * (`PORTAL_FILTER_PANEL_CHROME_PX`), the containment gap is 8px, and the menu — this header
+ * plus the search row plus five option rows — is 292px. That leaves 10px, not the 32px an
+ * earlier version of this comment claimed against superseded numbers.
  * Changing it means re-checking `portalFilterPanelSizeClass` against
- * `computeFieldSelectMenuRectInHost`'s `hostCanContainMenu`.
+ * `computeFieldSelectMenuRectInHost`'s `hostCanContainMenu`, which subtracts the chrome.
  */
 export const FIELD_SELECT_MENU_HEADER_PX = 28;
 
@@ -284,7 +287,7 @@ export function computeFieldSelectMenuRectInHost(
   );
   const top = openUp
     ? Math.max(safeTop, triggerTopInHost - maxHeight - gap)
-    : triggerBottomInHost + gap;
+    : Math.max(safeTop, triggerBottomInHost + gap);
 
   return { top, left, width, maxHeight, position: "absolute" };
 }
@@ -292,18 +295,35 @@ export function computeFieldSelectMenuRectInHost(
 export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,
-  _portalHost: HTMLElement,
-  options?: { minWidth?: number; preferOpenDown?: boolean; matchTriggerWidth?: boolean },
+  portalHost: HTMLElement,
+  options?: {
+    minWidth?: number;
+    preferOpenDown?: boolean;
+    matchTriggerWidth?: boolean;
+    /**
+     * Height of the host's FIXED chrome measured from the host's top, exactly as in
+     * {@link computeFieldSelectMenuRectInHost}. The rule is universal — there is no
+     * "except in a modal" carve-out — because a modal that happens to be tall enough
+     * today stops being tall enough the next time its content changes, silently.
+     */
+    topInsetPx?: number;
+  },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
   const viewportW = window.innerWidth;
   const viewportPadding = 12;
+  const gap = 4;
   const contentHeight = contentPx;
-  const spaceBelow = viewportH - rect.bottom - viewportPadding;
-  const spaceAbove = rect.top - viewportPadding;
+  const topInset = options?.topInsetPx ?? 0;
+  const hostTop = topInset > 0 ? portalHost.getBoundingClientRect().top : 0;
+  /* This menu is `position: fixed`, so the host's chrome has to be translated into
+     viewport coordinates before it can be honoured. Every placement below starts here. */
+  const topBound = Math.max(viewportPadding, hostTop + topInset + gap);
   const preferOpenDown = options?.preferOpenDown ?? false;
   const matchTriggerWidth = options?.matchTriggerWidth ?? false;
+  const spaceBelow = viewportH - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - topBound;
   const openUp = resolveOpenUp(spaceBelow, spaceAbove, contentHeight, preferOpenDown);
   const maxHeight = Math.min(
     contentHeight,
@@ -317,8 +337,8 @@ export function computeFieldSelectMenuRect(
     ? rect.left
     : Math.min(Math.max(viewportPadding, rect.left), viewportW - width - viewportPadding);
   const top = openUp
-    ? Math.max(viewportPadding, rect.top - maxHeight - 4)
-    : rect.bottom + 4;
+    ? Math.max(topBound, rect.top - maxHeight - gap)
+    : Math.max(topBound, rect.bottom + gap);
   return {
     top,
     left,
@@ -389,15 +409,20 @@ export function useFieldSelectMenu({
                 matchTriggerWidth: matchTriggerWidth || inVaulSheet,
                 hostPaddingPx: inVaulSheet ? 0 : undefined,
                 topInsetPx: fieldSelectHostTopInsetPx(portalHost),
-                /* Both hosts are `overflow-visible`, so the menu may spill below them and
-                   is bounded by the viewport instead — otherwise the bottom-most field of
-                   a short sheet/panel opens a crushed one-row menu. */
+                /* FALLBACK ONLY. Containment comes first, so this bound is reached solely
+                   when the host is too short to seat the menu below its own chrome; both
+                   hosts are `overflow-visible` so that spill can render at all. Without it
+                   the bottom-most field of such a host opens a crushed one-row menu. */
                 bottomBoundPx: window.innerHeight - 12,
               })
             : computeFieldSelectMenuRect(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,
                 preferOpenDown,
                 matchTriggerWidth,
+                /* Same rule in a modal/dialog host as in a sheet: never over the chrome
+                   that carries the close control. `document.body` has none to measure. */
+                topInsetPx:
+                  portalHost === document.body ? 0 : fieldSelectHostTopInsetPx(portalHost),
               }),
       );
     };

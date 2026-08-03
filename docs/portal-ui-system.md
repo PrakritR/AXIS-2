@@ -271,18 +271,51 @@ or resize the panel.
   one-row menu for a trigger low in the viewport.
 - **Containment beats anchoring; the viewport bound is a last resort.** A menu that
   escapes its sheet onto the dimmed page reads as broken, so whenever the HOST can
-  hold the whole menu it is slid back inside its box — even when neither side of the
-  trigger alone has room, which can overlap the trigger by the shortfall. Only a host
-  too short to hold the menu at all (a one-field sheet) falls back to `bottomBoundPx`
-  and overhangs, because showing five rows outranks staying inside a box that cannot
-  fit them. Both hosts are `overflow-visible` so that fallback can render at all.
+  hold the whole menu BELOW ITS OWN CHROME it is slid back inside that box — even when
+  neither side of the trigger alone has room, which can overlap the trigger by the
+  shortfall. Only a host too short to seat the menu at all (a one-field sheet) falls
+  back to `bottomBoundPx` and overhangs, because showing five rows outranks staying
+  inside a box that cannot fit them. Both hosts are `overflow-visible` so that fallback
+  can render at all.
+- **TAG YOUR HOST'S FIXED CHROME OR A MENU WILL COVER YOUR CLOSE CONTROL.** Put
+  `FIELD_SELECT_HOST_CHROME_ATTR` (`data-field-select-host-chrome`) on the host's drag
+  handle + title/close row, and `fieldSelectHostTopInsetPx` measures it at RUNTIME (a
+  stale constant would silently start hiding the control again). EVERY placement —
+  contained and spilled, up and down, in a sheet (`computeFieldSelectMenuRectInHost`)
+  and in a modal/dialog (`computeFieldSelectMenuRect`) — then starts at
+  `topInset + gap`. There is no "except in a modal" carve-out: a host that is tall
+  enough today is a coincidence, not a guarantee. Untagged, the clamp treats chrome as
+  free space; that shipped a 1-field mobile sheet whose close ✕, title, handle and
+  trigger were ALL 100% covered, and `FilterCheckboxList` does not close on pick and a
+  phone has no Escape key, so it could strand the user. Tagged today:
+  `VaulBottomSheet`, `FilterDropdownHeader` (`portal-filter-sort-sheet.tsx`), and the
+  `Modal` header row.
+- **Two chrome reservations, both MEASURED — do not recompute them from the utility
+  classes.** `PORTAL_FILTER_PANEL_CHROME_PX` = **58** (desktop Filter/Reset/✕ row;
+  arithmetic once said 37, and the 22rem panel that produced left 286px against a
+  292px menu, so menus quietly went back to spilling).
+  `PORTAL_FILTER_SHEET_CHROME_PX` = **88** against a measured **75** — deliberately
+  over-reserved, because under-reserving is what hides the dismiss control.
+  `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX` is DERIVED
+  (`FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12`), never typed in, so a
+  raised sheet is always tall enough to contain its widest menu below its chrome; the
+  dead space under a lone field is the accepted price of "stationary AND contained".
+  Re-measure and re-pin whenever the chrome changes.
 - **The menu names its own field** (`FieldSelectMenuHeader`), because it covers its
   trigger and, on a tight host, every label in the panel — measured on the 3-field
   panel, an open menu covered all three. The header is BUDGETED into
   `fieldSelectMenuContentPx` alongside the search row, never paid for with an option
-  row. `FIELD_SELECT_MENU_HEADER_PX` is bounded by the 3-field panel (19rem/304px vs
-  a 264px menu): grow it past that headroom and menus silently start escaping the
-  panel again. Re-check both when changing either.
+  row. `FIELD_SELECT_MENU_HEADER_PX` is bounded by the 3-field panel, and the real
+  headroom is **10px**, not the 32px an earlier note claimed: the panel is 23rem/368px,
+  its chrome is 58px, the containment gap is 8px, and the menu is 292px. Grow either
+  past that and menus silently start escaping the panel — or eating its chrome — again.
+- **The menu's row count is reported by the list that renders it**, via
+  `useRegisterFilterMenuOptionCount` in a layout effect, so it overrides
+  `FilterCollapsibleSection`'s `menuOptionCount` prop before paint. The count feeds
+  `menuContentPx` → `resolveOpenUp`, so a hand-synced number drifting from the array
+  changed a menu's height AND its open direction with no test failure — and two callers
+  inject their own leading "All …" row, so a caller's raw options array is not the
+  rendered row count either.
 - **One open field per SHEET, not per group.** `PortalFilterSortSheet` wraps its
   children in `FilterFieldsAccordionScope`, and `FilterFieldsAccordion` defers to an
   enclosing scope rather than opening a second one — Finances composes its sheet from

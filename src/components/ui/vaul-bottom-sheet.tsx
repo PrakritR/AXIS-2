@@ -105,10 +105,13 @@ export function VaulBottomSheet({
   const contentHugging = !fullScreen;
   const elevated = autoElevate && !fullScreen;
 
-  /* One raised placement, applied statically. The elevated max-height is the SAME offset
-     subtracted from the viewport, so it replaces (rather than fights) the caller's
-     `maxHeightClass` — two `max-h-*` utilities on one element would resolve by CSS source
-     order, not class order. Both read {@link RAISED_SHEET_OFFSET_VAR}. */
+  /* One raised placement, applied statically. The elevated `bottom` and max-height each
+     REPLACE (rather than fight) the bottom-anchored ones — two `bottom-*` or two `max-h-*`
+     utilities on one element would resolve by CSS source order, not class order, so the
+     raised sheet would silently drop back to the viewport bottom the day Tailwind changes
+     how it emits arbitrary values, taking containment (and the uncoverable chrome) with it.
+     That is why `bottom-0` lives on the non-elevated branch below rather than in the base
+     class list. Both of these read {@link RAISED_SHEET_OFFSET_VAR}. */
   const elevatedPlacement =
     "bottom-[var(--portal-raised-sheet-offset)] top-auto " +
     "max-h-[calc(100dvh-var(--portal-raised-sheet-offset)-1rem)]";
@@ -129,12 +132,14 @@ export function VaulBottomSheet({
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content
           className={cn(
-            "fixed inset-x-0 bottom-0 z-[71] flex flex-col overflow-visible border-t border-border bg-background outline-none motion-reduce:transition-none",
+            "fixed inset-x-0 z-[71] flex flex-col overflow-visible border-t border-border bg-background outline-none motion-reduce:transition-none",
             fullScreen
               ? "inset-0 top-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
               : cn(
                   "h-auto rounded-t-2xl",
-                  elevated ? elevatedPlacement : (maxHeightClass ?? "max-h-[min(88dvh,36rem)]"),
+                  elevated
+                    ? elevatedPlacement
+                    : cn("bottom-0", maxHeightClass ?? "max-h-[min(88dvh,36rem)]"),
                 ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
