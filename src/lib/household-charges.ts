@@ -4,6 +4,7 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { createCoalescedRefresher, type CoalescedRefresher } from "@/lib/coalesced-refresh";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
@@ -80,6 +81,7 @@ const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
 let householdChargesLastSyncedAt = 0;
 type HouseholdChargesSyncResult = { charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] };
 let householdChargesSyncPromise: Promise<HouseholdChargesSyncResult> | null = null;
+const householdChargesRefreshers = new Map<string, CoalescedRefresher<HouseholdChargesSyncResult>>();
 export const HOUSEHOLD_CHARGES_SESSION_KEY = "axis:household-charges:v1";
 const HOUSEHOLD_RENT_PROFILES_SESSION_KEY = "axis:household-rent-profiles:v1";
 
@@ -345,6 +347,28 @@ export async function syncHouseholdChargesFromServer(
   if (!force && householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
   }
+  // `force` bypasses the TTL by design, so the panels that force a refresh on
+  // mount each issued their own request (measured: 3 on one `/portal/payments`
+  // load). Collapse concurrent forced callers without ever serving one a fetch
+  // that began before it asked — this is a money path, so a forced read after a
+  // charge write must never be answered from a read that predates the write.
+  // Keyed on `skipReconcile`, which changes what the run WRITES back (the
+  // resident path must not run the manager's reconcile), so the two can never
+  // share a run.
+  const key = skipReconcile ? "skipReconcile" : "reconcile";
+  let refresher = householdChargesRefreshers.get(key);
+  if (!refresher) {
+    refresher = createCoalescedRefresher(() => runHouseholdChargesSync({ skipReconcile }));
+    householdChargesRefreshers.set(key, refresher);
+  }
+  return refresher.run(force);
+}
+
+async function runHouseholdChargesSync({
+  skipReconcile,
+}: {
+  skipReconcile: boolean;
+}): Promise<HouseholdChargesSyncResult> {
   const syncPromise = fetch("/api/portal-household-charges")
     .then(async (res) => {
       const body = res.ok ? (await res.json() as { charges?: HouseholdCharge[]; rentProfiles?: RecurringRentProfile[] }) : {};
