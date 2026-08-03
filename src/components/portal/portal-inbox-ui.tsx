@@ -628,6 +628,14 @@ function inboxAttachmentMimeFromName(fileName: string): string {
  * (the shell implements no `WKDownloadDelegate`) and a synthetic `<a download>`,
  * so inside the Capacitor shell the tap is intercepted and the bytes are handed
  * to the OS share sheet instead — which still never renders them on-origin.
+ *
+ * On that native path the ONLY non-failure outcomes are `"shared"` (the OS took
+ * the file) and `"share-cancelled"` (the user dismissed the sheet — silent, not
+ * an error). `"downloaded"` means the sheet did NOT take it and
+ * `downloadOrShareFile` fell back to the anchor download that WKWebView ignores,
+ * so it is a dead tap and must surface like a fetch failure. That reading is the
+ * call site's, not the helper's: the anchor fallback is a genuine download on
+ * every other caller.
  */
 function InboxAttachmentChip({
   att,
@@ -650,11 +658,12 @@ function InboxAttachmentChip({
         const res = await fetch(att.url, { credentials: "include" });
         if (!res.ok) throw new Error(`Attachment fetch failed (${res.status})`);
         const blob = await res.blob();
-        await downloadOrShareFile({
+        const result = await downloadOrShareFile({
           fileName,
           mimeType: blob.type || inboxAttachmentMimeFromName(fileName),
           content: blob,
         });
+        if (result === "downloaded") setFailed(true);
       } catch {
         setFailed(true);
       }

@@ -34,6 +34,13 @@ const pdfUrl = inboxAttachmentServeUrl(`${OWNER}/1785760142643-3cbab42a/2026-lea
 const pngUrl = inboxAttachmentServeUrl(`${OWNER}/1785760003060-4075a9ef/floorplan.pdf.png`);
 const legacyPdfUrl = inboxAttachmentServeUrl(`${OWNER}/1785760142643-3cbab42a.pdf`);
 
+const CHIP_ERROR = "Couldn't open this attachment.";
+
+function stubNativeFetch(): void {
+  const blob = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, blob: async () => blob })));
+}
+
 function bubble(attachments: { url: string; name?: string }[]): InboxBubbleMessage {
   return {
     id: "m1",
@@ -115,6 +122,45 @@ describe("inbox bubble attachment chips", () => {
     expect(shareMock.mock.calls[0]![0]!.mimeType).toBe("application/pdf");
   });
 
+  it("treats a native 'downloaded' result as a failure — the anchor fallback is a dead tap on iOS", async () => {
+    // downloadOrShareFile swallows a rejected navigator.share and falls back to
+    // triggerBrowserDownload, which WKWebView silently ignores, then reports
+    // "downloaded". Reading the resolved promise as success restores the very
+    // dead tap the native path exists to remove.
+    document.documentElement.setAttribute("data-native", "ios");
+    stubNativeFetch();
+    shareMock.mockResolvedValueOnce("downloaded");
+
+    const { container } = render(<InboxBubble message={bubble([{ url: pdfUrl }])} />);
+    fireEvent.click(container.querySelector("a")!);
+
+    expect(await screen.findByText(CHIP_ERROR)).toBeTruthy();
+  });
+
+  it("stays silent when the OS takes the file", async () => {
+    document.documentElement.setAttribute("data-native", "ios");
+    stubNativeFetch();
+    shareMock.mockResolvedValueOnce("shared");
+
+    const { container } = render(<InboxBubble message={bubble([{ url: pdfUrl }])} />);
+    fireEvent.click(container.querySelector("a")!);
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(CHIP_ERROR)).toBeNull();
+  });
+
+  it("stays silent when the user dismisses the share sheet", async () => {
+    document.documentElement.setAttribute("data-native", "ios");
+    stubNativeFetch();
+    shareMock.mockResolvedValueOnce("share-cancelled");
+
+    const { container } = render(<InboxBubble message={bubble([{ url: pdfUrl }])} />);
+    fireEvent.click(container.querySelector("a")!);
+
+    await waitFor(() => expect(shareMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(CHIP_ERROR)).toBeNull();
+  });
+
   it("surfaces a failed native fetch instead of leaving a dead tap", async () => {
     document.documentElement.setAttribute("data-native", "ios");
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 403, blob: async () => new Blob([]) })));
@@ -122,7 +168,7 @@ describe("inbox bubble attachment chips", () => {
     const { container } = render(<InboxBubble message={bubble([{ url: pdfUrl }])} />);
     fireEvent.click(container.querySelector("a")!);
 
-    expect(await screen.findByText("Couldn't open this attachment.")).toBeTruthy();
+    expect(await screen.findByText(CHIP_ERROR)).toBeTruthy();
     expect(shareMock).not.toHaveBeenCalled();
   });
 });
