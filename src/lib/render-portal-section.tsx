@@ -34,7 +34,6 @@ import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
 import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
 import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
 import { ManagerPortalPageShell, PORTAL_INLINE_UNLOCK_NOTICE_CLASS } from "@/components/portal/portal-metrics";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
 import {
