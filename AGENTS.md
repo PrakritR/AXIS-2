@@ -1232,16 +1232,21 @@ page is broken" or "the seed has no properties" when the data is fine and the
 OWNER moved. When those surfaces disagree, diff the two sources before touching
 either.
 
-- **`POST /api/property-records` never takes an EXISTING row's owner from the
-  request body — not even for an admin.** Every client posts `managerUserId`
-  straight out of a browser-local pipeline bucket
-  (`mirrorLocalPropertyPipelineToServer`, `mirrorAdminPropertyRecord`,
-  `promoteLegacyPendingListingsToLive`), so honoring it let a stale local bucket
-  keyed by another user id silently hand live listings to that account. A
-  brand-new row still honors it (the admin inventory publishes on a manager's
-  behalf). Ownership changes have exactly one door: `transferPropertyOwnership`
-  (requires an accepted co-manager link, audited, notifies both sides).
-  Coverage: `tests/unit/property-records-owner-not-reassignable.test.ts`.
+- **`POST /api/property-records` never MOVES an owned row from the request body
+  — not even for an admin.** Every client posts `managerUserId` straight out of a
+  browser-local pipeline bucket (`mirrorLocalPropertyPipelineToServer`,
+  `mirrorAdminPropertyRecord`, `promoteLegacyPendingListingsToLive`), so honoring
+  it let a stale local bucket keyed by another user id silently hand live
+  listings to that account. Ownership changes have exactly one door:
+  `transferPropertyOwnership` (requires an accepted co-manager link, audited,
+  notifies both sides). Only a MISSING row is a create, and only there does the
+  body's `managerUserId` win (the admin inventory publishes on a manager's
+  behalf; a non-admin naming anyone else gets 403). An EXISTING row whose
+  `manager_user_id` is blank — the column is `on delete set null` — is still an
+  edit, not a create: an admin may adopt it onto a manager, and every other
+  caller goes through the same co-manager gate as an owned row, so knowing a
+  public listing id never adopts an orphan. Coverage:
+  `tests/unit/property-records-owner-not-reassignable.test.ts`.
 - **The seed reclaims drifted owners before anything else reads ownership.**
   `tests/helpers/reclaim-canonical-property-owners.mjs` (called from
   `seed-test-db.mjs`, also runnable as `npm run test:seed:reclaim-properties`)
