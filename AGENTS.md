@@ -384,35 +384,18 @@ resident, vendor, and admin portals:
   section leaves zero. The two shapes, and the five sections still on `split`, are in
   [`docs/portal-list-section-layout.md`](docs/portal-list-section-layout.md) rule 3;
   `tests/unit/portal-inline-title-band-duplicate-controls.test.tsx` enforces both halves.
+- **Clipped surfaces make overflow unreachable, not scrollable.**
+  `data-communication-surface` / `data-portal-sticky-chrome` clip
+  `#portal-main-content` and `.portal-main-inner`, so a panel that asks to fill
+  the viewport needs an unbroken `flex-1` + `min-h-0` chain (one `display: block`
+  link pushes the page's own header off-screen), `PortalRecordDetailPage` takes
+  an opt-in `fillBody` for that, `threadReading: true` chrome is only for a
+  surface that renders the inbox back header, and a hand-rolled `.modal-panel`
+  must cap its own height. All four, with rationale and coverage, are in
+  [`docs/portal-ui-system.md`](docs/portal-ui-system.md).
 
 Reference: resident detail sections in `manager-residents.tsx`; inbox table in
 `portal-inbox-ui.tsx`.
-
-### A fill-height panel needs an unbroken flex chain, or its page chrome is lost
-
-`data-communication-surface` (and `data-portal-sticky-chrome`) clip
-`#portal-main-content` AND `.portal-main-inner` — that is the "fixed chrome,
-scrollable body below" model, where an inner element owns the scroll. Content
-that overflows those is therefore **not** reachable by scrolling: it silently
-pushes the page's own header off-screen. So any panel that asks to fill the
-viewport must have `flex-1` + `min-h-0` on EVERY ancestor up to
-`.portal-main-inner`; one `display: block` link sizes it to content and breaks
-the whole chain. `PortalRecordDetailPage`'s body wrapper is block by default and
-takes an opt-in `fillBody` for this (resident detail → Communication is the only
-caller); the other ~10 detail pages flow and must stay block.
-
-`useCommunicationSurfaceChrome({ threadReading: true })` is a separate, stronger
-claim: it also hides the mobile nav bar and the page header, justified by "thread
-view uses the inbox back header". Only pass it on a surface that actually renders
-one — `ManagerInbox` sets `onBack={undefined}` whenever `filterResidentEmail` is
-set, so the resident-detail Communication tab does not qualify and passes
-`threadReading: false`. Coverage:
-`tests/unit/resident-detail-communication-chrome.test.ts`.
-
-Related: a modal in a `fixed inset-0` overlay can never be scrolled by the page,
-and `.modal-panel` sets no height — its own `max-h-…` + `overflow-y-auto` is the
-only thing keeping its action row reachable on a short phone
-(`tests/unit/portal-modal-reachable-actions.test.ts`).
 
 ### Manager dashboard sections are customizable + mobile-collapsible
 
@@ -1063,19 +1046,23 @@ conversations) plus the archive toggle. Invariants:
   `[A-Za-z0-9._-]` (Supabase key charset; also blocks `..`, separators, and
   `Content-Disposition` header injection). Ownership checks still read `path[0]`,
   and two-segment legacy paths still resolve.
-- **Read the name from `?path=`, never the URL's last segment** —
-  `inboxAttachmentDisplayName`. The serve URL percent-encodes the whole path, so
-  splitting the URL yields the route name; that is why recipient-side chips were
-  all labelled "inbox-attachments". Sender and recipient share the one helper.
+- **Read the name from `?path=`, never the URL's last segment.** The serve URL
+  percent-encodes the whole path, so splitting the URL yields the route name;
+  that is why recipient-side chips were all labelled "inbox-attachments", and why
+  the `row_data` copy has to beat the URL segment. Sender and recipient share one
+  helper, `inboxAttachmentChipName`: key segment → stored `name` → URL segment
+  (`inboxAttachmentDisplayName`).
 - **`.pdf` is a SUFFIX test, not a substring** (`inboxAttachmentLooksLikePdf`) —
   `floorplan.pdf.png` is an image and must preview inline.
-- ⚠️ **The `portal-inbox-attachments` bucket's own `allowed_mime_types` gates
-  uploads independently of `ALLOWED_MIME`,** and no migration in this repo creates
-  or configures that bucket. A type the route accepts but the bucket does not
-  fails as a 500 "mime type … is not supported" that surfaces to the user as
-  "PDF upload failed." Check the bucket when adding a type.
+- ⚠️ **The `portal-inbox-attachments` bucket's own `allowed_mime_types` and size
+  limit gate uploads independently of the route's `ALLOWED_MIME` /
+  `MAX_PDF_BYTES`,** and no migration in this repo creates or configures that
+  bucket. A type the route accepts but the bucket does not fails as a 500
+  "mime type … is not supported" that surfaces to the user as "PDF upload
+  failed." Check the bucket when adding a type or raising a size cap.
 - Coverage: `tests/unit/inbox-attachments.server.test.ts`,
-  `tests/unit/inbox-attachment-display.test.ts`.
+  `tests/unit/inbox-attachment-display.test.ts`,
+  `tests/unit/inbox-attachment-chip.test.tsx`.
 
 # Emailed auth links are `token_hash`, never a PKCE `code`
 

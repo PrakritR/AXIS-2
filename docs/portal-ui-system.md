@@ -182,6 +182,26 @@ Verify a phone change by measuring, not by eyeballing the first screenful:
 `inner.scrollHeight - inner.clientHeight` must be 0 on a page taller than the
 viewport.
 
+#### A fill-height panel needs an unbroken chain, or the page chrome is lost
+
+The clip is not only about scrolling. Content that overflows
+`#portal-main-content` / `.portal-main-inner` is *unreachable*, so it pushes the
+page's own header off-screen instead of extending the page. Any panel that asks
+to fill the viewport therefore needs `flex-1` + `min-h-0` on EVERY ancestor up to
+`.portal-main-inner`; one `display: block` link sizes it to content and breaks
+the whole chain. `PortalRecordDetailPage`'s body wrapper is a block by default
+and takes an opt-in `fillBody` for exactly this — resident detail →
+Communication is the only caller, and the ~10 other detail pages flow and must
+stay block.
+
+`useCommunicationSurfaceChrome({ threadReading: true })` is a separate, stronger
+claim: it also hides the mobile nav bar and the page header, justified by "thread
+view uses the inbox back header". Only pass it on a surface that actually renders
+one — `ManagerInbox` sets `onBack={undefined}` whenever `filterResidentEmail` is
+set, so the resident-detail Communication tab does not qualify and passes
+`threadReading: false`. Coverage:
+`tests/unit/resident-detail-communication-chrome.test.ts`.
+
 ## Filter dropdowns: one portaled-overlay pattern
 
 Every portal filter field (property / resident / status / sort / scope) is ONE
@@ -234,10 +254,20 @@ Native shell: the panel caps at `100dvh` minus the safe-area insets and the
 backdrop wrapper pads by the same insets (see `MODAL_PANEL_CLASS`), so the
 header/Close never sits under the notch.
 
-Client-generated file saves (flyers, exports) must go through
-`downloadOrShareFile` (`src/lib/native/download-or-share.ts`) — a synthetic
-`<a download>` on a blob URL is silently ignored in iOS WKWebView; the helper
-web-downloads on web and presents the native share sheet in the app shell.
+A hand-rolled panel does NOT inherit that cap. `.modal-panel` sets no height of
+its own, and a panel inside a `fixed inset-0` overlay can never be scrolled by
+the page, so its own `max-h-…` + `overflow-y-auto` is the only thing keeping its
+action row reachable on a short phone — dropping them put Approve/Delete on the
+calendar detail popover out of reach at 667px. Coverage:
+`tests/unit/portal-modal-reachable-actions.test.ts`.
+
+File saves must go through `downloadOrShareFile`
+(`src/lib/native/download-or-share.ts`) — a synthetic `<a download>` on a blob
+URL is silently ignored in iOS WKWebView; the helper web-downloads on web and
+presents the native share sheet in the app shell. That covers client-generated
+files (flyers, exports) and, in the native shell only, fetched bytes a tap is
+meant to save (inbox attachments — see AGENTS.md → Inbox attachments, whose
+`Content-Disposition: attachment` WKWebView also ignores).
 Fixed-width document previews (the flyer iframe) scale to fit the container
 width instead of relying on iframe-internal scrolling, which is unreliable in
 WKWebView — see `computeFlyerFit` + `useFlyerFit` in
