@@ -145,6 +145,32 @@ import { PortalTableDetailActions, PORTAL_DETAIL_BTN } from "@/components/portal
 
 Admin/manager tab tables use `ManagerPortalPageShell` with `filterRow` above the divider — see `admin-inbox-client.tsx` and `AGENTS.md` → Admin portal table tabs.
 
+### A portal page's scroller is `.portal-list-page-scroll`, not the window
+
+`ManagerPortalPageShell` defaults to `stickyPageChrome`, which sets
+`html[data-portal-sticky-chrome]`. That flips `#portal-main-content` to
+`overflow: hidden` and moves the scroll into the `.portal-list-page-scroll` box
+that `renderPortalStickyBody` wraps the page body in
+(`src/lib/portal-page-chrome-layout.tsx`). Communication surfaces do the same via
+`html[data-communication-surface]`. Everything between those two elements must
+therefore stay a `flex min-h-0 flex-1 flex-col` chain, or the scroller sizes to
+its content inside a clipped parent and the page silently stops scrolling below
+the first viewport — no error, no failing build, and pages whose content happens
+to fit look fine.
+
+Watch for **unlayered rules in `globals.css` beating Tailwind utilities**: they
+win over anything in `@layer utilities` regardless of specificity, so a rule like
+`.portal-main-inner > * { flex: 0 0 auto }` overrides the shell's `flex-1`. That
+one shipped and clipped Settings, Payments and Residents on every phone. Scope
+new `.portal-main-inner` / `#portal-main-content` layout rules to the surfaces
+they mean (`html:not([data-portal-sticky-chrome]):not([data-communication-surface])`
+for page-scrolls surfaces). Coverage: `tests/unit/portal-mobile-shell.test.ts`.
+
+Verify a phone change by measuring, not by eyeballing the first screenful:
+`scroller.scrollHeight - scroller.clientHeight` must be > 0 and
+`inner.scrollHeight - inner.clientHeight` must be 0 on a page taller than the
+viewport.
+
 ## Filter dropdowns: one portaled-overlay pattern
 
 Every portal filter field (property / resident / status / sort / scope) is ONE
