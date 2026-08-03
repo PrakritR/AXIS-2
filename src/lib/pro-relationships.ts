@@ -4,6 +4,8 @@
  */
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { createCoalescedRefresher, type CoalescedRefresher } from "@/lib/coalesced-refresh";
+import { PRO_RELATIONSHIPS_EVENT, serverSyncOriginatedEvent } from "@/lib/property-pipeline-events";
 import type { CoManagerPermissions, PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 import {
   coManagerPermissionsFromLegacy,
@@ -42,6 +44,7 @@ const memoryByUser = new Map<string, ProRelationshipRecord[]>();
 const RELATIONSHIPS_SYNC_TTL_MS = 15_000;
 const relationshipsLastSyncedAt = new Map<string, number>();
 const relationshipsSyncPromises = new Map<string, Promise<ProRelationshipRecord[]>>();
+const relationshipsRefreshers = new Map<string, CoalescedRefresher<ProRelationshipRecord[]>>();
 
 /** Merge server/local relationship rows. Exported for unit tests. */
 export function mergeRelationshipRows(
@@ -221,6 +224,19 @@ export async function syncProRelationshipsFromServer(
     return memoryByUser.get(userId) ?? [];
   }
 
+  // Forced callers bypass the TTL by design, so the several panels that force a
+  // refresh on mount each issued their own fetch (measured: 6 on one
+  // `/portal/properties` load). Collapse those into at most two without ever
+  // serving a forced caller a fetch that began before it asked.
+  let refresher = relationshipsRefreshers.get(userId);
+  if (!refresher) {
+    refresher = createCoalescedRefresher(() => runRelationshipsSync(userId));
+    relationshipsRefreshers.set(userId, refresher);
+  }
+  return refresher.run(force);
+}
+
+async function runRelationshipsSync(userId: string): Promise<ProRelationshipRecord[]> {
   const promise = (async () => {
     try {
       const res = await fetch("/api/portal-pro-relationships", { credentials: "include", cache: "no-store" });
@@ -234,7 +250,9 @@ export async function syncProRelationshipsFromServer(
       memoryByUser.set(userId, merged);
       relationshipsLastSyncedAt.set(userId, Date.now());
       if (relationshipsChanged(previous, merged)) {
-        window.dispatchEvent(new Event("axis-pro-relationships"));
+        // Tagged as sync-originated: `memoryByUser` above already holds the
+        // fresh rows, so listeners must NOT force another server round trip.
+        window.dispatchEvent(serverSyncOriginatedEvent(PRO_RELATIONSHIPS_EVENT));
       }
       return merged;
     } catch {

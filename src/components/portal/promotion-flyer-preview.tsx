@@ -177,7 +177,7 @@ export function PromotionFlyerPreview({
             type="button"
             variant="outline"
             className="h-9 text-xs"
-            onClick={() => void downloadPromotionFlyer(promotion)}
+            onClick={() => downloadPromotionFlyer(promotion)}
             data-attr="promotion-flyer-download"
           >
             Download

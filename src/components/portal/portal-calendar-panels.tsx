@@ -1110,7 +1110,7 @@ export function PortalCalendarPanels({
               type="button"
               variant="outline"
               className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
-              onClick={() => void deleteSelectedMeeting()}
+              onClick={() => deleteSelectedMeeting()}
             >
               {selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting)
                 ? "Delete event"
@@ -1132,7 +1132,7 @@ export function PortalCalendarPanels({
                   type="button"
                   variant="primary"
                   className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
-                  onClick={() => void approveSelectedInquiry()}
+                  onClick={() => approveSelectedInquiry()}
                 >
                   Approve
                 </Button>

@@ -375,7 +375,7 @@ export function ApplicationPhotoField({
               variant="secondary"
               className="px-4 text-[13px]"
               disabled={busy}
-              onClick={() => void handleFile(lastFailedFile)}
+              onClick={() => handleFile(lastFailedFile)}
               data-attr={dataAttr ? `${dataAttr}-retry` : undefined}
             >
               Retry

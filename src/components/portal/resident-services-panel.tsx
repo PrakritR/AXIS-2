@@ -1490,7 +1490,7 @@ export function ResidentServicesPanel({
               variant="primary"
               className="rounded-full"
               data-attr="resident-maintenance-submit"
-              onClick={() => { void submitMaintenance(); }}
+              onClick={() => { return submitMaintenance(); }}
               disabled={maintenanceSubmitting}
             >
               {maintenanceSubmitting ? "Submitting…" : "Submit"}
@@ -1602,7 +1602,7 @@ export function ResidentServicesPanel({
                 type="button"
                 variant="primary"
                 className="rounded-full"
-                onClick={() => { void submitService(); }}
+                onClick={() => { return submitService(); }}
                 disabled={serviceRequestSubmitDisabled}
               >
                 {serviceSubmitting ? "Sending…" : "Send request"}

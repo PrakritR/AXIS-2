@@ -859,7 +859,7 @@ export function ManagerWorkOrdersPanel({
                                   data-attr="dispatch-approve"
                                   className="h-7 rounded-full px-3 text-xs"
                                   disabled={dispatchBusyId === row.id}
-                                  onClick={() => void handleDispatchDecision(row, "approve")}
+                                  onClick={() => handleDispatchDecision(row, "approve")}
                                 >
                                   {dispatchBusyId === row.id ? "Dispatching…" : "Approve & dispatch"}
                                 </Button>
@@ -869,7 +869,7 @@ export function ManagerWorkOrdersPanel({
                                   data-attr="dispatch-decline"
                                   className="h-7 rounded-full px-3 text-xs"
                                   disabled={dispatchBusyId === row.id}
-                                  onClick={() => void handleDispatchDecision(row, "decline")}
+                                  onClick={() => handleDispatchDecision(row, "decline")}
                                 >
                                   Decline
                                 </Button>
@@ -1042,7 +1042,7 @@ export function ManagerWorkOrdersPanel({
                                           data-attr="work-order-accept-bid"
                                           className="h-7 rounded-full px-3 text-xs"
                                           disabled={acceptingBidId === bid.id}
-                                          onClick={() => void acceptBidHandler(bid)}
+                                          onClick={() => acceptBidHandler(bid)}
                                         >
                                           Accept
                                         </Button>
@@ -1062,7 +1062,7 @@ export function ManagerWorkOrdersPanel({
                                 type="button"
                                 variant="primary"
                                 className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                onClick={() => void saveScheduleFromOpen(row)}
+                                onClick={() => saveScheduleFromOpen(row)}
                               >
                                 Schedule visit
                               </Button>
@@ -1076,7 +1076,7 @@ export function ManagerWorkOrdersPanel({
                               </Button>
                             </>
                           ) : row.bucket === "scheduled" ? (
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => rescheduleVisit(row)}>
                               Save new time
                             </Button>
                           ) : null}
@@ -1087,7 +1087,7 @@ export function ManagerWorkOrdersPanel({
                               data-attr="work-order-auto-schedule"
                               className={PORTAL_DETAIL_BTN}
                               disabled={autoSchedulingId === row.id}
-                              onClick={() => void autoScheduleVisit(row)}
+                              onClick={() => autoScheduleVisit(row)}
                             >
                               {autoSchedulingId === row.id ? "Finding a slot…" : "Auto-schedule"}
                             </Button>
@@ -1183,7 +1183,7 @@ export function ManagerWorkOrdersPanel({
         footer={
           completeRow ? (
             <ModalFooter>
-              <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
+              <Button type="button" variant="primary" onClick={() => submitComplete()} disabled={completeBusy}>
                 {completeBusy
                   ? "Completing…"
                   : completeDraft.notifyResident && completeRow.residentEmail?.includes("@")
@@ -1327,7 +1327,7 @@ export function ManagerWorkOrdersPanel({
                 type="button"
                 variant="primary"
                 data-attr="work-order-approve-pay-confirm"
-                onClick={() => void submitApprovePay(approvePayRow)}
+                onClick={() => submitApprovePay(approvePayRow)}
                 disabled={approvePayBusy}
               >
                 {approvePayBusy ? "Approving…" : "Approve & pay"}

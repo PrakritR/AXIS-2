@@ -122,7 +122,7 @@ export function VendorTaxProfileModal({
       title={`W-9 / tax info${vendorName ? ` · ${vendorName}` : ""}`}
       footer={
         <ModalFooter>
-          <Button variant="primary" onClick={() => void save()} disabled={saving || loading}>
+          <Button variant="primary" onClick={() => save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </ModalFooter>

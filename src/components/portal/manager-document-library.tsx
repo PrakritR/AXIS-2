@@ -459,7 +459,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN}
-          onClick={() => void handleRequestSignature(doc)}
+          onClick={() => handleRequestSignature(doc)}
           data-attr="document-request-signature"
         >
           Request signature
@@ -469,7 +469,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="outline"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleShareLink(doc)}
+        onClick={() => handleShareLink(doc)}
         data-attr="document-share-link"
       >
         Share link
@@ -478,7 +478,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="danger"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleDelete(doc)}
+        onClick={() => handleDelete(doc)}
         data-attr="document-delete"
       >
         Delete
@@ -851,7 +851,7 @@ function UploadModal({
       title={title}
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
         </ModalFooter>
@@ -1072,7 +1072,7 @@ function EditDocumentModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>
         </ModalFooter>
@@ -1197,7 +1197,7 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
-              onClick={() => void handleDownload()}
+              onClick={() => handleDownload()}
               disabled={downloading}
               data-attr="document-download"
             >

@@ -416,7 +416,7 @@ export function PortalAuthForm({
                 type="button"
                 data-attr="portal-auth-create-submit"
                 className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                onClick={() => void submit()}
+                onClick={() => submit()}
                 disabled={busy}
               >
                 {busy ? "Creating…" : "Create account"}
@@ -484,7 +484,7 @@ export function PortalAuthForm({
       <Button
         type="button"
         className="mt-4 w-full rounded-full py-2.5 text-[15px] font-semibold sm:mt-5 sm:py-3 sm:text-base"
-        onClick={() => void submit()}
+        onClick={() => submit()}
         disabled={busy}
       >
         {busy ? (isCreate ? "Creating…" : "Signing in…") : isCreate ? "Create account" : "Sign in"}

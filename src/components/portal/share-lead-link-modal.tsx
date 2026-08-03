@@ -630,7 +630,7 @@ export function ShareLeadLinkModal({
                                 type="button"
                                 variant="outline"
                                 className="h-10 shrink-0 rounded-full px-3 text-xs whitespace-nowrap sm:px-4 sm:text-sm"
-                                onClick={() => void handleCopy(entry.url, "Tour link copied.")}
+                                onClick={() => handleCopy(entry.url, "Tour link copied.")}
                               >
                                 Copy link
                               </Button>

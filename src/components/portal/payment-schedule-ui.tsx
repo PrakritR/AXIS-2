@@ -498,20 +498,20 @@ export function ScheduledMessageEditForm({
           Apply to future payments
         </label>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
+          <Button type="button" variant="primary" className="rounded-full" onClick={() => save()} disabled={busy}>
             Save
           </Button>
           {message.status === "scheduled" && onSendNow ? (
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => void onSendNow()} disabled={busy}>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => onSendNow()} disabled={busy}>
               Send now
             </Button>
           ) : null}
           {message.status === "cancelled" ? (
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => void toggleCancelled(false)} disabled={busy}>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => toggleCancelled(false)} disabled={busy}>
               Restore send
             </Button>
           ) : message.status === "scheduled" ? (
-            <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={() => void toggleCancelled(true)} disabled={busy}>
+            <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={() => toggleCancelled(true)} disabled={busy}>
               Cancel send
             </Button>
           ) : null}
@@ -1027,7 +1027,7 @@ function PaymentAutomationSettingsForm({
             type="button"
             variant="primary"
             className={`rounded-full ${compact && variant === "payments" ? "w-full" : ""}`}
-            onClick={() => void save()}
+            onClick={() => save()}
             disabled={!saveEnabled}
           >
             {copy.saveLabel}

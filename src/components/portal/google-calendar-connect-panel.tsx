@@ -157,7 +157,7 @@ export function GoogleCalendarConnectPanel({
         </div>
         <div className="flex shrink-0 gap-2">
           {status.connected ? (
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void disconnect()}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => disconnect()}>
               Disconnect
             </Button>
           ) : (

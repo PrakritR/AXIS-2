@@ -925,7 +925,7 @@ export function ManagerApplications({
         className={className}
         data-attr="application-send-reminder"
         disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-        onClick={() => void openReminderPreview(row)}
+        onClick={() => openReminderPreview(row)}
       >
         {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
       </Button>
@@ -1034,7 +1034,7 @@ export function ManagerApplications({
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
         data-attr="application-delete"
-        onClick={() => void deleteApplication(row.id)}
+        onClick={() => deleteApplication(row.id)}
       >
         Delete
       </Button>

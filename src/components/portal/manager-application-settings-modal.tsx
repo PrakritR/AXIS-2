@@ -100,7 +100,7 @@ export function ManagerApplicationSettingsModal({ open, onClose }: { open: boole
           <Button
             type="button"
             className="rounded-full px-4 text-[13px]"
-            onClick={() => void save()}
+            onClick={() => save()}
             disabled={loading || saving}
             data-attr="manager-application-fee-save"
           >

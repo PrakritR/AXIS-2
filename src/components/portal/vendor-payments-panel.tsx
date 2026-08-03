@@ -523,7 +523,7 @@ export function VendorPaymentsPanel() {
               className={PORTAL_DETAIL_BTN_PRIMARY}
               disabled={bulkBusy}
               data-attr="vendor-payments-mark-paid"
-              onClick={() => void runBulkNotify("report_paid")}
+              onClick={() => runBulkNotify("report_paid")}
             >
               {bulkBusy ? "Updating…" : "Mark paid"}
             </Button>
@@ -533,7 +533,7 @@ export function VendorPaymentsPanel() {
               className={PORTAL_DETAIL_BTN}
               disabled={bulkBusy}
               data-attr="vendor-payments-send-reminder"
-              onClick={() => void runBulkNotify("send_reminder")}
+              onClick={() => runBulkNotify("send_reminder")}
             >
               {bulkBusy ? "Sending…" : "Send reminder"}
             </Button>

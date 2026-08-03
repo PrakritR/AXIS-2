@@ -146,11 +146,11 @@ export function ManagerBillsPanel() {
                     </td>
                     <td className={PORTAL_TABLE_TD}>
                       {bill.status === "pending_approval" || bill.status === "draft" ? (
-                        <Button variant="secondary" onClick={() => void actOnBill(bill.id, "approve")}>
+                        <Button variant="secondary" onClick={() => actOnBill(bill.id, "approve")}>
                           Approve
                         </Button>
                       ) : bill.status === "approved" || bill.status === "scheduled" ? (
-                        <Button variant="secondary" onClick={() => void actOnBill(bill.id, "pay")}>
+                        <Button variant="secondary" onClick={() => actOnBill(bill.id, "pay")}>
                           Mark paid
                         </Button>
                       ) : (
@@ -171,7 +171,7 @@ export function ManagerBillsPanel() {
         title="Add bill"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void createBill()}>
+            <Button variant="primary" onClick={() => createBill()}>
               Create bill
             </Button>
           </ModalFooter>

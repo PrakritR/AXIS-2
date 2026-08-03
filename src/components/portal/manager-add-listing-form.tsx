@@ -4885,7 +4885,7 @@ export function ManagerAddListingForm({
                   type="button"
                   className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                   data-attr="listing-wizard-submit"
-                  onClick={() => void submitListing()}
+                  onClick={() => submitListing()}
                   disabled={busy}
                 >
                   {busy

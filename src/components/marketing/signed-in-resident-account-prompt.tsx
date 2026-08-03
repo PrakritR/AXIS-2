@@ -75,7 +75,7 @@ export function SignedInResidentAccountPrompt({
           className="min-h-[44px] w-full rounded-full text-[15px] font-semibold"
           data-attr="signed-in-create-resident-account"
           disabled={busy}
-          onClick={() => void createResidentAccount()}
+          onClick={() => createResidentAccount()}
         >
           {busy ? "Creating…" : "Create resident account & apply"}
         </Button>

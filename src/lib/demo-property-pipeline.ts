@@ -5,7 +5,8 @@ import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/li
 import { scopePropertyPipelineSnapshotForViewer } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1, ManagerListingServiceOption } from "@/lib/manager-listing-submission";
 import { parseRecordOfArrays } from "@/lib/safe-local-storage";
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
+import { PROPERTY_PIPELINE_EVENT, serverSyncOriginatedEvent } from "@/lib/property-pipeline-events";
+import { createCoalescedRefresher, type CoalescedRefresher } from "@/lib/coalesced-refresh";
 
 /** Admin-only / legacy listings not tied to a real manager auth user (demo localStorage bucket). */
 export const LEGACY_MANAGER_SCOPE_USER_ID = "__axis_legacy__";
@@ -38,6 +39,17 @@ const SESSION_CACHE_PREFIX = "axis_property_pipeline_cache_v1:";
 const PROPERTY_PIPELINE_SYNC_META_KEY = `${SESSION_CACHE_PREFIX}__synced_at`;
 const PROPERTY_PIPELINE_SYNC_TTL_MS = 15_000;
 let propertyPipelineSyncPromise: Promise<boolean> | null = null;
+// Forced syncs bypass the TTL by design, so several panels mounting at once each
+// used to issue their own `/api/property-records` fetch (measured: 5 on one
+// `/portal/properties` load). The refreshers below collapse those into at most
+// two, without ever handing a forced caller a fetch that started before it asked.
+// Keyed by the viewer id because that id SCOPES the snapshot — an unscoped call
+// and a scoped one must never share a run.
+const propertyPipelineRefreshers = new Map<string, CoalescedRefresher<boolean>>();
+const latestPipelineSyncOpts = new Map<
+  string,
+  { userId?: string | null; linkedPropertyIds?: Iterable<string> } | undefined
+>();
 // Signature of the last snapshot we broadcast. The PROPERTY_PIPELINE_EVENT re-enters
 // listeners that can force another sync (e.g. manager-properties' refreshPortfolio),
 // so dispatching on every sync — even an unchanged one — is an infinite refetch loop.
@@ -334,6 +346,25 @@ export async function syncPropertyPipelineFromServer(opts?: {
   if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < PROPERTY_PIPELINE_SYNC_TTL_MS) {
     return true;
   }
+  const viewerKey = opts?.userId?.trim() ?? "";
+  // The refresher outlives any one call, so it must read the LATEST caller's
+  // linked ids rather than closing over the first caller's — otherwise a joined
+  // caller's ids would be silently dropped from the union below.
+  latestPipelineSyncOpts.set(viewerKey, opts);
+  let refresher = propertyPipelineRefreshers.get(viewerKey);
+  if (!refresher) {
+    refresher = createCoalescedRefresher(() =>
+      runPropertyPipelineSync(latestPipelineSyncOpts.get(viewerKey)),
+    );
+    propertyPipelineRefreshers.set(viewerKey, refresher);
+  }
+  return refresher.run(force);
+}
+
+async function runPropertyPipelineSync(opts?: {
+  userId?: string | null;
+  linkedPropertyIds?: Iterable<string>;
+}): Promise<boolean> {
   try {
     propertyPipelineSyncPromise = (async () => {
       const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
@@ -376,7 +407,11 @@ export async function syncPropertyPipelineFromServer(opts?: {
       const promoted = await promoteLegacyPendingListingsToLive();
       // Only notify listeners when the snapshot actually changed — an unconditional
       // dispatch here loops with force-syncing listeners (see lastPipelineSnapshotSig).
-      if (changed || promoted > 0) window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      // Tagged as sync-originated: the fresh snapshot is already in the local
+      // store above, so listeners must NOT force another server round trip.
+      if (changed || promoted > 0) {
+        window.dispatchEvent(serverSyncOriginatedEvent(PROPERTY_PIPELINE_EVENT));
+      }
       return true;
     })();
     return await propertyPipelineSyncPromise;

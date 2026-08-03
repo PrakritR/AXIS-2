@@ -223,7 +223,7 @@ export function ManagerApplicationFeeWaiverCodesModal({ open, onClose }: { open:
             className="rounded-full px-4 text-[13px]"
             disabled={creating}
             data-attr="manager-waiver-code-create"
-            onClick={() => void createCode()}
+            onClick={() => createCode()}
           >
             {creating ? "Creating…" : "Create code"}
           </Button>
@@ -255,7 +255,7 @@ export function ManagerApplicationFeeWaiverCodesModal({ open, onClose }: { open:
                         className="rounded-full px-3 text-[12px]"
                         disabled={revokingId === c.id}
                         data-attr="manager-waiver-code-revoke"
-                        onClick={() => void revokeCode(c.id)}
+                        onClick={() => revokeCode(c.id)}
                       >
                         {revokingId === c.id ? "Revoking…" : "Revoke"}
                       </Button>

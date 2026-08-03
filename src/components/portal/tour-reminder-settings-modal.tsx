@@ -177,7 +177,7 @@ export function TourReminderSettingsModal({
             <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" variant="primary" className="rounded-full" disabled={saving} onClick={() => void save()} data-attr="tour-reminder-settings-save">
+            <Button type="button" variant="primary" className="rounded-full" disabled={saving} onClick={() => save()} data-attr="tour-reminder-settings-save">
               {saving ? "Saving…" : "Save"}
             </Button>
           </div>

@@ -138,7 +138,7 @@ export function VendorPaymentMethodsModal({
             type="button"
             variant="primary"
             className="rounded-full"
-            onClick={() => void save()}
+            onClick={() => save()}
             disabled={saving}
             data-attr="vendor-payment-methods-save"
           >

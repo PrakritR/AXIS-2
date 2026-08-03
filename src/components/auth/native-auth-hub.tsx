@@ -277,7 +277,7 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: NativeAuthHubProps) {
                 type="button"
                 className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
                 disabled={locked}
-                onClick={() => void signIn()}
+                onClick={() => signIn()}
               >
                 {busy ? "Signing in…" : "Sign in"}
               </Button>

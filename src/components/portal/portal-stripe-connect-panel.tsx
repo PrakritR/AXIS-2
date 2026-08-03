@@ -382,7 +382,7 @@ export function PortalStripeConnectPanel({
                 data-attr={`${dataAttrPrefix}-update`}
                 className="rounded-full"
                 disabled={busy}
-                onClick={() => void startConnect()}
+                onClick={() => startConnect()}
               >
                 {busy ? "Opening…" : "Update bank details"}
               </Button>
@@ -398,7 +398,7 @@ export function PortalStripeConnectPanel({
                 data-attr={`${dataAttrPrefix}-link`}
                 className="rounded-full"
                 disabled={busy}
-                onClick={() => void startConnect()}
+                onClick={() => startConnect()}
               >
                 {busy ? "Opening…" : "Link bank account"}
               </Button>

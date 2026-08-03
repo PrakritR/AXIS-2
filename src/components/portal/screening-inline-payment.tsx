@@ -108,7 +108,7 @@ export function ScreeningInlinePayment({
     return (
       <div className="space-y-3 rounded-2xl border border-border bg-card p-4" data-attr="screening-inline-error">
         <p className="text-sm font-medium text-red-600">{error}</p>
-        <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={() => void start()}>
+        <Button type="button" variant="outline" className="px-4 text-[13px]" onClick={() => start()}>
           Try again
         </Button>
       </div>
