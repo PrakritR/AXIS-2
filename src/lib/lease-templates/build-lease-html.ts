@@ -216,6 +216,9 @@ type ProrateOptions = {
   utilitiesAmount?: number;
 };
 
+/** Placeholder for the prorated section's number, swapped for a counter value at render. */
+const PRORATED_SECTION_TOKEN = "__PRORATED_SECTION__";
+
 function proratedBlock(
   monthlyRentStr: string,
   utilitiesStr: string,
@@ -275,7 +278,7 @@ function proratedBlock(
         : `<p>Beginning the first full month, the full monthly utilities estimate stated in Section 4 applies.</p>`
       : `<p>Beginning the first full month, regular rent and utilities as stated in Sections 4 and 9 apply.</p>`;
     return `
-<h2>5. ${heading}</h2>
+<h2>${PRORATED_SECTION_TOKEN}. ${heading}</h2>
 <p>${intro}</p>
 <table>
   <tr><th>Item</th><th>${rateCol}</th><th>${utilitiesOnly ? "Days billed" : "Days remaining"}</th><th>Prorated amount</th></tr>
@@ -767,6 +770,20 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </div>`
       : "";
 
+  // Long-form section numbers are COUNTED, not written down. Every heading used to carry a
+  // hand-computed expression over which optional sections were present, so adding one more
+  // optional clause meant editing the number on every heading below it and getting a wrong
+  // section number onto a legal document if you missed one. The body literal below evaluates
+  // left to right, so a counter is exact. `recordSection` also stores a number that later body
+  // text cross-references by name, instead of repeating the arithmetic.
+  let sectionCounter = 0;
+  const sectionRefs: Record<string, number> = {};
+  const nextSection = (key?: string): number => {
+    sectionCounter += 1;
+    if (key) sectionRefs[key] = sectionCounter;
+    return sectionCounter;
+  };
+
   const longTermTitleHtml = config.brandTitle
     ? `<h1>${escapeHtml(config.brandTitle)}</h1>
 <p class="sub" style="font-size:1.05rem;font-weight:700;margin-bottom:0.25rem">RESIDENTIAL LEASE AGREEMENT</p>
@@ -779,14 +796,14 @@ ${longTermTitleHtml}
 <p class="generated">Generated ${generatedDate} via PropLane</p>
 ${leaseSummaryHtml}
 
-<h2>1. Parties</h2>
+<h2>${nextSection()}. Parties</h2>
 <table>
   <tr><th width="35%">Landlord / Operator</th><td><strong>${landlordEntity}</strong><br/>Mailing address: ${landlordMailing}<br/>For notices, use PropLane portal messaging or the address above.</td></tr>
   <tr><th>Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${tenantPhone} &nbsp;·&nbsp; Email: ${tenantEmail}<br/>Date of birth: ${tenantDob}</td></tr>
 </table>
 ${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
 
-<h2>2. Premises</h2>
+<h2>${nextSection()}. Premises</h2>
 <p>Landlord leases to Resident the following private room and appurtenant shared-area rights:</p>
 <table>
   <tr><th width="35%">Property / building</th><td>${landlordEntity}</td></tr>
@@ -797,7 +814,7 @@ ${jointPartiesNote ? `<p>${jointPartiesNote}</p>` : ""}
 </table>
 ${config.municipalComplianceParagraph ? `<p>${escapeHtml(config.municipalComplianceParagraph)}</p>` : ""}
 
-<h2>3. Lease Term</h2>
+<h2>${nextSection()}. Lease Term</h2>
 <p>The initial term is <strong>${leaseTerm}</strong>, beginning <strong>${leaseStart}</strong> and ending <strong>${leaseEnd}</strong>. ${leaseTermsBody}</p>
 ${
   isMonthToMonthLease(a)
@@ -813,7 +830,7 @@ ${
     : ""
 }
 
-<h2>4. Rent</h2>
+<h2>${nextSection()}. Rent</h2>
 <table>
   <tr><th width="50%">${rentRowLabel}</th><td><strong>${escapeHtml(monthlyRentBaseStr)}</strong></td></tr>
   <tr><th>Utilities / services (monthly estimate)</th><td><strong>${utilitiesStr}</strong></td></tr>
@@ -823,9 +840,9 @@ ${isDailyBasis ? `<p>Rent for this Premises is charged <strong>by the day</stron
 <p>Rent is due on the <strong>1st calendar day</strong> of each month. ${paymentMethod}</p>
 ${lateFeeUsd != null ? `<p><strong>Late fee:</strong> If rent is not received after the listing's configured grace period, a late fee of <strong>${fmtUsd(lateFeeUsd)}</strong> (non-refundable) may be assessed. Acceptance of late payment does not waive Landlord&apos;s right to enforce late fees or pursue other remedies under this Agreement or applicable law.</p>` : ""}
 
-${proratedSection || ""}
+${proratedSection ? proratedSection.replace(PRORATED_SECTION_TOKEN, String(nextSection())) : ""}
 
-<h2>${proratedSection ? "6" : "5"}. Security Deposit &amp; Move-In Charges</h2>
+<h2>${nextSection()}. Security Deposit &amp; Move-In Charges</h2>
 <table>
   <tr><th width="50%">Application fee</th><td>${appFee}</td></tr>
   <tr><th>Security deposit</th><td><strong>${secDep}</strong></td></tr>
@@ -847,16 +864,16 @@ ${customFeeSigningRows}
 </ul>
 ${longTermDepositReissueFee != null && longTermDepositReissueFee > 0 ? `<p>A <strong>${fmtUsd(longTermDepositReissueFee)}</strong> stop-payment or reissuance fee may be deducted if a refund must be reissued due to an incorrect or missing address, where permitted by law.</p>` : ""}
 
-<h2>${proratedSection ? "7" : "6"}. Returned Payments</h2>
+<h2>${nextSection()}. Returned Payments</h2>
 <p>If any payment is dishonored, reversed, or returned unpaid, Resident shall promptly pay the original amount due and any actual bank or processing charges.${longTermReturnedPaymentFee != null && longTermReturnedPaymentFee > 0 ? ` A returned-payment fee of <strong>${fmtUsd(longTermReturnedPaymentFee)}</strong> may also be charged${config.returnedPaymentStatuteRef ? ` subject to ${escapeHtml(config.returnedPaymentStatuteRef)}` : ""}.` : ""} Repeated returned payments may require future payment by certified funds or another method approved in writing by Landlord.</p>
 
-<h2>${proratedSection ? "8" : "7"}. Utilities &amp; Services</h2>
+<h2>${nextSection()}. Utilities &amp; Services</h2>
 ${utilitiesBreakdown}
 <p>The estimated monthly utilities / RUBS charge is <strong>${utilitiesStr}</strong>. ${utilitiesEstimateSentence} The actual charge may vary based on usage. Resident shall not engage in unusual or wasteful energy use. Landlord reserves the right to bill excess usage directly to Resident with 30 days' advance written notice of a change in the utility structure.</p>
 ${longTermTrashViolationFee != null && longTermTrashViolationFee > 0 ? `<p><strong>Trash rules:</strong> Resident must bag trash, use designated containers, break down boxes, and keep trash and recyclables out of hallways. A documented violation may result in a <strong>${fmtUsd(longTermTrashViolationFee)}</strong> fee per occurrence, to the extent permitted by applicable law.</p>` : ""}
 <p>Resident remains responsible for cleaning up after personal use of shared spaces and providing reasonable access for scheduled cleaning services.</p>
 
-<h2>${proratedSection ? "9" : "8"}. Use, Occupancy &amp; Guest Policy</h2>
+<h2>${nextSection("useOccupancy")}. Use, Occupancy &amp; Guest Policy</h2>
 <p>The Premises shall be used exclusively as a private residence. The only authorized occupant(s) are: <strong>${tenantName}</strong> and <strong>${occupancy}</strong> additional authorized occupant(s) listed in writing at signing.</p>
 <ul>
   <li><strong>Guests:</strong> ${longTermGuestCap ? `Gatherings of more than ${longTermGuestCap} guests require Landlord's prior written approval.` : "No guest is permitted on the property or in the room unless Landlord gives prior written approval in advance."}</li>
@@ -865,12 +882,12 @@ ${longTermTrashViolationFee != null && longTermTrashViolationFee > 0 ? `<p><stro
   <li><strong>Illegal activity:</strong> No illegal activity of any kind on or near the Premises.</li>
 </ul>
 
-<h2>${proratedSection ? "10" : "9"}. Shared Spaces</h2>
+<h2>${nextSection()}. Shared Spaces</h2>
 <p>${escapeHtml(sharedSpacesText)}</p>
 ${bathroomArrangement ? `<p><strong>Bathroom arrangement:</strong> ${escapeHtml(bathroomArrangement)}</p>` : ""}
 <p><strong>Building amenities (summary):</strong> ${amenities}</p>
 
-<h2>${proratedSection ? "11" : "10"}. House Rules</h2>
+<h2>${nextSection()}. House Rules</h2>
 ${houseRules
   ? `<p>${houseRules}</p>`
   : `<ul>
@@ -884,11 +901,11 @@ ${houseRules
 </ul>`}
 ${houseRules && longTermQuietHours ? `<p><strong>Quiet hours:</strong> ${longTermQuietHours}. No loud music, TV, or gatherings that disturb other residents during these hours.</p>` : ""}
 
-<h2>${proratedSection ? "12" : "11"}. Pets</h2>
+<h2>${nextSection()}. Pets</h2>
 <p>${escapeHtml(petPolicy)}</p>
 <p>Pet disclosure on application: <strong>${pets}</strong>.</p>
 
-<h2>${proratedSection ? "13" : "12"}. Maintenance &amp; Repairs</h2>
+<h2>${nextSection()}. Maintenance &amp; Repairs</h2>
 <h3>Landlord responsibilities${config.landlordMaintenanceStatuteRef ? ` (${config.landlordMaintenanceStatuteRef})` : ""}:</h3>
 <ul>
   <li>Maintain the dwelling in a structurally sound, weathertight, and sanitary condition.</li>
@@ -915,20 +932,20 @@ ${houseRules && longTermQuietHours ? `<p><strong>Quiet hours:</strong> ${longTer
 <h3>Alterations:</h3>
 <p>Resident shall not paint, drill, install fixtures, or make any alterations without prior written approval. Unauthorized alterations must be restored at Resident's expense at move-out.</p>
 
-<h2>${proratedSection ? "14" : "13"}. Landlord Entry (${config.landlordEntryStatuteRef})</h2>
+<h2>${nextSection()}. Landlord Entry (${config.landlordEntryStatuteRef})</h2>
 <p>Landlord or Landlord's authorized agents may enter the Premises after providing at least <strong>24 hours' advance written notice</strong> (email to Resident's address of record shall suffice) for the purpose of inspections, repairs, improvements, or showing to prospective tenants or buyers. Entry shall be at reasonable times unless agreed otherwise.</p>
 <p>In case of <strong>emergency</strong> (fire, flood, gas leak, or other imminent hazard), Landlord may enter without notice. After an emergency entry, Landlord shall provide written notice to Resident as soon as reasonably practicable.</p>
 
-<h2>${proratedSection ? "15" : "14"}. Assignment &amp; Subletting</h2>
-<p>Resident may not assign this lease, sublet the room, or accommodate any occupant not authorized in Section ${proratedSection ? "9" : "8"} without prior written consent of Landlord. Consent shall not be unreasonably withheld where Resident provides a qualified replacement tenant. Any unauthorized subletting, including short-term rentals, constitutes material breach.</p>
+<h2>${nextSection()}. Assignment &amp; Subletting</h2>
+<p>Resident may not assign this lease, sublet the room, or accommodate any occupant not authorized in Section ${sectionRefs.useOccupancy} without prior written consent of Landlord. Consent shall not be unreasonably withheld where Resident provides a qualified replacement tenant. Any unauthorized subletting, including short-term rentals, constitutes material breach.</p>
 
-${longTermProfessionalCleaningRequired ? `<h2>${proratedSection ? "16" : "15"}. Move-Out &amp; Surrender</h2>
+${longTermProfessionalCleaningRequired ? `<h2>${nextSection()}. Move-Out &amp; Surrender</h2>
 <p>At move-out, Resident shall vacate, remove personal property, return all keys and access devices, and surrender the Premises in substantially the same condition as received, ordinary wear and tear excepted. Resident must complete professional cleaning and provide a paid invoice. If Resident does not do so, Landlord may arrange professional cleaning after vacancy and include the documented invoice in any lawful deposit deduction.</p>` : ""}
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "17" : "16") : (longTermProfessionalCleaningRequired ? "16" : "15")}. Renter's Insurance</h2>
+<h2>${nextSection()}. Renter's Insurance</h2>
 <p>Resident is <strong>strongly encouraged</strong> to maintain renter's insurance with personal-liability coverage. Landlord's property insurance does <em>not</em> cover Resident's personal belongings or liability. Landlord is not liable for theft, fire, water damage, or loss of Resident's personal property.</p>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "18" : "17") : (longTermProfessionalCleaningRequired ? "17" : "16")}. Default &amp; Remedies</h2>
+<h2>${nextSection()}. Default &amp; Remedies</h2>
 <p>A material breach includes but is not limited to: nonpayment of rent or fees, unauthorized occupants, violation of house rules, illegal activity, or substantial damage to the Premises. Upon material breach:</p>
 <ul>
   <li>Landlord shall provide written notice to cure or vacate per ${config.defaultNoticeStatuteRef} (3-day pay-or-vacate for nonpayment; 10-day cure notice for other violations).</li>
@@ -936,30 +953,30 @@ ${longTermProfessionalCleaningRequired ? `<h2>${proratedSection ? "16" : "15"}. 
   <li>Resident remains liable for rent through the end of the lease term or until a qualified replacement tenant begins paying rent, whichever occurs first.</li>
 </ul>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "19" : "18") : (longTermProfessionalCleaningRequired ? "18" : "17")}. Early Termination</h2>
+<h2>${nextSection()}. Early Termination</h2>
 ${
   hasConfiguredEarlyTerminationTerm
     ? `<p>If Resident terminates the lease before the end of the initial term, Resident remains responsible for lawful obligations until a replacement resident takes possession or the lease ends, whichever occurs first${config.earlyTerminationStatuteRef ? `, subject to ${escapeHtml(config.earlyTerminationStatuteRef)}` : ""}. ${longTermBreakLeaseFee != null && longTermBreakLeaseFee > 0 ? `A break-lease fee of <strong>${fmtUsd(longTermBreakLeaseFee)}</strong> may be charged.` : ""} ${longTermLeaseUpFeePercent != null ? `A prorated lease-up fee of up to <strong>${longTermLeaseUpFeePercent}% of one month's rent</strong> may be charged.` : ""} Actual re-renting costs may also be charged to the extent permitted by law.</p>`
     : "<p>Any early termination is governed by applicable law and a written agreement between the parties.</p>"
 }
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "20" : "19") : (longTermProfessionalCleaningRequired ? "19" : "18")}. Payment Application Order</h2>
+<h2>${nextSection()}. Payment Application Order</h2>
 <p>Any payments received shall be applied in the following order: (1) outstanding damage charges; (2) outstanding utility charges; (3) late fees and administrative fees; (4) past due rent (oldest first); (5) current rent.</p>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "21" : "20") : (longTermProfessionalCleaningRequired ? "20" : "19")}. Notices</h2>
+<h2>${nextSection()}. Notices</h2>
 <p>All notices shall be in writing. Delivery by email to the address on file or via PropLane portal messaging is acceptable and shall be deemed received upon sending during business hours. Legal notices may also be delivered in person or by first-class mail to the mailing addresses listed in Section 1. Either party may update their notice address in writing.</p>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "22" : "21") : (longTermProfessionalCleaningRequired ? "21" : "20")}. Lead-Based Paint Disclosure</h2>
+<h2>${nextSection()}. Lead-Based Paint Disclosure</h2>
 <p>If the property was built before 1978, federal law (42 U.S.C. § 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet "Protect Your Family From Lead in Your Home" or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "23" : "22") : (longTermProfessionalCleaningRequired ? "22" : "21")}. Governing Law; Severability; Entire Agreement</h2>
+<h2>${nextSection()}. Governing Law; Severability; Entire Agreement</h2>
 <p>${config.governingLawParagraph}</p>
 ${longTermDisputeVenue ? `<p>Venue for a dispute arising from this Agreement is ${longTermDisputeVenue}, to the extent permitted by applicable law.</p>` : ""}
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "24" : "23") : (longTermProfessionalCleaningRequired ? "23" : "22")}. Attorney Fees</h2>
+<h2>${nextSection()}. Attorney Fees</h2>
 <p>In any action to enforce or interpret this Agreement, the prevailing party shall be entitled to recover reasonable attorney fees and court costs as permitted by law.</p>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "25" : "24") : (longTermProfessionalCleaningRequired ? "24" : "23")}. Application Summary (Incorporated by Reference)</h2>
+<h2>${nextSection()}. Application Summary (Incorporated by Reference)</h2>
 <table>
   <tr><th>Field</th><th>Information supplied by Resident</th></tr>
   <tr><td>Full legal name</td><td>${tenantName}</td></tr>
@@ -976,7 +993,7 @@ ${longTermDisputeVenue ? `<p>Venue for a dispute arising from this Agreement is 
   <tr><td>Household size</td><td>${occupancy}</td></tr>
 </table>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "26" : "25") : (longTermProfessionalCleaningRequired ? "25" : "24")}. Rent &amp; Fees Schedule (Exhibit A)</h2>
+<h2>${nextSection()}. Rent &amp; Fees Schedule (Exhibit A)</h2>
 <table>
   <tr><th>Item</th><th>Amount</th><th>Frequency</th></tr>
   <tr><td>${rentRowLabel}</td><td><strong>${escapeHtml(typeof monthlyRentStr === "string" ? monthlyRentStr : String(monthlyRentStr))}</strong></td><td>${isDailyBasis ? "Per day, billed each month by actual days" : "Monthly, due 1st"}</td></tr>
@@ -990,7 +1007,7 @@ ${customFeeExhibitRows}
   <tr><td>Total due at signing</td><td>${paySigning}</td><td>At signing</td></tr>
 </table>
 
-<h2>${proratedSection ? (longTermProfessionalCleaningRequired ? "27" : "26") : (longTermProfessionalCleaningRequired ? "26" : "25")}. Electronic Signature</h2>
+<h2>${nextSection()}. Electronic Signature</h2>
 <p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the PropLane portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
