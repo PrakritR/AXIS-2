@@ -1045,6 +1045,16 @@ conversations) plus the archive toggle. Invariants:
   `default-src 'none'; sandbox`, `nosniff`, and `Cross-Origin-Resource-Policy`.
   `Content-Disposition` does not affect subresource loads, so `<img>` previews are
   unaffected; clicking any attachment downloads it.
+- ⚠️ **That download does NOT work in the Capacitor shell.** WKWebView turns an
+  attachment disposition into a download only when the host app implements
+  `WKDownloadDelegate` (it does not), and it ignores a synthetic `<a download>`
+  too — so on iOS the plain anchor is a tap that does nothing.
+  `InboxAttachmentChip` (`portal-inbox-ui.tsx`) therefore intercepts the click on
+  `isNativeRuntimeSync()` ONLY — never `prefersFileShareSheet()`, which is also
+  true in iOS Safari — fetches the same-origin URL with credentials and hands the
+  blob to `downloadOrShareFile`. Handing a `File` to the OS never renders the
+  bytes on-origin, so this does not reopen the rule above. Any new attachment
+  surface needs the same treatment.
 - **The storage key carries the uploader's file name**:
   `<userId>/<ts>-<uuid>/<sanitized name>`. It is the only visible label on a PDF
   chip, and nothing else stores it. Keeping it IN the key means the label can
