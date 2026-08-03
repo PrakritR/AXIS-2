@@ -296,7 +296,7 @@ export function AssistantDockPanel({
           loading={loading}
           compact={compact}
           inputRef={inputRef}
-          placeholder={compact ? "Ask PropLane to help with this…" : "Ask about your portfolio…"}
+          placeholder={compact ? "Ask PropPlane to help — attach images or PDFs with the paperclip" : "Ask about your portfolio… Attach images or PDFs with the paperclip."}
           onSend={() => void sendWithContext()}
         />
       </form>

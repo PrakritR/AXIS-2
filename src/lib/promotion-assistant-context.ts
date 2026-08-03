@@ -38,7 +38,7 @@ export function buildPromotionNewModalAssistantContext(
   }
   if (draft.aiPrompt.trim()) parts.push(`styleNotes=${singleLineField(draft.aiPrompt, 160)}`);
   parts.push(
-    "Propose create_promotion or generate_promotion_flyer when the manager wants a flyer; use propertyId above and referenceImageUrls from uploaded images.",
+    "Manager may attach reference images or PDFs with the paperclip. Uploaded image URLs go in referenceImageUrls; read PDFs for copy and layout. Propose create_promotion or generate_promotion_flyer when the manager wants a flyer.",
   );
   return parts.join(" · ");
 }

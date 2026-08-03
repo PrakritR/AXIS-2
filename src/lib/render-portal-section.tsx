@@ -835,11 +835,18 @@ export async function renderPortalSection(
 
     if (section === "promotion") {
       if (tabParts?.length) {
-        const legacyFilter = tabParts[0];
-        if (legacyFilter === "text" || legacyFilter === "image") {
+        const segment = tabParts[0]!;
+        if (segment === "text" || segment === "image") {
           redirect(`${def.basePath}/promotion`);
         }
-        notFound();
+        if (tabParts.length > 1) notFound();
+        const assetId = decodeURIComponent(segment);
+        return subscriptionGated(
+          <ManagerPromotion basePath={def.basePath} assetId={assetId} />,
+          kind,
+          "promotion",
+          managerOwnerSubscriptionTier,
+        );
       }
       return subscriptionGated(
         <ManagerPromotion basePath={def.basePath} />,

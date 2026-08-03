@@ -118,6 +118,7 @@ export function ListingRoomMediaBrowser({
             }
           : undefined
       }
+      detailsActionLabel="Room details"
       resolvePrimaryCta={
         onOpenDetails
           ? undefined
