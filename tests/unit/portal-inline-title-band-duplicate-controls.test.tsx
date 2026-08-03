@@ -91,30 +91,74 @@ function readBracedExpression(src: string, prefix: string, from: number): { text
   return { text: src.slice(start + prefix.length, i), end: i };
 }
 
-/** The opening tag (`<Name … >`) whose props contain the character at `propIndex`. */
-function enclosingOpeningTag(src: string, propIndex: number): { name: string; props: string } | null {
-  let start = -1;
-  for (let i = propIndex; i >= 0; i -= 1) {
-    if (src[i] === ">") break;
-    if (src[i] === "<" && /[A-Za-z]/.test(src[i + 1] ?? "")) {
-      start = i;
-      break;
+/** Every `<Name …>` opening tag in `src`, with the raw text of its props. */
+function openingTags(src: string, name: string): string[] {
+  const marker = new RegExp(`<${name}(?=[\\s/>])`, "g");
+  const tags: string[] = [];
+  let match = marker.exec(src);
+  while (match) {
+    let depth = 0;
+    let i = match.index + match[0].length;
+    for (; i < src.length; i += 1) {
+      const char = src[i];
+      if (char === '"' || char === "'" || char === "`") {
+        i = skipStringLiteral(src, i);
+        continue;
+      }
+      if (char === "{") depth += 1;
+      else if (char === "}") depth -= 1;
+      else if (char === ">" && depth === 0) break;
     }
+    tags.push(src.slice(match.index + match[0].length, i));
+    marker.lastIndex = i;
+    match = marker.exec(src);
   }
-  if (start === -1) return null;
-  let depth = 0;
-  let i = start + 1;
-  for (; i < src.length; i += 1) {
-    const char = src[i];
-    if (char === '"' || char === "'" || char === "`") {
-      i = skipStringLiteral(src, i);
+  return tags;
+}
+
+/** `true` for a bare prop, the expression/string text otherwise, absent when not written. */
+type PropValue = string | true;
+
+function parseTagProps(props: string): Record<string, PropValue> {
+  const parsed: Record<string, PropValue> = {};
+  let i = 0;
+  while (i < props.length) {
+    if (/\s/.test(props[i])) {
+      i += 1;
       continue;
     }
-    if (char === "{") depth += 1;
-    else if (char === "}") depth -= 1;
-    else if (char === ">" && depth === 0) break;
+    if (props[i] === "{") {
+      i = (readBracedExpression(props, "{", i)?.end ?? i) + 1;
+      continue;
+    }
+    const name = /^[A-Za-z_$][\w$-]*/.exec(props.slice(i))?.[0];
+    if (!name) {
+      i += 1;
+      continue;
+    }
+    i += name.length;
+    while (i < props.length && /\s/.test(props[i])) i += 1;
+    if (props[i] !== "=") {
+      parsed[name] = true;
+      continue;
+    }
+    i += 1;
+    while (i < props.length && /\s/.test(props[i])) i += 1;
+    if (props[i] === "{") {
+      const expression = readBracedExpression(props, "{", i);
+      parsed[name] = expression?.text ?? "";
+      i = (expression?.end ?? i) + 1;
+    } else if (props[i] === '"' || props[i] === "'") {
+      const end = skipStringLiteral(props, i);
+      parsed[name] = props.slice(i + 1, end);
+      i = end + 1;
+    } else {
+      const end = props.slice(i).search(/\s|$/);
+      parsed[name] = props.slice(i, i + end);
+      i += end;
+    }
   }
-  return { name: /^<([A-Za-z][\w.]*)/.exec(src.slice(start))?.[1] ?? "?", props: src.slice(start, i) };
+  return parsed;
 }
 
 /** The `const <name> = …;` initializer, so an identifier `titleAside` can be inspected. */
@@ -153,26 +197,200 @@ function rootClassName(expression: string): string | null {
 const DESKTOP_GATE = /(\bhidden\b[\s\S]*\bmd:flex\b)|(\bmd:flex\b[\s\S]*\bhidden\b)|\bmax-md:hidden\b/;
 
 /**
- * Every shell call site that lands on the `useInlineTitleBand` path — `hideTitleOnMobileNav`
- * with a `titleAside` and no `filterRow`, the props that make `ManagerPortalPageShell` draw
- * its band at every breakpoint. With a `filterRow` the shell desktop-gates the aside itself
- * (`titleAsideDesktopOnly`), so those call sites need no manual gate.
+ * How one shell-like component maps a CALLER's props onto the four
+ * `useInlineTitleBand` inputs. Reading the literal call-site text instead is the second
+ * hole this guard has had: `PortalCommunicationShell` defaults `hideTitleOnMobileNav` to
+ * `true`, so `admin-communication.tsx` is on the band path without writing the prop, and
+ * `PortalListSectionShell` always forwards `filterRow={filterRow}` to the inner shell, so
+ * it reads as "has a filterRow" even for a caller that passes none. Both were silently
+ * exempted from the check.
  */
-function inlineBandTitleAsides(src: string): { tag: string; gated: boolean }[] {
+type ShellSpec = {
+  component: string;
+  asideProp: string;
+  filterRowProp: string | null;
+  titleTrailingProp: string | null;
+  titleInlineFilterProp: string | null;
+  /** Caller-facing name of the hide-title prop; null when the wrapper fixes the value. */
+  hideTitleProp: string | null;
+  hideTitleDefault: boolean;
+};
+
+const BASE_SHELL: ShellSpec = {
+  component: "ManagerPortalPageShell",
+  asideProp: "titleAside",
+  filterRowProp: "filterRow",
+  titleTrailingProp: "titleTrailing",
+  titleInlineFilterProp: "titleInlineFilter",
+  hideTitleProp: "hideTitleOnMobileNav",
+  hideTitleDefault: false,
+};
+
+/** Top-level exported components, each paired with the source text of its body. */
+function exportedComponents(src: string): { name: string; body: string }[] {
+  const starts = [...src.matchAll(/export function ([A-Z][\w$]*)\s*\(/g)].map((match) => ({
+    name: match[1],
+    index: match.index ?? 0,
+  }));
+  return starts.map((start, index) => ({
+    name: start.name,
+    body: src.slice(start.index, starts[index + 1]?.index ?? src.length),
+  }));
+}
+
+/** Params carry JSDoc (`@deprecated Prefer controlStack`), which would eat the name after it. */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+}
+
+function signatureText(body: string): string {
+  const open = body.indexOf("(");
+  if (open === -1) return "";
+  let depth = 0;
+  for (let i = open; i < body.length; i += 1) {
+    if (body[i] === "(") depth += 1;
+    else if (body[i] === ")") {
+      depth -= 1;
+      if (depth === 0) return stripComments(body.slice(open + 1, i));
+    }
+  }
+  return "";
+}
+
+function destructuredParams(signature: string): Set<string> {
+  const open = signature.indexOf("{");
+  if (open === -1) return new Set();
+  const block = readBracedExpression(signature, "{", open)?.text ?? "";
+  const params = new Set<string>();
+  let depth = 0;
+  let token = "";
+  for (const char of `${block},`) {
+    if (char === "{" || char === "(" || char === "[") depth += 1;
+    else if (char === "}" || char === ")" || char === "]") depth -= 1;
+    if (char === "," && depth === 0) {
+      const name = /^[A-Za-z_$][\w$]*/.exec(token.trim())?.[0];
+      if (name) params.add(name);
+      token = "";
+      continue;
+    }
+    token += char;
+  }
+  return params;
+}
+
+function booleanParamDefaults(signature: string): Record<string, boolean> {
+  const defaults: Record<string, boolean> = {};
+  for (const match of signature.matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*(true|false)\b/g)) {
+    defaults[match[1]] = match[2] === "true";
+  }
+  return defaults;
+}
+
+/** Which of the component's OWN params feeds `expression`, following one local binding. */
+function paramBehind(expression: string, params: Set<string>, body: string): string | null {
+  const bare = expression.trim();
+  if (params.has(bare)) return bare;
+  const candidates = [bare];
+  if (/^[A-Za-z_$][\w$]*$/.test(bare)) {
+    const resolved = resolveBinding(body, bare);
+    if (resolved) candidates.push(resolved);
+  }
+  for (const candidate of candidates) {
+    for (const match of candidate.matchAll(/[A-Za-z_$][\w$]*/g)) {
+      if (params.has(match[0])) return match[0];
+    }
+  }
+  return null;
+}
+
+/** Read a wrapper's spec off the shell call it makes, so its DEFAULTS are honoured. */
+function deriveWrapperSpec(name: string, body: string, known: ShellSpec[]): ShellSpec | null {
+  for (const inner of known) {
+    const tag = openingTags(body, inner.component)[0];
+    if (tag === undefined) continue;
+    const props = parseTagProps(tag);
+    const signature = signatureText(body);
+    const params = destructuredParams(signature);
+    const defaults = booleanParamDefaults(signature);
+    const forwarded = (innerProp: string | null): string | null => {
+      if (!innerProp) return null;
+      const value = props[innerProp];
+      if (value === undefined || value === true) return null;
+      return paramBehind(value, params, body);
+    };
+    const asideProp = forwarded(inner.asideProp);
+    if (!asideProp) return null;
+    const written = inner.hideTitleProp ? props[inner.hideTitleProp] : undefined;
+    const hideTitleParam = typeof written === "string" ? paramBehind(written, params, body) : null;
+    return {
+      component: name,
+      asideProp,
+      filterRowProp: forwarded(inner.filterRowProp),
+      titleTrailingProp: forwarded(inner.titleTrailingProp),
+      titleInlineFilterProp: forwarded(inner.titleInlineFilterProp),
+      hideTitleProp: hideTitleParam,
+      hideTitleDefault: hideTitleParam
+        ? (defaults[hideTitleParam] ?? false)
+        : written === undefined
+          ? inner.hideTitleDefault
+          : true,
+    };
+  }
+  return null;
+}
+
+function deriveShellSpecs(sources: { file: string; src: string }[]): ShellSpec[] {
+  const specs = [BASE_SHELL];
+  const components = sources.flatMap(({ src }) => exportedComponents(src));
+  for (let pass = 0; pass < components.length; pass += 1) {
+    const before = specs.length;
+    for (const { name, body } of components) {
+      if (specs.some((spec) => spec.component === name)) continue;
+      const spec = deriveWrapperSpec(name, body, specs);
+      if (spec) specs.push(spec);
+    }
+    if (specs.length === before) break;
+  }
+  return specs;
+}
+
+const PORTAL_SOURCES = readdirSync(PORTAL_DIR)
+  .filter((file) => file.endsWith(".tsx"))
+  .map((file) => ({ file, src: readFileSync(join(PORTAL_DIR, file), "utf8") }));
+
+const SHELL_SPECS = deriveShellSpecs(PORTAL_SOURCES);
+
+function resolvedHideTitle(spec: ShellSpec, props: Record<string, PropValue>): boolean {
+  if (!spec.hideTitleProp) return spec.hideTitleDefault;
+  const written = props[spec.hideTitleProp];
+  if (written === undefined) return spec.hideTitleDefault;
+  if (written === true) return true;
+  return written.trim() !== "false";
+}
+
+/**
+ * Every shell call site that lands on the `useInlineTitleBand` path — a resolved
+ * `hideTitleOnMobileNav`, a `titleAside`, and no `filterRow`, the props that make
+ * `ManagerPortalPageShell` draw its band at every breakpoint. With a `filterRow` the shell
+ * desktop-gates the aside itself (`titleAsideDesktopOnly`), so those need no manual gate.
+ */
+function inlineBandTitleAsides(src: string, specs: ShellSpec[] = SHELL_SPECS): { tag: string; gated: boolean }[] {
   const found: { tag: string; gated: boolean }[] = [];
-  let cursor = 0;
-  for (;;) {
-    const at = src.indexOf("titleAside={", cursor);
-    if (at === -1) break;
-    const expression = readBracedExpression(src, "titleAside={", at);
-    cursor = expression ? expression.end : at + "titleAside={".length;
-    const tag = enclosingOpeningTag(src, at);
-    if (!tag || !expression) continue;
-    if (!tag.props.includes("hideTitleOnMobileNav") || tag.props.includes("filterRow")) continue;
-    const bare = expression.text.trim().replace(/\s*(\?\?|\|\|)\s*undefined$/, "");
-    const resolved = /^[A-Za-z_$][\w$]*$/.test(bare) ? resolveBinding(src, bare) : bare;
-    const className = resolved === null ? null : rootClassName(resolved);
-    found.push({ tag: tag.name, gated: className !== null && DESKTOP_GATE.test(className) });
+  for (const spec of specs) {
+    for (const tag of openingTags(src, spec.component)) {
+      const props = parseTagProps(tag);
+      const aside = props[spec.asideProp];
+      if (aside === undefined || aside === true) continue;
+      if (spec.filterRowProp && props[spec.filterRowProp] !== undefined) continue;
+      if (!resolvedHideTitle(spec, props)) continue;
+      const trailing = spec.titleTrailingProp ? props[spec.titleTrailingProp] : undefined;
+      const inlineFilter = spec.titleInlineFilterProp ? props[spec.titleInlineFilterProp] : undefined;
+      if (trailing !== undefined && inlineFilter === undefined) continue;
+      const bare = aside.trim().replace(/\s*(\?\?|\|\|)\s*undefined$/, "");
+      const resolved = /^[A-Za-z_$][\w$]*$/.test(bare) ? resolveBinding(src, bare) : bare;
+      const className = resolved === null ? null : rootClassName(resolved);
+      found.push({ tag: spec.component, gated: className !== null && DESKTOP_GATE.test(className) });
+    }
   }
   return found;
 }
@@ -180,9 +398,7 @@ function inlineBandTitleAsides(src: string): { tag: string; gated: boolean }[] {
 describe("header controls reach mobile exactly once", () => {
   it("every panel with a mobile actions row keeps a desktop-gated titleAside", () => {
     const offenders: string[] = [];
-    for (const file of readdirSync(PORTAL_DIR)) {
-      if (!file.endsWith(".tsx")) continue;
-      const src = readFileSync(join(PORTAL_DIR, file), "utf8");
+    for (const { file, src } of PORTAL_SOURCES) {
       if (!RENDERS_MOBILE_ROW.test(src)) continue;
       // Band-only sections must not ALSO ship a mobile row; split sections must gate the band.
       for (const aside of inlineBandTitleAsides(src)) {
@@ -190,6 +406,39 @@ describe("header controls reach mobile exactly once", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("resolves shell props through wrapper defaults, not the literal call-site text", () => {
+    const portalMetrics = readFileSync(join(PORTAL_DIR, "portal-metrics.tsx"), "utf8");
+    expect(portalMetrics, "ManagerPortalPageShell no longer defaults hideTitleOnMobileNav to false").toContain(
+      "hideTitleOnMobileNav = false,",
+    );
+
+    const spec = (component: string) => SHELL_SPECS.find((candidate) => candidate.component === component);
+
+    // Defaults true and never forwards a filterRow — so a caller that writes neither is
+    // still on the band path (admin-communication.tsx does exactly that).
+    expect(spec("PortalCommunicationShell")).toMatchObject({
+      asideProp: "titleAside",
+      filterRowProp: null,
+      hideTitleProp: "hideTitleOnMobileNav",
+      hideTitleDefault: true,
+    });
+    expect(
+      inlineBandTitleAsides(readFileSync(join(PORTAL_DIR, "admin-communication.tsx"), "utf8")),
+    ).toEqual([{ tag: "PortalCommunicationShell", gated: false }]);
+
+    // Renames the aside to `primaryAction` and hard-codes hideTitleOnMobileNav, but its
+    // `filterRow={filterRow}` is only a filterRow when the CALLER passes one.
+    expect(spec("PortalListSectionShell")).toMatchObject({
+      asideProp: "primaryAction",
+      filterRowProp: "filterRow",
+      hideTitleProp: null,
+      hideTitleDefault: true,
+    });
+
+    // Never sets hideTitleOnMobileNav, so it can never reach the band path.
+    expect(spec("PortalListPageShell")).toMatchObject({ hideTitleProp: null, hideTitleDefault: false });
   });
 
   it("the split-shape panels still render their mobile row (never zero controls)", () => {

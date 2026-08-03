@@ -28,6 +28,7 @@ dist/
 test-results/
 playwright-report/
 playwright/.cache/
+.playwright-mcp/
 coverage/
 
 npm-debug.log*
