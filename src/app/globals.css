@@ -2384,7 +2384,13 @@ html[data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-light);
 }
 
-[data-theme="dark"] html[data-portal-sticky-chrome] .portal-calendar-toolbar {
+/* Both `data-theme` and `data-portal-sticky-chrome` live on <html> (see
+   theme-storage.ts and use-portal-sticky-page-chrome.ts), so this MUST be a
+   compound selector. `[data-theme="dark"] html[...]` asks for an <html>
+   DESCENDANT of a dark element, which can never match — that left the sticky
+   calendar toolbar painted `--portal-surface-light` (#f7f8fa) in dark mode on
+   /portal/calendar/all and /admin/events. */
+html[data-theme="dark"][data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-dark);
 }
 
