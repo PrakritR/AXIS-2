@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
@@ -73,9 +73,8 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
 /** Communication filter — four fields (house, role, resident, sort). */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
   `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[19rem] flex-col overflow-hidden`;
-/** Mobile Communication / inbox filter sheet — hug content so auto-elevate can lift the sheet. */
-export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS =
-  "h-auto max-h-[min(24rem,55vh)]";
+/** Mobile Communication / inbox filter sheet — scroll inside the elevated sheet body. */
+export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS = "min-h-0";
 /** Default compact mobile sheet when callers do not override height. */
 export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "h-auto max-h-[min(20rem,52vh)]";
 /** Tall mobile sheet for browse-home filters (AI + manual fields). */
@@ -117,6 +116,9 @@ type FilterFieldsAccordionContextValue = {
 
 const FilterFieldsAccordionContext = createContext<FilterFieldsAccordionContextValue | null>(null);
 
+/** Mobile filter sheet: lock the sheet body while a portaled field menu is open. */
+export const FilterSheetScrollLockContext = createContext<((locked: boolean) => void) | null>(null);
+
 const FieldSelectMenuShellHeightContext = createContext<number | null>(null);
 
 function useFieldSelectMenuShellHeight(fallbackPx: number): number {
@@ -131,6 +133,13 @@ export function useFilterAccordionClose(): () => void {
 /** One open dropdown at a time — Excel-style filter sheet behavior. */
 export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const setSheetScrollLocked = useContext(FilterSheetScrollLockContext);
+
+  useEffect(() => {
+    setSheetScrollLocked?.(openId !== null);
+    return () => setSheetScrollLocked?.(false);
+  }, [openId, setSheetScrollLocked]);
+
   return (
     <FilterFieldsAccordionContext.Provider value={{ openId, setOpenId }}>
       <div className="grid gap-3 max-lg:gap-2">{children}</div>
@@ -218,27 +227,37 @@ export function FilterCollapsibleSection({
     open,
     onOpenChange: setOpen,
     contentPx: menuContentPx,
-    minMenuWidth: FILTER_FIELD_MENU_MIN_WIDTH_PX,
     preferOpenDown: true,
+    matchTriggerWidth: true,
   });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const button = buttonRef.current;
+    if (!button?.scrollIntoView) return;
+    button.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [open]);
 
   const menu =
     open && menuRect && isClient && portalHost ? (
       <div
         id={listId}
         data-field-select-menu=""
-        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex min-h-0 flex-col")}
+        data-vaul-no-drag=""
+        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex min-h-0 flex-col overscroll-contain")}
         style={{
           position: menuRect.position,
           top: menuRect.top,
           left: menuRect.left,
           width: menuRect.width,
           height: menuRect.maxHeight,
-          minHeight: menuRect.maxHeight,
+          minHeight: 0,
           maxHeight: menuRect.maxHeight,
           zIndex: fieldSelectMenuZIndex(portalHost),
+          touchAction: "pan-y",
         }}
         onPointerDown={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
       >
         <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
           {children}

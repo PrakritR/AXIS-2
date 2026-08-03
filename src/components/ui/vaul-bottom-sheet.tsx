@@ -32,7 +32,10 @@ export function VaulBottomSheet({
    * the bottom nav with a large empty gap above.
    */
   autoElevate = false,
+  /** When true with autoElevate, always lift the sheet (tall filter panels). */
+  alwaysElevate = false,
   flushBody = false,
+  lockBodyScroll = false,
   /** Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. */
   maxHeightClass,
 }: {
@@ -44,7 +47,10 @@ export function VaulBottomSheet({
   footer?: ReactNode;
   fullScreen?: boolean;
   autoElevate?: boolean;
+  alwaysElevate?: boolean;
   flushBody?: boolean;
+  /** When true, the sheet body does not scroll (e.g. an open filter field menu). */
+  lockBodyScroll?: boolean;
   maxHeightClass?: string;
 }) {
   const contentHugging = !fullScreen;
@@ -54,6 +60,10 @@ export function VaulBottomSheet({
   useLayoutEffect(() => {
     if (!open || !autoElevate || fullScreen) {
       setElevated(false);
+      return;
+    }
+    if (alwaysElevate) {
+      setElevated(true);
       return;
     }
     const sheet = sheetRef.current;
@@ -73,13 +83,13 @@ export function VaulBottomSheet({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [open, autoElevate, fullScreen, children, footer, title, description]);
+  }, [open, autoElevate, alwaysElevate, fullScreen, children, footer, title, description]);
 
   const elevatedPlacement =
     autoElevate &&
-    elevated &&
+    (alwaysElevate || elevated) &&
     !fullScreen &&
-    "bottom-[max(32vh,calc(var(--portal-native-bottom-nav-inset,0px)+6rem))] top-auto";
+    "bottom-[max(42vh,calc(var(--portal-native-bottom-nav-inset,0px)+7rem))] top-auto";
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
@@ -88,7 +98,7 @@ export function VaulBottomSheet({
         <Drawer.Content
           ref={sheetRef}
           className={cn(
-            "fixed inset-x-0 bottom-0 z-[71] flex flex-col border-t border-border bg-background outline-none motion-reduce:transition-none",
+            "fixed inset-x-0 bottom-0 z-[71] flex flex-col overflow-visible border-t border-border bg-background outline-none motion-reduce:transition-none",
             fullScreen
               ? "inset-0 top-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
               : cn(
@@ -134,9 +144,11 @@ export function VaulBottomSheet({
               className={cn(
                 flushBody ? "px-0" : "px-4",
                 "py-3",
-                contentHugging
-                  ? "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
-                  : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+                lockBodyScroll
+                  ? "overflow-hidden"
+                  : contentHugging
+                    ? "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+                    : "min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
               )}
             >
               {children}

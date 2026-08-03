@@ -2411,6 +2411,7 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
 
   html[data-communication-thread-reading] #portal-main-content {
     overflow: hidden;
+    padding-top: 0;
     padding-bottom: 0;
     scroll-padding-bottom: 0;
   }
@@ -2422,6 +2423,12 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     flex-direction: column;
     height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
     max-height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
+  }
+
+  /* Thread view uses the inbox back header — hide duplicate section chrome. */
+  html[data-communication-thread-reading] .portal-mobile-nav-bar,
+  html[data-communication-thread-reading] [data-slot="page-header"] {
+    display: none;
   }
 
   html[data-communication-thread-reading] .portal-communication-inbox .portal-inbox-two-pane {
@@ -2442,8 +2449,12 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
   }
 
-  /* Thread-reading flex fill: direct children must shrink so `.portal-inbox-thread-body` can scroll. */
-  html[data-communication-thread-reading] .portal-main-inner > * {
+  html[data-communication-thread-reading] .portal-inbox-thread-header {
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+  }
+
+  /* Thread-reading flex fill: page shell only — never grow the mobile nav bar. */
+  html[data-communication-thread-reading] .portal-main-inner > *:not(.portal-mobile-nav-bar) {
     flex: 1 1 0%;
     min-height: 0;
     display: flex;
@@ -2527,6 +2538,21 @@ html[data-native] [data-listing-sections-root] {
 
 #portal-main-content:has([data-portal-list-destination-nav]) .portal-mobile-nav-bar {
   margin-bottom: 0;
+}
+
+/* Inline page title band (Communication, etc.): hide duplicate section label in mobile nav. */
+@media (max-width: 1023px) {
+  .portal-main-inner:has([data-slot="portal-page-title-band"]) > .portal-mobile-nav-bar h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
 }
 
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */

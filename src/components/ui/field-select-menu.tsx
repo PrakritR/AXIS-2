@@ -59,19 +59,17 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
 /**
  * Portal menus into an open modal/drawer shell when present. Radix `hideOthers` and Vaul
  * mark every `document.body` sibling outside the dialog tree as aria-hidden, so body-
- * portaled menus look correct but cannot receive clicks. Body fallback keeps viewport
- * `fixed` coords for non-modal surfaces (filters, tables, etc.). Filter dropdown panels
- * intentionally use body too — their centering transform would trap `position: fixed`
- * menus and clip option lists.
+ * portaled menus look correct but cannot receive clicks and Vaul treats scroll as an
+ * outside dismiss. Prefer the open Vaul sheet or filter panel host with absolute coords.
  */
 export function resolveFieldSelectMenuPortal(): HTMLElement {
   const vaulSheet = document.querySelector<HTMLElement>(
     '[data-slot="vaul-bottom-sheet"][data-state="open"]',
   );
-  // Vaul animates with transform; `position: fixed` menus must use viewport/body coords.
-  if (vaulSheet) return document.body;
+  if (vaulSheet) return vaulSheet;
 
   for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
+    if (selector === '[data-slot="vaul-bottom-sheet"][data-state="open"]') continue;
     const host = document.querySelector<HTMLElement>(selector);
     if (host) return host;
   }
@@ -84,6 +82,7 @@ export function resolveFieldSelectMenuPortal(): HTMLElement {
 
 export function fieldSelectMenuZIndex(portalHost: HTMLElement): number {
   if (portalHost === document.body) return 10000;
+  if (portalHost.matches('[data-slot="vaul-bottom-sheet"]')) return 100;
   if (portalHost.matches('[data-slot="portal-filter-dropdown-panel"]')) return 30;
   return 80;
 }
@@ -149,7 +148,12 @@ export function computeFieldSelectMenuRectInHost(
   button: HTMLButtonElement,
   contentPx: number,
   host: HTMLElement,
-  options?: { minWidth?: number; hostPaddingPx?: number; preferOpenDown?: boolean },
+  options?: {
+    minWidth?: number;
+    hostPaddingPx?: number;
+    preferOpenDown?: boolean;
+    matchTriggerWidth?: boolean;
+  },
 ): FieldSelectMenuRect {
   const hostRect = host.getBoundingClientRect();
   const rect = button.getBoundingClientRect();
@@ -157,17 +161,22 @@ export function computeFieldSelectMenuRectInHost(
   const hostPadding = options?.hostPaddingPx ?? 12;
   const maxMenuWidth = Math.max(120, hostRect.width - hostPadding * 2);
   const minWidth = options?.minWidth ?? 0;
-  const width = Math.min(Math.max(minWidth, rect.width), maxMenuWidth);
+  const matchTriggerWidth = options?.matchTriggerWidth ?? false;
+  const width = matchTriggerWidth
+    ? rect.width
+    : Math.min(Math.max(minWidth, rect.width), maxMenuWidth);
 
   let left = rect.left - hostRect.left;
-  left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
+  if (!matchTriggerWidth) {
+    left = Math.min(Math.max(hostPadding, left), hostRect.width - width - hostPadding);
+  }
 
   const spaceBelow = hostRect.bottom - rect.bottom - gap;
   const spaceAbove = rect.top - hostRect.top - gap;
   const preferOpenDown = options?.preferOpenDown ?? false;
   const openUp = !preferOpenDown && spaceBelow < contentPx && spaceAbove > spaceBelow;
   const maxHeight = preferOpenDown
-    ? contentPx
+    ? Math.min(contentPx, Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, spaceBelow - gap))
     : Math.min(
         contentPx,
         Math.max(
@@ -186,7 +195,7 @@ export function computeFieldSelectMenuRect(
   button: HTMLButtonElement,
   contentPx: number,
   _portalHost: HTMLElement,
-  options?: { minWidth?: number; preferOpenDown?: boolean },
+  options?: { minWidth?: number; preferOpenDown?: boolean; matchTriggerWidth?: boolean },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
@@ -196,21 +205,22 @@ export function computeFieldSelectMenuRect(
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
   const spaceAbove = rect.top - viewportPadding;
   const preferOpenDown = options?.preferOpenDown ?? false;
+  const matchTriggerWidth = options?.matchTriggerWidth ?? false;
   const openUp = !preferOpenDown && spaceBelow < contentHeight && spaceAbove > spaceBelow;
   const viewportCap = Math.max(
     FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12,
     openUp ? spaceAbove - 8 : spaceBelow - 8,
   );
-  const maxHeight = preferOpenDown ? contentHeight : Math.min(contentHeight, viewportCap);
+  const maxHeight = preferOpenDown
+    ? Math.min(contentHeight, Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, spaceBelow - 8))
+    : Math.min(contentHeight, viewportCap);
   const minWidth = options?.minWidth ?? 0;
-  const width = Math.min(
-    minWidth > 0 ? minWidth : rect.width,
-    viewportW - viewportPadding * 2,
-  );
-  const left = Math.min(
-    Math.max(viewportPadding, rect.left),
-    viewportW - width - viewportPadding,
-  );
+  const width = matchTriggerWidth
+    ? rect.width
+    : Math.min(minWidth > 0 ? minWidth : rect.width, viewportW - viewportPadding * 2);
+  const left = matchTriggerWidth
+    ? rect.left
+    : Math.min(Math.max(viewportPadding, rect.left), viewportW - width - viewportPadding);
   const top = openUp
     ? Math.max(viewportPadding, rect.top - maxHeight - 4)
     : rect.bottom + 4;
@@ -236,6 +246,7 @@ export function useFieldSelectMenu({
   minMenuWidth,
   align = "start",
   preferOpenDown = false,
+  matchTriggerWidth = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -246,6 +257,8 @@ export function useFieldSelectMenu({
   align?: "start" | "end";
   /** Portal filter fields always open below the trigger (mobile sheets, bottom fields). */
   preferOpenDown?: boolean;
+  /** Align menu width/left to the trigger (mobile filter sheet edge-to-edge). */
+  matchTriggerWidth?: boolean;
 }) {
   const listId = useId();
   const isClient = useIsClient();
@@ -269,17 +282,22 @@ export function useFieldSelectMenu({
       const inFilterPanel =
         portalHost !== document.body &&
         portalHost.matches('[data-slot="portal-filter-dropdown-panel"]');
+      const inVaulSheet =
+        portalHost !== document.body && portalHost.matches('[data-slot="vaul-bottom-sheet"]');
       setMenuRect(
         align === "end"
           ? computePortalFilterDropdownRect(button, contentPx, { widthPx: minMenuWidth })
-          : inFilterPanel
+          : inFilterPanel || inVaulSheet
             ? computeFieldSelectMenuRectInHost(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,
-                preferOpenDown: true,
+                preferOpenDown: preferOpenDown || inVaulSheet,
+                matchTriggerWidth: matchTriggerWidth || inVaulSheet,
+                hostPaddingPx: inVaulSheet ? 0 : undefined,
               })
             : computeFieldSelectMenuRect(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,
                 preferOpenDown,
+                matchTriggerWidth,
               }),
       );
     };
@@ -290,7 +308,7 @@ export function useFieldSelectMenu({
       window.removeEventListener("resize", updateMenuRect);
       window.removeEventListener("scroll", updateMenuRect, true);
     };
-  }, [align, open, contentPx, minMenuWidth, preferOpenDown]);
+  }, [align, open, contentPx, minMenuWidth, preferOpenDown, matchTriggerWidth]);
 
   useEffect(() => {
     if (!open) return;

@@ -15,6 +15,7 @@ import {
   portalFilterDropdownHeightPx,
   portalFilterDropdownWidthPx,
   portalFilterPanelSizeClass,
+  FilterSheetScrollLockContext,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
@@ -87,7 +88,7 @@ function FilterPanelFields({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={compact ? "flex flex-col" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
@@ -96,7 +97,7 @@ function FilterPanelFields({
       <div
         className={
           compact
-            ? "min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+            ? undefined
             : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
         }
       >
@@ -149,6 +150,7 @@ export function PortalFilterSortSheet({
   mobileFooter?: ReactNode | ((close: () => void) => ReactNode);
 }) {
   const [open, setOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const isMobile = useSmallPortalViewport();
   const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
@@ -281,6 +283,8 @@ export function PortalFilterSortSheet({
           title="Filter"
           flushBody={mobileFlushBody}
           autoElevate={compactPanel}
+          alwaysElevate={compactPanel}
+          lockBodyScroll={filterMenuOpen}
           maxHeightClass={
             mobileSheetClassName
               ? "max-h-[min(92dvh,44rem)]"
@@ -296,14 +300,17 @@ export function PortalFilterSortSheet({
               : undefined
           }
         >
-          <div
-            className={cn(
-              "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-              resolvedMobileSheetClass,
-            )}
-          >
-            {fields}
-          </div>
+          <FilterSheetScrollLockContext.Provider value={setFilterMenuOpen}>
+            <div
+              className={cn(
+                "flex w-full max-w-full flex-col",
+                mobileFlushBody && "px-4",
+                resolvedMobileSheetClass,
+              )}
+            >
+              {fields}
+            </div>
+          </FilterSheetScrollLockContext.Provider>
         </VaulBottomSheet>
       ) : desktopPresentation === "panel" ? (
         <Modal

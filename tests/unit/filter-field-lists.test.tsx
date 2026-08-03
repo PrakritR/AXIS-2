@@ -337,6 +337,7 @@ describe("portal filter dropdown positioning", () => {
     const rect = computeFieldSelectMenuRectInHost(button, 252, host, { preferOpenDown: true });
     const triggerBottomInHost = 392 - 100;
     expect(rect.top).toBe(triggerBottomInHost + 4);
+    expect(rect.maxHeight).toBeLessThanOrEqual(252);
 
     document.body.removeChild(host);
   });
@@ -360,9 +361,15 @@ describe("portal filter dropdown positioning", () => {
     Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
 
     const contentPx = 252;
-    const rect = computeFieldSelectMenuRect(button, contentPx, document.body, { preferOpenDown: true });
+    const rect = computeFieldSelectMenuRect(button, contentPx, document.body, {
+      preferOpenDown: true,
+      matchTriggerWidth: true,
+    });
     expect(rect.position).toBe("fixed");
     expect(rect.top).toBe(664 + 4);
+    expect(rect.width).toBe(344);
+    expect(rect.left).toBe(16);
+    expect(rect.maxHeight).toBeLessThan(contentPx);
 
     document.body.removeChild(button);
   });

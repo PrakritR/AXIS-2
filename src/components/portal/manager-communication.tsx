@@ -246,7 +246,7 @@ export function ManagerCommunication({
       compactPanel
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
-      mobileFlushBody={false}
+      mobileFlushBody={true}
       mobileSheetClassName={PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS}
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
@@ -275,13 +275,6 @@ export function ManagerCommunication({
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
       {communicationNewMessageButton}
     </>
-  );
-
-  const communicationMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={communicationFilterSheet}
-      actions={communicationHeaderActions}
-    />
   );
 
   const controlStack = (
@@ -322,7 +315,6 @@ export function ManagerCommunication({
       titleAside={communicationHeaderActions}
       hideTitleOnMobileNav
       controlStack={controlStack}
-      mobileActionsRow={communicationMobileActionsRow}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
     >

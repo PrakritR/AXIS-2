@@ -56,7 +56,7 @@ export function PortalPageTitleBand({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 sm:gap-2",
+        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5 sm:gap-2",
         className,
       )}
       data-slot="portal-page-title-band"

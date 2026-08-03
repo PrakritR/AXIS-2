@@ -34,7 +34,7 @@ export function PortalCommunicationShell({
   compactFilterRow?: boolean;
   mobileThreadReading?: boolean;
   hideTitleOnMobileNav?: boolean;
-  /** Full-width mobile action row (Filter | primary) above list chrome. */
+  /** Full-width mobile action row (Filter | primary) above list chrome. Deprecated when title uses {@link PortalPageTitleBand}. */
   mobileActionsRow?: ReactNode;
 }) {
   const resolvedStack =
@@ -55,7 +55,7 @@ export function PortalCommunicationShell({
       viewportFillBody
       stickyPageChrome={false}
     >
-      {mobileActionsRow && !hideMobileFilterRow ? (
+      {mobileActionsRow && !hideMobileFilterRow && !titleInlineFilter && titleAside == null ? (
         <div className="shrink-0" data-portal-communication-chrome>
           {mobileActionsRow}
         </div>
