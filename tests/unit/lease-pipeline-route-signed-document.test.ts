@@ -65,6 +65,7 @@ vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => false }));
 vi.mock("@/lib/auth/manager-lease-scope", () => ({
   fetchLeasesForManagerUser: async () => [],
   managerCanAccessLeaseRecord: async () => true,
+  managerMayFileLeaseUnderProperty: async () => ({ ok: true, allowed: true }),
 }));
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,

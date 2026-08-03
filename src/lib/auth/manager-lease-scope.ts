@@ -225,6 +225,48 @@ export async function fetchLeasesForManagerUser(
 }
 
 /**
+ * Whether `userId` may file a lease under `propertyId`.
+ *
+ * `property_id` is not a descriptive field — it is a scope SELECTOR. A lease row
+ * is pulled into a manager's pipeline by `fetchLeasesForManagerUser` when its
+ * `property_id` is in that manager's linked set, and `leaseRecordVisibleToManager`
+ * then passes because the named property genuinely is theirs. So a
+ * client-supplied `property_id` moves the row into whoever owns that property.
+ *
+ * Validated against THIS module's ownership notion — owned rows UNION the
+ * co-manager linked ids, the same union `fetchLeasesForManagerUser` reads —
+ * rather than direct ownership alone (`findPropertyIdsNotOwnedByManager`), which
+ * would refuse a legitimate co-manager working on a property assigned to them.
+ *
+ * Fails CLOSED on a read failure and logs it, like
+ * `findPropertyIdsNotOwnedByManager`: a transient failure otherwise reads as
+ * "managers mysteriously cannot save leases" with nothing to correlate against.
+ */
+export async function managerMayFileLeaseUnderProperty(
+  db: ServiceClient,
+  userId: string,
+  propertyId: string,
+): Promise<{ ok: true; allowed: boolean } | { ok: false; error: string }> {
+  const id = String(propertyId ?? "").trim();
+  if (!id) return { ok: true, allowed: false };
+
+  const { data, error } = await db
+    .from("manager_property_records")
+    .select("id")
+    .eq("manager_user_id", userId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.error("Lease property ownership lookup failed:", error.message);
+    return { ok: false, error: error.message };
+  }
+  if (data) return { ok: true, allowed: true };
+
+  const linked = await collectLinkedPropertyIdsForUser(db, userId);
+  return { ok: true, allowed: linked.has(id) };
+}
+
+/**
  * Whether the user may access this lease record. `level` defaults to read
  * (any linked property qualifies); pass "edit"/"delete" on write paths so the
  * co-manager's granular leases grant is enforced.

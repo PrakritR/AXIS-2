@@ -3,8 +3,10 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import {
   fetchLeasesForManagerUser,
   managerCanAccessLeaseRecord,
+  managerMayFileLeaseUnderProperty,
   type LeaseScopeRecord,
 } from "@/lib/auth/manager-lease-scope";
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { resolveResidentScopedActorRole } from "@/lib/auth/resident-role-access";
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
 import { replacesSignedLeaseDocument } from "@/lib/lease-execution-evidence";
@@ -229,6 +231,27 @@ export async function POST(req: Request) {
     const rows = body.action === "replace" ? (body.rows ?? []) : body.row ? [body.row] : [];
     if (rows.length === 0) return NextResponse.json({ error: "row required" }, { status: 400 });
 
+    /**
+     * A client-named `property_id` is only honored when the caller owns or is
+     * linked to that property. An unchanged value is not a move, so a row whose
+     * property was since deleted still saves.
+     */
+    const refuseUnownedProperty = async (
+      namedPropertyId: string | null,
+      storedPropertyId: string | null | undefined,
+    ): Promise<NextResponse | null> => {
+      const named = String(namedPropertyId ?? "").trim();
+      if (!named || named === String(storedPropertyId ?? "").trim()) return null;
+      const check = await managerMayFileLeaseUnderProperty(ctx.db, ctx.user.id, named);
+      if (!check.ok) {
+        return NextResponse.json({ error: "Could not verify property ownership." }, { status: 500 });
+      }
+      if (!check.allowed) {
+        return NextResponse.json({ error: "That property is not yours to file a lease under." }, { status: 403 });
+      }
+      return null;
+    };
+
     for (const row of rows) {
       const normalized = normalizeRow(row);
       if (!normalized.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
@@ -282,16 +305,31 @@ export async function POST(req: Request) {
             ? await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, existingRecord, "edit")
             : false;
           if (!allowed) return NextResponse.json({ error: "Record not found." }, { status: 404 });
+          const named = clientNamedScope(normalized);
+          const refusal = await refuseUnownedProperty(named.property_id, existingRecord?.property_id);
+          if (refusal) return refusal;
           // Preserve server-trusted ownership on update.
-          scope = {
-            ...clientNamedScope(normalized),
-            manager_user_id: existingRecord?.manager_user_id ?? ctx.user.id,
-          };
+          scope = { ...named, manager_user_id: existingRecord?.manager_user_id ?? ctx.user.id };
         }
       } else if (ctx.user.role === "resident") {
         scope = ownResidentScope(ctx.user);
       } else {
-        scope = { ...clientNamedScope(normalized), manager_user_id: ctx.user.id };
+        // Naming ANOTHER person as the resident is a manager capability. The
+        // branch is otherwise merely "not admin, not resident", which a vendor
+        // — or an authenticated account with no profile row and no roles at
+        // all — also satisfies, and `clientNamedScope` would then plant the row
+        // in whatever resident scope the request asked for.
+        const portalCtx = await getPortalAccessContext();
+        if (!hasRole(portalCtx, "manager")) {
+          return NextResponse.json(
+            { error: "Only a property manager can create a lease record." },
+            { status: 403 },
+          );
+        }
+        const named = clientNamedScope(normalized);
+        const refusal = await refuseUnownedProperty(named.property_id, null);
+        if (refusal) return refusal;
+        scope = { ...named, manager_user_id: ctx.user.id };
       }
 
       const record = buildUpsert(normalized, scope);
