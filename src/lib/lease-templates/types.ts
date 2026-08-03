@@ -75,6 +75,14 @@ export type LeaseJurisdictionTemplateConfig = {
    * only safe default. Never populate this without a verified source.
    */
   landlordMaintenanceStatuteRef?: string;
+  /** Optional citation for returned-payment rules, rendered only when verified for this jurisdiction. */
+  returnedPaymentStatuteRef?: string;
+  /** Optional citation for a resident's ongoing liability after an early termination. */
+  earlyTerminationStatuteRef?: string;
+  /** Optional citation for smoke-alarm requirements. */
+  smokeAlarmStatuteRef?: string;
+  /** Optional citation for carbon-monoxide-alarm requirements. */
+  carbonMonoxideAlarmStatuteRef?: string;
   /**
    * Jurisdiction-specific NUMERIC lease terms.
    *
