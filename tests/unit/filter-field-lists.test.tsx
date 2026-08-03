@@ -448,10 +448,14 @@ describe("the raised filter sheet is placed statically, never measured", () => {
       </VaulBottomSheet>,
     );
     const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
-    // Clamped against the raised max-height: a bare pixel floor would out-rank max-height
-    // on a short viewport and push the sheet's top off screen.
+    // Clamped against the raised max-height, never applied raw: a bare pixel floor would
+    // out-rank max-height on a short viewport and push the sheet's top off screen. Under
+    // ~575px of viewport height the clamp arm wins and containment is unreachable — an
+    // accepted degradation documented beside PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX, which
+    // is why nothing here asserts five rows at that size.
     expect(sheet.style.minHeight).toContain(`min(${PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}px,`);
     expect(sheet.style.minHeight).toContain("--portal-raised-sheet-offset");
+    expect(sheet.style.minHeight).not.toMatch(/^\s*\d+px\s*$/);
   });
 
   it("leaves a viewport-filling sheet bottom-anchored (raising it would clip its top)", () => {

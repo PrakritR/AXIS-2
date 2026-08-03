@@ -153,6 +153,23 @@ export const PORTAL_FILTER_SHEET_CHROME_PX = 88;
  * The cost is dead space under a lone field, knowingly accepted: correctness first. Growing
  * the sheet when a menu opens would move it, which is the defect this whole pattern exists
  * to remove. Leave that space as plain sheet background — do not fill it with invented UI.
+ *
+ * KNOWN LIMIT, accepted deliberately — below roughly 575px of VIEWPORT height this floor
+ * stops being reachable, so menus render as many rows as fit and overhang the sheet onto the
+ * scrim. The floor is applied through a `min()` against the raised max-height (see
+ * `raisedMinHeight` in `vaul-bottom-sheet.tsx`), and under ~575px the clamp arm wins.
+ * Checkable arithmetic: containment needs measured chrome 75 + menu 292 + containment gap 8
+ * = 375px, while a raised sheet on a 390px-tall viewport can be at most
+ * 390 - 125 (the 32vh offset) - 16 = 249px; even fully bottom-anchored the best case is
+ * 390 - 16 = 374px, one pixel short. 375px of requirement does not fit in 249px of space, so
+ * dropping the raised offset on short viewports would only trade one broken invariant for a
+ * different one PLUS viewport-dependent placement — worse to reason about, worse to maintain.
+ * What makes the degradation acceptable is that the CHROME GUARD STILL HOLDS: measured on
+ * Leases at 844x390 the sheet is 217px and the menu overhangs by 134px showing 3 of 5 rows,
+ * yet the menu stays fully on screen and the close control and title are 0% covered and
+ * tappable. A landscape user is never trapped — they can dismiss and rotate. Fewer visible
+ * rows in an unusual orientation is a degraded experience; a user stuck in a sheet would be a
+ * defect.
  */
 export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX =
   FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12;

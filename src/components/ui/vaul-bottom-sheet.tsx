@@ -77,8 +77,9 @@ export function VaulBottomSheet({
   /**
    * Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. IGNORED when
    * `autoElevate` is set: an elevated sheet derives its max-height from the raised offset,
-   * and two `max-h-*` utilities on one element would resolve by CSS source order rather
-   * than class order. Only pass this on a bottom-anchored sheet.
+   * and letting a caller's `max-h-*` reach the same element would make the sheet's height
+   * depend on which of two sources won a merge rather than on the placement it is in. Only
+   * pass this on a bottom-anchored sheet.
    */
   maxHeightClass,
   /**
@@ -106,19 +107,28 @@ export function VaulBottomSheet({
   const elevated = autoElevate && !fullScreen;
 
   /* One raised placement, applied statically. The elevated `bottom` and max-height each
-     REPLACE (rather than fight) the bottom-anchored ones — two `bottom-*` or two `max-h-*`
-     utilities on one element would resolve by CSS source order, not class order, so the
-     raised sheet would silently drop back to the viewport bottom the day Tailwind changes
-     how it emits arbitrary values, taking containment (and the uncoverable chrome) with it.
-     That is why `bottom-0` lives on the non-elevated branch below rather than in the base
-     class list. Both of these read {@link RAISED_SHEET_OFFSET_VAR}. */
+     REPLACE the bottom-anchored ones: exactly one branch emits a `bottom-*` and exactly one
+     emits a `max-h-*`, so the two placements are mutually exclusive and each is assertable on
+     its own. `cn()` is `twMerge(clsx(...))`, so duplicates WOULD collapse to the last one
+     rather than fight — the point of the split is not to break a tie, it is that a single
+     emitted utility per property is what lets a test pin the placement (and with it
+     containment and the uncoverable chrome) instead of pinning a merge outcome. That is why
+     `bottom-0` lives on the non-elevated branch below rather than in the base class list.
+     Both of these read {@link RAISED_SHEET_OFFSET_VAR}. */
   const elevatedPlacement =
     "bottom-[var(--portal-raised-sheet-offset)] top-auto " +
     "max-h-[calc(100dvh-var(--portal-raised-sheet-offset)-1rem)]";
 
   /* `min()` against the same raised max-height, not a bare pixel floor: on a short viewport
      a bare floor would out-rank max-height (min-height always wins) and push the sheet's
-     top off screen. */
+     top off screen.
+
+     Below roughly 575px of viewport height the clamp arm wins and the floor is NOT reached,
+     so a menu can no longer be contained and shows as many rows as fit while overhanging the
+     sheet. That is an accepted degradation, not an oversight — the arithmetic, the measured
+     844x390 numbers, and why the still-intact chrome guard makes it acceptable are recorded
+     beside `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX` in
+     `src/components/portal/filter-field-lists.tsx`. Read that before retuning either number. */
   const raisedMinHeight =
     elevated && minHeightPx
       ? {
