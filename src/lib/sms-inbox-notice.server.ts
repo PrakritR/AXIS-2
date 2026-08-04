@@ -8,6 +8,7 @@
  * a self-addressed notice would silently deliver to no one.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 
@@ -43,7 +44,7 @@ export async function upsertManagerInboxNotice(
           subject: args.subject,
           preview: args.preview.slice(0, 100).replace(/\n/g, " "),
           body: args.body,
-          time: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+          time: formatPacificDateTime(new Date()),
           unread: args.unread ?? true,
           scope: MANAGER_INBOX_SCOPE,
         },

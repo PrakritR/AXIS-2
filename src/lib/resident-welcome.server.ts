@@ -7,6 +7,7 @@
  * from the landlord's OWN application record — never from client/model input.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { formatProplaneIdForDisplay } from "@/lib/manager-id";
 import {
@@ -188,7 +189,7 @@ export async function deliverResidentWelcome(
 
   // Deliver to portal inboxes: manager's Sent + resident's Unopened
   try {
-    const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const when = formatPacificDateTime(new Date());
     const ts = Date.now();
     const rand = Math.random().toString(36).slice(2, 6);
     const senderName = actor.email ?? "PropLane";
@@ -352,7 +353,7 @@ export async function deliverExistingResidentWelcome(
   }
 
   try {
-    const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const when = formatPacificDateTime(new Date());
     const ts = Date.now();
     const rand = Math.random().toString(36).slice(2, 6);
     const senderName = actor.email ?? "PropLane";

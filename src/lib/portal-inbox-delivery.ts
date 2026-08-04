@@ -10,11 +10,13 @@ import {
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { inboxDeepLinkForRole } from "@/lib/platform/parity";
-// Pinned to Pacific, matching `formatInboxStamp`. These stamps are persisted and
-// later re-parsed for conversation ordering, but carry no timezone: this writer
-// runs server-side (UTC on Vercel) while the client writer renders local, so the
-// same instant was stored as two different stamps and a server-delivered message
-// could outrank a later client reply by the UTC offset. Same rendered output.
+// Pinned to Pacific, matching `formatInboxStamp` and every other inbox stamp
+// writer. These stamps are persisted and later re-parsed for conversation
+// ordering, but carry no timezone: this writer runs server-side (UTC on Vercel)
+// while the client writer renders local, so the same instant was stored as two
+// different stamps and a server-delivered message could outrank a later client
+// reply by the UTC offset. A server-written stamp therefore now DISPLAYS shifted
+// by that offset — that shift is the fix, not a regression.
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,

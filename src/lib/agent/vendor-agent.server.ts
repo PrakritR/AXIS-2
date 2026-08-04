@@ -6,6 +6,7 @@
  * Reply delivery is code here — never a model-chosen tool.
  */
 import type Anthropic from "@anthropic-ai/sdk";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { track } from "@/lib/analytics/posthog";
 import { runAgentTurn } from "@/lib/agent/loop";
@@ -64,7 +65,7 @@ export async function findVendorAgentSessionByPhone(db: Db, phoneE164: string): 
 }
 
 function shortNow(): string {
-  return new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatPacificDateTime(new Date());
 }
 
 /** Append one message into the session's vendor inbox thread (both directions mirror here). */
@@ -82,7 +83,8 @@ async function appendToInboxThread(
   if (!threadRow) return;
   const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
   const messages = Array.isArray(rowData.messages) ? [...rowData.messages] : [];
-  messages.push({ id: `agent-${Date.now().toString(36)}`, from: message.from, body: message.body, at: shortNow() });
+  const when = shortNow();
+  messages.push({ id: `agent-${Date.now().toString(36)}`, from: message.from, body: message.body, at: when });
   await db.from("portal_inbox_thread_records").upsert(
     {
       id: threadId,
@@ -94,6 +96,7 @@ async function appendToInboxThread(
         ...rowData,
         messages,
         preview: message.body.slice(0, 100).replace(/\n/g, " "),
+        time: when,
         unread: opts.unread,
       },
       updated_at: new Date().toISOString(),

@@ -5,6 +5,7 @@
  */
 
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   resolveManagerRecipientProfiles,
   resolvePropertyLeadRecipientIds,
@@ -122,7 +123,7 @@ export async function notifyManagerApplicationSubmitted(
     "your listing";
   const subject = applicationSubmittedManagerSubject(propertyLabel);
   const text = buildApplicationSubmittedManagerBody({ row, origin });
-  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const when = formatPacificDateTime(new Date());
   const preview = text.slice(0, 100).replace(/\n/g, " ");
   const messageId = `application-submitted-${row.id.trim()}`;
 

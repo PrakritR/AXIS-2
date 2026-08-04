@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { track } from "@/lib/analytics/posthog";
 import {
   findVendorAgentSessionByThread,
@@ -411,7 +412,7 @@ export async function POST(req: Request) {
     if (deliverToPortalInbox && recipients.length > 0) {
       const senderScope = scopeForRole(senderRole);
 
-      const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const when = formatPacificDateTime(new Date());
       const preview = text.slice(0, 100).replace(/\n/g, " ");
       for (const recipient of recipients) {
         const ts = Date.now();
