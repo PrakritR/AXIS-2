@@ -22,14 +22,19 @@ export const FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40;
 export const FIELD_SELECT_MENU_SEARCH_PX = 52;
 
 /**
- * Height reserved for the in-menu field-name header. Deliberately small: it must be paid
- * for out of the menu's own box WITHOUT costing an option row (the five-row rule is not
- * negotiable) and WITHOUT pushing the menu past what its host can contain BELOW ITS CHROME.
- * The binding constraint is the 3-field filter panel, and the headroom is far tighter than
- * it looks: the panel is 23rem/368px, its own Filter/Reset/✕ chrome is a MEASURED 58px
- * (`PORTAL_FILTER_PANEL_CHROME_PX`), the containment gap is 8px, and the menu — this header
- * plus the search row plus five option rows — is 292px. That leaves 10px, not the 32px an
- * earlier version of this comment claimed against superseded numbers.
+ * Height reserved for the in-menu field-name header.
+ *
+ * NOTHING RENDERS THE HEADER TODAY: the filter trigger row already prints the field
+ * label, so repeating it inside the portaled menu showed "PROPERTY" twice. Both this
+ * constant and {@link FieldSelectMenuHeader} are kept for a surface that genuinely
+ * covers its own trigger label.
+ *
+ * If you re-add one, it must be paid for out of the menu's own box (pass it as
+ * `extraPx` to {@link fieldSelectMenuContentPx}) WITHOUT costing an option row — the
+ * five-row rule is not negotiable — and WITHOUT pushing the menu past what its host can
+ * contain BELOW ITS CHROME. The binding constraint is the 3-field filter panel: 23rem/368px,
+ * its own Filter/Reset/✕ chrome a MEASURED 58px (`PORTAL_FILTER_PANEL_CHROME_PX`), and an
+ * 8px containment gap, against a header-less menu (search row + five option rows) of 264px.
  * Changing it means re-checking `portalFilterPanelSizeClass` against
  * `computeFieldSelectMenuRectInHost`'s `hostCanContainMenu`, which subtracts the chrome.
  */
@@ -466,11 +471,10 @@ export function useFieldSelectMenu({
 }
 
 /**
- * Field name shown at the top of a portaled filter menu. The menu overlays its own trigger
- * and, on a tight host, every field label in the panel — measured on the 3-field panel, an
- * open menu covered all three labels — so without this the user faces a list of options
- * with nothing on screen saying what is being filtered. Budgeted as
- * {@link FIELD_SELECT_MENU_HEADER_PX}; see that constant before restyling it.
+ * Field name shown at the top of a portaled filter menu, for a host whose own field label
+ * the menu covers. CURRENTLY UNUSED — portal filter menus dropped it because the trigger
+ * row keeps its label visible, so rendering both duplicated the field name. Budgeted as
+ * {@link FIELD_SELECT_MENU_HEADER_PX}; see that constant before adopting or restyling it.
  */
 export function FieldSelectMenuHeader({ label }: { label: string }) {
   return (
