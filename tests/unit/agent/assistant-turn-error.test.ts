@@ -26,6 +26,55 @@ describe("formatAgentChatUserError", () => {
     const err = new Anthropic.APIError(429, undefined, "rate limited", undefined);
     expect(formatAgentChatUserError(err).httpStatus).toBe(429);
   });
+
+  // The provider stamps `invalid_request_error` into the message of every 400,
+  // so a mapping that keys on "invalid" reports every failure — billing, auth,
+  // a malformed tool schema — as an attachment problem. This is the verbatim
+  // body the live API returned for a spent credit balance; it is what made the
+  // assistant tell managers to remove a file they never attached (F-AI-1/2).
+  const SPENT_CREDIT_400 =
+    '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
+
+  const ATTACHMENT_COPY = /attachment could not be processed/i;
+
+  it("does not blame an attachment for a spent credit balance", () => {
+    const err = new Anthropic.APIError(400, undefined, SPENT_CREDIT_400, undefined);
+    const { message } = formatAgentChatUserError(err);
+    expect(message).not.toMatch(ATTACHMENT_COPY);
+    expect(message).toMatch(/service account/i);
+  });
+
+  it("does not blame an attachment for unrelated 400s", () => {
+    const unrelated = [
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"tools.0.custom.input_schema: unexpected keyword"}}',
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"messages: roles must alternate"}}',
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: must be greater than 0"}}',
+    ];
+    for (const raw of unrelated) {
+      const err = new Anthropic.APIError(400, undefined, raw, undefined);
+      expect(formatAgentChatUserError(err).message).not.toMatch(ATTACHMENT_COPY);
+    }
+  });
+
+  it("still reports a genuine media failure as an attachment problem", () => {
+    const err = new Anthropic.APIError(
+      400,
+      undefined,
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"messages.0.content.1.image.source.base64: image exceeds 5 MB maximum"}}',
+      undefined,
+    );
+    expect(formatAgentChatUserError(err).message).toMatch(ATTACHMENT_COPY);
+  });
+
+  it("still reports context exhaustion as a too-long conversation", () => {
+    const err = new Anthropic.APIError(
+      400,
+      undefined,
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 250000 tokens > 200000 maximum"}}',
+      undefined,
+    );
+    expect(formatAgentChatUserError(err).message).toMatch(/conversation is too long/i);
+  });
 });
 
 describe("messagesNeedVisionModel", () => {

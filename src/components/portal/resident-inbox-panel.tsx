@@ -380,23 +380,57 @@ export const ResidentInboxPanel = forwardRef<
     [reloadScheduledMessages, showToast],
   );
 
+  /**
+   * Persist a read/unread flip.
+   *
+   * This used to be `setLocal` only, so the flag lived in React state and
+   * nothing ever reached the server: reading a thread cleared the badge until
+   * the next reload, when the row came back unread. That is why the resident
+   * unread count only ever grew. Mirrors `moveToTrash` — stage locally, write
+   * through, roll back if the write fails.
+   */
+  const persistUnreadFlag = useCallback((id: string, unread: boolean) => {
+    void runInboxMutation(async () => {
+      persistInboxRef.current = false;
+      try {
+        const prev = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[];
+        const target = prev.find((t) => t.id === id);
+        if (!target || target.folder !== "inbox" || target.unread === unread) return;
+        const updated: InboxThread = { ...target, unread };
+        const next = prev.map((t) => (t.id === id ? updated : t));
+        stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, next);
+        setLocal(next);
+        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
+        if (!ok) {
+          stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, prev);
+          setLocal(prev);
+        }
+      } finally {
+        persistInboxRef.current = true;
+      }
+    });
+  }, []);
+
   const markRead = (id: string) => {
-    setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     setRetainedIds((prev) => new Set(prev).add(id));
+    persistUnreadFlag(id, false);
     showToast("Marked as read. Moves to Opened after refresh.");
   };
 
-  const markReadSilent = useCallback((id: string) => {
-    setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
-    setRetainedIds((prev) => new Set(prev).add(id));
-  }, []);
+  const markReadSilent = useCallback(
+    (id: string) => {
+      setRetainedIds((prev) => new Set(prev).add(id));
+      persistUnreadFlag(id, false);
+    },
+    [persistUnreadFlag],
+  );
 
   const markUnread = useCallback(
     (id: string) => {
-      setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: true } : t)));
+      persistUnreadFlag(id, true);
       showToast("Marked as unread.");
     },
-    [showToast],
+    [persistUnreadFlag, showToast],
   );
 
   function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {
