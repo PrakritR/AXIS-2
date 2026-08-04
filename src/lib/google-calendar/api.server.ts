@@ -308,34 +308,54 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
 const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
 
 /**
+ * The whole timeout ladder for Google Calendar, derived from one number.
+ *
+ * EVERY budget here has to fire before the PLATFORM kills the request, or the
+ * guard is inert and the caller sees a transport failure instead of the
+ * degraded-but-honest result it was written to produce. Vercel's default Node
+ * function limit is 10s on the smallest plan, and `maxDuration` is a
+ * plan-dependent ceiling we deliberately do not assume, so the top of this
+ * ladder stays comfortably under 10s.
+ *
+ * The three constants are derived rather than independently chosen, because
+ * that is exactly how they drifted apart before: a whole-operation budget that
+ * under-counted the call it wrapped reported a timeout for work still in
+ * flight.
+ */
+
+/**
  * Per-round-trip ceiling on every Google Calendar call, INCLUDING the OAuth
  * token hops.
  *
- * Node's `fetch` has no default timeout, and these calls are now AWAITED inside
- * request handlers — a hung Google request would otherwise hold a cancel or
- * reschedule response open until the platform function timeout, reporting a
- * transport failure for an operation whose PropLane write already committed and
- * whose guest email already went out. The token refresh needs it just as much:
+ * Node's `fetch` has no default timeout, and these calls are AWAITED inside
+ * request handlers. The token refresh needs it just as much:
  * `getGoogleCalendarAccessToken` refreshes whenever the token is within a minute
  * of expiry, so it is on the hot path of every call below.
  */
-export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 6_000;
+export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 3_000;
 
 /**
- * The longest a single Calendar OPERATION may take: at most a token refresh
- * plus one API call for a read or a delete, plus an extra call for the
- * update-then-create fallback in an upsert. Callers that race an operation
- * against a deadline must allow at least this, or they report a timeout for
- * work that was still going to succeed.
+ * Whole-walk ceiling on the paged event list, measured from the START of
+ * `listGoogleCalendarEvents` so it covers the token hop as well as the pages.
+ *
+ * Two hops' worth: the walk always runs its first page, and starts a further one
+ * only when a full {@link GOOGLE_CALENDAR_FETCH_TIMEOUT_MS} still fits inside
+ * the budget — so this is a real bound, not a check that a page beginning just
+ * under the deadline can overrun.
  */
-export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 3;
+export const GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
 
 /**
- * Whole-walk ceiling on the paged event list. The PUBLIC availability route
- * calls this on a cache miss, so the ceiling here is what stops a slow Google
- * from stretching a prospect's booking page across every page in turn.
+ * The outer budget a caller races a whole Calendar operation against.
+ *
+ * Above every bounded chain below it — a paged read (paging budget), and a
+ * token hop plus one write — with a hop of slack, so it fires only for a
+ * genuine stall. The one chain that can exceed it is an upsert whose update
+ * times out and falls through to a create (three hops); by then two hops have
+ * already stalled, so reporting the operation as unfinished is accurate.
  */
-export const GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
+export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS =
+  GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS;
 
 /** `AbortSignal` bounding one Google Calendar round trip. */
 export function googleCalendarFetchSignal(): AbortSignal {
@@ -363,6 +383,9 @@ export async function listGoogleCalendarEvents(
   timeMin: string,
   timeMax: string,
 ): Promise<GoogleCalendarApiEvent[]> {
+  // Started BEFORE the token hop, which is itself a Google round trip on the
+  // hot path — a budget that began after it would not bound this call.
+  const pagingDeadline = Date.now() + GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS;
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
   if (!connection.syncEnabled) return [];
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
@@ -380,13 +403,23 @@ export async function listGoogleCalendarEvents(
   // Page rather than truncate: a single `maxResults` request silently dropped
   // the tail for a busy manager, and public tour availability subtracts these
   // windows — a missing event is a busy hour still on offer to a prospect.
-  // ...but bound the WHOLE walk, not only each hop: eight sequential round trips
-  // would otherwise stretch a public booking page far past any per-fetch ceiling.
-  const pagingDeadline = Date.now() + GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS;
+  // ...but bound the WHOLE walk, not only each hop: sequential round trips would
+  // otherwise stretch a public booking page far past any per-fetch ceiling.
   const items: GoogleCalendarListItem[] = [];
   let pageToken: string | undefined;
+  let pagesWalked = 0;
+  let stoppedBy: "page-limit" | "time-budget" = "page-limit";
   for (let page = 0; page < GOOGLE_CALENDAR_EVENT_PAGE_LIMIT; page += 1) {
-    if (page > 0 && Date.now() >= pagingDeadline) break;
+    // A page begun just under the deadline still runs a full fetch timeout, so
+    // require the headroom for one rather than merely checking the deadline.
+    // The first page always runs — a read that returns nothing is worse than a
+    // slow one. That makes the walk's true worst case token + one page, which is
+    // what GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS is sized for.
+    if (page > 0 && Date.now() + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS > pagingDeadline) {
+      stoppedBy = "time-budget";
+      break;
+    }
+    pagesWalked += 1;
     const params = new URLSearchParams({
       timeMin,
       timeMax,
@@ -415,9 +448,10 @@ export async function listGoogleCalendarEvents(
   if (pageToken) {
     // Say so rather than silently under-subtracting the tail — an unread event
     // is a busy hour still on offer to a prospect, which is the whole failure
-    // mode the pagination above exists to remove.
+    // mode the pagination above exists to remove. Name the bound that actually
+    // stopped the walk: the two have different knobs.
     console.warn(
-      `[google-calendar] events truncated after ${GOOGLE_CALENDAR_EVENT_PAGE_LIMIT} pages (${items.length} events) for manager ${managerUserId}; later busy time is not subtracted.`,
+      `[google-calendar] events truncated by ${stoppedBy} after ${pagesWalked} page(s) (${items.length} events) for manager ${managerUserId}; later busy time is not subtracted.`,
     );
   }
 

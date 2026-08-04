@@ -70,15 +70,15 @@ export type PlannedTourCalendarSync = { ok: boolean; skipped?: boolean; error?: 
 /**
  * Whole-operation ceiling on the Google side of a cancel or reschedule.
  *
- * Derived from — and deliberately above — the bounded worst case of the call it
- * wraps (token refresh plus the update-then-create fallback), so this can only
- * ever fire for work that had genuinely stalled, never for a delete that was
- * still going to land. It exists so the manager always gets their answer: a slow
- * Google degrades to the `calendarSync` notice instead of a response that hangs
- * to the platform timeout and reads to the client as "could not reach the
- * server" — for a change that already committed and a guest already emailed.
+ * The shared ladder's outer budget, unmodified — it is already sized above the
+ * bounded worst case of the calls below it AND comfortably under the smallest
+ * default platform function limit. Padding it here would put it back above that
+ * limit, where the platform kills the request first and the guard never fires:
+ * the client then reports "could not reach the server" for a change that
+ * already committed and a guest who was already emailed, which is the exact
+ * outcome this race exists to prevent.
  */
-const CALENDAR_SYNC_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS + 2_000;
+const CALENDAR_SYNC_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS;
 
 /**
  * Run the Google side of a change and CLASSIFY the outcome, never throw it.
