@@ -327,14 +327,37 @@ export async function GET(req: Request) {
       propertyIdsByManager.set(managerUserId, ids);
     }
 
-    const propertyAvailabilityRows = await db
-      .from("portal_schedule_records")
-      .select("id, manager_user_id, property_id, record_type, row_data")
-      .eq("record_type", "manager_property_availability");
+    // Scoped in TWO reads rather than one unfiltered scan. This route is
+    // deliberately `no-store`, so an unscoped `manager_property_availability`
+    // select streamed every manager's `row_data` on every public booking-page
+    // view and then discarded nearly all of it in `propertyRowsForHouse` — the
+    // CDN cache used to absorb that, and no longer does. The two reads are the
+    // two ways that filter can match: the property's own managers, and a row
+    // whose `property_id` IS the requested property (a manager who publishes
+    // availability for a house whose record they do not own).
+    const [byManager, byProperty] = await Promise.all([
+      db
+        .from("portal_schedule_records")
+        .select("id, manager_user_id, property_id, record_type, row_data")
+        .eq("record_type", "manager_property_availability")
+        .in("manager_user_id", managerIds.length > 0 ? managerIds : ["__none__"]),
+      db
+        .from("portal_schedule_records")
+        .select("id, manager_user_id, property_id, record_type, row_data")
+        .eq("record_type", "manager_property_availability")
+        .in("property_id", [...requestedPropertyIds]),
+    ]);
 
-    if (propertyAvailabilityRows.error) {
-      return NextResponse.json({ error: propertyAvailabilityRows.error.message }, { status: 500 });
+    if (byManager.error) return NextResponse.json({ error: byManager.error.message }, { status: 500 });
+    if (byProperty.error) return NextResponse.json({ error: byProperty.error.message }, { status: 500 });
+
+    const propertyAvailabilityById = new Map<string, ScheduleRecordRow>();
+    for (const row of [...(byManager.data ?? []), ...(byProperty.data ?? [])] as ScheduleRecordRow[]) {
+      const id = row.id?.trim();
+      if (!id) continue;
+      propertyAvailabilityById.set(id, row);
     }
+    const propertyAvailabilityRows = { data: [...propertyAvailabilityById.values()] };
 
     const { data: globalData, error } = await db
       .from("portal_schedule_records")

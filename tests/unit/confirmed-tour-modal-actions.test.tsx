@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PortalCalendarPanels, type DemoMeeting } from "@/components/portal/portal-calendar-panels";
+import { startOfWeekMonday, toLocalDateStr } from "@/lib/demo-admin-scheduling";
 
 /** Painted availability the calendar reads for the storage key under test. */
 let PAINTED_SLOTS = new Set<string>();
@@ -238,6 +239,75 @@ describe("a tour that lives on GOOGLE, not in the planned-events record", () => 
   });
 });
 
+/**
+ * The two-step arming is right for every deletable meeting, but its wording is
+ * not: a manager's own planned event has no guest to keep in the dark, so the
+ * confirmation must not ask about one or offer to "Keep tour".
+ */
+describe("the delete confirmation says what is actually being deleted", () => {
+  /** A manager's own calendar event — no guest, no tour. */
+  function plannedOwnEvent(): DemoMeeting {
+    return {
+      ...confirmedTour(),
+      id: "planned-own",
+      sourceId: "planned-own",
+      title: "Audit Prospect block",
+      kind: undefined,
+      name: "Audit Prospect",
+      email: undefined,
+    };
+  }
+
+  it("uses neutral wording for a manager's own event", async () => {
+    renderCalendar({ meeting: plannedOwnEvent() });
+    await openTourModal();
+
+    fireEvent.click(document.querySelector('[data-attr="tour-delete-open"]')!);
+    const banner = document.querySelector('[data-attr="tour-delete-confirm"]')!;
+    expect(banner.textContent).not.toContain("guest");
+    expect(banner.textContent).toContain("Delete this event?");
+    expect(modalButtonLabels()).toContain("Keep event");
+    expect(modalButtonLabels()).not.toContain("Keep tour");
+  });
+
+  it("keeps the guest-aware wording for a confirmed tour", async () => {
+    renderCalendar();
+    await openTourModal();
+
+    fireEvent.click(document.querySelector('[data-attr="tour-delete-open"]')!);
+    expect(document.querySelector('[data-attr="tour-delete-confirm"]')!.textContent).toContain(
+      "Delete without telling the guest?",
+    );
+    expect(modalButtonLabels()).toContain("Keep tour");
+  });
+
+  it("does not rename the action when it arms", async () => {
+    // The un-armed button says `Delete event` / `Delete request`; flattening the
+    // armed one to "Delete anyway" lost the distinction a manager just read.
+    renderCalendar();
+    await openTourModal();
+
+    fireEvent.click(document.querySelector('[data-attr="tour-delete-open"]')!);
+    expect(document.querySelector('[data-attr="tour-delete-submit"]')!.textContent).toContain(
+      "Delete event",
+    );
+  });
+
+  it("keeps `Delete request` for a pending tour request", async () => {
+    renderCalendar({
+      meeting: { ...confirmedTour(), id: "inquiry-1", source: "inquiry", sourceId: "inquiry-1" },
+    });
+    await openTourModal();
+
+    fireEvent.click(document.querySelector('[data-attr="tour-delete-open"]')!);
+    expect(document.querySelector('[data-attr="tour-delete-submit"]')!.textContent).toContain(
+      "Delete request",
+    );
+    // Still a guest on the other end, so the guest-aware wording stays.
+    expect(modalButtonLabels()).toContain("Keep tour");
+  });
+});
+
 describe("counts stay honest after a tour changes state", () => {
   /** The week's "N open slots" badge — painted availability minus what is booked. */
   function weekOpenSlotCount(): number | null {
@@ -291,6 +361,50 @@ describe("counts stay honest after a tour changes state", () => {
     expect(
       [...document.querySelectorAll("button")].some((el) => el.textContent?.includes("Focus time")),
     ).toBe(true);
+  });
+
+  it("subtracts EVERY day a multi-day event covers, not just the first", async () => {
+    // A multi-day / all-day Google event arrives with a ~96-slot span. Marking
+    // its slots as `dateStr:startSlot + offset` emitted keys like
+    // `2026-08-06:48` that match no cell, so only the first day lost capacity —
+    // while the public route, which works in real instants, blocked the whole
+    // span. That is the header-vs-public-page disagreement this shape exists to
+    // close, so the count has to fall on both days.
+    const monday = startOfWeekMonday(new Date());
+    const start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0);
+    const tuesday = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const dayOne = toLocalDateStr(start);
+    const dayTwo = toLocalDateStr(tuesday);
+    PAINTED_SLOTS = new Set([`${dayOne}:20`, `${dayTwo}:20`]);
+
+    render(
+      <PortalCalendarPanels
+        storageKey="axis_mgr_avail_slots_v2_test"
+        externalMeetings={[
+          {
+            id: "google_multi",
+            source: "external",
+            sourceId: "gcal-multi",
+            startIso: start.toISOString(),
+            endIso: new Date(start.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            dateStr: dayOne,
+            startSlot: 0,
+            span: 96,
+            durationMinutes: 2880,
+            title: "Blocked",
+            color: "bg-muted",
+            statusLabel: "Blocked",
+            googleCalendarPrivate: true,
+          },
+        ]}
+        scheduleOwnerLabel="Test Manager"
+      />,
+    );
+
+    await waitFor(() => expect(weekOpenSlotCount()).not.toBeNull());
+    // Before the rollover this read 1: the second day's painted 10 am window
+    // still advertised itself as open under an event that covers it.
+    expect(weekOpenSlotCount()).toBe(0);
   });
 
   it("tells the page around it whenever a tour changes, so tab counts refresh", async () => {

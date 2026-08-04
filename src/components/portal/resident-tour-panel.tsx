@@ -401,9 +401,6 @@ export function ResidentTourPanel({
         </div>
       ) : (
         <>
-          {error ? (
-            <p className="mb-4 rounded-2xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{error}</p>
-          ) : null}
           {toursForBucket.length > 0 ? (
             <div className={PORTAL_LIST_PAGE_BODY} data-attr="resident-tour-list">
               {toursForBucket.map((tour) => {
