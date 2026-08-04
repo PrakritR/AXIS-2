@@ -38,7 +38,11 @@ describe("buildReceiptRows", () => {
 
     // Charge rows are excluded; payments are returned newest-first.
     expect(receipts.map((r) => r.date)).toEqual(["2026-03-01", "2026-01-01"]);
-    // Empty description falls back to a readable label.
-    expect(receipts[1]?.description).toBe("Rent payment");
+    // Empty description falls back to a readable label — a NEUTRAL one. It used
+    // to read "Rent payment", but a ledger payment with no description may be
+    // utilities, a deposit or an application fee, and this label is rendered on
+    // an exportable financial record (resident audit U9).
+    expect(receipts[1]?.description).toBe("Payment");
+    expect(receipts[1]?.description).not.toMatch(/rent/i);
   });
 });

@@ -141,6 +141,22 @@ export function isGoogleCalendarPrivateBlock(
   return meeting.source === "external" && Boolean(meeting.googleCalendarPrivate);
 }
 
+/**
+ * Meetings that count as EVENTS in a calendar's counters: tours and service
+ * visits, never personal Google busy time.
+ *
+ * The day headers counted every meeting, busy blocks included, so a week with
+ * no tours and no service orders read "7 EVENTS / 6 / 9 / 4 …" directly under
+ * view tabs reading "All 0 · Tours 0 · Service orders 0" (manager audit
+ * F-CAL-1). The busy blocks stay drawn in the grid, labelled "Blocked" — they
+ * are simply not events, and the tabs never counted them.
+ */
+export function scheduledCalendarMeetings<
+  T extends Pick<DemoMeeting, "source" | "kind" | "googleCalendarPrivate">,
+>(meetings: readonly T[]): T[] {
+  return meetings.filter((meeting) => !isGoogleCalendarPrivateBlock(meeting));
+}
+
 /** Label for calendar grid cells — never exposes personal Google event titles. */
 export function meetingCalendarGridLabel(meeting: DemoMeeting): string {
   if (isGoogleCalendarPrivateBlock(meeting)) return "Blocked";

@@ -29,6 +29,7 @@ import {
   applicationVisibleToPortalUser,
   leaseVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { readUploadedOwnLeases } from "@/lib/resident-lease-upload";
 import { cn } from "@/lib/utils";
@@ -105,7 +106,7 @@ function buildManagerSections(userId: string | null): DownloadSection[] {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
     .map((row) => ({
       id: row.id,
-      label: row.name || row.email || "Applicant",
+      label: applicantDisplayName(row),
       sublabel: row.property || undefined,
       run: () => downloadApplicationRow(row),
     }));

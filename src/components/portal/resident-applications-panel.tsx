@@ -62,6 +62,7 @@ import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { getRoomChoiceLabel, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import {
   applicationStageDisplayLabel,
+  applicationStartedLabel,
   findInProgressRowForTarget,
   isInProgressApplicationRow,
   switchApplicationTargetProperty,
@@ -72,6 +73,7 @@ import {
   isWithdrawnApplicationRow,
   sortResidentApplicationRows,
 } from "@/lib/rental-application/resident-application-list";
+import { applicantDisplayName, realApplicantName } from "@/lib/rental-application/applicant-name";
 import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
@@ -881,21 +883,43 @@ export function ResidentApplicationsPanel({
       hideColumnHeaders
       rows={filteredRowsForBucket.map((row) => {
         const room = displayRoomForRow(row);
-        const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room !== "—" ? `Room ${room}` : ""]
+        // Every row used to read "<Property> Applicant" and nothing else, so a
+        // resident holding several applications for the same property+room had
+        // no way to tell them apart (resident audit F7). Status, when it was
+        // started/submitted, and the application id make each row identifiable.
+        const subtitle = [
+          stripPropertyRoomCountSuffix(row.property || ""),
+          room !== "—" ? `Room ${room}` : "",
+          applicationStageDisplayLabel(row),
+          applicationStartedLabel(row),
+          row.id,
+        ]
           .filter(Boolean)
           .join(" · ");
         return {
           id: row.id,
           data: row,
-          primary: row.name || "Applicant",
+          primary: applicantDisplayName(row),
+          trailing: <span className="text-xs text-muted">{applicationStageDisplayLabel(row)}</span>,
           meta: subtitle || row.id,
           onClick: () => openApplicationRow(row),
         };
       })}
       columns={[
-        { id: "name", header: "Application", cell: (row) => row.name || "Applicant" },
+        {
+          id: "name",
+          header: "Application",
+          cell: (row) => (
+            <>
+              <span className="block truncate">{applicantDisplayName(row)}</span>
+              <span className="block font-mono text-[10px] text-muted">{row.id}</span>
+            </>
+          ),
+        },
         { id: "property", header: "Property", cell: (row) => row.property || "—" },
         { id: "room", header: "Room", cell: (row) => displayRoomForRow(row) },
+        { id: "status", header: "Status", cell: (row) => applicationStageDisplayLabel(row) },
+        { id: "started", header: "Date", cell: (row) => applicationStartedLabel(row) || "—" },
       ]}
       emptyState={
         <PortalDataTableEmpty
@@ -920,7 +944,7 @@ export function ResidentApplicationsPanel({
             onClick={() => openApplicationRow(row)}
             data-attr="resident-application-list-row"
           >
-            <p className="truncate font-semibold text-foreground">{row.name || "Applicant"}</p>
+            <p className="truncate font-semibold text-foreground">{applicantDisplayName(row)}</p>
             <p className="mt-0.5 truncate text-xs text-muted">
               {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
             </p>
@@ -941,7 +965,7 @@ export function ResidentApplicationsPanel({
                   data-attr="resident-application-list-row"
                 >
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                    <p className="font-medium leading-snug text-foreground">{row.name || "Applicant"}</p>
+                    <p className="font-medium leading-snug text-foreground">{applicantDisplayName(row)}</p>
                     <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
                   </td>
                   <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
@@ -1007,7 +1031,17 @@ export function ResidentApplicationsPanel({
           <div className="w-full min-w-0">
             {listRows.map((row) => {
               const room = displayRoomForRow(row);
-              const address = [room !== "—" ? `Room ${room}` : null, row.name || "Your application"]
+              const address = [
+                room !== "—" ? `Room ${room}` : null,
+                realApplicantName(row.name) || "Your application",
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              // Every row used to read "<Property> · Applicant" and nothing
+              // more, so twelve applications for the same property and room were
+              // genuinely indistinguishable (resident audit F7). Status, when it
+              // was started or submitted, and the id identify each one.
+              const summary = [applicationStageDisplayLabel(row), applicationStartedLabel(row), row.id]
                 .filter(Boolean)
                 .join(" · ");
               return (
@@ -1015,6 +1049,7 @@ export function ResidentApplicationsPanel({
                   key={row.id}
                   title={stripPropertyRoomCountSuffix(row.property || "Property")}
                   address={address}
+                  summary={summary}
                   onOpen={() => openApplicationRow(row)}
                   dataAttr="resident-application-list-row"
                 />

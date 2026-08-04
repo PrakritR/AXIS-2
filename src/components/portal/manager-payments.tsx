@@ -24,7 +24,6 @@ import {
   compareDueDateMs,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
-  isManagerAddedOneOffCharge,
   readChargesForManager,
   reconcileApprovedResidentPaymentSchedules,
   removeResidentHouseholdPaymentData,
@@ -42,7 +41,7 @@ import {
 import { applicationVisibleToPortalUser, collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-access";
 import { ledgerRoomNumberForApplication } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
-import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import { scopeChargesToManagerPaymentsLedger } from "@/lib/manager-payments-scope";
 import {
   ReminderSettingsModal,
   useScheduledPaymentMessages,
@@ -75,8 +74,6 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "overdue", label: "Overdue" },
   { id: "paid", label: "Paid" },
 ];
-
-const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
 
 type PaymentListSort = "dueSoon" | "dueLatest" | "amountDesc" | "amountAsc" | "resident";
 
@@ -149,12 +146,6 @@ function sortOutgoingRows(
         return 0;
     }
   });
-}
-
-function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
-  const name = (residentName ?? "").trim().toLowerCase();
-  const email = (residentEmail ?? "").trim().toLowerCase();
-  return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
 }
 
 function normalizePropertyLabel(label: string | undefined): string {
@@ -388,20 +379,15 @@ export function ManagerPayments({
   const mergedRows = useMemo(() => {
     void ledgerDataVersion;
     const applications = readManagerApplicationRows();
-    const previousResidentEmails = new Set(
-      applications
-        .filter((row) => !isCurrentResidentApplicationRow(row))
-        .map((row) => row.email?.trim().toLowerCase())
-        .filter((e): e is string => Boolean(e))
+    // Scoping lives in `manager-payments-scope` so the dashboard's Payments
+    // group counts exactly these rows too (F-PAY-1).
+    const scoped = scopeChargesToManagerPaymentsLedger(
+      readChargesForManager(userId, {
+        linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments"),
+      }),
+      applications,
     );
-    return readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") })
-      .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
-      .filter((charge) => {
-        // Keep manager "Add payment" one-offs even if that email later moves to Previous.
-        if (isManagerAddedOneOffCharge(charge)) return true;
-        const email = charge.residentEmail?.trim().toLowerCase();
-        return !email || !previousResidentEmails.has(email);
-      })
+    return scoped
       .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
         const chargeEmail = charge.residentEmail?.trim().toLowerCase() ?? "";

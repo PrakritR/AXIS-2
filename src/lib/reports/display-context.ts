@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecurringRentProfile } from "@/lib/household-charges";
+import { realApplicantName } from "@/lib/rental-application/applicant-name";
 
 const DIRECTIONALS = new Set(["ne", "nw", "se", "sw"]);
 const STREET_TYPES = new Set(["ave", "st", "rd", "blvd", "dr", "ln", "ct", "pl"]);
@@ -138,7 +139,7 @@ async function loadManagerReportDisplayContextNow(
       propertyLabels.set(propertyId, label);
     }
     const email = normalizeEmail(profile?.residentEmail);
-    const name = profile?.residentName?.trim();
+    const name = realApplicantName(profile?.residentName);
     if (email && name) residentNames.set(email, name);
   }
 
@@ -155,12 +156,16 @@ async function loadManagerReportDisplayContextNow(
             ? app.email
             : "",
     );
+    // `realApplicantName` rejects the stored "Applicant" placeholder: a single
+    // nameless draft used to overwrite the resident's real name for every
+    // finance row on that email (F-FIN-2). Applications also no longer
+    // OVERWRITE a name already resolved from a rent profile (a signed lease is
+    // the better source) or from an earlier application row.
     const name =
-      (typeof app?.fullLegalName === "string" && app.fullLegalName.trim()) ||
-      (typeof data.fullLegalName === "string" && data.fullLegalName.trim()) ||
-      (typeof data.name === "string" && data.name.trim()) ||
-      "";
-    if (email && name) residentNames.set(email, name);
+      realApplicantName(typeof app?.fullLegalName === "string" ? app.fullLegalName : "") ||
+      realApplicantName(typeof data.fullLegalName === "string" ? data.fullLegalName : "") ||
+      realApplicantName(typeof data.name === "string" ? data.name : "");
+    if (email && name && !residentNames.has(email)) residentNames.set(email, name);
 
     const propertyId =
       (typeof data.propertyId === "string" && data.propertyId.trim()) ||

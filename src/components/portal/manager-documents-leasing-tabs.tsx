@@ -17,6 +17,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
+import { applicantDisplayName, realApplicantName } from "@/lib/rental-application/applicant-name";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -205,7 +206,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
     return (
       <DocumentInlineViewer
         embedded
-        title={`Application · ${row.name || row.id}`}
+        title={`Application · ${realApplicantName(row.name) || row.id}`}
         srcDoc={previewHtml}
         onDownload={() => downloadRow(row)}
         downloadLabel="Download PDF"
@@ -251,7 +252,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
             mobile={rows.map((row) => (
               <PortalMobileSummaryCard
                 key={row.id}
-                title={row.name || row.email || "Applicant"}
+                title={applicantDisplayName(row)}
                 subtitle={applicationStatusLabel(row.bucket)}
                 meta={[row.property, applicationRoomLabel(row)].filter(Boolean).join(" · ") || "—"}
                 expanded={preview?.id === row.id}
@@ -270,7 +271,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
                 >
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>
                     <PortalTableInlineExpand expanded={preview?.id === row.id} className="font-medium text-foreground">
-                      {row.name || "—"}
+                      {applicantDisplayName(row, "—")}
                     </PortalTableInlineExpand>
                     {row.email ? <p className="mt-0.5 text-xs text-muted">{row.email}</p> : null}
                   </td>

@@ -5,6 +5,7 @@ import { PortalCalendarPanels } from "@/components/portal/portal-calendar-panels
 import { PortalPropertyDetailSection } from "@/components/portal/portal-property-detail-section";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { managerPropertyAvailabilityStorageKey } from "@/lib/demo-admin-scheduling";
+import { useGoogleCalendarBusyMeetings } from "@/hooks/use-google-calendar-busy";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export function ManagerPropertyTourPanel({
@@ -39,6 +40,13 @@ export function ManagerPropertyTourPanel({
     [listingId, propertyLabel],
   );
 
+  // This is the screen where a manager PUBLISHES tour availability, so it has to
+  // show the conflicts that availability would collide with. It used to render
+  // no busy overlay at all while /portal/calendar showed the same half hour as
+  // "Blocked" — a slot you could publish straight on top of (F-CAL-6). No toast
+  // here: the portfolio calendar already surfaces connection warnings.
+  const googleBusyMeetings = useGoogleCalendarBusyMeetings({ enabled: Boolean(managerUserId) });
+
   return (
     <>
       <PortalPropertyDetailSection>
@@ -51,6 +59,7 @@ export function ManagerPropertyTourPanel({
           availabilityHeading="Your availability"
           tourScopeLabel={propertyLabel}
           unavailableMessage="Sign in to manage tour availability for this property."
+          externalMeetings={googleBusyMeetings}
           scheduledTourFilter={
             managerUserId
               ? {

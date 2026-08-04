@@ -20,8 +20,8 @@ import {
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
+  householdChargeManagerBucket,
   isHouseholdChargeOverdue,
-  readChargesForManager,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
@@ -35,10 +35,13 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import {
+  readManagerPaymentsLedgerCharges,
+  unpaidManagerPaymentCharges,
+} from "@/lib/manager-payments-scope";
 import { MonthlyProfitChart } from "@/components/portal/monthly-profit-chart";
 import {
   applicationVisibleToPortalUser,
-  collectLinkedPropertyIdsForModule,
   moduleRowVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import {
@@ -673,15 +676,15 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       .filter((l) => l.status === "Manager Signature Pending" || l.status === "Resident Signature Pending")
       .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
 
-    const charges = readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") });
-    const pendingCharges = charges
-      .filter((c) => c.status === "pending")
-      .sort((a, b) => {
-        const aOverdue = isHouseholdChargeOverdue(a);
-        const bOverdue = isHouseholdChargeOverdue(b);
-        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
+    // Scoped exactly like /portal/payments — this group's "View all N →" links
+    // straight there, so the two must count the same rows (F-PAY-1).
+    const charges = readManagerPaymentsLedgerCharges(userId);
+    const pendingCharges = unpaidManagerPaymentCharges(charges).sort((a, b) => {
+      const aOverdue = isHouseholdChargeOverdue(a);
+      const bOverdue = isHouseholdChargeOverdue(b);
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
     const managerWorkOrders = readManagerWorkOrderRows().filter((w) =>
       moduleRowVisibleToPortalUser(w, userId, "services"),
     );
@@ -814,7 +817,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
-  const overdueCharges = pendingCharges.filter((c) => isHouseholdChargeOverdue(c));
+  // Same Pending/Overdue split the Payments tabs render (F-PAY-1) — a clearing
+  // ACH charge counts as Pending on both, never Overdue.
+  const overdueCharges = pendingCharges.filter((c) => householdChargeManagerBucket(c) === "overdue");
   const overdueChargeCount = overdueCharges.length;
   const pendingPaymentCount = pendingCharges.length - overdueChargeCount;
   const overdueBalanceLabel = formatUsd(
@@ -1131,7 +1136,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               emptyMessage="No pending or overdue payments right now."
               keyForItem={(charge) => charge.id}
               renderRow={(charge) => {
-                const overdue = isHouseholdChargeOverdue(charge);
+                const overdue = householdChargeManagerBucket(charge) === "overdue";
                 const rowTone: AttentionTone = overdue ? "danger" : "pending";
                 return (
                   <IssueRow

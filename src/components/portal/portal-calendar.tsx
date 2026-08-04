@@ -19,7 +19,6 @@ import {
   syncScheduleRecordsFromServer,
   writeAvailabilityDateSetForStorageKeyToServer,
   writeCalendarShareAvailability,
-  startOfWeekMonday,
 } from "@/lib/demo-admin-scheduling";
 import {
   coManagerOverlaysFromPeers,
@@ -39,6 +38,7 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
 import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
+import { useGoogleCalendarBusyMeetings } from "@/hooks/use-google-calendar-busy";
 import { listManagerServiceCalendarMeetings } from "@/lib/manager-service-calendar";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -81,7 +81,6 @@ export function PortalCalendar({
   const [shareTourModalOpen, setShareTourModalOpen] = useState(false);
   const [coManagerPeers, setCoManagerPeers] = useState<CoManagerCalendarPeerDto[]>([]);
   const [shareAvailability, setShareAvailability] = useState(false);
-  const [googleExternalMeetings, setGoogleExternalMeetings] = useState<DemoMeeting[]>([]);
   const [googleCalendarTick, setGoogleCalendarTick] = useState(0);
   const calendarView = portal === "manager" ? parseCalendarViewTab(calendarViewProp) : "all";
   const [workOrderTick, setWorkOrderTick] = useState(0);
@@ -109,45 +108,19 @@ export function PortalCalendar({
     };
   }, [portal]);
 
-  useEffect(() => {
-    if (portal !== "manager" || !authReady || !userId) return;
-    let cancelled = false;
-    const weekStart = startOfWeekMonday(new Date());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 14);
-    void fetch(
-      `/api/portal/google-calendar/events?timeMin=${encodeURIComponent(weekStart.toISOString())}&timeMax=${encodeURIComponent(weekEnd.toISOString())}`,
-      { credentials: "include" },
-    )
-      .then(async (res) => {
-        const data = (await res.json()) as {
-          meetings?: DemoMeeting[];
-          warning?: string;
-          hint?: string;
-        };
-        if (!res.ok) return { meetings: [] as DemoMeeting[], warning: undefined as string | undefined };
-        return data;
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setGoogleExternalMeetings(Array.isArray(data.meetings) ? data.meetings : []);
-          if (data.warning === "calendar_api_disabled") {
-            showToast(
-              data.hint ??
-                "Enable the Google Calendar API in Google Cloud Console, then refresh this page.",
-            );
-          } else if (data.warning === "calendar_oauth_not_configured" || data.warning === "calendar_not_connected") {
-            showToast(data.hint ?? "Google Calendar sync is not ready yet.");
-          }
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setGoogleExternalMeetings([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [portal, authReady, userId, calendarRefreshSignal, googleCalendarTick, showToast]);
+  // Shared with the per-property availability calendar so both screens show the
+  // same conflicts (F-CAL-6). Only this one toasts the connection warnings.
+  const googleExternalMeetings = useGoogleCalendarBusyMeetings({
+    enabled: portal === "manager" && authReady && Boolean(userId),
+    refreshSignal: calendarRefreshSignal + googleCalendarTick,
+    onWarning: ({ warning, hint }) => {
+      if (warning === "calendar_api_disabled") {
+        showToast(hint ?? "Enable the Google Calendar API in Google Cloud Console, then refresh this page.");
+      } else if (warning === "calendar_oauth_not_configured" || warning === "calendar_not_connected") {
+        showToast(hint ?? "Google Calendar sync is not ready yet.");
+      }
+    },
+  });
 
   useEffect(() => {
     if (portal !== "manager" || !authReady || !userId) return;
