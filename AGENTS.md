@@ -807,6 +807,16 @@ None of these layers is covered by a build. After adding or renaming a section,
 load its URL in the browser — a passing build, and a passing unit test of the
 server layer alone, are not evidence it resolves.
 
+**A link builder can name a path that has no route, and nothing will say so.**
+`claw-resident-links.ts` returned `/auth/login` — which never existed — for the
+link in every resident onboarding email and SMS, so a lease sent fine and the
+resident landed on a 404, which from the manager's chair is indistinguishable
+from "the lease never sent". A build does not catch it, and neither did the unit
+test, because it asserted the broken literal string. `tests/unit/claw-resident-links.test.ts`
+now resolves every path both builders hand out against the real `src/app` tree
+(dynamic segments, both catch-all forms, route groups) with a negative control;
+assert a path RESOLVES, never that it equals a string you also wrote.
+
 ## Portal nav locks: a lock is not a dead click
 
 `portalNavLockKind` (`src/lib/portals/nav-locks.ts`) is the single decision for
