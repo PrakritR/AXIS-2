@@ -402,6 +402,48 @@ export function isGoogleCalendarNotLinkedError(error: unknown): boolean {
   return error instanceof GoogleCalendarNotLinkedError;
 }
 
+export type GoogleCalendarListItem = {
+  id?: string;
+  summary?: string;
+  description?: string;
+  htmlLink?: string;
+  transparency?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
+};
+
+/**
+ * One Google list item as the busy layer reads it.
+ *
+ * The all-day bound is the sharp edge: Google reports an all-day `end.date`
+ * EXCLUSIVELY — a one-day event on Aug 6 carries `end.date = 2026-08-07` — so
+ * midnight ON that date is the first instant the event no longer covers.
+ * Stretching it to `T23:59:59` made a single "Vacation" entry subtract two full
+ * days of bookable tour slots from the public grid, and `overlaps()` already
+ * treats the end as exclusive (`startMs < blockEndMs`).
+ */
+export function googleCalendarApiEventFromListItem(
+  item: GoogleCalendarListItem,
+): GoogleCalendarApiEvent | null {
+  const allDay = !item.start?.dateTime && Boolean(item.start?.date);
+  const start = item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : "");
+  const end = item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00` : "");
+  if (!item.id || !start || !end) return null;
+  const self = item.attendees?.find((attendee) => attendee.self);
+  return {
+    id: item.id,
+    summary: item.summary?.trim() || "Google Calendar event",
+    description: item.description?.trim() || undefined,
+    start,
+    end,
+    htmlLink: item.htmlLink,
+    transparency: item.transparency === "transparent" ? "transparent" : "opaque",
+    declinedBySelf: self?.responseStatus === "declined",
+    allDay,
+  } satisfies GoogleCalendarApiEvent;
+}
+
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
   managerUserId: string,
@@ -414,16 +456,6 @@ export async function listGoogleCalendarEvents(
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
   if (!connection.syncEnabled) return [];
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
-  type GoogleCalendarListItem = {
-    id?: string;
-    summary?: string;
-    description?: string;
-    htmlLink?: string;
-    transparency?: string;
-    start?: { dateTime?: string; date?: string };
-    end?: { dateTime?: string; date?: string };
-    attendees?: Array<{ self?: boolean; responseStatus?: string }>;
-  };
 
   // Page rather than truncate: a single `maxResults` request silently dropped
   // the tail for a busy manager, and public tour availability subtracts these
@@ -481,24 +513,7 @@ export async function listGoogleCalendarEvents(
   }
 
   return items
-    .map((item) => {
-      const allDay = !item.start?.dateTime && Boolean(item.start?.date);
-      const start = item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : "");
-      const end = item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T23:59:59` : "");
-      if (!item.id || !start || !end) return null;
-      const self = item.attendees?.find((attendee) => attendee.self);
-      return {
-        id: item.id,
-        summary: item.summary?.trim() || "Google Calendar event",
-        description: item.description?.trim() || undefined,
-        start,
-        end,
-        htmlLink: item.htmlLink,
-        transparency: item.transparency === "transparent" ? "transparent" : "opaque",
-        declinedBySelf: self?.responseStatus === "declined",
-        allDay,
-      } satisfies GoogleCalendarApiEvent;
-    })
+    .map(googleCalendarApiEventFromListItem)
     .filter(Boolean) as GoogleCalendarApiEvent[];
 }
 

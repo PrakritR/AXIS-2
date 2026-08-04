@@ -210,6 +210,39 @@ export function meetingConsumesTourSlot(meeting: DemoMeeting): boolean {
   return meeting.blocksTourAvailability !== false;
 }
 
+function shiftDateStr(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) return dateStr;
+  // Noon anchor: a DST transition can never skip or repeat a calendar date.
+  return toLocalDateStr(new Date(year, month - 1, day + days, 12, 0, 0, 0));
+}
+
+/**
+ * Every `dateStr:slotIndex` a meeting occupies, rolling an index past the end of
+ * a day onto the following date.
+ *
+ * A multi-day or all-day Google event has a ~96-slot span, so without the
+ * rollover its later half emitted keys like `2026-08-06:48` that match no cell:
+ * only the first day lost capacity in the "N open" headers, while the public
+ * booking route — which works in real instants — blocked the whole span. That is
+ * exactly the header-vs-public-page disagreement `blocksTourAvailability` exists
+ * to close.
+ */
+export function meetingOccupiedSlotKeys(
+  meeting: Pick<DemoMeeting, "dateStr" | "startSlot" | "span">,
+): string[] {
+  const keys: string[] = [];
+  for (let offset = 0; offset < meeting.span; offset += 1) {
+    const absolute = meeting.startSlot + offset;
+    const dayOffset = Math.floor(absolute / SLOTS_PER_DAY);
+    const slotIndex = absolute - dayOffset * SLOTS_PER_DAY;
+    keys.push(
+      dateSlotKey(dayOffset === 0 ? meeting.dateStr : shiftDateStr(meeting.dateStr, dayOffset), slotIndex),
+    );
+  }
+  return keys;
+}
+
 type CalendarBlockSelection =
   | { kind: "availability"; dateStr: string; slotIndex: number }
   | { kind: "meeting"; meeting: DemoMeeting };
@@ -681,8 +714,8 @@ export function PortalCalendarPanels({
   const meetingBySlotKey = useMemo(() => {
     const map = new Map<string, DemoMeeting>();
     for (const meeting of meetings) {
-      for (let offset = 0; offset < meeting.span; offset += 1) {
-        map.set(dateSlotKey(meeting.dateStr, meeting.startSlot + offset), meeting);
+      for (const key of meetingOccupiedSlotKeys(meeting)) {
+        map.set(key, meeting);
       }
     }
     return map;
@@ -697,8 +730,8 @@ export function PortalCalendarPanels({
     const keys = new Set<string>();
     for (const meeting of meetings) {
       if (!meetingConsumesTourSlot(meeting)) continue;
-      for (let offset = 0; offset < meeting.span; offset += 1) {
-        keys.add(dateSlotKey(meeting.dateStr, meeting.startSlot + offset));
+      for (const key of meetingOccupiedSlotKeys(meeting)) {
+        keys.add(key);
       }
     }
     return keys;
@@ -1068,6 +1101,30 @@ export function PortalCalendarPanels({
     selectedBlock.meeting.kind === "tour" &&
     (selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting));
 
+  /**
+   * Is the thing being deleted a tour someone outside PropLane is waiting on?
+   *
+   * The delete confirmation is armed for EVERY deletable meeting, including a
+   * manager's own planned event, so the guest-facing wording has to be gated on
+   * this — otherwise deleting a personal calendar entry asks about a guest who
+   * does not exist and offers to "Keep tour".
+   */
+  const selectedIsGuestFacingTour =
+    selectedBlock?.kind === "meeting" && selectedBlock.meeting.kind === "tour";
+
+  /** Matches the un-armed button, so arming never renames the action. */
+  const selectedDeleteLabel =
+    selectedBlock?.kind === "meeting" &&
+    (selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting))
+      ? "Delete event"
+      : "Delete request";
+
+  const selectedKeepLabel = selectedIsGuestFacingTour
+    ? "Keep tour"
+    : selectedDeleteLabel === "Delete event"
+      ? "Keep event"
+      : "Keep request";
+
   // Seed the reschedule fields from the tour's current window each time it opens.
   const openReschedule = useCallback(() => {
     if (selectedBlock?.kind !== "meeting") return;
@@ -1398,9 +1455,13 @@ export function PortalCalendarPanels({
 
           {pendingTourAction === "delete" ? (
             <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending" data-attr="tour-delete-confirm">
-              <p className="font-semibold text-foreground">Delete without telling the guest?</p>
+              <p className="font-semibold text-foreground">
+                {selectedIsGuestFacingTour ? "Delete without telling the guest?" : "Delete this event?"}
+              </p>
               <p className="mt-1 text-xs text-muted">
-                This removes the event from your calendar and sends nothing.
+                {selectedIsGuestFacingTour
+                  ? "This removes the event from your calendar and sends nothing."
+                  : "This removes the event from your calendar. It cannot be undone."}
                 {selectedTourGuestAlreadyTold
                   ? " The guest was already told this tour is confirmed, so they will still expect it. Use Cancel tour instead unless you have already reached them."
                   : ""}
@@ -1440,7 +1501,7 @@ export function PortalCalendarPanels({
                   className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
                   onClick={() => setPendingTourAction(null)}
                 >
-                  Keep tour
+                  {pendingTourAction === "cancel" ? "Keep tour" : selectedKeepLabel}
                 </Button>
                 <Button
                   type="button"
@@ -1452,7 +1513,7 @@ export function PortalCalendarPanels({
                     pendingTourAction === "cancel" ? cancelSelectedTour() : deleteSelectedMeeting()
                   }
                 >
-                  {pendingTourAction === "cancel" ? "Cancel tour & notify" : "Delete anyway"}
+                  {pendingTourAction === "cancel" ? "Cancel tour & notify" : selectedDeleteLabel}
                 </Button>
               </>
             ) : (
@@ -1486,9 +1547,7 @@ export function PortalCalendarPanels({
               data-attr="tour-delete-open"
               onClick={() => setPendingTourAction("delete")}
             >
-              {selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting)
-                ? "Delete event"
-                : "Delete request"}
+              {selectedDeleteLabel}
             </Button>
             {selectedBlock.meeting.source === "inquiry" ? (
               selectedBlock.meeting.kind === "tour" ? (
@@ -1758,7 +1817,9 @@ export function PortalCalendarPanels({
               const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
               const selected = isSlotInDragSelection(ds, slotIdx);
               const meeting = meetingBySlotKey.get(key);
-              const isMeetingStart = meeting?.startSlot === slotIdx;
+              const isMeetingStart = Boolean(
+                meeting && key === dateSlotKey(meeting.dateStr, meeting.startSlot),
+              );
               return (
                 <button
                   key={key}

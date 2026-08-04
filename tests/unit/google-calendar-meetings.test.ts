@@ -7,8 +7,12 @@ import {
   meetingCalendarGridLabel,
   parseProplaneGoogleCalendarDescription,
 } from "@/lib/google-calendar/meetings";
-import type { GoogleCalendarApiEvent } from "@/lib/google-calendar/api.server";
+import {
+  googleCalendarApiEventFromListItem,
+  type GoogleCalendarApiEvent,
+} from "@/lib/google-calendar/api.server";
 import { meetingConsumesTourSlot } from "@/components/portal/portal-calendar-panels";
+import { slotBlocked } from "@/lib/tour-slot-math";
 import {
   PROPLANE_GOOGLE_CALENDAR_MARKER,
   PROPLANE_TOUR_TYPE_MARKER,
@@ -140,5 +144,78 @@ describe("every Google event still renders; only some count as taken", () => {
   it("counts an ordinary busy event", () => {
     const [meeting] = googleCalendarEventsToMeetings([event({ summary: "Dentist" })]);
     expect(meetingConsumesTourSlot(meeting!)).toBe(true);
+  });
+});
+
+/**
+ * Google's all-day `end.date` is EXCLUSIVE. Because an all-day entry ALWAYS
+ * blocks tours, mapping it to `end.date + T23:59:59` meant one "Vacation" day
+ * removed TWO days of bookable slots from the public grid.
+ */
+describe("an all-day event covers exactly the days it spans", () => {
+  it("ends at midnight ON the exclusive end date, not the end of it", () => {
+    const mapped = googleCalendarApiEventFromListItem({
+      id: "all-day-1",
+      summary: "Vacation",
+      start: { date: "2099-08-06" },
+      end: { date: "2099-08-07" },
+    });
+    expect(mapped?.allDay).toBe(true);
+    expect(mapped?.start).toBe("2099-08-06T00:00:00");
+    expect(mapped?.end).toBe("2099-08-07T00:00:00");
+  });
+
+  it("does not subtract the day AFTER a one-day all-day entry", () => {
+    const mapped = googleCalendarApiEventFromListItem({
+      id: "all-day-1",
+      summary: "Vacation",
+      start: { date: "2099-08-06" },
+      end: { date: "2099-08-07" },
+    })!;
+    const block = { start: mapped.start, end: mapped.end };
+    // Every half hour of Aug 6 is gone…
+    expect(slotBlocked("2099-08-06:0", [block])).toBe(true);
+    expect(slotBlocked("2099-08-06:20", [block])).toBe(true);
+    expect(slotBlocked("2099-08-06:47", [block])).toBe(true);
+    // …and Aug 7 opens as normal.
+    expect(slotBlocked("2099-08-07:0", [block])).toBe(false);
+    expect(slotBlocked("2099-08-07:20", [block])).toBe(false);
+  });
+
+  it("still covers every day of a multi-day all-day entry", () => {
+    const mapped = googleCalendarApiEventFromListItem({
+      id: "all-day-2",
+      summary: "Conference",
+      start: { date: "2099-08-06" },
+      end: { date: "2099-08-09" },
+    })!;
+    const block = { start: mapped.start, end: mapped.end };
+    for (const day of ["2099-08-06", "2099-08-07", "2099-08-08"]) {
+      expect(slotBlocked(`${day}:20`, [block])).toBe(true);
+    }
+    expect(slotBlocked("2099-08-09:20", [block])).toBe(false);
+  });
+
+  it("draws a one-day all-day entry as exactly one day of slots", () => {
+    const [meeting] = googleCalendarEventsToMeetings([
+      googleCalendarApiEventFromListItem({
+        id: "all-day-1",
+        summary: "Vacation",
+        start: { date: "2099-08-06" },
+        end: { date: "2099-08-07" },
+      })!,
+    ]);
+    expect(meeting?.span).toBe(48);
+  });
+
+  it("leaves a timed event's end alone", () => {
+    const mapped = googleCalendarApiEventFromListItem({
+      id: "timed-1",
+      summary: "Dentist",
+      start: { dateTime: "2099-08-06T15:00:00-07:00" },
+      end: { dateTime: "2099-08-06T15:30:00-07:00" },
+    });
+    expect(mapped?.allDay).toBe(false);
+    expect(mapped?.end).toBe("2099-08-06T15:30:00-07:00");
   });
 });

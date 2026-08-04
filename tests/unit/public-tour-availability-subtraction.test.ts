@@ -36,6 +36,8 @@ let GOOGLE_BUSY: {
   allDay?: boolean;
 }[];
 let GOOGLE_THROWS: boolean;
+/** Columns the property-availability reads were scoped on, in call order. */
+let PROPERTY_AVAILABILITY_QUERY_FILTERS: string[] = [];
 
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: () => makeServiceClient(),
@@ -100,35 +102,11 @@ function makeServiceClient() {
         };
       }
       if (table === "portal_schedule_records") {
+        let recordType = "";
         const builder: Record<string, unknown> = {
           select: () => builder,
           eq: (column: string, value: string) => {
-            if (column === "record_type" && value === "manager_property_availability") {
-              builder.then = (resolve: (v: unknown) => unknown) =>
-                Promise.resolve({
-                  data: PROPERTY_AVAILABILITY_SLOTS
-                    ? [availabilityRow("manager_property_availability", PROPERTY_AVAILABILITY_SLOTS)]
-                    : [],
-                  error: null,
-                }).then(resolve);
-            }
-            if (column === "record_type" && value === "manager_availability") {
-              builder.in = async () => ({
-                data: GLOBAL_AVAILABILITY_SLOTS
-                  ? [availabilityRow("manager_availability", GLOBAL_AVAILABILITY_SLOTS)]
-                  : [],
-                error: null,
-              });
-            }
-            if (column === "record_type" && value === "partner_inquiry_request") {
-              builder.in = async () => ({
-                data: PENDING_INQUIRIES.map((payload) => ({
-                  manager_user_id: MANAGER,
-                  row_data: { payload },
-                })),
-                error: null,
-              });
-            }
+            if (column === "record_type") recordType = value;
             if (column === "id" && value === "axis_admin_planned_events_v1") {
               builder.maybeSingle = async () => ({
                 data: { row_data: { payload: PLANNED_EVENTS } },
@@ -137,7 +115,44 @@ function makeServiceClient() {
             }
             return builder;
           },
-          in: async () => ({ data: [], error: null }),
+          // Every read of this table is now SCOPED — the property-availability
+          // select used to be a full-table scan, which a `no-store` route pays
+          // for on every public booking-page view. Filter here so the fixture
+          // proves the scoping, rather than handing back rows regardless.
+          in: async (column: string, values: string[]) => {
+            if (recordType === "manager_property_availability") {
+              const rows = PROPERTY_AVAILABILITY_SLOTS
+                ? [availabilityRow("manager_property_availability", PROPERTY_AVAILABILITY_SLOTS)]
+                : [];
+              PROPERTY_AVAILABILITY_QUERY_FILTERS.push(column);
+              return {
+                data: rows.filter((row) =>
+                  column === "manager_user_id"
+                    ? values.includes(row.manager_user_id)
+                    : values.includes(row.property_id ?? ""),
+                ),
+                error: null,
+              };
+            }
+            if (recordType === "manager_availability") {
+              return {
+                data: GLOBAL_AVAILABILITY_SLOTS
+                  ? [availabilityRow("manager_availability", GLOBAL_AVAILABILITY_SLOTS)]
+                  : [],
+                error: null,
+              };
+            }
+            if (recordType === "partner_inquiry_request") {
+              return {
+                data: PENDING_INQUIRIES.map((payload) => ({
+                  manager_user_id: MANAGER,
+                  row_data: { payload },
+                })),
+                error: null,
+              };
+            }
+            return { data: [], error: null };
+          },
           maybeSingle: async () => ({ data: null, error: null }),
         };
         return builder;
@@ -195,6 +210,7 @@ describe("public tour availability subtracts what is already taken", () => {
     GOOGLE_THROWS = false;
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
+    PROPERTY_AVAILABILITY_QUERY_FILTERS = [];
     if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
@@ -218,6 +234,16 @@ describe("public tour availability subtracts what is already taken", () => {
     const slots = await offeredSlots();
     expect(slots.has(TEN_AM)).toBe(false);
     expect(slots.has(`${DAY}:21`)).toBe(true);
+  });
+
+  it("never reads property availability unscoped", async () => {
+    // This route is `no-store`, so a full-table `manager_property_availability`
+    // select is paid on every public booking-page view. Both reads must carry a
+    // filter: the property's own managers, and the requested property's id.
+    await offeredSlots();
+    expect(PROPERTY_AVAILABILITY_QUERY_FILTERS).toContain("manager_user_id");
+    expect(PROPERTY_AVAILABILITY_QUERY_FILTERS).toContain("property_id");
+    expect(PROPERTY_AVAILABILITY_QUERY_FILTERS.length).toBe(2);
   });
 
   it("removes a confirmed tour's slot even when the event carries no slotKey", async () => {
@@ -431,6 +457,7 @@ describe("a property with no published availability still offers the 9-5 default
     GOOGLE_THROWS = false;
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
+    PROPERTY_AVAILABILITY_QUERY_FILTERS = [];
     if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
