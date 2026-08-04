@@ -408,11 +408,22 @@ export function ScopedInboxComposeModal({
 
         <PortalMessageBodyField value={body} onChange={setBody} minHeightClass="min-h-[7rem]" />
 
+        {/* Residents cannot schedule a message. `PortalMessageScheduleFields`
+            REMOVES itself when disabled (it returns null), so this hides the
+            whole "Schedule for later" control rather than greying it out — that
+            is intended: e021015a lists "hide resident compose scheduling" as one
+            of its changes. Reviewers keep re-raising this as an accidental
+            regression, hence this note. Do NOT confuse it with the separate
+            rule that resident-originated scheduled rows are cancel-only. The
+            resident send path still handles `scheduleLater` (resident-inbox-panel),
+            so reversing this is a one-line prop change if the product call
+            changes. */}
         <PortalMessageScheduleFields
           scheduleLater={scheduleLater}
           onScheduleLaterChange={setScheduleLater}
           sendAt={sendAt}
           onSendAtChange={setSendAt}
+          disabled={portal === "resident"}
         />
       </PortalMessageComposeModalBody>
     </Modal>

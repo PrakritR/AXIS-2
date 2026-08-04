@@ -6,7 +6,6 @@ import { Modal } from "@/components/ui/modal";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -1152,7 +1151,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           type="button"
           variant="outline"
           className="h-8 rounded-full px-4 text-xs"
-          onClick={() => void openTransferForCoManager(propertyId, link.linkedAxisId, link.linkedUserId)}
+          onClick={() => openTransferForCoManager(propertyId, link.linkedAxisId, link.linkedUserId)}
         >
           Make owner of property
         </Button>
@@ -1160,7 +1159,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           type="button"
           variant="outline"
           className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          onClick={() => void removeCoManagerFromProperty(link, propertyId)}
+          onClick={() => removeCoManagerFromProperty(link, propertyId)}
         >
           Remove access
         </Button>
@@ -1320,7 +1319,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         type="button"
         variant="primary"
         className={`${PORTAL_HEADER_ACTION_BTN} min-h-0 px-4 py-1.5 text-xs`}
-        onClick={() => void respondInvite(inv.id, "accept")}
+        onClick={() => respondInvite(inv.id, "accept")}
         data-attr="co-manager-approve-invite"
       >
         Approve
@@ -1329,7 +1328,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         type="button"
         variant="outline"
         className="min-h-0 rounded-full px-4 py-1.5 text-xs"
-        onClick={() => void respondInvite(inv.id, "reject")}
+        onClick={() => respondInvite(inv.id, "reject")}
         data-attr="co-manager-decline-invite"
       >
         Decline
@@ -1342,7 +1341,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       type="button"
       variant="outline"
       className="min-h-0 rounded-full px-4 py-1.5 text-xs"
-      onClick={() => void cancelInvite(inv.id)}
+      onClick={() => cancelInvite(inv.id)}
       data-attr="co-manager-withdraw-invite"
     >
       Withdraw invite
@@ -1387,7 +1386,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             type="button"
             variant="outline"
             className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            onClick={() => void removeLink(inv.id)}
+            onClick={() => removeLink(inv.id)}
             data-attr="co-manager-remove-link"
           >
             {readOnly ? "Leave this team link" : "Remove team link"}
@@ -1461,10 +1460,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     />
   );
 
-  const teamMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={teamFilterSheet} actions={teamLinkButton} />
-  );
-
   const teamActiveFilterChips = teamPropertyFilters.length > 0 ? (
     <div className="mb-3">
       <PortalActiveFilterChips
@@ -1487,7 +1482,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {teamMobileActionsRow}
       {teamActiveFilterChips}
       <div className="space-y-4" data-attr="co-manager-unified-view">
         {loadError ? (
@@ -1857,7 +1851,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" className="rounded-full" disabled={lookupBusy || atLinkCap}>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="rounded-full"
+                  loading={lookupBusy}
+                  disabled={lookupBusy || atLinkCap}
+                >
                   {lookupBusy ? "Checking…" : "Continue"}
                 </Button>
               </div>
@@ -1929,7 +1929,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   variant="primary"
                   className="rounded-full"
                   disabled={atLinkCap}
-                  onClick={() => void saveNewLink()}
+                  onClick={() => saveNewLink()}
                 >
                   {useRemote ? "Send invite" : "Save link (local)"}
                 </Button>
@@ -2007,7 +2007,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 >
                   Cancel
                 </Button>
-                <Button type="button" className="rounded-full" disabled={transferBusy} onClick={() => void submitTransfer()}>
+                <Button type="button" className="rounded-full" disabled={transferBusy} onClick={() => submitTransfer()}>
                   {transferBusy ? "Transferring…" : "Confirm transfer"}
                 </Button>
               </div>

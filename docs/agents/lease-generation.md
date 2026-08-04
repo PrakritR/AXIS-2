@@ -256,16 +256,59 @@ client storage layer, and a browser-reported IP is worthless as evidence.
 Capturing it means routing signature writes through a route handler, which is
 outside this agent's files. Flagged, not attempted.
 
+### A consent tick must not outlive what it consented to
+
+Both lease gates — the e-signature affirmation (`lease-signing-modal.tsx`) and the
+uploaded-lease review attestation (`uploaded-lease-review-modal.tsx`, below) — are
+mounted **without a `key` at a stable position** by every call site
+(`resident-lease-panel.tsx`, `manager-residents.tsx`,
+`manager-leases-pipeline-panel.tsx`). A new `row` / `parse` prop therefore
+RE-RENDERS rather than remounts, and `useState` initializers do not re-run:
+nothing resets on its own. That allowed two ways to agree to something you never
+saw — a retried parse carrying the weaker "I have read the original PDF myself"
+tick onto the stronger "I have compared this against the original PDF. The terms
+above are correct", and a live `row` swapping the document under an already
+ticked signing affirmation. **The evidence layer structurally cannot catch this:**
+`lease-execution-evidence.ts` hashes whatever is current AT signature time, so it
+records the substitution faithfully. The reset is the control.
+
+Rules for any new consent/attestation control here:
+
+- Reset the tick — and anything else staged against the old subject, such as the
+  review modal's `drafts`/`note`, which are submitted as human-confirmed
+  overrides and badged "Manager entered" — whenever a **content-derived**
+  identity of what is being attested to changes. Each component has a documented
+  `…Subject()` helper; extend that rather than adding a second scheme.
+- **Never key on object identity.** The pipeline re-syncs on a cadence and hands
+  back an equal-but-new object; clearing the box under a manager's fingers on a
+  background refresh is its own bug. Equally, keep the identity narrow enough
+  that an unrelated field (a new thread message) does not clear it — the signing
+  modal's subject is only the fields that decide WHICH document renders.
+- **Reset during render**, not in an effect — an effect runs after paint, so the
+  new subject would be painted with the old consent still ticked.
+- A featureless parse is not a unique document: `pending`/`failed` carry
+  `sourceSha256: null`, no `extractedAtIso` and no fields, so identity must also
+  include the upload (`managerUploadedPdf` file name + `uploadedAt`).
+- Coverage: `tests/unit/lease-signing-consent-carryover.test.tsx`,
+  `tests/unit/uploaded-lease-attestation-carryover.test.tsx`.
+
 ### Signed documents are immutable in practice
 
 **The server check is the one that matters.** `POST /api/portal-lease-pipeline`
 stores whatever `row_data` the caller sends, so a browser-side guard on a
 browser-owned store is advisory at best: anyone with devtools could POST a
 rewritten executed lease. The route now loads the stored row and answers **409**
-when the request would replace the document body of a row that still carries a
-signature. It refuses rather than silently restoring, because a legitimate
+when the request would replace the document body of a row that already claims
+execution. It refuses rather than silently restoring, because a legitimate
 client never makes that request, and it does not exempt admins. The point is
 that executed text cannot change, not that only strangers may not change it.
+
+**"Claims execution" is one predicate, `leaseClaimsExecution`** — `fullySignedAt`
+OR any signature. Guards used to key on one signal or the other, and every
+disagreement was a bypass: a payload carrying `fullySignedAt` with no signature
+object was "executed" to one guard and "unsigned" to the next, so neither
+protected its body. Anything deciding what an executed row may do reads that one
+function.
 
 `preserveSignedLeaseDocuments(prev, next)` (`lease-pipeline-storage.ts`) is the
 client-side second line, applied in `write()`, `materializeLeasePipeline()`, and
@@ -288,9 +331,9 @@ Three deliberate exemptions:
   carrying only `dataUrl` would have the certificate appended to an
   already-merged copy on the second signature, and the guard could not tell a
   merge from a swap.
-- **Clearing the signatures.** Void, send-back-to-manager, renew, and amend all
-  null the signatures; that is a superseding document, not a silent edit to an
-  executed one, and it drops out of the guard by design.
+- **Clearing the execution claim.** Void, send-back-to-manager, renew, and amend
+  all null the signatures and `fullySignedAt`; that is a superseding document,
+  not a silent edit to an executed one, and it drops out of the guard by design.
 - **Filling in an absent body on an `externallySignedLease` row.** That is how
   existing-resident onboarding files an already-executed off-platform PDF onto
   a row that never carried a document.
@@ -299,6 +342,76 @@ Coverage, both verified by deleting the guard and watching them go red:
 `tests/unit/lease-pipeline-route-signed-document.test.ts` drives the real route
 handler (manager and resident), and
 `tests/unit/lease-signed-document-immutability.test.ts` drives the client store.
+
+#### The sibling case: body and execution claim in the SAME write
+
+`replacesSignedLeaseDocument` requires the STORED row to be executed already,
+because it assumes the signature was applied to a body the server held. A caller
+that supplies the body and the execution claim in one request never trips it, so
+the "executed" text would be whatever that single POST said it was.
+`introducesUntrustedLeaseDocument` (same pure module) is that shape: stored row
+unexecuted, `next` executed, body changed.
+
+It has **no flag carve-out**, deliberately. Apart from the four scope mirrors,
+`row_data` is persisted verbatim from the client, so a stored
+`externallySignedLease` is prior-request client input, not server-established
+state — honouring it here would just move the attacker's write one request
+earlier. (`replacesSignedLeaseDocument` may honour it, because it is only reached
+once the stored row is executed, a state the evidence rules have already
+protected.)
+
+Two behaviours read that one decision, so the guard and the action it protects
+cannot key on different signals:
+
+- a **resident-scoped** write of this shape is refused **409** — a resident signs
+  a lease, they never author one;
+- **auto-file declines** to render such a body into the property owner's document
+  library.
+
+The one legitimate shape — the existing-resident onboarding lease
+`syncApprovedApplications` seeds, which materializes in the RESIDENT's browser
+too — is admitted by corroborating the BYTES, not a flag:
+`leaseBodyMatchesManagerFiledLease`
+(`src/lib/lease-manager-filed-document.server.ts`) requires byte equality with
+the PDF the manager filed on the application record
+(`manualResidentDetails.signedLeaseDataUrl`), looked up pinned to the lease row's
+stored `manager_user_id` column, PDF-only (an accompanying HTML body is refused),
+failing closed. `axisId` only selects which application to compare against and is
+caller-influenced; that is harmless only while the verdict is byte equality — if
+this is ever loosened to a hash, a filename, or mere presence, re-derive `axisId`
+server side first.
+
+#### Who may write a lease row, and whose row it becomes
+
+The four scope columns (`manager_user_id`, `resident_user_id`, `resident_email`,
+`property_id`) are what every scoped query keys on, so they are a **required,
+server-resolved argument** to `buildUpsert` — never read off the client row. For
+those four keys `row_data` is a MIRROR reconciled from the resolved columns, not
+a second source: pinning the columns alone left the manager's own browser store
+to read a tampered `row_data.residentEmail` back from GET and launder it into the
+column on its next sync.
+
+- **Resident-scoped actor:** may edit the body of a lease they can already see;
+  scope is pinned to what the server stored, a row they create is pinned to
+  themselves, and a `delete` / `deleteIds` action is refused **403** outright
+  (it used to skip silently, reporting success).
+- **Manager:** may re-point scope but never blank it by omission — a field the
+  row does not NAME falls back to the stored column (a normalized `null` from the
+  browser store is not a request to clear). A named `property_id` is honored only
+  when they own it or hold the co-manager `leases` grant at EDIT level
+  (`managerMayFileLeaseUnderProperty`); refusal is reserved for a property that
+  provably belongs to someone else, since an absent record would 403 whole
+  ordinary `replace` batches.
+- **Creating a row that names another person as the resident requires the manager
+  role** (`hasRole`), not merely "not admin, not resident".
+- **Admin** keeps table-wide scope, with omitted fields still falling back to the
+  stored column.
+
+The whole batch is authorized and resolved BEFORE any row is written, so a
+refusal on the last row of a `replace` no longer leaves the earlier rows upserted.
+Coverage: `tests/unit/lease-pipeline-resident-upsert-scope.test.ts`,
+`tests/unit/lease-pipeline-route-role-scope.test.ts`,
+`tests/unit/manager-lease-scope.test.ts`.
 
 One related fix in `syncApprovedApplications`: the off-platform PDF is filed only
 onto a row carrying no document at all. It used to key on `!managerUploadedPdf`
@@ -344,6 +457,156 @@ signature.
 - Rows seeded as `externallySignedLease` carry synthetic signatures and no hash.
   That is correct (nothing was executed through the portal), but it means a
   present signature does not imply a present fingerprint.
+
+# Uploaded leases: parsed into PropLane format, held until a human confirms (Aug 2026)
+
+A manager-uploaded lease (`managerUploadLeasePdf` → `LeasePipelineRow.managerUploadedPdf`)
+used to be an opaque PDF: nothing was read out of it, and it was signable the
+moment it landed. It is now read in full, mapped into PropLane's structure,
+rendered in PropLane's own lease format, and **kept out of the signature flow
+until a manager confirms the reading**.
+
+**The upload is still the executed artifact.** The parse is a new, additive,
+derived field (`LeasePipelineRow.uploadedLeaseParse`) that sits ALONGSIDE
+`managerUploadedPdf`, never in place of it. Signing still appends the
+certificate page to `originalDataUrl` and `leaseSignedDocumentBytes` still
+hashes those bytes — a machine-derived document must never become the thing the
+parties execute. Do not move the parsed HTML into `generatedHtml`.
+
+Three rules, each with a test that goes red if it is broken
+(`tests/unit/uploaded-lease-{extraction,proplane-format,confirm-gate,parse-server}.test.ts`):
+
+- **Nothing invented.** `extractLeaseFields` emits a value only when the
+  document states it exactly once. Two disagreeing readings →
+  `status: "ambiguous"` with an EMPTY value and both candidates listed; no
+  reading → `not_found`, also empty. There is no default and no best guess.
+  `normalizeLeaseDate` refuses `03/04/2026` (two different days by convention)
+  and keeps the document's own wording as the value.
+- **Nothing authored.** Section bodies are the source's bytes. No clause is
+  written, no wording tidied, and no statute cited — the same bar as
+  `landlordMaintenanceStatuteRef` above.
+- **Nothing lost.** `splitLeasePagesIntoSections` PARTITIONS the extracted text;
+  `assertSectionsPartition` throws if the spans gap, overlap, or drop a
+  character, so unmapped and unrecognized content still reaches the reader
+  verbatim. An oversized or unreadable PDF fails LOUDLY (`status: "failed"`)
+  rather than being truncated.
+
+**The gate.** `managerUploadLeasePdf` writes a `pending` parse *synchronously*,
+before any text is read, so a parse that fails or never returns still holds the
+lease. `sendLeaseToResident` — the only path to signability — refuses while
+`leaseAwaitsUploadedLeaseReview(row)`, and both manager surfaces
+(`manager-residents.tsx`, `manager-leases-pipeline-panel.tsx`) disable Send and
+offer "Review import" (`UploadedLeaseReviewModal`). Confirming records who,
+when, and which values the human typed (`review.overrides`), and every surface
+renders manager-entered values differently from machine-extracted ones. **A row
+with NO parse is untouched** — legacy uploads, `externallySignedLease` filings,
+and generated leases all behave exactly as before, and `/demo` writes no parse
+at all.
+
+**The gate is on the transition, not on a button, so the agent layer is inside
+it.** `send_lease_for_signature` performs the same transition from the assistant
+that the Leases UI performs, so `sendForSignatureBlocker`
+(`src/lib/tools/domains/leases.ts`) calls the SAME
+`leaseAwaitsUploadedLeaseReview` predicate and returns the same
+`UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE`. Any future path that writes
+`bucket: "resident"` must clear this gate too — greying out a button is not the
+gate.
+
+**One predicate decides "has a human confirmed this reading".**
+`uploadedLeaseReviewIsConfirmed` (and its inverse
+`uploadedLeaseNeedsManagerConfirmation`, wrapped row-side as
+`leaseAwaitsUploadedLeaseReview`) is that decision. The review modal, both
+"Review import" buttons, the rendered PropLane document, `saveUploadedLeaseParse`
+and the send gate all route through it. **Never compare `review.status` to
+`"confirmed"` at a call site** — that re-implements a weaker rule, and the last
+time five sites did, a lease could render a green "Confirmed … can be sent for
+signature" banner with no Confirm button while every send path refused it. A
+manager cannot debug a Send button that is dead for a reason the UI denies.
+
+**A confirmation is bound to the parse it was made against.**
+`confirmUploadedLeaseParse` stamps the parse's `sourceSha256` onto
+`review.confirmedDocumentSha256`, and the predicate honours a confirmation ONLY
+when that digest equals the parse's current `sourceSha256`. Absent or mismatched
+reads as `needs_review`. Be precise about its reach:
+
+- It proves the confirmation matches the PARSE it was made against — a re-read
+  producing a new digest, or a parse swapped for one describing other bytes,
+  drops back to `needs_review`.
+- It does NOT prove the parse matches the bytes now in `managerUploadedPdf`.
+  Both values live inside the same `row_data.uploadedLeaseParse` blob, so this
+  is an internal-consistency check. A byte-level check would have to hash the
+  upload, which the synchronous render-path predicate cannot do.
+- It does NOT close the `row_data` trust problem. A forged blob can satisfy it
+  by naming its own digest on both sides. That belongs to the lease-pipeline
+  route lane, not here.
+- The ONE deliberate exception: a parse with no digest of its own — a `pending`
+  parse written before any text was read, a `failed` one, a row from before the
+  field existed, or a stored `sourceSha256` that failed the 64-hex check in
+  `normalizeUploadedLeaseParse` and so normalized to null — has nothing to bind
+  to and reads as confirmed on the who-and-when alone. Requiring a digest there
+  would make those leases permanently unconfirmable: a dead end, not a gate.
+
+**`pending` is not a one-way door.** The parse is written synchronously at
+upload time, so a manager who closes the tab mid-read would otherwise own a row
+that can never be sent. `retryUploadedLeaseParse`
+(`src/lib/uploaded-lease-parse.client.ts`, surfaced as "Retry read" / "Read it
+again" in `UploadedLeaseReviewModal`) re-reads `managerUploadedPdf.originalDataUrl`
+— the bytes already on the row, never a re-upload — and stores the result
+through the same `saveUploadedLeaseParse`. It never confirms: the fresh parse
+lands `needs_review`, so the human step still happens. `saveUploadedLeaseParse`
+refuses on the same predicate the gate uses, so a confirmation that no longer
+binds cannot lock a re-read out. A retry also changes WHAT the manager is being
+asked to attest to, so the modal's tick and staged overrides reset with it — see
+[A consent tick must not outlive what it consented to](#a-consent-tick-must-not-outlive-what-it-consented-to).
+
+**Every canonical term is always listed.** `normalizeUploadedLeaseParse`
+backfills any `FIELD_MATCHERS` key a stored blob lost as `not_found` with an
+empty value, in matcher order. An absent row reads as "this term does not apply
+to this lease"; a blank flagged row reads as "nobody found this, go check". Only
+the second is true of a reading that dropped a row.
+
+**The reading is derived, so it may not outlive the upload.**
+`normalizeLeasePipelineRow` drops `uploadedLeaseParse` whenever the row has no
+`managerUploadedPdf.dataUrl`. Every path that swaps a generated document in for
+the upload (`generateLeaseHtmlForRow`, and the packet and section edits behind
+`update_lease_packet` / `update_lease_document_sections`) already writes
+`managerUploadedPdf: null` through that function, so one choke point covers all
+of them instead of a list to keep in sync — otherwise a manager is held forever,
+asked to attest against a PDF the row no longer has. `residentUploadLeasePdf` clears it explicitly, because there
+the upload is *replaced* rather than removed.
+
+**`normalizeUploadedLeaseParse` fails CLOSED.** `row_data` is client-writable,
+so the stored blob is untrusted: section titles/bodies and field values are
+coerced, an unknown field status reads as `not_found` (blank and flagged, never
+a term), unknown keys and uncoercible rows are dropped, and a `version` this
+build does not know degrades the whole parse to `failed` with its confirmation
+discarded. What it must never do is return `null` for a parse that is present
+but unreadable — that would unblock signing. Absent still means absent (`null`
+→ `null`), which is what keeps pre-parse rows behaving as before.
+
+Extraction is deterministic regex over `unpdf` page text, server-side
+(`/api/portal/parse-uploaded-lease`, manager-authenticated + rate limited). No
+new dependency, nothing added to the client bundle, and **no lease text leaves
+the process** — sending private tenant documents to a third party is a decision
+for a human, not for this path. Note that the older lease-*template* parser
+(`lease-pdf-parse.server.ts`, used by the create-listing wizard) DOES call
+Anthropic to split sections; that is a separate, pre-existing path.
+
+Deliberately NOT done, for whoever picks this up:
+
+- **Confirming writes nothing back into PropLane's records.** The review table
+  shows PropLane's value beside the extracted one so a disagreement is visible,
+  but rent, dates and deposits are not overwritten. Auto-applying an extracted
+  money figure to the ledger is exactly the failure mode the blank-payment-terms
+  defect warns about; it needs a deliberate product decision.
+- **`landlordName`, `propertyAddress`, `rentDueDay` and `lateFee` map to
+  nothing** — PropLane derives the landlord from the manager account, `unit`
+  from the listing, due dates from the charge schedule, and late fees from
+  automation settings. They are review-only and labelled as such.
+- **Resident-side rendering still shows the raw PDF.** The PropLane-format view
+  is manager-only; `lease-document-preview.tsx` was left alone.
+- **Scanned/image-only PDFs produce a `failed` parse** (no OCR). The manager can
+  still confirm after reading the original, so it is a gap, not a dead end.
 
 # Lease templates are private (Jul 2026)
 

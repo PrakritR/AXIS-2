@@ -65,9 +65,17 @@ vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => false }));
 vi.mock("@/lib/auth/manager-lease-scope", () => ({
   fetchLeasesForManagerUser: async () => [],
   managerCanAccessLeaseRecord: async () => true,
+  managerMayFileLeaseUnderProperty: async () => ({ ok: true, allowed: true }),
 }));
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,
+}));
+// Creating a lease record (no stored row) re-checks the manager role through the portal
+// context, not just the profile role this file's user mock carries.
+vi.mock("@/lib/auth/portal-access", () => ({
+  ACTIVE_PORTAL_COOKIE: "axis_active_portal",
+  hasRole: (ctx: { roles: string[] }, role: string) => ctx.roles.includes(role),
+  getPortalAccessContext: async () => ({ user: null, profile: null, roles: ["manager"] }),
 }));
 
 import { POST } from "@/app/api/portal-lease-pipeline/route";

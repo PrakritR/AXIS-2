@@ -12,6 +12,9 @@
 //     recipient, not the vendor themselves.
 //  3. Selecting rows in the "all" view must actually do something: the bulk
 //     toolbar is not gated to the retired folder tabs.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
@@ -109,6 +112,8 @@ describe("vendor conversation inbox (unified 'all' view)", () => {
     expect(screen.getAllByText("From / To").length).toBeGreaterThan(0);
   });
 
+  // "Archive" is the unified inbox's name for what used to be labelled "Trash"
+  // (`bulkMoveToArchive`); the bulk affordance itself is unchanged.
   it("offers bulk Mark read / Archive in the 'all' view", () => {
     const { container } = render(<VendorInboxPanel tabId="all" embeddedInCommunication externalTitleActions />);
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -117,4 +122,10 @@ describe("vendor conversation inbox (unified 'all' view)", () => {
     expect(screen.getAllByText("Mark read").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Archive").length).toBeGreaterThan(0);
   });
+
+  it("does not use page scroll mode in Communication shell", () => {
+    const src = readFileSync(join(process.cwd(), "src/components/portal/vendor-communication.tsx"), "utf8");
+    expect(src).not.toMatch(/\bpageScroll\b/);
+  });
+
 });

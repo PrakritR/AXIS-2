@@ -4,7 +4,10 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
-import { PortalFilterChipRow } from "@/components/portal/portal-filter-chips";
+import {
+  FilterFieldsAccordion,
+  FilterSingleSelectDropdown,
+} from "@/components/portal/filter-field-lists";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -51,6 +54,7 @@ import {
   suggestedExpiryDateInput,
   summarizeDocumentExpiration,
 } from "@/lib/documents/document-expiration";
+import { loadDocumentExpirationSummary } from "@/lib/manager-document-expiry-client";
 import { useSearchParams } from "next/navigation";
 import { MANAGER_VENDORS_EVENT, syncManagerVendorsFromServer, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
 
@@ -143,34 +147,58 @@ export function DocumentLibraryFilterFields({
         aria-label="Search documents"
         data-attr="document-search"
       />
-      <PortalFilterChipRow
-        ariaLabel="Filter by category"
-        value={categoryFilter}
-        onChange={onCategoryFilterChange}
-        allLabel="All categories"
-        options={categoryFilterOptions}
-        className="w-full"
-      />
-      <PortalFilterChipRow
-        ariaLabel="Filter by scope"
-        value={scopeFilter}
-        onChange={onScopeFilterChange}
-        allowAll={false}
-        options={scopeFilterOptions}
-        className="w-full"
-      />
-      {propertyOptions.length > 0 ? (
-        <PortalFilterChipRow
-          ariaLabel="Filter by property"
-          value={propertyFilter}
-          onChange={onPropertyFilterChange}
-          allLabel="All properties"
-          options={propertyFilterOptions}
-          className="w-full"
+      {/* Category / Scope / Property are the one portal filter dropdown pattern: closed by
+          default, opening portals an overlay so the fields below never shift. They stay
+          SINGLE-select because each maps to one server query param on
+          `GET /api/manager/documents` (`category` / `scope` / `propertyId`); widening any
+          of them to multi-select is an API change, not a presentation one. The expiry row
+          above stays status pills — an in-section status filter, like Pending/Overdue/Paid. */}
+      <FilterFieldsAccordion>
+        <FilterSingleSelectDropdown
+          sectionId="document-category"
+          label="Category"
+          value={categoryFilter}
+          onChange={onCategoryFilterChange}
+          placeholder="All categories"
+          options={toFilterOptions(categoryFilterOptions, "All categories")}
+          dataAttr="document-filter-category"
         />
-      ) : null}
+        <FilterSingleSelectDropdown
+          sectionId="document-scope"
+          label="Scope"
+          value={scopeFilter}
+          onChange={onScopeFilterChange}
+          placeholder="All scopes"
+          options={toFilterOptions(scopeFilterOptions, "All scopes")}
+          dataAttr="document-filter-scope"
+        />
+        {propertyOptions.length > 0 ? (
+          <FilterSingleSelectDropdown
+            sectionId="document-property"
+            label="Property"
+            value={propertyFilter}
+            onChange={onPropertyFilterChange}
+            placeholder="All properties"
+            options={toFilterOptions(propertyFilterOptions, "All properties")}
+            dataAttr="document-filter-property"
+          />
+        ) : null}
+      </FilterFieldsAccordion>
     </div>
   );
+}
+
+/**
+ * `{id,label}` filter options as `{value,label}`, with a leading "clear" row. Some option
+ * lists (SCOPE_FILTERS) already carry their own empty-id row, so prepending unconditionally
+ * would render "All scopes" twice — only add one when the list lacks it.
+ */
+function toFilterOptions(
+  options: { id: string; label: string }[],
+  allLabel: string,
+): { value: string; label: string }[] {
+  const mapped = options.map((o) => ({ value: o.id, label: o.label }));
+  return mapped.some((o) => o.value === "") ? mapped : [{ value: "", label: allLabel }, ...mapped];
 }
 
 export type ManagerDocumentLibraryHandle = {
@@ -241,6 +269,18 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
   const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
+
+  /**
+   * A document write changes the dashboard's expiry counts, but that banner is
+   * now TTL-guarded, so without this it could show counts up to the TTL stale
+   * after an upload/edit/delete. Forcing a read on the SAME user key the
+   * dashboard reads guarantees its next read is newer than the write.
+   * Fire-and-forget: a failed refresh must never fail the write.
+   */
+  const refreshExpirySummary = useCallback(() => {
+    if (demo) return;
+    void loadDocumentExpirationSummary({ userId, force: true }).catch(() => {});
+  }, [demo, userId]);
 
   const categoryFilterOptions = useMemo(
     () => DOCUMENT_CATEGORIES.map((c) => ({ id: c, label: DOCUMENT_CATEGORY_LABELS[c] })),
@@ -340,12 +380,13 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? "Failed to delete document.");
         setDocuments((cur) => cur.filter((d) => d.id !== doc.id));
+        refreshExpirySummary();
         showToast("Document deleted.");
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Failed to delete document.");
       }
     },
-    [showToast],
+    [refreshExpirySummary, showToast],
   );
 
   const handleShareLink = useCallback(
@@ -459,7 +500,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN}
-          onClick={() => void handleRequestSignature(doc)}
+          onClick={() => handleRequestSignature(doc)}
           data-attr="document-request-signature"
         >
           Request signature
@@ -469,7 +510,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="outline"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleShareLink(doc)}
+        onClick={() => handleShareLink(doc)}
         data-attr="document-share-link"
       >
         Share link
@@ -478,7 +519,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         type="button"
         variant="danger"
         className={PORTAL_DETAIL_BTN}
-        onClick={() => void handleDelete(doc)}
+        onClick={() => handleDelete(doc)}
         data-attr="document-delete"
       >
         Delete
@@ -712,6 +753,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         vendorRows={vendorRows.filter((v) => v.active !== false)}
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur]);
+          refreshExpirySummary();
           setUploadOpen(false);
         }}
       />
@@ -726,6 +768,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         versionMode
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur.filter((row) => row.id !== versionTarget?.id)]);
+          refreshExpirySummary();
           setVersionTarget(null);
         }}
       />
@@ -736,6 +779,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
         onClose={() => setRenameTarget(null)}
         onSaved={(updated) => {
           setDocuments((cur) => cur.map((d) => (d.id === updated.id ? updated : d)));
+          refreshExpirySummary();
           setRenameTarget(null);
         }}
       />
@@ -851,7 +895,7 @@ function UploadModal({
       title={title}
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy || !file} data-attr="document-upload-submit">
             {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
         </ModalFooter>
@@ -1072,7 +1116,7 @@ function EditDocumentModal({
       dense
       footer={
         <ModalFooter>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
+          <Button type="button" variant="primary" onClick={() => submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>
         </ModalFooter>
@@ -1197,7 +1241,7 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
-              onClick={() => void handleDownload()}
+              onClick={() => handleDownload()}
               disabled={downloading}
               data-attr="document-download"
             >

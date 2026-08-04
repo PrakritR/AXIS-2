@@ -5,13 +5,12 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   PortalSettingsGroup,
   PortalSettingsSection,
 } from "@/components/portal/portal-settings-ui";
 import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_MOBILE_DETAIL_EXPAND,
@@ -141,7 +140,7 @@ export function PortalBugFeedbackPanel({
           variant="outline"
           className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
           disabled={deletingId === row.id}
-          onClick={() => void handleDelete(row)}
+          onClick={() => handleDelete(row)}
         >
           {deletingId === row.id ? "Deleting…" : "Delete"}
         </Button>

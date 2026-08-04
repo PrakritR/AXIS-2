@@ -1,3 +1,4 @@
+import type { AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 
 export type AuthPortalPickerId = "manager" | "resident" | "vendor";
@@ -43,3 +44,17 @@ export const AUTH_PORTAL_PICKER_OPTIONS: AuthPortalPickerOption[] = [
     tone: "blue",
   },
 ];
+
+const PICKER_ROLE_IDS = new Set<AuthPortalPickerId>(AUTH_PORTAL_PICKER_OPTIONS.map((opt) => opt.id));
+
+function isAuthPortalPickerId(role: AuthRole): role is AuthPortalPickerId {
+  return PICKER_ROLE_IDS.has(role as AuthPortalPickerId);
+}
+
+/** Portal types a signed-in user can still add (excludes roles they already have). */
+export function filterAddablePortalPickerOptions(existingRoles: readonly AuthRole[]): AuthPortalPickerOption[] {
+  const owned = new Set(
+    existingRoles.filter(isAuthPortalPickerId),
+  );
+  return AUTH_PORTAL_PICKER_OPTIONS.filter((opt) => !owned.has(opt.id));
+}

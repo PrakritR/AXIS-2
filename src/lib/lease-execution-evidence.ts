@@ -129,18 +129,90 @@ export function leaseDocumentBodyChanged(stored: LeasePipelineRow, next: LeasePi
 }
 
 /**
- * True when `next` replaces the document body of an already-signed `stored`
- * row. Clearing the signatures drops out by design, because that is a superseding
- * document (void, send back, renew, amend), not a silent edit to an executed
- * one. Filling in an absent body on an `externallySignedLease` row is how
- * existing-resident onboarding files an already-executed off-platform PDF.
+ * Every signal that says "this row is executed", as ONE predicate.
+ *
+ * `rowHasAnySignature` and `fullySignedAt` used to be read by different guards,
+ * and each disagreement was a bypass: a payload carrying `fullySignedAt` but no
+ * signature object satisfied a signature-keyed guard while still tripping a
+ * `fullySignedAt`-keyed action. Anything that decides what an executed row may
+ * do reads this, so the two signals can never drift apart again.
+ */
+export function leaseClaimsExecution(
+  row: Pick<
+    LeasePipelineRow,
+    "managerSignature" | "residentSignature" | "signatureName" | "signedAtIso" | "fullySignedAt"
+  >,
+): boolean {
+  return Boolean(row.fullySignedAt) || rowHasAnySignature(row);
+}
+
+/**
+ * True when `next` turns an unexecuted stored row into an executed one while
+ * ALSO changing the document body — claiming execution of a document the server
+ * never held.
+ *
+ * This is the sibling `replacesSignedLeaseDocument` cannot cover: that one
+ * requires the STORED row to already be executed, because it assumes the
+ * signature was applied to a body the server had. A caller that supplies the
+ * body and the execution claim in the SAME write never trips it, so the executed
+ * text is whatever that one request said it was.
+ *
+ * It is the single trust decision behind two behaviours: a resident-scoped write
+ * of this shape is refused outright, and auto-file declines to render such a
+ * body into the property owner's document library. Both read this function, so
+ * the guard and the action it protects cannot key on different signals.
+ *
+ * Legitimate shapes stay out of it. `residentUploadLeasePdf` clears every
+ * signature and `fullySignedAt` first, so `next` claims nothing, and
+ * countersigning leaves the body untouched.
+ *
+ * It has NO carve-out, deliberately — not even one keyed on the stored row.
+ * `row_data` is written verbatim from whatever the client last sent apart from
+ * the four scope mirrors, so a stored flag is prior-request client input, not
+ * server-established state; honouring `stored.externallySignedLease` here would
+ * only move the attacker's write one earlier. (Its sibling may honour that flag
+ * because it is reached only when the stored row is ALREADY executed, which is a
+ * state the evidence rules have protected up to that point.) The one shape that
+ * legitimately fills an ABSENT body with an already-executed off-platform PDF —
+ * the existing-resident onboarding row `syncApprovedApplications` seeds — is
+ * admitted by the CALLER corroborating those bytes against the manager-filed PDF
+ * on the application record, server side; see
+ * `leaseBodyMatchesManagerFiledLease`.
+ */
+export function introducesUntrustedLeaseDocument(
+  stored: LeasePipelineRow | undefined,
+  next: LeasePipelineRow,
+): boolean {
+  if (!stored) return false;
+  if (leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
+  return leaseDocumentBodyReplaced(stored, next);
+}
+
+/**
+ * True when `next` replaces the document body of an already-executed `stored`
+ * row. Clearing the execution claim drops out by design, because that is a
+ * superseding document (void, send back, renew, amend), not a silent edit to an
+ * executed one. Filling in an absent body on an `externallySignedLease` row is
+ * how existing-resident onboarding files an already-executed off-platform PDF.
+ *
+ * Keyed on `leaseClaimsExecution`, the same predicate
+ * `introducesUntrustedLeaseDocument` bows out on, so the two partition every row
+ * shape between them. Keyed on the narrower `rowHasAnySignature`, a row carrying
+ * `fullySignedAt` with no signature object was "executed" to one and "unsigned"
+ * to the other, and neither protected its body.
  */
 export function replacesSignedLeaseDocument(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
-  if (!rowHasAnySignature(stored) || !rowHasAnySignature(next)) return false;
+  if (!leaseClaimsExecution(stored) || !leaseClaimsExecution(next)) return false;
+  if (!leaseDocumentBodyReplaced(stored, next)) return false;
   const before = leaseDocumentBody(stored);
-  if (!leaseDocumentBodyChanged(stored, next)) return false;
   if (!before.html && !before.pdf && stored.externallySignedLease) return false;
   return true;
+}
+
+function leaseDocumentBodyReplaced(stored: LeasePipelineRow, next: LeasePipelineRow): boolean {
+  const before = leaseDocumentBody(stored);
+  const after = leaseDocumentBody(next);
+  return before.html !== after.html || before.pdf !== after.pdf;
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {

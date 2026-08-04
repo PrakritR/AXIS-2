@@ -365,6 +365,101 @@ describe("syncInProgressApplicationRow never downgrades a submitted application"
     syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
     expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
   });
+
+  // Regression: the downgrade guard tested the EXISTING row with the exact
+  // `isDraftApplicationRow` (stage must be literally "In progress"). A legacy or
+  // blank-stage draft failed that test, so it read as already-submitted and every
+  // autosave after it was dropped as a submitted -> draft downgrade — the draft
+  // silently stopped saving, with no error and no toast. The existing side now
+  // uses the wider `isDraftShapedApplicationRow`.
+  it("keeps autosaving a legacy draft whose stage metadata is blank", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: AXIS_ID,
+        name: "Jane",
+        property: "P",
+        propertyId: "prop-1",
+        bucket: "pending",
+        // Older rows were persisted with no stage at all.
+        stage: "",
+        detail: "",
+        email: "jane@test.com",
+      },
+    ]);
+
+    syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+    expect(replaceManagerApplicationRowInCache).toHaveBeenCalledTimes(1);
+    expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(upsertApplicationRowToServer).mock.calls[0][0].stage).toBe(IN_PROGRESS_APPLICATION_STAGE);
+  });
+
+  it.each(["draft", "started", INCOMPLETE_APPLICATION_LABEL])(
+    "keeps autosaving a legacy draft stored with stage %s",
+    (stage) => {
+      vi.mocked(readManagerApplicationRows).mockReturnValue([
+        {
+          id: AXIS_ID,
+          name: "Jane",
+          property: "P",
+          propertyId: "prop-1",
+          bucket: "pending",
+          stage,
+          detail: "",
+          email: "jane@test.com",
+        },
+      ]);
+
+      syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+      expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("keeps autosaving a stage-less wizard snapshot carrying only application data", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: AXIS_ID,
+        name: "Jane",
+        property: "",
+        bucket: "pending",
+        stage: "",
+        detail: "",
+        email: "jane@test.com",
+        application: { propertyId: "prop-1", email: "jane@test.com" },
+      } as never,
+    ]);
+
+    syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+    expect(upsertApplicationRowToServer).toHaveBeenCalledTimes(1);
+  });
+
+  // The widened EXISTING side must not weaken the guard this function exists for:
+  // a genuinely submitted row is still rejected by the wider predicate, so a
+  // racing draft write is still dropped. Covers "Submitted" in any casing.
+  it.each(["Submitted", "submitted", "  SUBMITTED  "])(
+    "still drops a racing draft sync against a submitted row (stage %s)",
+    (stage) => {
+      vi.mocked(readManagerApplicationRows).mockReturnValue([
+        {
+          id: AXIS_ID,
+          name: "Jane Doe",
+          property: "P",
+          propertyId: "prop-1",
+          bucket: "pending",
+          stage,
+          detail: "",
+          email: "jane@test.com",
+        },
+      ]);
+
+      syncInProgressApplicationRow({ axisId: AXIS_ID, form, residentEmail: "jane@test.com" });
+
+      expect(replaceManagerApplicationRowInCache).not.toHaveBeenCalled();
+      expect(upsertApplicationRowToServer).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("application-policy in-progress", () => {

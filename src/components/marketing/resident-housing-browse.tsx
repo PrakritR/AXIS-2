@@ -508,6 +508,9 @@ export function ResidentHousingBrowse({ propertyIds }: { propertyIds?: string[] 
           compactPanel={false}
           panelSizeClassName={PORTAL_FILTER_BROWSE_PANEL_CLASS}
           mobileSheetClassName={PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS}
+          /* The only filter sheet tall enough (82dvh) that raising it would push its top
+             off screen — it stays bottom-anchored, and is stationary either way. */
+          mobileSheetFillsViewport
           mobileFlushBody={false}
           desktopPresentation="panel"
           mobileFooter={(close) => (

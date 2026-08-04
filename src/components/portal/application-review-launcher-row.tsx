@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
@@ -63,6 +64,7 @@ export function ApplicationReviewLauncherRow({
       {showApplication ? (
         <section>
           <ApplicationDocumentPreview row={row} collapsible={false} showDownload={showDownload} bareCanvas={bareCanvas} />
+          <ApplicationVerificationPhotos row={row} />
         </section>
       ) : (
         <ApplicationScreeningPanel

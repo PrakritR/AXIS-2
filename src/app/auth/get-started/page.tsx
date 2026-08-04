@@ -2,46 +2,96 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
-import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
+import {
+  AuthAccountFooterLink,
+  AuthBackLink,
+  AuthPageHeader,
+  AuthRoleStack,
+} from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
+import type { AuthRole } from "@/components/auth/portal-switcher";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   AUTH_PORTAL_PICKER_OPTIONS,
+  filterAddablePortalPickerOptions,
   type AuthPortalPickerId,
 } from "@/lib/auth/auth-portal-picker-options";
+import { isGetStartedAddMode } from "@/lib/auth/get-started-path";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 import { provisionPortalFromGetStarted } from "@/lib/auth/provision-portal-from-get-started";
 import { isGetStartedDestination, resolvePostAuthDestination } from "@/lib/auth/resolve-post-auth-destination";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 /**
- * Portal chooser for a signed-in user with no portal role yet (new OAuth/email login).
- * User picks Property, Resident, or Vendor — never silently provisioned.
+ * Portal chooser for a signed-in user with no portal role yet (new OAuth/email login),
+ * or for adding another portal type when `?mode=add`.
  */
 function GetStartedContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const addMode = isGetStartedAddMode(searchParams);
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState<string | null>(null);
   const [resolving, setResolving] = useState(true);
+  const [existingRoles, setExistingRoles] = useState<AuthRole[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   useAuthWelcomeChrome(true);
+
+  const pickerOptions = useMemo(() => {
+    if (addMode) {
+      if (existingRoles === null) return [];
+      return filterAddablePortalPickerOptions(existingRoles);
+    }
+    return AUTH_PORTAL_PICKER_OPTIONS;
+  }, [addMode, existingRoles]);
 
   const stackOptions = useMemo(
     () =>
-      AUTH_PORTAL_PICKER_OPTIONS.map((opt) => ({
+      pickerOptions.map((opt) => ({
         id: opt.id,
         label: opt.chooserLabel,
         hint: opt.id === "vendor" ? opt.chooserHint : undefined,
         icon: opt.icon,
         tone: opt.tone,
       })),
-    [],
+    [pickerOptions],
   );
 
   useEffect(() => {
     let cancelled = false;
+
+    if (addMode) {
+      void (async () => {
+        try {
+          const res = await fetch("/api/auth/portal-roles", { credentials: "include" });
+          const body = (await res.json()) as { roles?: AuthRole[]; error?: string };
+          if (cancelled) return;
+          if (!res.ok) {
+            if (res.status === 401) {
+              router.replace("/auth/sign-in");
+              return;
+            }
+            setLoadError(body.error ?? "Could not load your account.");
+            setResolving(false);
+            return;
+          }
+          setExistingRoles(body.roles ?? []);
+          setResolving(false);
+        } catch {
+          if (!cancelled) {
+            setLoadError("Could not load your account.");
+            setResolving(false);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void (async () => {
       const { redirectTo, resolutionFailed } = await resolvePostAuthDestination("/auth/continue");
       if (cancelled) return;
@@ -57,11 +107,11 @@ function GetStartedContent() {
     return () => {
       cancelled = true;
     };
-  }, [showToast]);
+  }, [addMode, router, showToast]);
 
   const choose = async (id: string) => {
     const role = id as AuthPortalPickerId;
-    if (!AUTH_PORTAL_PICKER_OPTIONS.some((opt) => opt.id === role)) return;
+    if (!pickerOptions.some((opt) => opt.id === role)) return;
     setBusy(id);
     const result = await provisionPortalFromGetStarted(role);
     if (!result.ok) {
@@ -87,7 +137,7 @@ function GetStartedContent() {
   if (resolving) {
     return (
       <AuthCard variant="blend">
-        <AuthOAuthLoading label="Loading your account" />
+        <AuthOAuthLoading label={addMode ? "Loading your portals" : "Loading your account"} />
       </AuthCard>
     );
   }
@@ -96,16 +146,29 @@ function GetStartedContent() {
     <AuthCard variant="blend">
       <AuthPageHeader
         showLogo
-        title="How do you want to use PropLane?"
+        title={addMode ? "Add another portal type" : "How do you want to use PropLane?"}
+        subtitle={addMode ? "Same email works for every portal. Switch anytime from Settings." : undefined}
         accent={false}
       />
 
-      <AuthRoleStack
-        options={stackOptions}
-        onSelect={choose}
-        disabled={busy !== null}
-        busyId={busy}
-      />
+      {loadError ? <p className="mt-4 text-center text-sm text-rose-600">{loadError}</p> : null}
+
+      {addMode && stackOptions.length === 0 ? (
+        <p className="auth-role-stack text-center text-sm text-muted">
+          You already have every portal type on this account.
+        </p>
+      ) : (
+        <AuthRoleStack
+          options={stackOptions}
+          onSelect={choose}
+          disabled={busy !== null}
+          busyId={busy}
+        />
+      )}
+
+      {addMode ? (
+        <AuthAccountFooterLink href="/auth/choose-portal">Back to portal chooser</AuthAccountFooterLink>
+      ) : null}
 
       <AuthBackLink onClick={() => void signOut()}>Sign out</AuthBackLink>
     </AuthCard>
@@ -122,9 +185,7 @@ function GetStartedFallback() {
 
 export default function GetStartedPage() {
   return (
-    <Suspense
-      fallback={<GetStartedFallback />}
-    >
+    <Suspense fallback={<GetStartedFallback />}>
       <GetStartedContent />
     </Suspense>
   );

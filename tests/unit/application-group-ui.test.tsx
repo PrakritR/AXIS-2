@@ -10,7 +10,7 @@
 // Set GROUP_UI_HTML_DIR to also dump each rendered surface's HTML to that
 // directory so it can be screenshotted with the app's real stylesheet.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import fs from "node:fs";
 import path from "node:path";
 import type { DemoApplicantRow } from "@/data/demo-portal";

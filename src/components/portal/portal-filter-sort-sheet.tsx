@@ -7,16 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Modal, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
 import {
-  PORTAL_FILTER_PANEL_COMPACT_CLASS,
   PORTAL_FILTER_PANEL_SIZE_CLASS,
   PORTAL_FILTER_PANEL_WIDTH_CLASS,
   PORTAL_FILTER_BODY_CLASS,
   PORTAL_FILTER_ICON_CLASS,
-  PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS,
   PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS,
+  PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX,
   portalFilterDropdownHeightPx,
   portalFilterDropdownWidthPx,
   portalFilterPanelSizeClass,
+  FilterFieldsAccordionScope,
+  FilterSheetScrollLockContext,
 } from "@/components/portal/filter-field-lists";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
@@ -59,7 +60,10 @@ function FilterResetLink({ onReset }: { onReset: () => void }) {
 
 function FilterDropdownHeader({ onReset, onClose }: { onReset: () => void; onClose: () => void }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+    <div
+      data-field-select-host-chrome=""
+      className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2"
+    >
       <p className="text-sm font-semibold text-foreground">Filter</p>
       <div className="flex items-center gap-3">
         <FilterResetLink onReset={onReset} />
@@ -82,12 +86,19 @@ function FilterPanelFields({
   extraModalContent,
   onReset,
   compact = false,
+  scrollLocked = false,
 }: {
   children: ReactNode;
   extraModalContent?: ReactNode;
   onReset: () => void;
   compact?: boolean;
+  /** A portaled field menu is open — freeze this scroll region so it cannot drift under it. */
+  scrollLocked?: boolean;
 }) {
+  /* `fields` is shared by ALL THREE presentations (mobile sheet, desktop dropdown, desktop
+     panel). The dropdown gives it a FIXED inline height inside `overflow-hidden`, so without
+     `min-h-0 flex-1` here plus a real scroll region below, a long field list is silently
+     clipped with no scrollbar instead of scrolling to its last option. */
   return (
     <div className={compact ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
@@ -96,11 +107,11 @@ function FilterPanelFields({
         </div>
       ) : null}
       <div
-        className={
-          compact
-            ? "min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
-            : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
-        }
+        className={cn(
+          "min-h-0 overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]",
+          !compact && "flex-1",
+          scrollLocked ? "overflow-y-hidden" : "overflow-y-auto",
+        )}
       >
         <div className="flex min-w-0 max-w-full flex-col gap-3 max-lg:gap-2">
           {children}
@@ -135,6 +146,12 @@ export function PortalFilterSortSheet({
   /** When false, sheet body uses horizontal padding like standard modals. */
   mobileFlushBody = false,
   mobileFooter,
+  /**
+   * Opt out of the raised mobile placement. Only for a sheet that already fills most of
+   * the viewport (browse-homes), where raising it would push its top off screen. Every
+   * other filter sheet opens raised and stays there — see {@link VaulBottomSheet.autoElevate}.
+   */
+  mobileSheetFillsViewport = false,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -149,8 +166,10 @@ export function PortalFilterSortSheet({
   mobileSheetClassName?: string;
   mobileFlushBody?: boolean;
   mobileFooter?: ReactNode | ((close: () => void) => ReactNode);
+  mobileSheetFillsViewport?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const isMobile = useSmallPortalViewport();
   const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
@@ -170,13 +189,24 @@ export function PortalFilterSortSheet({
     minMenuWidth: panelWidthPx,
     align: "end",
   });
-  const resolvedMobileSheetClass =
-    mobileSheetClassName ??
-    (compactPanel ? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS : "h-auto max-h-[min(14rem,45vh)]");
+  /* Both branches leave the height to the sheet — see PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS. */
+  const resolvedMobileSheetClass = mobileSheetClassName ?? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
+  /* `filterMenuOpen` is only ever set from inside the mobile sheet's provider, so on the
+     desktop dropdown/panel this stays false and their scroll regions are untouched. */
+  /* One accordion scope per SHEET, not per field group: a sheet composed from sibling
+     groups (Finances = ReportFilterBar + FinancesRowFilters) would otherwise hold one open
+     menu per group and stack them over the panel. */
   const fields = (
-    <FilterPanelFields onReset={onReset} extraModalContent={extraModalContent} compact={compactPanel}>
-      {children}
-    </FilterPanelFields>
+    <FilterFieldsAccordionScope>
+      <FilterPanelFields
+        onReset={onReset}
+        extraModalContent={extraModalContent}
+        compact={compactPanel}
+        scrollLocked={filterMenuOpen}
+      >
+        {children}
+      </FilterPanelFields>
+    </FilterFieldsAccordionScope>
   );
 
   const filterDropdownPanel = (
@@ -282,14 +312,15 @@ export function PortalFilterSortSheet({
           onOpenChange={setOpen}
           title="Filter"
           flushBody={mobileFlushBody}
-          autoElevate={compactPanel}
-          maxHeightClass={
-            mobileSheetClassName
-              ? "max-h-[min(92dvh,44rem)]"
-              : compactPanel
-                ? "max-h-[min(78dvh,34rem)]"
-                : undefined
-          }
+          autoElevate={!mobileSheetFillsViewport}
+          /* A one-field sheet is ~179px and could not contain its own 264px menu, so the
+             menu hung onto the dimmed scrim. The floor buys containment; the dead space
+             under a lone field is the price of "stationary AND contained". */
+          minHeightPx={PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}
+          lockBodyScroll={filterMenuOpen}
+          /* Only the bottom-anchored (viewport-filling) sheet can use this — an elevated
+             sheet derives its max-height from the raised offset and ignores the prop. */
+          maxHeightClass={mobileSheetFillsViewport ? "max-h-[min(92dvh,44rem)]" : undefined}
           footer={
             mobileFooter
               ? typeof mobileFooter === "function"
@@ -298,14 +329,22 @@ export function PortalFilterSortSheet({
               : undefined
           }
         >
-          <div
-            className={cn(
-              "flex w-full max-w-full flex-col overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-              resolvedMobileSheetClass,
-            )}
-          >
-            {fields}
-          </div>
+          <FilterSheetScrollLockContext.Provider value={setFilterMenuOpen}>
+            <div
+              className={cn(
+                "flex w-full max-w-full flex-col overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]",
+                /* `VaulBottomSheet`'s `lockBodyScroll` works by putting `overflow-hidden` on
+                   its own body div, which a descendant's own `overflow-y-auto` defeats. So the
+                   sheet's scroll containers have to stand down while a portaled field menu is
+                   open, or the prop is inert for this caller. */
+                filterMenuOpen ? "overflow-y-hidden" : "overflow-y-auto",
+                mobileFlushBody && "px-4",
+                resolvedMobileSheetClass,
+              )}
+            >
+              {fields}
+            </div>
+          </FilterSheetScrollLockContext.Provider>
         </VaulBottomSheet>
       ) : desktopPresentation === "panel" ? (
         <Modal

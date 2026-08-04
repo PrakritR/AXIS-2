@@ -22,6 +22,7 @@ export function PortalRecordDetailPage({
   inlineActions = false,
   inlineActionsClassName,
   children,
+  fillBody = false,
   dataAttrBack = "portal-record-detail-back",
 }: {
   /** @deprecated Detail chrome no longer renders a duplicate section title. */
@@ -40,11 +41,24 @@ export function PortalRecordDetailPage({
   inlineActions?: boolean;
   inlineActionsClassName?: string;
   children: ReactNode;
+  /**
+   * Opt in when `children` is a self-contained fill layout (a chat pane that
+   * scrolls internally) rather than flowing content.
+   *
+   * The default body wrapper is a BLOCK, which severs a `flex-1` chain: a child
+   * asking to fill gets no definite height and lays out at its content height
+   * instead. On a fixed-chrome surface (`data-communication-surface` clips
+   * `#portal-main-content` and `.portal-main-inner`) that overflow is not
+   * scrollable, so the header — including this component's own back button — is
+   * pushed out of a page that cannot scroll back. Opt-in so the ~10 flowing
+   * detail pages keep block layout unchanged.
+   */
+  fillBody?: boolean;
   dataAttrBack?: string;
 }) {
   const navigate = usePortalNavigate();
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className={`flex min-h-0 flex-col${fillBody ? " flex-1" : ""}`}>
       <PortalDetailHeader
         title={title}
         subtitle={subtitle}
@@ -59,7 +73,7 @@ export function PortalRecordDetailPage({
         inlineActions={inlineActions}
         inlineActionsClassName={inlineActionsClassName}
       />
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className={fillBody ? "flex min-h-0 flex-1 flex-col" : "min-h-0 flex-1"}>{children}</div>
     </div>
   );
 }

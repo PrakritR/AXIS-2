@@ -26,22 +26,19 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
-import { InboxAvatar } from "@/components/portal/portal-inbox-ui";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationReviewLauncherRow, type ApplicationReviewView } from "@/components/portal/application-review-launcher-row";
 import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
-import { ApplicationVerificationPhotos } from "@/components/portal/application-verification-photos";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
@@ -664,14 +661,18 @@ export function ManagerApplications({
     [viewingIncompleteApplicationDetail],
   );
 
+  // The detail view renders full applicant PII — name, contact, income, screening
+  // results — so it resolves out of `scopedRows`, the SAME already-scoped list the
+  // table renders, rather than the raw cache. That makes it structurally impossible
+  // for the list and the detail to disagree about who may see a row: an unresolved
+  // scope leaves `scopedRows` empty, so the detail denies it too, and the caller
+  // renders a skeleton for a null row until the scope (and the property cache)
+  // resolves.
   const detailRow = useMemo(() => {
     if (!applicationIdProp) return null;
     const target = normalizeApplicationAxisId(decodeURIComponent(applicationIdProp)).toUpperCase();
-    const hit = rows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target);
-    if (!hit) return null;
-    if (scopeUserId && !applicationVisibleToPortalUser(hit, scopeUserId, "applications")) return null;
-    return hit;
-  }, [applicationIdProp, rows, scopeUserId]);
+    return scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === target) ?? null;
+  }, [applicationIdProp, scopedRows]);
 
   useEffect(() => {
     if (openHandled.current || scopedRows.length === 0) return;
@@ -922,7 +923,7 @@ export function ManagerApplications({
         className={className}
         data-attr="application-send-reminder"
         disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
-        onClick={() => void openReminderPreview(row)}
+        onClick={() => openReminderPreview(row)}
       >
         {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
       </Button>
@@ -1031,7 +1032,7 @@ export function ManagerApplications({
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
         data-attr="application-delete"
-        onClick={() => void deleteApplication(row.id)}
+        onClick={() => deleteApplication(row.id)}
       >
         Delete
       </Button>
@@ -1154,7 +1155,6 @@ export function ManagerApplications({
         onOpenScreeningModal={(opts) => openDetailScreeningModal(row, opts)}
       />
 
-      <ApplicationVerificationPhotos row={row} />
     </>
     );
   };
@@ -1230,17 +1230,6 @@ export function ManagerApplications({
     </>
   );
 
-  const applicationsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={applicationsFilterSort}
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {applicationsHeaderActions}
-        </PortalSectionActionRow>
-      }
-    />
-  );
-
   const applicationModals = (
     <>
       <PortalNotificationPreviewModal
@@ -1313,7 +1302,7 @@ export function ManagerApplications({
         key={checkrScreeningRowId ?? "none"}
         row={
           checkrScreeningRowId
-            ? rows.find((r) => r.id === checkrScreeningRowId) ??
+            ? scopedRows.find((r) => r.id === checkrScreeningRowId) ??
               (detailRow?.id === checkrScreeningRowId ? detailRow : null)
             : null
         }
@@ -1379,7 +1368,6 @@ export function ManagerApplications({
       titleAside={applicationsHeaderActions}
       compactFilterRow
     >
-      {applicationsMobileActionsRow}
       <PortalListControlStack
         className="mb-2 max-lg:mb-2"
         destinationRow={
@@ -1425,7 +1413,7 @@ export function ManagerApplications({
       />
       <CheckrScreeningModal
         key={checkrScreeningRowId ?? "none"}
-        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        row={scopedRows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
         showPackagePickerInitially={checkrScreeningShowPicker}
         onClose={() => {

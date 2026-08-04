@@ -166,6 +166,7 @@ function ReportPropertyFilterField({
       label="Property"
       summary={filterSingleSelectSummary(value, options, "All properties")}
       empty={!value}
+      menuOptionCount={options.length}
       dataAttr="report-filter-property-trigger"
     >
       <FilterSingleSelectList

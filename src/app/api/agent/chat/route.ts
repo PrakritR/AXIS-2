@@ -11,7 +11,7 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
-import { enrichManagerChatImageAttachments } from "@/lib/listing-draft-agent.server";
+import { enrichManagerChatDocumentAttachments, enrichManagerChatImageAttachments } from "@/lib/listing-draft-agent.server";
 import {
   assistantContextHintFromMessages,
   isListingDraftAssistantContext,
@@ -87,6 +87,18 @@ export async function POST(req: Request) {
       console.error("[agent/chat] listing photo upload failed:", e);
       return NextResponse.json(
         { error: "We could not save your photos. Try again or use smaller images." },
+        { status: 500 },
+      );
+    }
+  }
+  if (attached.documentCount > 0) {
+    const contextHint = assistantContextHintFromMessages(messages);
+    try {
+      messages = await enrichManagerChatDocumentAttachments(ctx.db, ctx.landlordId, messages, contextHint);
+    } catch (e) {
+      console.error("[agent/chat] lease template upload failed:", e);
+      return NextResponse.json(
+        { error: "We could not save your PDF. Try again or use a smaller file." },
         { status: 500 },
       );
     }

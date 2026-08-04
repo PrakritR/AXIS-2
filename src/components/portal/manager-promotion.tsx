@@ -8,7 +8,8 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import {
   buildManagerPropertyFilterOptions,
   samePropertyId,
@@ -36,9 +37,12 @@ import {
   PromotionFlyerHeaderActions,
   PromotionTextAssetDetail,
   PromotionTextHeaderActions,
+  PromotionUploadAssetDetail,
+  PromotionUploadHeaderActions,
 } from "@/components/portal/promotion-asset-detail";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
+import { buildPromotionNewModalAssistantContext } from "@/lib/promotion-assistant-context";
 import {
   CUSTOM_PROPERTY_KEY,
   EMPTY_DRAFT,
@@ -53,6 +57,8 @@ import {
   makePromotionAssetId,
   nextPromotionAssetDefaultTitle,
   sortPromotionAssets,
+  promotionAssetListTitle,
+  promotionAssetKindIndices,
   type PromotionAsset,
 } from "@/lib/promotion-assets";
 import {
@@ -88,6 +94,8 @@ import {
   upsertManagerPromotion,
   deleteManagerPromotionRow,
 } from "@/lib/manager-promotions-storage";
+import { promotionDetailHref, promotionListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { readPromotionTextEntries, type PromotionTextEntry, type PromotionTextFormat } from "@/lib/promotion-text";
 import {
   fileToPromotionUpload,
@@ -133,11 +141,14 @@ function flyerEntryToDraft(
 
 
 export function ManagerPromotion({
-  basePath: _basePath = "/portal",
+  basePath = "/portal",
+  assetId: assetIdProp,
 }: {
   basePath?: string;
+  assetId?: string;
 } = {}) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -158,7 +169,6 @@ export function ManagerPromotion({
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
   const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
 
@@ -297,8 +307,8 @@ export function ManagerPromotion({
         cur.length === 0 || cur.some((id) => samePropertyId(id, pid)) ? cur : [pid],
       );
     }
-    setExpandedId(assetId);
-  }, []);
+    navigate(promotionDetailHref(basePath, assetId));
+  }, [basePath, navigate]);
 
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
@@ -571,14 +581,6 @@ export function ManagerPromotion({
     }
   }
 
-  function saveAssetTitle(asset: PromotionAsset, title: string) {
-    if (asset.kind === "flyer" && asset.flyerEntry) {
-      upsertManagerPromotion(updateFlyerEntryOnRow(asset.row, asset.flyerEntry.id, { title }));
-    } else if (asset.kind === "text" && asset.textEntry) {
-      upsertManagerPromotion(updateTextEntryOnRow(asset.row, asset.textEntry.id, { title }));
-    }
-  }
-
   function saveTextEntry(row: ManagerPromotionRow, entry: PromotionTextEntry) {
     upsertManagerPromotion(updateTextEntryOnRow(row, entry.id, entry));
   }
@@ -593,7 +595,7 @@ export function ManagerPromotion({
       if (next) upsertManagerPromotion(next);
       else deleteManagerPromotionRow(asset.row.id);
     }
-    if (expandedId === asset.id) setExpandedId(null);
+    if (assetIdProp === asset.id) navigate(promotionListHref(basePath));
     if (editingRowId === asset.row.id) closeForm();
     showToast("Promotion deleted.");
   }
@@ -626,6 +628,20 @@ export function ManagerPromotion({
       );
     }
 
+    if (asset.kind === "upload") {
+      return (
+        <PromotionUploadHeaderActions
+          asset={asset}
+          onDelete={(row, entryId) => {
+            const uploadAsset = assets.find(
+              (a) => a.row.id === row.id && a.uploadEntry?.id === entryId,
+            );
+            if (uploadAsset) deleteAsset(uploadAsset);
+          }}
+        />
+      );
+    }
+
     return (
       <PromotionTextHeaderActions
         asset={asset}
@@ -642,19 +658,140 @@ export function ManagerPromotion({
     );
   };
 
-  const renderExpanded = (asset: PromotionAsset, _indexWithinKind: number) => {
-    if (asset.kind === "flyer") {
-      return <PromotionFlyerAssetDetail asset={asset} />;
+
+
+  const detailAsset = useMemo(() => {
+    if (!assetIdProp) return null;
+    return assets.find((a) => a.id === assetIdProp) ?? null;
+  }, [assetIdProp, assets]);
+
+  const detailTitle = useMemo(() => {
+    if (!detailAsset) return "Promotion";
+    const indices = promotionAssetKindIndices(assets);
+    const indexWithinKind = indices.get(detailAsset.id) ?? 0;
+    const stored =
+      detailAsset.kind === "flyer"
+        ? (detailAsset.flyerEntry?.title ?? "")
+        : detailAsset.kind === "upload"
+          ? (detailAsset.uploadEntry?.title ?? "")
+          : (detailAsset.textEntry?.title ?? "");
+    return stored.trim() || promotionAssetListTitle(detailAsset, indexWithinKind);
+  }, [detailAsset, assets]);
+
+  const promotionModals = (
+    <>
+      <PromotionNewModal
+        open={showNewModal}
+        onClose={closeForm}
+        draft={draft}
+        setDraft={setDraft}
+        listings={listings}
+        onSelectProperty={onSelectProperty}
+        onGenerateFlyer={() => void generate()}
+        flyerBusy={generating}
+        onGenerateText={(opts) => void createTextFromModal(opts)}
+        textBusy={generatingTextId !== null}
+        onUploadPromotion={(file) => void uploadPromotion(file)}
+        uploadBusy={uploadBusy}
+      />
+
+      <Modal
+        open={showForm}
+        title="Edit flyer"
+        onClose={closeForm}
+        panelClassName="max-w-2xl"
+        assistantContext={buildPromotionNewModalAssistantContext(draft, "flyer")}
+        assistantStorageScopeKey="Edit promotion flyer"
+        footer={
+          <ModalFooter>
+            <Button type="button" variant="primary" onClick={() => generate()} disabled={generating} data-attr="promotion-generate">
+              {generating ? "Updating…" : "Update flyer"}
+            </Button>
+          </ModalFooter>
+        }
+      >
+        <div className="pr-1">
+          <PromotionForm
+            draft={draft}
+            setDraft={setDraft}
+            listings={listings}
+            onSelectProperty={onSelectProperty}
+          />
+        </div>
+      </Modal>
+
+      <PromotionTextGenerateModal
+        open={textModalAssetId !== null}
+        onClose={closeForm}
+        initialFormat={textModalAsset?.textEntry?.copy.format}
+        initialTone={textModalAsset?.row.inputs.tone}
+        initialImages={textModalAsset?.row.inputs.images}
+        onGenerate={(opts) => {
+          if (!textModalAsset?.textEntry) return;
+          void regenerateText(textModalAsset.row, textModalAsset.textEntry.id, opts);
+        }}
+      />
+    </>
+  );
+
+  if (assetIdProp) {
+    if (!detailAsset) {
+      return (
+        <>
+          {promotionModals}
+          <PortalRecordDetailPage
+            pageTitle="Promotion"
+            title="Promotion"
+            backHref={promotionListHref(basePath)}
+            hideBackText
+            bareHeader
+            dataAttrBack="promotion-detail-back"
+          >
+            <div className="px-3 py-6">
+              {authReady ? (
+                <p className="text-center text-sm text-muted">Promotion not found.</p>
+              ) : (
+                <ListSkeleton rows={4} showLeading={false} />
+              )}
+            </div>
+          </PortalRecordDetailPage>
+        </>
+      );
     }
 
+    const detailKindIndices = promotionAssetKindIndices(assets);
+    const detailIndexWithinKind = detailKindIndices.get(detailAsset.id) ?? 0;
+
     return (
-      <PromotionTextAssetDetail
-        asset={asset}
-        onSave={(row, entry) => saveTextEntry(row, entry)}
-        showToast={showToast}
-      />
+      <>
+        {promotionModals}
+        <PortalRecordDetailPage
+          pageTitle="Promotion"
+          title={detailTitle}
+          subtitle={detailAsset.propertyLabel}
+          backHref={promotionListHref(basePath)}
+          hideBackText
+          bareHeader
+          dataAttrBack="promotion-detail-back"
+          actions={renderHeaderActions(detailAsset, detailIndexWithinKind)}
+        >
+          <div className="px-3 py-4 sm:px-4">
+            {detailAsset.kind === "flyer" ? (
+              <PromotionFlyerAssetDetail asset={detailAsset} />
+            ) : detailAsset.kind === "upload" ? (
+              <PromotionUploadAssetDetail asset={detailAsset} />
+            ) : (
+              <PromotionTextAssetDetail
+                asset={detailAsset}
+                onSave={(row, entry) => saveTextEntry(row, entry)}
+                showToast={showToast}
+              />
+            )}
+          </div>
+        </PortalRecordDetailPage>
+      </>
     );
-  };
+  }
 
   const promotionFilterSheet = (
     <PortalFilterSortSheet
@@ -694,10 +831,6 @@ export function ManagerPromotion({
     />
   );
 
-  const promotionMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={promotionFilterSheet} actions={promotionNewButton} />
-  );
-
   return (
     <ManagerPortalPageShell
       title="Promotion"
@@ -706,7 +839,6 @@ export function ManagerPromotion({
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {promotionMobileActionsRow}
       <div data-attr="promotion-content-direct">
         {propertyScopedAssets.length === 0 ? (
           <div className="space-y-3">
@@ -719,69 +851,15 @@ export function ManagerPromotion({
           <div className={PORTAL_LIST_PAGE_BODY}>
             <PromotionAssetStack
               assets={propertyScopedAssets}
-              expandedId={expandedId}
-              onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-              onSaveTitle={saveAssetTitle}
+              onOpen={(asset) => navigate(promotionDetailHref(basePath, asset.id))}
               renderHeaderActions={renderHeaderActions}
-              renderExpanded={renderExpanded}
             />
             <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
           </div>
         )}
       </div>
 
-      <PromotionNewModal
-        open={showNewModal}
-        onClose={closeForm}
-        draft={draft}
-        setDraft={setDraft}
-        listings={listings}
-        onSelectProperty={onSelectProperty}
-        onGenerateFlyer={() => void generate()}
-        flyerBusy={generating}
-        onGenerateText={(opts) => void createTextFromModal(opts)}
-        textBusy={generatingTextId !== null}
-        onUploadPromotion={(file) => void uploadPromotion(file)}
-        uploadBusy={uploadBusy}
-      />
-
-      {/* Edit an existing flyer (create-new lives in PromotionNewModal above). */}
-      <Modal
-        open={showForm}
-        title="Edit flyer"
-        onClose={closeForm}
-        panelClassName="max-w-2xl"
-        footer={
-          <ModalFooter>
-            <Button type="button" variant="primary" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Updating…" : "Update flyer"}
-            </Button>
-          </ModalFooter>
-        }
-      >
-        {/* The Modal body scrolls — no nested scroller, which trapped touch
-            scrolling in the native WebView. */}
-        <div className="pr-1">
-          <PromotionForm
-            draft={draft}
-            setDraft={setDraft}
-            listings={listings}
-            onSelectProperty={onSelectProperty}
-          />
-        </div>
-      </Modal>
-
-      <PromotionTextGenerateModal
-        open={textModalAssetId !== null}
-        onClose={closeForm}
-        initialFormat={textModalAsset?.textEntry?.copy.format}
-        initialTone={textModalAsset?.row.inputs.tone}
-        initialImages={textModalAsset?.row.inputs.images}
-        onGenerate={(opts) => {
-          if (!textModalAsset?.textEntry) return;
-          void regenerateText(textModalAsset.row, textModalAsset.textEntry.id, opts);
-        }}
-      />
+      {promotionModals}
     </ManagerPortalPageShell>
   );
 }

@@ -1,13 +1,20 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { useInboxThreadScroll } from "@/hooks/use-inbox-thread-scroll";
 import {
   buildInboxMessageTimeline,
   inboxBubbleClusterRadius,
   type InboxBubbleClusterPosition,
 } from "@/lib/inbox-message-timeline";
-import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, Paperclip, Pencil, Sparkles, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Check, Clock, FileText, Paperclip, Pencil, Sparkles, X } from "lucide-react";
 import { PortalEmptyIcon, PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -16,7 +23,8 @@ import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isNativeRuntimeSync } from "@/lib/native/detect-native";
-import { MANAGER_TABLE_TH, PORTAL_TOOLBAR_GROUP, PORTAL_TOOLBAR_PILL_BUTTON, PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE } from "@/components/portal/portal-metrics";
+import { downloadOrShareFile } from "@/lib/native/download-or-share";
+import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
@@ -29,7 +37,6 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
@@ -41,6 +48,11 @@ import {
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { TabItem } from "@/components/ui/tabs";
 import type { InboxThreadMessage } from "@/lib/portal-inbox-storage";
+import {
+  INBOX_ATTACHMENT_ACCEPT,
+  inboxAttachmentDisplayName,
+  inboxAttachmentPathFromServeUrl,
+} from "@/lib/inbox-attachments";
 
 /** Same chrome as other portal data tables */
 export const PORTAL_INBOX_TABLE_WRAP = PORTAL_DATA_TABLE_WRAP;
@@ -561,6 +573,139 @@ export type InboxBubbleMessage = {
   attachments?: { url: string; name?: string }[];
 };
 
+/**
+ * Label for an attachment chip, in strict precedence order:
+ *
+ *  1. the last segment of the storage key carried in `?path=` — the uploader's
+ *     own file name, so it can never drift from the bytes it names;
+ *  2. the copy persisted in `row_data`, for a URL that carries no key;
+ *  3. the URL's own last path segment.
+ *
+ * (2) has to beat (3): the serve URL percent-encodes the whole key, so a serve
+ * URL that lost its `?path=` has the literal route name `inbox-attachments` as
+ * its last segment — the exact wrong label this ordering exists to avoid.
+ */
+export function inboxAttachmentChipName(att: { url: string; name?: string }): string | undefined {
+  const fromKey = inboxAttachmentPathFromServeUrl(att.url).split("/").pop()?.trim();
+  if (fromKey) return fromKey;
+  const stored = att.name?.trim();
+  if (stored) return stored;
+  return inboxAttachmentDisplayName(att.url);
+}
+
+/**
+ * Suffix, never substring: an image named `floorplan.pdf.png` is a PNG, and a
+ * substring test rendered it as a document link instead of a preview. Matches
+ * how `InboxComposer` decides below (`/\.pdf$/i` on the file name), and reads
+ * the same label the chip shows so the icon can never contradict the name.
+ */
+export function inboxAttachmentLooksLikePdf(att: { url: string; name?: string }): boolean {
+  const name = inboxAttachmentChipName(att);
+  if (name) return /\.pdf$/i.test(name);
+  return /\.pdf$/i.test(inboxAttachmentPathFromServeUrl(att.url) || att.url.split("?")[0] || "");
+}
+
+const INBOX_ATTACHMENT_MIME_BY_EXT: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+};
+
+function inboxAttachmentMimeFromName(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  return INBOX_ATTACHMENT_MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
+
+/**
+ * One attachment on a message bubble.
+ *
+ * On the web this is a plain same-origin `<a download>`: the serve route answers
+ * `Content-Disposition: attachment` for every type, so the file is saved rather
+ * than rendered on the app's own origin. WKWebView ignores both that disposition
+ * (the shell implements no `WKDownloadDelegate`) and a synthetic `<a download>`,
+ * so inside the Capacitor shell the tap is intercepted and the bytes are handed
+ * to the OS share sheet instead — which still never renders them on-origin.
+ *
+ * On that native path the ONLY non-failure outcomes are `"shared"` (the OS took
+ * the file) and `"share-cancelled"` (the user dismissed the sheet — silent, not
+ * an error). `"downloaded"` means the sheet did NOT take it and
+ * `downloadOrShareFile` fell back to the anchor download that WKWebView ignores,
+ * so it is a dead tap and must surface like a fetch failure. That reading is the
+ * call site's, not the helper's: the anchor fallback is a genuine download on
+ * every other caller.
+ */
+function InboxAttachmentChip({
+  att,
+  outbound,
+}: {
+  att: { url: string; name?: string };
+  outbound: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  const label = inboxAttachmentChipName(att);
+  const isPdf = inboxAttachmentLooksLikePdf(att);
+  const fileName = label ?? (isPdf ? "attachment.pdf" : "attachment");
+
+  const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!isNativeRuntimeSync()) return;
+    event.preventDefault();
+    setFailed(false);
+    void (async () => {
+      try {
+        const res = await fetch(att.url, { credentials: "include" });
+        if (!res.ok) throw new Error(`Attachment fetch failed (${res.status})`);
+        const blob = await res.blob();
+        const result = await downloadOrShareFile({
+          fileName,
+          mimeType: blob.type || inboxAttachmentMimeFromName(fileName),
+          content: blob,
+        });
+        if (result === "downloaded") setFailed(true);
+      } catch {
+        setFailed(true);
+      }
+    })();
+  };
+
+  return (
+    <span className="flex max-w-full flex-col gap-1">
+      {isPdf ? (
+        <a
+          href={att.url}
+          download={label ?? ""}
+          onClick={handleClick}
+          className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+            outbound
+              ? "border-white/30 bg-white/10 text-white hover:bg-white/15"
+              : "border-border/60 bg-background text-foreground hover:bg-accent/40"
+          }`}
+        >
+          <FileText className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="truncate">{label ?? "PDF document"}</span>
+        </a>
+      ) : (
+        <a
+          href={att.url}
+          download={label ?? ""}
+          onClick={handleClick}
+          className="block overflow-hidden rounded-lg border border-border/60"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={att.url} alt={label ?? "Attachment"} className="max-h-40 max-w-full object-cover" />
+        </a>
+      )}
+      {failed ? (
+        <span className={`text-[11px] font-medium ${outbound ? "text-white/80" : "text-rose-600"}`}>
+          Couldn&apos;t open this attachment.
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /** Small omnichannel channel tag rendered on a bubble / scheduled card. */
 export function InboxChannelTag({ channel }: { channel: InboxChannel }) {
   return (
@@ -793,16 +938,7 @@ export function InboxBubble({
         {message.attachments?.length ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {message.attachments.map((att) => (
-              <a
-                key={att.url}
-                href={att.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block overflow-hidden rounded-lg border border-border/60"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={att.url} alt={att.name ?? "Attachment"} className="max-h-40 max-w-full object-cover" />
-              </a>
+              <InboxAttachmentChip key={att.url} att={att} outbound={outbound} />
             ))}
           </div>
         ) : null}
@@ -979,7 +1115,7 @@ export function InboxComposer({
   channelControl?: ReactNode;
   /** Channel picker or other controls above the reply field. */
   channelBar?: ReactNode;
-  attachments?: { id: string; fileName: string; previewUrl: string; uploading?: boolean; error?: string }[];
+  attachments?: { id: string; fileName: string; previewUrl: string; uploading?: boolean; error?: string; isImage?: boolean }[];
   onAttachmentsPick?: (files: FileList | null) => void;
   onAttachmentRemove?: (id: string) => void;
   maxAttachments?: number;
@@ -1003,28 +1139,38 @@ export function InboxComposer({
       >
         {attachments?.length ? (
           <div className="mb-2 flex flex-wrap gap-2 px-1">
-            {attachments.map((att) => (
-              <div key={att.id} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={att.previewUrl} alt={att.fileName} className="h-14 w-14 rounded-lg border border-border object-cover" />
-                {att.uploading ? (
-                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 text-[10px] font-semibold text-white">…</span>
-                ) : null}
-                {att.error ? (
-                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-rose-600/80 px-1 text-center text-[9px] font-semibold text-white">Failed</span>
-                ) : null}
-                {onAttachmentRemove ? (
-                  <button
-                    type="button"
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background shadow"
-                    aria-label={`Remove ${att.fileName}`}
-                    onClick={() => onAttachmentRemove(att.id)}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
-              </div>
-            ))}
+            {attachments.map((att) => {
+              const showImage = att.isImage !== false && Boolean(att.previewUrl) && !/\.pdf$/i.test(att.fileName);
+              return (
+                <div key={att.id} className="relative">
+                  {showImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={att.previewUrl} alt={att.fileName} className="h-14 w-14 rounded-lg border border-border object-cover" />
+                  ) : (
+                    <div className="flex h-14 w-14 flex-col items-center justify-center rounded-lg border border-border bg-accent/30 px-1 text-center">
+                      <FileText className="h-5 w-5 text-primary" aria-hidden />
+                      <span className="mt-0.5 max-w-full truncate text-[8px] font-semibold uppercase text-muted">PDF</span>
+                    </div>
+                  )}
+                  {att.uploading ? (
+                    <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 text-[10px] font-semibold text-white">…</span>
+                  ) : null}
+                  {att.error ? (
+                    <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-rose-600/80 px-1 text-center text-[9px] font-semibold text-white">Failed</span>
+                  ) : null}
+                  {onAttachmentRemove ? (
+                    <button
+                      type="button"
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background shadow"
+                      aria-label={`Remove ${att.fileName}`}
+                      onClick={() => onAttachmentRemove(att.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : null}
         <div className="portal-inbox-composer-row flex items-end gap-2">
@@ -1033,7 +1179,7 @@ export function InboxComposer({
               <Paperclip className="h-5 w-5" strokeWidth={2} />
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                accept={INBOX_ATTACHMENT_ACCEPT}
                 className="sr-only"
                 multiple
                 disabled={disabled || sending || (attachments?.length ?? 0) >= maxAttachments}
@@ -1653,6 +1799,7 @@ export function InboxThreadView({
   messages,
   showAuthors = false,
   onBack,
+  hideIdentityHeader = false,
   headerActions,
   composer,
   afterMessages,
@@ -1670,6 +1817,8 @@ export function InboxThreadView({
   showAuthors?: boolean;
   /** Mobile-only back affordance returning to the list. */
   onBack?: () => void;
+  /** Hide avatar, title, and subtitle (e.g. resident profile Communication tab). */
+  hideIdentityHeader?: boolean;
   headerActions?: ReactNode;
   /** Pass an <InboxComposer/>; omit for a read-only thread (e.g. Trash). */
   composer?: ReactNode;
@@ -1690,6 +1839,7 @@ export function InboxThreadView({
   scrollMode?: "pane" | "page";
 }) {
   const pageScroll = scrollMode === "page";
+  const showHeader = Boolean(onBack || !hideIdentityHeader || headerActions);
   const { scrollRef, endRef, handleScroll: handleThreadScroll } = useInboxThreadScroll(
     threadKey,
     messages.length,
@@ -1697,8 +1847,9 @@ export function InboxThreadView({
 
   return (
     <div className={pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}>
+      {showHeader ? (
       <header
-        className="portal-inbox-thread-header sticky top-0 z-10 flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))]"
+        className="portal-inbox-thread-header sticky top-0 z-10 flex shrink-0 items-center gap-0.5 border-b border-border bg-card px-1.5 py-1 max-md:py-1 md:gap-1 md:px-2 md:py-2 md:[padding-top:max(0.375rem,env(safe-area-inset-top,0px))] max-md:[padding-top:max(0.5rem,env(safe-area-inset-top,0px))]"
       >
         {onBack ? (
           <button
@@ -1712,17 +1863,22 @@ export function InboxThreadView({
             <span className="sr-only">Inbox</span>
           </button>
         ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
-          {avatarName ? (
-            <InboxAvatar name={avatarName} className="h-8 w-8 text-[10px] md:h-9 md:w-9 md:text-[11px]" />
-          ) : null}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-            {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+        {!hideIdentityHeader ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-0.5 md:gap-2.5 md:px-1">
+            {avatarName ? (
+              <InboxAvatar name={avatarName} className="h-8 w-8 text-[10px] md:h-9 md:w-9 md:text-[11px]" />
+            ) : null}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+              {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
         {headerActions ? <div className="flex shrink-0 items-center gap-1.5">{headerActions}</div> : null}
       </header>
+      ) : null}
 
       <div
         ref={scrollRef}

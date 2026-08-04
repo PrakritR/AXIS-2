@@ -96,7 +96,7 @@ export function ManagerVendorInviteModal({
               className="rounded-full"
               disabled={busy}
               data-attr="vendor-invite-send"
-              onClick={() => void send()}
+              onClick={() => send()}
             >
               {busy ? "Sending…" : "Send invite email"}
             </Button>

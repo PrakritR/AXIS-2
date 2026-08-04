@@ -12,12 +12,8 @@ import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
-import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
-import {
-  residentSectionLockedForStage,
-  residentNavLockReason,
-  type ResidentPortalNavStage,
-} from "@/lib/resident-portal-nav";
+import { portalNavLockNavigable, portalNavSectionLocked } from "@/lib/portals/nav-locks";
+import { residentNavLockReason, type ResidentPortalNavStage } from "@/lib/resident-portal-nav";
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
 import {
   nativeBottomBarEnabledForKind,
@@ -193,24 +189,32 @@ export function PortalSidebar({
     definition.kind === "manager" ||
     definition.kind === "vendor";
 
-  const showManagerTierLocks =
-    (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
-  const showResidentTierLocks = definition.kind === "resident" && subscriptionTier === "free";
-
+  // Locks apply to managers AND residents; `portalNavLockKind` only decides what
+  // a locked row DOES when clicked — `upsell` (manager free tier, still
+  // navigates to the PortalTierPaywall upgrade page) vs `inert` (every resident
+  // lock, nothing to buy). See src/lib/portals/nav-locks.ts for the reasoning.
+  // Every surface below — desktop list, collapsed rail, mobile strip, bottom
+  // bar, More sheet — must honour the same split.
   const isSectionLocked = useCallback(
-    (section: string) => {
-      if (definition.kind === "resident" && residentNavStage) {
-        if (residentSectionLockedForStage(section, residentNavStage)) return true;
-      }
-      if (showResidentTierLocks) {
-        return residentSectionLockedForManagerTier(section, subscriptionTier);
-      }
-      if (showManagerTierLocks) {
-        return managerSectionLockedForTier(section, subscriptionTier);
-      }
-      return false;
-    },
-    [definition.kind, residentNavStage, showResidentTierLocks, showManagerTierLocks, subscriptionTier],
+    (section: string) =>
+      portalNavSectionLocked({
+        kind: definition.kind,
+        section,
+        subscriptionTier,
+        residentNavStage,
+      }),
+    [definition.kind, residentNavStage, subscriptionTier],
+  );
+
+  const isSectionLockNavigable = useCallback(
+    (section: string) =>
+      portalNavLockNavigable({
+        kind: definition.kind,
+        section,
+        subscriptionTier,
+        residentNavStage,
+      }),
+    [definition.kind, residentNavStage, subscriptionTier],
   );
 
   const nativeBottomNavSplit = useMemo(
@@ -334,9 +338,10 @@ export function PortalSidebar({
         label: item.label,
         href: item.href,
         locked: isSectionLocked(item.section),
+        lockedNavigable: isSectionLockNavigable(item.section),
         count: navCounts[item.section] ?? 0,
       }));
-  }, [navItems, definition.kind, navCounts, isSectionLocked]);
+  }, [navItems, definition.kind, navCounts, isSectionLocked, isSectionLockNavigable]);
 
   const mobileTopStripItems = useMemo(
     () =>
@@ -364,19 +369,29 @@ export function PortalSidebar({
   ) => {
     const active = activeSection === s.section;
     const locked = isSectionLocked(s.section);
+    // Inert locks must not navigate anywhere: the server bounces the request
+    // straight back home, which reads as a tab that silently fails.
+    const inert = locked && !isSectionLockNavigable(s.section);
     const count = navCounts[s.section] ?? 0;
 
     if (variant === "bottom") {
       return (
         <Link
           key={s.section}
-          href={s.href}
+          href={inert ? "#" : s.href}
           data-native-nav-section={s.section}
           data-attr={`bottom-nav-${s.section}`}
-          prefetch={portalMobileLinkPrefetchEnabled()}
-          onClick={portalNavClick(router, s.href, {
-            preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
-          })}
+          prefetch={inert ? false : portalMobileLinkPrefetchEnabled()}
+          aria-disabled={inert ? true : undefined}
+          onClick={(e) => {
+            if (inert) {
+              e.preventDefault();
+              return;
+            }
+            portalNavClick(router, s.href, {
+              preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
+            })(e);
+          }}
           className={`${PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS} ${
             active ? "text-primary" : "text-muted"
           }`}
@@ -420,11 +435,20 @@ export function PortalSidebar({
     return (
       <Link
         key={s.section}
-        href={s.href}
+        href={inert ? "#" : s.href}
         data-mobile-nav-section={s.section}
-        prefetch={portalMobileLinkPrefetchEnabled()}
-        onClick={portalNavClick(router, s.href)}
+        prefetch={inert ? false : portalMobileLinkPrefetchEnabled()}
+        aria-disabled={inert ? true : undefined}
+        onClick={(e) => {
+          if (inert) {
+            e.preventDefault();
+            return;
+          }
+          portalNavClick(router, s.href)(e);
+        }}
         className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
+          inert ? "cursor-not-allowed " : ""
+        }${
           active
             ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
             : locked
@@ -465,11 +489,17 @@ export function PortalSidebar({
         </span>
       </>
     );
-    if (locked) {
+    if (locked && !isSectionLockNavigable(s.section)) {
+      // `title` as well as `aria-label`: an inert row has no destination and no
+      // visible reason text, so without a tooltip a SIGHTED user taps a dead
+      // row and learns nothing — the lock reason ("Available after your
+      // application is approved", "Available after your lease is signed") only
+      // ever reached assistive tech. Applies to every resident lock, not one string.
       return (
         <span
           key={s.section}
           className={cn(navLinkClass(false, true), "cursor-not-allowed")}
+          title={lockAriaLabel(s.label, true, s.section)}
           aria-label={lockAriaLabel(s.label, true, s.section)}
           role="link"
           aria-disabled="true"
@@ -521,11 +551,13 @@ export function PortalSidebar({
         {locked ? <NavLockIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-muted" /> : null}
       </>
     );
-    if (locked) {
+    if (locked && !isSectionLockNavigable(s.section)) {
       return (
         <span
           key={s.section}
-          title={s.label}
+          // The collapsed rail is icon-only, so `title={s.label}` dropped the
+          // reason entirely — carry the same tooltip the expanded row shows.
+          title={lockAriaLabel(s.label, true, s.section)}
           aria-label={lockAriaLabel(s.label, true, s.section)}
           aria-disabled="true"
           className={railClass}

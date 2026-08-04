@@ -3,7 +3,6 @@ import {
   filterOwnVendorRowsForSync,
   readManagerVendorRows,
   readOwnManagerVendorRows,
-  seedDemoManagerVendorRows,
   setManagerVendorActive,
   setManagerVendorPriority,
   writeManagerVendorRows,

@@ -47,6 +47,14 @@ import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { manualResidentSignedLeasePdf } from "@/lib/existing-resident-onboarding";
 import {
+  confirmedUploadedLeaseReview,
+  normalizeUploadedLeaseParse,
+  pendingUploadedLeaseParse,
+  uploadedLeaseNeedsManagerConfirmation,
+  type UploadedLeaseFieldKey,
+  type UploadedLeaseParse,
+} from "@/lib/uploaded-lease-extraction";
+import {
   buildBundleApplicationGroups,
   bundleGroupKey,
   bundleGroupReadyForJointLease,
@@ -200,6 +208,22 @@ export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
 /** True when the manager may generate, upload, or replace the lease document (manager review only). */
 export { leaseAllowsManagerDocumentEdits } from "@/lib/lease-execution-evidence";
 
+/**
+ * True when an uploaded lease has been parsed but no human has confirmed the
+ * reading yet, so it must not become signable.
+ *
+ * Machine extraction of a contract promoted straight to a signable document is
+ * how someone ends up signing terms nobody checked. Scoped to rows that
+ * actually carry a parse: a row uploaded before parsing existed, and an
+ * off-platform `externallySignedLease` filing, both have none and are untouched.
+ */
+export function leaseAwaitsUploadedLeaseReview(row: LeasePipelineRow): boolean {
+  return uploadedLeaseNeedsManagerConfirmation(row.uploadedLeaseParse);
+}
+
+export const UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE =
+  "Review the imported lease and confirm it before sending it for signature.";
+
 /** True when editing a resident should refresh the lease document (manager-side review only). */
 export function leaseSyncsFromResidentEdit(row: LeasePipelineRow): boolean {
   if (!leaseAllowsManagerDocumentEdits(row)) return false;
@@ -335,6 +359,17 @@ export type LeasePipelineRow = {
   /** Manager-authored, typed section overrides. The generated HTML stays the source document. */
   managerSectionEdits?: Record<string, LeaseSectionEdit> | null;
   managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string; originalDataUrl?: string } | null;
+  /**
+   * PropLane's structured reading of `managerUploadedPdf`, and the manager's
+   * review of it. Purely ADDITIVE and derived — it never replaces the upload,
+   * which stays the executed artifact (`lease-execution-evidence.ts`).
+   *
+   * Present and unconfirmed means the lease cannot be sent for signature: see
+   * `leaseAwaitsUploadedLeaseReview`. Absent means the row predates parsing (or
+   * is an off-platform `externallySignedLease` filing), and behaves exactly as
+   * it always did.
+   */
+  uploadedLeaseParse?: UploadedLeaseParse | null;
   thread: LeaseThreadMessage[];
   managerSignature?: LeaseSignature | null;
   residentSignature?: LeaseSignature | null;
@@ -523,6 +558,13 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     generatedAtIso: r.generatedAtIso ?? null,
     managerSectionEdits: normalizeManagerSectionEdits(r.managerSectionEdits),
     managerUploadedPdf: r.managerUploadedPdf ?? null,
+    // The parse describes ONE uploaded document, so it cannot outlive it. Every
+    // path that replaces the upload with generated HTML (the agent's
+    // regenerate, section edits, packet edits) writes `managerUploadedPdf:
+    // null` through this function, so clearing the derived reading here covers
+    // all of them at once instead of leaving a list to keep in sync — and a
+    // manager can never be asked to attest against a PDF the row no longer has.
+    uploadedLeaseParse: r.managerUploadedPdf?.dataUrl ? normalizeUploadedLeaseParse(r.uploadedLeaseParse) : null,
     thread: safeThread,
     managerSignature,
     residentSignature,
@@ -1148,6 +1190,8 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
         generatedHtml: null,
         generatedAtIso: null,
         managerUploadedPdf: null,
+        // The parse is derived from the upload; it goes when the upload goes.
+        uploadedLeaseParse: null,
         managerSignature: null,
         residentSignature: null,
         signatureName: null,
@@ -1475,6 +1519,8 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
     generatedHtml: null,
     generatedAtIso: null,
     managerUploadedPdf: null,
+    // The parse is derived from the upload; it goes when the upload goes.
+    uploadedLeaseParse: null,
     managerSignature: null,
     residentSignature: null,
     signatureName: null,
@@ -1774,6 +1820,8 @@ export function generateLeaseHtmlForRow(
       application: app,
       generatedHtml: outcome.html,
       managerUploadedPdf: null,
+      // The parse is derived from the upload; it goes when the upload goes.
+      uploadedLeaseParse: null,
       generatedAtIso: new Date().toISOString(),
       pdfVersion: version,
       versionNumber: version,
@@ -1904,6 +1952,12 @@ export function managerUploadLeasePdf(
         ...row,
         bucket: "manager",
         managerUploadedPdf: payload,
+        // Written BEFORE any text is read, so the confirm-before-sign gate is
+        // closed for the whole window in which the parse could still be running
+        // or could fail. A parse that never completes leaves the lease held,
+        // not quietly signable. /demo has no parse round trip (it must not call
+        // real routes), so it stays on the pre-parse behaviour.
+        uploadedLeaseParse: isDemoModeActive() ? null : pendingUploadedLeaseParse(file.name),
         generatedHtml: null,
         generatedAtIso: null,
         pdfVersion: nextVersion,
@@ -1929,6 +1983,96 @@ export function managerUploadLeasePdf(
     reader.onerror = () => resolve({ ok: false, error: "Could not read file." });
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Store the structured reading of an uploaded lease.
+ *
+ * Refuses once a signature exists and refuses to overwrite a review a human has
+ * already confirmed — a late-arriving parse must never silently reopen or
+ * replace what a manager signed off on. "Confirmed" is the same judgement the
+ * gate makes (`leaseAwaitsUploadedLeaseReview`), so a confirmation that no
+ * longer binds to the document does not lock a re-read out; the fresh parse
+ * lands unconfirmed and the manager reviews it again.
+ */
+export function saveUploadedLeaseParse(
+  rowId: string,
+  parse: UploadedLeaseParse,
+  managerUserId?: string | null,
+): LeasePipelineActionResult {
+  const rows = [...materializeLeasePipeline(managerUserId)];
+  const idx = findRawLeaseRowIndex(rowId, managerUserId);
+  if (idx === -1) return { ok: false, error: "Lease not found." };
+  const row = rows[idx]!;
+  if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
+  if (hasAnyLeaseSignature(row)) return { ok: false, error: "This lease already has signatures." };
+  if (row.uploadedLeaseParse && !uploadedLeaseNeedsManagerConfirmation(row.uploadedLeaseParse)) {
+    return { ok: false, error: "This imported lease has already been confirmed." };
+  }
+  if (!row.managerUploadedPdf?.dataUrl) return { ok: false, error: "No uploaded lease document on this record." };
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    uploadedLeaseParse: parse,
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
+  write(rows, managerUserId);
+  return { ok: true };
+}
+
+/**
+ * The manager's confirmation. Until this runs, `sendLeaseToResident` refuses.
+ *
+ * `overrides` are values the manager typed; storing them separately from the
+ * extracted `fields` is what lets every surface show which values a human
+ * stands behind and which a machine read.
+ */
+export function confirmUploadedLeaseParse(
+  rowId: string,
+  args: {
+    managerUserId?: string | null;
+    confirmedByName?: string | null;
+    overrides?: Partial<Record<UploadedLeaseFieldKey, string>>;
+    note?: string | null;
+  },
+): LeasePipelineActionResult {
+  const rows = [...materializeLeasePipeline(args.managerUserId)];
+  const idx = findRawLeaseRowIndex(rowId, args.managerUserId);
+  if (idx === -1) return { ok: false, error: "Lease not found." };
+  const row = rows[idx]!;
+  if (!leaseAccessibleToManager(row, args.managerUserId)) return { ok: false, error: "Lease not found." };
+  const parse = row.uploadedLeaseParse;
+  if (!parse) return { ok: false, error: "There is no imported lease to confirm on this record." };
+  if (!leaseAllowsManagerDocumentEdits(row)) {
+    return { ok: false, error: "Move the lease back to manager review before confirming it." };
+  }
+  const merged = { ...(parse.review.overrides ?? {}), ...(args.overrides ?? {}) };
+  const cleaned: Partial<Record<UploadedLeaseFieldKey, string>> = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (typeof value === "string" && value.trim()) cleaned[key as UploadedLeaseFieldKey] = value.trim();
+  }
+  const iso = new Date().toISOString();
+  rows[idx] = normalizeLeasePipelineRow({
+    ...row,
+    uploadedLeaseParse: {
+      ...parse,
+      review: confirmedUploadedLeaseReview(
+        { ...parse.review, overrides: Object.keys(cleaned).length > 0 ? cleaned : undefined },
+        {
+          userId: args.managerUserId ?? null,
+          name: args.confirmedByName ?? null,
+          atIso: iso,
+          note: args.note,
+          documentSha256: parse.sourceSha256,
+        },
+      ),
+    },
+    updatedAtIso: iso,
+    updated: formatUpdatedLabel(iso),
+  });
+  write(rows, args.managerUserId);
+  return { ok: true };
 }
 
 export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok: boolean; error?: string }> {
@@ -1966,6 +2110,11 @@ export function residentUploadLeasePdf(email: string, file: File): Promise<{ ok:
           fileName: file.name,
           uploadedAt: iso,
         },
+        // The resident swapped in a different document, so the reading of the
+        // manager's file no longer describes what is on this row — keeping it
+        // would let an old `sourceSha256` and file name claim to belong to
+        // bytes nobody read.
+        uploadedLeaseParse: null,
         generatedHtml: null,
         generatedAtIso: null,
         pdfVersion: nextVersion,
@@ -2158,6 +2307,12 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   }
   if (residentHasSignedLease(logical) || logical.managerSignature) {
     return { ok: false, error: "This lease already has signatures and cannot be re-sent." };
+  }
+  // The confirm-before-sign gate. `sendLeaseToResident` is the only way a lease
+  // becomes signable, so guarding it here closes the path rather than only
+  // greying out a button.
+  if (leaseAwaitsUploadedLeaseReview(logical)) {
+    return { ok: false, error: UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE };
   }
   const raw = [...materializeLeasePipeline(managerUserId)];
   const idx = findRawLeaseRowIndex(rowId, managerUserId);

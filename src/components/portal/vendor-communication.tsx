@@ -13,7 +13,6 @@ import {
 } from "@/components/portal/portal-inbox-ui";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
@@ -260,7 +259,6 @@ function VendorUnifiedInbox({
           embeddedInCommunication
           externalTitleActions
           suppressListPane
-          pageScroll
           smsUiEnabled={smsUiEnabled}
           controlledExpandedId={selection?.channel === "email" ? selection.threadId : null}
           onControlledExpandedIdChange={(id) => {
@@ -333,8 +331,6 @@ export function VendorCommunication({
     </Button>
   );
 
-  const mobileActionsRow = <PortalPageHeaderMobileActionsRow actions={newMessageButton} />;
-
   const controlStack = (
     <PortalListControlStack
       destinations={[
@@ -369,7 +365,6 @@ export function VendorCommunication({
     <PortalCommunicationShell
       title="Communication"
       titleAside={newMessageButton}
-      mobileActionsRow={mobileActionsRow}
       hideTitleOnMobileNav
       controlStack={controlStack}
       hideMobileFilterRow={threadOpen}

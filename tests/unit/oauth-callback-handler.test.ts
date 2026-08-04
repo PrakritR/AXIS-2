@@ -97,4 +97,39 @@ describe("handleOAuthCallback", () => {
     const location = response.headers.get("location") ?? "";
     expect(location.startsWith("http://localhost:3000/auth/sign-in?")).toBe(true);
   });
+
+  // `/auth/sign-in` allow-lists `?message=` against the copy this codebase authored, so any
+  // message this route emits inline instead of importing degrades to the generic sentence and
+  // the real explanation is lost — the same silent failure the native path had.
+  it("emits only allow-listed copy, so every authored reason survives to the sign-in screen", async () => {
+    const { handleOAuthCallback } = await import("@/lib/auth/oauth-callback-handler");
+    const { oauthErrorFromParams, OAUTH_GENERIC_FAILURE_MESSAGE } = await import(
+      "@/lib/auth/oauth-error-params"
+    );
+    const {
+      OAUTH_CALLBACK_MISSING_CODE_MESSAGE,
+      OAUTH_CALLBACK_SESSION_FAILED_MESSAGE,
+      OAUTH_NOT_COMPLETED_MESSAGE,
+    } = await import("@/lib/auth/oauth-failure-messages");
+
+    exchangeCodeForSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: "" },
+    } as unknown as never);
+
+    const cases: Array<{ url: string; expected: string }> = [
+      { url: "https://axis.example.com/auth/callback", expected: OAUTH_CALLBACK_MISSING_CODE_MESSAGE },
+      { url: "https://axis.example.com/auth/callback?error=access_denied", expected: OAUTH_NOT_COMPLETED_MESSAGE },
+      { url: "https://axis.example.com/auth/callback?code=abc123", expected: OAUTH_CALLBACK_SESSION_FAILED_MESSAGE },
+    ];
+
+    for (const { url, expected } of cases) {
+      const response = await handleOAuthCallback(new NextRequest(url), "/auth/continue");
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.pathname).toBe("/auth/sign-in");
+      expect(location.searchParams.get("message")).toBe(expected);
+      expect(oauthErrorFromParams(location.searchParams)).toBe(expected);
+      expect(oauthErrorFromParams(location.searchParams)).not.toBe(OAUTH_GENERIC_FAILURE_MESSAGE);
+    }
+  });
 });

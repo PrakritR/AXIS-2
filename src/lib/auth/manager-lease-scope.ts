@@ -34,6 +34,9 @@ export async function collectLinkedPropertyIdsForUser(db: ServiceClient, userId:
       .eq("status", "accepted")
       .eq("invitee_user_id", userId);
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
+      // Contract unchanged (still the empty set = no linked access), but a real
+      // read failure is otherwise indistinguishable from "this user has no links".
+      console.error("Co-manager link membership lookup failed:", { userId, message: error.message });
       return linkedPropertyIds;
     }
 
@@ -81,6 +84,7 @@ export async function collectLinkedPropertyPermissionsForUser(
       .eq("status", "accepted")
       .eq("invitee_user_id", userId);
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
+      console.error("Co-manager link permissions lookup failed:", { userId, message: error.message });
       return byProperty;
     }
     for (const row of linkRows ?? []) {
@@ -222,6 +226,71 @@ export async function fetchLeasesForManagerUser(
     const bTs = Date.parse(String((b as { updated_at?: string }).updated_at ?? ""));
     return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
   });
+}
+
+/**
+ * Whether `userId` may file a lease under `propertyId`.
+ *
+ * `property_id` is not a descriptive field — it is a scope SELECTOR. A lease row
+ * is pulled into a manager's pipeline by `fetchLeasesForManagerUser` when its
+ * `property_id` is in that manager's linked set, and `leaseRecordVisibleToManager`
+ * then passes because the named property genuinely is theirs. So a
+ * client-supplied `property_id` moves the row into whoever owns that property.
+ *
+ * Allowed for the property's direct owner, or for a co-manager whose assignment
+ * carries the `leases` grant at EDIT level. That is deliberately STRICTER than
+ * the set `fetchLeasesForManagerUser` lists with (`linkedLeasePropertyIds`,
+ * `leases` at READ): filing or moving a lease under a property is a write, and
+ * co-manager writes require the edit level. It is also strictly narrower than
+ * bare link membership, which would let a co-manager without the `leases` grant
+ * write a row they are not allowed to read back. An assignment with NO checked
+ * permissions is still a full grant, so the ordinary co-manager is unaffected.
+ *
+ * Fails CLOSED on a read failure, like `findPropertyIdsNotOwnedByManager`. Every
+ * refusal is logged, not just the ownership query's own error: the linked-grant
+ * lookups below swallow their failures into "no access", and that path lands
+ * only on co-managers, so without a line here a transient failure reads as
+ * "managers mysteriously cannot save leases" with nothing to correlate against.
+ *
+ * `propertyExists` reports whether `manager_property_records` holds a row with
+ * that id AT ALL, which is a different question from ownership: a deleted
+ * listing, and any id that was never persisted as a property record, are absent
+ * rather than someone else's. Callers that want to REFUSE must key on
+ * `!allowed && propertyExists` — "provably another manager's" — because a bare
+ * `!allowed` also catches every absent id and turns an ordinary save into a 403.
+ * The co-manager grant is still consulted for an absent row, so a linked
+ * assignment keeps working even if the property record cannot be read back.
+ */
+export async function managerMayFileLeaseUnderProperty(
+  db: ServiceClient,
+  userId: string,
+  propertyId: string,
+): Promise<{ ok: true; allowed: boolean; propertyExists: boolean } | { ok: false; error: string }> {
+  const id = String(propertyId ?? "").trim();
+  if (!id) return { ok: true, allowed: false, propertyExists: false };
+
+  const { data, error } = await db
+    .from("manager_property_records")
+    .select("id, manager_user_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.error("Lease property ownership lookup failed:", { userId, propertyId: id, message: error.message });
+    return { ok: false, error: error.message };
+  }
+  const propertyExists = Boolean(data);
+  if (data && String((data as { manager_user_id?: string | null }).manager_user_id ?? "").trim() === userId) {
+    return { ok: true, allowed: true, propertyExists: true };
+  }
+
+  const allowed = await managerHasCoManagerPermissionForProperty(db, userId, id, "leases", "edit");
+  if (!allowed && propertyExists) {
+    console.error("Lease property filing refused: not owned, and no leases edit grant", {
+      userId,
+      propertyId: id,
+    });
+  }
+  return { ok: true, allowed, propertyExists };
 }
 
 /**

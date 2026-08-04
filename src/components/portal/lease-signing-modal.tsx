@@ -9,6 +9,33 @@ import { LEASE_ESIGN_CONSENT_TEXT, LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lea
 import { getLeaseDocumentHtml, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
+/**
+ * Which document the signer is agreeing to, so consent cannot outlive it.
+ *
+ * `row` is live in the resident portal (`resident-lease-panel.tsx` derives
+ * `pipelineRow` with `useMemo` off synced rows), and this modal renders the
+ * document straight from it — the uploaded PDF when there is one, otherwise the
+ * generated HTML. So a manager re-uploading or regenerating while the resident
+ * has the affirmation ticked would swap the document under an existing consent
+ * and let them sign one they never read. `lease-execution-evidence.ts` hashes
+ * whatever is current AT signature time, so it would faithfully record a
+ * signature over the new document — the evidence layer cannot catch this.
+ *
+ * Identity is deliberately narrow: only fields that change WHICH document is
+ * rendered. Widening it to the whole row would clear the box on every
+ * background sync that appended a thread message.
+ */
+function signedDocumentSubject(row: LeasePipelineRow): string {
+  return [
+    row.managerUploadedPdf?.dataUrl ? "upload" : "generated",
+    row.managerUploadedPdf?.fileName ?? "",
+    row.managerUploadedPdf?.uploadedAt ?? "",
+    row.generatedAtIso ?? "",
+    String(row.pdfVersion ?? ""),
+    String(row.versionNumber ?? ""),
+  ].join("~");
+}
+
 export function LeaseSigningModal({
   row,
   signerName,
@@ -27,6 +54,18 @@ export function LeaseSigningModal({
   const [agreed, setAgreed] = useState(false);
   const [signed, setSigned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Drop the affirmation if the document changes under it. Done during render
+  // (React's "adjust state when props change" pattern) so the new document is
+  // never painted with the old consent still ticked. Skipped once `signed` is
+  // true: the affirmation has already been consumed and the modal is closing,
+  // and the write itself moves the row.
+  const documentSubject = signedDocumentSubject(row);
+  const [agreedDocument, setAgreedDocument] = useState(documentSubject);
+  if (!signed && agreedDocument !== documentSubject) {
+    setAgreedDocument(documentSubject);
+    setAgreed(false);
+  }
 
   useEffect(() => {
     const onPrepare = (e: Event) => {

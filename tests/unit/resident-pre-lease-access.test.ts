@@ -61,6 +61,18 @@ describe("resident portal stage access", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postApproval)).toBe(false);
   });
 
+  it("passes legacy section aliases through to their real destination", () => {
+    // Not resident nav sections — renderPortalSection rewrites each one. A
+    // guard that calls them forbidden bounces the redirect before it lands
+    // (the client guard judges the ORIGINAL pathname mid-redirect).
+    for (const access of [preApproval, applicationSubmitted, postApproval, postLease]) {
+      expect(isResidentPathAllowedForAccess("/resident/inbox/unopened", access)).toBe(true);
+      expect(isResidentPathAllowedForAccess("/resident/financials/summary", access)).toBe(true);
+      expect(isResidentPathAllowedForAccess("/resident/finances", access)).toBe(true);
+      expect(isResidentPathAllowedForAccess("/resident/bugs-feedback", access)).toBe(true);
+    }
+  });
+
   it("post-lease unlocks services and house details and keeps tour and application reachable", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/move-in/placement", postLease)).toBe(true);

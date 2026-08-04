@@ -34,18 +34,16 @@ import {
   type NotificationCategory,
 } from "@/lib/notification-preferences";
 import { normalizeInboxAttachmentUrls } from "@/lib/inbox-attachments.server";
+// The recipient's stored chip label must match the sender's optimistic one, so
+// both derive it from the storage key with the SAME helper. The local copy this
+// route used to keep split the URL rather than `?path=`, so every recipient-side
+// attachment was labelled "inbox-attachments".
+import { attachmentMetaFromUrls as inboxAttachmentsFromUrls } from "@/lib/inbox-attachments";
 
 export const runtime = "nodejs";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
-
-function inboxAttachmentsFromUrls(urls: string[]): { url: string; name?: string }[] {
-  return urls.map((url) => {
-    const name = url.split("/").pop()?.split("?")[0]?.trim();
-    return name ? { url, name } : { url };
-  });
-}
 
 const VENDOR_INBOX_SCOPE = "axis_portal_inbox_vendor_v1";
 

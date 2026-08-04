@@ -101,7 +101,7 @@ export function TourProposalsPanel() {
                 type="button"
                 className="px-4 text-[13px]"
                 disabled={busyId === proposal.id}
-                onClick={() => void decide(proposal.id, "approve")}
+                onClick={() => decide(proposal.id, "approve")}
                 data-attr="tour-proposal-approve"
               >
                 {proposal.preview.confirmLabel || "Confirm tour"}
@@ -111,7 +111,7 @@ export function TourProposalsPanel() {
                 variant="outline"
                 className="px-4 text-[13px]"
                 disabled={busyId === proposal.id}
-                onClick={() => void decide(proposal.id, "discard")}
+                onClick={() => decide(proposal.id, "discard")}
                 data-attr="tour-proposal-discard"
               >
                 Discard

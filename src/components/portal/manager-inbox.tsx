@@ -37,6 +37,14 @@ import {
 } from "@/lib/portal-inbox-storage";
 import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
 import {
+  INBOX_MAX_ATTACHMENTS,
+  attachmentMetaFromUrls,
+  createPendingInboxAttachment,
+  revokeInboxAttachmentPreview,
+  uploadInboxAttachment,
+  type InboxComposerAttachment,
+} from "@/lib/inbox-attachments";
+import {
   INBOX_TAB_DEFS,
   INBOX_LIST_SCROLL,
   AiDraftReplyCard,
@@ -161,6 +169,10 @@ export const ManagerInbox = forwardRef<
     smsRecipients?: ManagerSmsResidentConversation[];
     /** Let the portal page scroll the thread instead of a nested pane (resident profile). */
     pageScroll?: boolean;
+    /** Scope threads to one resident email (Residents detail Communication tab). */
+    filterResidentEmail?: string;
+    /** Rendered when suppressListPane is set and no thread matches filterResidentEmail. */
+    emptyThreadFallback?: React.ReactNode;
   }
 >(function ManagerInbox(
   {
@@ -178,6 +190,8 @@ export const ManagerInbox = forwardRef<
     smsUiEnabled = false,
     pageScroll = false,
     smsRecipients = [],
+    filterResidentEmail,
+    emptyThreadFallback,
   },
   ref,
 ) {
@@ -284,6 +298,9 @@ export const ManagerInbox = forwardRef<
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, inboxSynced]);
 
+  const residentEmailNorm = filterResidentEmail?.trim().toLowerCase() ?? "";
+  const embeddedResidentChat = Boolean(residentEmailNorm);
+
   const emailThreads = useMemo(() => {
     const base = embeddedInCommunication ? filterEmailInboxThreads(local) : local;
     const scoped =
@@ -296,8 +313,11 @@ export const ManagerInbox = forwardRef<
               counterpartyEmail: t.email,
             }),
           );
-    return collapsePersonInboxThreads(scoped, { mergeFolders: embeddedInCommunication });
-  }, [embeddedInCommunication, local, threadFilters, filterContacts]);
+    const residentScoped = residentEmailNorm
+      ? scoped.filter((t) => t.email.trim().toLowerCase() === residentEmailNorm)
+      : scoped;
+    return collapsePersonInboxThreads(residentScoped, { mergeFolders: embeddedInCommunication });
+  }, [embeddedInCommunication, local, threadFilters, filterContacts, residentEmailNorm]);
 
   const counts = useMemo(() => countThreads(emailThreads, scheduleCount), [emailThreads, scheduleCount]);
   const tabs = useMemo(
@@ -310,6 +330,26 @@ export const ManagerInbox = forwardRef<
   useEffect(() => {
     if (embeddedInCommunication) onTabCountsChange?.(counts);
   }, [counts, embeddedInCommunication, onTabCountsChange]);
+
+  // Resident-scoped chat (Residents → detail → Communication) has no list pane to
+  // pick from, so this effect IS the selection: it opens the newest conversation
+  // that belongs to the active view. `tabId` is the archived toggle here —
+  // "trash" is the archived view and must select an ARCHIVED thread, every other
+  // tab a live one; selecting across the two would show a live conversation under
+  // "Archived". The tab-change reset below must not run in this mode or it
+  // clobbers this in the same commit — see the comment there.
+  useEffect(() => {
+    if (!residentEmailNorm || controlledExpandedId !== undefined) return;
+    const candidates = emailThreads.filter((t) =>
+      tabId === "trash" ? t.folder === "trash" : t.folder !== "trash",
+    );
+    if (candidates.length === 0) {
+      setInternalExpandedId(null);
+      return;
+    }
+    const best = [...candidates].sort((a, b) => threadTimestamp(b) - threadTimestamp(a))[0];
+    if (best) setInternalExpandedId(best.id);
+  }, [residentEmailNorm, emailThreads, controlledExpandedId, tabId]);
 
   function threadTimestamp(t: InboxThread): number {
     return inboxThreadSortMs(t.id, t.time);
@@ -366,8 +406,13 @@ export const ManagerInbox = forwardRef<
     // already clears it on tab change; clearing here would ALSO fire on mount —
     // when the parent has just selected a thread and mounted this pane — and
     // immediately wipe that selection back to "Select a conversation".
+    // In RESIDENT-SCOPED mode the auto-select effect above owns selection and has
+    // already picked the right thread for the new tab in THIS commit; this effect
+    // is declared later so its `null` would win and nothing would ever open
+    // (clicking "Archived (1)" landed on a blank pane). There is no list to strand
+    // in that mode either — the pane is the whole surface.
+    if (controlledExpandedId === undefined && !embeddedResidentChat) setExpandedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    if (controlledExpandedId === undefined) setExpandedId(null);
   }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
@@ -571,6 +616,7 @@ export const ManagerInbox = forwardRef<
       rowId: string,
       text: string,
       channels: { email: boolean; sms: boolean },
+      attachmentUrls: string[] = [],
     ) => {
       const thread = local.find((t) => t.id === rowId);
       if (!thread) return;
@@ -578,6 +624,7 @@ export const ManagerInbox = forwardRef<
         throw new Error("no channel");
       }
 
+      const attachmentMeta = attachmentMetaFromUrls(attachmentUrls);
       let emailOk = !channels.email;
       let smsOk = !channels.sms;
 
@@ -590,6 +637,7 @@ export const ManagerInbox = forwardRef<
           at: new Date().toLocaleString(),
           outbound: true,
           delivery: "sending",
+          attachments: attachmentMeta.length ? attachmentMeta : undefined,
         };
         const updated = { ...appendReplyToInboxThread(thread, reply), aiDraft: undefined };
         const next = local.map((t) => (t.id === thread.id ? updated : t));
@@ -608,6 +656,7 @@ export const ManagerInbox = forwardRef<
             text,
             toEmails: [thread.email],
             deliverToPortalInbox: true,
+            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
           }),
         });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
@@ -808,6 +857,7 @@ export const ManagerInbox = forwardRef<
 
   // ---- Open conversation (right pane) ----------------------------------
   const [replyDraft, setReplyDraft] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<InboxComposerAttachment[]>([]);
   const [replySending, setReplySending] = useState(false);
   const [replyViaEmail, setReplyViaEmail] = useState(true);
   const [replyViaSms, setReplyViaSms] = useState(false);
@@ -829,6 +879,10 @@ export const ManagerInbox = forwardRef<
     setReplyDraft("");
     setReplyViaEmail(true);
     setReplyViaSms(false);
+    setReplyAttachments((prev) => {
+      prev.forEach(revokeInboxAttachmentPreview);
+      return [];
+    });
   }, [expandedId]);
 
   const activeIsSent = activeThread?.folder === "sent";
@@ -859,6 +913,7 @@ export const ManagerInbox = forwardRef<
         // Email is the only live channel today; the tag makes the thread
         // omnichannel-ready so SMS/WhatsApp/Gmail can join the same person-thread.
         channel: "email",
+        attachments: m.attachments,
       } satisfies InboxBubbleMessage;
     });
   }, [activeThread, activeFolder, pendingSendingThreadIds]);
@@ -973,18 +1028,69 @@ export const ManagerInbox = forwardRef<
     [],
   );
 
+  const pickReplyAttachments = useCallback(
+    (files: FileList | null) => {
+      if (!files?.length) return;
+      const room = INBOX_MAX_ATTACHMENTS - replyAttachments.length;
+      if (room <= 0) {
+        showToast(`You can attach up to ${INBOX_MAX_ATTACHMENTS} files.`);
+        return;
+      }
+      const batch = Array.from(files).slice(0, room);
+      for (const file of batch) {
+        const pending = createPendingInboxAttachment(file);
+        setReplyAttachments((prev) => [...prev, pending]);
+        void uploadInboxAttachment(file)
+          .then((url) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) => (a.id === pending.id ? { ...a, uploadUrl: url, uploading: false } : a)),
+            );
+          })
+          .catch((e) => {
+            setReplyAttachments((prev) =>
+              prev.map((a) =>
+                a.id === pending.id
+                  ? { ...a, uploading: false, error: e instanceof Error ? e.message : "Upload failed" }
+                  : a,
+              ),
+            );
+          });
+      }
+    },
+    [replyAttachments.length, showToast],
+  );
+
+  const removeReplyAttachment = useCallback((id: string) => {
+    setReplyAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target) revokeInboxAttachmentPreview(target);
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
   const sendActiveReply = useCallback(async () => {
     if (!activeThread) return;
     const text = replyDraft.trim();
-    if (!text) return;
+    const attachmentUrls = replyAttachments
+      .filter((a) => a.uploadUrl && !a.uploading && !a.error)
+      .map((a) => a.uploadUrl!);
+    if (!text && attachmentUrls.length === 0) return;
     if (!replyViaEmail && !replyViaSms) {
       showToast("Choose Email, SMS, or both.");
       return;
     }
+    if (replyAttachments.some((a) => a.uploading)) {
+      showToast("Wait for uploads to finish.");
+      return;
+    }
     setReplySending(true);
     try {
-      await handleReply(activeThread.id, text, { email: replyViaEmail, sms: replyViaSms });
+      await handleReply(activeThread.id, text, { email: replyViaEmail, sms: replyViaSms }, attachmentUrls);
       setReplyDraft("");
+      setReplyAttachments((prev) => {
+        prev.forEach(revokeInboxAttachmentPreview);
+        return [];
+      });
       if (replyViaEmail && replyViaSms) showToast("Reply sent via email and SMS.");
       else if (replyViaSms) showToast("SMS sent.");
       else showToast("Reply sent.");
@@ -993,7 +1099,15 @@ export const ManagerInbox = forwardRef<
     } finally {
       setReplySending(false);
     }
-  }, [activeThread, replyDraft, replyViaEmail, replyViaSms, handleReply, showToast]);
+  }, [
+    activeThread,
+    replyDraft,
+    replyAttachments,
+    replyViaEmail,
+    replyViaSms,
+    handleReply,
+    showToast,
+  ]);
 
   const requestInboxAiDraft = useCallback(async (threadId: string, force = false) => {
     if (isDemoModeActive()) return;
@@ -1127,6 +1241,7 @@ export const ManagerInbox = forwardRef<
 
   const showAiDraftUi = Boolean(
     activeThread &&
+      !embeddedResidentChat &&
       activeThread.folder === "inbox" &&
       ((activeThread.messages ?? []).length > 0 || Boolean(activeThread.body?.trim())),
   );
@@ -1391,10 +1506,11 @@ export const ManagerInbox = forwardRef<
       subtitle={activeThread.subject || (activeIsSent ? undefined : activeThread.email)}
       messages={activeBubbles}
       threadKey={activeThread.id}
-      onBack={() => setExpandedId(null)}
+      onBack={embeddedResidentChat ? undefined : () => setExpandedId(null)}
+      hideIdentityHeader={embeddedResidentChat}
       headerActions={threadHeaderActions}
       emptyLabel="No messages in this conversation."
-      scrollMode={pageScroll ? "page" : "pane"}
+      scrollMode={embeddedResidentChat ? "pane" : pageScroll ? "page" : "pane"}
       composer={
         activeThread.folder === "trash" ? undefined : (
           <>
@@ -1447,11 +1563,17 @@ export const ManagerInbox = forwardRef<
               maxLength={replyViaSms && !replyViaEmail ? 1600 : undefined}
               dataAttr="inbox-reply"
               channelControl={replyChannelPicker}
+              attachments={replyAttachments}
+              onAttachmentsPick={pickReplyAttachments}
+              onAttachmentRemove={removeReplyAttachment}
+              maxAttachments={INBOX_MAX_ATTACHMENTS}
             />
           </>
         )
       }
     />
+  ) : emptyThreadFallback && suppressListPane ? (
+    emptyThreadFallback
   ) : (
     <InboxThreadEmpty />
   );
@@ -1497,7 +1619,15 @@ export const ManagerInbox = forwardRef<
       {tabId === "schedule" && !searchActive ? (
         <ManagerInboxSchedulePanel portalBase={portalBase} />
       ) : suppressListPane ? (
-        <div className={`${pageScroll ? "flex flex-col" : "flex h-full min-h-0 flex-1 flex-col overflow-hidden"}`}>{threadPane}</div>
+        <div
+          className={`${
+            embeddedResidentChat || !pageScroll
+              ? "flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+              : "flex flex-col"
+          }`}
+        >
+          {threadPane}
+        </div>
       ) : (
         <InboxTwoPane threadOpen={Boolean(activeThread)} list={listPane} thread={threadPane} />
       )}

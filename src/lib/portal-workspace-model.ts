@@ -1,7 +1,6 @@
 import type { PortalKind } from "@/lib/portal-types";
 import {
   demoKpis,
-  demoLeasePipelineRows,
   demoManagerSubscriberRows,
   demoResidentLeaseRows,
   demoResidentPropertyRows,

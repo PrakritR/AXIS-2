@@ -21,6 +21,31 @@ Rules:
   Vercel Production scope only. A local `.env` must point at the dev/test
   project.
 
+### A local production build can silently target production
+
+The rule above ("which env file is loaded decides the project") has one trap: a
+correct `.env` is **not** enough for a production build. Next loads
+`.env.production.local` for `npm run build`, that file outranks `.env`, and
+`NEXT_PUBLIC_*` values are inlined into the bundle at build time — so
+`npm run build && npm run start` serves a site whose browser client talks to
+production no matter what `.env` / `.env.test` say. Worktrees are especially
+exposed: `npm run seed:env` copies every gitignored `.env*` file from the
+primary checkout, so a `.env.production.local` pulled earlier for the production
+demo seed (below) follows you into each new worktree.
+
+The symptom is quiet and misleading — seeded `@test.…local` accounts get
+"Invalid login credentials", which reads as a broken seed rather than the wrong
+project. (`assertNonProdDatabase()` does not catch it: the browser client is not
+server-side, so nothing throws.)
+
+Confirm which project a build actually points at, and pin dev/test when building
+for local E2E (CI does the same by passing `TEST_SUPABASE_*` into the e2e step):
+
+```bash
+grep -rho 'https://[a-z]\{20\}\.supabase\.co' .next/static | sort -u
+set -a; . ./.env.test; set +a           # then build + start in that same shell
+```
+
 ### Fail-closed guard
 
 `assertNonProdDatabase()` in `src/lib/server-env.ts` throws if a non-production

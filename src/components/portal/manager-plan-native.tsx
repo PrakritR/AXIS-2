@@ -218,7 +218,7 @@ export function ManagerPlanNative({
                 className="mt-4 w-full rounded-full"
                 disabled={busy}
                 data-attr={`ios-subscribe-${offering.tier}`}
-                onClick={() => void onSubscribe(offering)}
+                onClick={() => onSubscribe(offering)}
               >
                 {purchasingProductId === offering.productId
                   ? "Opening App Store…"

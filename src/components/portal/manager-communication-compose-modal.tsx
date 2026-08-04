@@ -641,7 +641,7 @@ export function ManagerCommunicationComposeModal({
             className="rounded-full"
             data-attr="communication-compose-send"
             disabled={sending || (!viaEmail && !viaSms)}
-            onClick={() => void submit()}
+            onClick={() => submit()}
           >
             {sendLabel}
           </Button>

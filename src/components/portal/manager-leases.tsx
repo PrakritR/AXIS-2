@@ -9,7 +9,6 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
@@ -255,17 +254,6 @@ export function ManagerLeases({
     </>
   );
 
-  const leasesMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={leasesFilterSheet}
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {leasesHeaderActions}
-        </PortalSectionActionRow>
-      }
-    />
-  );
-
   const modals = (
     <>
       <ManagerEditLeasesModal
@@ -314,7 +302,6 @@ export function ManagerLeases({
         hideTitleOnMobileNav
         compactFilterRow
       >
-        {leasesMobileActionsRow}
         <PortalListControlStack
           className="mb-2"
           destinations={tabs.map((t) => ({

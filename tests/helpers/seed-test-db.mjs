@@ -33,6 +33,10 @@ import {
   DEMO_WORKFLOW_RESIDENT_EMAILS,
   PRODUCTION_ADMIN_EMAIL,
 } from "./canonical-test-accounts.mjs";
+import {
+  CANONICAL_DEMO_PORTFOLIO_PROPERTY_IDS,
+  reclaimCanonicalPropertyOwners,
+} from "./reclaim-canonical-property-owners.mjs";
 import { ensureManagerStripeCustomer, getSeedStripeClient } from "./ensure-stripe-test-customer.mjs";
 import { buildSeedLeaseHtml } from "./build-seed-lease-html.mjs";
 
@@ -1697,15 +1701,29 @@ try {
   await relockCanonicalAuthAccounts();
 
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
-  const demoPortfolioPropertyIds = [
-    "mgr-demo-pioneer",
-    "mgr-demo-cascade",
-    "mgr-demo-emerald",
-    "mgr-demo-lakeview",
-    "mgr-demo-ballard",
-  ];
+  const demoPortfolioPropertyIds = [...CANONICAL_DEMO_PORTFOLIO_PROPERTY_IDS];
   const canonicalIds = new Set([...demoPortfolioPropertyIds, ...catalog.map((p) => p.id)]);
   const testManagerIds = [managerUserId, manager2UserId];
+
+  // 0. Ownership drift: a canonical property whose `manager_user_id` moved onto
+  //    another account is invisible to every check below (they all scope
+  //    `.in("manager_user_id", testManagerIds)`) and would be DELETED by the
+  //    account prune in step 6, which removes property rows by stray owner. It
+  //    also empties only the Properties tab — Residents / Applications /
+  //    Communication read denormalized property labels off application and lease
+  //    rows, so they keep looking healthy. The canonical catalog upsert earlier
+  //    in this script already rewrites `manager_user_id` for these ids, so on a
+  //    full run this is not the first writer; what it adds is the re-read that
+  //    fails loudly if the row did not move, and running before the prune can
+  //    delete it. It is also the standalone repair
+  //    (`npm run test:seed:reclaim-properties`).
+  await reclaimCanonicalPropertyOwners(
+    supabase,
+    Object.fromEntries([
+      ...demoPortfolioPropertyIds.map((id) => [id, managerUserId]),
+      ...catalog.map((p) => [p.id, p.ownerUserId]),
+    ]),
+  );
 
   // 1. Superseded property rows from older seeds — ANY status, not just live.
   //    A leftover `review` row (e.g. the old seedwf_ "Fir Loft 3") reaches the

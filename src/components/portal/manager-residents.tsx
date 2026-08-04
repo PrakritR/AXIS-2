@@ -13,28 +13,21 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
-  ManagerPortalFilterRow,
-  ManagerPortalFilterActions,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
-  RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PortalTableDetailActions,
-  PortalTableInlineExpand,
   PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -48,7 +41,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageFooterActions, PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   RESIDENT_DETAIL_TAB_LABELS,
   RESIDENT_DETAIL_TAB_SHORT_LABELS,
@@ -132,7 +125,9 @@ import {
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
-  managerUploadLeasePdf,
+  confirmUploadedLeaseParse,
+  leaseAwaitsUploadedLeaseReview,
+  UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   readLeasePipeline,
   residentCanViewLeaseRow,
   sendLeaseBackToManager,
@@ -142,9 +137,11 @@ import {
   runLeaseDownload,
   hasBothLeaseSignatures,
   residentHasSignedLease,
-  updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
+import { retryUploadedLeaseParse, uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
+import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
+import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   deleteManagerWorkOrdersForResident,
@@ -160,7 +157,7 @@ import {
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
-import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import {
   APPLICATION_COMPLETION_REMINDER_SUBJECT,
@@ -191,7 +188,6 @@ import {
   EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildExistingResidentWelcomeEmailBody,
 } from "@/lib/existing-resident-welcome-email";
-import { Badge } from "@/components/ui/badge";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
@@ -204,8 +200,6 @@ import { applicationShowsBackgroundCheck } from "@/lib/application-background-ch
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerResidentDetailInbox } from "@/components/portal/manager-resident-detail-inbox";
-import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
-import { type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import {
   ServiceStatusBadge,
 } from "@/components/portal/resident-services-panel";
@@ -327,6 +321,7 @@ export function ManagerResidents({
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
+  const [importReviewLeaseId, setImportReviewLeaseId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -370,8 +365,6 @@ export function ManagerResidents({
   const [svcReqBucket, setSvcReqBucket] = useState<ManagerServiceRequestBucket>("pending");
   const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
-
-  const residentSmsPanelRef = useRef<ManagerSmsPanelHandle>(null);
 
   const activeDetailTab = parseResidentDetailTab(detailTabProp);
   const [applicationEditOpen, setApplicationEditOpen] = useState(false);
@@ -867,6 +860,12 @@ export function ManagerResidents({
     return readChargesForManagerResident(selected.email, userId ?? null);
   }, [selected, hcTick, userId]);
 
+  const importReviewLease = useMemo<LeasePipelineRow | null>(() => {
+    void leaseTick;
+    if (!importReviewLeaseId) return null;
+    return readLeasePipeline(userId).find((row) => row.id === importReviewLeaseId) ?? null;
+  }, [importReviewLeaseId, leaseTick, userId]);
+
   const residentLease = useMemo<LeasePipelineRow | null>(() => {
     void leaseTick;
     if (!selected?.email) return null;
@@ -1021,6 +1020,17 @@ export function ManagerResidents({
     ? activeDetailTab
     : (residentDetailTabsAvailable[0] ?? "payments");
 
+  // `threadReading` must stay FALSE here. Under
+  // `html[data-communication-thread-reading]` globals.css hides the mobile nav
+  // bar and locks `#portal-main-content` to the viewport with `overflow:hidden`,
+  // which is only survivable on a surface that renders the inbox back header —
+  // and this one deliberately does not: `ManagerResidentDetailInbox` passes no
+  // `controlledExpandedId`, so `ManagerInbox` sets `onBack={undefined}` and the
+  // resident-detail chrome (Back to residents + the profile tab strip) is the
+  // only way out. With the lock on, that chrome and the composer are both pushed
+  // outside a page that can no longer scroll, so the manager is stranded on a
+  // phone. globals.css already assumes this: its resident-detail Communication
+  // rules are scoped `:not([data-communication-thread-reading])`.
   useCommunicationSurfaceChrome({
     active: Boolean(residentIdProp && resolvedDetailTab === "communication"),
     threadReading: false,
@@ -2277,7 +2287,7 @@ export function ManagerResidents({
                 className={PORTAL_DETAIL_BTN}
                 data-attr="resident-application-send-reminder"
                 disabled={applicationReminderPreviewBusyId !== null || applicationReminderBusyId !== null}
-                onClick={() => void openApplicationCompletionReminderPreview(selectedApplicationRow)}
+                onClick={() => openApplicationCompletionReminderPreview(selectedApplicationRow)}
               >
                 {applicationReminderPreviewBusyId === selectedApplicationRow.id ? "Loading…" : "Send reminder"}
               </Button>
@@ -2287,7 +2297,7 @@ export function ManagerResidents({
               variant="outline"
               className={PORTAL_DETAIL_BTN}
               data-attr="resident-application-reject"
-              onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+              onClick={() => setApplicationBucket(selectedApplicationRow.id, "rejected")}
             >
               Reject
             </Button>
@@ -2310,7 +2320,7 @@ export function ManagerResidents({
             variant="outline"
             className={PORTAL_DETAIL_BTN}
             data-attr="resident-application-move-pending"
-            onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+            onClick={() => setApplicationBucket(selectedApplicationRow.id, "pending")}
           >
             <span className="max-md:hidden">To pending</span>
             <span className="md:hidden">Pending</span>
@@ -2351,7 +2361,10 @@ export function ManagerResidents({
         sendToResidentBusy={leaseSendBusy}
         sendToResidentDisabled={
           !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
-          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl)
+          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl) ||
+          // An imported lease is not signable until a person has confirmed the
+          // extraction. `sendLeaseToResident` refuses too; this is the affordance.
+          leaseAwaitsUploadedLeaseReview(residentLease)
         }
         onMoveToManagerReview={() => {
           const moveResult = sendLeaseBackToManager(residentLease.id, userId);
@@ -2377,16 +2390,30 @@ export function ManagerResidents({
         generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
         onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
         uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
+        onReviewImportedLease={() => setImportReviewLeaseId(residentLease.id)}
         onUploadPdf={async (file) => {
           setUploadingLeaseRowId(residentLease.id);
-          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+          const result = await uploadAndParseLeasePdf(residentLease.id, file, userId);
           setUploadingLeaseRowId(null);
-          if (result.ok) {
-            setLeaseTick((n) => n + 1);
-            showToast("Lease PDF uploaded.");
-          } else {
+          if (!result.ok) {
             showToast(result.error ?? "Upload failed.");
+            return;
           }
+          setLeaseTick((n) => n + 1);
+          if (result.saveError) {
+            showToast(`Lease PDF uploaded, but its PropLane reading was not stored: ${result.saveError}`);
+            return;
+          }
+          if (!result.parse) {
+            showToast("Lease PDF uploaded.");
+            return;
+          }
+          setImportReviewLeaseId(residentLease.id);
+          showToast(
+            result.parse.status === "parsed"
+              ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+              : `Lease PDF uploaded, but PropLane could not read its text. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+          );
         }}
         deleteLabel="Delete lease"
         deleteDataAttr="resident-lease-delete"
@@ -2741,23 +2768,13 @@ export function ManagerResidents({
                             ) : null}
 
                             {resolvedDetailTab === "communication" ? (
-                            <ResidentDetailTabPanel>
-                              <div className="flex flex-col gap-3">
-                                <ManagerResidentDetailInbox
-                                  residentEmail={selected.email}
-                                  residentName={selected.name}
-                                  portalBase={portalBase}
-                                  smsUiEnabled={smsUiEnabled}
-                                  smsRef={residentSmsPanelRef}
-                                />
-                                <ModalAssistantStrip
-                                  contextHint={`Resident communication · ${selected.name || selected.email}`}
-                                  storageScopeKey={`resident-communication-${selected.id}`}
-                                  conversationInstance={hcTick}
-                                  defaultExpanded={false}
-                                  className="shrink-0"
-                                />
-                              </div>
+                            <ResidentDetailTabPanel fill>
+                              <ManagerResidentDetailInbox
+                                residentEmail={selected.email}
+                                residentName={selected.name}
+                                portalBase={portalBase}
+                                smsUiEnabled={smsUiEnabled}
+                              />
                             </ResidentDetailTabPanel>
                             ) : null}
 
@@ -2798,13 +2815,6 @@ export function ManagerResidents({
       </PortalFilterSortSheet>
     ) : null;
 
-  const residentsMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={residentsFilterSheet}
-      actions={residentsAddButton}
-    />
-  );
-
   return (
     <>
       <LeaseRegenerateConfirmModal
@@ -2828,6 +2838,41 @@ export function ManagerResidents({
           onClose={() => setSigningLease(null)}
         />
       ) : null}
+      {importReviewLease?.uploadedLeaseParse ? (
+        <UploadedLeaseReviewModal
+          open
+          row={importReviewLease}
+          parse={importReviewLease.uploadedLeaseParse}
+          onClose={() => setImportReviewLeaseId(null)}
+          onConfirm={({ overrides, note }) => {
+            const result = confirmUploadedLeaseParse(importReviewLease.id, {
+              managerUserId: userId,
+              overrides: overrides as Partial<Record<UploadedLeaseFieldKey, string>>,
+              note,
+            });
+            if (!result.ok) {
+              showToast(result.error ?? "Could not confirm the imported lease.");
+              return;
+            }
+            setLeaseTick((n) => n + 1);
+            setImportReviewLeaseId(null);
+            showToast("Imported lease confirmed. It can now be sent for signature.");
+          }}
+          onRetryRead={async () => {
+            const result = await retryUploadedLeaseParse(importReviewLease.id, userId);
+            setLeaseTick((n) => n + 1);
+            if (!result.ok) {
+              showToast(result.error ?? "Could not read that lease PDF.");
+              return;
+            }
+            showToast(
+              result.parse?.status === "parsed"
+                ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+                : `PropLane still could not read this PDF. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+            );
+          }}
+        />
+      ) : null}
       {residentIdProp && selected ? (
         <PortalRecordDetailPage
           pageTitle="Residents"
@@ -2841,6 +2886,11 @@ export function ManagerResidents({
           dataAttrBack="resident-detail-back"
           actions={residentProfileHeaderActions}
           inlineActions
+          // Communication is a fill-height chat that scrolls internally; every
+          // other tab flows. Without this the chat has no bounded height, so it
+          // overflows the clipped Communication surface and shoves the back
+          // button and the profile tabs off a page that cannot scroll.
+          fillBody={resolvedDetailTab === "communication"}
         >
           {residentDetailPanel}
         </PortalRecordDetailPage>
@@ -2852,7 +2902,6 @@ export function ManagerResidents({
         titleAside={residentsAddButton}
         compactFilterRow
       >
-      {residentsMobileActionsRow}
       <PortalListControlStack
         className="mb-2 max-lg:mb-1.5"
         search={{

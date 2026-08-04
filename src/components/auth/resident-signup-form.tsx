@@ -300,7 +300,7 @@ export function ResidentSignupForm({
           data-attr="resident-add-role-submit"
           className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
           disabled={locked}
-          onClick={() => void addResidentRole()}
+          onClick={() => addResidentRole()}
         >
           {busy ? "Setting up…" : "Add resident access & apply"}
         </Button>
@@ -326,7 +326,7 @@ export function ResidentSignupForm({
           data-attr="resident-signup-submit"
           className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
           disabled={locked}
-          onClick={() => void submit()}
+          onClick={() => submit()}
           event="resident_signup_submitted"
         >
           {busy ? "Creating…" : "Create resident account"}
@@ -348,7 +348,7 @@ export function ResidentSignupForm({
       <Button
         type="button"
         className="w-full rounded-full py-3 text-base font-semibold"
-        onClick={() => void submit()}
+        onClick={() => submit()}
         disabled={locked}
         data-attr="resident-signup-submit"
         event="resident_signup_submitted"

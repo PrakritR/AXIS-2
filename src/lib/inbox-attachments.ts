@@ -1,5 +1,9 @@
 const MAX_ATTACHMENTS = 4;
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
+export const INBOX_ATTACHMENT_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/gif,image/*,application/pdf,.pdf";
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -17,13 +21,44 @@ export type InboxComposerAttachment = {
   uploadUrl?: string;
   uploading?: boolean;
   error?: string;
+  /** False for PDFs and other non-image files. */
+  isImage?: boolean;
 };
 
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+}
+
+function isImageFile(file: File): boolean {
+  return (
+    file.type.startsWith("image/") ||
+    /\.(jpe?g|png|webp|gif)$/i.test(file.name)
+  );
+}
+
 export async function uploadInboxAttachment(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Only image files can be attached.");
+  if (isPdfFile(file)) {
+    if (file.size > MAX_PDF_BYTES) {
+      throw new Error("Each PDF must be 10 MB or smaller.");
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const res = await fetch("/api/portal/inbox-attachments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ dataUrl, ext: "pdf", fileName: file.name }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok || !body.url) {
+      throw new Error(body.error ?? "PDF upload failed.");
+    }
+    return body.url;
   }
-  if (file.size > MAX_BYTES) {
+
+  if (!isImageFile(file)) {
+    throw new Error("Attach JPEG, PNG, WebP, GIF images, or PDF documents.");
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
     throw new Error("Each image must be 5 MB or smaller.");
   }
   const dataUrl = await readFileAsDataUrl(file);
@@ -31,13 +66,64 @@ export async function uploadInboxAttachment(file: File): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ dataUrl, ext: file.name.split(".").pop() ?? undefined }),
+    body: JSON.stringify({
+      dataUrl,
+      ext: file.name.split(".").pop() ?? undefined,
+      fileName: file.name,
+    }),
   });
   const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
   if (!res.ok || !body.url) {
     throw new Error(body.error ?? "Image upload failed.");
   }
   return body.url;
+}
+
+/** Storage path carried by an inbox-attachment serve URL (`""` when it has none). */
+export function inboxAttachmentPathFromServeUrl(url: string): string {
+  try {
+    return new URL(url, "http://localhost").searchParams.get("path")?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Label shown on an attachment chip.
+ *
+ * The uploader's file name is the LAST segment of the storage key (see
+ * `sanitizeInboxAttachmentFileName`), so it must be read out of `?path=` — the
+ * URL's own last path segment is the route name, not the file. Sender-side and
+ * recipient-side chips both go through here so they can never disagree.
+ */
+export function inboxAttachmentDisplayName(url: string): string | undefined {
+  const fromPath = inboxAttachmentPathFromServeUrl(url).split("/").pop()?.trim();
+  if (fromPath) return fromPath;
+  const fromUrl = url.split("/").pop()?.split("?")[0]?.trim();
+  return fromUrl || undefined;
+}
+
+export function attachmentMetaFromUrls(urls: string[]): { url: string; name?: string }[] {
+  return urls.map((url) => {
+    const name = inboxAttachmentDisplayName(url);
+    return name ? { url, name } : { url };
+  });
+}
+
+export function createPendingInboxAttachment(file: File): InboxComposerAttachment {
+  const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const image = isImageFile(file);
+  return {
+    id,
+    fileName: file.name,
+    previewUrl: image ? URL.createObjectURL(file) : "",
+    uploading: true,
+    isImage: image,
+  };
+}
+
+export function revokeInboxAttachmentPreview(att: InboxComposerAttachment): void {
+  if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
 }
 
 export { MAX_ATTACHMENTS as INBOX_MAX_ATTACHMENTS };

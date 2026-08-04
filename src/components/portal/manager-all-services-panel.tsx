@@ -9,7 +9,6 @@ import {
 } from "@/lib/portal-detail-routes";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
@@ -351,6 +350,7 @@ export function ManagerAllServicesPanel({
             label="Property"
             summary={filterMultiSelectSummary(propertyFilters, servicePropertyListOptions, "All properties")}
             empty={propertyFilters.length === 0}
+            menuOptionCount={servicePropertyListOptions.length}
             dataAttr="services-filter-property-trigger"
           >
             <FilterCheckboxList
@@ -370,6 +370,7 @@ export function ManagerAllServicesPanel({
               label="Resident"
               summary={filterMultiSelectSummary(activeResidentFilters, residentListOptions, "All residents")}
               empty={activeResidentFilters.length === 0}
+              menuOptionCount={residentListOptions.length}
               dataAttr="services-filter-resident-trigger"
             >
               <FilterCheckboxList
@@ -483,10 +484,6 @@ export function ManagerAllServicesPanel({
       </Button>
     );
 
-  const servicesMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow filter={servicesFilterSheet} actions={servicesAddButton} />
-  );
-
   // Hoisted above the early returns below. It sat after them, so on a render that took an
   // early return this hook did not run and the hook COUNT changed between renders, which
   // is the rules-of-hooks violation. Its deps are all resolved by this point.
@@ -597,7 +594,6 @@ export function ManagerAllServicesPanel({
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {servicesMobileActionsRow}
       <PortalListControlStack
         className="mb-2"
         destinationRow={servicesListDestinations}

@@ -838,7 +838,7 @@ export function ManagerPaymentsLedgerPanel({
         variant="outline"
         className={btnClass}
         data-attr="payments-move-pending"
-        onClick={() => void moveToPending(row)}
+        onClick={() => moveToPending(row)}
       >
         Move to pending
       </Button>

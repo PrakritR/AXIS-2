@@ -261,7 +261,11 @@ function ModalPanelInner({
   const bodyFillsPanel = scrollableContent || Boolean(footer);
   return (
     <div className={cn("flex flex-col overflow-hidden", bodyFillsPanel ? "min-h-0 flex-1" : "shrink-0")}>
+      {/* Title + close: fixed chrome a portaled field menu must never cover. A modal that
+          is tall enough today to leave it clear is a coincidence, not a guarantee — the
+          rule is universal, with no "except in a modal" carve-out. */}
       <div
+        data-field-select-host-chrome=""
         className={cn(
           "flex shrink-0 flex-col border-b border-border",
           dense ? "gap-2 pb-2" : "gap-3 pb-4",
@@ -295,8 +299,8 @@ function ModalPanelInner({
       </div>
       <div
         className={cn(
-          bodyFillsPanel ? "flex min-h-0 flex-1" : "flex shrink-0",
-          showAssistantStrip && assistantExpanded ? "flex-col @2xl:flex-row" : "flex-col",
+          bodyFillsPanel ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" : "flex shrink-0 flex-col",
+          showAssistantStrip && assistantExpanded ? "@2xl:flex-row" : undefined,
         )}
       >
         <div
@@ -318,14 +322,14 @@ function ModalPanelInner({
             </div>
           )}
         </div>
-        {showAssistantStrip && assistantConversationInstance > 0 ? (
+        {showAssistantStrip ? (
           <ModalAssistantStrip
             contextHint={assistantHint}
             storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
             conversationInstance={assistantConversationInstance}
             onExpandedChange={onAssistantExpandedChange}
             defaultExpanded={assistantDefaultExpanded}
-            className={cn(dense ? "px-0" : undefined)}
+            className={cn("shrink-0", dense ? "px-0" : undefined)}
           />
         ) : null}
       </div>
@@ -353,7 +357,7 @@ export function Modal({
   panelClassName,
   stackClassName,
   dense = false,
-  assistantStrip = false,
+  assistantStrip,
   assistantContext,
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
@@ -373,6 +377,7 @@ export function Modal({
   panelClassName?: string;
   stackClassName?: string;
   dense?: boolean;
+  /** Pass `false` to hide the in-modal assistant on surfaces like previews or payment flows. */
   assistantStrip?: boolean;
   assistantContext?: string;
   assistantStorageScopeKey?: string;
@@ -384,13 +389,13 @@ export function Modal({
 }) {
   const presentation = useModalPresentation();
   const portalAssistant = usePortalAssistantConfig();
-  const showAssistantStrip = (assistantStrip ?? Boolean(assistantContext)) && portalAssistant != null;
+  const showAssistantStrip = assistantStrip !== false && portalAssistant != null;
   const assistantHint =
     assistantContext?.trim() ||
     (typeof title === "string" ? title.trim() : "") ||
     "Portal modal";
 
-  const [assistantConversationInstance, setAssistantConversationInstance] = useState(0);
+  const [assistantConversationInstance, setAssistantConversationInstance] = useState(1);
   const [assistantExpanded, setAssistantExpanded] = useState(assistantDefaultExpanded);
   const wasOpenRef = useRef(false);
   useLayoutEffect(() => {

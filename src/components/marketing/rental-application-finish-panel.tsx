@@ -87,7 +87,7 @@ export function GroupShareCallout({
           variant="outline"
           className="h-9 shrink-0 rounded-full px-4 text-xs"
           data-attr="group-id-copy"
-          onClick={() => void copy()}
+          onClick={() => copy()}
         >
           {copied ? "Copied" : "Copy"}
         </Button>

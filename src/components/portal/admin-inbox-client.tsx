@@ -303,7 +303,7 @@ function ComposeModal({
       panelClassName={MODAL_LARGE_PANEL_CLASS}
       footer={
         <ModalFooter>
-          <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
+          <Button type="button" className="rounded-full" onClick={() => submit()} disabled={busy}>
             {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
           </Button>
         </ModalFooter>

@@ -97,6 +97,7 @@ export function ListingBathroomMediaBrowser({
             }
           : undefined
       }
+      detailsActionLabel="Bathroom details"
       resolvePrimaryCta={
         onOpenDetails ? undefined : (_, index) => resolvePrimaryCta(index)
       }
@@ -180,6 +181,7 @@ export function ListingSharedMediaBrowser({
             }
           : undefined
       }
+      detailsActionLabel="Space details"
       resolvePrimaryCta={onOpenDetails ? undefined : () => resolvePrimaryCta()}
       resolveSecondaryCta={
         onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)

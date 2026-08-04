@@ -24,6 +24,13 @@ export type PortalMoreNavItem = {
   label: string;
   href: string;
   locked?: boolean;
+  /**
+   * A locked row that still navigates — the manager/pro free-tier case, whose
+   * destination renders the `PortalTierPaywall` upgrade page. Locked rows are
+   * inert by default (resident stage / resident free-tier locks have nothing to
+   * buy); see the lock-kind note in `portal-sidebar.tsx`.
+   */
+  lockedNavigable?: boolean;
   count?: number;
 };
 
@@ -67,13 +74,14 @@ function MoreNavRow({
   const router = useRouter();
   const pathname = usePathname();
   const nativeChrome = useNativeChrome();
+  const inert = Boolean(item.locked) && !item.lockedNavigable;
 
   return (
     <Link
-      href={item.locked ? "#" : item.href}
-      prefetch={item.locked ? false : portalMobileLinkPrefetchEnabled()}
+      href={inert ? "#" : item.href}
+      prefetch={inert ? false : portalMobileLinkPrefetchEnabled()}
       onClick={(e) => {
-        if (item.locked) {
+        if (inert) {
           e.preventDefault();
           return;
         }
@@ -85,12 +93,14 @@ function MoreNavRow({
       className={`portal-pressable flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition active:opacity-90 ${
         active
           ? "bg-primary/10 text-primary"
-          : item.locked
+          : inert
             ? "cursor-not-allowed text-muted/80"
-            : "text-foreground hover:bg-accent/70"
+            : item.locked
+              ? "text-muted/80 hover:bg-accent/70"
+              : "text-foreground hover:bg-accent/70"
       }`}
       aria-label={item.locked ? `${item.label} (locked)` : item.label}
-      aria-disabled={item.locked ? true : undefined}
+      aria-disabled={inert ? true : undefined}
     >
       {showNavIcons ? (
         <span className={`shrink-0 ${item.locked ? "opacity-60" : ""}`} aria-hidden>

@@ -290,7 +290,7 @@ export function ManagerBankReconciliationPanel() {
                 {summary.differenceCents !== 0 ? ` · Difference ${centsToUsd(summary.differenceCents)}` : ""}
               </p>
               {!selectedStatement.reconciledAt && summary.differenceCents === 0 ? (
-                <Button className="mt-2" variant="secondary" onClick={() => void markReconciled()} data-attr="bank-mark-reconciled">
+                <Button className="mt-2" variant="secondary" onClick={() => markReconciled()} data-attr="bank-mark-reconciled">
                   Mark reconciled
                 </Button>
               ) : null}
@@ -322,7 +322,7 @@ export function ManagerBankReconciliationPanel() {
                             type="button"
                             variant={line.cleared ? "primary" : "outline"}
                             className="h-8 rounded-full px-3 text-xs"
-                            onClick={() => void toggleLineCleared(line)}
+                            onClick={() => toggleLineCleared(line)}
                             data-attr="bank-line-cleared-toggle"
                           >
                             {line.cleared ? "Cleared" : "Outstanding"}
@@ -344,7 +344,7 @@ export function ManagerBankReconciliationPanel() {
         title="Add bank account"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void createAccount()}>
+            <Button variant="primary" onClick={() => createAccount()}>
               Save account
             </Button>
           </ModalFooter>
@@ -387,7 +387,7 @@ export function ManagerBankReconciliationPanel() {
         title="Add bank statement"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void createStatement()}>
+            <Button variant="primary" onClick={() => createStatement()}>
               Save statement
             </Button>
           </ModalFooter>

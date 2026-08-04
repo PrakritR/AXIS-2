@@ -118,7 +118,7 @@ export function PortalProfileClient({
 
   const editAction = editing ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={saving} onClick={() => void save()}>
+      <Button type="button" variant="primary" className="px-4 text-[13px]" disabled={saving} onClick={() => save()}>
         {saving ? "Saving…" : "Save"}
       </Button>
     </div>
@@ -210,6 +210,9 @@ export function PortalProfileClient({
       <ManagerPortalPageShell
         title="Settings"
         subtitle="Manage your account settings and preferences."
+        // The mobile/native app bar already reads "Settings" — same as every
+        // other manager section, drop the duplicate in-page title on phones.
+        hideTitleOnMobileNav
       >
         {settingsBody}
       </ManagerPortalPageShell>
@@ -218,7 +221,7 @@ export function PortalProfileClient({
 
   return (
     <div className="relative z-0 w-full min-w-0">
-      <div className="mb-8">
+      <div className="mb-8 max-md:hidden">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <p className="mt-1 text-sm text-muted">Manage your account settings and preferences.</p>
       </div>

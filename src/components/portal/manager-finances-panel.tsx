@@ -27,7 +27,7 @@ import {
   ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
@@ -950,7 +950,7 @@ export function ManagerFinancesPanel({
         title="Add expense"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void saveExpense()}>
+            <Button variant="primary" onClick={() => saveExpense()}>
               Save expense
             </Button>
           </ModalFooter>
@@ -1047,7 +1047,7 @@ export function ManagerFinancesPanel({
         title="Add income"
         footer={
           <ModalFooter>
-            <Button variant="primary" onClick={() => void saveIncome()}>
+            <Button variant="primary" onClick={() => saveIncome()}>
               Save income
             </Button>
           </ModalFooter>

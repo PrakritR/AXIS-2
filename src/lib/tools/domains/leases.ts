@@ -3,7 +3,9 @@ import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
 import { randomUUID } from "node:crypto";
 import {
+  UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   leaseAllowsManagerDocumentEdits,
+  leaseAwaitsUploadedLeaseReview,
   materializeManagerSectionEditsForSignature,
   normalizeLeasePipelineRow,
   type LeasePipelineRow,
@@ -333,6 +335,12 @@ function sendForSignatureBlocker(row: LeasePipelineRow): string | null {
   }
   if (!row.residentEmail.trim().toLowerCase().includes("@")) {
     return "This lease has no resident email on file, so the resident cannot be notified to sign.";
+  }
+  // The confirm-before-sign gate, same predicate and same wording the store
+  // uses — an imported lease nobody has read must not become signable just
+  // because the request came through the assistant instead of the UI.
+  if (leaseAwaitsUploadedLeaseReview(row)) {
+    return UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE;
   }
   return null;
 }

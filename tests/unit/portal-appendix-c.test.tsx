@@ -30,6 +30,8 @@ import {
   serviceRequestListHref,
   workOrderDetailHref,
   workOrderListHref,
+  promotionDetailHref,
+  promotionListHref,
 } from "@/lib/portal-detail-routes";
 
 describe("portal-detail-routes", () => {
@@ -48,6 +50,13 @@ describe("portal-detail-routes", () => {
   it("parses resident detail tabs with application fallback", () => {
     expect(parseResidentDetailTab("payments")).toBe("payments");
     expect(parseResidentDetailTab("")).toBe("application");
+  });
+
+  it("builds promotion detail hrefs", () => {
+    expect(promotionListHref("/portal")).toBe("/portal/promotion");
+    expect(promotionDetailHref("/portal", "row-1::flyer::entry-1")).toBe(
+      "/portal/promotion/row-1%3A%3Aflyer%3A%3Aentry-1",
+    );
   });
 
   it("builds encoded detail hrefs", () => {

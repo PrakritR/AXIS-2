@@ -7,14 +7,12 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
-  MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -26,7 +24,6 @@ import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
 } from "@/components/portal/portal-data-table";
@@ -83,10 +80,7 @@ import {
   residentApplicationListHref,
   type ResidentApplicationBucketId,
 } from "@/lib/portal-detail-routes";
-import {
-  ResidentApplicationWorkspaceActions,
-  ResidentApplicationWorkspaceMobileApply,
-} from "@/components/portal/resident-application-workspace";
+import { ResidentApplicationWorkspaceActions } from "@/components/portal/resident-application-workspace";
 import { buildResidentApplicationWorkspaceState } from "@/lib/rental-application/resident-application-workspace";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 
@@ -702,7 +696,7 @@ export function ResidentApplicationsPanel({
             variant="danger"
             className="rounded-full"
             data-attr="resident-application-withdraw-confirm"
-            onClick={() => void confirmWithdraw()}
+            onClick={() => confirmWithdraw()}
             disabled={withdrawBusy}
           >
             {withdrawBusy ? "Withdrawing…" : "Withdraw application"}
@@ -882,12 +876,9 @@ export function ResidentApplicationsPanel({
       </Button>
     ) : null;
 
-  const applicationsMobileActionsRow = newApplicationButton ? (
-    <PortalPageHeaderMobileActionsRow actions={newApplicationButton} />
-  ) : null;
-
   const renderRoutedList = () => (
     <DataList
+      hideColumnHeaders
       rows={filteredRowsForBucket.map((row) => {
         const room = displayRoomForRow(row);
         const subtitle = [stripPropertyRoomCountSuffix(row.property || ""), room !== "—" ? `Room ${room}` : ""]
@@ -940,13 +931,6 @@ export function ResidentApplicationsPanel({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Application</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-              </tr>
-            </thead>
             <tbody>
               {rowsForBucket.map((row) => (
                 <tr
@@ -1073,12 +1057,6 @@ export function ResidentApplicationsPanel({
         }
         compactFilterRow
       >
-        <ResidentApplicationWorkspaceMobileApply
-          workspace={workspace}
-          sessionReady={sessionReady}
-          onApplyClick={openPropertyPicker}
-          canOpenPropertyPicker={canOpenPropertyPicker}
-        />
         {renderResidentApplicationList()}
       </ManagerPortalPageShell>
     );
@@ -1092,7 +1070,6 @@ export function ResidentApplicationsPanel({
         titleAside={newApplicationButton ?? undefined}
         compactFilterRow
       >
-        {applicationsMobileActionsRow}
         <PortalListControlStack className="mb-2 max-lg:mb-2" destinationRow={filterRow} />
         {!sessionReady ? (
           <div className={PORTAL_DATA_TABLE_WRAP}>

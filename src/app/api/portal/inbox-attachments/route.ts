@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
   INBOX_ATTACHMENTS_BUCKET,
+  contentDispositionForInboxAttachmentPath,
   contentTypeForInboxAttachmentPath,
   inboxAttachmentServeUrl,
   inboxAttachmentStoragePrefix,
   isInboxAttachmentPath,
   sanitizeInboxAttachmentExt,
+  sanitizeInboxAttachmentFileName,
   userCanAccessInboxAttachment,
 } from "@/lib/inbox-attachments.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
@@ -16,8 +18,9 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
 
 async function resolveUser() {
   const supabase = await createSupabaseServerClient();
@@ -58,9 +61,21 @@ export async function GET(req: Request) {
     return new NextResponse(bytes, {
       headers: {
         "Content-Type": contentTypeForInboxAttachmentPath(path),
-        "Content-Disposition": `inline; filename="${path.split("/").pop()?.replace(/"/g, "") ?? "attachment"}"`,
+        // NEVER `inline`. These bytes are attacker-controllable — any authenticated
+        // user can upload one and send it to anyone — and this route answers on the
+        // APP's own origin, so an inline response is a same-origin document under
+        // the uploader's control. That was survivable only while every allowed type
+        // was an inert raster image; `application/pdf` (an active document format
+        // that runs in whatever handler the browser has registered) made it a real
+        // escalation. The disposition deliberately does NOT branch on content type,
+        // so widening ALLOWED_MIME again can never silently reopen this.
+        "Content-Disposition": contentDispositionForInboxAttachmentPath(path),
         "Cache-Control": "private, no-store",
+        // Defense in depth if a client ever ignores the disposition: no scripts, no
+        // subresources, no form posts, opaque origin, and not loadable cross-site.
+        "Content-Security-Policy": "default-src 'none'; sandbox; base-uri 'none'; form-action 'none'",
         "X-Content-Type-Options": "nosniff",
+        "Cross-Origin-Resource-Policy": "same-origin",
       },
     });
   } catch {
@@ -80,7 +95,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Too many uploads. Please slow down." }, { status: 429 });
     }
 
-    const body = (await req.json()) as { dataUrl?: string; ext?: string };
+    const body = (await req.json()) as { dataUrl?: string; ext?: string; fileName?: string };
     const dataUrl = body.dataUrl;
     if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
       return NextResponse.json({ error: "dataUrl required." }, { status: 400 });
@@ -92,19 +107,26 @@ export async function POST(req: Request) {
     const mimeMatch = header.match(/data:([^;]+)/);
     const mime = mimeMatch?.[1] ?? "image/jpeg";
     if (!ALLOWED_MIME.has(mime)) {
-      return NextResponse.json({ error: "Only JPEG, PNG, WebP, and GIF images are allowed." }, { status: 400 });
+      return NextResponse.json({ error: "Only JPEG, PNG, WebP, GIF images, and PDF documents are allowed." }, { status: 400 });
     }
 
     const bytes = Buffer.from(b64, "base64");
-    if (bytes.length > MAX_BYTES) {
-      return NextResponse.json({ error: "Image must be 5 MB or smaller." }, { status: 400 });
+    const maxBytes = mime === "application/pdf" ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+    if (bytes.length > maxBytes) {
+      return NextResponse.json(
+        { error: mime === "application/pdf" ? "PDF must be 10 MB or smaller." : "Image must be 5 MB or smaller." },
+        { status: 400 },
+      );
     }
 
     const ext = sanitizeInboxAttachmentExt(body.ext, mime);
     if (!ext) {
       return NextResponse.json({ error: "Invalid file extension." }, { status: 400 });
     }
-    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${randomUUID()}.${ext}`;
+    // `<userId>/<ts>-<uuid>/<original name>` — the uuid segment keeps the key
+    // unique, the last segment preserves the uploader's file name so the chip in
+    // a message bubble can show it. Ownership checks still read `path[0]`.
+    const path = `${inboxAttachmentStoragePrefix(user.id)}${Date.now()}-${randomUUID()}/${sanitizeInboxAttachmentFileName(body.fileName, ext)}`;
     const db = createSupabaseServiceRoleClient();
     const { error } = await db.storage.from(INBOX_ATTACHMENTS_BUCKET).upload(path, bytes, {
       contentType: mime,

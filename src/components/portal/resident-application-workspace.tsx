@@ -3,7 +3,6 @@
 import { Button } from "@/components/ui/button";
 import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_ACTION_BTN, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { DemoApplicantRow } from "@/data/demo-portal";
@@ -160,34 +159,4 @@ export function ResidentApplicationWorkspaceActions({
           : "Apply to a property"}
     </Button>
   );
-}
-
-export function ResidentApplicationWorkspaceMobileApply({
-  workspace,
-  sessionReady,
-  onApplyClick,
-  canOpenPropertyPicker,
-}: {
-  workspace: ResidentApplicationWorkspaceState;
-  sessionReady: boolean;
-  onApplyClick: () => void;
-  canOpenPropertyPicker: boolean;
-}) {
-  if (!sessionReady || !canOpenPropertyPicker) return null;
-  const button = (
-    <Button
-      type="button"
-      variant="primary"
-      className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
-      data-attr="resident-applications-apply"
-      onClick={onApplyClick}
-    >
-      {workspace.mode === "in_progress"
-        ? "Apply to property"
-        : workspace.mode === "submitted"
-          ? "Apply to another property"
-          : "Apply to a property"}
-    </Button>
-  );
-  return <PortalPageHeaderMobileActionsRow actions={button} />;
 }

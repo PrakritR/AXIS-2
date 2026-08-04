@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalListAddRow, PORTAL_LIST_ADD_ROW_WRAP_CLASS } from "@/components/portal/portal-list-add-row";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
@@ -336,8 +336,6 @@ export function ResidentTourPanel({
     </Button>
   );
 
-  const tourMobileActionsRow = <PortalPageHeaderMobileActionsRow actions={scheduleTourButton} />;
-
   const filterRow = (
     <LocalDestinationNav
       items={tabs.map((t) => ({
@@ -444,7 +442,6 @@ export function ResidentTourPanel({
       titleAside={scheduleTourButton}
       compactFilterRow
     >
-      {tourMobileActionsRow}
       {renderTourList()}
     </ManagerPortalPageShell>
     </>

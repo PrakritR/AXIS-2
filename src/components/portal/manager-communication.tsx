@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
-import { PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS, PORTAL_FILTER_COMMUNICATION_PANEL_CLASS } from "@/components/portal/filter-field-lists";
+import { PORTAL_FILTER_COMMUNICATION_PANEL_CLASS } from "@/components/portal/filter-field-lists";
 import { CommunicationFilterSortFields } from "@/components/portal/communication-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
@@ -16,7 +16,6 @@ import {
 import { ManagerWorkNumberButton } from "@/components/portal/manager-work-number-button";
 import { PortalCommunicationShell } from "@/components/portal/portal-communication-shell";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   axisAdminFilterContact,
@@ -246,8 +245,7 @@ export function ManagerCommunication({
       compactPanel
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
-      mobileFlushBody={false}
-      mobileSheetClassName={PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS}
+      mobileFlushBody={true}
       onReset={() => {
         setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
         setListSort("recent");
@@ -275,13 +273,6 @@ export function ManagerCommunication({
       {smsUiEnabled ? <ManagerWorkNumberButton /> : null}
       {communicationNewMessageButton}
     </>
-  );
-
-  const communicationMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      filter={communicationFilterSheet}
-      actions={communicationHeaderActions}
-    />
   );
 
   const controlStack = (
@@ -322,7 +313,6 @@ export function ManagerCommunication({
       titleAside={communicationHeaderActions}
       hideTitleOnMobileNav
       controlStack={controlStack}
-      mobileActionsRow={communicationMobileActionsRow}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
     >

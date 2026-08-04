@@ -796,6 +796,13 @@ html {
   -webkit-backdrop-filter: none;
 }
 
+/* Any opaque surface INSIDE a floating menu (the search row). The shell is already opaque,
+   so a translucent child is invisible until the menu overhangs the page — then it is
+   plainly see-through. Every layer of a floating menu stays solid. */
+.field-dropdown-menu-surface {
+  background-color: #ffffff !important;
+}
+
 .field-dropdown-menu-option {
   background-color: #ffffff !important;
 }
@@ -814,6 +821,7 @@ html {
   background-color: #111827 !important;
 }
 
+[data-theme="dark"] .field-dropdown-menu-surface,
 [data-theme="dark"] .field-dropdown-menu-option {
   background-color: #111827 !important;
 }
@@ -824,6 +832,14 @@ html {
 
 [data-theme="dark"] .field-dropdown-menu-option[aria-selected="true"] {
   background-color: rgba(47, 107, 255, 0.22) !important;
+}
+
+/* Vaul paints a `::after` of `height: 200%` below a bottom drawer so an overscroll drag
+   never reveals the page behind it. A RAISED filter sheet deliberately leaves a gap below
+   itself, and that fill painted straight across it — the sheet still read as bottom-anchored
+   with a large empty band instead of a raised card. Only the raised sheets opt out. */
+[data-slot="vaul-bottom-sheet"][data-elevated="true"]::after {
+  display: none;
 }
 
 /* Opaque portal filter popover — bg-card is translucent on dashboard surfaces. */
@@ -2384,7 +2400,13 @@ html[data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-light);
 }
 
-[data-theme="dark"] html[data-portal-sticky-chrome] .portal-calendar-toolbar {
+/* Both `data-theme` and `data-portal-sticky-chrome` live on <html> (see
+   theme-storage.ts and use-portal-sticky-page-chrome.ts), so this MUST be a
+   compound selector. `[data-theme="dark"] html[...]` asks for an <html>
+   DESCENDANT of a dark element, which can never match — that left the sticky
+   calendar toolbar painted `--portal-surface-light` (#f7f8fa) in dark mode on
+   /portal/calendar/all and /admin/events. */
+html[data-theme="dark"][data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-dark);
 }
 
@@ -2409,8 +2431,44 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
   }
 
+  /* Fixed-chrome surfaces clip #portal-main-content (`overflow: hidden` above),
+     so unlike a page-scrolls surface its padding-bottom can never become
+     trailing scroll room — it only shrinks the scroll viewport. The FAB half of
+     `--portal-mobile-scroll-bottom-inset` therefore rendered as a dead 56px
+     strip between the last row and the bottom nav, painted with this element's
+     own background gradient, with the assistant FAB parked in it: that strip is
+     what read as an opaque "banner" behind the button. Reserve only the nav bar
+     here so the page background runs continuously under the floating FAB, and
+     hand the FAB clearance to the scroller below, which can actually scroll it.
+
+     The `:not([data-bulk-action-bar])` is load-bearing, not decorative: the
+     bulk-bar rule above is the same specificity, so without it this rule would
+     win purely on source order and silently strip the fixed bulk bar's 3.75rem
+     of reserved clearance. The two cases are spelled out as disjoint selectors
+     so neither depends on its position in this file. */
+  html[data-portal-sticky-chrome]:not([data-bulk-action-bar]) #portal-main-content {
+    padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+    scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
+  }
+
+  /* Bulk bar open: still drop the dead FAB band, but keep the clearance the
+     fixed selection bar needs so the last row is not stranded underneath it. */
+  html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content {
+    padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
+    scroll-padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
+  }
+
+  /* Trailing room INSIDE the scroller so the last row still clears the FAB
+     rather than coming to rest underneath it. Collapses to 0 on its own when
+     the FAB is hidden (`--portal-assistant-fab-clearance: 0px`). */
+  html[data-portal-sticky-chrome] .portal-list-page-scroll {
+    padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
+    scroll-padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
+  }
+
   html[data-communication-thread-reading] #portal-main-content {
     overflow: hidden;
+    padding-top: 0;
     padding-bottom: 0;
     scroll-padding-bottom: 0;
   }
@@ -2422,6 +2480,15 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     flex-direction: column;
     height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
     max-height: calc(100dvh - var(--portal-native-bottom-nav-inset, 0px));
+  }
+
+  /* Thread view uses the inbox back header — hide duplicate section chrome.
+     Communication renders the inline title band, NOT `page-header`, so both slots must be
+     listed: matching only `page-header` left this rule inert and the duplicate title visible. */
+  html[data-communication-thread-reading] .portal-mobile-nav-bar,
+  html[data-communication-thread-reading] [data-slot="page-header"],
+  html[data-communication-thread-reading] [data-slot="portal-page-title-band"] {
+    display: none;
   }
 
   html[data-communication-thread-reading] .portal-communication-inbox .portal-inbox-two-pane {
@@ -2442,8 +2509,12 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     padding-bottom: max(0.375rem, env(safe-area-inset-bottom, 0px));
   }
 
-  /* Thread-reading flex fill: direct children must shrink so `.portal-inbox-thread-body` can scroll. */
-  html[data-communication-thread-reading] .portal-main-inner > * {
+  html[data-communication-thread-reading] .portal-inbox-thread-header {
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+  }
+
+  /* Thread-reading flex fill: page shell only — never grow the mobile nav bar. */
+  html[data-communication-thread-reading] .portal-main-inner > *:not(.portal-mobile-nav-bar) {
     flex: 1 1 0%;
     min-height: 0;
     display: flex;
@@ -2529,6 +2600,25 @@ html[data-native] [data-listing-sections-root] {
   margin-bottom: 0;
 }
 
+/* Inline page title band (Communication, etc.): hide duplicate section label in mobile nav.
+   `position: absolute` takes the h1 out of flow, so the nav bar's Tailwind `flex-1` on it
+   stops applying and the sr-only recipe below is sufficient on its own — do not add
+   `flex`/`min-width` overrides here expecting them to do anything. Verified in-browser:
+   forcing `flex: 1 1 0% !important` back onto this h1 leaves it measuring 1px. */
+@media (max-width: 1023px) {
+  .portal-main-inner:has([data-slot="portal-page-title-band"]) > .portal-mobile-nav-bar h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
 /* Keep horizontal table scroll from breaking the page layout on listing detail. */
 [data-listing-sections-root] {
   overflow-x: clip;
@@ -2541,8 +2631,20 @@ html[data-native] [data-listing-sections-root] {
 
 @media (max-width: 1023px) {
   .portal-main-inner > * {
-    flex: 0 0 auto;
     width: 100%;
+  }
+
+  /* Page-scrolls surfaces: children size to content so #portal-main-content owns
+     the scroll. This must NOT apply to the fixed-chrome surfaces, whose
+     #portal-main-content is `overflow: hidden` — there the page shell needs its
+     `flex-1` so the inner .portal-list-page-scroll gets a bounded height. Left
+     unscoped, this rule (unlayered, so it beats the Tailwind utility) pinned the
+     shell to its full content height inside a clipped parent and every phone
+     surface taller than the viewport became unscrollable below the fold. The
+     `html[data-communication-thread-reading] .portal-main-inner > *` override
+     earlier in this file exists for the same reason. */
+  html:not([data-portal-sticky-chrome]):not([data-communication-surface]) .portal-main-inner > * {
+    flex: 0 0 auto;
   }
 }
 

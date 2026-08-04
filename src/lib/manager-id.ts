@@ -13,3 +13,29 @@ export function generateAxisId(): string {
 export function generateManagerId(): string {
   return generateAxisId();
 }
+
+/** Customer-facing PropLane ID — legacy `AXIS-` values are shown as `PROPLANE-`. */
+export function formatProplaneIdForDisplay(id: string): string {
+  const raw = id.trim();
+  if (!raw) return raw;
+  if (raw.toUpperCase().startsWith("AXIS-")) return `PROPLANE-${raw.slice(5)}`;
+  return raw;
+}
+
+/** DB lookup accepts both legacy `AXIS-` and current `PROPLANE-` application ids. */
+export function proplaneIdLookupVariants(id: string): string[] {
+  const trimmed = id.trim();
+  if (!trimmed) return [];
+  const upper = trimmed.toUpperCase();
+  const variants = new Set<string>([trimmed]);
+  if (upper.startsWith("AXIS-")) {
+    const suffix = trimmed.slice(5);
+    variants.add(`AXIS-${suffix}`);
+    variants.add(`PROPLANE-${suffix}`);
+  } else if (upper.startsWith("PROPLANE-")) {
+    const suffix = trimmed.slice(9);
+    variants.add(`PROPLANE-${suffix}`);
+    variants.add(`AXIS-${suffix}`);
+  }
+  return [...variants];
+}

@@ -388,6 +388,7 @@ export function LeasePacketInlineEditor({ row, managerUserId, onSaved, className
           type="submit"
           variant="primary"
           className="rounded-full"
+          loading={saving}
           disabled={!dirty || saving}
           data-attr="lease-edit-save"
         >

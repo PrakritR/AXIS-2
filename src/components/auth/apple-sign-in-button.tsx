@@ -32,6 +32,7 @@ export function AppleSignInButton({
   fixedCallbackPath,
   intent = null,
   onBeforeRedirect,
+  onError,
 }: {
   nextPath?: string;
   disabled?: boolean;
@@ -40,6 +41,8 @@ export function AppleSignInButton({
   fixedCallbackPath?: string;
   intent?: OAuthSignInIntent | null;
   onBeforeRedirect?: () => void;
+  /** Render the failure in place too — a toast is too transient for a multi-sentence hint. */
+  onError?: (message: string) => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -87,6 +90,7 @@ export function AppleSignInButton({
     if (signInInFlight.current) return;
     signInInFlight.current = true;
     setBusy(true);
+    onError?.("");
     try {
       const supabase = createSupabaseBrowserClient();
       const result = await startAppleSignIn({
@@ -99,8 +103,15 @@ export function AppleSignInButton({
         onBeforeRedirect,
       });
       if (!result.ok) {
-        if (shouldShowAppleSignInErrorToast(result.message)) {
-          showToast(result.message);
+        // Cancellation is silent — no inline text AND no toast. Dismissing a sheet is not a
+        // problem, and telling the user something broke when nothing did is wrong. This is the
+        // same answer `openOAuthUrl` gives for the WebAuthSession `CANCELED` code; Apple and
+        // Google must not answer the same question two different ways on the same screen.
+        if (!result.cancelled) {
+          onError?.(result.message);
+          if (shouldShowAppleSignInErrorToast(result.message)) {
+            showToast(result.message);
+          }
         }
         setBusy(false);
         return;

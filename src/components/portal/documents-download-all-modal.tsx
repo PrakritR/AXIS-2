@@ -23,7 +23,6 @@ import {
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
-  resolveResidentPortalAxisId,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import {
@@ -425,7 +424,7 @@ export function DocumentsDownloadAllModal({
             type="button"
             className="rounded-full"
             disabled={downloading || selectedCount === 0 || sections.length === 0}
-            onClick={() => void handleDownload()}
+            onClick={() => handleDownload()}
             data-attr="documents-download-all-submit"
           >
             {downloading ? "Downloading…" : `Download${selectedCount > 0 ? ` (${selectedCount})` : ""}`}

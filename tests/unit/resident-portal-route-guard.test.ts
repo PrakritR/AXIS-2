@@ -23,7 +23,9 @@ describe("resident application-phase route guard", () => {
     expect(isResidentApplicationPhaseAllowedPath("/resident/payments")).toBe(false);
   });
 
-  it("allows dashboard after a completed application submission", () => {
+  // Every stage has a Dashboard now, so `allowDashboard` is a no-op kept for
+  // existing callers — it must not flip the answer back to false.
+  it("keeps the legacy allowDashboard option a no-op", () => {
     expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard", { allowDashboard: true })).toBe(true);
   });
 });

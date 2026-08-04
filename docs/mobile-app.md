@@ -38,10 +38,25 @@ Per-surface pay methods come from `residentPaymentMethodsForSurface()` (`src/lib
 
 ## App identity (iOS rebranded to PropLane; Android deferred)
 
-The **iOS** bundle identifier is `space.proplane.app` (Team `8FH3GVHCZ9`) — rebranded
-from the legacy `com.axisseattlehousing.app`. The old App Store Connect record is
-abandoned deliberately (the app is TestFlight-only, never publicly launched), so there
-are no compatibility shims. The identity lives in `capacitor.config.ts` (`appId`),
+The **iOS** bundle identifier is `space.proplane.app` (Team `8FH3GVHCZ9`, App Store
+Connect **App ID 6795707576**) — rebranded from the legacy
+`com.axisseattlehousing.app`. The old App Store Connect record is abandoned
+deliberately (the app is TestFlight-only, never publicly launched), so there
+are no compatibility shims.
+
+⚠️ **The legacy record is still live and still installable, and its build numbers
+are HIGHER** (49 vs the canonical record's 37) because it kept shipping until the
+rebrand. It now displays as "PropLane Legacy". Build numbers across the two records
+are **not comparable** — a higher number on the legacy record is an *older*,
+orphaned app. Never ship to or modify the legacy record. To see which one a device
+actually has installed:
+
+```
+/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
+  /Applications/PropLane.app/Wrapper/*.app/Info.plist
+```
+
+The identity lives in `capacitor.config.ts` (`appId`),
 `ios/App/App.xcodeproj/project.pbxproj` (`PRODUCT_BUNDLE_IDENTIFIER`, both configs),
 `ios/App/App/Info.plist` (the custom URL scheme), `ios/App/fastlane/{Appfile,Fastfile}`,
 `public/.well-known/apple-app-site-association` (`8FH3GVHCZ9.space.proplane.app`), and
@@ -247,8 +262,91 @@ GitHub Actions workflow
 [`.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml),
 which on every push to `production` (and on `workflow_dispatch`) runs `npm ci`,
 `npx cap sync ios` at the production `CAP_SERVER_URL`, the
-`scripts/verify-cap-prod-config.sh` Release guard, and `fastlane beta` to upload
-to TestFlight. It self-skips until the `ASC_*` secrets exist.
+`scripts/verify-cap-prod-config.sh` Release guard, `fastlane beta` to upload
+to TestFlight, and `scripts/ios-testflight-distribute.mjs` to make the build
+installable. It self-skips until the `ASC_*` secrets exist.
+
+#### The distribute step is what makes a build installable
+
+`fastlane beta` uses `skip_waiting_for_build_processing: true` so the macOS job
+isn't billed for Apple's processing queue. That option is mutually exclusive with
+tester-group assignment (pilot needs a processed build to assign one), which is
+how builds 33-37 shipped as green runs that no tester could install — uploaded,
+"Complete", **empty Groups column**, zero invites.
+
+`scripts/ios-testflight-distribute.mjs` closes it, talking to the App Store
+Connect API directly (ES256 JWT from the same `ASC_*` secrets, no extra deps):
+
+1. Resolve `space.proplane.app` → app id and **assert it is 6795707576**. Bundle
+   id → app id is pinned so a build can never land on the abandoned legacy record.
+2. Resolve the beta group by **exact name** (`Internal — PropLane team`, em dash,
+   override with `TESTFLIGHT_INTERNAL_GROUP`). No match → fail and print every
+   group that does exist. Matched an *external* group → fail; external testing
+   needs App Review and is never enabled here.
+3. Poll `builds?filter[version]=<n>` every 20s until `processingState = VALID`,
+   logging elapsed time and state each tick, bounded by
+   `TESTFLIGHT_PROCESSING_TIMEOUT_SECONDS`, which defaults to (and is capped at) the
+   largest wait that still leaves the step budget room to assign and verify — both
+   are derived from `STEP_BUDGET_SECONDS` and the poll intervals, never typed in,
+   and a unit test asserts that budget still equals the distribute step's own
+   `timeout-minutes`. A failed read is a tick, not the end of the wait, **only when
+   the request layer tagged it retryable** (transport error, 429, 5xx): an App Store
+   Connect blip inside the deadline no longer reds a promote whose build is fine,
+   while a 401, a 403, any permanent 4xx, or an untagged error surfaces immediately
+   with its own message instead of being re-read to the deadline and reported as
+   Apple being slow. `FAILED`/`INVALID` and a build number matching more than one
+   build still fail immediately. The timeout message names which case it was —
+   still processing, read once and then unreadable, or never readable at all — so
+   those are never confused for one another.
+4. Assign the build to the group, then **re-read
+   `builds?filter[id]=<buildId>&filter[betaGroups]=<groupId>`** and fail unless
+   the build is present. The exit code reflects a fresh API read, not the POST's
+   status code — a failed assignment can never look green, and conversely a POST
+   that errors (a retry landing on 409 "already exists") does not fail a build the
+   API says *is* assigned. The read is re-polled a few times over ~1 min because
+   that filter is search-index-backed and can lag the write; re-polling only
+   prevents a false red, it never softens the verdict. The query is exact rather
+   than a page of the group's builds, so a group with hundreds of accumulated
+   builds can never report a correctly-assigned build as missing.
+5. Report `buildBetaDetail` (`internalBuildState` / `externalBuildState`) and pass
+   **only** on an affirmatively installable `internalBuildState` —
+   `READY_FOR_BETA_TESTING` or `IN_BETA_TESTING`. `PROCESSING` and
+   `IN_EXPORT_COMPLIANCE_REVIEW` are TRANSIENT — `buildBetaDetail` lags
+   `build.processingState` because they are separate resources on separate
+   backends — so they are re-polled for ~60s and then fail closed; re-polling only
+   prevents a false red, it never softens the verdict. Every other value reds the
+   run immediately: `MISSING_EXPORT_COMPLIANCE`, `PROCESSING_EXCEPTION`,
+   `EXPIRED`, an absent state, an unreadable one, and any
+   value Apple adds later. It is an **allowlist, not a denylist of bad states**,
+   because a denylist passes everything it has not heard of — that is how an
+   absent state (an empty body read as `{}`) once slipped through and silently
+   defeated the fail-closed guarantee. Every request retries transport errors and
+   5xx (node's `fetch` *rejects* on a dropped socket, so that is caught, not just
+   status codes), so an unreadable state is a real unknown, and the step fails
+   closed rather than reporting success it cannot support. Only a *retryable*
+   failure becomes that unknown: a credential or permanent-4xx failure on the
+   `buildBetaDetail` read is re-thrown with its own message rather than dressed up
+   as an unknown beta state.
+
+The build number comes from the fastlane step's `build_number` output, not from
+"latest build", so a concurrent upload can't cause the wrong build to be
+distributed. Export compliance is answered declaratively by
+`ITSAppUsesNonExemptEncryption` in `ios/App/App/Info.plist` — a build missing that
+key stays un-installable regardless of group assignment, and step 5 catches it.
+
+Rerunning is safe and idempotent (already-assigned builds are detected and left
+alone). To backfill a stranded build or just inspect state:
+
+```
+export ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_P8_PATH=~/AuthKey_XXXX.p8
+node scripts/ios-testflight-distribute.mjs --build=37
+node scripts/ios-testflight-distribute.mjs --build=37 --verify-only   # read-only
+```
+
+`--verify-only` answers "is build N installable right now": one read of each
+resource, no waiting and no re-polling, so a build Apple is still processing is
+reported as such immediately instead of blocking. Drop the flag to wait and
+distribute.
 
 Xcode Cloud was a redundant second pipeline that did the same thing. It failed
 continuously (builds 54–97) because Apple only runs `ci_scripts/ci_post_clone.sh`

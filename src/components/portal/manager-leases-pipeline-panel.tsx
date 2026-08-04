@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  MANAGER_TABLE_TH,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -38,11 +37,12 @@ import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   generateLeaseHtmlForRow,
-  getLeaseDocumentHtml,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   managerSignLease,
-  managerUploadLeasePdf,
+  confirmUploadedLeaseParse,
+  leaseAwaitsUploadedLeaseReview,
+  UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   runLeaseDownload,
   sendLeaseBackToManager,
   sendLeaseToResident,
@@ -52,6 +52,9 @@ import {
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
+import { retryUploadedLeaseParse, uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
+import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
+import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
 
 export function ManagerLeasesPipelinePanel({
   rows,
@@ -102,6 +105,7 @@ export function ManagerLeasesPipelinePanel({
   const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [editLeaseRowId, setEditLeaseRowId] = useState<string | null>(null);
   const [regenerateLeaseRow, setRegenerateLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [importReviewRowId, setImportReviewRowId] = useState<string | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -402,12 +406,27 @@ export function ManagerLeasesPipelinePanel({
     const f = files?.[0];
     if (!f) return;
     setPendingRowId(rowId);
-    const res = await managerUploadLeasePdf(rowId, f, managerUserId);
+    const res = await uploadAndParseLeasePdf(rowId, f, managerUserId);
     setPendingRowId(null);
     if (uploadRef.current) uploadRef.current.value = "";
-    if (res.ok) {
+    if (!res.ok) {
+      showToast(res.error ?? "Upload failed.");
+      return;
+    }
+    if (res.saveError) {
+      showToast(`PDF saved, but its PropLane reading was not stored: ${res.saveError}`);
+      return;
+    }
+    if (!res.parse) {
       showToast("PDF saved. Resident sees this on their Lease tab.");
-    } else showToast(res.error ?? "Upload failed.");
+      return;
+    }
+    setImportReviewRowId(rowId);
+    showToast(
+      res.parse.status === "parsed"
+        ? `Lease imported into PropLane format (${res.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+        : `Lease PDF saved, but PropLane could not read its text. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+    );
   };
 
   const renderLeaseHeaderActions = (row: LeasePipelineRow) => {
@@ -422,7 +441,10 @@ export function ManagerLeasesPipelinePanel({
     const hasDocument = hasLeaseDocument(row);
     const sendToResidentDisabled =
       !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-      (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl);
+      (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) ||
+      // An imported lease is not signable until a person has confirmed the
+      // extraction. `sendLeaseToResident` refuses too; this is the affordance.
+      leaseAwaitsUploadedLeaseReview(row);
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
     const showDelete = row.status !== "Fully Signed";
     const showMoveToReview = row.status === "Resident Signature Pending";
@@ -515,6 +537,21 @@ export function ManagerLeasesPipelinePanel({
       </Button>
     ) : null;
 
+    const showReviewImport = Boolean(row.uploadedLeaseParse);
+    const importNeedsReview = leaseAwaitsUploadedLeaseReview(row);
+    const reviewImportLabel = importNeedsReview ? "Review import" : "Imported lease";
+    const reviewImportButton = showReviewImport ? (
+      <Button
+        type="button"
+        variant={importNeedsReview ? "primary" : "outline"}
+        className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
+        data-attr="lease-review-import"
+        onClick={() => setImportReviewRowId(row.id)}
+      >
+        {reviewImportLabel}
+      </Button>
+    ) : null;
+
     const uploadButton = canEditDocument ? (
       <Button
         type="button"
@@ -580,7 +617,7 @@ export function ManagerLeasesPipelinePanel({
         variant="outline"
         className={`${RESIDENT_DETAIL_HEADER_ACTION_BTN} bg-primary/[0.06] text-primary hover:bg-primary/[0.12]`}
         disabled={emailBusyForRow === row.id}
-        onClick={() => void sendAccountEmail(row)}
+        onClick={() => sendAccountEmail(row)}
       >
         {emailBusyForRow === row.id ? "Sending…" : "Email setup"}
       </Button>
@@ -589,6 +626,7 @@ export function ManagerLeasesPipelinePanel({
     const hasMobileOverflow =
       hasDocument ||
       canEditDocument ||
+      showReviewImport ||
       showDelete ||
       showGenerate ||
       showMoveToReview ||
@@ -621,6 +659,11 @@ export function ManagerLeasesPipelinePanel({
               onSelect={triggerUpload}
             >
               {uploadLabel}
+            </DropdownMenuItem>
+          ) : null}
+          {showReviewImport ? (
+            <DropdownMenuItem data-attr="lease-review-import" onSelect={() => setImportReviewRowId(row.id)}>
+              {reviewImportLabel}
             </DropdownMenuItem>
           ) : null}
           {showDelete ? (
@@ -681,6 +724,7 @@ export function ManagerLeasesPipelinePanel({
             {editButton}
             {downloadButton}
             {generateButton}
+            {reviewImportButton}
             {uploadButton}
             {moveToReviewButton}
             {renewButton}
@@ -695,8 +739,48 @@ export function ManagerLeasesPipelinePanel({
 
   const renderLeaseRowDetail = (row: LeasePipelineRow) => <LeaseDocumentPreview row={row} />;
 
+  const importReviewRow = useMemo(
+    () => (importReviewRowId ? (rows.find((r) => r.id === importReviewRowId) ?? null) : null),
+    [importReviewRowId, rows],
+  );
+
   const leaseModals = (
     <>
+      {importReviewRow?.uploadedLeaseParse ? (
+        <UploadedLeaseReviewModal
+          open
+          row={importReviewRow}
+          parse={importReviewRow.uploadedLeaseParse}
+          onClose={() => setImportReviewRowId(null)}
+          onConfirm={({ overrides, note }) => {
+            const result = confirmUploadedLeaseParse(importReviewRow.id, {
+              managerUserId,
+              overrides: overrides as Partial<Record<UploadedLeaseFieldKey, string>>,
+              note,
+            });
+            if (!result.ok) {
+              showToast(result.error ?? "Could not confirm the imported lease.");
+              return;
+            }
+            setImportReviewRowId(null);
+            void syncLeasePipelineFromServer(managerUserId, { force: true });
+            showToast("Imported lease confirmed. It can now be sent for signature.");
+          }}
+          onRetryRead={async () => {
+            const result = await retryUploadedLeaseParse(importReviewRow.id, managerUserId);
+            if (!result.ok) {
+              showToast(result.error ?? "Could not read that lease PDF.");
+              return;
+            }
+            await syncLeasePipelineFromServer(managerUserId, { force: true });
+            showToast(
+              result.parse?.status === "parsed"
+                ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+                : `PropLane still could not read this PDF. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+            );
+          }}
+        />
+      ) : null}
       {signingRow ? (
         <LeaseSigningModal
           row={signingRow}

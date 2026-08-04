@@ -200,7 +200,7 @@ export function TourReminderTourPanel({
             Message
             <Textarea className="mt-1 min-h-[8rem]" value={body} onChange={(e) => setBody(e.target.value)} data-attr="tour-reminder-body" />
           </label>
-          <Button type="button" variant="primary" className="rounded-full" disabled={saving} onClick={() => void save()} data-attr="tour-reminder-save">
+          <Button type="button" variant="primary" className="rounded-full" disabled={saving} onClick={() => save()} data-attr="tour-reminder-save">
             {saving ? "Saving…" : "Save reminder"}
           </Button>
         </div>

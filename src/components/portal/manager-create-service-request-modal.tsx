@@ -31,7 +31,7 @@ import {
   type ListingServiceQuickAdd,
 } from "@/lib/manager-listing-submission";
 import { resolvePropertySaveTargetById } from "@/lib/manager-property-save-target";
-import { createServiceRequest, hasDeposit, CUSTOM_SERVICE_REQUEST_OFFER_ID } from "@/lib/service-requests-storage";
+import { createServiceRequest, CUSTOM_SERVICE_REQUEST_OFFER_ID } from "@/lib/service-requests-storage";
 
 type PropertyOption = { propertyId: string; propertyLabel: string };
 

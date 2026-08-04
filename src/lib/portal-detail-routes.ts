@@ -384,6 +384,10 @@ export function promotionListHref(basePath: string, _filter?: PromotionContentFi
   return `${basePath}/promotion`;
 }
 
+export function promotionDetailHref(basePath: string, assetId: string): string {
+  return `${basePath}/promotion/${encodeURIComponent(assetId)}`;
+}
+
 /** Map mistaken top-level portal segments to their routed section paths. */
 export function legacyManagerPortalSectionPath(section: string): string | null {
   if ((APPLICATION_BUCKETS as readonly string[]).includes(section)) {

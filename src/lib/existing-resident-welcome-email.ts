@@ -4,6 +4,7 @@
 
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
+import { formatProplaneIdForDisplay } from "@/lib/manager-id";
 
 export const EXISTING_RESIDENT_WELCOME_EMAIL_SUBJECT =
   "Your PropLane resident portal — pay rent and manage your home";
@@ -15,7 +16,7 @@ export function buildExistingResidentWelcomeEmailBody(params: {
   propertyLabel?: string;
 }): string {
   const greeting = params.residentName?.trim() ? `Hi ${params.residentName.trim()},` : "Hi,";
-  const id = params.axisId.trim();
+  const id = formatProplaneIdForDisplay(params.axisId);
   const propertyLine = params.propertyLabel?.trim()
     ? `You're set up for ${params.propertyLabel.trim()} on PropLane.`
     : "You're set up on PropLane as a resident.";
@@ -61,7 +62,7 @@ export function buildExistingResidentWelcomeEmailHtml(params: {
   const greeting = params.residentName?.trim()
     ? `Hi ${escapeHtmlText(params.residentName.trim())},`
     : "Hi,";
-  const id = escapeHtmlText(params.axisId.trim());
+  const id = escapeHtmlText(formatProplaneIdForDisplay(params.axisId));
   const href = escapeHtmlAttr(params.signupUrl);
   const urlPlain = escapeHtmlText(params.signupUrl);
   const propertyLine = params.propertyLabel?.trim()

@@ -14,6 +14,7 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { oauthErrorFromParams } from "@/lib/auth/oauth-error-params";
 import { oauthContinuePath } from "@/lib/auth/oauth-redirect";
 import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
 import {
@@ -76,7 +77,13 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: NativeAuthHubProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [errorText, setErrorText] = useState<string | null>(null);
+  // `/auth/sign-in` is where EVERY native OAuth failure lands (`nativeOAuthSignInFailureUrl`
+  // navigates here with ?error=oauth&message=…). Reading those params is what turns that
+  // navigation from a bare page reload — "it just refreshes and goes back" — into an
+  // explanation. `PortalAuthForm` already did this; this screen dropped it on the floor.
+  const [errorText, setErrorText] = useState<string | null>(() =>
+    oauthErrorFromParams(searchParams),
+  );
   const [failedSignInAttempts, setFailedSignInAttempts] = useState(0);
 
   const nextFromUrl = searchParams.get("next")?.trim() ?? "";
@@ -226,7 +233,12 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: NativeAuthHubProps) {
           ) : null}
 
           <div className="space-y-3">
-            <OAuthSocialStack nextPath={signInNextPath} intent={signInIntent} disabled={locked} />
+            <OAuthSocialStack
+              nextPath={signInNextPath}
+              intent={signInIntent}
+              disabled={locked}
+              onError={(message) => setErrorText(message || null)}
+            />
             <AuthDivider label="or enter your details" />
             <div className="space-y-3">
               <Input
@@ -265,7 +277,7 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: NativeAuthHubProps) {
                 type="button"
                 className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
                 disabled={locked}
-                onClick={() => void signIn()}
+                onClick={() => signIn()}
               >
                 {busy ? "Signing in…" : "Sign in"}
               </Button>

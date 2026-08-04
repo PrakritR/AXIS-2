@@ -210,7 +210,7 @@ export function PortalTextNotificationsBlock({
                 className="h-9 min-h-0 shrink-0 px-4 text-xs"
                 data-attr={`${dataAttrPrefix}-text-notifications-send-code`}
                 disabled={busy || !smsConfigured || !phoneInput.trim()}
-                onClick={() => void sendCode()}
+                onClick={() => sendCode()}
               >
                 {busy && !codeSent ? "Sending…" : codeSent ? "Resend code" : "Send code"}
               </Button>
@@ -242,7 +242,7 @@ export function PortalTextNotificationsBlock({
                   className="h-9 min-h-0 shrink-0 px-4 text-xs"
                   data-attr={`${dataAttrPrefix}-text-notifications-verify`}
                   disabled={busy || codeInput.length !== 6}
-                  onClick={() => void verifyCode()}
+                  onClick={() => verifyCode()}
                 >
                   {busy ? "Verifying…" : "Verify"}
                 </Button>

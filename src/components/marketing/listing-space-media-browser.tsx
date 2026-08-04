@@ -58,6 +58,33 @@ function AvailabilityPill({ text, variant = "room" }: { text: string; variant?: 
   );
 }
 
+function DetailsOpenButton({
+  label,
+  title,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`${label} for ${title}`}
+      data-attr="listing-space-media-details"
+      className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-card/95 px-2.5 py-2 text-xs font-semibold text-foreground shadow-md backdrop-blur-sm transition hover:bg-card sm:px-3"
+      onClick={onClick}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+        <path d="M12 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="12" cy="8" r="1" fill="currentColor" />
+      </svg>
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
 function SpaceMediaCtaButton({
   cta,
   className,
@@ -99,6 +126,7 @@ export function ListingSpaceMediaBrowser({
   resolveSecondaryCta,
   className = "",
   onEntryPress,
+  detailsActionLabel = "Details",
 }: {
   entries: ListingSpaceMediaEntry[];
   testId: string;
@@ -111,6 +139,8 @@ export function ListingSpaceMediaBrowser({
   className?: string;
   /** Preview/manager mode: compact list rows; tap opens details (no apply CTAs). */
   onEntryPress?: (entry: ListingSpaceMediaEntry, index: number) => void;
+  /** Label for the hero details button when `onEntryPress` is set. */
+  detailsActionLabel?: string;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -186,6 +216,12 @@ export function ListingSpaceMediaBrowser({
     if (heroOpensDetails) e.stopPropagation();
   };
 
+  const openDetails = (e: React.MouseEvent) => {
+    if (!onEntryPress || !entry) return;
+    e.stopPropagation();
+    onEntryPress(entry, safeIndex);
+  };
+
   const thumbForEntry = (e: ListingSpaceMediaEntry) => {
     const firstPhoto = e.photoUrls?.[0];
     if (firstPhoto) return { kind: "photo" as const, src: firstPhoto };
@@ -242,6 +278,12 @@ export function ListingSpaceMediaBrowser({
         ) : (
           <NoImagePlaceholder />
         )}
+
+        {heroOpensDetails ? (
+          <div className="pointer-events-none absolute right-3 top-3 z-20">
+            <DetailsOpenButton label={detailsActionLabel} title={entry!.title} onClick={openDetails} />
+          </div>
+        ) : null}
 
         {entries.length > 1 ? (
           <>

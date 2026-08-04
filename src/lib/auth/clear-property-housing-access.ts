@@ -16,13 +16,19 @@ function asStringArray(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
+/**
+ * Ids match EXACTLY. This helper runs with the service-role client and rewrites
+ * rows across every manager, so any normalization here lets one manager's id
+ * fold onto another's: a record created under `mgr-victim-house-1.` is a
+ * distinct primary key its owner may legitimately delete, and a fuzzy match
+ * would carry that delete into the victim's `mgr-victim-house-1` grants and
+ * resident rows.
+ */
 function propertyIdMatches(candidate: unknown, propertyId: string): boolean {
   const left = String(candidate ?? "").trim();
   const right = propertyId.trim();
   if (!left || !right) return false;
-  if (left === right) return true;
-  const token = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
-  return token(left) === token(right);
+  return left === right;
 }
 
 function scrubHousingFromRowData(rowData: unknown): Record<string, unknown> {

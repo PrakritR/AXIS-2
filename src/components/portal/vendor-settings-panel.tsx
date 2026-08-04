@@ -538,7 +538,7 @@ export function VendorAvailabilityEditor() {
               data-attr="vendor-availability-save-weekly"
               className="h-9 rounded-full px-4 text-sm"
               disabled={saving}
-              onClick={() => void addWeeklyWindow()}
+              onClick={() => addWeeklyWindow()}
             >
               {weeklyEditingId ? "Save changes" : "Save"}
             </Button>
@@ -688,7 +688,7 @@ export function VendorAvailabilityEditor() {
               data-attr="vendor-availability-save-open-date"
               className="h-9 rounded-full px-4 text-sm"
               disabled={saving}
-              onClick={() => void addOpenDate()}
+              onClick={() => addOpenDate()}
             >
               {openEditingId ? "Save changes" : "Save"}
             </Button>
@@ -818,7 +818,7 @@ export function VendorAvailabilityEditor() {
               data-attr="vendor-availability-save-block"
               className="h-9 rounded-full px-4 text-sm"
               disabled={saving}
-              onClick={() => void addBlock()}
+              onClick={() => addBlock()}
             >
               {blockEditingId ? "Save changes" : "Save"}
             </Button>
@@ -1041,7 +1041,7 @@ export function VendorSettingsPanel() {
             <Button
               variant="primary"
               className="px-4 text-[13px]"
-              onClick={() => void saveProfile()}
+              onClick={() => saveProfile()}
               disabled={profileSaving || profileLoading || unlinked}
               data-attr="vendor-settings-profile-save"
             >
@@ -1084,7 +1084,7 @@ export function VendorSettingsPanel() {
             <Button
               variant="primary"
               className="px-4 text-[13px]"
-              onClick={() => void saveCapabilities()}
+              onClick={() => saveCapabilities()}
               disabled={capabilitiesSaving || profileLoading || unlinked}
               data-attr="vendor-settings-capabilities-save"
             >

@@ -22,7 +22,6 @@ export function PortalCommunicationShell({
   compactFilterRow = true,
   mobileThreadReading = false,
   hideTitleOnMobileNav = true,
-  mobileActionsRow,
 }: {
   title: string;
   controlStack?: ReactNode;
@@ -34,8 +33,6 @@ export function PortalCommunicationShell({
   compactFilterRow?: boolean;
   mobileThreadReading?: boolean;
   hideTitleOnMobileNav?: boolean;
-  /** Full-width mobile action row (Filter | primary) above list chrome. */
-  mobileActionsRow?: ReactNode;
 }) {
   const resolvedStack =
     controlStack ??
@@ -55,11 +52,6 @@ export function PortalCommunicationShell({
       viewportFillBody
       stickyPageChrome={false}
     >
-      {mobileActionsRow && !hideMobileFilterRow ? (
-        <div className="shrink-0" data-portal-communication-chrome>
-          {mobileActionsRow}
-        </div>
-      ) : null}
       {resolvedStack ? (
         <div
           className={hideMobileFilterRow ? "mb-2 shrink-0 max-md:hidden" : "mb-2 shrink-0"}

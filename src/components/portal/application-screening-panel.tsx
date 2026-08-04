@@ -367,7 +367,7 @@ export function ApplicationScreeningPanel({
             variant="primary"
             className={headerActionBtnClass}
             disabled={busy}
-            onClick={() => void runScreening()}
+            onClick={() => runScreening()}
           >
             {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
           </Button>

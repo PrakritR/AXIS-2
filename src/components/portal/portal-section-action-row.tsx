@@ -19,8 +19,13 @@ const PORTAL_FOOTER_INLINE_SPACER =
   "h-[calc(2.5rem+var(--portal-native-bottom-nav-inset,0px)+env(safe-area-inset-bottom,0px))] shrink-0 md:hidden";
 
 /**
- * Desktop title row — page title (and optional trailing tabs) on the left;
+ * Page title row — page title (and optional trailing tabs) on the left;
  * filter + primary actions grouped on the right (dropdown opens leftward from filter).
+ *
+ * Renders at EVERY breakpoint, not desktop only: `ManagerPortalPageShell` collapsed its old
+ * mobile `PageHeader` / desktop band pair onto this one band. So an ungated `actions` node
+ * already reaches phones from here — pairing one with a {@link PortalPageHeaderMobileActionsRow}
+ * draws it twice. See that component for the two legal shapes.
  */
 export function PortalPageTitleBand({
   title,
@@ -56,7 +61,7 @@ export function PortalPageTitleBand({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 sm:gap-2",
+        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5 sm:gap-2",
         className,
       )}
       data-slot="portal-page-title-band"
@@ -79,7 +84,16 @@ export function PortalPageTitleBand({
   );
 }
 
-/** Mobile — filter + primary actions grouped on the right (below the nav title). */
+/**
+ * Mobile — filter + primary actions grouped on the right (below the nav title).
+ *
+ * Only for the SPLIT shape: a `hidden md:flex` `titleAside` (so {@link PortalPageTitleBand}
+ * contributes nothing on a phone) paired with this `md:hidden` row. A section whose
+ * `titleAside` is ungated is BAND-ONLY and must not render this — that mix shipped two
+ * overlapping CTAs on resident Applications and Tour. Deleting the row from a split-shape
+ * section is the worse failure: zero controls on a phone. Guard:
+ * `tests/unit/portal-inline-title-band-duplicate-controls.test.tsx`.
+ */
 export function PortalPageHeaderMobileActionsRow({
   filter,
   actions,

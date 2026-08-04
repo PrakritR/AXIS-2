@@ -38,6 +38,7 @@ export function GoogleSignInButton({
   fixedCallbackPath,
   intent = null,
   onBeforeRedirect,
+  onError,
 }: {
   nextPath?: string;
   disabled?: boolean;
@@ -46,6 +47,8 @@ export function GoogleSignInButton({
   fixedCallbackPath?: string;
   intent?: OAuthSignInIntent | null;
   onBeforeRedirect?: () => void;
+  /** Render the failure in place too — a toast is too transient for a multi-sentence hint. */
+  onError?: (message: string) => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -63,6 +66,7 @@ export function GoogleSignInButton({
 
   const signInWithGoogle = async () => {
     setBusy(true);
+    onError?.("");
     const supabase = createSupabaseBrowserClient();
     const result = await startOAuthSignIn({
       supabase,
@@ -74,6 +78,7 @@ export function GoogleSignInButton({
       onBeforeRedirect,
     });
     if (!result.ok) {
+      onError?.(result.message);
       showToast(result.message);
       setBusy(false);
       return;

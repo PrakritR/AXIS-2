@@ -7,13 +7,16 @@ import {
   resolvePlacementLeaseDates,
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
+import {
+  isDraftShapedApplicationRow,
+  type DraftShapedRowFields,
+} from "@/lib/rental-application/draft-shape";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
 import {
   defaultBackgroundCheckStatusForRow,
   normalizeBackgroundCheckStatus,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 export const MANAGER_APPLICATIONS_EVENT = "axis:manager-applications";
 const MANAGER_APPLICATIONS_SESSION_KEY_PREFIX = "axis:manager-applications:v2";
@@ -135,9 +138,18 @@ function applicationRowsChanged(a: DemoApplicantRow[], b: DemoApplicantRow[]) {
   return JSON.stringify(normalizeApplicationRows(a)) !== JSON.stringify(normalizeApplicationRows(b));
 }
 
-/** A pending row still being filled in by the applicant (not yet submitted). */
+/**
+ * A pending row still being filled in by the applicant (not yet submitted).
+ *
+ * Deliberately withdrawn-agnostic and narrower than `isInProgressApplicationRow`:
+ * this is the persistence guard, and it must mirror the conditional UPDATE in
+ * `persistDraftRow` (bucket `pending` + stage "In progress"), which already
+ * refuses a withdrawn row in SQL. Treating a withdrawn draft as "not a draft"
+ * here would route it down the unconditional upsert instead and let a late
+ * autosave revive it.
+ */
 export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "stage">): boolean {
-  return isInProgressApplicationRow(row as DemoApplicantRow);
+  return row.bucket === "pending" && String(row.stage ?? "").trim().toLowerCase() === "in progress";
 }
 
 /**
@@ -152,11 +164,25 @@ export function isDraftApplicationRow(row: Pick<DemoApplicantRow, "bucket" | "st
  * "In progress", so the draft write is the one to drop.
  */
 export function wouldDowngradeSubmittedApplication(
-  existing: Pick<DemoApplicantRow, "bucket" | "stage"> | null | undefined,
+  existing: DraftShapedRowFields | null | undefined,
   incoming: Pick<DemoApplicantRow, "bucket" | "stage">,
 ): boolean {
   if (!existing) return false;
-  return isDraftApplicationRow(incoming) && !isDraftApplicationRow(existing);
+  // The two sides deliberately use DIFFERENT predicates.
+  //
+  // `incoming` uses the exact `isDraftApplicationRow` (bucket `pending` + stage
+  // "In progress"), because that is what the wizard's own autosave writes and it
+  // must mirror the conditional UPDATE in `persistDraftRow`.
+  //
+  // `existing` uses the WIDER `isDraftShapedApplicationRow`, because a cached row
+  // can be a legacy draft whose stage is blank, `draft`, `started` or `incomplete`.
+  // Testing the existing row with the exact predicate read those as
+  // already-submitted, so every later autosave looked like a submitted -> draft
+  // downgrade and `syncInProgressApplicationRow` returned early forever: the draft
+  // silently stopped saving, with no error and no toast. A genuinely submitted row
+  // is still rejected by the wider predicate (`isSubmittedStage` excludes it), so
+  // the submit-race guard this function exists for is unchanged.
+  return isDraftApplicationRow(incoming) && !isDraftShapedApplicationRow(existing);
 }
 
 function chooseString(primary: string | undefined, fallback: string | undefined): string | undefined {

@@ -110,7 +110,9 @@ export function PortalListControlStack({
             <div
               className={cn(
                 "min-w-0",
-                filterRow ? "w-full md:max-w-[14rem] md:shrink-0" : "flex-1",
+                filterRow
+                  ? "w-full md:max-w-[14rem] md:shrink-0"
+                  : "flex-1 -mx-2.5 px-2.5 sm:-mx-4 sm:px-4",
               )}
             >
               <Input

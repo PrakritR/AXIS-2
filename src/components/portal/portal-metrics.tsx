@@ -615,7 +615,7 @@ export function ManagerPortalPageShell({
   title: string;
   subtitle?: string;
   titleAside?: ReactNode;
-  /** Filter pill immediately beside the page title (desktop title band). Pass `null` to opt into the band without a filter. */
+  /** Filter pill immediately beside the page title (the title band). Pass `null` to opt into the band without a filter. */
   titleInlineFilter?: ReactNode | null;
   /** Inline on the title row (Appendix D4 — direction switch beside page title). */
   titleTrailing?: ReactNode;
@@ -672,27 +672,18 @@ export function ManagerPortalPageShell({
       )}
     >
       {useInlineTitleBand ? (
-        <>
-          <PageHeader
-            title={title}
-            count={count}
-            showTitleOnMobile={false}
-            className={cn(
-              "md:hidden",
-              chromeShrink,
-              compactFilterRow && "!space-y-1.5 max-lg:!space-y-1",
-              hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
-            )}
-          />
-          <PortalPageTitleBand
-            className={cn("max-md:hidden", chromeShrink, hideTitleOnNative && "[html[data-native]_&_h1]:sr-only")}
-            title={title}
-            count={count}
-            filter={titleInlineFilter}
-            titleTrailing={titleTrailing}
-            actions={titleAside}
-          />
-        </>
+        <PortalPageTitleBand
+          className={cn(
+            chromeShrink,
+            compactFilterRow && "max-lg:mb-0",
+            hideTitleOnNative && "[html[data-native]_&_h1]:sr-only",
+          )}
+          title={title}
+          count={count}
+          filter={titleInlineFilter}
+          titleTrailing={titleTrailing}
+          actions={titleAside}
+        />
       ) : (
         <PageHeader
           title={title}

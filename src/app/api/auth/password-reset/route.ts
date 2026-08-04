@@ -19,6 +19,16 @@ export const runtime = "nodejs";
 const GENERIC_OK = { ok: true } as const;
 
 /**
+ * "No user with this email" is the ordinary case, not an incident — it is what every
+ * probe of a non-customer's address looks like. Everything else from GoTrue means the
+ * mint itself is broken and an operator needs to see it.
+ */
+function isUnknownAddressError(error: { message?: string; status?: number }): boolean {
+  if (error.status === 404) return true;
+  return /user not found/i.test(error.message ?? "");
+}
+
+/**
  * Send a password-reset email.
  *
  * This replaces `supabase.auth.resetPasswordForEmail` on the client. That call
@@ -67,12 +77,23 @@ export async function POST(req: Request) {
   let tokenHash: string | undefined;
   try {
     const supabase = createSupabaseServiceRoleClient();
-    const { data } = await supabase.auth.admin.generateLink({ type: "recovery", email });
+    // supabase-js reports API failures by RETURNING an error, not by throwing, so
+    // dropping `error` here would let a revoked service-role key or a paused project
+    // fall through to the unknown-address branch below — reset dead in production while
+    // every call still answers {ok:true}. The caller's reply stays generic either way
+    // (a distinguishable one would be an account-existence oracle); the difference is
+    // that an operator gets a log line.
+    const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email });
+    if (error && !isUnknownAddressError(error)) {
+      console.error("Password reset link minting failed:", error.message);
+    }
     tokenHash = data?.properties?.hashed_token;
-  } catch {
-    // Missing/malformed service-role env or a transport error. Answering with the
-    // generic reply keeps this from becoming a health/existence oracle.
-    console.error("Password reset link minting failed");
+  } catch (thrown) {
+    // Missing/malformed service-role env, or a transport error.
+    console.error(
+      "Password reset link minting threw:",
+      thrown instanceof Error ? thrown.message : "unknown error",
+    );
     return NextResponse.json(GENERIC_OK);
   }
   if (!tokenHash) {

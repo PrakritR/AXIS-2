@@ -153,9 +153,23 @@ platform :ios do
 
     upload_to_testflight(
       api_key: api_key,
-      # Don't block the CI job waiting for Apple's server-side processing.
+      # Don't block the CI job waiting for Apple's server-side processing. Group
+      # assignment is therefore impossible here (pilot needs a processed build to
+      # assign one), so it happens in the workflow's dedicated "Distribute build
+      # to internal TestFlight group" step, which waits, assigns, and verifies.
+      # Without that step an upload is invisible to every tester.
       skip_waiting_for_build_processing: true,
+      # Internal testers only — external testing would require App Review.
+      distribute_external: false,
     )
+
+    # Hand the build number to the distribution step. Recomputing "latest build"
+    # there would race with a concurrent upload and could distribute the wrong one.
+    github_output = ENV["GITHUB_OUTPUT"]
+    if github_output && !github_output.empty?
+      File.open(github_output, "a") { |file| file.puts("build_number=#{next_build}") }
+    end
+    UI.success("Uploaded build #{next_build}; it is NOT installable until it is assigned to a tester group.")
   ensure
     File.delete(key_path) if defined?(key_path) && key_path && File.exist?(key_path)
     File.delete(p12_path) if defined?(p12_path) && p12_path && File.exist?(p12_path)

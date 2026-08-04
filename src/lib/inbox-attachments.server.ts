@@ -3,10 +3,56 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** Private bucket for portal Communication message attachments. */
 export const INBOX_ATTACHMENTS_BUCKET = "portal-inbox-attachments";
 
-const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "pdf"]);
+
+/** Characters kept from the uploader's original file name (extension excluded). */
+const MAX_ATTACHMENT_NAME_CHARS = 64;
 
 export function inboxAttachmentStoragePrefix(userId: string): string {
   return `${userId.trim()}/`;
+}
+
+/**
+ * Turn an uploader-supplied file name into a storage-key-safe final path segment.
+ *
+ * The original name is the ONLY visible label on a PDF chip, so it has to be
+ * STORED — the rest of the key is a timestamp plus a UUID and carries nothing of
+ * it. Keeping it inside the object key (rather than in a parallel metadata
+ * field) means the label can never drift from the bytes it names, every existing
+ * "derive the name from the path" reader becomes correct with no plumbing, and
+ * the download's `Content-Disposition` filename is the real one too.
+ *
+ * Restricted to `[A-Za-z0-9._-]`: Supabase Storage keys accept only a limited
+ * character set, and the same restriction makes it impossible for a name to
+ * introduce a path separator, a `..` segment, or a quote/newline that could
+ * break out of the `Content-Disposition` header.
+ */
+export function sanitizeInboxAttachmentFileName(raw: unknown, ext: string): string {
+  const base = String(raw ?? "").split(/[\\/]/).pop() ?? "";
+  const stem = base.replace(/\.[^.]*$/, "");
+  const cleaned = stem
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/\.+/g, ".")
+    .replace(/-+/g, "-")
+    .replace(/^[.\-]+/, "")
+    .slice(0, MAX_ATTACHMENT_NAME_CHARS)
+    .replace(/[.\-]+$/, "");
+  return `${cleaned || "attachment"}.${ext}`;
+}
+
+/**
+ * Always `attachment`, never `inline`.
+ *
+ * These bytes are attacker-controllable and this route answers on the app's own
+ * origin, so an inline response would be a same-origin document the uploader
+ * authored. Deliberately does not branch on content type — the hole opened the
+ * first time a non-image type was allow-listed, and a type-blind disposition is
+ * what keeps a future `ALLOWED_MIME` edit from reopening it.
+ */
+export function contentDispositionForInboxAttachmentPath(path: string): string {
+  const raw = path.split("/").pop() ?? "";
+  const safe = raw.replace(/[^A-Za-z0-9._-]/g, "_") || "attachment";
+  return `attachment; filename="${safe}"`;
 }
 
 export function isInboxAttachmentPath(path: string): boolean {
@@ -31,6 +77,8 @@ export function contentTypeForInboxAttachmentPath(path: string): string {
       return "image/webp";
     case "gif":
       return "image/gif";
+    case "pdf":
+      return "application/pdf";
     default:
       return "image/jpeg";
   }
@@ -43,6 +91,7 @@ export function sanitizeInboxAttachmentExt(ext: unknown, mime: string): string |
     .replace(/[^a-z0-9]/g, "");
   if (ALLOWED_EXT.has(raw)) return raw;
   if (mime === "image/jpeg") return "jpg";
+  if (mime === "application/pdf") return "pdf";
   return null;
 }
 

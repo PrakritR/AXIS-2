@@ -12,7 +12,6 @@ import {
 } from "@/components/portal/manager-house-properties-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow, PortalPageHeaderMobileActionsRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
@@ -35,6 +34,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
 } from "@/lib/demo-property-pipeline";
 import { collectLinkedPropertyIds, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { isServerSyncOriginatedEvent } from "@/lib/property-pipeline-events";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
@@ -134,7 +134,14 @@ export function ManagerProperties({
         if (userId) void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId));
       });
     });
-    const on = () => {
+    const on = (e: Event) => {
+      // A sync-originated event already delivered the fresh snapshot into the
+      // local store; forcing another sync here just re-fetches what we hold.
+      if (isServerSyncOriginatedEvent(e)) {
+        setPropCount(countManagerManagedPropertiesForUser(scopeUserId));
+        setPortfolioTick((t) => t + 1);
+        return;
+      }
       void refreshPortfolio();
     };
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
@@ -143,7 +150,7 @@ export function ManagerProperties({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [refreshPortfolio, userId]);
+  }, [refreshPortfolio, userId, scopeUserId]);
 
   const stageCounts = useMemo(() => {
     void portfolioTick;
@@ -246,17 +253,6 @@ export function ManagerProperties({
     </>
   );
 
-  const propertiesMobileActionsRow = (
-    <PortalPageHeaderMobileActionsRow
-      actions={
-        <PortalSectionActionRow variant="header" className="gap-2">
-          {propertiesShareButton}
-          {propertiesAddButton}
-        </PortalSectionActionRow>
-      }
-    />
-  );
-
   const isDetailView = Boolean(propertyKeyProp);
 
   const listPanel = (
@@ -286,7 +282,6 @@ export function ManagerProperties({
           titleAside={propertiesDesktopHeaderActions}
           compactFilterRow
         >
-          {propertiesMobileActionsRow}
           <PortalListControlStack
             className="mb-2"
             destinations={MANAGER_STAGES.map((stage) => ({

@@ -22,7 +22,7 @@ import {
   PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
+import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import {
   DOCUMENT_CATEGORY_LABELS,
   type ManagerDocumentDTO,

@@ -90,4 +90,125 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain('html[data-native] nextjs-portal');
     expect(GLOBALS_CSS).toContain("display: none !important");
   });
+
+  it("leaves fixed-chrome page shells free to flex on phones", () => {
+    // `.portal-main-inner > * { flex: 0 0 auto }` is unlayered, so it beats the
+    // Tailwind `flex-1` utility on the page shell. Unscoped, it pinned the shell
+    // to its full content height inside the `overflow: hidden`
+    // #portal-main-content of every sticky-chrome / Communication surface, so
+    // .portal-list-page-scroll never got a bounded height and phone pages taller
+    // than the viewport could not scroll below the fold.
+    const PAGE_SCROLLS_SCOPE =
+      "html:not([data-portal-sticky-chrome]):not([data-communication-surface])";
+    expect(GLOBALS_CSS).toContain(`${PAGE_SCROLLS_SCOPE} .portal-main-inner > *`);
+
+    const cssWithoutComments = GLOBALS_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    const childRules = [
+      ...cssWithoutComments.matchAll(/([^{}]*\.portal-main-inner\s*>\s*\*[^{}]*)\{([^{}]*)\}/g),
+    ].map((match) => ({ selector: match[1].trim(), declarations: match[2] }));
+    const pinnedRules = childRules.filter((rule) =>
+      /(^|;)\s*flex\s*:\s*0\s+0\s+auto\s*(;|$)/.test(rule.declarations),
+    );
+
+    // Whitespace- and order-insensitive: only the page-scrolls-scoped rule may
+    // pin `.portal-main-inner > *` to `flex: 0 0 auto`.
+    expect(pinnedRules.length).toBeGreaterThan(0);
+    for (const rule of pinnedRules) {
+      expect(rule.selector).toContain(PAGE_SCROLLS_SCOPE);
+    }
+  });
+
+  it("gives fixed-chrome surfaces their FAB clearance inside the scroller, not as dead padding", () => {
+    // `#portal-main-content` is `overflow: hidden` on sticky-chrome surfaces, so
+    // its padding-bottom can never become trailing scroll room the way it does on
+    // a page-scrolls surface — it only shrinks the scroll viewport. Reserving the
+    // FAB half of `--portal-mobile-scroll-bottom-inset` there left a dead 56px
+    // strip of the shell gradient between the last row and the bottom nav, with
+    // the assistant FAB parked in it, which read as an opaque banner behind the
+    // button. The nav bar is reserved on the clipped element; the FAB clearance
+    // belongs to `.portal-list-page-scroll`, which can actually scroll it.
+    const cssWithoutComments = GLOBALS_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    const declarationsFor = (selector: string) =>
+      [...cssWithoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter((match) =>
+          match[1]
+            .split(",")
+            .some((part) => part.trim().replace(/\s+/g, " ") === selector),
+        )
+        .map((match) => match[2]);
+
+    // The nav-inset-only rule must exclude the bulk-action-bar case. It is the
+    // same specificity as `html[data-bulk-action-bar] #portal-main-content` and
+    // sits later in the file, so an unscoped version wins on source order and
+    // strips the fixed selection bar's 3.75rem of clearance, stranding the last
+    // ledger row underneath it on phone-width Payments / Residents.
+    const mainContent = declarationsFor(
+      "html[data-portal-sticky-chrome]:not([data-bulk-action-bar]) #portal-main-content",
+    );
+    const padded = mainContent.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(padded.length).toBeGreaterThan(0);
+    for (const declarations of padded) {
+      // Only the bottom nav — never the combined inset that also covers the FAB.
+      expect(declarations).toMatch(
+        /padding-bottom:\s*var\(--portal-native-bottom-nav-inset[^)]*\)/,
+      );
+      expect(declarations).not.toContain("--portal-mobile-scroll-bottom-inset");
+    }
+
+    // No unscoped sticky-chrome rule may reserve bottom padding — that is the
+    // shape that would shadow the bulk bar again.
+    expect(
+      declarationsFor("html[data-portal-sticky-chrome] #portal-main-content").filter((d) =>
+        /(^|;)\s*padding-bottom\s*:/.test(d),
+      ),
+    ).toHaveLength(0);
+
+    // Bulk bar open: dead FAB band still gone, bulk clearance still reserved.
+    const withBulkBar = declarationsFor(
+      "html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content",
+    ).filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(withBulkBar.length).toBeGreaterThan(0);
+    for (const declarations of withBulkBar) {
+      expect(declarations).toMatch(
+        /padding-bottom:\s*calc\(\s*var\(--portal-native-bottom-nav-inset[^)]*\)\s*\+\s*3\.75rem\s*\)/,
+      );
+      expect(declarations).not.toContain("--portal-mobile-scroll-bottom-inset");
+    }
+
+    const scroller = declarationsFor("html[data-portal-sticky-chrome] .portal-list-page-scroll");
+    const scrollerPadded = scroller.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
+    expect(scrollerPadded.length).toBeGreaterThan(0);
+    for (const declarations of scrollerPadded) {
+      expect(declarations).toMatch(
+        /padding-bottom:\s*var\(--portal-assistant-fab-clearance[^)]*\)/,
+      );
+    }
+  });
+
+  it("drops the duplicate Settings page title behind the mobile app bar", () => {
+    const PROFILE_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
+      "utf8",
+    );
+
+    const shellTag = PROFILE_SOURCE.match(/<ManagerPortalPageShell\b[\s\S]*?>/);
+    expect(shellTag).not.toBeNull();
+    expect(shellTag?.[0]).toContain('title="Settings"');
+    expect(shellTag?.[0]).toContain("hideTitleOnMobileNav");
+  });
+
+  it("hides the admin Settings heading block below the mobile app bar breakpoint", () => {
+    const PROFILE_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/portal-profile-client.tsx"),
+      "utf8",
+    );
+
+    const headingWrapper = PROFILE_SOURCE.match(
+      /<div className="([^"]*)">\s*<h1 className=\{PORTAL_PAGE_TITLE\}>Settings<\/h1>/,
+    );
+    expect(headingWrapper).not.toBeNull();
+    // The wrapper itself carries `mb-8`, so hiding only its children would leave
+    // dead whitespace under the app bar.
+    expect(headingWrapper?.[1].split(/\s+/)).toContain("max-md:hidden");
+  });
 });

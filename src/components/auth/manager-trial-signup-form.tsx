@@ -259,7 +259,7 @@ export function ManagerTrialSignupForm({
             type="button"
             data-attr="manager-trial-signup-go-to-portal"
             className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-            onClick={() => void navigateAfterRoleSignup("/portal/dashboard")}
+            onClick={() => navigateAfterRoleSignup("/portal/dashboard")}
           >
             Go to your portal
           </Button>
@@ -343,7 +343,7 @@ export function ManagerTrialSignupForm({
             data-attr="manager-trial-signup-submit"
             className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
             disabled={locked}
-            onClick={() => void submit()}
+            onClick={() => submit()}
           >
             {busy ? "Creating…" : signedInUser ? "Set up property manager" : "Create property account"}
           </Button>

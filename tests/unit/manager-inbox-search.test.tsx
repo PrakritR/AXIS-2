@@ -184,6 +184,10 @@ describe("manager inbox search", () => {
 
     expect(screen.queryByRole("button", { name: "Restore" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    // The live-row action is labelled "Archive" in the unified inbox (it still
+    // calls `moveToTrash`; "archived" is what a trashed conversation is called
+    // now). This is the positive control — the invariant under test is the two
+    // trash-only actions being absent above.
     expect(screen.getAllByRole("button", { name: "Archive" }).length).toBeGreaterThan(0);
   });
 
