@@ -277,6 +277,11 @@ export async function loadResidentTourViews(db: Db, userId: string): Promise<Res
   const planned = plannedEventsFromRecord(plannedRecord?.row_data);
 
   const views: ResidentTourView[] = [];
+  // A slot with several hosts books ONE inquiry per manager under a shared
+  // `tourGroupId`, and confirming collapses the whole group into a SINGLE
+  // planned event. Without this the surviving links would each render the same
+  // booking, reading as "Confirmed N" for one tour.
+  const seenPlannedEventIds = new Set<string>();
   for (const link of links) {
     const inquiry = inquiries.find((row) => textField(row, "id") === link.inquiry_id);
 
@@ -289,6 +294,11 @@ export async function loadResidentTourViews(db: Db, userId: string): Promise<Res
     // NEITHER side is genuinely gone.
     if (!inquiry) {
       if (!confirmedEvent) continue;
+      const plannedEventId = textField(confirmedEvent, "id");
+      if (plannedEventId) {
+        if (seenPlannedEventIds.has(plannedEventId)) continue;
+        seenPlannedEventIds.add(plannedEventId);
+      }
       views.push(viewFromPlannedEvent(confirmedEvent, link));
       continue;
     }

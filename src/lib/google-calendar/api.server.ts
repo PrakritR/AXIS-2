@@ -286,6 +286,38 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
 /** Pages of 250 events to walk before giving up; bounds a pathological calendar. */
 const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
 
+/**
+ * Per-round-trip ceiling on every Google Calendar call.
+ *
+ * Node's `fetch` has no default timeout, and these calls are now AWAITED inside
+ * request handlers — a hung Google request would otherwise hold a cancel or
+ * reschedule response open until the platform function timeout, reporting a
+ * transport failure for an operation whose PropLane write already committed and
+ * whose guest email already went out.
+ */
+export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 8_000;
+
+/** `AbortSignal` bounding one Google Calendar round trip. */
+export function googleCalendarFetchSignal(): AbortSignal {
+  return AbortSignal.timeout(GOOGLE_CALENDAR_FETCH_TIMEOUT_MS);
+}
+
+/**
+ * True for the states that mean "this manager has no working calendar link"
+ * rather than "Google failed". Callers report these as SKIPPED, never as a
+ * failure — `upsertGoogleCalendarEvent` returns null for the same states
+ * without throwing, and the two paths must not disagree about it.
+ */
+export function isGoogleCalendarNotLinkedError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("not configured") ||
+    normalized.includes("not connected") ||
+    normalized.includes("reconnect") ||
+    normalized.includes("expired")
+  );
+}
+
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
   managerUserId: string,
@@ -322,7 +354,7 @@ export async function listGoogleCalendarEvents(
     if (pageToken) params.set("pageToken", pageToken);
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal: googleCalendarFetchSignal() },
     );
     const data = (await res.json()) as {
       items?: GoogleCalendarListItem[];
@@ -335,6 +367,15 @@ export async function listGoogleCalendarEvents(
     items.push(...(data.items ?? []));
     pageToken = data.nextPageToken;
     if (!pageToken) break;
+  }
+
+  if (pageToken) {
+    // Say so rather than silently under-subtracting the tail — an unread event
+    // is a busy hour still on offer to a prospect, which is the whole failure
+    // mode the pagination above exists to remove.
+    console.warn(
+      `[google-calendar] events truncated after ${GOOGLE_CALENDAR_EVENT_PAGE_LIMIT} pages (${items.length} events) for manager ${managerUserId}; later busy time is not subtracted.`,
+    );
   }
 
   return items
@@ -392,6 +433,7 @@ export async function createGoogleCalendarEvent(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(googleCalendarEventBody(input)),
+    signal: googleCalendarFetchSignal(),
   });
   const data = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
   if (!res.ok) {
@@ -421,6 +463,7 @@ export async function updateGoogleCalendarEvent(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(googleCalendarEventBody(input)),
+      signal: googleCalendarFetchSignal(),
     },
   );
   const data = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
@@ -446,6 +489,7 @@ export async function deleteGoogleCalendarEvent(
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: googleCalendarFetchSignal(),
     },
   );
   if (!res.ok && res.status !== 404 && res.status !== 410) {

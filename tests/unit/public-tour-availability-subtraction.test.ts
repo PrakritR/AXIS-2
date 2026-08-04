@@ -51,6 +51,7 @@ vi.mock("@/lib/public-host-label", () => ({
 }));
 
 import { GET as getAvailability } from "@/app/api/public/property-tour-availability/route";
+import { DEFAULT_TOUR_HORIZON_DAYS } from "@/lib/tour-slot-math";
 
 function availabilityRow(recordType: string, slots: string[]) {
   return {
@@ -257,6 +258,38 @@ describe("public tour availability subtracts what is already taken", () => {
     expect(slots.size).toBe(0);
   });
 
+  it("blocks an all-day entry even though Google reports it Free", async () => {
+    // Google Calendar DEFAULTS all-day events to Free, so honouring transparency
+    // ahead of the all-day flag would quietly un-block every trip and holiday.
+    GOOGLE_BUSY = [
+      {
+        id: "g-allday-free",
+        summary: "Out of town",
+        start: `${DAY}T00:00:00`,
+        end: `${DAY}T23:59:59`,
+        allDay: true,
+        transparency: "transparent",
+      },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(0);
+  });
+
+  it("does not block an all-day invite the manager declined", async () => {
+    GOOGLE_BUSY = [
+      {
+        id: "g-allday-declined",
+        summary: "Someone else's offsite",
+        start: `${DAY}T00:00:00`,
+        end: `${DAY}T23:59:59`,
+        allDay: true,
+        declinedBySelf: true,
+      },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(4);
+  });
+
   it("still serves availability when the calendar link is broken", async () => {
     GOOGLE_THROWS = true;
     const slots = await offeredSlots();
@@ -297,6 +330,14 @@ describe("a property with no published availability still offers the 9-5 default
     PLANNED_EVENTS = [];
     GOOGLE_BUSY = [];
     GOOGLE_THROWS = false;
+  });
+
+  it("bounds the default grid to the 21-day horizon", async () => {
+    // The response is `no-store`, so every request pays for the whole grid.
+    const slots = await offeredSlots();
+    const days = new Set([...slots].map((slot) => slot.split(":")[0]));
+    expect(days.size).toBeLessThanOrEqual(DEFAULT_TOUR_HORIZON_DAYS);
+    expect(days.size).toBeGreaterThanOrEqual(DEFAULT_TOUR_HORIZON_DAYS - 1);
   });
 
   it("offers a 9 am - 5 pm day rather than nothing", async () => {

@@ -1664,11 +1664,23 @@ The one rule behind `/api/public/property-tour-availability`:
 
 - **The 9-5 default is intended**, not a bug — a property whose manager has not
   opened a calendar still offers a day (`buildDefaultTourSlotKeys`), and the same
-  subtraction applies to it.
+  subtraction applies to it. The trigger is ONE named predicate,
+  `shouldOfferDefaultTourGrid(publishedFutureSlots)` in `tour-slot-math.ts`: the
+  default fires whenever no FUTURE slot is published, so a painted week that has
+  simply passed yields a default rather than a dead booking page. Its doc comment
+  states the accepted sharp edge (a manager who clears their ENTIRE calendar has
+  it silently reopened) and how to switch to the stricter "never published
+  anything" rule in one line. The horizon is `DEFAULT_TOUR_HORIZON_DAYS = 21` —
+  the response is `no-store`, so every request pays for the whole grid.
 - **Already-booked** is pending inquiries AND confirmed planned tours; a
   reschedule drops the stale `slotKey` so the old window is not still blocked.
 - **Calendar-busy** is the manager's linked Google Calendar, cached per manager
-  in-process for 60s because this route is public and uncached.
+  in-process for 60s because this route is public and uncached. What counts as
+  busy is `googleEventBlocksTours` (`google-calendar/busy.ts`) — declined never
+  blocks, all-day always does (Google defaults all-day entries to Free), Free
+  does not. The MANAGER's calendar filters through the same predicate in
+  `googleCalendarEventsToMeetings`, because the "N open" headers and the public
+  page must agree about what is taken.
 - **The response is `no-store` on purpose**, against the repo's prefer-caching
   rule: `s-maxage=300` meant a just-booked slot stayed on offer for minutes. A
   double-booked tour costs more than the egress.

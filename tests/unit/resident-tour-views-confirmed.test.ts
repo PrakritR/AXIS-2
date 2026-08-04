@@ -136,6 +136,22 @@ describe("loadResidentTourViews when the inquiry row is gone", () => {
     });
   });
 
+  it("renders a co-hosted booking once, not once per host", async () => {
+    // A slot with several hosts books one inquiry — and so one link — PER
+    // MANAGER under a shared tourGroupId, while confirming collapses the whole
+    // group into a SINGLE planned event. Without deduping, one tour reads as
+    // "Confirmed 2".
+    const views = await loadResidentTourViews(
+      db({
+        links: [link({ id: "link-1", inquiry_id: "inq-1" }), link({ id: "link-2", inquiry_id: "inq-2" })],
+        inquiries: [],
+        planned: [PLANNED_TOUR],
+      }),
+      "res-1",
+    );
+    expect(views).toHaveLength(1);
+  });
+
   it("still skips a link with NEITHER an inquiry nor a planned tour", async () => {
     const views = await loadResidentTourViews(
       db({ links: [link()], inquiries: [], planned: [] }),

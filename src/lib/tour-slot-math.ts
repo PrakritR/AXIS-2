@@ -171,8 +171,13 @@ export function slotIsBookable(slot: string, now: number = Date.now()): boolean 
 export const DEFAULT_TOUR_START_SLOT = 18;
 /** Last default window starts 4:30 pm (slot 33) and ends at 5:00 pm — a 9-to-5 day. */
 export const DEFAULT_TOUR_END_SLOT_EXCLUSIVE = 34;
-/** How far ahead the default grid is offered. Bounds the public payload. */
-export const DEFAULT_TOUR_HORIZON_DAYS = 60;
+/**
+ * How far ahead the default grid is offered. Bounds the public payload: the
+ * availability response is deliberately `no-store`, so every request pays for
+ * the whole grid. 60 days × 16 windows was ~960 slot entries per request; three
+ * weeks is ample for a booking page and costs a third of the egress.
+ */
+export const DEFAULT_TOUR_HORIZON_DAYS = 21;
 
 /** `YYYY-MM-DD` for an instant, on the tour calendar's wall clock. */
 export function tourCalendarDateStr(ms: number, timeZone: string = TOUR_CALENDAR_TIME_ZONE): string {
@@ -197,6 +202,28 @@ export function tourCalendarDateStr(ms: number, timeZone: string = TOUR_CALENDAR
  * whose manager has not opened the calendar yet offers a prospect nothing at
  * all, which reads as a dead booking page.
  */
+/**
+ * Should a property fall back to {@link buildDefaultTourSlotKeys}?
+ *
+ * The rule is "no FUTURE slot is published". A manager who painted a week that
+ * has since passed gets the default rather than a dead booking page, which is
+ * the point.
+ *
+ * The sharp edge, stated plainly: a manager who deliberately clears their
+ * ENTIRE calendar — "Clear week" over every published week — has it silently
+ * reopened to the public at 9-5, which could send a stranger to a property when
+ * nobody is there. That risk was accepted knowingly, so it lives here rather
+ * than buried in a route expression.
+ *
+ * Switching to the stricter rule — offer the default only when the manager has
+ * NEVER published anything — is a one-line change at this predicate: take the
+ * count of availability ROWS instead of future slots, and return true only when
+ * no row exists.
+ */
+export function shouldOfferDefaultTourGrid(publishedFutureSlots: readonly string[]): boolean {
+  return publishedFutureSlots.length === 0;
+}
+
 export function buildDefaultTourSlotKeys(
   now: number = Date.now(),
   days: number = DEFAULT_TOUR_HORIZON_DAYS,
