@@ -117,15 +117,26 @@ function hasLatinLetters(tokens: Set<string>): boolean {
  *    hard-block a whole cohort of real leases — a false mismatch is what teaches
  *    managers to click past the warning. A name that carries BOTH, like
  *    "张伟 (Wei Zhang)", counts as Latin and still compares.
- * 2. **No word boundaries.** Both sides collapse to a single dense token in a
- *    non-Latin script, which is what a script that does not delimit words with
- *    whitespace (Han, Kana, Hangul, Thai) looks like from here. "Share no word"
- *    needs words; with none, one differing character reads as a total
- *    disagreement, so the leniency that keeps "Diego Morales" and "Diego A.
- *    Morales and Jane Doe" quiet cannot do its job.
+ * 2. **No word boundaries.** EITHER side is non-Latin and carries no internal
+ *    word boundary — one dense token — which is what a script that does not
+ *    delimit words with whitespace (Han, Kana, Hangul, Thai) looks like from
+ *    here. Either, not both: a PDF text extraction routinely spaces a CJK name
+ *    that the PropLane record holds unspaced, so "田中 太郎" and "田中太郎" share
+ *    no token and requiring both sides to be dense reported the SAME person as
+ *    a mismatch, in whichever direction the spacing happened to fall.
  *
- * Under-reporting a mismatch this cannot judge honestly beats manufacturing one.
- * The rent and term comparisons are unaffected and still object.
+ *    So a whitespace-free script is deliberately NOT compared on the
+ *    tenant-name axis at all, and no containment or per-character test is used
+ *    to rescue those pairs: a different given name there is one character, so
+ *    any test sharp enough to catch a genuinely different person would also
+ *    fire on ordinary formatting variation. Those leases are still covered on
+ *    every other axis — lease start, lease end, rent, and the document digest
+ *    plus record fingerprint a confirmation binds to.
+ *
+ * The cost of that is a single-word non-Latin name in a delimited script no
+ * longer being compared either, which is accepted: under-reporting a mismatch
+ * this cannot judge honestly beats manufacturing one, and a false mismatch is
+ * what teaches managers to click past every warning.
  */
 function namesDisagree(documentValue: string, recordValue: string): boolean {
   const a = nameTokens(documentValue);
@@ -134,7 +145,7 @@ function namesDisagree(documentValue: string, recordValue: string): boolean {
   const aIsLatin = hasLatinLetters(a);
   const bIsLatin = hasLatinLetters(b);
   if (aIsLatin !== bIsLatin) return false;
-  if (!aIsLatin && a.size === 1 && b.size === 1) return false;
+  if (!aIsLatin && (a.size === 1 || b.size === 1)) return false;
   for (const token of a) if (b.has(token)) return false;
   return true;
 }

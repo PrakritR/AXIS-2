@@ -110,6 +110,22 @@ describe("names are compared in every script that can be compared honestly", () 
     expect(tenantMismatch("田中太郎", "山田花子")).toEqual([]);
   });
 
+  /**
+   * PDF extraction routinely spaces a CJK name the record holds unspaced. Both
+   * sides are the SAME person, and reporting them as a mismatch is the worst
+   * thing this guard can do — so the bail has to fire whichever side carries
+   * the spacing, not only when both sides are dense.
+   */
+  it("does not report a spaced and an unspaced writing of one name as a disagreement", () => {
+    expect(tenantMismatch("田中 太郎", "田中太郎")).toEqual([]);
+    expect(tenantMismatch("田中太郎", "田中 太郎")).toEqual([]);
+    expect(tenantMismatch("田中　太郎", "田中太郎")).toEqual([]);
+    expect(tenantMismatch("김민준", "김 민준")).toEqual([]);
+    // ...and it stays quiet even when the spaced side names someone else, which
+    // is the accepted cost of not comparing a whitespace-free script at all.
+    expect(tenantMismatch("山田 花子", "田中太郎")).toEqual([]);
+  });
+
   it("keeps failing open when either side has no comparable word at all", () => {
     expect(tenantMismatch("—", "Diego Morales")).toEqual([]);
     expect(tenantMismatch("Diego Morales", "1234")).toEqual([]);
