@@ -60,10 +60,10 @@ function openAssistant() {
 }
 
 /**
- * Named entry point for the site-wide assistant. It belongs in a page header,
- * never as a floating control that competes with the portal assistant.
+ * Named entry point for the site-wide assistant. Public navigation uses the
+ * header presentation; the landing page uses the fixed bottom-right variant.
  */
-export function GeneralAssistantTrigger() {
+export function GeneralAssistantTrigger({ floating = false }: { floating?: boolean }) {
   const open = useGeneralOpen();
 
   function toggleAssistant() {
@@ -81,7 +81,11 @@ export function GeneralAssistantTrigger() {
       data-attr="general-assistant-open"
       aria-label={open ? "Close PropLane Assistant" : "Ask PropLane"}
       aria-expanded={open}
-      className="group flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-[13px] font-medium text-muted outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+      className={
+        floating
+          ? "group fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-[60] flex min-h-12 items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-[13px] font-medium text-muted shadow-[0_12px_30px_-12px_rgba(15,23,42,0.35)] outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 sm:bottom-5 sm:right-5"
+          : "group flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-[13px] font-medium text-muted outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+      }
     >
       <ChatBubbleIcon className="h-4 w-4 shrink-0 text-primary" />
       <span className="tracking-[-0.01em]">Ask PropLane</span>

@@ -45,6 +45,11 @@ type TranscriptResponse = {
   error?: string;
 };
 
+type StartSessionResponse = {
+  sessionId?: string;
+  error?: string;
+};
+
 function isRetryableConfirmStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
@@ -215,6 +220,7 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
           toolTrace?: ToolTraceEntry[];
           pendingAction?: PendingAction;
           sessionId?: string | null;
+          archiveSaved?: boolean;
           error?: string;
         };
         if (!res.ok || data.error) {
@@ -229,6 +235,9 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
           }
           setLastTools(data.toolTrace ?? []);
           setPendingAction(data.pendingAction ?? null);
+          if (multiThread && data.archiveSaved === false) {
+            setError("This reply could not be saved to Past conversations. Please send it again.");
+          }
           if (data.pendingAction || hadPending) notifyAgentPendingActionsChanged();
         }
       } catch {
@@ -289,6 +298,27 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
     setAttachments([]);
     setHistoryOpen(false);
   }, [attachments, endpoint, multiThread, storageScope]);
+
+  const startNewChat = useCallback(async () => {
+    reset();
+    if (!multiThread) return;
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newSession: true }),
+      });
+      const data = (await res.json()) as StartSessionResponse;
+      if (!res.ok || !data.sessionId || data.error) {
+        throw new Error(data.error ?? "We couldn't start a saved conversation. Please try again.");
+      }
+      setActiveThreadId(data.sessionId);
+      setThreads((current) => upsertThread(current, data.sessionId!, []));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't start a saved conversation. Please try again.");
+    }
+  }, [endpoint, multiThread, reset]);
 
   const openHistory = useCallback(() => {
     if (!multiThread) return;
@@ -353,6 +383,6 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
     selectThread,
     loadMoreHistory,
     hydrateArchive,
-    startNewChat: reset,
+    startNewChat,
   } as const;
 }
