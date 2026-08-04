@@ -952,9 +952,12 @@ conversations) plus the archive toggle. Invariants:
 
 - **No folder tabs.** The list shows ALL live conversations (inbox + sent).
   Manager / resident / vendor route on
-  `/communication/{active|unread|archived}[/{threadId}]` — `PortalListControlStack`
+  `/communication/{active|archived}[/{threadId}]` — `PortalListControlStack`
   destinations that scope that ONE list and deep-link the open thread, never
-  folders: `unread` filters it, `archived` is the trashed view. Admin still routes
+  folders: `archived` is the trashed view. Unread is NOT a segment — it is a
+  per-row dot on `InboxConversationRow` that clears when the thread is opened,
+  and the legacy `/communication/unread` path redirects to `active` (keeping the
+  deep-linked thread id). Admin still routes
   `/communication/inbox/{tab}` and reaches archived through its
   `admin-inbox-archived-toggle` button. Trash/restore live in the open thread —
   never re-add a top-level Schedule/Trash tab. `INBOX_TAB_DEFS` and the standalone
@@ -1026,7 +1029,10 @@ conversations) plus the archive toggle. Invariants:
   error text on refusal. Appending first shipped a 403-then-200 sequence where a
   refused message became the thread's `preview`, so the conversation list read
   "You: …" and residents believed a maintenance request had been delivered.
-  Coverage: `tests/unit/resident-refused-send-not-delivered.test.tsx`,
+  The manager (`manager-inbox.tsx`) and vendor (`vendor-inbox-panel.tsx`) reply
+  paths are NOT migrated yet — they still let a refused reply reach the store —
+  so copy the resident panel's shape rather than theirs. Coverage:
+  `tests/unit/resident-refused-send-not-delivered.test.tsx`,
   `tests/integration/portal/send-inbox-message.test.ts`.
 - **Client surfaces re-filter on the email embedded in `row_data`, while the
   server authorizes on the `resident_email` COLUMN.** When the two disagree the
