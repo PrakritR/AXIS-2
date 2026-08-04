@@ -26,10 +26,13 @@ export type LeaseSectionEdit = {
 };
 
 /** Sections whose body is computed, not written. Editing them would break other invariants. */
+/** Mirrors LEASE_DOCUMENT_HEADER_ID in lease-html-sections.ts, kept local to stay pure. */
+const LEASE_DOCUMENT_HEADER_SECTION_ID = "lease-document-header";
+
 const LEDGER_DERIVED_SECTION_PATTERNS = [
   /rent\s*&?\s*fees schedule/i,
   /exhibit a/i,
-  /lease summary/i,
+  /summary/i,
   /application summary/i,
 ];
 
@@ -174,6 +177,12 @@ export function sectionSourceFromHtml(html: string): string {
 export function isEditableLeaseSection(section: { id: string; title: string; bodyHtml: string }): boolean {
   if (/data-disclosure-rule=/i.test(section.bodyHtml)) return false;
   if (/electronic signature/i.test(section.title)) return false;
+  // The preamble is not prose. It carries the Lease Summary block: monthly rent, utilities,
+  // total monthly payment, deposit, move-in fee, payment due at signing. Every one of those is
+  // computed from the ledger, so an editable header is a direct route to a lease that states a
+  // different number than the resident is charged. Excluded by ID, because its title has been
+  // "Lease header & summary" and a title pattern would not have caught it.
+  if (section.id === LEASE_DOCUMENT_HEADER_SECTION_ID) return false;
   return !LEDGER_DERIVED_SECTION_PATTERNS.some((pattern) => pattern.test(section.title));
 }
 
