@@ -171,11 +171,9 @@ The same split governs **bottom clearance**. On a page-scrolls surface
 scroll room; on a sticky-chrome surface it is clipped, so padding there can only
 shrink the scroll viewport into a dead band. Phone-width sticky-chrome rules
 therefore reserve only what is genuinely fixed over the page — the bottom-nav
-inset, plus the bulk-action bar when one is open — and hand the assistant FAB
-clearance to `.portal-list-page-scroll`, which can actually scroll it. Never
-reserve the combined `--portal-mobile-scroll-bottom-inset` on a clipped element;
-the rationale and the disjoint bulk-bar selector are commented at the rules in
-`globals.css`.
+inset, plus the bulk-action bar when one is open. Never reserve additional
+clearance on a clipped element; the rationale and the disjoint bulk-bar selector
+are commented at the rules in `globals.css`.
 
 Verify a phone change by measuring, not by eyeballing the first screenful:
 `scroller.scrollHeight - scroller.clientHeight` must be > 0 and

@@ -9,7 +9,7 @@ const OPTIONS: { mode: AssistantDisplayMode; label: string; description: string 
   {
     mode: "popup",
     label: "Floating popup",
-    description: "A button in the corner opens the assistant over your work.",
+    description: "Ask PropLane in the header opens the assistant over your work.",
   },
   {
     mode: "docked",
@@ -37,7 +37,7 @@ export function AssistantDisplayModeSetting() {
       subtitle={
         mode === "docked"
           ? "Pinned to the right side of the portal on wide screens."
-          : "Opens as a floating popup from the corner button."
+          : "Opens as a popup from Ask PropLane in the header."
       }
       surfaceMuted={false}
       contentClassName="px-4 pb-4"

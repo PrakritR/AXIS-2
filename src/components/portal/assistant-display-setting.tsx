@@ -20,7 +20,7 @@ const OPTIONS: { docked: boolean; label: string; description: string }[] = [
   {
     docked: false,
     label: "Floating popup",
-    description: "A button in the corner opens the assistant over your work.",
+    description: "Ask PropLane in the header opens the assistant over your work.",
   },
   {
     docked: true,
@@ -87,7 +87,7 @@ export function AssistantDisplaySetting() {
               ? "On this screen the assistant is always the floating popup — there is no room for a side panel."
               : docked
                 ? "Pinned to the right side of the portal."
-                : "Opens as a floating popup from the corner button."
+                : "Opens as a popup from Ask PropLane in the header."
           }
         >
           <div

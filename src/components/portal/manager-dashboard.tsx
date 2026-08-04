@@ -882,7 +882,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       hideTitleOnMobileNav
       welcomeSubtitle
     >
-      {/* Full width: the assistant is the floating popup by default, and a
+      {/* Full width: Ask PropLane opens a popup by default, and a
           manager who pins it gets the portal-wide rail from the shell layout
           (`PortalAssistantDockRail`) rather than a dashboard-only column.
           `min-w-0` keeps the horizontally-scrolling KPI row from forcing page

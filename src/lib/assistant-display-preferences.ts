@@ -6,11 +6,11 @@
  * and the same preview→confirm gate. This preference only decides which one is
  * on screen:
  *
- * - `"popup"` (DEFAULT) — the floating FAB + popup panel, the only surface a
- *   manager who never touches this setting ever sees.
+ * - `"popup"` (DEFAULT) — the popup panel opened from the shared Ask PropLane
+ *   header control.
  * - `"docked"` — a full-height right-side rail pinned beside the portal content
  *   on `lg`+ viewports. Below `lg` there is no room for the rail, so the
- *   FAB/popup stays the assistant regardless of the stored mode.
+ *   Ask PropLane opens the popup regardless of the stored mode.
  *
  * Storage mirrors {@link file://./dashboard-preferences.ts}: per-user
  * localStorage, override-only (the default mode stores nothing, so a future
@@ -24,7 +24,7 @@
 
 export type AssistantDisplayMode = "popup" | "docked";
 
-/** The assistant is a floating popup unless the manager explicitly pins it. */
+/** The assistant opens as a popup unless the manager explicitly pins it. */
 export const DEFAULT_ASSISTANT_DISPLAY_MODE: AssistantDisplayMode = "popup";
 
 const STORAGE_KEY_PREFIX = "axis:assistant-display-mode:v1";

@@ -1073,7 +1073,7 @@ export function ResidentApplicationsPanel({
         ) : null}
 
         {sessionReady && canOpenPropertyPicker ? (
-          <div className="px-3 pt-1 pb-[max(1rem,var(--portal-assistant-fab-clearance,3.5rem))] max-md:px-2.5 lg:pb-[max(1.25rem,calc(var(--portal-assistant-fab-clearance,3.5rem)+1rem))]">
+          <div className="px-3 pb-4 pt-1 max-md:px-2.5 lg:pb-5">
             <PortalListAddRow
               label="Add application"
               hint="Apply to another property"

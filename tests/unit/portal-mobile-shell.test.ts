@@ -8,6 +8,10 @@ const PORTAL_METRICS_SOURCE = readFileSync(
 );
 
 const GLOBALS_CSS = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+const PORTAL_TOP_BAR_SOURCE = readFileSync(
+  join(process.cwd(), "src/components/portal/portal-top-bar.tsx"),
+  "utf8",
+);
 
 describe("portal mobile shell conventions", () => {
   it("keeps ManagerPortalPageShell header compact on narrow screens", () => {
@@ -73,15 +77,15 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("width: 1.375rem");
   });
 
-  it("floats the assistant FAB above the native bottom bar instead of a bar slot", () => {
+  it("keeps assistant entry in the named header button, not the bottom nav", () => {
     const AXIS_ASSISTANT_SOURCE = readFileSync(
       join(process.cwd(), "src/components/portal/axis-assistant.tsx"),
       "utf8",
     );
     expect(AXIS_ASSISTANT_SOURCE).not.toContain("AxisAssistantNavButton");
-    expect(AXIS_ASSISTANT_SOURCE).toContain("[html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]");
-    expect(GLOBALS_CSS).toContain(".axis-assistant-fab");
-    expect(GLOBALS_CSS).toContain("calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem)");
+    expect(AXIS_ASSISTANT_SOURCE).not.toContain("axis-assistant-fab");
+    expect(GLOBALS_CSS).not.toContain(".axis-assistant-fab");
+    expect(PORTAL_TOP_BAR_SOURCE).toContain("Ask PropLane");
     expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
     expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
   });
@@ -118,15 +122,11 @@ describe("portal mobile shell conventions", () => {
     }
   });
 
-  it("gives fixed-chrome surfaces their FAB clearance inside the scroller, not as dead padding", () => {
+  it("reserves only fixed chrome on clipped surfaces", () => {
     // `#portal-main-content` is `overflow: hidden` on sticky-chrome surfaces, so
     // its padding-bottom can never become trailing scroll room the way it does on
-    // a page-scrolls surface — it only shrinks the scroll viewport. Reserving the
-    // FAB half of `--portal-mobile-scroll-bottom-inset` there left a dead 56px
-    // strip of the shell gradient between the last row and the bottom nav, with
-    // the assistant FAB parked in it, which read as an opaque banner behind the
-    // button. The nav bar is reserved on the clipped element; the FAB clearance
-    // belongs to `.portal-list-page-scroll`, which can actually scroll it.
+    // a page-scrolls surface — it only shrinks the scroll viewport. The nav bar
+    // and an active bulk-action bar are the only fixed elements to reserve.
     const cssWithoutComments = GLOBALS_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
     const declarationsFor = (selector: string) =>
       [...cssWithoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
@@ -163,7 +163,7 @@ describe("portal mobile shell conventions", () => {
       ),
     ).toHaveLength(0);
 
-    // Bulk bar open: dead FAB band still gone, bulk clearance still reserved.
+    // Bulk bar open: bulk clearance is still reserved.
     const withBulkBar = declarationsFor(
       "html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content",
     ).filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
@@ -177,12 +177,7 @@ describe("portal mobile shell conventions", () => {
 
     const scroller = declarationsFor("html[data-portal-sticky-chrome] .portal-list-page-scroll");
     const scrollerPadded = scroller.filter((d) => /(^|;)\s*padding-bottom\s*:/.test(d));
-    expect(scrollerPadded.length).toBeGreaterThan(0);
-    for (const declarations of scrollerPadded) {
-      expect(declarations).toMatch(
-        /padding-bottom:\s*var\(--portal-assistant-fab-clearance[^)]*\)/,
-      );
-    }
+    expect(scrollerPadded).toHaveLength(0);
   });
 
   it("drops the duplicate Settings page title behind the mobile app bar", () => {
