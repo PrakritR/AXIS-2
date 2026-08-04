@@ -30,8 +30,19 @@ import type { ReportRow } from "@/lib/reports/types";
  * disagree again for a different reason.
  */
 export function residentLedgerReceiptRange(now = new Date()): { from: string; to: string } {
+  // Formatted from LOCAL components at both ends. Building `from` locally and
+  // then serializing with `toISOString()` mixed calendars: east of UTC the
+  // window opened a day early and could exclude a payment posted today, so a
+  // receipt could be missing from both surfaces at once. `ledger_entries.posted_date`
+  // is a plain date, so a local calendar date is the right key.
   const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-  return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+  return { from: localDateKey(from), to: localDateKey(now) };
+}
+
+function localDateKey(d: Date): string {
+  const month = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 /** Prefix `syncLedgerPaymentEntry` puts on every payment entry description. */

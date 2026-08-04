@@ -109,8 +109,18 @@ describe("recordedPaymentsMissingFromCharges (F6)", () => {
   });
 
   it("Documents and Payments read the same ledger window", () => {
-    const range = residentLedgerReceiptRange(new Date("2026-08-03T12:00:00Z"));
-    expect(range).toEqual({ from: "2025-08-03", to: "2026-08-03" });
+    const now = new Date(2026, 7, 3, 12, 0, 0);
+    expect(residentLedgerReceiptRange(now)).toEqual({ from: "2025-08-03", to: "2026-08-03" });
+  });
+
+  it("builds the window from LOCAL calendar dates, not a UTC serialization", () => {
+    // Late-evening local time east of UTC used to roll `to` (and `from`) onto
+    // the next/previous UTC day, so a payment posted today could fall outside
+    // the window on BOTH surfaces at once. posted_date is a plain date.
+    const lateLocal = new Date(2026, 7, 3, 23, 30, 0);
+    expect(residentLedgerReceiptRange(lateLocal)).toEqual({ from: "2025-08-03", to: "2026-08-03" });
+    const earlyLocal = new Date(2026, 0, 1, 0, 15, 0);
+    expect(residentLedgerReceiptRange(earlyLocal)).toEqual({ from: "2025-01-01", to: "2026-01-01" });
   });
 });
 

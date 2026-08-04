@@ -17,7 +17,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
-import { applicantDisplayName, realApplicantName } from "@/lib/rental-application/applicant-name";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -206,7 +206,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
     return (
       <DocumentInlineViewer
         embedded
-        title={`Application · ${realApplicantName(row.name) || row.id}`}
+        title={`Application · ${applicantDisplayName(row, row.id)}`}
         srcDoc={previewHtml}
         onDownload={() => downloadRow(row)}
         downloadLabel="Download PDF"

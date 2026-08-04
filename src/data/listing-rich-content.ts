@@ -529,14 +529,18 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
   // A listing with no rent yet (an unfinished draft) has no price to show. The
   // fabricated band below used to run anyway: mid=0 gave `low = max(500, -125)`
   // and `high = 100`, printing the range BACKWARDS as "from $500–$100/mo"
-  // (F-DRAFT-2). The same floor inverted any genuine rent under $400/mo, so the
-  // bounds are ordered rather than assumed. No rent → no price label, never an
-  // invented one.
+  // (F-DRAFT-2). No rent → no price label, never an invented one.
+  //
+  // The $500 floor is clamped to the rent itself for the same reason the range
+  // is ordered: it must never contradict the price printed beside it. Unclamped,
+  // a $450/mo listing rendered "$450/mo" as its starting rent directly above a
+  // band reading "from $500–$550/mo" — two different prices for one unit, which
+  // is the defect this finding is about, just one screen over.
   const parsedRent = parseMonthlyRent(property.rentLabel);
   const mid = parsedRent === null ? 875 : parsedRent;
   const hasRent = mid > 0;
-  const low = Math.min(Math.max(500, mid - 125), mid + 100);
-  const high = Math.max(Math.max(500, mid - 125), mid + 100);
+  const low = Math.min(Math.max(Math.min(500, mid), mid - 125), mid);
+  const high = Math.max(mid + 100, low);
   return {
     heroTagline: property.tagline,
     houseRulesBody: DEFAULT_LISTING_HOUSE_RULES_FALLBACK,
