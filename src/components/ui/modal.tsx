@@ -19,7 +19,16 @@ import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { usePortalAssistantConfig } from "@/lib/axis-assistant/portal-assistant-context";
 import { cn } from "@/lib/utils";
 
-export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MODAL_WARNING_BOX_CLASS, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal-styles";
+export {
+  MODAL_INSET_BOX_CLASS,
+  MODAL_INSET_BOX_PRE_CLASS,
+  MODAL_PANEL_CLASS,
+  MODAL_WARNING_BOX_CLASS,
+  MODAL_FIELD_LABEL_CLASS,
+  PORTAL_MODAL_FORM_GRID_CLASS,
+  PORTAL_MODAL_FORM_FIELD_CLASS,
+  PORTAL_MODAL_FORM_FULL_ROW_CLASS,
+} from "@/components/ui/modal-styles";
 
 /** Top-right dismiss control — Carbon / Primer / Watson pattern (icon, 44px target). */
 export const MODAL_HEADER_CLOSE_CLASS =
@@ -307,7 +316,7 @@ function ModalPanelInner({
           className={cn(
             bodyFillsPanel
               ? scrollableContent
-                ? "min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+                ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
                 : "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
               : "min-w-0 shrink-0 flex-col",
             footer && bodyFillsPanel && scrollableContent && "flex flex-col",

@@ -271,8 +271,6 @@ export function ManagerUnifiedInbox({
       });
     } else if (listSegment === "archived") {
       rows = rows.filter((t) => t.folder === "trash");
-    } else if (listSegment === "unread") {
-      rows = rows.filter((t) => t.folder !== "trash" && t.folder === "inbox" && t.unread);
     } else {
       rows = rows.filter((t) => t.folder !== "trash");
     }
@@ -355,10 +353,7 @@ export function ManagerUnifiedInbox({
   const smsListItems = useMemo((): UnifiedInboxListItem[] => {
     if (listSegment === "archived") return [];
     const q = query.trim().toLowerCase();
-    let items = allSmsItems;
-    if (listSegment === "unread") {
-      items = items.filter(({ item }) => item.unread);
-    }
+    const items = allSmsItems;
     return items.filter(({ haystack }) => (q ? haystack.includes(q) : true)).map(({ item }) => item);
   }, [allSmsItems, query, listSegment]);
 
@@ -437,13 +432,6 @@ export function ManagerUnifiedInbox({
             items={[
               { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
               {
-                id: "unread",
-                label: "Unread",
-                href: `${commBase}/unread`,
-                count: unreadCount,
-                dataAttr: "communication-segment-unread",
-              },
-              {
                 id: "archived",
                 label: "Archived",
                 href: `${commBase}/archived`,
@@ -486,9 +474,7 @@ export function ManagerUnifiedInbox({
                   ? `No messages match “${query.trim()}”.`
                   : listSegment === "archived"
                     ? "No archived conversations."
-                    : listSegment === "unread"
-                      ? "No unread conversations."
-                      : "No conversations yet."
+                    : "No conversations yet."
               }
             />
           </div>
@@ -502,7 +488,6 @@ export function ManagerUnifiedInbox({
               previewPrefix={row.previewPrefix}
               time={row.time}
               unread={row.unread}
-              unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
               onOpen={() => {

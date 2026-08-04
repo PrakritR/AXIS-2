@@ -1,6 +1,7 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { cn } from "@/lib/utils";
 import { useCommunicationSurfaceChrome } from "@/hooks/use-communication-surface-chrome";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -8,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
 import {Input, Textarea, Select, NativeSelect} from "@/components/ui/input";
-import { Modal, ModalFooter } from "@/components/ui/modal";
+import {
+  Modal,
+  ModalFooter,
+  PORTAL_MODAL_FORM_FIELD_CLASS,
+  PORTAL_MODAL_FORM_FULL_ROW_CLASS,
+  PORTAL_MODAL_FORM_GRID_CLASS,
+} from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -3178,24 +3185,24 @@ export function ManagerResidents({
           </ModalFooter>
         }
       >
-        <div className="space-y-3">
+        <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
           <p className="text-xs text-muted">
             Onboard an existing tenant: creates an active resident record, sets up payments, and can email portal instructions (no application or screening). Generate or upload a lease in Manager Review unless you attach an already-signed PDF below.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
+          <div className={PORTAL_MODAL_FORM_GRID_CLASS}>
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Full name *</span>
               <Input value={arName} onChange={(e) => setArName(e.target.value)} placeholder="Jane Smith" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Email *</span>
               <Input type="email" value={arEmail} onChange={(e) => setArEmail(e.target.value)} placeholder="jane@example.com" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Phone</span>
               <Input type="tel" value={arPhone} onChange={(e) => setArPhone(e.target.value)} placeholder="(555) 555-0100" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Property</span>
               <Select
                 value={arPropertyId}
@@ -3206,7 +3213,7 @@ export function ManagerResidents({
                 {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </Select>
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Lease term</span>
               <Select
                 value={arLeaseTermSelectValue}
@@ -3239,7 +3246,7 @@ export function ManagerResidents({
                 />
               ) : null}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Room</span>
               {arRoomOptions.length > 0 ? (
                 <Select
@@ -3264,7 +3271,7 @@ export function ManagerResidents({
                 </p>
               )}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">{arIsShortTermStay ? "Rent / night ($)" : "Monthly rent ($)"}</span>
               <Input
                 type="number"
@@ -3277,30 +3284,40 @@ export function ManagerResidents({
               {arStayPreview ? <span className="text-xs text-muted">{arStayPreview}</span> : null}
             </label>
             {!arIsShortTermStay ? (
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
                 <span className="font-medium text-muted">Monthly utilities ($)</span>
                 <Input type="number" min={0} step={0.01} value={arUtilities} onChange={(e) => setArUtilities(e.target.value)} placeholder="175.00" />
               </label>
             ) : null}
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={arMoveInFee} onChange={(e) => setArMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">{arIsShortTermStay ? "Deposit ($)" : "Security deposit ($)"}</span>
               <Input type="number" min={0} step={0.01} value={arSecurityDeposit} onChange={(e) => setArSecurityDeposit(e.target.value)} placeholder="875.00" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Move-in date</span>
-              <Input type="date" value={arMoveInDate} onChange={(e) => setArMoveInDate(e.target.value)} />
+              <Input
+                type="date"
+                className="portal-modal-date-input"
+                value={arMoveInDate}
+                onChange={(e) => setArMoveInDate(e.target.value)}
+              />
             </label>
             {!isMonthToMonthLease ? (
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
                 <span className="font-medium text-muted">Move-out date</span>
-                <Input type="date" value={arMoveOutDate} onChange={(e) => setArMoveOutDate(e.target.value)} />
+                <Input
+                  type="date"
+                  className="portal-modal-date-input"
+                  value={arMoveOutDate}
+                  onChange={(e) => setArMoveOutDate(e.target.value)}
+                />
               </label>
             ) : null}
-            <label className="col-span-2 flex flex-col gap-1 text-sm">
+            <label className={cn(PORTAL_MODAL_FORM_FIELD_CLASS, PORTAL_MODAL_FORM_FULL_ROW_CLASS)}>
               <span className="font-medium text-muted">Signed lease (PDF, optional)</span>
               <input
                 type="file"
@@ -3331,7 +3348,7 @@ export function ManagerResidents({
                 <span className="text-xs text-muted">Attached: {arSignedLeaseFileName}</span>
               ) : null}
             </label>
-            <label className="col-span-2 flex flex-col gap-1 text-sm">
+            <label className={cn(PORTAL_MODAL_FORM_FIELD_CLASS, PORTAL_MODAL_FORM_FULL_ROW_CLASS)}>
               <span className="font-medium text-muted">Notes</span>
               <Textarea
                 className="min-h-[72px]"
@@ -3396,25 +3413,25 @@ export function ManagerResidents({
           </ModalFooter>
         }
       >
-        <div className="space-y-3 pb-1">
+        <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden pb-1">
           <p className="text-xs text-muted">Changes here update the resident record and application simultaneously.</p>
           {erIsShortTermStay ? (
             <p className="text-xs text-muted">Short-term stays use an all-in nightly rate — no separate utilities.</p>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm">
+          <div className={PORTAL_MODAL_FORM_GRID_CLASS}>
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Full name *</span>
               <Input value={erName} onChange={(e) => setErName(e.target.value)} placeholder="Jane Smith" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Email</span>
               <Input type="email" value={erEmail} onChange={(e) => setErEmail(e.target.value)} placeholder="resident@email.com" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Phone</span>
               <Input type="tel" value={erPhone} onChange={(e) => setErPhone(e.target.value)} placeholder="(555) 555-0100" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Property</span>
               <NativeSelect
                 value={erPropertyId}
@@ -3431,7 +3448,7 @@ export function ManagerResidents({
                 ))}
               </NativeSelect>
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Lease term</span>
               <NativeSelect
                 value={erLeaseTermSelectValue}
@@ -3464,7 +3481,7 @@ export function ManagerResidents({
                 />
               ) : null}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Room</span>
               {erRoomOptions.length > 0 ? (
                 <NativeSelect
@@ -3488,7 +3505,7 @@ export function ManagerResidents({
                 </p>
               )}
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">{erIsShortTermStay ? "Rent / night ($)" : "Monthly rent ($)"}</span>
               <Input
                 type="number"
@@ -3501,16 +3518,16 @@ export function ManagerResidents({
               {erStayPreview ? <span className="text-xs text-muted">{erStayPreview}</span> : null}
             </label>
             {!erIsShortTermStay ? (
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
                 <span className="font-medium text-muted">Monthly utilities ($)</span>
                 <Input type="number" min={0} step={0.01} value={erUtilities} onChange={(e) => setErUtilities(e.target.value)} placeholder="175.00" />
               </label>
             ) : null}
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Move-in fee ($)</span>
               <Input type="number" min={0} step={0.01} value={erMoveInFee} onChange={(e) => setErMoveInFee(e.target.value)} placeholder="200.00" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">{erIsShortTermStay ? "Deposit ($)" : "Security deposit ($)"}</span>
               <Input
                 type="number"
@@ -3521,17 +3538,27 @@ export function ManagerResidents({
                 placeholder="875.00"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Move-in date</span>
-              <Input type="date" value={erMoveInDate} onChange={(e) => setErMoveInDate(e.target.value)} />
+              <Input
+                type="date"
+                className="portal-modal-date-input"
+                value={erMoveInDate}
+                onChange={(e) => setErMoveInDate(e.target.value)}
+              />
             </label>
             {!isEditMonthToMonthLease ? (
-              <label className="flex flex-col gap-1 text-sm">
+              <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
                 <span className="font-medium text-muted">Move-out date</span>
-                <Input type="date" value={erMoveOutDate} onChange={(e) => setErMoveOutDate(e.target.value)} />
+                <Input
+                  type="date"
+                  className="portal-modal-date-input"
+                  value={erMoveOutDate}
+                  onChange={(e) => setErMoveOutDate(e.target.value)}
+                />
               </label>
             ) : null}
-            <label className="col-span-2 flex flex-col gap-1 text-sm">
+            <label className={cn(PORTAL_MODAL_FORM_FIELD_CLASS, PORTAL_MODAL_FORM_FULL_ROW_CLASS)}>
               <span className="font-medium text-muted">Notes</span>
               <Textarea
                 className="min-h-[72px]"

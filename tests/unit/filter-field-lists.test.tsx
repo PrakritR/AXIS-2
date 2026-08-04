@@ -10,7 +10,6 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { useState } from "react";
 import {
   FIELD_SELECT_HOST_CHROME_ATTR,
-  FIELD_SELECT_MENU_HEADER_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   computeFieldSelectMenuRect,
   computeFieldSelectMenuRectInHost,
@@ -44,7 +43,7 @@ afterEach(cleanup);
  * row. Both are BUDGETED on top of the five option rows — never taken out of them — so
  * this is what the shell's five-row cap is measured against.
  */
-const FILTER_MENU_CHROME_PX = FIELD_SELECT_MENU_HEADER_PX + FIELD_SELECT_MENU_SEARCH_PX;
+const FILTER_MENU_CHROME_PX = FIELD_SELECT_MENU_SEARCH_PX;
 
 function makeOptions(n: number) {
   return Array.from({ length: n }, (_, i) => ({ value: `p${i}`, label: `Property ${i}` }));
@@ -163,20 +162,17 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(shell.style.height).toBe("auto");
   });
 
-  it("names the field inside the menu, and does NOT pay for that header with an option row", () => {
-    // The menu overlays its own trigger and, on a tight host, every label in the panel —
-    // measured on the 3-field panel, an open menu covered all three. Without a header the
-    // user faces a list with nothing saying what is being filtered.
+  it("does not repeat the field label inside the portaled menu", () => {
     render(<Harness optionCount={30} />);
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
     const shell = screen.getByRole("listbox").closest("[data-field-select-menu]") as HTMLElement;
 
-    expect(within(shell).getByText("Property")).toBeTruthy();
-    // The header is added to the budget, so the five option rows survive intact.
+    expect(within(shell).queryByText("Property")).toBeNull();
+    expect(screen.getByText("Property")).toBeTruthy();
     expect(shell.style.maxHeight).toBe(
       `${fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX)}px`,
     );
-    expect(FILTER_MENU_CHROME_PX).toBe(FIELD_SELECT_MENU_SEARCH_PX + FIELD_SELECT_MENU_HEADER_PX);
+    expect(FILTER_MENU_CHROME_PX).toBe(FIELD_SELECT_MENU_SEARCH_PX);
   });
 
   it("keeps the 3-field panel tall enough for its own chrome AND a full menu", () => {
@@ -394,7 +390,7 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     expect(bottomUtilities).toEqual(["bottom-[var(--portal-raised-sheet-offset)]"]);
   });
 
-  it("keeps the bottom-anchored sheet on bottom-0 (the branch that owns that utility)", () => {
+  it("keeps the bottom-anchored sheet above the native tab bar inset", () => {
     render(
       <VaulBottomSheet open onOpenChange={() => {}} title="Filter">
         <p>fields</p>
@@ -402,7 +398,7 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     );
     const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
     expect(sheet.className.split(/\s+/).filter((token) => /^bottom-/.test(token))).toEqual([
-      "bottom-0",
+      "bottom-[var(--portal-native-bottom-nav-inset,0px)]",
     ]);
   });
 
@@ -468,6 +464,28 @@ describe("the raised filter sheet is placed statically, never measured", () => {
     expect(sheet.getAttribute("data-elevated")).toBe("false");
     expect(sheet.className).toContain("max-h-[min(92dvh,44rem)]");
     expect(sheet.className).not.toContain("top-auto");
+  });
+
+  it("fills a bottom-anchored sheet to its max height so the card background reaches the tab bar", () => {
+    render(
+      <VaulBottomSheet
+        open
+        onOpenChange={() => {}}
+        title="Filter"
+        fillViewport
+        maxHeightClass="max-h-[min(92dvh,calc(100dvh-var(--portal-native-bottom-nav-inset,0px)-0.5rem))]"
+      >
+        <p>one field</p>
+      </VaulBottomSheet>,
+    );
+    const sheet = document.querySelector('[data-slot="vaul-bottom-sheet"]') as HTMLElement;
+    expect(sheet.getAttribute("data-elevated")).toBe("false");
+    expect(sheet.className).toContain(
+      "min-h-[min(92dvh,calc(100dvh-var(--portal-native-bottom-nav-inset,0px)-0.5rem))]",
+    );
+    expect(sheet.className).toContain(
+      "max-h-[min(92dvh,calc(100dvh-var(--portal-native-bottom-nav-inset,0px)-0.5rem))]",
+    );
   });
 });
 

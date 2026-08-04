@@ -122,8 +122,6 @@ function VendorUnifiedInbox({
       });
     } else if (listSegment === "archived") {
       rows = rows.filter((t) => t.folder === "trash");
-    } else if (listSegment === "unread") {
-      rows = rows.filter((t) => t.folder !== "trash" && t.folder === "inbox" && t.unread);
     } else {
       rows = rows.filter((t) => t.folder !== "trash");
     }
@@ -166,7 +164,6 @@ function VendorUnifiedInbox({
       sortMs: Date.parse(last.createdAt) || 0,
     };
     const q = searchQuery.trim().toLowerCase();
-    if (listSegment === "unread" && !unread) return [];
     if (q && !["text messages", "property manager", last.body].join(" ").toLowerCase().includes(q)) return [];
     return [item];
   }, [listSegment, searchQuery, smsMessages, smsOpened, smsUiEnabled]);
@@ -214,9 +211,7 @@ function VendorUnifiedInbox({
                   ? `No messages match “${searchQuery.trim()}”.`
                   : listSegment === "archived"
                     ? "No archived conversations."
-                    : listSegment === "unread"
-                      ? "No unread conversations."
-                      : "No conversations yet."
+                    : "No conversations yet."
               }
             />
           </div>
@@ -230,7 +225,6 @@ function VendorUnifiedInbox({
               previewPrefix={row.previewPrefix}
               time={row.time}
               unread={row.unread}
-              unreadCount={row.unread ? 1 : 0}
               selected={selectedKey === row.key}
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
               onOpen={() => {
@@ -297,7 +291,7 @@ export function VendorCommunication({
   threadId,
   smsUiEnabled = false,
 }: {
-  /** Routed conversation list segment (Active / Unread / Archived). */
+  /** Routed conversation list segment (Active / Archived). */
   listSegment?: InboxListSegment;
   /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
   threadId?: string;
@@ -309,14 +303,14 @@ export function VendorCommunication({
   const inboxRef = useRef<VendorInboxPanelHandle>(null);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
-  const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
+  const [archivedCount, setArchivedCount] = useState(0);
 
   useEffect(() => {
     setThreadOpen(Boolean(threadId));
   }, [threadId]);
 
   const onFolderCountsChange = useCallback((counts: { unread: number; archived: number }) => {
-    setFolderCounts(counts);
+    setArchivedCount(counts.archived);
   }, []);
 
   const newMessageButton = (
@@ -336,17 +330,10 @@ export function VendorCommunication({
       destinations={[
         { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
         {
-          id: "unread",
-          label: "Unread",
-          href: `${commBase}/unread`,
-          count: folderCounts.unread,
-          dataAttr: "communication-segment-unread",
-        },
-        {
           id: "archived",
           label: "Archived",
           href: `${commBase}/archived`,
-          count: folderCounts.archived,
+          count: archivedCount,
           dataAttr: "communication-segment-archived",
         },
       ]}

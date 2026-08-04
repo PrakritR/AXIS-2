@@ -83,6 +83,11 @@ export function VaulBottomSheet({
    */
   maxHeightClass,
   /**
+   * Bottom-anchored sheets only: open at the same height as `maxHeightClass` so the card
+   * background fills down to the tab bar instead of hugging field content with a gap below.
+   */
+  fillViewport = false,
+  /**
    * Floor height for the RAISED sheet, so a portaled menu can always be contained inside it
    * rather than hanging onto the scrim. Clamped against the raised max-height, so a short
    * viewport can never push the sheet's top off screen. Ignored unless `autoElevate`.
@@ -101,10 +106,17 @@ export function VaulBottomSheet({
   /** When true, the sheet body does not scroll (e.g. an open filter field menu). */
   lockBodyScroll?: boolean;
   maxHeightClass?: string;
+  fillViewport?: boolean;
   minHeightPx?: number;
 }) {
-  const contentHugging = !fullScreen;
+  const contentHugging = !fullScreen && !fillViewport;
   const elevated = autoElevate && !fullScreen;
+  const bottomAnchoredMaxHeight =
+    maxHeightClass ??
+    "max-h-[min(88dvh,calc(100dvh-var(--portal-native-bottom-nav-inset,0px)-0.5rem))]";
+  const bottomAnchoredMinHeight = fillViewport
+    ? bottomAnchoredMaxHeight.replace(/^max-h-/, "min-h-")
+    : undefined;
 
   /* One raised placement, applied statically. The elevated `bottom` and max-height each
      REPLACE the bottom-anchored ones: exactly one branch emits a `bottom-*` and exactly one
@@ -149,7 +161,11 @@ export function VaulBottomSheet({
                   "h-auto rounded-t-2xl",
                   elevated
                     ? elevatedPlacement
-                    : cn("bottom-0", maxHeightClass ?? "max-h-[min(88dvh,36rem)]"),
+                    : cn(
+                        "bottom-[var(--portal-native-bottom-nav-inset,0px)]",
+                        bottomAnchoredMaxHeight,
+                        bottomAnchoredMinHeight,
+                      ),
                 ),
             !footer && "pb-[max(1rem,var(--native-safe-bottom,0px))]",
           )}
@@ -195,7 +211,7 @@ export function VaulBottomSheet({
               shrinks and scrolls INSIDE the sheet. With `shrink-0` it overflowed the sheet
               instead, which is why callers had to hand-cap their body height and why a
               four-field filter pushed its last fields past the sheet's bottom edge. */}
-          <div className={cn("flex flex-col", contentHugging ? "min-h-0" : "min-h-0 flex-1 overflow-hidden")}>
+          <div className={cn("flex min-h-0 flex-col", fillViewport && "flex-1")}>
             <div
               className={cn(
                 flushBody ? "px-0" : "px-4",
@@ -204,7 +220,7 @@ export function VaulBottomSheet({
                 lockBodyScroll
                   ? "overflow-hidden"
                   : "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
-                !contentHugging && "flex-1",
+                fillViewport || !contentHugging ? "flex-1" : undefined,
               )}
             >
               {children}

@@ -66,8 +66,8 @@ export function ManagerCommunication({
   inboxTabId = "unopened",
   smsUiEnabled = false,
 }: {
-  /** Routed conversation list segment (Active / Unread / Archived). */
-  listSegment?: "active" | "unread" | "archived";
+  /** Routed conversation list segment (Active / Archived). */
+  listSegment?: "active" | "archived";
   /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
   threadId?: string;
   /** @deprecated Channel is always unified; kept for route compatibility. */
@@ -100,7 +100,7 @@ export function ManagerCommunication({
     setThreadOpen(Boolean(threadId));
   }, [threadId]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [folderCounts, setFolderCounts] = useState({ unread: 0, archived: 0 });
+  const [archivedCount, setArchivedCount] = useState(0);
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -243,6 +243,7 @@ export function ManagerCommunication({
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
       compactPanel
+      filterFieldCount={4}
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
       mobileFlushBody={true}
@@ -280,17 +281,10 @@ export function ManagerCommunication({
       destinations={[
         { id: "active", label: "Active", href: `${commBase}/active`, dataAttr: "communication-segment-active" },
         {
-          id: "unread",
-          label: "Unread",
-          href: `${commBase}/unread`,
-          count: folderCounts.unread,
-          dataAttr: "communication-segment-unread",
-        },
-        {
           id: "archived",
           label: "Archived",
           href: `${commBase}/archived`,
-          count: folderCounts.archived,
+          count: archivedCount,
           dataAttr: "communication-segment-archived",
         },
       ]}
@@ -343,7 +337,7 @@ export function ManagerCommunication({
         listChrome="external"
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onFolderCountsChange={setFolderCounts}
+        onFolderCountsChange={(counts) => setArchivedCount(counts.archived)}
       />
     </PortalCommunicationShell>
   );

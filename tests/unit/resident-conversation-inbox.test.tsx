@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
-// Resident Communication matches the manager CRM layout: Active / Unread /
-// Archived segments, unified conversation list, and Archive (not Trash).
+// Resident Communication matches the manager CRM layout: Active / Archived
+// segments, unified conversation list, and Archive (not Trash).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 
@@ -55,12 +55,12 @@ afterEach(() => {
 });
 
 describe("resident conversation inbox", () => {
-  it("shows Active / Unread / Archived segments like the manager portal", () => {
+  it("shows Active and Archived segments like the manager portal", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     render(<ResidentCommunication />);
 
     expect(screen.getByRole("link", { name: /^Active$/i })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Unread/i })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Unread/i })).toBeNull();
     expect(screen.getByRole("link", { name: /Archived/i })).toBeTruthy();
     expect(screen.getByText("Property manager")).toBeTruthy();
     expect(screen.queryByText("Old notice")).toBeNull();
