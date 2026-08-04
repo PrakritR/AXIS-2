@@ -90,12 +90,15 @@ function cacheGoogleBusyBlocks(
 }
 
 /**
- * Ceiling on one manager's busy read.
+ * Ceiling on one manager's busy read — the shared ladder's READ budget, which is
+ * deliberately LONGER than the write budget the cancel/reschedule paths race on
+ * (`GOOGLE_CALENDAR_WRITE_OPERATION_TIMEOUT_MS`).
  *
- * The SAME whole-operation budget the cancel/reschedule paths race on, not a
- * second independently-chosen number: `listGoogleCalendarEvents` already bounds
- * its own token hop and page walk below this, and two hand-picked constants are
- * exactly how the two drifted apart before.
+ * They differ for a reason, so do not "restore" a single shared value: a write
+ * runs after the outbound guest email and SMS in the same handler, and those are
+ * unbounded, so its Google leg has to leave them headroom under the platform's
+ * function limit. This read is the first and only external call in its handler,
+ * so it can use the whole ladder — and it needs to, because it can page.
  */
 const GOOGLE_BUSY_READ_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS;
 

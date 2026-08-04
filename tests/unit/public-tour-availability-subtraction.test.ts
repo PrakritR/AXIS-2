@@ -155,6 +155,26 @@ async function offeredSlots(): Promise<Set<string>> {
   return new Set(Object.keys(body.slotHosts ?? {}));
 }
 
+/**
+ * A FIXED clock for the TTL tests, half past the hour on purpose.
+ *
+ * The busy window end is `now + horizon`, rounded UP to the hour so successive
+ * requests ask Google for the same `timeMax`. Offsetting the LIVE clock by a few
+ * seconds can therefore straddle an hour boundary, move the window, and make the
+ * cache-coverage check miss — a rare flake that reads as "the cache did not
+ * hold". A base at :30:00 keeps every offset used here inside one hour.
+ */
+const PINNED_NOW = Date.parse("2026-08-03T12:30:00.000Z");
+
+/** Pin `Date.now` so every clock read in one test agrees. */
+function pinNow(ms: number): void {
+  if (vi.isMockFunction(Date.now)) {
+    vi.mocked(Date.now).mockReturnValue(ms);
+    return;
+  }
+  vi.spyOn(Date, "now").mockReturnValue(ms);
+}
+
 /** A far-future date so `slotIsBookable` never filters the fixture out. */
 const DAY = "2099-08-06";
 /** 10:00-10:30 am Pacific on {@link DAY}. */
@@ -175,6 +195,7 @@ describe("public tour availability subtracts what is already taken", () => {
     GOOGLE_THROWS = false;
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
+    if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
   it("offers published availability when nothing is taken", async () => {
@@ -342,21 +363,16 @@ describe("public tour availability subtracts what is already taken", () => {
     // for the full success TTL un-subtracts a manager's whole calendar for a
     // minute on the one route whose purpose is preventing a double book.
     GOOGLE_THROWS = true;
+    pinNow(PINNED_NOW);
     await offeredSlots();
     expect(GOOGLE_TIME_MAX).toHaveLength(1);
 
     GOOGLE_THROWS = false;
     GOOGLE_BUSY = [{ id: "g1", summary: "Busy", start: TEN_AM_START, end: TEN_AM_END }];
-    const realNow = Date.now;
-    const skew = 6_000;
-    vi.spyOn(Date, "now").mockImplementation(() => realNow() + skew);
-    try {
-      const slots = await offeredSlots();
-      expect(GOOGLE_TIME_MAX).toHaveLength(2);
-      expect(slots.has(TEN_AM)).toBe(false);
-    } finally {
-      vi.mocked(Date.now).mockRestore();
-    }
+    pinNow(PINNED_NOW + 6_000);
+    const slots = await offeredSlots();
+    expect(GOOGLE_TIME_MAX).toHaveLength(2);
+    expect(slots.has(TEN_AM)).toBe(false);
   });
 
   it("does not re-ask Google for a manager who simply has no calendar", async () => {
@@ -364,17 +380,13 @@ describe("public tour availability subtracts what is already taken", () => {
     // success TTL. Re-asking every few seconds would turn each request on this
     // public no-store route into a fresh connection read from Supabase.
     GOOGLE_THROWS_NOT_LINKED = true;
+    pinNow(PINNED_NOW);
     await offeredSlots();
     expect(GOOGLE_TIME_MAX).toHaveLength(1);
 
-    const realNow = Date.now;
-    vi.spyOn(Date, "now").mockImplementation(() => realNow() + 6_000);
-    try {
-      await offeredSlots();
-      expect(GOOGLE_TIME_MAX).toHaveLength(1);
-    } finally {
-      vi.mocked(Date.now).mockRestore();
-    }
+    pinNow(PINNED_NOW + 6_000);
+    await offeredSlots();
+    expect(GOOGLE_TIME_MAX).toHaveLength(1);
   });
 
   it("still serves availability when the calendar link is broken", async () => {
@@ -419,6 +431,7 @@ describe("a property with no published availability still offers the 9-5 default
     GOOGLE_THROWS = false;
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
+    if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
   it("bounds the default grid to the 21-day horizon", async () => {
