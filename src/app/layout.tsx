@@ -45,9 +45,8 @@ export default function RootLayout({
             <AuthOAuthErrorHandler />
             <NativeBridge />
             <NativeAppGate>{children}</NativeAppGate>
-            {/* Site-wide general AI assistant — pinned bottom-right on every page
-                (public, auth, portal). Distinct from the portal-scoped Axis
-                Assistant; it lifts above that FAB when both are on screen. */}
+            {/* The public-page assistant panel. Its single named trigger lives
+                in the public navigation; portal pages use their own header trigger. */}
             <GeneralAssistant />
           </AppUiProvider>
         </ThemeProvider>

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { track } from "@/lib/analytics/track-client";
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
@@ -15,7 +14,6 @@ import type { ActionPreview } from "@/lib/tools/registry";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
-  openAxisAssistant,
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
@@ -55,13 +53,8 @@ function useOpen() {
 }
 
 /**
- * The in-demo Axis Assistant — the portal/property-scoped assistant, pinned
- * bottom-right INSIDE the demo frame exactly where it sits in the real property
- * portal. It talks to the sandboxed `/api/agent/demo-chat` (in-memory snapshot
- * data, currently empty) and is fully CONTAINED within the frame: its FAB,
- * backdrop, and panel are absolutely positioned inside the (overflow-hidden)
- * frame, so nothing spills onto the page. The site-wide general assistant
- * handles broader questions.
+ * The in-demo Axis Assistant — the portal/property-scoped panel for scripted
+ * demo prompts. It is fully contained within the demo frame when opened.
  *
  * The "Run demo" auto-play drives this via the shared scripted-prompt channel.
  */
@@ -188,24 +181,6 @@ export function DemoFrameAssistant() {
 
   return (
     <>
-      {/* FAB — bottom-right of the demo frame, mirroring the real portal */}
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => {
-            track("assistant_opened", { surface: "demo" });
-            openAxisAssistant();
-          }}
-          data-attr="demo-assistant-open"
-          aria-label="Open PropLane Assistant"
-          aria-expanded={open}
-          className="absolute bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
-          style={{ background: "var(--btn-primary)" }}
-        >
-          <SparkleIcon className="h-5 w-5" />
-        </button>
-      ) : null}
-
       {/* Panel — contained within the frame */}
       {open ? (
         <div className="absolute inset-0 z-50">

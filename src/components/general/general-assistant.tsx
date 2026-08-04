@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -23,12 +22,9 @@ import { useIsClient } from "@/hooks/use-is-client";
 import {
   closeGeneralAssistant,
   getGeneralAssistantOpen,
-  getPortalAssistantPresent,
   openGeneralAssistant,
   subscribeGeneralAssistantOpen,
-  subscribePortalAssistantPresence,
 } from "@/lib/general-assistant/open-store";
-import { cn } from "@/lib/utils";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type Suggestion = { label: string; prompt: string };
@@ -42,10 +38,6 @@ const SUGGESTIONS: Suggestion[] = [
 
 function useGeneralOpen() {
   return useSyncExternalStore(subscribeGeneralAssistantOpen, getGeneralAssistantOpen, () => false);
-}
-
-function usePortalAssistantPresent() {
-  return useSyncExternalStore(subscribePortalAssistantPresence, getPortalAssistantPresent, () => false);
 }
 
 function ChatBubbleIcon({ className }: { className?: string }) {
@@ -62,20 +54,45 @@ function ChatBubbleIcon({ className }: { className?: string }) {
   );
 }
 
-function handleOpen() {
+function openAssistant() {
   track("general_assistant_opened");
   openGeneralAssistant();
 }
 
 /**
- * Site-wide general AI assistant — pinned bottom-right on every page except
- * portal surfaces, which mount their own scoped Axis Assistant instead.
- * Answers broad questions about Axis via `/api/agent/general-chat`.
+ * Named entry point for the site-wide assistant. It belongs in a page header,
+ * never as a floating control that competes with the portal assistant.
  */
+export function GeneralAssistantTrigger() {
+  const open = useGeneralOpen();
+
+  function toggleAssistant() {
+    if (open) {
+      closeGeneralAssistant();
+      return;
+    }
+    openAssistant();
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggleAssistant}
+      data-attr="general-assistant-open"
+      aria-label={open ? "Close PropLane Assistant" : "Ask PropLane"}
+      aria-expanded={open}
+      className="group flex min-h-10 items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-[13px] font-medium text-muted outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <ChatBubbleIcon className="h-4 w-4 shrink-0 text-primary" />
+      <span className="tracking-[-0.01em]">Ask PropLane</span>
+    </button>
+  );
+}
+
+/** Site-wide general AI assistant panel for public pages. */
 export function GeneralAssistant() {
   const isClient = useIsClient();
   const open = useGeneralOpen();
-  const portalPresent = usePortalAssistantPresent();
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
@@ -144,30 +161,6 @@ export function GeneralAssistant() {
     setAttachments([]);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
-
-  // Portal layouts mount Axis Assistant — keep a single bottom-right AI control.
-  if (portalPresent) return null;
-
-  const trigger =
-    open ? null : (
-      <button
-        type="button"
-        onClick={handleOpen}
-        data-attr="general-assistant-open"
-        aria-label="Open PropLane AI assistant"
-        aria-expanded={open}
-        className={cn(
-          "group fixed right-[max(1.25rem,env(safe-area-inset-right))] z-[60] flex items-center justify-center rounded-full text-white shadow-[0_16px_36px_-14px_rgba(47,107,255,0.8)] outline-none transition-[transform,filter,bottom] duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95",
-          "bottom-[max(1.25rem,env(safe-area-inset-bottom))] lg:bottom-6",
-          "h-11 w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
-          "lg:inline-flex lg:h-auto lg:w-auto lg:gap-2 lg:pl-4 lg:pr-5 lg:py-3.5",
-        )}
-        style={{ background: "var(--btn-primary)" }}
-      >
-        <ChatBubbleIcon className="h-[18px] w-[18px] shrink-0 lg:h-6 lg:w-6" />
-        <span className="hidden text-sm font-semibold tracking-[-0.01em] lg:inline">Ask PropLane AI</span>
-      </button>
-    );
 
   const panel = open ? (
     <div className="fixed inset-0 z-[70]">
@@ -309,12 +302,5 @@ export function GeneralAssistant() {
     </div>
   ) : null;
 
-  const overlay: ReactNode = (
-    <>
-      {trigger}
-      {panel}
-    </>
-  );
-
-  return isClient ? createPortal(overlay, document.body) : null;
+  return isClient ? createPortal(panel, document.body) : null;
 }

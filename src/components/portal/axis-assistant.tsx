@@ -3,7 +3,6 @@
 import {
   createContext,
   memo,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -15,7 +14,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { ModalShell } from "@/components/ui/modal";
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
@@ -37,7 +35,6 @@ import type { AssistantDisplayMode } from "@/lib/assistant-display-preferences";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
-  openAxisAssistant,
   setAxisAssistantOpen,
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
@@ -85,71 +82,17 @@ function useAxisAssistantOpen() {
   return useSyncExternalStore(subscribeAxisAssistantOpen, getAxisAssistantOpen, () => false);
 }
 
-function handleOpenAssistant() {
-  track("assistant_opened");
-  startTransition(() => {
-    openAxisAssistant();
-  });
-}
-
-/**
- * Assistant FAB — floats above the bottom nav bar in the native app (clearing it
- * via the same measured `--portal-native-bottom-nav-inset` the bar itself uses),
- * bottom-right on web. Always rendered: the assistant is no longer a bar slot.
- *
- * In docked mode the rail already puts the assistant on screen at `lg`+, so the
- * FAB hides there (`lg:hidden`) and stays the assistant below `lg`, where the
- * rail never renders.
- */
-function AxisAssistantFixedTrigger({ docked }: { docked: boolean }) {
-  const open = useAxisAssistantOpen();
-  const hideFab = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof document === "undefined") return () => {};
-      const obs = new MutationObserver(onStoreChange);
-      obs.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["data-hide-assistant-fab", "data-communication-surface"],
-      });
-      return () => obs.disconnect();
-    },
-    () =>
-      typeof document !== "undefined" &&
-      (document.documentElement.hasAttribute("data-hide-assistant-fab") ||
-        document.documentElement.hasAttribute("data-communication-surface")),
-    () => false,
-  );
-  if (open || hideFab) return null;
-
-  return (
-    <button
-      type="button"
-      onClick={handleOpenAssistant}
-      aria-label="Open PropLane Assistant"
-      aria-expanded={open}
-      data-attr="axis-assistant-fab"
-      className={cn(
-        "axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
-        docked && "lg:hidden",
-      )}
-      style={{ background: "var(--btn-primary)" }}
-    >
-      <AxisAssistantSparkleIcon className="h-5 w-5 max-lg:h-[18px] max-lg:w-[18px] [html[data-native]_&]:h-[18px] [html[data-native]_&]:w-[18px]" />
-    </button>
-  );
-}
-
 const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { children: ReactNode }) {
   return children;
 });
 
 /**
- * Panel + FAB live outside the portal layout tree so opening the assistant does not
+ * The panel lives outside the portal layout tree so opening the assistant does not
  * re-render dashboard/sidebar content (keeps INP under budget).
  */
 function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
   const isClient = useIsClient();
-  const { dockable, mode, setMode } = useAxisAssistantDock();
+  const { dockable, setMode } = useAxisAssistantDock();
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
@@ -263,7 +206,6 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
 
   return (
     <>
-      <AxisAssistantFixedTrigger docked={dockable && mode === "docked"} />
       {isClient && open ? (
         <ModalShell
           open={open}

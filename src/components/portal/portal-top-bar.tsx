@@ -2,7 +2,7 @@
 
 import { ChevronDown, User } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useCallback, useEffect } from "react";
+import { startTransition, useCallback, useEffect, useSyncExternalStore } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
@@ -16,7 +16,12 @@ import {
 import { track } from "@/lib/analytics/track-client";
 import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
 import { useAxisAssistantDock } from "@/components/portal/axis-assistant";
-import { closeAxisAssistant, openAxisAssistant } from "@/lib/axis-assistant/open-store";
+import {
+  closeAxisAssistant,
+  getAxisAssistantOpen,
+  openAxisAssistant,
+  subscribeAxisAssistantOpen,
+} from "@/lib/axis-assistant/open-store";
 import type { PortalKind } from "@/lib/portal-types";
 
 /**
@@ -34,8 +39,8 @@ function initials(name: string | null, email: string | null): string {
 
 /**
  * Slim desktop top bar holding the account menu in the top-right — the standard
- * SaaS location. Hidden below lg, where the existing mobile section strip and
- * native bottom nav already surface Settings.
+ * SaaS location. On smaller screens, the named assistant entry point remains
+ * visible while the account menu moves to the existing mobile navigation.
  */
 export function PortalTopBar({
   kind,
@@ -49,6 +54,11 @@ export function PortalTopBar({
   email: string | null;
 }) {
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const assistantOpen = useSyncExternalStore(
+    subscribeAxisAssistantOpen,
+    getAxisAssistantOpen,
+    () => false,
+  );
   const { dockable, setMode } = useAxisAssistantDock();
 
   const openAskProPlane = useCallback(() => {
@@ -63,7 +73,7 @@ export function PortalTopBar({
     // The rail is intentionally `lg`-only. On a wide, dock-enabled portal,
     // make it the active presentation and wait for React to mount its composer
     // before moving focus into it.
-    if (dockable && window.matchMedia("(min-width: 1024px)").matches) {
+    if (dockable && window.matchMedia?.("(min-width: 1024px)").matches) {
       setMode("docked");
       closeAxisAssistant();
       requestAnimationFrame(() => {
@@ -79,6 +89,20 @@ export function PortalTopBar({
     });
   }, [dockable, setMode]);
 
+  function toggleAssistant() {
+    const dockInput = document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null;
+    if (assistantOpen) {
+      closeAxisAssistant();
+      return;
+    }
+    if (dockInput?.offsetParent) {
+      setMode("popup");
+      closeAxisAssistant();
+      return;
+    }
+    openAskProPlane();
+  }
+
   // ⌘K / Ctrl+K opens the assistant, matching the visible keyboard chip. Only
   // this shortcut is claimed; nothing else in the app binds ⌘K.
   useEffect(() => {
@@ -93,12 +117,13 @@ export function PortalTopBar({
   }, [openAskProPlane]);
 
   return (
-    <header className="hidden h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-5 md:flex">
+    <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-4 sm:px-5">
       <button
         type="button"
-        onClick={openAskProPlane}
+        onClick={toggleAssistant}
         data-attr="portal-ask-proplane"
-        aria-label="Ask PropLane"
+        aria-label={assistantOpen ? "Close PropLane Assistant" : "Ask PropLane"}
+        aria-expanded={assistantOpen}
         aria-keyshortcuts="Meta+K Control+K"
         className="group flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2.5 pr-2 text-[13px] font-medium text-muted outline-none transition hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
       >
@@ -113,7 +138,7 @@ export function PortalTopBar({
 
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 text-foreground outline-none transition hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="hidden items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 text-foreground outline-none transition hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-primary/40 md:flex"
           aria-label="Account menu"
         >
           <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--cobalt-deep,#16233f)] text-[12px] font-bold text-white">

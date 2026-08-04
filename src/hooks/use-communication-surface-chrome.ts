@@ -3,9 +3,9 @@
 import { useEffect } from "react";
 
 /**
- * Communication surfaces (main tab + resident-detail chat) hide the floating
- * assistant FAB and tighten bottom scroll padding. `threadReading` adds the
- * full-bleed mobile thread layout (no extra page chrome).
+ * Communication surfaces (main tab + resident-detail chat) apply their
+ * communication-specific layout. `threadReading` adds the full-bleed mobile
+ * thread layout (no extra page chrome).
  */
 export function useCommunicationSurfaceChrome({
   active,
@@ -17,7 +17,6 @@ export function useCommunicationSurfaceChrome({
   useEffect(() => {
     if (!active) return;
     const html = document.documentElement;
-    html.dataset.hideAssistantFab = "true";
     html.dataset.communicationSurface = "true";
     if (threadReading) {
       html.dataset.communicationThreadReading = "true";
@@ -25,7 +24,6 @@ export function useCommunicationSurfaceChrome({
       delete html.dataset.communicationThreadReading;
     }
     return () => {
-      delete html.dataset.hideAssistantFab;
       delete html.dataset.communicationSurface;
       delete html.dataset.communicationThreadReading;
     };

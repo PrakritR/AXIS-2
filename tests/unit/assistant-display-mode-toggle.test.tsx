@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The assistant's presentation preference, driven through the real components a
-// manager touches: the floating popup's "pin", the dock's "unpin", and the
+// manager touches: the named Ask PropLane entry point's popup "pin", the dock's "unpin", and the
 // Settings radio group. All three write the SAME persisted preference, and the
 // default — nothing stored — must be the popup with NO right rail, so the portal
 // content keeps the full width.
@@ -41,6 +41,7 @@ function installFakeStorage() {
 function renderPortal({ dockable = true }: { dockable?: boolean } = {}) {
   return render(
     <AxisAssistant managerName="Jordan Lee" dockable={dockable}>
+      <PortalTopBar kind="pro" basePath="/portal" name="Jordan Lee" email="mgr@example.com" />
       <AssistantDisplayModeSetting />
       <PortalAssistantDockRail managerName="Jordan Lee" />
     </AxisAssistant>,
@@ -58,7 +59,7 @@ function renderPortalWithTopBar() {
 
 const rail = () => document.querySelector('[data-attr="portal-assistant-dock-rail"]');
 const dock = () => document.querySelector('[data-attr="dashboard-assistant-dock"]');
-const fab = () => document.querySelector('[data-attr="axis-assistant-fab"]');
+const askPropLane = () => document.querySelector<HTMLButtonElement>('[data-attr="portal-ask-proplane"]')!;
 
 describe("assistant display mode", () => {
   beforeEach(() => {
@@ -76,18 +77,28 @@ describe("assistant display mode", () => {
     vi.unstubAllGlobals();
   });
 
-  it("defaults to the popup: the FAB is the only assistant surface, no rail", async () => {
+  it("defaults to the popup opened from Ask PropLane, with no floating trigger or rail", () => {
     renderPortal();
-    await waitFor(() => expect(fab()).not.toBeNull());
+    expect(askPropLane()).toBeInTheDocument();
+    expect(document.querySelector('[data-attr="axis-assistant-fab"]')).toBeNull();
     expect(rail()).toBeNull();
     expect(dock()).toBeNull();
-    // The FAB is the assistant at every width on the default.
-    expect(fab()!.className).not.toContain("lg:hidden");
   });
 
-  it("pins from the popup header, and the FAB steps aside on desktop", async () => {
+  it("toggles the popup closed when Ask PropLane is clicked again", async () => {
     renderPortal();
-    fireEvent.click(screen.getByLabelText("Open PropLane Assistant"));
+    fireEvent.click(askPropLane());
+    await waitFor(() => expect(document.querySelector(".axis-assistant-panel")).not.toBeNull());
+    expect(askPropLane()).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(askPropLane());
+    await waitFor(() => expect(document.querySelector(".axis-assistant-panel")).toBeNull());
+    expect(askPropLane()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("pins from the Ask PropLane popup header", async () => {
+    renderPortal();
+    fireEvent.click(askPropLane());
 
     const pin = await screen.findByLabelText("Pin PropLane Assistant to the right side");
     fireEvent.click(pin);
@@ -95,10 +106,10 @@ describe("assistant display mode", () => {
     await waitFor(() => expect(rail()).not.toBeNull());
     expect(dock()).not.toBeNull();
     expect(readAssistantDisplayMode(USER)).toBe("docked");
-    // Small screens keep the popup — the rail itself is `hidden lg:flex`.
+    // The rail itself is desktop-only.
     expect(rail()!.className).toContain("hidden");
     expect(rail()!.className).toContain("lg:flex");
-    await waitFor(() => expect(fab()!.className).toContain("lg:hidden"));
+    expect(document.querySelector('[data-attr="axis-assistant-fab"]')).toBeNull();
   });
 
   it("opens Ask PropLane in the right-side conversation rail on desktop", async () => {
@@ -120,7 +131,7 @@ describe("assistant display mode", () => {
 
   it("unpins from the dock header, back to the popup default", async () => {
     renderPortal();
-    fireEvent.click(screen.getByLabelText("Open PropLane Assistant"));
+    fireEvent.click(askPropLane());
     fireEvent.click(await screen.findByLabelText("Pin PropLane Assistant to the right side"));
     await waitFor(() => expect(rail()).not.toBeNull());
 
@@ -156,12 +167,12 @@ describe("assistant display mode", () => {
 
   it("offers no dock affordance in a portal that did not opt in", async () => {
     renderPortal({ dockable: false });
-    await waitFor(() => expect(fab()).not.toBeNull());
+    expect(askPropLane()).toBeInTheDocument();
 
     // No Settings toggle...
     expect(screen.queryByRole("radio", { name: /Pinned to the right/ })).toBeNull();
     // ...and no pin control in the popup.
-    fireEvent.click(screen.getByLabelText("Open PropLane Assistant"));
+    fireEvent.click(askPropLane());
     await screen.findByText("PropLane Assistant");
     expect(screen.queryByLabelText("Pin PropLane Assistant to the right side")).toBeNull();
 

@@ -1357,17 +1357,13 @@ input[type="date"].portal-modal-date-input::-webkit-date-and-time-value {
 }
 
 /* Mobile-web default for the bottom-nav inset (same var native uses below), so
-   `#portal-main-content` padding / the assistant FAB clear the fixed bottom bar
-   on a phone-width browser too, before JS measures the real bar height via
+   `#portal-main-content` clears the fixed bottom bar on a phone-width browser
+   too, before JS measures the real bar height via
    observeNativeBottomNavInset. `html[data-native]`'s own declaration below has
    higher specificity and wins in the native app, so this only ever governs web. */
 :root {
   --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
-  /* FAB (h-11) + gap above the fixed bottom bar — used for main-column scroll clearance. */
-  --portal-assistant-fab-clearance: 3.5rem;
-  --portal-mobile-scroll-bottom-inset: calc(
-    var(--portal-native-bottom-nav-inset) + var(--portal-assistant-fab-clearance)
-  );
+  --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);
   --portal-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --portal-duration-fast: 120ms;
   --portal-duration: 220ms;
@@ -2255,13 +2251,6 @@ html[data-native] .portal-mobile-nav-bar {
   }
 }
 
-/* Desktop: extra scroll room so list tails clear the assistant FAB. */
-@media (min-width: 1024px) {
-  #portal-main-content {
-    scroll-padding-bottom: calc(var(--portal-assistant-fab-clearance, 3.5rem) + 1.5rem);
-  }
-}
-
 /* Nested scroll panels: desktop only — mobile uses #portal-main-content scroll. */
 @media (min-width: 1024px) {
   .portal-desktop-scroll-panel {
@@ -2309,67 +2298,17 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
     border-radius: 0.75rem;
   }
 
-  /* G3 — keep the assistant FAB bottom-right without overlapping the send button. */
-  .portal-communication-inbox .portal-inbox-composer-row {
-    padding-right: 3.25rem;
-  }
-
-  /* Float above the fixed bottom tab bar (not inside it) on phone-width web + native. */
-  .axis-assistant-fab {
-    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem) !important;
-    right: max(1rem, env(safe-area-inset-right)) !important;
-    z-index: 45;
-  }
-
   html[data-bulk-action-bar] #portal-main-content {
     padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
     scroll-padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
   }
 
-  html[data-bulk-action-bar] .axis-assistant-fab {
-    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.5rem) !important;
-  }
-
-  /* Record detail footer actions — float FAB above the centered action row. */
-  html:has([data-slot="portal-page-footer-actions"]) .axis-assistant-fab {
-    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.75rem) !important;
-  }
-
-  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
-    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 6.25rem) !important;
-  }
 }
 
-/* Lift assistant FAB when bulk selection bar is open (desktop). */
 @media (min-width: 1024px) {
-  html[data-bulk-action-bar] .axis-assistant-fab {
-    bottom: 5.5rem !important;
-  }
-
-  /* Pinned record-detail footer (resident profile sections) — sit above the action row. */
-  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
-    bottom: 5.75rem !important;
-  }
-
   html[data-portal-sidebar-collapsed] [data-slot="bulk-action-bar"][data-variant="payments"] {
     left: 58px;
   }
-}
-
-html[data-hide-assistant-fab] .axis-assistant-fab,
-html[data-communication-surface] .axis-assistant-fab {
-  display: none !important;
-}
-
-html[data-hide-assistant-fab],
-html[data-communication-surface] {
-  --portal-assistant-fab-clearance: 0px;
-  --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);
-}
-
-html[data-hide-assistant-fab] .portal-communication-inbox .portal-inbox-composer-row,
-html[data-communication-surface] .portal-inbox-composer-row {
-  padding-right: 0;
 }
 
 /* Communication + list pages: fixed chrome, scrollable body below. */
@@ -2459,13 +2398,8 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
 
   /* Fixed-chrome surfaces clip #portal-main-content (`overflow: hidden` above),
      so unlike a page-scrolls surface its padding-bottom can never become
-     trailing scroll room — it only shrinks the scroll viewport. The FAB half of
-     `--portal-mobile-scroll-bottom-inset` therefore rendered as a dead 56px
-     strip between the last row and the bottom nav, painted with this element's
-     own background gradient, with the assistant FAB parked in it: that strip is
-     what read as an opaque "banner" behind the button. Reserve only the nav bar
-     here so the page background runs continuously under the floating FAB, and
-     hand the FAB clearance to the scroller below, which can actually scroll it.
+     trailing scroll room — it only shrinks the scroll viewport. Reserve only
+     the fixed navigation and bulk-selection chrome here.
 
      The `:not([data-bulk-action-bar])` is load-bearing, not decorative: the
      bulk-bar rule above is the same specificity, so without it this rule would
@@ -2477,19 +2411,11 @@ html[data-communication-surface] .portal-inbox-thread-pane > * {
     scroll-padding-bottom: var(--portal-native-bottom-nav-inset, 0px);
   }
 
-  /* Bulk bar open: still drop the dead FAB band, but keep the clearance the
-     fixed selection bar needs so the last row is not stranded underneath it. */
+  /* Bulk bar open: preserve the clearance the fixed selection bar needs so the
+     last row is not stranded underneath it. */
   html[data-portal-sticky-chrome][data-bulk-action-bar] #portal-main-content {
     padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
     scroll-padding-bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 3.75rem);
-  }
-
-  /* Trailing room INSIDE the scroller so the last row still clears the FAB
-     rather than coming to rest underneath it. Collapses to 0 on its own when
-     the FAB is hidden (`--portal-assistant-fab-clearance: 0px`). */
-  html[data-portal-sticky-chrome] .portal-list-page-scroll {
-    padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
-    scroll-padding-bottom: var(--portal-assistant-fab-clearance, 3.5rem);
   }
 
   html[data-communication-thread-reading] #portal-main-content {
