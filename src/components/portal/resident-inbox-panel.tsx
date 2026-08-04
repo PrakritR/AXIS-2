@@ -708,79 +708,101 @@ export const ResidentInboxPanel = forwardRef<
       // written until a channel actually succeeds.
       persistInboxRef.current = false;
       setLocal((cur) => cur.map((t) => (t.id === thread.id ? updated : t)));
-      // Roll back THIS thread only. A whole-array restore would also undo rows
-      // that arrived from a background sync or PORTAL_INBOX_CHANGED_EVENT during
-      // the send, which the re-armed persist effect then deletes server-side.
-      const revertReply = () => {
-        setLocal((cur) => cur.map((t) => (t.id === thread.id ? thread : t)));
-        persistInboxRef.current = true;
+      // Take back ONLY this reply, off whatever the thread looks like now. A
+      // whole-row restore would discard an inbound message that landed in the
+      // same thread mid-send — the lost update this change exists to prevent.
+      const rollbackReply = () => {
+        setLocal((cur) =>
+          cur.map((t) => {
+            if (t.id !== thread.id) return t;
+            const messages = (t.messages ?? []).filter((m) => m.id !== replyId);
+            const last = messages[messages.length - 1];
+            return {
+              ...t,
+              messages,
+              preview: last ? last.body.slice(0, 100).replace(/\n/g, " ") : thread.preview,
+            };
+          }),
+        );
       };
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
       let emailOk = !channels.email;
       let smsOk = !channels.sms;
       let failureMessage = "";
-      const sendFailed = (message: string) => {
-        revertReply();
-        return new InboxSendRefusal(message.trim() || null);
-      };
-      if (channels.email) {
-        const res = await fetch("/api/portal/send-inbox-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            threadId: thread.id,
-            subject,
-            text,
-            toEmails: [thread.email],
-            deliverToPortalInbox: true,
-            deliverViaEmail: true,
-            deliverViaSms: false,
-            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
-          }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-        emailOk = res.ok && data.ok === true;
-        if (!emailOk) {
-          failureMessage = data.error ?? "";
-          throw sendFailed(failureMessage);
-        }
-      }
-      if (channels.sms && activeSmsAvailable) {
-        const res = await fetch("/api/portal/send-inbox-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            threadId: thread.id,
-            subject,
-            text,
-            toEmails: [thread.email],
-            deliverToPortalInbox: false,
-            deliverViaEmail: false,
-            deliverViaSms: true,
-            attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
-          }),
-        });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-        smsOk = res.ok && data.ok === true;
-        if (!smsOk && !channels.email) {
-          failureMessage = data.error ?? "";
-          throw sendFailed(failureMessage);
-        }
-      }
-      if (!emailOk && !smsOk) throw sendFailed(failureMessage);
-      // Delivered on at least one channel — only now may it enter the store.
-      // Everything past this point is bookkeeping over a message that WAS sent,
-      // so it must never surface to the resident as a send failure.
-      const delivered = markThreadMessageDelivery(updated, replyId, undefined);
-      const persisted = localRef.current.map((t) => (t.id === thread.id ? delivered : t));
-      persistInboxRef.current = false;
-      setLocal(persisted);
+      // One window, one exit contract: the "sending" bubble and the disabled
+      // persist flag can never outlive this call, including when a fetch REJECTS
+      // (offline, aborted, DNS) rather than answering.
       try {
-        await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [delivered], persisted);
-      } catch {
-        /* the re-armed persist effect below still writes the delivered row */
+        try {
+          if (channels.email) {
+            const res = await fetch("/api/portal/send-inbox-message", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                threadId: thread.id,
+                subject,
+                text,
+                toEmails: [thread.email],
+                deliverToPortalInbox: true,
+                deliverViaEmail: true,
+                deliverViaSms: false,
+                attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+            emailOk = res.ok && data.ok === true;
+            if (!emailOk) {
+              failureMessage = data.error ?? "";
+              throw new InboxSendRefusal(failureMessage.trim() || null);
+            }
+          }
+          if (channels.sms && activeSmsAvailable) {
+            const res = await fetch("/api/portal/send-inbox-message", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                threadId: thread.id,
+                subject,
+                text,
+                toEmails: [thread.email],
+                deliverToPortalInbox: false,
+                deliverViaEmail: false,
+                deliverViaSms: true,
+                attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+            smsOk = res.ok && data.ok === true;
+            if (!smsOk && !channels.email) {
+              failureMessage = data.error ?? "";
+              throw new InboxSendRefusal(failureMessage.trim() || null);
+            }
+          }
+          if (!emailOk && !smsOk) throw new InboxSendRefusal(failureMessage.trim() || null);
+        } catch (e) {
+          rollbackReply();
+          throw e;
+        }
+
+        // Delivered on at least one channel — only now may it enter the store,
+        // merged onto the CURRENT row so a mid-send arrival survives. Everything
+        // from here is bookkeeping over a message that WAS sent, so a failure
+        // must never reach the resident as a failed send: the explicit upsert is
+        // the write we trust, and the forced sync reconciles when it reports
+        // false (it returns a boolean; it does not throw).
+        const currentRows = localRef.current;
+        const currentThread = currentRows.find((t) => t.id === thread.id);
+        if (currentThread) {
+          const withReply = (currentThread.messages ?? []).some((m) => m.id === replyId)
+            ? currentThread
+            : appendReplyToInboxThread(currentThread, reply);
+          const delivered = markThreadMessageDelivery(withReply, replyId, undefined);
+          const persisted = currentRows.map((t) => (t.id === thread.id ? delivered : t));
+          setLocal(persisted);
+          await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [delivered], persisted).catch(() => false);
+        }
       } finally {
         persistInboxRef.current = true;
       }
