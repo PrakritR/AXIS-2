@@ -1508,6 +1508,50 @@ the proposal is a gated pending action the manager approves. Invariants:
   mirrors the public availability route's exclusion set; it excludes the
   inquiry's own window so it never blocks itself. No slot match → no proposal.
 
+## A slotKey is WALL TIME, and the wall clock is Pacific — never the server's
+
+`"2026-08-06:20"` means "10:00 on Aug 6" on the calendar a manager paints and a
+guest reads. Resolving it with `new Date(y, m, d)` reads the SERVER's zone —
+Pacific in dev, **UTC on Vercel** — and every consequence is a silent no-op, not
+an error: `overlaps()` compares a confirmed tour against the wrong half hour so
+the booked slot stays on offer and a second prospect books on top of it, and
+`slotIsBookable()` mis-judges which slots are past. Both shipped. `slotStartMs` /
+`blockInstantMs` in `src/lib/tour-slot-math.ts` are the anchor
+(`TOUR_CALENDAR_TIME_ZONE`); use them rather than constructing Dates from a
+slotKey. A Pacific dev box cannot see this class of bug, so
+`tests/unit/tour-slot-math-timezone.test.ts` pins the process to UTC.
+
+Known, deliberately not widened: the PUBLIC booking client still turns the chosen
+slot into an instant with the PROSPECT's browser zone, so an out-of-region guest
+sends a slotKey and an ISO that disagree. Blocking survives it because a planned
+tour carries its `slotKey` and `slotBlocked` matches that first.
+
+## What a prospect is offered = published − busy − booked
+
+The one rule behind `/api/public/property-tour-availability`:
+
+    offered = (published availability, or the 9-5 default when none is
+               published) MINUS calendar-busy MINUS already-booked
+
+- **The 9-5 default is intended**, not a bug — a property whose manager has not
+  opened a calendar still offers a day (`buildDefaultTourSlotKeys`), and the same
+  subtraction applies to it.
+- **Already-booked** is pending inquiries AND confirmed planned tours; a
+  reschedule drops the stale `slotKey` so the old window is not still blocked.
+- **Calendar-busy** is the manager's linked Google Calendar, cached per manager
+  in-process for 60s because this route is public and uncached.
+- **The response is `no-store` on purpose**, against the repo's prefer-caching
+  rule: `s-maxage=300` meant a just-booked slot stayed on offer for minutes. A
+  double-booked tour costs more than the egress.
+
+Cancel/reschedule of a CONFIRMED tour go through
+`src/lib/tour-planned-change.server.ts` (routes `/api/portal-tour-inquiries/
+{cancel,reschedule}`) because the guest must be reached — PropLane already
+emailed them "your tour is confirmed". A client-side store rewrite reaches
+nobody. Those routes write server-side, so the caller must
+`syncScheduleRecordsFromServer({ force: true })` afterwards or the grid and the
+view-tab counts keep showing the pre-change tour until a manual reload.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.
