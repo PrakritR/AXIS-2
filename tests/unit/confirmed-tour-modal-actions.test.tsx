@@ -262,6 +262,37 @@ describe("counts stay honest after a tour changes state", () => {
     expect(weekOpenSlotCount()).toBe(1);
   });
 
+  it("still draws a Free/declined Google event but does not count it as taken", async () => {
+    // Both invariants at once: the manager SEES the event, and the "N open"
+    // header agrees with what the public booking page actually offers.
+    const tour = confirmedTour();
+    PAINTED_SLOTS = new Set([`${tour.dateStr}:20`, `${tour.dateStr}:22`]);
+
+    render(
+      <PortalCalendarPanels
+        storageKey="axis_mgr_avail_slots_v2_test"
+        externalMeetings={[
+          {
+            ...tour,
+            id: "google_free",
+            source: "external",
+            sourceId: "gcal-free",
+            title: "Focus time",
+            name: "Focus time",
+            blocksTourAvailability: false,
+          },
+        ]}
+        scheduleOwnerLabel="Test Manager"
+      />,
+    );
+
+    await waitFor(() => expect(weekOpenSlotCount()).not.toBeNull());
+    expect(weekOpenSlotCount()).toBe(2);
+    expect(
+      [...document.querySelectorAll("button")].some((el) => el.textContent?.includes("Focus time")),
+    ).toBe(true);
+  });
+
   it("tells the page around it whenever a tour changes, so tab counts refresh", async () => {
     // Deleting a confirmed tour redrew the grid while the header's view tabs
     // still read "All 1 / Tours 1" until a manual reload.

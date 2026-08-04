@@ -14,15 +14,29 @@ import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+/**
+ * "This manager has no working calendar link" — never "Google failed".
+ *
+ * A distinct type rather than a message convention, because callers classify on
+ * it to decide whether to warn the manager, and the write calls rethrow
+ * Google's own error text verbatim.
+ */
+export class GoogleCalendarNotLinkedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GoogleCalendarNotLinkedError";
+  }
+}
+
 function clientId(): string {
   const id = resolveGoogleCalendarOAuthConfig()?.clientId;
-  if (!id) throw new Error("Google Calendar is not configured.");
+  if (!id) throw new GoogleCalendarNotLinkedError("Google Calendar is not configured.");
   return id;
 }
 
 function clientSecret(): string {
   const secret = resolveGoogleCalendarOAuthConfig()?.clientSecret;
-  if (!secret) throw new Error("Google Calendar is not configured.");
+  if (!secret) throw new GoogleCalendarNotLinkedError("Google Calendar is not configured.");
   return secret;
 }
 
@@ -146,6 +160,7 @@ export async function exchangeGoogleCalendarCode(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+    signal: googleCalendarFetchSignal(),
   });
   const data = (await res.json()) as {
     access_token?: string;
@@ -180,6 +195,7 @@ export async function exchangeGoogleCalendarCode(
 async function fetchGoogleAccountEmail(accessToken: string): Promise<string | null> {
   const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: googleCalendarFetchSignal(),
   });
   if (!res.ok) return null;
   const data = (await res.json()) as { email?: string };
@@ -190,7 +206,9 @@ async function refreshAccessToken(connection: GoogleCalendarConnection): Promise
   accessToken: string;
   expiresAt: string | null;
 }> {
-  if (!connection.refreshToken) throw new Error("Google Calendar session expired. Reconnect.");
+  if (!connection.refreshToken) {
+    throw new GoogleCalendarNotLinkedError("Google Calendar session expired. Reconnect.");
+  }
   const body = new URLSearchParams({
     client_id: clientId(),
     client_secret: clientSecret(),
@@ -201,6 +219,7 @@ async function refreshAccessToken(connection: GoogleCalendarConnection): Promise
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+    signal: googleCalendarFetchSignal(),
   });
   const data = (await res.json()) as { access_token?: string; expires_in?: number; error?: string };
   if (!res.ok || !data.access_token) {
@@ -218,11 +237,11 @@ export async function getGoogleCalendarAccessToken(
   managerUserId: string,
 ): Promise<{ connection: GoogleCalendarConnection; accessToken: string }> {
   if (!isGoogleCalendarOAuthConfigured()) {
-    throw new Error("Google Calendar is not configured.");
+    throw new GoogleCalendarNotLinkedError("Google Calendar is not configured.");
   }
   let connection = await loadGoogleCalendarConnection(db, managerUserId);
   if (!connection.connected || !connection.refreshToken) {
-    throw new Error("Google Calendar is not connected.");
+    throw new GoogleCalendarNotLinkedError("Google Calendar is not connected.");
   }
   const expiresAt = connection.accessTokenExpiresAt ? Date.parse(connection.accessTokenExpiresAt) : 0;
   const needsRefresh = !connection.accessToken || !expiresAt || expiresAt < Date.now() + 60_000;
@@ -233,7 +252,9 @@ export async function getGoogleCalendarAccessToken(
       accessTokenExpiresAt: refreshed.expiresAt,
     });
   }
-  if (!connection.accessToken) throw new Error("Google Calendar session expired. Reconnect.");
+  if (!connection.accessToken) {
+    throw new GoogleCalendarNotLinkedError("Google Calendar session expired. Reconnect.");
+  }
   return { connection, accessToken: connection.accessToken };
 }
 
@@ -287,15 +308,34 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
 const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
 
 /**
- * Per-round-trip ceiling on every Google Calendar call.
+ * Per-round-trip ceiling on every Google Calendar call, INCLUDING the OAuth
+ * token hops.
  *
  * Node's `fetch` has no default timeout, and these calls are now AWAITED inside
  * request handlers — a hung Google request would otherwise hold a cancel or
  * reschedule response open until the platform function timeout, reporting a
  * transport failure for an operation whose PropLane write already committed and
- * whose guest email already went out.
+ * whose guest email already went out. The token refresh needs it just as much:
+ * `getGoogleCalendarAccessToken` refreshes whenever the token is within a minute
+ * of expiry, so it is on the hot path of every call below.
  */
-export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 8_000;
+export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 6_000;
+
+/**
+ * The longest a single Calendar OPERATION may take: at most a token refresh
+ * plus one API call for a read or a delete, plus an extra call for the
+ * update-then-create fallback in an upsert. Callers that race an operation
+ * against a deadline must allow at least this, or they report a timeout for
+ * work that was still going to succeed.
+ */
+export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 3;
+
+/**
+ * Whole-walk ceiling on the paged event list. The PUBLIC availability route
+ * calls this on a cache miss, so the ceiling here is what stops a slow Google
+ * from stretching a prospect's booking page across every page in turn.
+ */
+export const GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
 
 /** `AbortSignal` bounding one Google Calendar round trip. */
 export function googleCalendarFetchSignal(): AbortSignal {
@@ -307,15 +347,14 @@ export function googleCalendarFetchSignal(): AbortSignal {
  * rather than "Google failed". Callers report these as SKIPPED, never as a
  * failure — `upsertGoogleCalendarEvent` returns null for the same states
  * without throwing, and the two paths must not disagree about it.
+ *
+ * Matches the SENTINEL TYPE, never the message text. The write calls rethrow
+ * Google's own `error.message` verbatim, so substring-matching words like
+ * "expired" or "reconnect" would silently reclassify a real remote failure as
+ * success while the stale event survived and kept blocking a freed slot.
  */
-export function isGoogleCalendarNotLinkedError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("not configured") ||
-    normalized.includes("not connected") ||
-    normalized.includes("reconnect") ||
-    normalized.includes("expired")
-  );
+export function isGoogleCalendarNotLinkedError(error: unknown): boolean {
+  return error instanceof GoogleCalendarNotLinkedError;
 }
 
 export async function listGoogleCalendarEvents(
@@ -341,9 +380,13 @@ export async function listGoogleCalendarEvents(
   // Page rather than truncate: a single `maxResults` request silently dropped
   // the tail for a busy manager, and public tour availability subtracts these
   // windows — a missing event is a busy hour still on offer to a prospect.
+  // ...but bound the WHOLE walk, not only each hop: eight sequential round trips
+  // would otherwise stretch a public booking page far past any per-fetch ceiling.
+  const pagingDeadline = Date.now() + GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS;
   const items: GoogleCalendarListItem[] = [];
   let pageToken: string | undefined;
   for (let page = 0; page < GOOGLE_CALENDAR_EVENT_PAGE_LIMIT; page += 1) {
+    if (page > 0 && Date.now() >= pagingDeadline) break;
     const params = new URLSearchParams({
       timeMin,
       timeMax,

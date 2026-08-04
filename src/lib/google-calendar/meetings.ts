@@ -155,21 +155,21 @@ export function meetingCalendarGridLabel(meeting: DemoMeeting): string {
 }
 
 /**
- * Google events the manager's calendar draws — and therefore the ones its
- * "N open" counts treat as taken.
+ * Every Google event becomes a meeting the manager's calendar DRAWS — including
+ * ones marked Free or declined, which they still want to see.
  *
- * Filtered through the SAME {@link googleEventBlocksTours} predicate the public
- * booking route uses, because the two must agree: a declined invite that still
- * drew here would remove a half hour from the manager's remaining-capacity
- * header while the public page went on offering it.
+ * What varies is `blocksTourAvailability`, carried from the SAME
+ * {@link googleEventBlocksTours} predicate the public booking route uses. Only
+ * the "N open" math reads it, so the header agrees with what a prospect is
+ * actually offered without anything disappearing from the calendar.
  */
 export function googleCalendarEventsToMeetings(events: GoogleCalendarApiEvent[]): DemoMeeting[] {
   return events
-    .filter(googleEventBlocksTours)
     .map((event) => {
       const start = new Date(event.start);
       const end = new Date(event.end);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      const blocksTourAvailability = googleEventBlocksTours(event);
       const dateStr = toLocalDateStr(start);
       const durationMinutes = Math.max(SLOT_DURATION_MINUTES, Math.round((end.getTime() - start.getTime()) / 60_000));
       const span = Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES));
@@ -202,6 +202,7 @@ export function googleCalendarEventsToMeetings(events: GoogleCalendarApiEvent[])
           roomLabel: details.roomLabel,
           instructions: details.instructions,
           hostLabel: "Google Calendar",
+          blocksTourAvailability,
         } satisfies DemoMeeting;
       }
 
@@ -224,6 +225,7 @@ export function googleCalendarEventsToMeetings(events: GoogleCalendarApiEvent[])
           notes: details.notes,
           propertyTitle: details.propertyTitle,
           hostLabel: "Google Calendar",
+          blocksTourAvailability,
         } satisfies DemoMeeting;
       }
 
@@ -242,6 +244,7 @@ export function googleCalendarEventsToMeetings(events: GoogleCalendarApiEvent[])
         statusLabel: "Blocked",
         googleCalendarPrivate: true,
         hostLabel: "Google Calendar",
+        blocksTourAvailability,
       } satisfies DemoMeeting;
     })
     .filter(Boolean) as DemoMeeting[];

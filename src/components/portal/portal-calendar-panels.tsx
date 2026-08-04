@@ -194,7 +194,21 @@ export type DemoMeeting = {
   isPeerTour?: boolean;
   /** Personal Google Calendar busy time — title/details must not be shown in the UI. */
   googleCalendarPrivate?: boolean;
+  /**
+   * Does this meeting make the manager unavailable for a tour? Absent means yes.
+   *
+   * Only Google-sourced meetings ever set it false (an event marked Free, or an
+   * invite the manager declined). Such an event still DRAWS on the calendar —
+   * the manager wants to see it — but must not reduce the "N open" counts, or
+   * the header would disagree with what the public booking page offers.
+   */
+  blocksTourAvailability?: boolean;
 };
+
+/** A meeting consumes a half hour unless it is explicitly non-blocking. */
+export function meetingConsumesTourSlot(meeting: DemoMeeting): boolean {
+  return meeting.blocksTourAvailability !== false;
+}
 
 type CalendarBlockSelection =
   | { kind: "availability"; dateStr: string; slotIndex: number }
@@ -675,6 +689,22 @@ export function PortalCalendarPanels({
   }, [meetings]);
 
   /**
+   * The half hours that are genuinely TAKEN — the grid still draws every
+   * meeting, but a Google event the manager marked Free or declined is not
+   * capacity they have lost, and the public booking page goes on offering it.
+   */
+  const takenSlotKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const meeting of meetings) {
+      if (!meetingConsumesTourSlot(meeting)) continue;
+      for (let offset = 0; offset < meeting.span; offset += 1) {
+        keys.add(dateSlotKey(meeting.dateStr, meeting.startSlot + offset));
+      }
+    }
+    return keys;
+  }, [meetings]);
+
+  /**
    * "N open" for a day header — painted availability MINUS the slots a booked
    * meeting already occupies.
    *
@@ -689,9 +719,9 @@ export function PortalCalendarPanels({
       visibleSlotIndices.reduce((total, slot) => {
         const key = dateSlotKey(dateStr, slot);
         if (!activeSlots.has(key)) return total;
-        return meetingBySlotKey.has(key) ? total : total + 1;
+        return takenSlotKeys.has(key) ? total : total + 1;
       }, 0),
-    [activeSlots, meetingBySlotKey, visibleSlotIndices],
+    [activeSlots, takenSlotKeys, visibleSlotIndices],
   );
 
   /** Week total for the "N open slots" badge — same booked-slot subtraction. */
@@ -700,11 +730,11 @@ export function PortalCalendarPanels({
     for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         const key = dateSlotKey(ds, slot);
-        if (activeSlots.has(key) && !meetingBySlotKey.has(key)) n += 1;
+        if (activeSlots.has(key) && !takenSlotKeys.has(key)) n += 1;
       }
     }
     return n;
-  }, [activeBlockDateStrs, activeSlots, meetingBySlotKey]);
+  }, [activeBlockDateStrs, activeSlots, takenSlotKeys]);
 
   const coManagerOverlayBySlotKey = useMemo(() => {
     const map = new Map<string, CoManagerAvailabilityOverlay>();

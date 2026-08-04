@@ -15,7 +15,10 @@
  * availability grid and these two actions all read one source.
  */
 import { PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
-import { isGoogleCalendarNotLinkedError } from "@/lib/google-calendar/api.server";
+import {
+  GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS,
+  isGoogleCalendarNotLinkedError,
+} from "@/lib/google-calendar/api.server";
 import {
   deleteProplaneGoogleCalendarEvent,
   syncPlannedTourToGoogleCalendar,
@@ -67,14 +70,15 @@ export type PlannedTourCalendarSync = { ok: boolean; skipped?: boolean; error?: 
 /**
  * Whole-operation ceiling on the Google side of a cancel or reschedule.
  *
- * Each round trip is already bounded, but a delete or an upsert can make two
- * (update-then-create, delete-then-cleanup). This caps the total so the manager
- * always gets their answer, and a slow Google degrades to the `calendarSync`
- * warning instead of a response that hangs to the platform timeout and reads to
- * the client as "could not reach the server" — for a change that already
- * committed and a guest who has already been emailed.
+ * Derived from — and deliberately above — the bounded worst case of the call it
+ * wraps (token refresh plus the update-then-create fallback), so this can only
+ * ever fire for work that had genuinely stalled, never for a delete that was
+ * still going to land. It exists so the manager always gets their answer: a slow
+ * Google degrades to the `calendarSync` notice instead of a response that hangs
+ * to the platform timeout and reads to the client as "could not reach the
+ * server" — for a change that already committed and a guest already emailed.
  */
-const CALENDAR_SYNC_BUDGET_MS = 12_000;
+const CALENDAR_SYNC_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS + 2_000;
 
 /**
  * Run the Google side of a change and CLASSIFY the outcome, never throw it.
@@ -98,9 +102,8 @@ async function runCalendarSync(run: () => Promise<unknown>): Promise<PlannedTour
       run().then(
         () => ({ ok: true }),
         (e: unknown) => {
-          const message = e instanceof Error ? e.message : "Google Calendar update failed.";
-          if (isGoogleCalendarNotLinkedError(message)) return { ok: true, skipped: true };
-          return { ok: false, error: message };
+          if (isGoogleCalendarNotLinkedError(e)) return { ok: true, skipped: true };
+          return { ok: false, error: e instanceof Error ? e.message : "Google Calendar update failed." };
         },
       ),
       deadline,

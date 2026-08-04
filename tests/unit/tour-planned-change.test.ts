@@ -27,6 +27,7 @@ vi.mock("@/lib/google-calendar/sync.server", () => ({
   deleteProplaneGoogleCalendarEvent: (...args: unknown[]) => deleteGoogle(...(args as [])),
 }));
 
+import { GoogleCalendarNotLinkedError } from "@/lib/google-calendar/api.server";
 import { cancelPlannedTour, reschedulePlannedTour } from "@/lib/tour-planned-change.server";
 
 const MANAGER = "mgr-1";
@@ -128,7 +129,7 @@ describe("cancelPlannedTour", () => {
     // The delete path THROWS for this state while the reschedule path quietly
     // returns null. Warning "your Google Calendar did not update" on cancel and
     // saying nothing on reschedule, for the identical state, is unactionable.
-    deleteGoogle.mockRejectedValueOnce(new Error("Google Calendar is not connected."));
+    deleteGoogle.mockRejectedValueOnce(new GoogleCalendarNotLinkedError("Google Calendar is not connected."));
     const result = await cancelPlannedTour(db(), {
       plannedEventId: "planned-1",
       actorUserId: MANAGER,
@@ -138,7 +139,7 @@ describe("cancelPlannedTour", () => {
   });
 
   it("treats an unconfigured integration as skipped too", async () => {
-    deleteGoogle.mockRejectedValueOnce(new Error("Google Calendar is not configured."));
+    deleteGoogle.mockRejectedValueOnce(new GoogleCalendarNotLinkedError("Google Calendar is not configured."));
     const result = await cancelPlannedTour(db(), {
       plannedEventId: "planned-1",
       actorUserId: MANAGER,

@@ -8,6 +8,7 @@ import {
   parseProplaneGoogleCalendarDescription,
 } from "@/lib/google-calendar/meetings";
 import type { GoogleCalendarApiEvent } from "@/lib/google-calendar/api.server";
+import { meetingConsumesTourSlot } from "@/components/portal/portal-calendar-panels";
 import {
   PROPLANE_GOOGLE_CALENDAR_MARKER,
   PROPLANE_TOUR_TYPE_MARKER,
@@ -97,27 +98,47 @@ describe("google calendar meetings", () => {
  * route subtracts. When only the public side filtered, a declined invite at 2pm
  * vanished from the manager's remaining capacity while the page still sold 2pm.
  */
-describe("only genuinely-busy Google events become meetings", () => {
-  it("drops an event the manager marked Free", () => {
-    expect(
-      googleCalendarEventsToMeetings([event({ summary: "Focus time", transparency: "transparent" })]),
-    ).toEqual([]);
+describe("every Google event still renders; only some count as taken", () => {
+  it("still draws an event the manager marked Free, but does not count it", () => {
+    const [meeting] = googleCalendarEventsToMeetings([
+      event({ summary: "Focus time", transparency: "transparent" }),
+    ]);
+    expect(meeting).toBeDefined();
+    expect(meeting!.blocksTourAvailability).toBe(false);
+    expect(meetingConsumesTourSlot(meeting!)).toBe(false);
   });
 
-  it("drops an invite the manager declined", () => {
-    expect(
-      googleCalendarEventsToMeetings([event({ summary: "Someone else's meeting", declinedBySelf: true })]),
-    ).toEqual([]);
+  it("still draws an invite the manager declined, but does not count it", () => {
+    const [meeting] = googleCalendarEventsToMeetings([
+      event({ summary: "Someone else's meeting", declinedBySelf: true }),
+    ]);
+    expect(meeting).toBeDefined();
+    expect(meetingConsumesTourSlot(meeting!)).toBe(false);
   });
 
-  it("keeps an all-day entry even though Google reports it Free", () => {
-    const meetings = googleCalendarEventsToMeetings([
+  it("keeps a PropLane service visit visible even when marked Free", () => {
+    // It is PropLane's own pushed event; vanishing from the manager's calendar
+    // because someone flipped it to Free would be a visible regression.
+    const [meeting] = googleCalendarEventsToMeetings([
+      event({
+        summary: "My work · Replace filter",
+        description: `${PROPLANE_WORK_ORDER_TYPE_MARKER}\n${PROPLANE_GOOGLE_CALENDAR_MARKER}`,
+        transparency: "transparent",
+      }),
+    ]);
+    expect(meeting?.kind).toBe("service");
+    expect(meetingConsumesTourSlot(meeting!)).toBe(false);
+  });
+
+  it("counts an all-day entry even though Google reports it Free", () => {
+    const [meeting] = googleCalendarEventsToMeetings([
       event({ summary: "Out of town", transparency: "transparent", allDay: true }),
     ]);
-    expect(meetings).toHaveLength(1);
+    expect(meetingConsumesTourSlot(meeting!)).toBe(true);
   });
 
-  it("keeps an ordinary busy event", () => {
-    expect(googleCalendarEventsToMeetings([event({ summary: "Dentist" })])).toHaveLength(1);
+  it("counts an ordinary busy event", () => {
+    const [meeting] = googleCalendarEventsToMeetings([event({ summary: "Dentist" })]);
+    expect(meetingConsumesTourSlot(meeting!)).toBe(true);
   });
 });
