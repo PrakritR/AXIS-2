@@ -1036,9 +1036,13 @@ conversations) plus the archive toggle. Invariants:
   gate. The client mirrors this: `resident-inbox-panel.tsx` renders the
   optimistic bubble in local state but calls `upsertPersistedInboxRows` only
   once a channel succeeds, withdrawing the bubble and surfacing the server's own
-  error text on refusal. Appending first shipped a 403-then-200 sequence where a
-  refused message became the thread's `preview`, so the conversation list read
-  "You: …" and residents believed a maintenance request had been delivered.
+  error text on refusal. The reply toast follows the same rule — it is built
+  from what each channel ACTUALLY did (`residentReplySentToastMessage`), never
+  from the channels the resident asked for, so a failed SMS leg reads "Reply
+  sent via email. Text message failed." rather than claiming both. Appending
+  first shipped a 403-then-200 sequence where a refused message became the
+  thread's `preview`, so the conversation list read "You: …" and residents
+  believed a maintenance request had been delivered.
   The manager (`manager-inbox.tsx`) and vendor (`vendor-inbox-panel.tsx`) reply
   paths are NOT migrated yet — they still let a refused reply reach the store —
   so copy the resident panel's shape rather than theirs. Coverage:
@@ -1675,12 +1679,17 @@ The one rule behind `/api/public/property-tour-availability`:
 - **Already-booked** is pending inquiries AND confirmed planned tours; a
   reschedule drops the stale `slotKey` so the old window is not still blocked.
 - **Calendar-busy** is the manager's linked Google Calendar, cached per manager
-  in-process for 60s because this route is public and uncached. What counts as
-  busy is `googleEventBlocksTours` (`google-calendar/busy.ts`) — declined never
-  blocks, all-day always does (Google defaults all-day entries to Free), Free
-  does not. The MANAGER's calendar filters through the same predicate in
-  `googleCalendarEventsToMeetings`, because the "N open" headers and the public
-  page must agree about what is taken.
+  in-process because this route is public and uncached — and only reused for a
+  window the cached read actually COVERS, since busy time is subtracted across
+  the whole range of slots the response offers, not just the default horizon
+  (`googleBusyWindowEndMs`). What counts as busy is `googleEventBlocksTours`
+  (`google-calendar/busy.ts`) — declined never blocks, all-day always does
+  (Google defaults all-day entries to Free), Free does not. The MANAGER's
+  calendar runs the SAME predicate, but as a tag rather than a filter:
+  `googleCalendarEventsToMeetings` draws every Google event and carries
+  `blocksTourAvailability`, which only the "N open" math reads — so a declined or
+  Free event stays visible on the grid without the headers disagreeing with what
+  a prospect is offered.
 - **The response is `no-store` on purpose**, against the repo's prefer-caching
   rule: `s-maxage=300` meant a just-booked slot stayed on offer for minutes. A
   double-booked tour costs more than the egress.
