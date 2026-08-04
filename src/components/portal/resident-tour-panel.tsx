@@ -239,6 +239,7 @@ export function ResidentTourPanel({
   const [tours, setTours] = useState<ResidentTourView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [detailTab, setDetailTab] = useState<TourDetailTabId>("details");
   const [bucket, setBucket] = useState<ResidentTourBucketId>(bucketProp);
   const [prevBucketProp, setPrevBucketProp] = useState(bucketProp);
@@ -251,24 +252,33 @@ export function ResidentTourPanel({
 
   const openScheduleTour = () => setScheduleTourOpen(true);
 
+  /**
+   * A failed read is never rendered as "you have no tours".
+   *
+   * This panel used to clear its own error whenever the route answered with
+   * `degraded`, and to swallow a 401 outright — so any backend failure showed a
+   * resident the empty state and the counts Pending 0 / Confirmed 0 / Declined
+   * 0. Two tours were booked successfully and the list still read zero. The
+   * route now fails as a failure; `loadFailed` is what keeps the confident zero
+   * off the screen, because an empty `tours` array is indistinguishable from a
+   * genuinely empty list once it reaches the render.
+   */
   const loadTours = useCallback(async () => {
     setError(null);
     try {
       const res = await fetch("/api/portal-resident-tours", { credentials: "include" });
-      if (res.status === 401) {
-        setTours([]);
-        return;
-      }
       const data = (await res.json().catch(() => ({}))) as {
         tours?: ResidentTourView[];
         error?: string;
         degraded?: boolean;
       };
-      if (!res.ok) throw new Error(data.error ?? "Could not load tours.");
+      if (res.status === 401) throw new Error("Your session expired. Sign in again to see your tours.");
+      if (!res.ok) throw new Error(data.error ?? "We could not load your tours.");
       setTours(sortResidentTourViews(Array.isArray(data.tours) ? data.tours : []));
-      if (data.degraded) setError(null);
+      setLoadFailed(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load tours.");
+      setError(e instanceof Error ? e.message : "We could not load your tours.");
+      setLoadFailed(true);
       setTours([]);
     } finally {
       setLoading(false);
@@ -298,6 +308,10 @@ export function ResidentTourPanel({
 
   useEffect(() => {
     if (!inquiryId || loading) return;
+    // A failed read has no opinion on whether this tour exists, so it must not
+    // redirect a deep link away — that is the same confident zero in navigation
+    // form. Fall through to the error state instead.
+    if (loadFailed) return;
     if (!detailTour) {
       navigate(residentTourListHref(basePath, bucket));
       return;
@@ -306,17 +320,19 @@ export function ResidentTourPanel({
     if (actualBucket !== bucket) {
       navigate(residentTourDetailHref(basePath, actualBucket, detailTour.inquiryId));
     }
-  }, [basePath, bucket, detailTour, inquiryId, loading, navigate]);
+  }, [basePath, bucket, detailTour, inquiryId, loadFailed, loading, navigate]);
 
   const counts = useMemo(() => countResidentToursByBucket(tours), [tours]);
+  // A count of 0 is a claim about the resident's tours. When the read failed we
+  // have no such claim to make, so the tabs carry no number at all.
   const tabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: counts.pending },
-        { id: "confirmed" as const, label: "Confirmed", count: counts.confirmed },
-        { id: "declined" as const, label: "Declined", count: counts.declined },
+        { id: "pending" as const, label: "Pending", count: loadFailed ? undefined : counts.pending },
+        { id: "confirmed" as const, label: "Confirmed", count: loadFailed ? undefined : counts.confirmed },
+        { id: "declined" as const, label: "Declined", count: loadFailed ? undefined : counts.declined },
       ] as const,
-    [counts],
+    [counts, loadFailed],
   );
 
   const toursForBucket = useMemo(
@@ -362,6 +378,27 @@ export function ResidentTourPanel({
 
       {loading ? (
         <PortalEmptyState title="Loading your tours…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />
+      ) : loadFailed ? (
+        <div
+          className="rounded-2xl border border-danger/20 bg-danger/5 px-4 py-4 text-sm text-danger"
+          data-attr="resident-tour-load-error"
+          role="alert"
+        >
+          <p className="font-semibold">We could not load your tours.</p>
+          <p className="mt-1 text-danger/90">{error}</p>
+          <p className="mt-1 text-danger/90">
+            This is not the same as having no tours — any tour you booked is still booked.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 h-9 min-h-0 px-4 text-[13px]"
+            data-attr="resident-tour-retry"
+            onClick={() => loadTours()}
+          >
+            Try again
+          </Button>
+        </div>
       ) : (
         <>
           {error ? (
@@ -403,6 +440,29 @@ export function ResidentTourPanel({
       return (
         <ManagerPortalPageShell title="Tour" hideTitleOnMobileNav>
           <PortalEmptyState title="Loading your tour…" icon={<Calendar className="h-[26px] w-[26px]" strokeWidth={1.75} />} />
+        </ManagerPortalPageShell>
+      );
+    }
+    if (loadFailed) {
+      return (
+        <ManagerPortalPageShell title="Tour" hideTitleOnMobileNav>
+          <div
+            className="rounded-2xl border border-danger/20 bg-danger/5 px-4 py-4 text-sm text-danger"
+            data-attr="resident-tour-load-error"
+            role="alert"
+          >
+            <p className="font-semibold">We could not load this tour.</p>
+            <p className="mt-1 text-danger/90">{error}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 h-9 min-h-0 px-4 text-[13px]"
+              data-attr="resident-tour-retry"
+              onClick={() => loadTours()}
+            >
+              Try again
+            </Button>
+          </div>
         </ManagerPortalPageShell>
       );
     }

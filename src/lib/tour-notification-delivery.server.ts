@@ -10,13 +10,17 @@ import {
   resolvePropertyLeadRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
 import {
+  TOUR_CANCELED_TENANT_SUBJECT,
   TOUR_CONFIRMED_TENANT_SUBJECT,
   TOUR_REQUEST_MANAGER_SUBJECT,
   TOUR_REQUEST_TENANT_SUBJECT,
+  TOUR_RESCHEDULED_TENANT_SUBJECT,
+  buildTourCanceledTenantBody,
   buildTourConfirmedTenantBody,
   buildTourConfirmedTenantHtml,
   buildTourNotificationContext,
   buildTourRequestManagerBody,
+  buildTourRescheduledTenantBody,
   formatTourTimeRange,
   buildTourRequestTenantBody,
 } from "@/lib/tour-notifications";
@@ -335,6 +339,124 @@ export async function notifyTenantTourRequestReceived(
 
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
+}
+
+/**
+ * Tell the guest a confirmed tour changed — cancelled, or moved.
+ *
+ * Shares `notifyTenantTourConfirmed`'s delivery shape on purpose: the same
+ * inbox thread, the same email, the same consent-gated SMS. A guest who was
+ * told "confirmed" through those three channels has to be told the change
+ * through them too, or the cancellation only exists inside the portal.
+ */
+async function notifyTenantTourChanged(
+  db: Db,
+  req: Request,
+  inquiry: TourInquiryPayload,
+  input: {
+    kind: "canceled" | "rescheduled";
+    window: { start: string; end: string; managerUserId?: string; adminLabel?: string };
+    previousWindow?: { start: string; end: string };
+    reason?: string | null;
+    instructions?: string | null;
+  },
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const row = inquiry as Record<string, unknown>;
+  const guestEmail = textField(row, "email");
+  if (!guestEmail || !guestEmail.includes("@")) {
+    return { ok: false, error: "Guest email is required to notify the guest." };
+  }
+
+  const propertyId = textField(row, "propertyId");
+  const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
+  const origin = resolveAppOrigin(req);
+  const ctx = buildTourNotificationContext({
+    origin,
+    guestName: textField(row, "name") || "Guest",
+    guestEmail,
+    guestPhone: textField(row, "phone") || null,
+    propertyId,
+    propertyTitle: textField(row, "propertyTitle") || "Property",
+    propertyAddress,
+    roomLabel: textField(row, "roomLabel") || null,
+    tourStartIso: input.window.start,
+    tourEndIso: input.window.end,
+    notes: textField(row, "notes") || null,
+    managerLabel: input.window.adminLabel || textField(row, "adminLabel") || null,
+    instructions: input.instructions || null,
+    tourInquiryId: textField(row, "id") || null,
+  });
+
+  const canceled = input.kind === "canceled";
+  const subject = canceled ? TOUR_CANCELED_TENANT_SUBJECT : TOUR_RESCHEDULED_TENANT_SUBJECT;
+  const text = canceled
+    ? buildTourCanceledTenantBody(ctx, input.reason)
+    : buildTourRescheduledTenantBody(
+        ctx,
+        {
+          startIso: input.previousWindow?.start ?? input.window.start,
+          endIso: input.previousWindow?.end ?? input.window.end,
+        },
+        input.reason,
+      );
+
+  const { data: guestProfile } = await db.from("profiles").select("id").eq("email", guestEmail).maybeSingle();
+
+  await upsertInboxThread(db, {
+    scope: RESIDENT_INBOX_SCOPE,
+    ownerUserId: (guestProfile?.id as string | null) ?? null,
+    participantEmail: guestEmail,
+    folder: "inbox",
+    fromName: "PropLane Tours",
+    fromEmail: "tours@axis.local",
+    toLine: guestEmail,
+    subject,
+    body: text,
+  });
+
+  const email = await deliverEmail([guestEmail], subject, text);
+
+  const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
+  await textTourGuest({
+    guestPhone: textField(row, "phone") || null,
+    smsConsent: inquirySmsConsent(inquiry),
+    text: canceled
+      ? `PropLane: your tour of ${ctx.propertyTitle} on ${formatTourTimeRange(
+          input.previousWindow?.start ?? input.window.start,
+          input.previousWindow?.end ?? input.window.end,
+        )} was cancelled. Please do not travel to the property. Book another: ${listingLink}. Reply STOP to opt out, HELP for help.`
+      : `PropLane: your tour of ${ctx.propertyTitle} moved to ${formatTourTimeRange(
+          input.window.start,
+          input.window.end,
+        )}. Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
+  });
+
+  if (email.error) return { ok: true, skipped: true, error: email.error };
+  return { ok: true, skipped: email.skipped };
+}
+
+export async function notifyTenantTourCanceled(
+  db: Db,
+  req: Request,
+  inquiry: TourInquiryPayload,
+  window: { start: string; end: string; adminLabel?: string },
+  reason?: string | null,
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  return notifyTenantTourChanged(db, req, inquiry, { kind: "canceled", window, reason });
+}
+
+export async function notifyTenantTourRescheduled(
+  db: Db,
+  req: Request,
+  inquiry: TourInquiryPayload,
+  input: {
+    window: { start: string; end: string; adminLabel?: string };
+    previousWindow: { start: string; end: string };
+    reason?: string | null;
+    instructions?: string | null;
+  },
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  return notifyTenantTourChanged(db, req, inquiry, { kind: "rescheduled", ...input });
 }
 
 export async function notifyTenantTourConfirmed(

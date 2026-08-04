@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
 import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
+  buildDefaultTourSlotKeys,
+  DEFAULT_TOUR_HORIZON_DAYS,
   payloadSlots,
   rowPayload,
   safePropertyId,
@@ -12,6 +15,50 @@ import {
 } from "@/lib/tour-slot-math";
 
 export const runtime = "nodejs";
+
+/**
+ * What a prospect is offered:
+ *
+ *     offered = (published availability, or the 9-5 default when none is
+ *                published) MINUS calendar-busy MINUS already-booked
+ *
+ * All three terms are load-bearing. Dropping the subtraction is how the same
+ * half hour got sold to three prospects: a confirmed tour left its own slot on
+ * offer and the manager's linked-calendar busy time was never consulted at all.
+ */
+
+/**
+ * Google busy windows are cached in-process because this route is public and
+ * uncached at the edge (see the response headers below) — without this, anyone
+ * could drive unbounded Google Calendar API calls by reloading a booking page.
+ * Short enough that a manager blocking their morning takes effect within a
+ * minute; PropLane's OWN bookings are never served from here, so this TTL can
+ * not resurrect a slot that was just booked.
+ */
+const GOOGLE_BUSY_TTL_MS = 60_000;
+const googleBusyCache = new Map<string, { expiresAt: number; blocks: TourBlock[] }>();
+
+async function googleBusyBlocks(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  managerUserId: string,
+  timeMin: string,
+  timeMax: string,
+): Promise<TourBlock[]> {
+  const cached = googleBusyCache.get(managerUserId);
+  if (cached && cached.expiresAt > Date.now()) return cached.blocks;
+  let blocks: TourBlock[] = [];
+  try {
+    const events = await listGoogleCalendarEvents(db, managerUserId, timeMin, timeMax);
+    blocks = events.map((event) => ({ start: event.start, end: event.end }));
+  } catch {
+    // Not linked, revoked, quota, API disabled — a manager without a working
+    // calendar link simply contributes no busy time. Never fail the whole
+    // availability read over one manager's integration.
+    blocks = [];
+  }
+  googleBusyCache.set(managerUserId, { expiresAt: Date.now() + GOOGLE_BUSY_TTL_MS, blocks });
+  return blocks;
+}
 
 type ScheduleRecordRow = {
   id: string | null;
@@ -101,7 +148,9 @@ export async function GET(req: Request) {
     }
 
     if (propertyRecords.length === 0) {
-      return NextResponse.json({ slotHosts: {} }, { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } });
+      // Same no-store reasoning as the main response: an unresolved property is
+      // often one that just went live, and a cached empty grid keeps it dead.
+      return NextResponse.json({ slotHosts: {} }, { headers: { "Cache-Control": "no-store" } });
     }
 
     const directMatches = propertyRecords.filter(({ property }) => {
@@ -184,7 +233,38 @@ export async function GET(req: Request) {
       return managerUserId && !propertyRowsForHouse.some((propertyRow) => propertyRow.manager_user_id === managerUserId);
     });
     const rows = [...propertyRowsForHouse, ...globalRows];
-    const availabilityManagerIds = [...new Set(rows.map((row) => row.manager_user_id).filter((id): id is string => Boolean(id)))];
+
+    /**
+     * One manager's offering for this property. Published rows become offerings
+     * verbatim; when NOTHING is published the property still offers the default
+     * 9-5 grid, so a manager who has not opened their calendar yet does not show
+     * a prospect a dead booking page. Either way the subtraction below applies.
+     */
+    type Offering = { managerUserId: string; propertyId?: string; slots: string[] };
+    const publishedOfferings: Offering[] = rows
+      .map((row) => ({
+        managerUserId: row.manager_user_id?.trim() ?? "",
+        propertyId: row.property_id?.trim() || undefined,
+        slots: payloadSlots(row.row_data).filter((slot) => slotIsBookable(slot)),
+      }))
+      .filter((offering) => offering.managerUserId);
+
+    const hasPublishedSlots = publishedOfferings.some((offering) => offering.slots.length > 0);
+    const defaultSlots = hasPublishedSlots ? [] : buildDefaultTourSlotKeys();
+    const offerings: Offering[] = hasPublishedSlots
+      ? publishedOfferings
+      : [...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId))]
+          .filter(Boolean)
+          .map((managerUserId) => ({
+            managerUserId,
+            propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
+            slots: defaultSlots.filter((slot) => slotIsBookable(slot)),
+          }));
+
+    const availabilityManagerIds = [...new Set(offerings.map((offering) => offering.managerUserId))];
+    for (const managerUserId of availabilityManagerIds) {
+      if (!managerIds.includes(managerUserId)) managerIds.push(managerUserId);
+    }
     const blockedSlotsByManager = new Map<string, TourBlock[]>();
     if (availabilityManagerIds.length > 0) {
       const { data: pendingRows, error: pendingError } = await db
@@ -226,6 +306,25 @@ export async function GET(req: Request) {
         blocks.push({ start, end, slotKey: textField(event, "slotKey") || undefined });
         blockedSlotsByManager.set(managerUserId, blocks);
       }
+
+      // Calendar-busy time. The manager's linked Google Calendar is the other
+      // half of "already booked" — the product's own copy promises the blocked
+      // time is honoured "so tour availability stays accurate", and until now
+      // this route never read it, so a manager's busy morning stayed bookable.
+      const busyWindowMin = new Date().toISOString();
+      const busyWindowMax = new Date(Date.now() + DEFAULT_TOUR_HORIZON_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const busyByManager = await Promise.all(
+        availabilityManagerIds.map(async (managerUserId) => ({
+          managerUserId,
+          blocks: await googleBusyBlocks(db, managerUserId, busyWindowMin, busyWindowMax),
+        })),
+      );
+      for (const { managerUserId, blocks: busy } of busyByManager) {
+        if (busy.length === 0) continue;
+        const blocks = blockedSlotsByManager.get(managerUserId) ?? [];
+        blocks.push(...busy);
+        blockedSlotsByManager.set(managerUserId, blocks);
+      }
     }
 
     const labelByManagerId = new Map<string, string>();
@@ -241,16 +340,14 @@ export async function GET(req: Request) {
     }
 
     const slotHosts: Record<string, PropertyManagerEntry[]> = {};
-    for (const row of rows) {
-      const managerUserId = row.manager_user_id?.trim();
-      if (!managerUserId) continue;
-      const hostPropertyId = row.property_id?.trim() || undefined;
+    for (const offering of offerings) {
+      const managerUserId = offering.managerUserId;
       const host = {
         userId: managerUserId,
         label: labelByManagerId.get(managerUserId) ?? "Property manager",
-        propertyId: hostPropertyId,
+        propertyId: offering.propertyId,
       };
-      for (const slot of payloadSlots(row.row_data)) {
+      for (const slot of offering.slots) {
         if (!slotIsBookable(slot)) continue;
         if (slotBlocked(slot, blockedSlotsByManager.get(managerUserId) ?? [])) continue;
         const hosts = slotHosts[slot] ?? [];
@@ -261,12 +358,13 @@ export async function GET(req: Request) {
       }
     }
 
-    // Public availability (time-aware): short CDN cache trims repeat load
-    // without materially staling the visible tour slots.
-    return NextResponse.json(
-      { slotHosts },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
-    );
+    // NOT edge-cached, deliberately, against this repo's usual prefer-caching
+    // rule. `s-maxage=300, stale-while-revalidate=600` meant a slot booked
+    // seconds ago stayed on offer for up to fifteen minutes, and a manager who
+    // published a window watched the page ignore it for five — both reported.
+    // A double-booked tour costs more than the egress. Repeat load is absorbed
+    // instead by the in-process Google busy cache above.
+    return NextResponse.json({ slotHosts }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load property tour availability.";
     return NextResponse.json({ error: message }, { status: 500 });

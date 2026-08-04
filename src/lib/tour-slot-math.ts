@@ -4,13 +4,89 @@
  * where slotIndex is 0-47 (48 half-hours per day, each 30 minutes). Keeping
  * this math in ONE place means the "first open slot" a proposal picks is
  * computed identically to what the public availability grid publishes.
+ *
+ * ## A slotKey is WALL TIME, and the wall clock is Pacific — never the server's
+ *
+ * `"2026-08-06:20"` means "10:00 on Aug 6" on the calendar a manager paints and
+ * a guest reads, not an instant. Resolving it with `new Date(y, m, d)` reads the
+ * SERVER's zone, which is Pacific in dev and **UTC on Vercel** — a seven-hour
+ * error in production. Everything downstream is a silent no-op at that point:
+ * `overlaps()` compares a confirmed tour against the wrong half hour, so the
+ * booked slot stays on offer and a second prospect books on top of it, and
+ * `slotIsBookable()` mis-judges which slots are in the past. Both were live.
+ *
+ * The product already renders every tour time through `formatPacificDateTime`,
+ * so Pacific is the zone the whole tour surface already means. Anchor here.
+ * (Known gap, deliberately not widened in this pass: the PUBLIC booking client
+ * still turns the chosen slot into an instant with the PROSPECT's browser zone,
+ * so an out-of-region guest sends a slotKey and an ISO that disagree. Blocking
+ * survives it because a planned tour carries its `slotKey` and
+ * {@link slotBlocked} matches on that first.)
  */
+
+/** The wall clock every published slotKey is painted and read on. */
+export const TOUR_CALENDAR_TIME_ZONE = "America/Los_Angeles";
 
 export type TourBlock = {
   start: string;
   end: string;
   slotKey?: string;
 };
+
+/** Milliseconds `timeZone` is offset from UTC at a given instant. */
+function timeZoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((item) => item.type === type)?.value ?? "0");
+  // Intl reports midnight as hour 24 in some ICU versions.
+  const hour = part("hour") % 24;
+  return (
+    Date.UTC(part("year"), part("month") - 1, part("day"), hour, part("minute"), part("second")) - utcMs
+  );
+}
+
+/** The instant a wall-clock time occurs at in {@link TOUR_CALENDAR_TIME_ZONE}. */
+export function zonedWallTimeMs(
+  year: number,
+  month: number,
+  day: number,
+  minutesIntoDay: number,
+  timeZone: string = TOUR_CALENDAR_TIME_ZONE,
+): number {
+  const naive = Date.UTC(year, month - 1, day, 0, minutesIntoDay);
+  const firstGuess = naive - timeZoneOffsetMs(naive, timeZone);
+  // One correction pass settles the DST-transition days, where the offset that
+  // applies at the resolved instant differs from the offset at the guess.
+  const settled = naive - timeZoneOffsetMs(firstGuess, timeZone);
+  return settled;
+}
+
+/**
+ * Instant of an ISO timestamp, reading a zone-less one as calendar wall time.
+ *
+ * Google returns all-day events as bare dates, and local-naive ISO strings turn
+ * up in stored payloads. `Date.parse` reads those in the SERVER's zone, which
+ * is the same production-only error {@link zonedWallTimeMs} exists to avoid.
+ */
+export function blockInstantMs(value: string): number {
+  const raw = value.trim();
+  if (!raw) return Number.NaN;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return Date.parse(raw);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(raw);
+  if (!match) return Date.parse(raw);
+  const [, year, month, day, hour, minute, second] = match;
+  const minutesIntoDay = Number(hour ?? 0) * 60 + Number(minute ?? 0) + Number(second ?? 0) / 60;
+  return zonedWallTimeMs(Number(year), Number(month), Number(day), minutesIntoDay);
+}
 
 export function safePropertyId(propertyId: string): string {
   return propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
@@ -63,17 +139,15 @@ export function slotStartMs(slot: string): number | null {
   if (!dateStr || !Number.isFinite(slotIndex) || slotIndex < 0 || slotIndex >= 48) return null;
   const [year, month, day] = dateStr.split("-").map(Number);
   if (!year || !month || !day) return null;
-  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
-  start.setMinutes(slotIndex * 30);
-  return start.getTime();
+  return zonedWallTimeMs(year, month, day, slotIndex * 30);
 }
 
 export function overlaps(slot: string, block: TourBlock): boolean {
   const startMs = slotStartMs(slot);
   if (startMs === null) return false;
   const endMs = startMs + 30 * 60 * 1000;
-  const blockStartMs = new Date(block.start).getTime();
-  const blockEndMs = new Date(block.end).getTime();
+  const blockStartMs = blockInstantMs(block.start);
+  const blockEndMs = blockInstantMs(block.end);
   if (![blockStartMs, blockEndMs].every(Number.isFinite)) return false;
   return startMs < blockEndMs && blockStartMs < endMs;
 }
@@ -87,4 +161,59 @@ export function slotIsBookable(slot: string, now: number = Date.now()): boolean 
   const startMs = slotStartMs(slot);
   if (startMs === null) return false;
   return startMs >= now;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Default offering — what a property shows before its manager publishes a week */
+/* -------------------------------------------------------------------------- */
+
+/** First default window starts 9:00 am (slot 18). */
+export const DEFAULT_TOUR_START_SLOT = 18;
+/** Last default window starts 4:30 pm (slot 33) and ends at 5:00 pm — a 9-to-5 day. */
+export const DEFAULT_TOUR_END_SLOT_EXCLUSIVE = 34;
+/** How far ahead the default grid is offered. Bounds the public payload. */
+export const DEFAULT_TOUR_HORIZON_DAYS = 60;
+
+/** `YYYY-MM-DD` for an instant, on the tour calendar's wall clock. */
+export function tourCalendarDateStr(ms: number, timeZone: string = TOUR_CALENDAR_TIME_ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/**
+ * The 9 am - 5 pm grid a property offers when its manager has published no
+ * availability of their own.
+ *
+ * This is a DEFAULT, not an invention of open time: a manager who paints a week
+ * replaces it entirely, and every caller still subtracts calendar-busy time and
+ * already-booked slots from whatever base set it gets. Without it a property
+ * whose manager has not opened the calendar yet offers a prospect nothing at
+ * all, which reads as a dead booking page.
+ */
+export function buildDefaultTourSlotKeys(
+  now: number = Date.now(),
+  days: number = DEFAULT_TOUR_HORIZON_DAYS,
+): string[] {
+  const keys: string[] = [];
+  const dayMs = 24 * 60 * 60 * 1000;
+  const [year, month, day] = tourCalendarDateStr(now).split("-").map(Number);
+  if (!year || !month || !day) return keys;
+  // Anchor on local NOON and step whole days from there, so a DST transition
+  // (a 23- or 25-hour day) can never skip or repeat a calendar date. Today is
+  // included; its already-past windows drop out at `slotIsBookable`.
+  const noonToday = zonedWallTimeMs(year, month, day, 12 * 60);
+  for (let offset = 0; offset < days; offset += 1) {
+    const dateStr = tourCalendarDateStr(noonToday + offset * dayMs);
+    for (let slot = DEFAULT_TOUR_START_SLOT; slot < DEFAULT_TOUR_END_SLOT_EXCLUSIVE; slot += 1) {
+      keys.push(`${dateStr}:${slot}`);
+    }
+  }
+  return keys;
 }

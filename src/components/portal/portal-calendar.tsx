@@ -557,6 +557,9 @@ export function PortalCalendar({
             coManagerAvailabilityOverlays={showCoManagerCoordination ? coManagerAvailabilityOverlays : undefined}
             externalMeetings={portal === "manager" ? mergedExternalMeetings : undefined}
             onGoogleCalendarRefresh={() => setGoogleCalendarTick((n) => n + 1)}
+            // Recompute the view-tab counts as soon as a tour is confirmed,
+            // rescheduled, cancelled or deleted, instead of at the next reload.
+            onMeetingsChanged={() => setCalendarRefreshSignal((n) => n + 1)}
             readOnly={portal === "manager" ? calendarPanelsReadOnly : false}
             eventSummaryLabel={servicesOnlyView ? "visit" : calendarView === "all" ? "event" : "tour"}
             preferEventCountsInDayHeader
