@@ -34,14 +34,20 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@/lib/portal-inbox-storage", () => ({
-  PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
-  RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
-  loadPersistedInbox: () => [EMAIL_INBOX, EMAIL_ARCHIVED],
-  inboxThreadMessages: (t: { id: string; from: string; body: string; time: string }) => [
-    { id: `${t.id}-root`, from: t.from, body: t.body, at: t.time },
-  ],
-}));
+vi.mock("@/lib/portal-inbox-storage", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/portal-inbox-storage")>(
+    "@/lib/portal-inbox-storage",
+  );
+  return {
+    PORTAL_INBOX_CHANGED_EVENT: "portal-inbox-changed",
+    RESIDENT_INBOX_STORAGE_KEY: "resident-inbox",
+    inboxThreadSortMs: actual.inboxThreadSortMs,
+    loadPersistedInbox: () => [EMAIL_INBOX, EMAIL_ARCHIVED],
+    inboxThreadMessages: (t: { id: string; from: string; body: string; time: string }) => [
+      { id: `${t.id}-root`, from: t.from, body: t.body, at: t.time },
+    ],
+  };
+});
 vi.mock("@/components/portal/resident-inbox-panel", () => ({
   ResidentInboxPanel: () => <div data-testid="resident-thread" />,
 }));

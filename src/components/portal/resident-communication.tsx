@@ -25,6 +25,7 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   RESIDENT_INBOX_STORAGE_KEY,
   inboxThreadMessages,
+  inboxThreadSortMs,
   loadPersistedInbox,
 } from "@/lib/portal-inbox-storage";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
@@ -141,7 +142,7 @@ function ResidentUnifiedInbox({
         previewPrefix: t.folder === "sent" ? "You: " : undefined,
         time: t.time,
         unread: t.folder === "inbox" && t.unread,
-        sortMs: Date.parse(lastMsg?.at ?? "") || 0,
+        sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
       };
     });
   }, [filteredEmail, searchQuery, listSegment]);
