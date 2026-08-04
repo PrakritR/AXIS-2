@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS,
+  isGoogleCalendarNotLinkedError,
   listGoogleCalendarEvents,
 } from "@/lib/google-calendar/api.server";
 import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
@@ -43,7 +44,8 @@ export const runtime = "nodejs";
  */
 const GOOGLE_BUSY_TTL_MS = 60_000;
 /**
- * A FAILED read is cached far more briefly than a successful one.
+ * A TRANSIENT failure — a stall, an abort, a 5xx, a network error — is cached
+ * far more briefly than a success.
  *
  * Caching the failure at all is deliberate — otherwise a Google outage is
  * hammered once per request on a public endpoint. But a failure caches an EMPTY
@@ -52,8 +54,12 @@ const GOOGLE_BUSY_TTL_MS = 60_000;
  * would break booking entirely on a blip), so what matters is bounding how long
  * one blip keeps doing it — seconds, not a full minute, on the one route whose
  * purpose is preventing a double book.
+ *
+ * This TTL is ONLY for failures that might clear on the next try. A PERMANENT
+ * state keeps the full {@link GOOGLE_BUSY_TTL_MS}; see the catch below for why
+ * collapsing the two back together is expensive.
  */
-const GOOGLE_BUSY_FAILURE_TTL_MS = 5_000;
+const GOOGLE_BUSY_TRANSIENT_FAILURE_TTL_MS = 5_000;
 /** Hard ceiling on distinct managers held at once; the map is module-global. */
 const GOOGLE_BUSY_CACHE_MAX_ENTRIES = 500;
 const googleBusyCache = new Map<string, { expiresAt: number; windowEndMs: number; blocks: TourBlock[] }>();
@@ -131,7 +137,12 @@ function googleBusyWindowEndMs(offeredSlots: readonly string[], now: number = Da
     const slotEnd = startMs + 30 * 60 * 1000;
     if (slotEnd > furthest) furthest = slotEnd;
   }
-  return Math.min(furthest, maxEnd);
+  // Rounded UP to the hour so two requests a second apart ask for the same
+  // window. Both bounds above move with `now`, so an unrounded end drifts every
+  // request — and the cache only reuses an entry whose window COVERS the one
+  // being asked for, which would make it miss almost every time.
+  const hourMs = 60 * 60 * 1000;
+  return Math.ceil(Math.min(furthest, maxEnd) / hourMs) * hourMs;
 }
 
 /**
@@ -161,12 +172,26 @@ async function googleBusyBlocks(
       .map((event) => ({ start: event.start, end: event.end }));
     cacheGoogleBusyBlocks(managerUserId, blocks, windowEndMs);
     return blocks;
-  } catch {
-    // Not linked, revoked, quota, API disabled, stalled — a manager without a
-    // working calendar link simply contributes no busy time. Never fail the
-    // whole availability read over one manager's integration; the short failure
-    // TTL is what keeps that fail-open from outliving the blip.
-    cacheGoogleBusyBlocks(managerUserId, [], windowEndMs, GOOGLE_BUSY_FAILURE_TTL_MS);
+  } catch (e) {
+    // A manager without a working calendar link simply contributes no busy
+    // time — never fail the whole availability read over one integration.
+    //
+    // But WHY it failed decides how long that empty answer is reused, and the
+    // two cases pull opposite ways:
+    //
+    // - NOT LINKED / not configured is PERMANENT and is the common case, since
+    //   most managers never connect Google. Re-asking every few seconds turns
+    //   each request on this public `no-store` route into a fresh
+    //   `loadGoogleCalendarConnection` Supabase read, an order of magnitude
+    //   more reads on a plan where egress is an explicit constraint. It gets
+    //   the full success TTL.
+    // - Anything else (stall, abort, 5xx, network) might clear on the next try,
+    //   and until it does the empty list is failing OPEN — so it gets the short
+    //   transient TTL.
+    const ttlMs = isGoogleCalendarNotLinkedError(e)
+      ? GOOGLE_BUSY_TTL_MS
+      : GOOGLE_BUSY_TRANSIENT_FAILURE_TTL_MS;
+    cacheGoogleBusyBlocks(managerUserId, [], windowEndMs, ttlMs);
     return [];
   }
 }

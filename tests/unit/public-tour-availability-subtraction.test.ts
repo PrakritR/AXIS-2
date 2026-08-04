@@ -43,11 +43,18 @@ vi.mock("@/lib/supabase/service", () => ({
 /** The `timeMax` the route asked Google for, per call. */
 let GOOGLE_TIME_MAX: string[] = [];
 
+/** Set to throw the permanent not-linked sentinel instead of a transient error. */
+let GOOGLE_THROWS_NOT_LINKED = false;
+
+class FakeNotLinkedError extends Error {}
+
 vi.mock("@/lib/google-calendar/api.server", () => ({
   GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS: 9_000,
+  isGoogleCalendarNotLinkedError: (e: unknown) => e instanceof FakeNotLinkedError,
   listGoogleCalendarEvents: vi.fn(async (_db: unknown, _id: string, _min: string, max: string) => {
     GOOGLE_TIME_MAX.push(max);
-    if (GOOGLE_THROWS) throw new Error("Google Calendar is not connected.");
+    if (GOOGLE_THROWS_NOT_LINKED) throw new FakeNotLinkedError("Google Calendar is not connected.");
+    if (GOOGLE_THROWS) throw new Error("Google Calendar did not respond in time.");
     return GOOGLE_BUSY;
   }),
 }));
@@ -166,6 +173,7 @@ describe("public tour availability subtracts what is already taken", () => {
     PLANNED_EVENTS = [];
     GOOGLE_BUSY = [];
     GOOGLE_THROWS = false;
+    GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
   });
 
@@ -351,6 +359,24 @@ describe("public tour availability subtracts what is already taken", () => {
     }
   });
 
+  it("does not re-ask Google for a manager who simply has no calendar", async () => {
+    // Not-linked is PERMANENT and is the common case, so it keeps the full
+    // success TTL. Re-asking every few seconds would turn each request on this
+    // public no-store route into a fresh connection read from Supabase.
+    GOOGLE_THROWS_NOT_LINKED = true;
+    await offeredSlots();
+    expect(GOOGLE_TIME_MAX).toHaveLength(1);
+
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockImplementation(() => realNow() + 6_000);
+    try {
+      await offeredSlots();
+      expect(GOOGLE_TIME_MAX).toHaveLength(1);
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
+  });
+
   it("still serves availability when the calendar link is broken", async () => {
     GOOGLE_THROWS = true;
     const slots = await offeredSlots();
@@ -391,6 +417,7 @@ describe("a property with no published availability still offers the 9-5 default
     PLANNED_EVENTS = [];
     GOOGLE_BUSY = [];
     GOOGLE_THROWS = false;
+    GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
   });
 
