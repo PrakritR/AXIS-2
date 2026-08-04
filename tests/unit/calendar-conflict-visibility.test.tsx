@@ -126,3 +126,103 @@ describe("property availability calendar shows the same conflicts (F-CAL-6)", ()
     expect(capturedProps.at(-1)?.externalMeetings).toEqual([]);
   });
 });
+
+/**
+ * A busy grid that could not be fully loaded looks exactly like a free one, and
+ * this is the screen where availability is PUBLISHED — so incompleteness has to
+ * reach the manager here, not only on /portal/calendar which they may never
+ * open. Connection SETUP problems stay with the portfolio calendar so the same
+ * account-level problem is not toasted twice.
+ */
+describe("an incomplete busy read is never presented as a free calendar", () => {
+  async function renderPropertyPanel() {
+    const toasts: string[] = [];
+    const { ManagerPropertyTourPanel } = await import("@/components/portal/manager-property-tour-panel");
+    render(
+      <ManagerPropertyTourPanel
+        listingId="mgr-demo-ballard"
+        managerUserId="m1"
+        propertyLabel="Ballard House"
+        showToast={(message: string) => toasts.push(message)}
+      />,
+    );
+    return toasts;
+  }
+
+  it("tells the manager when the response was truncated", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          meetings: [meeting({ id: "busy-1", googleCalendarPrivate: true })],
+          truncated: true,
+          warning: "calendar_events_truncated",
+          hint: "Some busy time may be missing.",
+        }),
+      })),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(toasts).toEqual(["Some busy time may be missing."]));
+    // The events it DID load still reach the grid.
+    expect((capturedProps.at(-1)?.externalMeetings as DemoMeeting[]).map((m) => m.id)).toEqual(["busy-1"]);
+  });
+
+  it("tells the manager when the read failed outright", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: "Failed" }) })),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(toasts).toHaveLength(1));
+    expect(toasts[0]).toMatch(/could not load/i);
+  });
+
+  it("tells the manager when the request never completed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(toasts).toHaveLength(1));
+    expect(toasts[0]).toMatch(/could not load/i);
+  });
+
+  it("leaves the connection-setup warnings to the portfolio calendar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          meetings: [],
+          warning: "calendar_not_connected",
+          hint: "Google Calendar is not linked yet.",
+        }),
+      })),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(capturedProps.length).toBeGreaterThan(0));
+    expect(toasts).toEqual([]);
+  });
+
+  it("classifies incompleteness by code, so both calendars agree on what to surface", async () => {
+    const {
+      GOOGLE_BUSY_TRUNCATED_WARNING,
+      GOOGLE_BUSY_UNAVAILABLE_WARNING,
+      isGoogleBusyIncompleteWarning,
+    } = await import("@/hooks/use-google-calendar-busy");
+
+    expect(isGoogleBusyIncompleteWarning(GOOGLE_BUSY_TRUNCATED_WARNING)).toBe(true);
+    expect(isGoogleBusyIncompleteWarning(GOOGLE_BUSY_UNAVAILABLE_WARNING)).toBe(true);
+    expect(isGoogleBusyIncompleteWarning("calendar_not_connected")).toBe(false);
+    expect(isGoogleBusyIncompleteWarning("calendar_api_disabled")).toBe(false);
+    expect(isGoogleBusyIncompleteWarning("calendar_oauth_not_configured")).toBe(false);
+    expect(isGoogleBusyIncompleteWarning(undefined)).toBe(false);
+  });
+});

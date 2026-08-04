@@ -14,6 +14,29 @@ export type GoogleCalendarBusyWarning = {
 /** Warning code the events route returns when it could not load the whole window. */
 export const GOOGLE_BUSY_TRUNCATED_WARNING = "calendar_events_truncated";
 
+/** Warning code for a read that failed outright — the grid is NOT known to be free. */
+export const GOOGLE_BUSY_UNAVAILABLE_WARNING = "calendar_events_unavailable";
+
+const GOOGLE_BUSY_UNAVAILABLE_HINT =
+  "PropLane could not load your Google Calendar busy time, so this grid may be missing conflicts. Check Google Calendar before publishing availability.";
+
+const INCOMPLETE_BUSY_WARNINGS = new Set<string>([
+  GOOGLE_BUSY_TRUNCATED_WARNING,
+  GOOGLE_BUSY_UNAVAILABLE_WARNING,
+]);
+
+/**
+ * True for the warnings that mean "the busy overlay you are looking at is
+ * incomplete", as opposed to the connection-setup warnings, which describe a
+ * persistent account state either calendar can report.
+ *
+ * A surface that lets a manager act on the grid must surface these; a surface
+ * that only displays it may leave them to the portfolio calendar.
+ */
+export function isGoogleBusyIncompleteWarning(code: string | undefined): boolean {
+  return Boolean(code && INCOMPLETE_BUSY_WARNINGS.has(code));
+}
+
 /**
  * The manager's linked Google Calendar busy time, as calendar meetings.
  *
@@ -24,10 +47,17 @@ export const GOOGLE_BUSY_TRUNCATED_WARNING = "calendar_events_truncated";
  * availability — the one place a conflict must be visible (manager audit
  * F-CAL-6, a double-booking risk).
  *
- * Best-effort by design: not connected, API disabled, or a transient failure
- * all resolve to an empty list, and the caller decides whether to surface the
- * warning (only the portfolio calendar toasts, so a manager never gets the same
- * toast twice).
+ * Best-effort by design: not connected and API disabled resolve to an empty
+ * list, and only the portfolio calendar toasts those, so a manager never gets
+ * the same setup toast twice.
+ *
+ * ## A read that FAILED is never reported as a free calendar
+ *
+ * A non-OK response and a network error both emit
+ * {@link GOOGLE_BUSY_UNAVAILABLE_WARNING} through `onWarning` and leave the
+ * previously loaded meetings in place rather than replacing them with an empty
+ * list. "Could not load conflicts" and "there are no conflicts" render
+ * identically on a grid, and only one of them is safe to publish over.
  *
  * ## The window is BOUNDED — conflicts outside it are NOT shown
  *
@@ -49,7 +79,8 @@ export const GOOGLE_BUSY_TRUNCATED_WARNING = "calendar_events_truncated";
  * {@link GOOGLE_BUSY_TRUNCATED_WARNING} and `truncated: true`, delivered through
  * `onWarning`. The meetings returned are still real, but they are not all of
  * them: a caller that lets a manager publish availability must say so rather
- * than present the grid as conflict-free.
+ * than present the grid as conflict-free. Test both incompleteness codes with
+ * {@link isGoogleBusyIncompleteWarning} rather than naming them individually.
  */
 
 /** Trailing days included so today's week is complete, not clipped at "now". */
@@ -57,6 +88,12 @@ export const GOOGLE_BUSY_DAYS_BEFORE = 7;
 
 /** Forward span of the busy window. Beyond this, conflicts are not shown. */
 export const GOOGLE_BUSY_DEFAULT_DAYS_AHEAD = 56;
+
+type GoogleCalendarBusyResponse = { meetings?: DemoMeeting[] } & GoogleCalendarBusyWarning;
+
+function unavailableResponse(): GoogleCalendarBusyResponse {
+  return { warning: GOOGLE_BUSY_UNAVAILABLE_WARNING, hint: GOOGLE_BUSY_UNAVAILABLE_HINT };
+}
 
 export function useGoogleCalendarBusyMeetings(input: {
   enabled: boolean;
@@ -84,20 +121,18 @@ export function useGoogleCalendarBusyMeetings(input: {
       )}&timeMax=${encodeURIComponent(weekEnd.toISOString())}`,
       { credentials: "include" },
     )
-      .then(async (res) => {
-        const data = (await res.json()) as { meetings?: DemoMeeting[] } & GoogleCalendarBusyWarning;
-        if (!res.ok) return { meetings: [] as DemoMeeting[] };
+      .then(async (res): Promise<GoogleCalendarBusyResponse> => {
+        const data = (await res.json().catch(() => ({}))) as GoogleCalendarBusyResponse;
+        if (!res.ok) return unavailableResponse();
         return data;
       })
+      .catch(unavailableResponse)
       .then((data) => {
         if (cancelled) return;
-        setMeetings(Array.isArray(data.meetings) ? data.meetings : []);
+        if (Array.isArray(data.meetings)) setMeetings(data.meetings);
         if (data.warning) {
           onWarning?.({ warning: data.warning, hint: data.hint, truncated: data.truncated });
         }
-      })
-      .catch(() => {
-        if (!cancelled) setMeetings([]);
       });
     return () => {
       cancelled = true;
