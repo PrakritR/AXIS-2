@@ -91,6 +91,50 @@ describe("cancelPlannedTour", () => {
     expect(deleteGoogle).toHaveBeenCalledWith(expect.anything(), MANAGER, "gcal-1");
   });
 
+  it("waits for the Google delete rather than firing it and returning", async () => {
+    // Fire-and-forget let a serverless instance freeze before the delete landed,
+    // stranding a ghost event that keeps blocking the slot this cancel freed —
+    // public availability now subtracts Google busy time.
+    let settled = false;
+    deleteGoogle.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      settled = true;
+      return undefined;
+    });
+    const result = await cancelPlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      notifyGuest: true,
+    });
+    expect(settled).toBe(true);
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: true } });
+  });
+
+  it("still cancels when Google fails, and says so on the result", async () => {
+    deleteGoogle.mockRejectedValueOnce(new Error("calendar revoked"));
+    const result = await cancelPlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      notifyGuest: true,
+    });
+    // The PropLane-side cancel already happened and the guest was told; a Google
+    // failure is reported, never turned into a failed cancel.
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: false, error: "calendar revoked" } });
+    expect(WRITTEN_PAYLOAD).toEqual([]);
+    expect(notifyCanceled).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a skipped sync for a tour that was never on Google", async () => {
+    PLANNED_EVENTS = [{ ...TOUR, googleCalendarEventId: undefined }];
+    const result = await cancelPlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      notifyGuest: true,
+    });
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: true, skipped: true } });
+    expect(deleteGoogle).not.toHaveBeenCalled();
+  });
+
   it("refuses another manager's tour", async () => {
     const result = await cancelPlannedTour(db(), {
       plannedEventId: "planned-1",
@@ -177,6 +221,19 @@ describe("reschedulePlannedTour", () => {
       notifyGuest: true,
     });
     expect(syncGoogle.mock.calls[0]![2]).toMatchObject({ googleCalendarEventId: "gcal-1" });
+  });
+
+  it("waits for the Google move, and reports a failure without failing the reschedule", async () => {
+    syncGoogle.mockRejectedValueOnce(new Error("calendar revoked"));
+    const result = await reschedulePlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      start: NEW_START,
+      end: NEW_END,
+      notifyGuest: true,
+    });
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: false, error: "calendar revoked" } });
+    expect(WRITTEN_PAYLOAD![0]).toMatchObject({ start: NEW_START, end: NEW_END });
   });
 
   it("refuses a window another confirmed tour already occupies", async () => {

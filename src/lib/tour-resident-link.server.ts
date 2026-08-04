@@ -212,6 +212,51 @@ function plannedEventsFromRecord(rowData: unknown): Record<string, unknown>[] {
   return Array.isArray(payload) ? payload.filter((item): item is Record<string, unknown> => Boolean(asObject(item))) : [];
 }
 
+/** The confirmed planned event a link points at, by inquiry id or tour group. */
+function plannedTourForLink(
+  planned: Record<string, unknown>[],
+  link: ResidentTourLinkRow,
+): Record<string, unknown> | undefined {
+  return planned.find(
+    (event) =>
+      textField(event, "kind") === "tour" &&
+      (textField(event, "sourceInquiryId") === link.inquiry_id ||
+        (Boolean(link.tour_group_id) && textField(event, "tourGroupId") === link.tour_group_id)),
+  );
+}
+
+/**
+ * The resident's view of a tour whose inquiry row is gone because it was
+ * confirmed. Every field comes off the planned event, falling back to the
+ * link's own columns — the link is the only surviving record of the request.
+ */
+function viewFromPlannedEvent(event: Record<string, unknown>, link: ResidentTourLinkRow): ResidentTourView {
+  const start = textField(event, "start") || null;
+  const end = textField(event, "end") || null;
+  return {
+    inquiryId: link.inquiry_id,
+    tourGroupId: textField(event, "tourGroupId") || link.tour_group_id,
+    status: "confirmed",
+    propertyId: textField(event, "propertyId") || link.property_id,
+    propertyTitle: textField(event, "propertyTitle") || null,
+    roomLabel: textField(event, "roomLabel") || null,
+    managerUserId: textField(event, "managerUserId") || textField(event, "adminUserId") || link.manager_user_id,
+    managerLabel: textField(event, "adminLabel") || null,
+    guestName: textField(event, "attendeeName") || null,
+    guestEmail: textField(event, "attendeeEmail") || link.attendee_email || null,
+    guestPhone: textField(event, "attendeePhone") || null,
+    notes: textField(event, "notes") || null,
+    instructions: textField(event, "instructions") || null,
+    proposedStart: start,
+    proposedEnd: end,
+    requestedWindows: start && end ? [{ start, end }] : [],
+    createdAt: link.linked_at,
+    confirmed: true,
+    confirmedStart: start,
+    confirmedEnd: end,
+  };
+}
+
 /** Load tour views scoped to linked inquiry ids only. */
 export async function loadResidentTourViews(db: Db, userId: string): Promise<ResidentTourView[]> {
   const links = await loadResidentTourLinks(db, userId);
@@ -223,7 +268,6 @@ export async function loadResidentTourViews(db: Db, userId: string): Promise<Res
     .eq("id", INQUIRIES_RECORD_ID)
     .maybeSingle();
   const inquiries = inquiryRowsFromRecord(inquiryRecord?.row_data);
-  const linkedIds = new Set(links.map((l) => l.inquiry_id));
 
   const { data: plannedRecord } = await db
     .from("portal_schedule_records")
@@ -235,15 +279,21 @@ export async function loadResidentTourViews(db: Db, userId: string): Promise<Res
   const views: ResidentTourView[] = [];
   for (const link of links) {
     const inquiry = inquiries.find((row) => textField(row, "id") === link.inquiry_id);
-    if (!inquiry) continue;
+
+    const confirmedEvent = plannedTourForLink(planned, link);
+    // Confirming a tour CONSUMES its inquiry row (`confirmTourInquiry` writes
+    // the inquiry payload back without it), so a resident whose tour was
+    // confirmed has a link with no inquiry and a planned event instead.
+    // Skipping it here reported "Confirmed 0" to a resident with a booked
+    // tour — a confident zero off a fully successful read. Only a link with
+    // NEITHER side is genuinely gone.
+    if (!inquiry) {
+      if (!confirmedEvent) continue;
+      views.push(viewFromPlannedEvent(confirmedEvent, link));
+      continue;
+    }
 
     const inquiryId = textField(inquiry, "id");
-    const confirmedEvent = planned.find(
-      (event) =>
-        textField(event, "kind") === "tour" &&
-        (textField(event, "sourceInquiryId") === inquiryId ||
-          (link.tour_group_id && textField(event, "tourGroupId") === link.tour_group_id)),
-    );
 
     const requestedWindows = Array.isArray(inquiry.requestedWindows)
       ? (inquiry.requestedWindows as unknown[])

@@ -3,6 +3,7 @@ import { filterAdminUserIds } from "@/lib/auth/admin-role";
 import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 import { publicAdminSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { overlaps, slotIsBookable } from "@/lib/tour-slot-math";
 
 export const runtime = "nodejs";
 
@@ -32,31 +33,13 @@ function adminIdFromRecord(id: string, managerUserId: unknown): string {
   return match?.[1]?.trim() || "";
 }
 
-function slotStartMs(slot: string): number | null {
-  const [dateStr, rawIdx] = slot.split(":");
-  const idx = Number.parseInt(rawIdx ?? "", 10);
-  if (!dateStr || !Number.isFinite(idx) || idx < 0 || idx >= 48) return null;
-  const [y, m, d] = dateStr.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-  start.setMinutes(idx * 30);
-  return start.getTime();
-}
-
-function slotIsBookable(slot: string): boolean {
-  const ms = slotStartMs(slot);
-  return ms !== null && ms >= Date.now();
-}
-
-function slotOverlaps(slot: string, startIso: string, endIso: string): boolean {
-  const slotMs = slotStartMs(slot);
-  if (slotMs === null) return false;
-  const slotEnd = slotMs + 30 * 60 * 1000;
-  const blockStart = new Date(startIso).getTime();
-  const blockEnd = new Date(endIso).getTime();
-  if (![blockStart, blockEnd].every(Number.isFinite)) return false;
-  return slotMs < blockEnd && blockStart < slotEnd;
-}
+/**
+ * Slot math comes from `@/lib/tour-slot-math`, never a private copy: a slotKey
+ * is WALL TIME on the tour calendar's zone, and resolving it with
+ * `new Date(y, m, d)` reads the SERVER's zone — Pacific in dev, UTC on Vercel,
+ * so every slot sat seven hours off in production and blocked windows were
+ * compared against the wrong half hour.
+ */
 
 export async function GET() {
   try {
@@ -159,7 +142,7 @@ export async function GET() {
 
       for (const slot of slots) {
         if (!slotIsBookable(slot)) continue;
-        if (blocked.some((b) => slotOverlaps(slot, b.start, b.end))) continue;
+        if (blocked.some((b) => overlaps(slot, b))) continue;
         const hosts = slotHosts[slot] ?? [];
         if (!hosts.some((host) => host.adminUserId === adminUserId)) {
           hosts.push({ adminUserId, adminLabel });

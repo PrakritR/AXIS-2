@@ -52,8 +52,24 @@ function inquiryFromPlannedEvent(event: Record<string, unknown>): Record<string,
   };
 }
 
+/**
+ * Outcome of the manager's linked-Google-Calendar side of the change.
+ *
+ * It is reported, never thrown: the PropLane-side change already succeeded and
+ * the guest has already been told, so a Google failure must not turn a real
+ * cancel into an error. But it cannot be swallowed either — public tour
+ * availability now subtracts Google busy time, so a surviving ghost event
+ * permanently blocks the half hour the manager just freed.
+ */
+export type PlannedTourCalendarSync = { ok: boolean; skipped?: boolean; error?: string };
+
 export type PlannedTourChangeResult =
-  | { ok: true; message: string; guestNotification: { ok: boolean; skipped?: boolean; error?: string } | null }
+  | {
+      ok: true;
+      message: string;
+      guestNotification: { ok: boolean; skipped?: boolean; error?: string } | null;
+      calendarSync: PlannedTourCalendarSync;
+    }
   | { ok: false; status: number; error: string };
 
 type LoadedTour = {
@@ -181,12 +197,19 @@ export async function cancelPlannedTour(
     );
   }
 
+  // Awaited, not fire-and-forget: a serverless runtime can freeze the instance
+  // the moment the response is returned, which would strand the Google event as
+  // busy time blocking the slot this cancel just freed.
   const googleEventId = textField(event, "googleCalendarEventId");
+  let calendarSync: PlannedTourCalendarSync = { ok: true, skipped: true };
   if (googleEventId && managerUserId) {
-    void deleteProplaneGoogleCalendarEvent(db, managerUserId, googleEventId).catch(() => undefined);
+    calendarSync = await deleteProplaneGoogleCalendarEvent(db, managerUserId, googleEventId).then(
+      () => ({ ok: true }),
+      (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : "Google Calendar update failed." }),
+    );
   }
 
-  return { ok: true, message: formatRangeLabel(start, end), guestNotification };
+  return { ok: true, message: formatRangeLabel(start, end), guestNotification, calendarSync };
 }
 
 /** Move a confirmed tour to a new window and tell the guest the new time. */
@@ -264,8 +287,12 @@ export async function reschedulePlannedTour(
     });
   }
 
+  // Awaited for the same reason as the cancel path: the move has to land before
+  // the response, or the old window stays busy on the manager's calendar and
+  // keeps blocking a slot the tour no longer occupies.
+  let calendarSync: PlannedTourCalendarSync = { ok: true, skipped: true };
   if (managerUserId) {
-    void syncPlannedTourToGoogleCalendar(db, managerUserId, {
+    calendarSync = await syncPlannedTourToGoogleCalendar(db, managerUserId, {
       plannedEventId: String(moved.id),
       title: textField(moved, "title") || "Tour",
       start,
@@ -280,8 +307,11 @@ export async function reschedulePlannedTour(
       // calendar entry; without it the old time stays on their calendar as a
       // ghost tour and keeps blocking the slot it no longer occupies.
       googleCalendarEventId: textField(moved, "googleCalendarEventId") || null,
-    }).catch(() => undefined);
+    }).then(
+      () => ({ ok: true }),
+      (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : "Google Calendar update failed." }),
+    );
   }
 
-  return { ok: true, message: formatRangeLabel(start, end), guestNotification };
+  return { ok: true, message: formatRangeLabel(start, end), guestNotification, calendarSync };
 }

@@ -40,7 +40,12 @@ export async function POST(req: Request) {
     });
 
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-    return NextResponse.json({ ok: true, message: result.message, guestNotification: result.guestNotification });
+    return NextResponse.json({
+      ok: true,
+      message: result.message,
+      guestNotification: result.guestNotification,
+      calendarSync: result.calendarSync,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to reschedule tour.";
     return NextResponse.json({ error: message }, { status: 500 });

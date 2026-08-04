@@ -36,7 +36,49 @@ export const runtime = "nodejs";
  * not resurrect a slot that was just booked.
  */
 const GOOGLE_BUSY_TTL_MS = 60_000;
+/** Hard ceiling on distinct managers held at once; the map is module-global. */
+const GOOGLE_BUSY_CACHE_MAX_ENTRIES = 500;
 const googleBusyCache = new Map<string, { expiresAt: number; blocks: TourBlock[] }>();
+
+/**
+ * Store a manager's busy blocks, sweeping expired entries first. Without this
+ * the map only ever grew: an entry is overwritten only if that same manager is
+ * asked for again, so a long-lived instance accumulated every manager ever
+ * queried. The FIFO trim after the sweep bounds the pathological case where
+ * every entry is still live.
+ */
+function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[]): void {
+  const now = Date.now();
+  for (const [key, entry] of googleBusyCache) {
+    if (entry.expiresAt <= now) googleBusyCache.delete(key);
+  }
+  googleBusyCache.set(managerUserId, { expiresAt: now + GOOGLE_BUSY_TTL_MS, blocks });
+  while (googleBusyCache.size > GOOGLE_BUSY_CACHE_MAX_ENTRIES) {
+    const oldest = googleBusyCache.keys().next();
+    if (oldest.done) break;
+    googleBusyCache.delete(oldest.value);
+  }
+}
+
+/**
+ * A Google event only subtracts availability when it actually means "away".
+ *
+ * - `transparency: "transparent"` is the manager marking the event Free.
+ * - A declined invite is an event they are NOT attending.
+ *
+ * All-day events DO block, deliberately: a trip or a holiday on the primary
+ * calendar is exactly the day a manager cannot host tours, and Google gives no
+ * signal distinguishing that from a birthday reminder. Over-blocking a day
+ * costs an unsold slot; under-blocking it sends a prospect to an empty house.
+ */
+function googleEventBlocksTours(event: {
+  transparency?: string;
+  declinedBySelf?: boolean;
+}): boolean {
+  if (event.transparency === "transparent") return false;
+  if (event.declinedBySelf) return false;
+  return true;
+}
 
 async function googleBusyBlocks(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
@@ -49,14 +91,16 @@ async function googleBusyBlocks(
   let blocks: TourBlock[] = [];
   try {
     const events = await listGoogleCalendarEvents(db, managerUserId, timeMin, timeMax);
-    blocks = events.map((event) => ({ start: event.start, end: event.end }));
+    blocks = events
+      .filter(googleEventBlocksTours)
+      .map((event) => ({ start: event.start, end: event.end }));
   } catch {
     // Not linked, revoked, quota, API disabled — a manager without a working
     // calendar link simply contributes no busy time. Never fail the whole
     // availability read over one manager's integration.
     blocks = [];
   }
-  googleBusyCache.set(managerUserId, { expiresAt: Date.now() + GOOGLE_BUSY_TTL_MS, blocks });
+  cacheGoogleBusyBlocks(managerUserId, blocks);
   return blocks;
 }
 
@@ -224,10 +268,6 @@ export async function GET(req: Request) {
         [...propertyIds].some((propertyKey) => rowId.includes(`_prop_${propertyKey}`))
       );
     });
-    for (const row of propertyRowsForHouse) {
-      const managerUserId = row.manager_user_id?.trim();
-      if (managerUserId && !managerIds.includes(managerUserId)) managerIds.push(managerUserId);
-    }
     const globalRows = ((globalData ?? []) as ScheduleRecordRow[]).filter((row) => {
       const managerUserId = row.manager_user_id?.trim();
       return managerUserId && !propertyRowsForHouse.some((propertyRow) => propertyRow.manager_user_id === managerUserId);
@@ -245,12 +285,13 @@ export async function GET(req: Request) {
       .map((row) => ({
         managerUserId: row.manager_user_id?.trim() ?? "",
         propertyId: row.property_id?.trim() || undefined,
-        slots: payloadSlots(row.row_data).filter((slot) => slotIsBookable(slot)),
+        slots: payloadSlots(row.row_data),
       }))
       .filter((offering) => offering.managerUserId);
 
-    const hasPublishedSlots = publishedOfferings.some((offering) => offering.slots.length > 0);
-    const defaultSlots = hasPublishedSlots ? [] : buildDefaultTourSlotKeys();
+    // Past slots do not count as "published": a week painted last month is not
+    // an offering. The render loop below is the one place slots are filtered.
+    const hasPublishedSlots = publishedOfferings.some((offering) => offering.slots.some((slot) => slotIsBookable(slot)));
     const offerings: Offering[] = hasPublishedSlots
       ? publishedOfferings
       : [...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId))]
@@ -258,13 +299,10 @@ export async function GET(req: Request) {
           .map((managerUserId) => ({
             managerUserId,
             propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
-            slots: defaultSlots.filter((slot) => slotIsBookable(slot)),
+            slots: buildDefaultTourSlotKeys(),
           }));
 
     const availabilityManagerIds = [...new Set(offerings.map((offering) => offering.managerUserId))];
-    for (const managerUserId of availabilityManagerIds) {
-      if (!managerIds.includes(managerUserId)) managerIds.push(managerUserId);
-    }
     const blockedSlotsByManager = new Map<string, TourBlock[]>();
     if (availabilityManagerIds.length > 0) {
       const { data: pendingRows, error: pendingError } = await db
