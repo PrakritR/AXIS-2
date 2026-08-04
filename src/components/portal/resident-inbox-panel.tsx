@@ -941,8 +941,12 @@ export const ResidentInboxPanel = forwardRef<
     [expandedId, local],
   );
 
+  const autoMarkReadAttemptedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!activeThread || activeThread.folder !== "inbox" || !activeThread.unread) return;
+    if (autoMarkReadAttemptedRef.current.has(activeThread.id)) return;
+    autoMarkReadAttemptedRef.current.add(activeThread.id);
     markReadSilent(activeThread.id);
   }, [activeThread?.id, activeThread?.folder, activeThread?.unread, markReadSilent]);
 
