@@ -79,3 +79,84 @@ describe("manager lease section edits", () => {
     expect(await leaseDocumentSha256(materialized)).toBe(beforeHash);
   });
 });
+
+/**
+ * A manager may write a section as prose OR as HTML. Both are offered, so exactly one has to
+ * be authoritative per section, and the tiebreaker must not be a rule someone has to remember:
+ * an HTML save is BASED ON the rendered document and clears the typed overrides, so the prose
+ * is baked into the bytes being saved rather than left to win over them afterwards.
+ */
+describe("text and HTML edits of the same lease", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+  });
+
+  it("shows the editor the rendered body, not the stale stored one", async () => {
+    const { readLeaseSectionsForEdit } = await import("@/lib/lease-section-edit.client");
+    seedDemoLeasePipeline([row()], MANAGER_ID);
+
+    const sections = readLeaseSectionsForEdit(readLeasePipeline(MANAGER_ID)[0]!);
+    const rent = sections.find((section) => section.id === "rent")!;
+
+    // The prose edit, not `BASE_HTML`'s original wording.
+    expect(rent.bodyHtml).toContain("Rent is due on the fifth.");
+    expect(rent.bodyHtml).not.toContain("Rent is due on the first.");
+  });
+
+  it("bakes a prose edit into the document when a section is saved as HTML", async () => {
+    const { saveLeaseSectionBodyEdits } = await import("@/lib/lease-section-edit.client");
+    seedDemoLeasePipeline([row()], MANAGER_ID);
+
+    const saved = saveLeaseSectionBodyEdits(
+      "lease-section-edits",
+      { rent: "<p>Rent is due on the twentieth.</p>" },
+      MANAGER_ID,
+    );
+
+    expect(saved.ok).toBe(true);
+    const updated = readLeasePipeline(MANAGER_ID)[0]!;
+    // The override is gone, so it can never re-apply over the HTML just written.
+    expect(updated.managerSectionEdits).toBeNull();
+    const html = getLeaseDocumentHtml(updated)!;
+    expect(html).toContain("Rent is due on the twentieth.");
+    expect(html).not.toContain("Rent is due on the fifth.");
+  });
+
+  it("keeps another section's prose edit when one section is saved as HTML", async () => {
+    const { saveLeaseSectionBodyEdits } = await import("@/lib/lease-section-edit.client");
+    const twoSections = row({
+      generatedHtml: `<!doctype html><html><body>
+  <h2>Rent</h2><p>Rent is due on the first.</p>
+  <h2>House rules</h2><p>Original rules.</p>
+</body></html>`,
+      managerSectionEdits: {
+        rent: { format: "text", value: "Rent is due on the fifth." },
+        "house-rules": { format: "text", value: "Quiet hours start at 10pm." },
+      },
+    });
+    seedDemoLeasePipeline([twoSections], MANAGER_ID);
+
+    saveLeaseSectionBodyEdits("lease-section-edits", { rent: "<p>Rent is due on the twentieth.</p>" }, MANAGER_ID);
+
+    const html = getLeaseDocumentHtml(readLeasePipeline(MANAGER_ID)[0]!)!;
+    expect(html).toContain("Rent is due on the twentieth.");
+    // Baked in by the save rather than dropped with the overrides map.
+    expect(html).toContain("Quiet hours start at 10pm.");
+  });
+
+  it("refuses a prose edit to a disclosure section at the save path, not just at render", async () => {
+    const { saveLeaseSectionEdits } = await import("@/lib/lease-section-edit.client");
+    seedDemoLeasePipeline([row()], MANAGER_ID);
+
+    const saved = saveLeaseSectionEdits(
+      "lease-section-edits",
+      { "required-disclosure": { format: "text", value: "Rewritten disclosure." } },
+      MANAGER_ID,
+    );
+
+    expect(saved.ok).toBe(false);
+    expect(getLeaseDocumentHtml(readLeasePipeline(MANAGER_ID)[0]!)).toContain("Required legal language.");
+  });
+});
