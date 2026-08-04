@@ -237,6 +237,10 @@ export async function upsertManagerListingDraft(
     throw new Error("Only draft or pending listings can be updated this way.");
   }
 
+  // No plan-quota gate: this always writes status "draft", which is never a
+  // listing slot (LISTING_SLOT_PROPERTY_STATUSES), so it can only ever free a
+  // slot — a pending row demoted back to draft — never occupy one. Publishing
+  // the draft goes through `POST /api/property-records`, where the cap runs.
   const { error } = await db.from("manager_property_records").upsert(
     {
       id: propertyId,

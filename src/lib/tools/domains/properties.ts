@@ -255,6 +255,25 @@ export const createPropertyTool = defineWriteTool({
     const rowData = buildDraftPropertyRowData(input, ctx.landlordId);
     const normalizedAddress = input.address.trim().toLowerCase().replace(/\s+/g, " ");
 
+    // This insert saves status "pending", which IS a listing slot
+    // (LISTING_SLOT_PROPERTY_STATUSES), and it never passes through
+    // `POST /api/property-records`, where the cap lives — so without this gate a
+    // manager at their plan limit could ask the assistant for the listing the
+    // portal's own "+ Add property" refuses. A create has no stored row, so it
+    // always charges a slot (`existingStatus: null`). The owner is resolved from
+    // the authenticated context, never from model-supplied input. Checked BEFORE
+    // the audit log so a refusal does not burn the dedupe key for a listing that
+    // was never created.
+    const quota = await assertManagerPropertyListingQuota(ctx.db, {
+      ownerUserId: ctx.landlordId,
+      recordId: rowData.id,
+      nextStatus: "pending",
+      existingStatus: null,
+    });
+    // The refusal carries `managerPropertyLimitMessage`, so the manager reads
+    // the same sentence here as in the portal.
+    if (!quota.ok) throw new Error(quota.error);
+
     // Record intent first, idempotent per address per day: asking twice in one
     // day must not create two draft records for the same property.
     const dedupeKey = `create_property:${ctx.landlordId}:${normalizedAddress}:${auditDayBucket()}`;
@@ -641,6 +660,8 @@ export const copyListingPhotosTool = defineWriteTool({
 
     const { submission, summary } = copyListingMediaBetweenSubmissions(sourceSub, targetSub);
     const payloads = writeSubmissionToRecordPayloads(targetRec, submission);
+    // No plan-quota gate: this patches only `row_data` / `property_data` and
+    // never writes `status`, so it cannot move a record into a listing slot.
     const { error } = await ctx.db
       .from("manager_property_records")
       .update({
@@ -926,6 +947,9 @@ export const updatePropertyLeaseConfigTool = defineWriteTool({
       input,
     );
     const payloads = writeSubmissionToRecordPayloads(rec, merged);
+    // No plan-quota gate: lease settings patch only `row_data` /
+    // `property_data` and never write `status`, so this cannot move a record
+    // into a listing slot.
     const { error } = await ctx.db
       .from("manager_property_records")
       .update({
