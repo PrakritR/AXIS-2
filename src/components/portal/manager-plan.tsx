@@ -37,6 +37,7 @@ type SubPayload = {
   isBusiness: boolean;
   isFree: boolean;
   isLegacyUnlimited: boolean;
+  planUnknown?: boolean;
   stripeManaged?: boolean;
   appleManaged?: boolean;
   cancelAtPeriodEnd?: boolean;
@@ -327,6 +328,14 @@ export function ManagerPlan({
     !sub.cancelAtPeriodEnd &&
     sub.scheduledDowngrade.tier === currentTier &&
     sub.scheduledDowngrade.billing !== currentBilling;
+
+  /**
+   * The interval the manager is already scheduled to move to. Offering an
+   * unqualified "Switch to …" for it would re-issue the same schedule; the
+   * banner and the "Billing change scheduled" chip already state it.
+   */
+  const billingChangeAlreadyScheduledFor = (interval: "monthly" | "annual") =>
+    Boolean(scheduledBillingChange && sub?.scheduledDowngrade?.billing === interval);
 
   const openBillingPortal = async () => {
     if (!sub?.stripeManaged || anyBusy) return;
@@ -933,7 +942,8 @@ export function ManagerPlan({
                         sub.stripeManaged &&
                         tierId !== "free" &&
                         !sub.cancelAtPeriodEnd &&
-                        priceView !== currentBilling ? (
+                        priceView !== currentBilling &&
+                        !billingChangeAlreadyScheduledFor(priceView) ? (
                           <Button
                             type="button"
                             variant="outline"
@@ -1244,6 +1254,7 @@ export function ManagerPlan({
       stripeManaged={Boolean(sub?.stripeManaged)}
       appleManaged={Boolean(sub?.appleManaged)}
       isFree={Boolean(sub?.isFree ?? currentTier === "free")}
+      planUnknown={Boolean(sub?.planUnknown)}
       trialActive={isTrialBilling}
       onReload={load}
     />

@@ -132,6 +132,16 @@ describe("native purchase screen — Guideline 3.1.2 required elements", () => {
     expect(screen.getByRole("button", { name: /switch to free/i })).toBeTruthy();
   });
 
+  it("never offers Switch to Free when the plan could not be read", async () => {
+    // A failed purchase-row read reports `planUnknown` with the paid signals
+    // nulled, so the surface looks like a trial account. Writing tier=free off
+    // that guess would cancel a real paid plan.
+    renderPurchaseSurface({ currentTier: "pro", isFree: false, trialActive: true, planUnknown: true });
+    await screen.findByText("PropLane Pro");
+    expect(screen.queryByRole("button", { name: /switch to free/i })).toBeNull();
+    expect(screen.getByText(/load your current plan/i)).toBeTruthy();
+  });
+
   it("the legal footer also renders on the Apple-managed manage-only branch", () => {
     renderPurchaseSurface({ currentTier: "pro", isFree: false, appleManaged: true });
     expect(screen.getByRole("button", { name: /terms of use/i })).toBeTruthy();

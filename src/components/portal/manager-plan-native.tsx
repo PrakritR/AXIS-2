@@ -96,6 +96,12 @@ type Props = {
   stripeManaged: boolean;
   appleManaged: boolean;
   isFree: boolean;
+  /**
+   * True when the subscription route could not read the purchase row. The
+   * payload then looks exactly like a fresh trial account, so no plan WRITE may
+   * be offered off it — a "Switch to Free" here would rewrite a paying row.
+   */
+  planUnknown?: boolean;
   /** True while the account is on the no-card signup trial (`billing = 'trial'`). */
   trialActive?: boolean;
   onReload: () => void | Promise<void>;
@@ -107,6 +113,7 @@ export function ManagerPlanNative({
   stripeManaged,
   appleManaged,
   isFree,
+  planUnknown = false,
   trialActive = false,
   onReload,
 }: Props) {
@@ -203,7 +210,7 @@ export function ManagerPlanNative({
    * purchase or an Apple-subscription cancellation, so it is safe to offer here.
    */
   const onSwitchToFree = useCallback(async () => {
-    if (purchasingProductId || restoring || switchingToFree) return;
+    if (purchasingProductId || restoring || switchingToFree || planUnknown) return;
     setSwitchingToFree(true);
     try {
       const res = await fetch("/api/stripe/subscription/update-tier", {
@@ -224,7 +231,7 @@ export function ManagerPlanNative({
     } finally {
       setSwitchingToFree(false);
     }
-  }, [purchasingProductId, restoring, switchingToFree, showToast, onReload]);
+  }, [purchasingProductId, restoring, switchingToFree, planUnknown, showToast, onReload]);
 
   const busy = Boolean(purchasingProductId) || restoring || activating || switchingToFree;
 
@@ -299,6 +306,10 @@ export function ManagerPlanNative({
         <div className="mt-3">
           {isFree ? (
             <CurrentPlanChip />
+          ) : planUnknown ? (
+            <p className="text-sm leading-relaxed text-muted">
+              We couldn&apos;t load your current plan. Reopen this screen to change plans.
+            </p>
           ) : (
             <Button
               type="button"
@@ -312,7 +323,7 @@ export function ManagerPlanNative({
             </Button>
           )}
         </div>
-        {!isFree ? (
+        {!isFree && !planUnknown ? (
           <p className="mt-2 text-xs leading-relaxed text-muted">
             {trialActive ? "Ends your trial now. " : ""}Your properties and records stay — Free includes 1 property
             listing and locks resident, lease, and inbox tools until you subscribe again. A dedicated phone number

@@ -36,6 +36,7 @@ type SubPayload = {
   billing: string | null;
   stripeManaged?: boolean;
   appleManaged?: boolean;
+  planUnknown?: boolean;
 };
 
 function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
@@ -44,6 +45,12 @@ function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
 
 /** True when this account has already chosen (or otherwise holds) a plan. */
 export function managerEntryPlanAlreadySettled(sub: SubPayload): boolean {
+  // A plan we could not READ arrives as `{tier: null, billing: null,
+  // stripeManaged: false, appleManaged: false}` — indistinguishable from a
+  // fresh trial account. Showing the chooser there lets "Continue with Free"
+  // rewrite a paying manager's row to tier=free. Fail closed: forward to the
+  // portal and never offer a tier write off an unreadable plan.
+  if (sub.planUnknown) return true;
   if (sub.stripeManaged || sub.appleManaged) return true;
   const tier = sub.tier?.toLowerCase().trim() ?? "";
   if (tier === "free") return true; // explicitly committed Free before

@@ -28,4 +28,21 @@ describe("managerEntryPlanAlreadySettled", () => {
     expect(managerEntryPlanAlreadySettled({ tier: "business", billing: "monthly" })).toBe(true);
     expect(managerEntryPlanAlreadySettled({ tier: "pro", billing: "admin" })).toBe(true);
   });
+
+  it("fails closed when the plan could not be read — an unknown plan is never re-asked", () => {
+    // `GET /api/manager/subscription` reports a failed purchase-row read as
+    // `planUnknown: true` with every other field nulled, which is byte-identical
+    // to a fresh trial account. Showing the chooser there would let "Continue
+    // with Free" rewrite a paying manager's row to tier=free.
+    expect(
+      managerEntryPlanAlreadySettled({
+        tier: null,
+        billing: null,
+        stripeManaged: false,
+        appleManaged: false,
+        planUnknown: true,
+      }),
+    ).toBe(true);
+    expect(managerEntryPlanAlreadySettled({ tier: "pro", billing: "trial", planUnknown: true })).toBe(true);
+  });
 });
