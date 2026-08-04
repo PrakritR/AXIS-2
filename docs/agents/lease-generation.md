@@ -523,13 +523,20 @@ filing is evidence of an executed lease, not a document waiting to be sent.
 
 **The gate is on the transition, not on a button, so the agent layer is inside
 it.** `send_lease_for_signature` performs the same transition from the assistant
-that the Leases UI performs, so `sendForSignatureBlocker`
-(`src/lib/tools/domains/leases.ts`) runs `leaseSendGateBlockerAmong` — the same
-ordering and the same wording the manager gets. Any future path that writes
-`bucket: "resident"` must clear this gate too — greying out a button is not the
-gate. The Send buttons are deliberately **not** disabled for a gate reason:
-disabling makes the click handler, the only thing that states the reason and
-opens the review that clears it, unreachable, and `title` is invisible on touch.
+that the Leases UI performs, so `sendForSignatureBlockerWithContext`
+(`src/lib/tools/domains/leases.ts`) — the guard both its `preview` and its
+`handler` run — calls `leaseSendGateBlockerAmong` over the landlord's own
+applications, giving the same ordering and the same wording the manager gets.
+`sendForSignatureBlocker` beside it is only the row-state half (no document, no
+resident email, already signed or finalized); it is not the gate. Any future
+path that writes `bucket: "resident"` must clear this gate too — greying out a
+button is not the gate. The Send buttons are deliberately **not** disabled for a
+gate reason: disabling makes the click handler, the only thing that states the
+reason and opens the review that clears it, unreachable, and `title` is
+invisible on touch. Because the whole assistant-side gate is one import, it can
+vanish while everything still compiles — `tests/unit/tools/lease-vendor-writes.test.ts`
+pins the tool's refusals (unapproved application, unreviewed upload) alongside
+the library-level `tests/unit/lease-send-guards.test.ts`.
 
 **Three ordered reasons, one ordering.** `leaseSendGateBlocker` answers in the
 order that tells the manager the most: an unapproved application (a fact about
