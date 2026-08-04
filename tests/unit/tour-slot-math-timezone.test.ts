@@ -1,0 +1,134 @@
+/**
+ * A slotKey is wall time on the tour calendar's clock, never the server's.
+ *
+ * `slotStartMs` used to build the instant with `new Date(y, m, d)`, which reads
+ * the SERVER's zone — Pacific in dev, **UTC on Vercel**. In production that put
+ * every slot seven hours off its real time, so `overlaps()` compared a
+ * confirmed tour against the wrong half hour and the booked slot stayed on
+ * offer. A second prospect could book straight on top of it. Nothing failed
+ * loudly; the grid just kept selling a booked window.
+ *
+ * These run the math under a UTC process zone on purpose: on a Pacific dev
+ * machine the bug is invisible, which is exactly how it shipped.
+ */
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  blockInstantMs,
+  buildDefaultTourSlotKeys,
+  DEFAULT_TOUR_END_SLOT_EXCLUSIVE,
+  DEFAULT_TOUR_START_SLOT,
+  overlaps,
+  slotBlocked,
+  slotIsBookable,
+  slotStartMs,
+} from "@/lib/tour-slot-math";
+
+const originalTz = process.env.TZ;
+
+/** Re-run a body with the process pinned to a zone, as a deployed server is. */
+function withProcessTimeZone(timeZone: string, body: () => void) {
+  process.env.TZ = timeZone;
+  try {
+    body();
+  } finally {
+    process.env.TZ = originalTz;
+  }
+}
+
+describe("slot math is anchored to the tour calendar zone, not the server", () => {
+  it("resolves a slot to the same instant under UTC and Pacific processes", () => {
+    const underUtc = withReturn("UTC", () => slotStartMs("2026-08-06:20"));
+    const underPacific = withReturn("America/Los_Angeles", () => slotStartMs("2026-08-06:20"));
+    expect(underUtc).toBe(underPacific);
+    // Slot 20 is 10:00 am Pacific; in August that is 17:00 UTC.
+    expect(new Date(underUtc!).toISOString()).toBe("2026-08-06T17:00:00.000Z");
+  });
+
+  it("blocks a confirmed tour's own slot on a UTC server", () => {
+    withProcessTimeZone("UTC", () => {
+      // A confirmed 10:00-10:30 am Pacific tour, stored as a real instant.
+      const confirmed = { start: "2026-08-06T17:00:00.000Z", end: "2026-08-06T17:30:00.000Z" };
+      expect(overlaps("2026-08-06:20", confirmed)).toBe(true);
+      expect(slotBlocked("2026-08-06:20", [confirmed])).toBe(true);
+      // And it must not spill onto a half hour it does not occupy.
+      expect(slotBlocked("2026-08-06:22", [confirmed])).toBe(false);
+    });
+  });
+
+  it("blocks calendar-busy time that carries no slotKey", () => {
+    withProcessTimeZone("UTC", () => {
+      // Google busy 7:30-10:00 am Pacific. Busy windows never carry a slotKey,
+      // so the exact-match shortcut cannot save this one — only the overlap
+      // math can, and under the old server-local math it never matched.
+      const busy = { start: "2026-08-04T14:30:00.000Z", end: "2026-08-04T17:00:00.000Z" };
+      expect(slotBlocked("2026-08-04:18", [busy])).toBe(true); // 9:00 am
+      expect(slotBlocked("2026-08-04:19", [busy])).toBe(true); // 9:30 am
+      expect(slotBlocked("2026-08-04:20", [busy])).toBe(false); // 10:00 am — busy has ended
+    });
+  });
+
+  it("reads a zone-less block timestamp as calendar wall time", () => {
+    withProcessTimeZone("UTC", () => {
+      // Google returns all-day events as bare dates, and stored payloads carry
+      // local-naive ISO strings. `Date.parse` would read these as UTC.
+      expect(new Date(blockInstantMs("2026-08-06T09:00:00")).toISOString()).toBe("2026-08-06T16:00:00.000Z");
+      expect(new Date(blockInstantMs("2026-08-06T09:00:00Z")).toISOString()).toBe("2026-08-06T09:00:00.000Z");
+      expect(new Date(blockInstantMs("2026-08-06T09:00:00-04:00")).toISOString()).toBe("2026-08-06T13:00:00.000Z");
+    });
+  });
+
+  it("judges past slots on the calendar clock", () => {
+    withProcessTimeZone("UTC", () => {
+      const tenAmPacific = Date.parse("2026-08-06T17:00:00.000Z");
+      expect(slotIsBookable("2026-08-06:20", tenAmPacific)).toBe(true);
+      expect(slotIsBookable("2026-08-06:19", tenAmPacific)).toBe(false);
+    });
+  });
+});
+
+describe("the default offering is a 9 am - 5 pm day", () => {
+  it("starts at 9:00 am and ends with a window closing at 5:00 pm", () => {
+    // Slot n starts at n * 30 minutes past midnight.
+    expect(DEFAULT_TOUR_START_SLOT * 30).toBe(9 * 60);
+    expect(DEFAULT_TOUR_END_SLOT_EXCLUSIVE * 30).toBe(17 * 60);
+  });
+
+  it("offers every half hour of that day, starting today", () => {
+    const now = Date.parse("2026-08-04T15:00:00.000Z"); // 8:00 am Pacific
+    const keys = buildDefaultTourSlotKeys(now, 3);
+    const perDay = DEFAULT_TOUR_END_SLOT_EXCLUSIVE - DEFAULT_TOUR_START_SLOT;
+    expect(keys).toHaveLength(perDay * 3);
+    expect(keys[0]).toBe("2026-08-04:18");
+    expect(keys[perDay - 1]).toBe("2026-08-04:33");
+    // Whole days apart, with no skipped or repeated date.
+    expect(keys[perDay]).toBe("2026-08-05:18");
+    expect(keys[perDay * 2]).toBe("2026-08-06:18");
+  });
+
+  it("builds the same days under a UTC process as a Pacific one", () => {
+    // 11:00 pm Pacific — already tomorrow in UTC. A server-local date read here
+    // skipped a whole day of the default grid.
+    const now = Date.parse("2026-08-05T06:00:00.000Z");
+    const underUtc = withReturn("UTC", () => buildDefaultTourSlotKeys(now, 2));
+    const underPacific = withReturn("America/Los_Angeles", () => buildDefaultTourSlotKeys(now, 2));
+    expect(underUtc).toEqual(underPacific);
+    expect(underUtc![0]).toBe("2026-08-04:18");
+  });
+});
+
+/** `withProcessTimeZone` for a body that returns a value. */
+function withReturn<T>(timeZone: string, body: () => T): T | undefined {
+  let out: T | undefined;
+  withProcessTimeZone(timeZone, () => {
+    out = body();
+  });
+  return out;
+}
+
+beforeEach(() => {
+  process.env.TZ = originalTz;
+});
+
+afterEach(() => {
+  process.env.TZ = originalTz;
+});

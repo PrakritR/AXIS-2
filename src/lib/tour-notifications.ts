@@ -11,6 +11,10 @@ export const TOUR_REQUEST_TENANT_SUBJECT = "We received your tour request — Pr
 
 export const TOUR_CONFIRMED_TENANT_SUBJECT = "Your PropLane tour is confirmed";
 
+export const TOUR_CANCELED_TENANT_SUBJECT = "Your PropLane tour was cancelled";
+
+export const TOUR_RESCHEDULED_TENANT_SUBJECT = "Your PropLane tour has a new time";
+
 export type TourNotificationContext = {
   guestName: string;
   guestEmail: string;
@@ -145,6 +149,73 @@ export function buildTourConfirmedTenantBody(ctx: TourNotificationContext): stri
     lines.push("", "Sign in to your PropLane resident portal to view messages:", ctx.residentPortalUrl.trim());
   }
   lines.push("", "— PropLane");
+  return lines.join("\n");
+}
+
+/**
+ * A confirmed tour that changes has to reach the guest.
+ *
+ * PropLane has already emailed them "Your PropLane tour is confirmed", so from
+ * that point the guest is holding a commitment. Cancelling or moving one used
+ * to be silent — the tour vanished from the manager's calendar and the guest
+ * still showed up. These two are the guest-facing half of those actions.
+ */
+export function buildTourCanceledTenantBody(
+  ctx: TourNotificationContext,
+  reason?: string | null,
+): string {
+  const greeting = ctx.guestName.trim() ? `Hi ${ctx.guestName.trim()},` : "Hi,";
+  const lines = [
+    greeting,
+    "",
+    "Your property tour has been cancelled by the property team.",
+    "",
+    `Was scheduled for: ${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)}`,
+    `Property: ${ctx.propertyTitle || "Property"}`,
+  ];
+  if (ctx.roomLabel?.trim()) lines.push(`Room: ${ctx.roomLabel.trim()}`);
+  if (ctx.propertyAddress?.trim()) lines.push(`Address: ${ctx.propertyAddress.trim()}`);
+  if (reason?.trim()) lines.push("", "Reason:", reason.trim());
+  lines.push(
+    "",
+    "Please do not travel to the property at that time.",
+    "",
+    "You are welcome to book another tour whenever it suits you:",
+    ctx.applyUrl,
+    "",
+    "Questions? Reply in your PropLane inbox and your property team will help.",
+    "",
+    "— PropLane",
+  );
+  return lines.join("\n");
+}
+
+export function buildTourRescheduledTenantBody(
+  ctx: TourNotificationContext,
+  previous: { startIso: string; endIso: string },
+  reason?: string | null,
+): string {
+  const greeting = ctx.guestName.trim() ? `Hi ${ctx.guestName.trim()},` : "Hi,";
+  const lines = [
+    greeting,
+    "",
+    "Your property tour has been moved to a new time.",
+    "",
+    `New time: ${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)}`,
+    `Previous time: ${formatTourTimeRange(previous.startIso, previous.endIso)}`,
+    `Property: ${ctx.propertyTitle || "Property"}`,
+  ];
+  if (ctx.roomLabel?.trim()) lines.push(`Room: ${ctx.roomLabel.trim()}`);
+  if (ctx.propertyAddress?.trim()) lines.push(`Address: ${ctx.propertyAddress.trim()}`);
+  if (ctx.managerLabel?.trim()) lines.push(`Host: ${ctx.managerLabel.trim()}`);
+  if (reason?.trim()) lines.push("", "Note from the property team:", reason.trim());
+  if (ctx.instructions?.trim()) lines.push("", "Before you arrive:", ctx.instructions.trim());
+  lines.push(
+    "",
+    "If the new time does not work, reply in your PropLane inbox and the property team will find another.",
+    "",
+    "— PropLane",
+  );
   return lines.join("\n");
 }
 

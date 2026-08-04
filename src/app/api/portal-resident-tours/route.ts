@@ -25,8 +25,17 @@ export async function GET() {
     return NextResponse.json({ tours });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load tours.";
+    // A failed read is NOT an empty tour list. This used to answer 200 with
+    // `{tours: [], degraded: true}` when `resident_tour_links` was missing from
+    // the schema cache, and the panel cleared its error on that flag — so a
+    // resident holding a CONFIRMED tour was told, confidently, that they had
+    // none. Every failure now leaves as a failure; `degraded` survives only to
+    // tell the client this is the recoverable "try again" shape.
     if (/resident_tour_links|schema cache/i.test(message)) {
-      return NextResponse.json({ tours: [], degraded: true });
+      return NextResponse.json(
+        { error: "We could not load your tours right now. Try again in a moment.", degraded: true },
+        { status: 503 },
+      );
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
