@@ -15,6 +15,7 @@ vi.mock("@/hooks/use-manager-user-id", () => ({
 import { AssistantDisplayModeSetting } from "@/components/portal/assistant-display-mode-setting";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
+import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { readAssistantDisplayMode } from "@/lib/assistant-display-preferences";
 
 const USER = "mgr-1";
@@ -41,6 +42,15 @@ function renderPortal({ dockable = true }: { dockable?: boolean } = {}) {
   return render(
     <AxisAssistant managerName="Jordan Lee" dockable={dockable}>
       <AssistantDisplayModeSetting />
+      <PortalAssistantDockRail managerName="Jordan Lee" />
+    </AxisAssistant>,
+  );
+}
+
+function renderPortalWithTopBar() {
+  return render(
+    <AxisAssistant managerName="Jordan Lee" dockable>
+      <PortalTopBar kind="pro" basePath="/portal" name="Jordan Lee" email="mgr@example.com" />
       <PortalAssistantDockRail managerName="Jordan Lee" />
     </AxisAssistant>,
   );
@@ -89,6 +99,23 @@ describe("assistant display mode", () => {
     expect(rail()!.className).toContain("hidden");
     expect(rail()!.className).toContain("lg:flex");
     await waitFor(() => expect(fab()!.className).toContain("lg:hidden"));
+  });
+
+  it("opens Ask PropLane in the right-side conversation rail on desktop", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    );
+    renderPortalWithTopBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask PropLane" }));
+
+    await waitFor(() => expect(rail()).not.toBeNull());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Ask the PropLane Assistant about your portfolio")).toHaveFocus(),
+    );
+    expect(readAssistantDisplayMode(USER)).toBe("docked");
+    expect(screen.queryByText("Opening PropLane Assistant")).toBeNull();
   });
 
   it("unpins from the dock header, back to the popup default", async () => {
