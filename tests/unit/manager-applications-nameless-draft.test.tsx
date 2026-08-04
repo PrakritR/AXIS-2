@@ -105,8 +105,20 @@ describe("manager Applications — an applicant with no stored name", () => {
     render(<ManagerApplications bucket="incomplete" />);
     await screen.findByRole("link", { name: /Incomplete/i });
 
-    expect(screen.getAllByText("nameless.draft@example.com").length).toBeGreaterThan(0);
+    // Exactly once: the name line resolves to the email, so echoing it as the
+    // row's preview would print the same identity twice.
+    expect(screen.getAllByText("nameless.draft@example.com")).toHaveLength(1);
     expect(screen.queryByText("Applicant")).toBeNull();
+  });
+
+  it("still shows the email beside a real name", async () => {
+    ROWS = [{ ...NAMELESS_DRAFT, name: "Maya Chen" }];
+
+    render(<ManagerApplications bucket="incomplete" />);
+    await screen.findByRole("link", { name: /Incomplete/i });
+
+    expect(screen.getAllByText("Maya Chen").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("nameless.draft@example.com").length).toBeGreaterThan(0);
   });
 
   it("prefers the email over a legacy stored 'Applicant' placeholder", async () => {
@@ -125,9 +137,10 @@ describe("manager Applications — an applicant with no stored name", () => {
     render(<ManagerApplications bucket="incomplete" applicationId={NAMELESS_DRAFT.id} />);
     const titled = await screen.findAllByText("nameless.draft@example.com");
 
-    // The header's title line, not just the subtitle — a blank title is what
-    // this covers.
-    expect(titled.some((el) => el.className.includes("font-semibold"))).toBe(true);
+    // The header's title line — a blank title is what this covers — and not
+    // repeated underneath it as the subtitle.
+    expect(titled[0]!.className).toContain("font-semibold");
+    expect(titled).toHaveLength(1);
     expect(screen.queryByText("Applicant")).toBeNull();
   });
 });

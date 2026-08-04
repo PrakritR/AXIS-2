@@ -22,7 +22,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
-import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
+import { applicantDisplayName, applicantSecondaryEmail } from "@/lib/rental-application/applicant-name";
 import { buildDemoBackgroundCheck } from "@/lib/checkr/demo-simulate";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
@@ -326,7 +326,7 @@ export function ManagerScreenings({
         <p className="text-lg font-bold text-foreground">{applicantDisplayName(selectedRow)}</p>
         <p className="text-sm text-muted">
           {selectedRow.property}
-          {selectedRow.email ? ` · ${selectedRow.email}` : ""}
+          {applicantSecondaryEmail(selectedRow) ? ` · ${applicantSecondaryEmail(selectedRow)}` : ""}
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

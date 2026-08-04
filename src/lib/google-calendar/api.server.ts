@@ -444,17 +444,45 @@ export function googleCalendarApiEventFromListItem(
   } satisfies GoogleCalendarApiEvent;
 }
 
+export type GoogleCalendarEventsPage = {
+  events: GoogleCalendarApiEvent[];
+  /**
+   * The walk stopped before the calendar did — the page bound or the time
+   * budget cut it short.
+   *
+   * The loop below already DETECTS this and logs it, but a server-side
+   * `console.warn` cannot reach the person looking at the grid. Results come
+   * back ordered by start time, so the events dropped are the LAST ones in the
+   * range — exactly the far weeks a wide busy window exists to cover. A caller
+   * that renders those weeks as free, selectable time is offering a prospect an
+   * hour the manager is not available, which is the double-booking failure the
+   * busy overlay exists to prevent. So callers that let a manager act on the
+   * grid must surface this rather than present a short list as a complete one.
+   */
+  truncated: boolean;
+};
+
+/** Array-returning form kept for existing callers; drops the truncation signal. */
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
   managerUserId: string,
   timeMin: string,
   timeMax: string,
 ): Promise<GoogleCalendarApiEvent[]> {
+  return (await listGoogleCalendarEventsPaged(db, managerUserId, timeMin, timeMax)).events;
+}
+
+export async function listGoogleCalendarEventsPaged(
+  db: SupabaseClient,
+  managerUserId: string,
+  timeMin: string,
+  timeMax: string,
+): Promise<GoogleCalendarEventsPage> {
   // Started BEFORE the token hop, which is itself a Google round trip on the
   // hot path — a budget that began after it would not bound this call.
   const pagingDeadline = Date.now() + GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS;
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
-  if (!connection.syncEnabled) return [];
+  if (!connection.syncEnabled) return { events: [], truncated: false };
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
 
   // Page rather than truncate: a single `maxResults` request silently dropped
@@ -512,9 +540,10 @@ export async function listGoogleCalendarEvents(
     );
   }
 
-  return items
-    .map(googleCalendarApiEventFromListItem)
-    .filter(Boolean) as GoogleCalendarApiEvent[];
+  return {
+    events: items.map(googleCalendarApiEventFromListItem).filter(Boolean) as GoogleCalendarApiEvent[],
+    truncated: Boolean(pageToken),
+  };
 }
 
 export type GoogleCalendarEventWriteInput = {

@@ -17,7 +17,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
-import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
+import { applicantDisplayName, applicantSecondaryEmail } from "@/lib/rental-application/applicant-name";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -273,7 +273,9 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
                     <PortalTableInlineExpand expanded={preview?.id === row.id} className="font-medium text-foreground">
                       {applicantDisplayName(row, "—")}
                     </PortalTableInlineExpand>
-                    {row.email ? <p className="mt-0.5 text-xs text-muted">{row.email}</p> : null}
+                    {applicantSecondaryEmail(row) ? (
+                      <p className="mt-0.5 text-xs text-muted">{applicantSecondaryEmail(row)}</p>
+                    ) : null}
                   </td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>

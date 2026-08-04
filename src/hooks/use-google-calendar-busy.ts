@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 import { startOfWeekMonday } from "@/lib/demo-admin-scheduling";
 
-export type GoogleCalendarBusyWarning = { warning?: string; hint?: string };
+export type GoogleCalendarBusyWarning = {
+  warning?: string;
+  hint?: string;
+  /** The window held more events than the server would page through. */
+  truncated?: boolean;
+};
+
+/** Warning code the events route returns when it could not load the whole window. */
+export const GOOGLE_BUSY_TRUNCATED_WARNING = "calendar_events_truncated";
 
 /**
  * The manager's linked Google Calendar busy time, as calendar meetings.
@@ -31,6 +39,17 @@ export type GoogleCalendarBusyWarning = { warning?: string; hint?: string };
  * than week-sized: one larger request is cheaper than refetching on every week
  * navigation, and every extra day is a conflict that becomes visible on BOTH
  * calendars.
+ *
+ * ## A TRUNCATED response means conflicts may be missing
+ *
+ * The server pages through the window but gives up after a bounded number of
+ * pages, and Google returns events in start-time order — so anything dropped is
+ * dropped from the FAR end of the range, which is the part the wide window
+ * exists to cover. When that happens the response carries
+ * {@link GOOGLE_BUSY_TRUNCATED_WARNING} and `truncated: true`, delivered through
+ * `onWarning`. The meetings returned are still real, but they are not all of
+ * them: a caller that lets a manager publish availability must say so rather
+ * than present the grid as conflict-free.
  */
 
 /** Trailing days included so today's week is complete, not clipped at "now". */
@@ -73,7 +92,9 @@ export function useGoogleCalendarBusyMeetings(input: {
       .then((data) => {
         if (cancelled) return;
         setMeetings(Array.isArray(data.meetings) ? data.meetings : []);
-        if (data.warning) onWarning?.({ warning: data.warning, hint: data.hint });
+        if (data.warning) {
+          onWarning?.({ warning: data.warning, hint: data.hint, truncated: data.truncated });
+        }
       })
       .catch(() => {
         if (!cancelled) setMeetings([]);

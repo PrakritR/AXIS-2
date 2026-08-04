@@ -38,7 +38,10 @@ import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { TourProposalsPanel } from "@/components/portal/tour-proposals-panel";
 import { GoogleCalendarConnectDialog } from "@/components/portal/google-calendar-connect-dialog";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
-import { useGoogleCalendarBusyMeetings } from "@/hooks/use-google-calendar-busy";
+import {
+  GOOGLE_BUSY_TRUNCATED_WARNING,
+  useGoogleCalendarBusyMeetings,
+} from "@/hooks/use-google-calendar-busy";
 import { listManagerServiceCalendarMeetings } from "@/lib/manager-service-calendar";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -118,6 +121,11 @@ export function PortalCalendar({
         showToast(hint ?? "Enable the Google Calendar API in Google Cloud Console, then refresh this page.");
       } else if (warning === "calendar_oauth_not_configured" || warning === "calendar_not_connected") {
         showToast(hint ?? "Google Calendar sync is not ready yet.");
+      } else if (warning === GOOGLE_BUSY_TRUNCATED_WARNING) {
+        showToast(
+          hint ??
+            "PropLane could not load every Google Calendar event for these dates, so some busy time may be missing.",
+        );
       }
     },
   });

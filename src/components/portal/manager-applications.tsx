@@ -84,7 +84,7 @@ import {
   shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
-import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
+import { applicantDisplayName, applicantSecondaryEmail } from "@/lib/rental-application/applicant-name";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
   buildBundleApplicationGroups,
@@ -1345,7 +1345,7 @@ export function ManagerApplications({
         <PortalRecordDetailPage
           pageTitle="Applications"
           title={applicantDisplayName(detailRow)}
-          subtitle={detailRow.email}
+          subtitle={applicantSecondaryEmail(detailRow) || undefined}
           avatarName={applicantDisplayName(detailRow)}
           backHref={applicationsListHref(tabForRow(detailRow))}
           hideBackText
@@ -1462,7 +1462,7 @@ export function ManagerApplications({
                 key={row.id}
                 name={applicantDisplayName(row)}
                 subtitle={subtitle || undefined}
-                preview={row.email}
+                preview={applicantSecondaryEmail(row)}
                 badge={
                   groupBadge ? (
                     <Badge tone={groupBadge.tone}>{groupBadge.label}</Badge>
