@@ -59,21 +59,27 @@ const norm = (value) => String(value ?? "").trim().toLowerCase();
  * the hosted default), so a `.limit(5000)` is silently truncated to the first
  * page. A scan that trusts it under-repairs, and a verification re-read that
  * trusts it re-reads the SAME truncated window and reports success anyway.
- * Every scan in this script therefore pages with `.range()` until a short page
- * comes back, ordered by `id` so the pages partition the table.
+ * Every scan in this script therefore pages with `.range()`, ordered by `id` so
+ * the pages partition the table.
+ *
+ * The cursor advances by the rows actually RETURNED and stops only on an empty
+ * page, never on a short one: `max_rows` is a per-project dashboard setting the
+ * repo does not govern, so a project capped below `SCAN_PAGE_SIZE` would make
+ * the very first page short and reintroduce the same silent truncation.
  */
 const SCAN_PAGE_SIZE = 1000;
 
 async function selectAllRows(supabase, { table, columns, label, filter }) {
   const rows = [];
-  for (let from = 0; ; from += SCAN_PAGE_SIZE) {
+  for (let from = 0; ; ) {
     let query = supabase.from(table).select(columns);
     if (filter) query = filter(query);
     const { data, error } = await query.order("id", { ascending: true }).range(from, from + SCAN_PAGE_SIZE - 1);
     if (error) throw new Error(`repair: ${label ?? "select"} ${table}: ${error.message}`);
     const page = data ?? [];
+    if (page.length === 0) return rows;
     rows.push(...page);
-    if (page.length < SCAN_PAGE_SIZE) return rows;
+    from += page.length;
   }
 }
 
