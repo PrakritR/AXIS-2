@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { managerPropertyLimitMessage } from "@/lib/manager-access";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import type { AgentContext } from "@/lib/tools/context";
 import { auditDayBucket } from "@/lib/tools/audit";
@@ -13,6 +14,17 @@ vi.mock("@/lib/manager-property-share-access", () => ({
       ? { id: "p1", title: "Sunset Lofts", buildingName: "Sunset Lofts", address: "1 A St", adminPublishLive: true }
       : null,
   ),
+}));
+
+/**
+ * The plan's listing cap is resolved from `manager_purchases` through a
+ * service-role client. Stub only that read so these tests stay in-memory; the
+ * slot COUNT below still runs for real against the seeded records.
+ */
+let EFFECTIVE_TIER: string | null = null;
+vi.mock("@/lib/manager-access-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/manager-access-server")>()),
+  getEffectiveManagerSkuTier: async () => ({ ok: true, tier: EFFECTIVE_TIER }),
 }));
 
 import {
@@ -54,7 +66,10 @@ function makeWriteCtx(tables: Record<string, Row[]>, overrides: Partial<AgentCon
     private mode: { kind: "select" } | { kind: "update"; values: Row } | { kind: "delete" } = { kind: "select" };
     constructor(private table: string) {}
 
-    select() {
+    private countMode = false;
+
+    select(_cols?: string, opts?: { count?: string; head?: boolean }) {
+      if (opts?.count) this.countMode = true;
       return this;
     }
     order() {
@@ -143,7 +158,10 @@ function makeWriteCtx(tables: Record<string, Row[]>, overrides: Partial<AgentCon
     range(from: number, to: number) {
       return this.run().then((res) => ({ data: (res.data ?? []).slice(from, to + 1), error: null }));
     }
-    then<T>(resolve: (v: { data: Row[] | null; error: null }) => T) {
+    then<T>(resolve: (v: { data: Row[] | null; count?: number; error: null }) => T) {
+      if (this.countMode) {
+        return Promise.resolve({ data: null, count: this.matched().length, error: null as null }).then(resolve);
+      }
       return this.run().then(resolve);
     }
   }
@@ -183,6 +201,7 @@ const ENV_KEYS = ["RESEND_API_KEY", "CERTN_API_KEY", "CHECKR_API_KEY", "BACKGROU
 const savedEnv: Record<string, string | undefined> = {};
 
 beforeEach(() => {
+  EFFECTIVE_TIER = null;
   for (const key of ENV_KEYS) {
     savedEnv[key] = process.env[key];
     delete process.env[key];
@@ -386,6 +405,80 @@ describe("update_property", () => {
     const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_foreign", rentUsd: 1 });
     expect(res.ok).toBe(false);
     expect(tables.manager_property_records![0]!.row_data).toMatchObject({ monthlyRent: 2000 });
+  });
+});
+
+/**
+ * Regression: agent-relist-bypasses-quota.
+ *
+ * The plan's property cap is enforced in `POST /api/property-records`, but this
+ * tool writes `manager_property_records` itself and never goes near that route.
+ * So a Free manager at their limit could unlist one listing, publish another,
+ * and ask the assistant to "set the first one live again" — the exact action the
+ * portal's Relist button refuses.
+ */
+describe("update_property respects the plan's listing cap", () => {
+  function unlistedProperty(managerUserId: string, id: string): Row {
+    return { ...liveProperty(managerUserId, id), status: "unlisted" };
+  }
+
+  it("refuses a relist that would take a second listing slot on Free", async () => {
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [unlistedProperty("manager_a", "p_down"), liveProperty("manager_a", "p_live")],
+    });
+
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_down", status: "live" });
+
+    expect(res.ok).toBe(false);
+    // The manager reads the same sentence the portal shows, not a bare failure.
+    if (!res.ok) expect(res.error).toBe(managerPropertyLimitMessage("free"));
+    // Nothing moved, and the refusal did not burn the dedupe key.
+    expect(tables.manager_property_records![0]!.status).toBe("unlisted");
+    expect(auditRows(tables)).toEqual([]);
+  });
+
+  it("allows the relist once the slot is free again", async () => {
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [unlistedProperty("manager_a", "p_down")],
+    });
+
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_down", status: "live" });
+
+    expect(res.ok).toBe(true);
+    expect(tables.manager_property_records![0]!.status).toBe("live");
+  });
+
+  it("never charges an over-limit account for an ordinary edit or an unlist", async () => {
+    // Block the transition INTO a slot, never the state of being over the cap.
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [liveProperty("manager_a", "p1"), liveProperty("manager_a", "p2")],
+    });
+
+    const edit = await executeWrite(updatePropertyTool, ctx, { propertyId: "p1", rentUsd: 2400 });
+    const unlist = await executeWrite(updatePropertyTool, ctx, { propertyId: "p2", status: "unlisted" });
+
+    expect(edit.ok).toBe(true);
+    expect(unlist.ok).toBe(true);
+    expect((tables.manager_property_records![0]!.row_data as Row).monthlyRent).toBe(2400);
+    expect(tables.manager_property_records![1]!.status).toBe("unlisted");
+  });
+
+  it("leaves a landlord with no numeric cap unaffected", async () => {
+    EFFECTIVE_TIER = null;
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [
+        unlistedProperty("manager_a", "p_down"),
+        ...Array.from({ length: 12 }, (_, i) => liveProperty("manager_a", `p_live_${i}`)),
+      ],
+    });
+
+    const res = await executeWrite(updatePropertyTool, ctx, { propertyId: "p_down", status: "live" });
+
+    expect(res.ok).toBe(true);
+    expect(tables.manager_property_records![0]!.status).toBe("live");
   });
 });
 

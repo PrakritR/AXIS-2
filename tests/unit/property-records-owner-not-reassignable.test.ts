@@ -44,7 +44,9 @@ vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => IS_ADMIN }
  * keeps this file about OWNERSHIP while leaving the gate itself in the path —
  * the cap has its own file, `property-records-plan-property-limit.test.ts`.
  */
-vi.mock("@/lib/manager-access-server", () => ({ getEffectiveManagerSkuTier: async () => null }));
+vi.mock("@/lib/manager-access-server", () => ({
+  getEffectiveManagerSkuTier: async () => ({ ok: true, tier: null }),
+}));
 vi.mock("@/lib/auth/co-manager-access", () => ({
   assertCoManagerModuleAccess: async () => CO_MANAGER_ACCESS,
 }));

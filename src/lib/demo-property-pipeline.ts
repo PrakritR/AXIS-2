@@ -462,6 +462,13 @@ async function runPropertyPipelineSync(opts?: {
 export async function mirrorLocalPropertyPipelineToServer(
   managerUserId?: string | null,
   linkedPropertyIds?: Iterable<string>,
+  /**
+   * Receives the server's explanation the FIRST time a mirrored write is
+   * refused. A refused row never persists anywhere but this browser, so
+   * dropping the response left the manager looking at a listing that exists
+   * nowhere else and no reason why. One message per run, not one per row.
+   */
+  opts?: { onError?: (message: string) => void },
 ): Promise<void> {
   if (!isBrowser() || isDemoModeActive()) return;
   const scopeUserId = managerUserId?.trim() ?? "";
@@ -473,40 +480,50 @@ export async function mirrorLocalPropertyPipelineToServer(
   const linked = new Set([...(linkedPropertyIds ?? [])].map((id) => String(id).trim()).filter(Boolean));
   const pendingMap = readPendingMap();
   const extrasMap = readExtrasMap();
-  const jobs: Promise<unknown>[] = [];
+  const jobs: {
+    id: string;
+    managerUserId: string;
+    status: ManagerPropertyRecordStatus;
+    rowData?: unknown;
+    propertyData?: unknown;
+  }[] = [];
   for (const [ownerId, rows] of Object.entries(pendingMap)) {
     if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       if (linked.has(String(row.id))) continue;
-      jobs.push(
-        fetch("/api/property-records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId: ownerId, status: "pending", rowData: row }),
-        }).catch(() => {}),
-      );
+      jobs.push({ id: String(row.id), managerUserId: ownerId, status: "pending", rowData: row });
     }
   }
   for (const [ownerId, rows] of Object.entries(extrasMap)) {
     if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       if (linked.has(String(row.id))) continue;
-      jobs.push(
-        fetch("/api/property-records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "upsert",
-            id: row.id,
-            managerUserId: ownerId,
-            status: row.adminPublishLive === true ? "live" : "review",
-            propertyData: row,
-          }),
-        }).catch(() => {}),
-      );
+      jobs.push({
+        id: String(row.id),
+        managerUserId: ownerId,
+        status: row.adminPublishLive === true ? "live" : "review",
+        propertyData: row,
+      });
     }
   }
-  await Promise.allSettled(jobs);
+
+  // SEQUENTIAL on purpose. Every one of these is a write into a plan listing
+  // slot, and the server counts the slots already held before it accepts one.
+  // Fired concurrently, N creates each read the count before any of them lands,
+  // so a one-listing plan mirrors all N — the cap would be racy on exactly the
+  // path most likely to send several creates at once. Rows the server already
+  // has never reach the count check, so the ordinary on-load re-mirror of an
+  // existing portfolio is unaffected.
+  let refusal = "";
+  for (const job of jobs) {
+    await upsertPropertyRecordToServer({
+      ...job,
+      onError: (message) => {
+        if (!refusal) refusal = message;
+      },
+    });
+  }
+  if (refusal) opts?.onError?.(refusal);
 }
 
 // In-flight guards: collapse concurrent duplicate calls into one request.

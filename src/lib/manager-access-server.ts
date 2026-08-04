@@ -22,25 +22,47 @@ import { resolveServiceFeePayer, type ServiceFeePayer } from "@/lib/payment-poli
  * client bundle.
  */
 
-async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPurchaseRowRecord[]> {
+/**
+ * `readFailed` distinguishes "this account has no purchase row" from "we could
+ * not find out". They look identical here — a PostgREST error yields zero rows
+ * — but they mean opposite things to a quota: no row resolves to Free, while an
+ * unknown plan must never be enforced AS Free (that refuses a paying Business
+ * manager their sixth listing on a transient database error).
+ */
+async function loadManagerPurchaseRowsResult(
+  userId: string,
+): Promise<{ rows: ManagerPurchaseRowRecord[]; readFailed: boolean }> {
   const supabase = createSupabaseServiceRoleClient();
-  const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle();
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
   const select =
     "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, promo_code, apple_original_transaction_id, paid_at, user_id";
-  const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
+  const [byUserId, byEmail] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
       ? supabase.from("manager_purchases").select(select).ilike("email", email)
-      : Promise.resolve({ data: [] as ManagerPurchaseRowRecord[] }),
+      : Promise.resolve({ data: [] as ManagerPurchaseRowRecord[], error: null }),
   ]);
 
   const merged = new Map<string, ManagerPurchaseRowRecord>();
-  for (const row of [...(byUserId ?? []), ...(byEmail ?? [])]) {
+  for (const row of [...(byUserId.data ?? []), ...(byEmail.data ?? [])]) {
     merged.set(String(row.id), row as ManagerPurchaseRowRecord);
   }
-  return [...merged.values()];
+  return {
+    rows: [...merged.values()],
+    // A failed profiles read also counts: it blanks the email, which silently
+    // drops the by-email half of the lookup rather than erroring.
+    readFailed: Boolean(profileError) || Boolean(byUserId.error) || Boolean(byEmail.error),
+  };
+}
+
+async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPurchaseRowRecord[]> {
+  return (await loadManagerPurchaseRowsResult(userId)).rows;
 }
 
 const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
@@ -52,8 +74,10 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   promoCode: string | null;
   appleOriginalTransactionId: string | null;
   paidAt: string | null;
+  readFailed: boolean;
 }> => {
-  const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId), userId);
+  const { rows, readFailed } = await loadManagerPurchaseRowsResult(userId);
+  const best = pickBestManagerPurchaseRow(rows, userId);
   if (!best) {
     return {
       tier: null,
@@ -64,9 +88,11 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
       promoCode: null,
       appleOriginalTransactionId: null,
       paidAt: null,
+      readFailed,
     };
   }
   return {
+    readFailed,
     tier: best.tier != null ? String(best.tier) : null,
     billing: best.billing != null ? String(best.billing) : null,
     stripeCustomerId:
@@ -223,14 +249,29 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
  * `manager_purchases` row — never from anything a client sent. Same inputs and
  * same rule as the `isFree` the Settings plan page renders, so the enforced
  * plan and the displayed plan can never disagree.
+ *
+ * It returns a RESULT rather than a bare tier so an unreadable plan stays
+ * distinguishable from "no committed SKU". Both produce zero purchase rows, and
+ * zero rows resolves to Free — so collapsing them would enforce the harshest
+ * plan on a transient database error, refusing a paying Business manager their
+ * sixth listing with the Free copy. Callers must fail closed on `ok: false`,
+ * exactly as the listing-slot count already does.
  */
-export async function getEffectiveManagerSkuTier(userId: string): Promise<ManagerSkuTier | null> {
+export type ManagerEffectiveSkuTierResult =
+  | { ok: true; tier: ManagerSkuTier | null }
+  | { ok: false; error: string };
+
+export async function getEffectiveManagerSkuTier(userId: string): Promise<ManagerEffectiveSkuTierResult> {
   const row = await getManagerPurchaseRowByUserId(userId);
-  return resolveEffectiveManagerSkuTier({
-    tier: row.tier,
-    stripeSubscriptionId: row.stripeSubscriptionId,
-    appleManaged: isAppleBilledManagerPurchase(row.billing, row.appleOriginalTransactionId),
-  });
+  if (row.readFailed) return { ok: false, error: "Could not read this account's plan." };
+  return {
+    ok: true,
+    tier: resolveEffectiveManagerSkuTier({
+      tier: row.tier,
+      stripeSubscriptionId: row.stripeSubscriptionId,
+      appleManaged: isAppleBilledManagerPurchase(row.billing, row.appleOriginalTransactionId),
+    }),
+  };
 }
 
 /**

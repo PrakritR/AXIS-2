@@ -15,6 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import {
+  mirrorLocalPropertyPipelineToServer,
   publishManagerListingSubmissionToServer,
   readExtraListingsForUser,
   submitManagerPendingPropertyToServer,
@@ -146,5 +147,86 @@ describe("other failures", () => {
 
     expect(ok).toBe(true);
     expect(readExtraListingsForUser(manager).map((p) => p.id)).toEqual(["mgr-first-listing"]);
+  });
+});
+
+/**
+ * Regression: mirror-parallel-upserts-race-and-swallow-403.
+ *
+ * `mirrorLocalPropertyPipelineToServer` used to fire every locally known row as
+ * a concurrent `fetch` and ignore every response. Both halves broke the cap:
+ * N simultaneous creates each read the slot count before any of them wrote, so
+ * a one-listing plan accepted all N; and a genuine refusal was dropped on the
+ * floor, leaving a listing that existed in this browser and nowhere else with
+ * no explanation.
+ */
+describe("mirroring locally held rows back to the server", () => {
+  let inFlight = 0;
+  let maxConcurrent = 0;
+  let upsertedIds: string[] = [];
+
+  /** Records concurrency and order; refuses ids the predicate selects. */
+  function mirrorFetch(refuseId: (id: string) => boolean) {
+    return vi.fn(async (url: unknown, init?: { body?: unknown }) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { action?: string; id?: string };
+      if (!String(url).includes("/api/property-records") || body.action !== "upsert") {
+        return { ok: true, status: 200, json: async () => ({ snapshot: null }) } as unknown as Response;
+      }
+      inFlight += 1;
+      maxConcurrent = Math.max(maxConcurrent, inFlight);
+      upsertedIds.push(String(body.id));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      inFlight -= 1;
+      return refuseId(String(body.id))
+        ? ({ ok: false, status: 403, json: async () => ({ error: LIMIT_MESSAGE }) } as unknown as Response)
+        : ({ ok: true, status: 200, json: async () => ({}) } as unknown as Response);
+    });
+  }
+
+  async function seedTwoLocalListings(manager: string) {
+    vi.stubGlobal("fetch", mockFetch());
+    await publishManagerListingSubmissionToServer("mgr-local-a", submission("Local A"), manager, {});
+    await publishManagerListingSubmissionToServer("mgr-local-b", submission("Local B"), manager, {});
+  }
+
+  beforeEach(() => {
+    inFlight = 0;
+    maxConcurrent = 0;
+    upsertedIds = [];
+  });
+
+  it("sends the writes one at a time so the cap cannot be raced", async () => {
+    const manager = nextManager();
+    await seedTwoLocalListings(manager);
+    vi.stubGlobal("fetch", mirrorFetch(() => false));
+
+    await mirrorLocalPropertyPipelineToServer(manager);
+
+    expect(upsertedIds).toEqual(["mgr-local-a", "mgr-local-b"]);
+    expect(maxConcurrent).toBe(1);
+  });
+
+  it("reports a refusal once, not once per row", async () => {
+    const manager = nextManager();
+    await seedTwoLocalListings(manager);
+    vi.stubGlobal("fetch", mirrorFetch(() => true));
+    const seen: string[] = [];
+
+    await mirrorLocalPropertyPipelineToServer(manager, undefined, { onError: (m) => seen.push(m) });
+
+    expect(upsertedIds).toHaveLength(2);
+    expect(seen).toEqual([LIMIT_MESSAGE]);
+  });
+
+  it("stays silent when every row the server already has is re-mirrored", async () => {
+    const manager = nextManager();
+    await seedTwoLocalListings(manager);
+    vi.stubGlobal("fetch", mirrorFetch(() => false));
+
+    await mirrorLocalPropertyPipelineToServer(manager, undefined, {
+      onError: () => expect.unreachable("an accepted mirror must not report an error"),
+    });
+
+    expect(upsertedIds).toHaveLength(2);
   });
 });
