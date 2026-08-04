@@ -91,21 +91,34 @@ export function recordedPaymentsMissingFromCharges(
 ): HouseholdCharge[] {
   const knownChargeIds = new Set(charges.map((c) => c.id));
   const seenSourceIds = new Set<string>();
+  const contentOccurrences = new Map<string, number>();
   const out: HouseholdCharge[] = [];
 
-  ledgerRows.forEach((row, index) => {
-    if (!isLedgerPaymentRow(row)) return;
+  for (const row of ledgerRows) {
+    if (!isLedgerPaymentRow(row)) continue;
     const sourceChargeId = readString(row, "sourceChargeId");
-    // No source id means the entry predates source tracking — fall back to a
-    // positional key so it still shows, and can still be deduped within a load.
-    const key = sourceChargeId || `${readString(row, "date")}|${moneyLabel(row.payment)}|${index}`;
-    if (sourceChargeId && knownChargeIds.has(sourceChargeId)) return;
-    if (seenSourceIds.has(key)) return;
-    seenSourceIds.add(key);
+    if (sourceChargeId && knownChargeIds.has(sourceChargeId)) continue;
 
     const paidDate = readString(row, "date");
-    const title = recordedPaymentTitle(readString(row, "description"));
+    const description = readString(row, "description");
     const amount = moneyLabel(row.payment);
+    const title = recordedPaymentTitle(description);
+
+    let key: string;
+    if (sourceChargeId) {
+      if (seenSourceIds.has(sourceChargeId)) continue;
+      seenSourceIds.add(sourceChargeId);
+      key = sourceChargeId;
+    } else {
+      // No source id means the entry predates source tracking. Key it on the
+      // payment's own content plus an occurrence counter, so the id is the same
+      // on every load while two genuinely identical payments stay distinct.
+      const contentKey = `${paidDate}|${amount}|${description}`;
+      const seen = contentOccurrences.get(contentKey) ?? 0;
+      contentOccurrences.set(contentKey, seen + 1);
+      key = `${contentKey}#${seen}`;
+    }
+
     out.push({
       id: `${RECORDED_PAYMENT_ID_PREFIX}${key}`,
       residentName: "",
@@ -124,7 +137,7 @@ export function recordedPaymentsMissingFromCharges(
       paidAt: paidDate,
       dueDateLabel: paidDate,
     });
-  });
+  }
 
   return out;
 }
