@@ -887,10 +887,11 @@ export function ResidentApplicationsPanel({
         // resident holding several applications for the same property+room had
         // no way to tell them apart (resident audit F7). Status, when it was
         // started/submitted, and the application id make each row identifiable.
+        // Status lives in `trailing`; repeating it here printed it twice on the
+        // same card.
         const subtitle = [
           stripPropertyRoomCountSuffix(row.property || ""),
           room !== "—" ? `Room ${room}` : "",
-          applicationStageDisplayLabel(row),
           applicationStartedLabel(row),
           row.id,
         ]

@@ -212,7 +212,18 @@ export function ResidentPaymentsPanel({
   // these, Paid reads 0 while Documents › Rent receipts lists the same
   // payments (F6). Read-only and always `status: "paid"`, so they can never
   // enter a pay/select path (every one of those filters on `pending`).
-  const [recordedPayments, setRecordedPayments] = useState<HouseholdCharge[]>([]);
+  const [ledgerPaymentRows, setLedgerPaymentRows] = useState<ReportRow[]>([]);
+
+  // DERIVED, never stored. Storing the synthesized rows froze them against the
+  // `charges` snapshot they were built from, so a charge that reappeared in the
+  // store (a sync restore, a deferred load) while the refetch failed or was in
+  // flight rendered BESIDE its synthesized twin — the double-count this whole
+  // reconciliation exists to prevent. Deriving it re-dedupes on every charge
+  // change, and a failed ledger read simply keeps the last known rows.
+  const recordedPayments = useMemo(
+    () => recordedPaymentsMissingFromCharges(ledgerPaymentRows, charges),
+    [ledgerPaymentRows, charges],
+  );
 
   const unpaidPayableCharges = useMemo(
     () => charges.filter((c) => isPayableHouseholdCharge(c)),
@@ -328,7 +339,7 @@ export function ResidentPaymentsPanel({
   // exactly the live paid charges, which is what it showed before.
   useEffect(() => {
     if (!session.ready || !email || isDemoModeActive()) {
-      setRecordedPayments([]);
+      setLedgerPaymentRows([]);
       return;
     }
     let cancelled = false;
@@ -339,7 +350,7 @@ export function ResidentPaymentsPanel({
         if (!res.ok) return;
         const data = (await res.json()) as { rows?: ReportRow[] };
         if (cancelled) return;
-        setRecordedPayments(recordedPaymentsMissingFromCharges(data.rows ?? [], charges));
+        setLedgerPaymentRows(data.rows ?? []);
       } catch {
         /* the ledger is a reconciliation, never a blocker for paying */
       }
@@ -347,7 +358,9 @@ export function ResidentPaymentsPanel({
     return () => {
       cancelled = true;
     };
-  }, [session.ready, email, charges]);
+    // Keyed on `tick`, not `charges`: one ledger read per refresh, not one per
+    // charge-list identity change.
+  }, [session.ready, email, tick]);
 
   useEffect(() => {
     if (!paymentsUnlocked) {

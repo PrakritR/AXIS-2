@@ -62,6 +62,19 @@ describe("listing fallback price range (F-DRAFT-2)", () => {
     }
   });
 
+  it("never prints a band whose low bound exceeds the rent shown beside it", () => {
+    // A $450 listing used to render "$450/mo" directly above "from $500–$550/mo"
+    // because of the $500 floor — two different prices for one unit, which is
+    // the same self-contradiction F-DRAFT-2 is about.
+    for (const rent of ["$100/mo", "$250/mo", "$450/mo", "$499/mo", "$875/mo"]) {
+      const rich = getListingRichContent(property({ rentLabel: rent }));
+      const range = bounds(rich.priceRangeLabel)!;
+      const stated = Number(rich.startingRentLabel.replace(/[^\d.]/g, ""));
+      expect(range[0], `${rent} → ${rich.priceRangeLabel}`).toBeLessThanOrEqual(stated);
+      expect(range[1], `${rent} → ${rich.priceRangeLabel}`).toBeGreaterThanOrEqual(stated);
+    }
+  });
+
   it("still bands a normal rent around its value", () => {
     const rich = getListingRichContent(property({ rentLabel: "$875/mo" }));
     expect(rich.priceRangeLabel).toBe("from $750–$975/mo");
