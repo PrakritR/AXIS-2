@@ -105,4 +105,53 @@ describe("manager payments scope (F-PAY-1)", () => {
     // It used to be invisible to the dashboard, which filtered on status === "pending".
     expect(unpaidManagerPaymentCharges([clearing])).toHaveLength(1);
   });
+
+  it("never counts a cancelled or refunded charge as money still owed", () => {
+    const cancelled = charge({ id: "cancelled", status: "cancelled", dueDateLabel: "2020-01-01" });
+    const refunded = charge({ id: "refunded", status: "refunded", dueDateLabel: "2020-01-01" });
+
+    for (const settled of [cancelled, refunded]) {
+      expect(householdChargeManagerBucket(settled)).toBe("paid");
+      const row = householdChargeToLedgerRow(settled);
+      // Payments' own "is this actionable" reads: statusLabel !== "Paid" AND a
+      // non-zero balance would put the row back in the chase list.
+      expect(row.balanceDue).toBe("$0.00");
+    }
+    expect(householdChargeToLedgerRow(cancelled).statusLabel).toBe("Cancelled");
+    expect(householdChargeToLedgerRow(refunded).statusLabel).toBe("Refunded");
+    expect(unpaidManagerPaymentCharges([cancelled, refunded])).toEqual([]);
+    expect(managerPaymentBucketCounts([cancelled, refunded])).toEqual({
+      pending: 0,
+      overdue: 0,
+      paid: 2,
+    });
+  });
+
+  it("keeps a failed payment attempt owed — the charge did not go away", () => {
+    const failed = charge({ id: "failed", status: "failed", dueDateLabel: "2099-01-01" });
+    expect(householdChargeManagerBucket(failed)).toBe("pending");
+    expect(unpaidManagerPaymentCharges([failed])).toHaveLength(1);
+  });
+
+  it("the ledger row agrees with the bucket helper for every charge status", () => {
+    const statuses: HouseholdCharge["status"][] = [
+      "pending",
+      "processing",
+      "partially_paid",
+      "paid",
+      "cancelled",
+      "refunded",
+      "failed",
+    ];
+    for (const status of statuses) {
+      for (const dueDateLabel of ["2020-01-01", "2099-01-01"]) {
+        const c = charge({ id: `${status}-${dueDateLabel}`, status, dueDateLabel });
+        const bucket = householdChargeManagerBucket(c);
+        const row = householdChargeToLedgerRow(c);
+        expect(row.bucket).toBe(bucket);
+        expect(row.balanceDue === "$0.00").toBe(bucket === "paid");
+        expect(unpaidManagerPaymentCharges([c])).toHaveLength(bucket === "paid" ? 0 : 1);
+      }
+    }
+  });
 });
