@@ -16,6 +16,14 @@ export const MODAL_WARNING_BOX_CLASS =
 
 export const MODAL_FIELD_LABEL_CLASS = "text-xs font-semibold uppercase tracking-wide text-muted";
 
+/** Modal forms in portal drawer (< lg): one column; desktop dialog: two columns. */
+export const PORTAL_MODAL_FORM_GRID_CLASS =
+  "grid min-w-0 max-w-full grid-cols-1 gap-3 lg:grid-cols-2";
+
+export const PORTAL_MODAL_FORM_FIELD_CLASS = "flex min-w-0 flex-col gap-1 text-sm";
+
+export const PORTAL_MODAL_FORM_FULL_ROW_CLASS = "lg:col-span-2";
+
 export const MODAL_OVERLAY_BACKDROP_CLASS = "modal-overlay fixed inset-0";
 
 /** Large centered dialog — previews, editors, multi-section forms. */

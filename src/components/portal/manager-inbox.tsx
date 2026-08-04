@@ -874,6 +874,12 @@ export const ManagerInbox = forwardRef<
     [expandedId, emailThreads, local],
   );
 
+  // Opening a thread in the unified Communication list marks it read (dot clears).
+  useEffect(() => {
+    if (!activeThread || activeThread.folder !== "inbox" || !activeThread.unread) return;
+    markReadSilent(activeThread.id);
+  }, [activeThread?.id]);
+
   // A fresh draft per conversation.
   useEffect(() => {
     setReplyDraft("");

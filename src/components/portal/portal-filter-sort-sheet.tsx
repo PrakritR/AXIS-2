@@ -147,11 +147,13 @@ export function PortalFilterSortSheet({
   mobileFlushBody = false,
   mobileFooter,
   /**
-   * Opt out of the raised mobile placement. Only for a sheet that already fills most of
-   * the viewport (browse-homes), where raising it would push its top off screen. Every
-   * other filter sheet opens raised and stays there — see {@link VaulBottomSheet.autoElevate}.
+   * Opt out of the bottom-anchored viewport-filling sheet. Only for a sheet that already
+   * fills most of the viewport (browse-homes) where the explicit props are documentary,
+   * or for the legacy raised placement (`mobileSheetRaised`).
    */
-  mobileSheetFillsViewport = false,
+  mobileSheetFillsViewport = true,
+  /** Legacy raised placement — leaves a gap above the tab bar; prefer the default fill. */
+  mobileSheetRaised = false,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -167,6 +169,7 @@ export function PortalFilterSortSheet({
   mobileFlushBody?: boolean;
   mobileFooter?: ReactNode | ((close: () => void) => ReactNode);
   mobileSheetFillsViewport?: boolean;
+  mobileSheetRaised?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -312,15 +315,15 @@ export function PortalFilterSortSheet({
           onOpenChange={setOpen}
           title="Filter"
           flushBody={mobileFlushBody}
-          autoElevate={!mobileSheetFillsViewport}
-          /* A one-field sheet is ~179px and could not contain its own 264px menu, so the
-             menu hung onto the dimmed scrim. The floor buys containment; the dead space
-             under a lone field is the price of "stationary AND contained". */
-          minHeightPx={PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX}
+          autoElevate={mobileSheetRaised}
+          fillViewport={mobileSheetFillsViewport && !mobileSheetRaised}
+          minHeightPx={mobileSheetRaised ? PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX : undefined}
           lockBodyScroll={filterMenuOpen}
-          /* Only the bottom-anchored (viewport-filling) sheet can use this — an elevated
-             sheet derives its max-height from the raised offset and ignores the prop. */
-          maxHeightClass={mobileSheetFillsViewport ? "max-h-[min(92dvh,44rem)]" : undefined}
+          maxHeightClass={
+            mobileSheetFillsViewport && !mobileSheetRaised
+              ? "max-h-[min(92dvh,calc(100dvh-var(--portal-native-bottom-nav-inset,0px)-0.5rem))]"
+              : undefined
+          }
           footer={
             mobileFooter
               ? typeof mobileFooter === "function"

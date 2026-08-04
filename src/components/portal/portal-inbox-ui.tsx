@@ -757,7 +757,6 @@ export function InboxConversationRow({
   preview,
   time,
   unread = false,
-  unreadCount,
   selected = false,
   onOpen,
   leading,
@@ -769,9 +768,8 @@ export function InboxConversationRow({
   subtitle?: string;
   preview: string;
   time: string;
+  /** Unread threads show an Instagram-style dot on the right. */
   unread?: boolean;
-  /** When set, shows a numeric badge (CRM-style). Defaults to 1 when `unread`. */
-  unreadCount?: number;
   selected?: boolean;
   onOpen: () => void;
   /** Optional slot before the avatar (e.g. a bulk-select checkbox). */
@@ -783,7 +781,6 @@ export function InboxConversationRow({
   /** Optional slot after the row body (e.g. a quick action button). */
   trailing?: ReactNode;
 }) {
-  const badgeCount = unreadCount ?? (unread ? 1 : 0);
   return (
     <div
       className={`portal-inbox-row flex items-center gap-2.5 border-b border-border/50 px-3 py-3 transition-colors max-md:gap-2 max-md:px-2.5 max-md:py-2.5 ${
@@ -804,7 +801,12 @@ export function InboxConversationRow({
             >
               {name}
             </p>
-            <span className="shrink-0 text-[11px] tabular-nums text-muted">{time}</span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {unread ? (
+                <span className="h-2 w-2 rounded-full bg-primary" aria-label="Unread" />
+              ) : null}
+              <span className="text-[11px] tabular-nums text-muted">{time}</span>
+            </div>
           </div>
           {subtitle ? <p className="truncate text-xs text-muted">{subtitle}</p> : null}
           <div className="mt-0.5 flex items-center gap-2">
@@ -821,14 +823,6 @@ export function InboxConversationRow({
               {previewPrefix ?? ""}
               {preview || " "}
             </p>
-            {badgeCount > 0 ? (
-              <span
-                className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-white"
-                aria-label={`${badgeCount} unread`}
-              >
-                {badgeCount > 9 ? "9+" : badgeCount}
-              </span>
-            ) : null}
           </div>
         </div>
       </button>
@@ -837,23 +831,20 @@ export function InboxConversationRow({
   );
 }
 
-export type InboxListSegment = "active" | "unread" | "archived";
+export type InboxListSegment = "active" | "archived";
 
-/** CRM-style segment tabs above the conversation list (Active / Unread / Archived). */
+/** Segment tabs above the conversation list (Active / Archived). */
 export function InboxListSegmentTabs({
   value,
   onChange,
-  unreadTotal = 0,
   archivedTotal = 0,
 }: {
   value: InboxListSegment;
   onChange: (segment: InboxListSegment) => void;
-  unreadTotal?: number;
   archivedTotal?: number;
 }) {
   const tabs: { id: InboxListSegment; label: string; count?: number }[] = [
     { id: "active", label: "Active" },
-    { id: "unread", label: "Unread", count: unreadTotal },
     { id: "archived", label: "Archived", count: archivedTotal },
   ];
   return (

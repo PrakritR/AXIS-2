@@ -1107,6 +1107,20 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   text-align: left;
 }
 
+/* Modal date fields — prevent iOS min-width overflow in drawer forms */
+input[type="date"].portal-modal-date-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+input[type="date"].portal-modal-date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
 [data-theme="dark"] .hero-search-panel input[type="date"],
 [data-theme="dark"] .hero-search-panel select {
   color-scheme: dark;
@@ -2408,6 +2422,18 @@ html[data-portal-sticky-chrome] .portal-calendar-toolbar {
    /portal/calendar/all and /admin/events. */
 html[data-theme="dark"][data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-dark);
+}
+
+html[data-portal-sticky-chrome] .portal-calendar-compact {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+html[data-portal-sticky-chrome] .portal-calendar-compact-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 html[data-communication-surface] .portal-communication-inbox {

@@ -14,13 +14,11 @@ import { createPortal } from "react-dom";
 import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import {
-  FIELD_SELECT_MENU_HEADER_PX,
   FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
   FIELD_SELECT_MENU_SEARCH_PX,
   FIELD_SELECT_MENU_SHELL_CLASS,
   FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS,
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
-  FieldSelectMenuHeader,
   FieldSelectMenuSearch,
   fieldSelectMenuContentPx,
   fieldSelectMenuListMaxHeightPx,
@@ -99,12 +97,12 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
   `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex ${PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS} flex-col overflow-hidden`;
 /**
- * Default compact mobile sheet when callers do not override height. Deliberately imposes NO
- * max-height of its own: the raised sheet already caps itself at `100dvh - 32vh - 1rem` and
- * scrolls internally, so a second, smaller cap here only pushed the lower filter fields past
- * the sheet's bottom edge — where their dropdowns then had no room to open five rows.
+ * Default compact mobile sheet when callers do not override height. Fills the bottom sheet
+ * with white down to the tab bar; filter fields stay at the top and scroll when needed.
  */
-export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "min-h-0";
+export const PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS = "flex min-h-0 flex-1 flex-col";
+/** @deprecated Use {@link PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS} — same layout. */
+export const PORTAL_FILTER_COMMUNICATION_MOBILE_SHEET_CLASS = PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
 /** Tall mobile sheet for browse-home filters (AI + manual fields). */
 export const PORTAL_FILTER_BROWSE_MOBILE_SHEET_CLASS =
   "h-[min(82dvh,42rem)] min-h-[min(70dvh,34rem)]";
@@ -127,10 +125,10 @@ const FILTER_FIELD_MENU_SEARCH_PX = FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH
   ? FIELD_SELECT_MENU_SEARCH_PX
   : 0;
 
-/** Estimated menu height (field header + search row + 5 option rows) for positioning math. */
+/** Estimated menu height (search row + 5 option rows) for positioning math. */
 export const FILTER_MENU_CONTENT_PX = fieldSelectMenuContentPx(
   FIELD_SELECT_MENU_VISIBLE_ITEMS,
-  FIELD_SELECT_MENU_HEADER_PX + FILTER_FIELD_MENU_SEARCH_PX,
+  FILTER_FIELD_MENU_SEARCH_PX,
 );
 
 /**
@@ -336,7 +334,7 @@ export function FilterCollapsibleSection({
      be paid for with an option row. */
   const menuContentPx = fieldSelectMenuContentPx(
     optionCount,
-    FIELD_SELECT_MENU_HEADER_PX + (showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0),
+    showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
   );
 
   const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
@@ -376,12 +374,9 @@ export function FilterCollapsibleSection({
         onPointerDown={(event) => event.stopPropagation()}
         onTouchMove={(event) => event.stopPropagation()}
       >
-        <FieldSelectMenuHeader label={label} />
-        {/* The child list sizes itself against the space left AFTER the header, so it still
-            gets its five rows and never has to know the header exists. */}
-        <FieldSelectMenuShellHeightContext.Provider
-          value={menuRect.maxHeight - FIELD_SELECT_MENU_HEADER_PX}
-        >
+        {/* The trigger row already shows {@link FILTER_FIELD_LABEL_CLASS} — repeating the
+            label inside the portaled menu duplicated "PROPERTY" on Residents and other sheets. */}
+        <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
           <FilterMenuOptionCountContext.Provider value={setRenderedOptionCount}>
             {children}
           </FilterMenuOptionCountContext.Provider>

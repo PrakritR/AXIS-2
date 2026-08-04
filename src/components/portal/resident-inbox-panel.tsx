@@ -908,6 +908,11 @@ export const ResidentInboxPanel = forwardRef<
   );
 
   useEffect(() => {
+    if (!activeThread || activeThread.folder !== "inbox" || !activeThread.unread) return;
+    markReadSilent(activeThread.id);
+  }, [activeThread?.id, activeThread?.folder, activeThread?.unread, markReadSilent]);
+
+  useEffect(() => {
     setReplyDraft("");
   }, [expandedId]);
 

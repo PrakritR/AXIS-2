@@ -538,7 +538,7 @@ export async function renderPortalSection(
     }
 
     if (section === "communication") {
-      const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+      const COMM_SEGMENTS = ["active", "archived"] as const;
       type CommListSegment = (typeof COMM_SEGMENTS)[number];
 
       if (!tabParts?.length) {
@@ -567,6 +567,10 @@ export async function renderPortalSection(
       }
 
       const segmentRaw = channel;
+      if (segmentRaw === "unread") {
+        const suffix = threadId ? `/${encodeURIComponent(threadId)}` : "";
+        redirect(`${def.basePath}/communication/active${suffix}`);
+      }
       const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
         ? (segmentRaw as CommListSegment)
         : "active";
@@ -1025,7 +1029,7 @@ export async function renderPortalSection(
     const tierGate = residentManagerTierGate("communication", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
 
-    const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+    const COMM_SEGMENTS = ["active", "archived"] as const;
     type CommListSegment = (typeof COMM_SEGMENTS)[number];
 
     if (!tabParts?.length) {
@@ -1053,6 +1057,10 @@ export async function renderPortalSection(
     }
 
     const segmentRaw = channel;
+    if (segmentRaw === "unread") {
+      const suffix = threadId ? `/${encodeURIComponent(threadId)}` : "";
+      redirect(`${def.basePath}/communication/active${suffix}`);
+    }
     const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
       ? (segmentRaw as CommListSegment)
       : "active";
@@ -1108,7 +1116,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "vendor" && section === "communication") {
-    const COMM_SEGMENTS = ["active", "unread", "archived"] as const;
+    const COMM_SEGMENTS = ["active", "archived"] as const;
     type CommListSegment = (typeof COMM_SEGMENTS)[number];
 
     if (!tabParts?.length) {
@@ -1136,6 +1144,10 @@ export async function renderPortalSection(
     }
 
     const segmentRaw = channel;
+    if (segmentRaw === "unread") {
+      const suffix = threadId ? `/${encodeURIComponent(threadId)}` : "";
+      redirect(`${def.basePath}/communication/active${suffix}`);
+    }
     const listSegment: CommListSegment = COMM_SEGMENTS.includes(segmentRaw as CommListSegment)
       ? (segmentRaw as CommListSegment)
       : "active";

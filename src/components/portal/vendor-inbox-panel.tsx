@@ -299,9 +299,13 @@ export const VendorInboxPanel = forwardRef<
     return m;
   }, [local]);
 
-  const markRead = (id: string) => {
+  const markReadSilent = useCallback((id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
     setRetainedIds((prev) => new Set(prev).add(id));
+  }, []);
+
+  const markRead = (id: string) => {
+    markReadSilent(id);
     showToast("Marked as read.");
   };
 
@@ -664,6 +668,12 @@ export const VendorInboxPanel = forwardRef<
     () => (expandedId ? local.find((t) => t.id === expandedId) ?? null : null),
     [expandedId, local],
   );
+
+  useEffect(() => {
+    if (!activeThread || activeThread.folder !== "inbox" || !activeThread.unread) return;
+    markReadSilent(activeThread.id);
+  }, [activeThread?.id, activeThread?.folder, activeThread?.unread, markReadSilent]);
+
   const activeIsSent = activeThread?.folder === "sent";
   const activeFolder = activeThread
     ? activeThread.folder === "trash"
