@@ -198,6 +198,8 @@ export const applyListingPhotosTool = defineWriteTool({
     }
 
     const payloads = writeSubmissionToRecordPayloads(rec, submission);
+    // No plan-quota gate: this patches only `row_data` / `property_data` and
+    // never writes `status`, so it cannot move a record into a listing slot.
     const { error } = await ctx.db
       .from("manager_property_records")
       .update({
