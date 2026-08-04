@@ -13,6 +13,7 @@ import {
 } from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { digitsOnly } from "@/lib/rental-application/masks";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import {
   applicationStageDisplayLabel,
   INCOMPLETE_APPLICATION_LABEL,
@@ -211,7 +212,7 @@ export async function buildApplicationPdf(
 
   const contentWidth = PAGE_WIDTH - MARGIN * 2;
   const valueWidth = PAGE_WIDTH - MARGIN - VALUE_X;
-  const applicantName = clean(app.fullLegalName) || clean(row.name) || "Applicant";
+  const applicantName = clean(app.fullLegalName) || applicantDisplayName(row);
   const axisId = clean(row.id) || "—";
   const generated = options.generatedAt ? new Date(options.generatedAt) : new Date();
   const generatedLabel = generated.toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });

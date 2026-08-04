@@ -91,6 +91,29 @@ describe("property availability calendar shows the same conflicts (F-CAL-6)", ()
     });
   });
 
+  it("asks for a window wide enough that navigating a few weeks out still shows conflicts", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ meetings: [] }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { GOOGLE_BUSY_DEFAULT_DAYS_AHEAD } = await import("@/hooks/use-google-calendar-busy");
+    const { ManagerPropertyTourPanel } = await import("@/components/portal/manager-property-tour-panel");
+    render(
+      <ManagerPropertyTourPanel listingId="mgr-demo-ballard" managerUserId="m1" propertyLabel="Ballard House" />,
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const url = new URL(String(fetchMock.mock.calls[0]![0]), "https://example.test");
+    const timeMin = new Date(url.searchParams.get("timeMin")!);
+    const timeMax = new Date(url.searchParams.get("timeMax")!);
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+
+    // Starts before today, so this week is never clipped at "now"…
+    expect(timeMin.getTime()).toBeLessThan(now);
+    // …and reaches far enough forward that the two-week blind spot is gone.
+    expect(GOOGLE_BUSY_DEFAULT_DAYS_AHEAD).toBeGreaterThanOrEqual(56);
+    expect((timeMax.getTime() - now) / day).toBeGreaterThan(50);
+  });
+
   it("asks Google for nothing when there is no signed-in manager", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ meetings: [] }) }));
     vi.stubGlobal("fetch", fetchMock);

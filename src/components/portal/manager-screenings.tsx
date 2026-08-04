@@ -22,6 +22,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import { buildDemoBackgroundCheck } from "@/lib/checkr/demo-simulate";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
@@ -304,7 +305,7 @@ export function ManagerScreenings({
                     onClick={() => openScreening(row)}
                     data-attr={`screening-list-row-${row.id}`}
                   >
-                    <p className="font-semibold text-foreground">{row.name}</p>
+                    <p className="font-semibold text-foreground">{applicantDisplayName(row)}</p>
                     <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
                       {screeningStatusLabel(row)}
                       {formatScreeningListDate(row) ? ` · ${formatScreeningListDate(row)}` : ""}
@@ -322,7 +323,7 @@ export function ManagerScreenings({
   const detailPane = selectedRow ? (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
       <div className="border-b border-border px-4 py-3">
-        <p className="text-lg font-bold text-foreground">{selectedRow.name}</p>
+        <p className="text-lg font-bold text-foreground">{applicantDisplayName(selectedRow)}</p>
         <p className="text-sm text-muted">
           {selectedRow.property}
           {selectedRow.email ? ` · ${selectedRow.email}` : ""}
@@ -515,7 +516,7 @@ export function ManagerScreenings({
                   setModalRowId(row.id);
                 }}
               >
-                <span className="font-semibold text-foreground">{row.name}</span>
+                <span className="font-semibold text-foreground">{applicantDisplayName(row)}</span>
                 <span className="text-xs text-muted">{row.property}</span>
               </button>
             ))

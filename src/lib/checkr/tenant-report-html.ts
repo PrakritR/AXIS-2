@@ -4,6 +4,7 @@ import { leaseCss } from "@/lib/lease-templates/types";
 import type { CheckrReportSnapshot } from "@/lib/checkr/types";
 import { countRecordsFromSnapshot, type CheckrReportProductKey } from "@/lib/checkr/report-snapshot";
 import { formatCheckrPrice } from "@/lib/checkr/packages";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 
 function statCard(label: string, value: string, sub?: string): string {
   return `
@@ -41,7 +42,7 @@ export function buildCheckrTenantReportHtml(row: DemoApplicantRow): string {
   if (!bg) return "";
 
   const snapshot = bg.reportSnapshot;
-  const applicantName = clean(row.name) || "Applicant";
+  const applicantName = applicantDisplayName(row);
   const email = clean(row.email) || row.application?.email || "—";
   const property = clean(row.property) || "—";
   const packageLabel = bg.packageSlug.charAt(0).toUpperCase() + bg.packageSlug.slice(1);

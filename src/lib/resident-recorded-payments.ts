@@ -39,6 +39,27 @@ export function residentLedgerReceiptRange(now = new Date()): { from: string; to
   return { from: localDateKey(from), to: localDateKey(now) };
 }
 
+/**
+ * A plain `ledger_entries.posted_date` ("2026-03-01") as the label the live
+ * charge list prints ("Mar 1, 2026").
+ *
+ * Two things depend on it. The Paid tab's Due column shows synthesized rows
+ * next to live paid charges, so a raw ISO string puts two date formats in one
+ * money column. And `parseDueDateLabelToDate` feeds sorting: `new Date(...)`
+ * reads a bare `YYYY-MM-DD` as UTC midnight and then the local components are
+ * taken off it, which sorts the row under the previous day west of UTC. The
+ * components are parsed here instead, so the date is a local calendar date at
+ * both ends.
+ */
+export function formatLedgerDateLabel(plainDate: string | null | undefined): string {
+  const raw = String(plainDate ?? "").trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!match) return raw;
+  const dt = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
+  if (Number.isNaN(dt.getTime())) return raw;
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 function localDateKey(d: Date): string {
   const month = `${d.getMonth() + 1}`.padStart(2, "0");
   const day = `${d.getDate()}`.padStart(2, "0");
@@ -146,7 +167,7 @@ export function recordedPaymentsMissingFromCharges(
       blocksLeaseUntilPaid: false,
       createdAt: paidDate,
       paidAt: paidDate,
-      dueDateLabel: paidDate,
+      dueDateLabel: formatLedgerDateLabel(paidDate),
     });
   }
 

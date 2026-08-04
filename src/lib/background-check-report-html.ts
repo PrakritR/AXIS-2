@@ -2,6 +2,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { buildCheckrTenantReportHtml } from "@/lib/checkr/tenant-report-html";
 import { clean, escapeHtml, freeTextSection, section } from "@/lib/manager-application-html";
 import { recommendationLabel } from "@/lib/screening/recommendation";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import { leaseCss } from "@/lib/lease-templates/types";
 
 function list(title: string, items: string[]): string {
@@ -43,7 +44,7 @@ export function buildBackgroundCheckReportHtml(
     if (tenantHtml) return tenantHtml;
   }
 
-  const applicantName = clean(row.name) || "Applicant";
+  const applicantName = applicantDisplayName(row);
   const axisId = clean(row.id) || "—";
   const generated = options.generatedAt ? new Date(options.generatedAt) : new Date();
   const generatedLabel = generated.toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });

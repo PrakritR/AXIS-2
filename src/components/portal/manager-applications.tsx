@@ -84,6 +84,7 @@ import {
   shouldOfferApplicationCompletionReminder,
 } from "@/lib/rental-application/in-progress-application";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
 import {
   buildBundleApplicationGroups,
@@ -1249,7 +1250,7 @@ export function ManagerApplications({
         }
         intro={
           approvePreviewRow
-            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their PropLane resident account setup email.`
+            ? `Approving ${applicantDisplayName(approvePreviewRow)} will update their application status and can send their PropLane resident account setup email.`
             : undefined
         }
         confirmLabel="Approve & send setup email"
@@ -1343,9 +1344,9 @@ export function ManagerApplications({
         {applicationModals}
         <PortalRecordDetailPage
           pageTitle="Applications"
-          title={detailRow.name}
+          title={applicantDisplayName(detailRow)}
           subtitle={detailRow.email}
-          avatarName={detailRow.name}
+          avatarName={applicantDisplayName(detailRow)}
           backHref={applicationsListHref(tabForRow(detailRow))}
           hideBackText
           bareHeader
@@ -1459,7 +1460,7 @@ export function ManagerApplications({
             return (
               <PortalPersonRecordRow
                 key={row.id}
-                name={row.name}
+                name={applicantDisplayName(row)}
                 subtitle={subtitle || undefined}
                 preview={row.email}
                 badge={

@@ -18,6 +18,7 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isScreeningTestModeActive } from "@/lib/screening/screening-test-mode";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { replaceManagerApplicationRowInCache } from "@/lib/manager-applications-storage";
+import { applicantDisplayName } from "@/lib/rental-application/applicant-name";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
 const DEMO_SCREENING_RESOLVE_DELAY_MS = 1800;
@@ -291,8 +292,8 @@ export function CheckrScreeningModal({
   const showInlinePayment = !isDemo && canRun && showPackagePicker;
   const backgroundCheckComplete = bg?.status === "complete";
   const modalTitle = backgroundCheckComplete && !showPackagePicker
-    ? `Background check · ${row.name}`
-    : `Run screening · ${row.name}`;
+    ? `Background check · ${applicantDisplayName(row)}`
+    : `Run screening · ${applicantDisplayName(row)}`;
 
   return (
     <Modal open={open} onClose={onClose} title={modalTitle} panelClassName="max-w-4xl max-h-[min(92vh,56rem)] overflow-y-auto">

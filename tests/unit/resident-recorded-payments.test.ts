@@ -5,12 +5,14 @@ import type { HouseholdCharge } from "@/lib/household-charges";
 import type { ReportRow } from "@/lib/reports/types";
 import { buildReceiptRows } from "@/lib/rent-receipts";
 import {
+  formatLedgerDateLabel,
   isRecordedPaymentRow,
   receiptRowLabel,
   recordedPaymentTitle,
   recordedPaymentsMissingFromCharges,
   residentLedgerReceiptRange,
 } from "@/lib/resident-recorded-payments";
+import { chargeDueLabel, compareChargesByDueDate } from "@/lib/household-charges";
 
 /**
  * Resident audit F6 (Payments "Paid 0" vs eleven receipts in Documents) and U9
@@ -56,6 +58,44 @@ describe("recordedPaymentTitle / receiptRowLabel (U9)", () => {
     const rows = buildReceiptRows([{ date: "2026-07-02", description: "", payment: "$85.00" }]);
     expect(rows[0]!.description).toBe("Payment");
     expect(receiptRowLabel(rows[0]!.description)).not.toContain("Rent");
+  });
+});
+
+describe("formatLedgerDateLabel — one date format in the Due column", () => {
+  it("renders a plain posted_date the way live charges render their due date", () => {
+    expect(formatLedgerDateLabel("2026-03-01")).toBe(
+      new Date(2026, 2, 1, 12).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+    );
+    expect(formatLedgerDateLabel("2026-03-01")).not.toBe("2026-03-01");
+  });
+
+  it("passes anything it cannot read through untouched", () => {
+    expect(formatLedgerDateLabel("")).toBe("");
+    expect(formatLedgerDateLabel(null)).toBe("");
+    expect(formatLedgerDateLabel("Before move-in")).toBe("Before move-in");
+  });
+
+  it("keeps a synthesized row on its own local calendar day, in any timezone", () => {
+    const [row] = recordedPaymentsMissingFromCharges(
+      [{ date: "2026-03-01", description: "Payment — Rent — March 2026", payment: "$100.00" }],
+      [],
+    );
+    // The label the Paid tab prints, and the date the Paid tab sorts on, are
+    // both March 1 — `new Date("2026-03-01")` is UTC midnight, which reads back
+    // as Feb 28 west of UTC.
+    expect(chargeDueLabel(row!)).toContain("2026");
+    expect(chargeDueLabel(row!)).not.toBe("2026-03-01");
+    const laterSameMonth = recordedPaymentsMissingFromCharges(
+      [{ date: "2026-03-02", description: "Payment — Rent", payment: "$100.00" }],
+      [],
+    )[0]!;
+    expect(compareChargesByDueDate(row!, laterSameMonth, "desc")).toBeGreaterThan(0);
+    // The plain posted_date survives for matching.
+    expect(row!.paidAt).toBe("2026-03-01");
   });
 });
 
