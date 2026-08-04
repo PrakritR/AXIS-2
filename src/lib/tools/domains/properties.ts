@@ -10,6 +10,7 @@ import {
   type LeadInviteKind,
 } from "@/lib/lead-invite.server";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
+import { assertManagerPropertyListingQuota } from "@/lib/manager-property-quota.server";
 import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
 import { leaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import { copyListingMediaBetweenSubmissions } from "@/lib/listing-media-copy";
@@ -435,6 +436,24 @@ export const updatePropertyTool = defineWriteTool({
     if (input.status) {
       const statusError = validatePropertyStatusChange(rec, input.status);
       if (statusError) throw new Error(statusError);
+    }
+
+    // Setting a record live takes it back into a plan listing slot, exactly like
+    // publishing a new one — and this write never passes through
+    // `POST /api/property-records`, where the cap lives. Without this gate a
+    // manager at their limit could ask the assistant for the relist the portal's
+    // own button refuses. Checked BEFORE the audit log so a refusal does not
+    // burn the dedupe key for an update that never happened.
+    if (input.status) {
+      const quota = await assertManagerPropertyListingQuota(ctx.db, {
+        ownerUserId: ctx.landlordId,
+        recordId: rec.id,
+        nextStatus: input.status,
+        existingStatus: rec.status,
+      });
+      // The refusal carries `managerPropertyLimitMessage`, so the manager reads
+      // the same sentence here as in the portal.
+      if (!quota.ok) throw new Error(quota.error);
     }
 
     const changedFields = (["rentUsd", "beds", "baths", "description", "status"] as const).filter(

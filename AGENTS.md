@@ -1328,17 +1328,35 @@ on an account with five listings and no paywall anywhere).
   cap for the same row. No committed SKU and no live Stripe/Apple grant behind
   it → Free. `GET /api/manager/subscription` exposes it as `effectiveTier` and
   derives `propertyLimit` / `accountLinkLimit` from it;
-  `getEffectiveManagerSkuTier` is the server-side twin;
-  `loadManagerSubscriptionTierClient` caches that value, not `tier`.
-- **The property cap is enforced in `POST /api/property-records`, not the
-  wizard.** `assertManagerPropertyListingQuota`
-  (`src/lib/manager-property-quota.server.ts`) runs on every upsert. The client
-  checks are courtesy pre-checks so a manager hears it before their photos
-  upload; both layers print the same sentence from
-  `managerPropertyLimitMessage`, and the route's 403 body
-  (`code: "property_limit_reached"`) travels back through
+  `getEffectiveManagerSkuTier` is the server-side twin, and it returns a RESULT
+  — an unreadable plan and "no committed SKU" both produce zero purchase rows,
+  so collapsing them would enforce Free on a transient DB error and refuse a
+  paying Business manager their sixth listing. Callers fail closed on
+  `ok: false`. **`manager-subscription-client.ts` caches BOTH values and they
+  are not interchangeable**: `loadManagerEffectivePlanTierClient`
+  (`effectiveTier`) is for the property-limit pre-checks only, because the
+  server re-resolves that same value; every other client gate mirroring a server
+  check that still reads `null` as legacy full access wants the raw
+  `loadManagerSubscriptionTierClient`. Screenings is why — caching
+  `effectiveTier` for everyone paywalled a panel `orderScreeningForApplication`
+  still serves.
+- **The property cap is enforced server-side, not in the wizard.**
+  `assertManagerPropertyListingQuota`
+  (`src/lib/manager-property-quota.server.ts`) runs on every
+  `POST /api/property-records` upsert AND in the assistant's `update_property`
+  write tool, which writes `manager_property_records` directly and never passes
+  through that route — otherwise a manager at their cap could ask the agent for
+  the relist the portal's Relist button refuses. Any NEW writer that can move a
+  record into a listing slot needs the same call. The client checks are courtesy
+  pre-checks so a manager hears it before their photos upload; every layer
+  prints the same sentence from `managerPropertyLimitMessage`, and the route's
+  403 body (`code: "property_limit_reached"`) travels back through
   `upsertPropertyRecordToServer`'s `onError` into the wizard toast — a refusal
   must never degrade to "Could not submit listing."
+  `mirrorLocalPropertyPipelineToServer` sends its writes SEQUENTIALLY for the
+  same reason: fired concurrently, N creates each read the slot count before any
+  of them lands, so the cap would be racy on the path most likely to send
+  several at once. It reports the first refusal once per run, never per row.
 - **It gates the TRANSITION INTO a listing slot, never the state of being over
   the cap.** `LISTING_SLOT_PROPERTY_STATUSES` (`persisted-property-records.ts`)
   is `pending`/`live`/`review` — derived from `propertyRowsToSnapshot`, which is
@@ -1346,7 +1364,8 @@ on an account with five listings and no paywall anywhere).
   already in a slot is never re-charged, which is what lets a seeded or
   downgraded over-limit portfolio keep editing, unlisting, relisting-in-place
   and deleting. **Block creation; never delete or hide a manager's records.** A
-  failed slot count is a 500, never "zero used".
+  failed slot count — or a plan that cannot be read — is a 500, never "zero
+  used" and never the Free cap.
 - **Section entitlements are a separate, page-level gate** and deliberately
   unchanged here: `managerSectionAllowedForTier` + `subscriptionGated` in
   `render-portal-section.tsx` paywall Residents/Leases/Services/Communication
@@ -1359,7 +1378,9 @@ on an account with five listings and no paywall anywhere).
 - Coverage: `tests/unit/manager-effective-plan-tier.test.ts`,
   `property-records-plan-property-limit.test.ts`,
   `property-listing-slot-statuses.test.ts`,
-  `manager-listing-publish-limit-feedback.test.ts`.
+  `manager-listing-publish-limit-feedback.test.ts`,
+  `manager-subscription-tier-client.test.ts`,
+  `tools/property-resident-writes.test.ts`.
 
 # Property drafts (save add-property progress)
 
