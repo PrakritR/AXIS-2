@@ -15,6 +15,7 @@
  * availability grid and these two actions all read one source.
  */
 import { PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
+import { isGoogleCalendarNotLinkedError } from "@/lib/google-calendar/api.server";
 import {
   deleteProplaneGoogleCalendarEvent,
   syncPlannedTourToGoogleCalendar,
@@ -62,6 +63,52 @@ function inquiryFromPlannedEvent(event: Record<string, unknown>): Record<string,
  * permanently blocks the half hour the manager just freed.
  */
 export type PlannedTourCalendarSync = { ok: boolean; skipped?: boolean; error?: string };
+
+/**
+ * Whole-operation ceiling on the Google side of a cancel or reschedule.
+ *
+ * Each round trip is already bounded, but a delete or an upsert can make two
+ * (update-then-create, delete-then-cleanup). This caps the total so the manager
+ * always gets their answer, and a slow Google degrades to the `calendarSync`
+ * warning instead of a response that hangs to the platform timeout and reads to
+ * the client as "could not reach the server" — for a change that already
+ * committed and a guest who has already been emailed.
+ */
+const CALENDAR_SYNC_BUDGET_MS = 12_000;
+
+/**
+ * Run the Google side of a change and CLASSIFY the outcome, never throw it.
+ *
+ * "No working calendar link" is reported as SKIPPED, not as a failure: the
+ * delete path throws for that state while the upsert path quietly returns null,
+ * and without this the two would disagree — a manager who linked Google once and
+ * later disconnected would be warned "your Google Calendar did not update" on
+ * every cancel and told nothing on reschedule for the identical state.
+ */
+async function runCalendarSync(run: () => Promise<unknown>): Promise<PlannedTourCalendarSync> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<PlannedTourCalendarSync>((resolve) => {
+    timer = setTimeout(
+      () => resolve({ ok: false, error: "Google Calendar did not respond in time." }),
+      CALENDAR_SYNC_BUDGET_MS,
+    );
+  });
+  try {
+    return await Promise.race([
+      run().then(
+        () => ({ ok: true }),
+        (e: unknown) => {
+          const message = e instanceof Error ? e.message : "Google Calendar update failed.";
+          if (isGoogleCalendarNotLinkedError(message)) return { ok: true, skipped: true };
+          return { ok: false, error: message };
+        },
+      ),
+      deadline,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export type PlannedTourChangeResult =
   | {
@@ -203,9 +250,8 @@ export async function cancelPlannedTour(
   const googleEventId = textField(event, "googleCalendarEventId");
   let calendarSync: PlannedTourCalendarSync = { ok: true, skipped: true };
   if (googleEventId && managerUserId) {
-    calendarSync = await deleteProplaneGoogleCalendarEvent(db, managerUserId, googleEventId).then(
-      () => ({ ok: true }),
-      (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : "Google Calendar update failed." }),
+    calendarSync = await runCalendarSync(() =>
+      deleteProplaneGoogleCalendarEvent(db, managerUserId, googleEventId),
     );
   }
 
@@ -292,24 +338,23 @@ export async function reschedulePlannedTour(
   // keeps blocking a slot the tour no longer occupies.
   let calendarSync: PlannedTourCalendarSync = { ok: true, skipped: true };
   if (managerUserId) {
-    calendarSync = await syncPlannedTourToGoogleCalendar(db, managerUserId, {
-      plannedEventId: String(moved.id),
-      title: textField(moved, "title") || "Tour",
-      start,
-      end,
-      propertyTitle: textField(moved, "propertyTitle") || undefined,
-      attendeeName: textField(moved, "attendeeName") || undefined,
-      attendeeEmail: textField(moved, "attendeeEmail") || undefined,
-      attendeePhone: textField(moved, "attendeePhone") || undefined,
-      notes: textField(moved, "notes") || undefined,
-      instructions: textField(moved, "instructions") || undefined,
-      // Carry the existing Google event id so a reschedule MOVES the manager's
-      // calendar entry; without it the old time stays on their calendar as a
-      // ghost tour and keeps blocking the slot it no longer occupies.
-      googleCalendarEventId: textField(moved, "googleCalendarEventId") || null,
-    }).then(
-      () => ({ ok: true }),
-      (e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : "Google Calendar update failed." }),
+    calendarSync = await runCalendarSync(() =>
+      syncPlannedTourToGoogleCalendar(db, managerUserId, {
+        plannedEventId: String(moved.id),
+        title: textField(moved, "title") || "Tour",
+        start,
+        end,
+        propertyTitle: textField(moved, "propertyTitle") || undefined,
+        attendeeName: textField(moved, "attendeeName") || undefined,
+        attendeeEmail: textField(moved, "attendeeEmail") || undefined,
+        attendeePhone: textField(moved, "attendeePhone") || undefined,
+        notes: textField(moved, "notes") || undefined,
+        instructions: textField(moved, "instructions") || undefined,
+        // Carry the existing Google event id so a reschedule MOVES the manager's
+        // calendar entry; without it the old time stays on their calendar as a
+        // ghost tour and keeps blocking the slot it no longer occupies.
+        googleCalendarEventId: textField(moved, "googleCalendarEventId") || null,
+      }),
     );
   }
 

@@ -124,6 +124,49 @@ describe("cancelPlannedTour", () => {
     expect(notifyCanceled).toHaveBeenCalledTimes(1);
   });
 
+  it("treats a disconnected calendar as skipped, not as a failure", async () => {
+    // The delete path THROWS for this state while the reschedule path quietly
+    // returns null. Warning "your Google Calendar did not update" on cancel and
+    // saying nothing on reschedule, for the identical state, is unactionable.
+    deleteGoogle.mockRejectedValueOnce(new Error("Google Calendar is not connected."));
+    const result = await cancelPlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      notifyGuest: true,
+    });
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: true, skipped: true } });
+  });
+
+  it("treats an unconfigured integration as skipped too", async () => {
+    deleteGoogle.mockRejectedValueOnce(new Error("Google Calendar is not configured."));
+    const result = await cancelPlannedTour(db(), {
+      plannedEventId: "planned-1",
+      actorUserId: MANAGER,
+      notifyGuest: true,
+    });
+    expect(result).toMatchObject({ ok: true, calendarSync: { ok: true, skipped: true } });
+  });
+
+  it("does not hang the response on a Google call that never settles", async () => {
+    // The PropLane write already committed and the guest email already went
+    // out, so holding the response to the platform timeout — which the client
+    // reports as "could not reach the server" — is worse than a warning.
+    vi.useFakeTimers();
+    try {
+      deleteGoogle.mockImplementationOnce(() => new Promise(() => {}));
+      const pending = cancelPlannedTour(db(), {
+        plannedEventId: "planned-1",
+        actorUserId: MANAGER,
+        notifyGuest: true,
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+      expect(result).toMatchObject({ ok: true, calendarSync: { ok: false } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports a skipped sync for a tour that was never on Google", async () => {
     PLANNED_EVENTS = [{ ...TOUR, googleCalendarEventId: undefined }];
     const result = await cancelPlannedTour(db(), {

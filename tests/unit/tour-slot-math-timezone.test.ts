@@ -16,8 +16,10 @@ import {
   blockInstantMs,
   buildDefaultTourSlotKeys,
   DEFAULT_TOUR_END_SLOT_EXCLUSIVE,
+  DEFAULT_TOUR_HORIZON_DAYS,
   DEFAULT_TOUR_START_SLOT,
   overlaps,
+  shouldOfferDefaultTourGrid,
   slotBlocked,
   slotIsBookable,
   slotStartMs,
@@ -113,6 +115,22 @@ describe("the default offering is a 9 am - 5 pm day", () => {
     const underPacific = withReturn("America/Los_Angeles", () => buildDefaultTourSlotKeys(now, 2));
     expect(underUtc).toEqual(underPacific);
     expect(underUtc![0]).toBe("2026-08-04:18");
+  });
+
+  it("spans three weeks, not two months", () => {
+    // The availability response is `no-store`, so every request pays for the
+    // whole grid; 60 days x 16 windows was ~960 slot entries per request.
+    expect(DEFAULT_TOUR_HORIZON_DAYS).toBe(21);
+  });
+});
+
+describe("shouldOfferDefaultTourGrid", () => {
+  it("offers the default when nothing future is published", () => {
+    expect(shouldOfferDefaultTourGrid([])).toBe(true);
+  });
+
+  it("stands aside the moment one future slot is published", () => {
+    expect(shouldOfferDefaultTourGrid(["2099-08-06:20"])).toBe(false);
   });
 });
 

@@ -90,3 +90,34 @@ describe("google calendar meetings", () => {
     expect(isGoogleCalendarPrivateBlock(meeting!)).toBe(false);
   });
 });
+
+/**
+ * The manager's "N open" headers count a slot as taken when a meeting occupies
+ * it, so what becomes a meeting here has to be exactly what the public booking
+ * route subtracts. When only the public side filtered, a declined invite at 2pm
+ * vanished from the manager's remaining capacity while the page still sold 2pm.
+ */
+describe("only genuinely-busy Google events become meetings", () => {
+  it("drops an event the manager marked Free", () => {
+    expect(
+      googleCalendarEventsToMeetings([event({ summary: "Focus time", transparency: "transparent" })]),
+    ).toEqual([]);
+  });
+
+  it("drops an invite the manager declined", () => {
+    expect(
+      googleCalendarEventsToMeetings([event({ summary: "Someone else's meeting", declinedBySelf: true })]),
+    ).toEqual([]);
+  });
+
+  it("keeps an all-day entry even though Google reports it Free", () => {
+    const meetings = googleCalendarEventsToMeetings([
+      event({ summary: "Out of town", transparency: "transparent", allDay: true }),
+    ]);
+    expect(meetings).toHaveLength(1);
+  });
+
+  it("keeps an ordinary busy event", () => {
+    expect(googleCalendarEventsToMeetings([event({ summary: "Dentist" })])).toHaveLength(1);
+  });
+});

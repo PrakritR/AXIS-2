@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
+import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
 import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
@@ -8,6 +9,7 @@ import {
   payloadSlots,
   rowPayload,
   safePropertyId,
+  shouldOfferDefaultTourGrid,
   slotBlocked,
   slotIsBookable,
   windowsFromPayload,
@@ -58,26 +60,6 @@ function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[]): void
     if (oldest.done) break;
     googleBusyCache.delete(oldest.value);
   }
-}
-
-/**
- * A Google event only subtracts availability when it actually means "away".
- *
- * - `transparency: "transparent"` is the manager marking the event Free.
- * - A declined invite is an event they are NOT attending.
- *
- * All-day events DO block, deliberately: a trip or a holiday on the primary
- * calendar is exactly the day a manager cannot host tours, and Google gives no
- * signal distinguishing that from a birthday reminder. Over-blocking a day
- * costs an unsold slot; under-blocking it sends a prospect to an empty house.
- */
-function googleEventBlocksTours(event: {
-  transparency?: string;
-  declinedBySelf?: boolean;
-}): boolean {
-  if (event.transparency === "transparent") return false;
-  if (event.declinedBySelf) return false;
-  return true;
 }
 
 async function googleBusyBlocks(
@@ -289,10 +271,10 @@ export async function GET(req: Request) {
       }))
       .filter((offering) => offering.managerUserId);
 
-    // Past slots do not count as "published": a week painted last month is not
-    // an offering. The render loop below is the one place slots are filtered.
-    const hasPublishedSlots = publishedOfferings.some((offering) => offering.slots.some((slot) => slotIsBookable(slot)));
-    const offerings: Offering[] = hasPublishedSlots
+    const publishedFutureSlots = publishedOfferings.flatMap((offering) =>
+      offering.slots.filter((slot) => slotIsBookable(slot)),
+    );
+    const offerings: Offering[] = !shouldOfferDefaultTourGrid(publishedFutureSlots)
       ? publishedOfferings
       : [...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId))]
           .filter(Boolean)

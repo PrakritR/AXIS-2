@@ -1,6 +1,7 @@
 import { SLOT_DURATION_MINUTES, toLocalDateStr } from "@/lib/demo-admin-scheduling";
 import type { DemoMeeting } from "@/components/portal/portal-calendar-panels";
 import type { GoogleCalendarApiEvent } from "@/lib/google-calendar/api.server";
+import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
 import {
   PROPLANE_GOOGLE_CALENDAR_MARKER,
   PROPLANE_TOUR_TYPE_MARKER,
@@ -153,8 +154,18 @@ export function meetingCalendarGridLabel(meeting: DemoMeeting): string {
   return meeting.title;
 }
 
+/**
+ * Google events the manager's calendar draws — and therefore the ones its
+ * "N open" counts treat as taken.
+ *
+ * Filtered through the SAME {@link googleEventBlocksTours} predicate the public
+ * booking route uses, because the two must agree: a declined invite that still
+ * drew here would remove a half hour from the manager's remaining-capacity
+ * header while the public page went on offering it.
+ */
 export function googleCalendarEventsToMeetings(events: GoogleCalendarApiEvent[]): DemoMeeting[] {
   return events
+    .filter(googleEventBlocksTours)
     .map((event) => {
       const start = new Date(event.start);
       const end = new Date(event.end);
