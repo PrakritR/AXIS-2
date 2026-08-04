@@ -75,10 +75,97 @@ export async function resolveBroadcastRecipients(
   return out;
 }
 
+/** A thread the sender is authorized to append to, resolved but not yet written. */
+export type InboxThreadReplyTarget = {
+  threadId: string;
+  scope: string;
+  ownerUserId: string | null;
+  participantEmail: string | null;
+  threadType: string;
+  rowData: Record<string, unknown>;
+};
+
 /**
- * Append a reply to an existing inbox thread. Only the thread's owner or its
- * participant (matched by email) may append; anything else is a silent no-op
- * (`ok: false`), mirroring the send-inbox-message route's historic behavior.
+ * Resolve the thread a reply targets and authorize the sender against it: only
+ * the thread's owner or its participant (matched by email) may append, and
+ * anything else resolves to `null` (a silent no-op, mirroring the
+ * send-inbox-message route's historic behavior).
+ *
+ * READ-ONLY on purpose. Thread ownership is not the only gate a send has to
+ * clear — the recipient-scope check in send-inbox-message can still refuse the
+ * message with a 403 — so the write is split out into `commitInboxThreadReply`
+ * and deferred until every gate has passed. Appending here is what let a
+ * refused send land in the thread store (and become the conversation preview)
+ * while the caller was told 403: the resident saw their message listed as sent
+ * to a manager who never received it. Never merge the two back together.
+ */
+export async function resolveInboxThreadReplyTarget(
+  db: SupabaseClient,
+  opts: { threadId: string; senderUserId: string; senderEmail: string },
+): Promise<InboxThreadReplyTarget | null> {
+  const threadId = opts.threadId.trim();
+  if (!threadId) return null;
+  const senderEmail = opts.senderEmail.trim().toLowerCase();
+  const { data: threadRow } = await db
+    .from("portal_inbox_thread_records")
+    .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (
+    !threadRow ||
+    (threadRow.owner_user_id !== opts.senderUserId &&
+      String(threadRow.participant_email ?? "").toLowerCase() !== senderEmail)
+  ) {
+    return null;
+  }
+  const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
+  return {
+    threadId,
+    scope: String(threadRow.scope ?? rowData.scope ?? MANAGER_INBOX_SCOPE),
+    ownerUserId: (threadRow.owner_user_id as string | null) ?? null,
+    participantEmail: (threadRow.participant_email as string | null) ?? null,
+    threadType: String(threadRow.thread_type ?? ""),
+    rowData,
+  };
+}
+
+/** Write the reply onto an already-authorized thread. Call only once the send is cleared. */
+export async function commitInboxThreadReply(
+  db: SupabaseClient,
+  target: InboxThreadReplyTarget,
+  opts: { fromName: string; text: string; attachments?: { url: string; name?: string }[] },
+): Promise<void> {
+  const messages = Array.isArray(target.rowData.messages) ? [...target.rowData.messages] : [];
+  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  messages.push({
+    id: `reply-${Date.now().toString(36)}`,
+    from: opts.fromName,
+    body: opts.text,
+    at: when,
+    ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
+  });
+  await db.from("portal_inbox_thread_records").upsert(
+    {
+      id: target.threadId,
+      scope: target.scope,
+      owner_user_id: target.ownerUserId,
+      participant_email: target.participantEmail,
+      row_data: {
+        ...target.rowData,
+        messages,
+        preview: opts.text.slice(0, 100).replace(/\n/g, " "),
+        unread: false,
+      },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+}
+
+/**
+ * Resolve + commit in one step. Safe only where thread ownership is the ONLY
+ * gate the reply has to clear; a caller that can still refuse the send after
+ * this point must use `resolveInboxThreadReplyTarget` and defer the commit.
  */
 export async function appendInboxThreadReply(
   db: SupabaseClient,
@@ -91,54 +178,10 @@ export async function appendInboxThreadReply(
     attachments?: { url: string; name?: string }[];
   },
 ): Promise<{ ok: boolean; thread?: { threadType: string; ownerUserId: string | null } }> {
-  const threadId = opts.threadId.trim();
-  if (!threadId) return { ok: false };
-  const senderEmail = opts.senderEmail.trim().toLowerCase();
-  const { data: threadRow } = await db
-    .from("portal_inbox_thread_records")
-    .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
-    .eq("id", threadId)
-    .maybeSingle();
-  if (
-    !threadRow ||
-    (threadRow.owner_user_id !== opts.senderUserId &&
-      String(threadRow.participant_email ?? "").toLowerCase() !== senderEmail)
-  ) {
-    return { ok: false };
-  }
-  const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
-  const messages = Array.isArray(rowData.messages) ? [...rowData.messages] : [];
-  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  messages.push({
-    id: `reply-${Date.now().toString(36)}`,
-    from: opts.fromName,
-    body: opts.text,
-    at: when,
-    ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
-  });
-  await db.from("portal_inbox_thread_records").upsert(
-    {
-      id: threadId,
-      scope: String(threadRow.scope ?? rowData.scope ?? MANAGER_INBOX_SCOPE),
-      owner_user_id: threadRow.owner_user_id,
-      participant_email: threadRow.participant_email,
-      row_data: {
-        ...rowData,
-        messages,
-        preview: opts.text.slice(0, 100).replace(/\n/g, " "),
-        unread: false,
-      },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
-  return {
-    ok: true,
-    thread: {
-      threadType: String(threadRow.thread_type ?? ""),
-      ownerUserId: (threadRow.owner_user_id as string | null) ?? null,
-    },
-  };
+  const target = await resolveInboxThreadReplyTarget(db, opts);
+  if (!target) return { ok: false };
+  await commitInboxThreadReply(db, target, opts);
+  return { ok: true, thread: { threadType: target.threadType, ownerUserId: target.ownerUserId } };
 }
 
 /**
