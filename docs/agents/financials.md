@@ -142,9 +142,20 @@ modules' header comments carry the full rationale.
   once past due. Bucketing on `status === "pending"` alone is what dropped
   clearing-ACH rows from the dashboard while Payments counted them.
 - **`src/lib/manager-payments-scope.ts` is the ONE Payments-ledger scoping.**
-  `readChargesForManager` is narrowed by two extra rules — internal payer accounts
-  are dropped, and so are charges belonging to someone who is no longer a current
-  resident (except a manager-entered one-off, which stays visible deliberately).
+  `readChargesForManager` is narrowed by two extra rules, and **each is
+  deliberately as narrow as it can be — money a manager cannot see is money they
+  never chase**:
+  - **Internal payer accounts are matched EXACTLY, email first**
+    (`shouldExcludePaymentAccount`) — never as a substring on name-or-email,
+    which swallowed every real resident whose name or address merely contained
+    the token.
+  - **A charge is dropped only for a resident who has MOVED OUT** — an email
+    with an approved-but-no-longer-current row AND no current-resident row
+    anywhere — except a manager-entered one-off, which stays visible
+    deliberately. Keying on "not a current resident" also catches pending,
+    in-progress, rejected and withdrawn rows, so a resident holding a SECOND
+    application had every charge vanish from both money surfaces.
+
   The rules live in that module rather than being copied into each caller, and
   **Payments is the authority**: align a new counter to it, not the reverse.
 

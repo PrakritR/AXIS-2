@@ -207,22 +207,34 @@ that reconciles them; its header comment carries the full rationale. Rules:
   deleted from either store, and no payable state is invented. The ledger/GL
   write model is untouched: a deleted charge still does not reverse its ledger
   entry, which is a financials-domain change, not a display one.
-- **Both surfaces read the same window** (`residentLedgerReceiptRange`, trailing
-  12 months). Two windows would make the counts disagree again for a new reason.
+- **The synthesized rows are DERIVED from (ledger rows, live charges), never
+  stored.** Stored, they freeze against the charge snapshot they were built
+  from, so a charge that reappears (a sync restore, a deferred load) renders
+  BESIDE its synthesized twin — the double-count this reconciliation exists to
+  prevent. They are also scoped to the identity they were read for, so an
+  in-session account switch can never show the previous resident's money.
+- **Both surfaces default to the same window** (`residentLedgerReceiptRange`,
+  trailing 12 months, LOCAL calendar dates at both ends because `posted_date` is
+  a plain date). Two default windows would make the counts disagree again for a
+  new reason. Documents lets the resident pick another range, which is why the
+  shared client cache (`src/lib/resident-ledger-client.ts`) keys on viewer
+  identity **and** window — see "Performance & egress" in AGENTS.md.
 - **Paid rows show the amount PAID, not the balance** — the outstanding balance
   is `$0.00` by definition on Paid, so showing it turned every settled row into
   `$0.00`. The unpaid buckets still show what is owed.
 - **A receipt is named from its own ledger description**
-  (`receiptRowLabel` / `recordedPaymentTitle`), so a utilities or deposit payment
-  no longer reads "Rent receipt". The empty-description fallback is a neutral
-  `"Payment"`, never `"Rent payment"` — this label lands on an exportable
-  financial record. The Documents tab itself is still called "Rent receipts".
+  (`receiptRowLabel` / `recordedPaymentTitle`) **on every surface that names one**
+  — the Rent receipts table, its inline viewer, and Download all — so a utilities
+  or deposit payment no longer reads "Rent receipt". The empty-description
+  fallback is a neutral `"Payment"`, never `"Rent payment"` — this label lands on
+  an exportable financial record. The Documents tab itself is still called
+  "Rent receipts".
 - `queryResidentLedger` emits `sourceChargeId` and `property` on each row for the
   match. They are deliberately NOT `columns`, and exports iterate `columns`, so
   CSV/PDF output is unchanged.
 
 Coverage: `tests/unit/resident-recorded-payments.test.ts`,
-`tests/unit/rent-receipts.test.ts`.
+`tests/unit/resident-ledger-client.test.ts`, `tests/unit/rent-receipts.test.ts`.
 
 ## Application-fee copy comes from one module
 
