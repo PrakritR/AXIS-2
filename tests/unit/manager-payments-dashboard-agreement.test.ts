@@ -49,30 +49,71 @@ function application(over: Partial<DemoApplicantRow> & Pick<DemoApplicantRow, "i
 }
 
 describe("manager payments scope (F-PAY-1)", () => {
-  it("drops internal payer accounts the Payments page never shows", () => {
+  it("drops the internal payer account by EXACT match, never by substring", () => {
     expect(shouldExcludePaymentAccount("Sharad Ramachandran", "x@y.com")).toBe(true);
-    expect(shouldExcludePaymentAccount("Someone", "sharad@y.com")).toBe(true);
+    expect(shouldExcludePaymentAccount("  sharad  ", "")).toBe(true);
     expect(shouldExcludePaymentAccount("Maya Chen", "maya@y.com")).toBe(false);
   });
 
-  it("drops charges for a payer who is no longer a current resident", () => {
+  it("never swallows a real resident whose name or email merely CONTAINS the token", () => {
+    // The substring rule this replaced hid every charge for any of these, on
+    // every manager's dashboard and Payments page, with nothing on screen.
+    expect(shouldExcludePaymentAccount("Sharada Iyer", "sharada@example.com")).toBe(false);
+    expect(shouldExcludePaymentAccount("Priya Sharma", "sharad.k@example.com")).toBe(false);
+    expect(shouldExcludePaymentAccount("Bob", "notsharad@example.com")).toBe(false);
+    expect(shouldExcludePaymentAccount("Sharad Ramachandran Jr", "")).toBe(false);
+  });
+
+  it("drops charges only for a resident who has MOVED OUT", () => {
     const charges = [
       charge({ id: "current" }),
-      charge({ id: "previous", residentEmail: "gone@example.com" }),
+      charge({ id: "movedOut", residentEmail: "gone@example.com" }),
     ];
     const apps = [
       application({ id: "a1" }),
-      application({ id: "a2", email: "gone@example.com", bucket: "pending", stage: "Submitted" }),
+      application({ id: "a2", email: "gone@example.com", stage: "Moved out" }),
     ];
     const scoped = scopeChargesToManagerPaymentsLedger(charges, apps);
     expect(scoped.map((c) => c.id)).toEqual(["current"]);
   });
 
-  it("keeps a manager-entered one-off after the payer moves to Previous", () => {
+  it("keeps every charge for a current resident who ALSO holds another application", () => {
+    // The old rule keyed on "not a current-resident row", which is true of a
+    // pending row too — so a housed resident who applied somewhere else had all
+    // their charges vanish from both money surfaces. One audited account held 19
+    // pending applications, so this was the common case, not the edge.
+    const charges = [charge({ id: "rent" }), charge({ id: "utilities", kind: "utilities" })];
+    const apps = [
+      application({ id: "a1" }),
+      application({ id: "a2", bucket: "pending", stage: "Submitted" }),
+    ];
+    const scoped = scopeChargesToManagerPaymentsLedger(charges, apps);
+    expect(scoped.map((c) => c.id)).toEqual(["rent", "utilities"]);
+  });
+
+  it("keeps a pending applicant's application fee — that is money genuinely owed", () => {
+    const charges = [
+      charge({ id: "fee", kind: "application_fee", residentEmail: "applicant@example.com" }),
+    ];
+    const apps = [
+      application({ id: "a1", email: "applicant@example.com", bucket: "pending", stage: "Submitted" }),
+    ];
+    expect(scopeChargesToManagerPaymentsLedger(charges, apps).map((c) => c.id)).toEqual(["fee"]);
+  });
+
+  it("keeps charges for a rejected or withdrawn applicant, who never moved out", () => {
+    const charges = [charge({ id: "fee", residentEmail: "rejected@example.com" })];
+    const apps = [
+      application({ id: "a1", email: "rejected@example.com", bucket: "rejected", stage: "Rejected" }),
+    ];
+    expect(scopeChargesToManagerPaymentsLedger(charges, apps).map((c) => c.id)).toEqual(["fee"]);
+  });
+
+  it("keeps a manager-entered one-off after the payer moves out", () => {
     const charges = [
       charge({ id: "hc_mgr_one_off", residentEmail: "gone@example.com", kind: "other_cost" }),
     ];
-    const apps = [application({ id: "a2", email: "gone@example.com", bucket: "pending", stage: "Submitted" })];
+    const apps = [application({ id: "a2", email: "gone@example.com", stage: "Moved out" })];
     expect(scopeChargesToManagerPaymentsLedger(charges, apps).map((c) => c.id)).toEqual(["hc_mgr_one_off"]);
   });
 
