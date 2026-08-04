@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { GENERAL_SYSTEM_PROMPT } from "@/lib/agent/general-system-prompt";
 import { applyChatAttachments, sanitizeChatMessages } from "@/lib/agent/chat-handler";
-import { TIER_MODELS } from "@/lib/agent/model";
+import { selectAgentRoute } from "@/lib/agent/model";
+import { completeAgentModel } from "@/lib/agent/provider";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
@@ -57,16 +57,23 @@ export async function POST(req: Request) {
   }
 
   try {
-    const client = new Anthropic();
-    const model = messagesNeedVisionModel(messages) ? visionPinnedModel().model : TIER_MODELS.simple;
-    const response = await client.messages.create({
-      model,
-      max_tokens: 1024,
+    const routing = messagesNeedVisionModel(messages)
+      ? visionPinnedModel()
+      : selectAgentRoute({ messages, actorKey: ip, availableTools: [] });
+    const response = await completeAgentModel({
+      selection: {
+        model: routing.model,
+        tier: routing.tier,
+        provider: routing.provider ?? "anthropic",
+        route: routing.route ?? "anthropic",
+        ...(routing.fallbackModel ? { fallbackModel: routing.fallbackModel } : {}),
+      },
       system: GENERAL_SYSTEM_PROMPT,
+      tools: [],
       messages,
     });
     const reply = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .filter((b) => b.type === "text")
       .map((b) => b.text)
       .join("")
       .trim();

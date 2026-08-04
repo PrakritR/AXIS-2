@@ -18,6 +18,16 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { lastUserText as lastUserMessageText } from "@/lib/agent/chat-handler";
 
 export type ModelTier = "simple" | "standard" | "complex";
+export type AgentProvider = "anthropic" | "openrouter";
+export type AgentRoute = "anthropic" | "fast_direct" | "fast_lookup";
+export type AgentModelSelection = {
+  model: string;
+  tier: ModelTier;
+  provider: AgentProvider;
+  route: AgentRoute;
+  /** Anthropic safety/reliability fallback for the OpenRouter fast lane. */
+  fallbackModel?: string;
+};
 
 /**
  * Tier -> model id. Each tier is overridable via env for cost tuning without a
@@ -43,6 +53,7 @@ export const MODEL_PRICING: Record<string, { inputPerMTok: number; outputPerMTok
   "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5 },
   "claude-sonnet-4-6": { inputPerMTok: 3, outputPerMTok: 15 },
   "claude-opus-4-8": { inputPerMTok: 5, outputPerMTok: 25 },
+  "google/gemini-3.5-flash-lite": { inputPerMTok: 0.3, outputPerMTok: 2.5 },
 };
 
 const warnedUnpricedModels = new Set<string>();
@@ -71,7 +82,6 @@ const COMPLEX_SIGNALS = [
   "analyze",
   "analyse",
   "analysis",
-  "why",
   "trend",
   "forecast",
   "project",
@@ -88,6 +98,26 @@ const COMPLEX_SIGNALS = [
   "recommend",
   "strategy",
   "optimi", // optimize / optimise
+];
+
+const WRITE_SIGNALS = [
+  "send ", "create ", "update ", "delete ", "cancel ", "schedule ", "pay ", "mark paid", "approve ", "reject ",
+  "assign ", "invite ", "record ", "sign ", "revoke ", "complete ",
+];
+
+const DIRECT_SIGNALS = [
+  "what can you do", "how does proplane work", "how does this work", "help me", "what is proplane", "pricing",
+];
+
+const LOOKUP_TOOL_KEYWORDS: [RegExp, string[]][] = [
+  [/\b(overdue|charge|charges|rent roll)\b/i, ["get_overdue_charges", "list_charges", "get_my_balance", "list_my_charges"]],
+  [/\b(lease|leases)\b/i, ["list_leases", "get_my_lease"]],
+  [/\b(work order|work orders|maintenance|service request)\b/i, ["list_work_orders", "list_my_work_orders", "list_my_service_requests"]],
+  [/\b(application|applications)\b/i, ["list_applications", "get_my_application_status"]],
+  [/\b(property|properties|listing|listings)\b/i, ["list_properties", "get_property_details"]],
+  [/\b(calendar|tour|availability)\b/i, ["list_calendar_events", "list_my_schedule"]],
+  [/\b(inbox|message|messages)\b/i, ["list_inbox_threads", "list_my_inbox_threads"]],
+  [/\b(job|jobs|bid|bids|offer|offers)\b/i, ["list_my_jobs", "list_my_bids", "list_my_offers"]],
 ];
 
 // Short, self-contained pleasantries / acknowledgements.
@@ -160,4 +190,47 @@ export function classifyComplexity(messages: Anthropic.MessageParam[]): ModelTie
 export function selectModel(messages: Anthropic.MessageParam[]): { model: string; tier: ModelTier } {
   const tier = classifyComplexity(messages);
   return { model: TIER_MODELS[tier], tier };
+}
+
+function fastLaneEnabled(actorKey: string): boolean {
+  if (process.env.AXIS_AGENT_FAST_ENABLED?.trim().toLowerCase() !== "true") return false;
+  if (!process.env.OPENROUTER_API_KEY?.trim()) return false;
+  const percentage = Math.min(100, Math.max(0, Number(process.env.AXIS_AGENT_FAST_ROLLOUT_PERCENT || 0)));
+  if (!Number.isFinite(percentage) || percentage <= 0) return false;
+  let hash = 2166136261;
+  for (const char of actorKey) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return (hash >>> 0) % 100 < percentage;
+}
+
+/**
+ * Choose a provider and, for the fast lane, a strictly read-only shortlist.
+ * Unknown or ambiguous requests intentionally return the established Anthropic
+ * route; this selector optimizes only clear wins.
+ */
+export function selectAgentRoute(args: {
+  messages: Anthropic.MessageParam[];
+  actorKey: string;
+  availableTools: readonly string[];
+  hasAttachments?: boolean;
+}): AgentModelSelection & { toolNames?: string[]; readOnly?: boolean } {
+  const normal = selectModel(args.messages);
+  const fallback = process.env.AXIS_AGENT_MODEL_STANDARD?.trim() || "claude-sonnet-4-6";
+  if (args.hasAttachments || !fastLaneEnabled(args.actorKey)) {
+    return { ...normal, provider: "anthropic", route: "anthropic" };
+  }
+  const text = lastUserText(args.messages).trim().toLowerCase();
+  if (!text || WRITE_SIGNALS.some((signal) => text.includes(signal)) || classifyComplexity(args.messages) === "complex") {
+    return { ...normal, provider: "anthropic", route: "anthropic" };
+  }
+  const fastModel = process.env.AXIS_AGENT_FAST_MODEL?.trim() || "google/gemini-3.5-flash-lite";
+  const isDirect = TRIVIAL_PHRASES.includes(text.replace(/[.!?,]+$/g, "")) || DIRECT_SIGNALS.some((signal) => text.includes(signal));
+  if (isDirect) {
+    return { model: fastModel, tier: "simple", provider: "openrouter", route: "fast_direct", fallbackModel: fallback, toolNames: [], readOnly: true };
+  }
+  const match = LOOKUP_TOOL_KEYWORDS.find(([pattern]) => pattern.test(text));
+  const toolName = match?.[1].find((candidate) => args.availableTools.includes(candidate));
+  if (toolName) {
+    return { model: fastModel, tier: "simple", provider: "openrouter", route: "fast_lookup", fallbackModel: fallback, toolNames: [toolName], readOnly: true };
+  }
+  return { ...normal, provider: "anthropic", route: "anthropic" };
 }

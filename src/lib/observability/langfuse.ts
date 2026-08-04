@@ -9,6 +9,7 @@
  * misbehaves — tracing must never break a turn.
  */
 import { Langfuse } from "langfuse";
+import { after } from "next/server";
 import type { AgentObserver } from "@/lib/agent/loop";
 import { estimateCostUsd } from "@/lib/agent/model";
 
@@ -92,6 +93,10 @@ export function buildTraceObserver(trace: TraceLike, actor: TraceActor): AgentOb
             iteration: e.iteration,
             stopReason: e.stopReason,
             toolsChosen: e.toolsChosen,
+            provider: e.provider,
+            route: e.route,
+            latencyMs: e.latencyMs,
+            fallbackReason: e.fallbackReason,
             estimatedCostUsd: estimateCostUsd(e.model, e.usage),
             ...actorMeta,
           },
@@ -200,7 +205,27 @@ type TracedResult = {
   tier?: string;
   usage?: TurnUsage;
   pendingAction?: { toolName: string };
+  provider?: string;
+  route?: string;
+  fallbackReason?: string;
+  latencyMs?: number;
 };
+
+/** Flush telemetry after the route has replied; tracing must not add tail latency. */
+function flushAfterResponse(lf: Langfuse) {
+  const flush = async () => {
+    try {
+      await lf.flushAsync();
+    } catch {
+      /* observability must never fail a turn */
+    }
+  };
+  try {
+    after(flush);
+  } catch {
+    void flush();
+  }
+}
 
 /**
  * Wrap an agent turn in a Langfuse trace. The trace records the input, the final
@@ -250,6 +275,10 @@ export async function traceAgentTurn<T extends TracedResult>(
           tools: result.toolTrace.map((t) => t.tool),
           model: result.model,
           tier: result.tier,
+          provider: result.provider,
+          route: result.route,
+          fallbackReason: result.fallbackReason,
+          latencyMs: result.latencyMs,
           inputTokens: result.usage?.inputTokens,
           outputTokens: result.usage?.outputTokens,
           estimatedCostUsd: costUsd,
@@ -268,11 +297,7 @@ export async function traceAgentTurn<T extends TracedResult>(
     }
     throw e;
   } finally {
-    try {
-      await lf.flushAsync();
-    } catch {
-      /* ignore */
-    }
+    flushAfterResponse(lf);
   }
 }
 
@@ -320,10 +345,6 @@ export async function traceAgentAction<T extends TracedActionResult>(
     safe(() => trace?.update({ output: e instanceof Error ? e.message : "error" }));
     throw e;
   } finally {
-    try {
-      await lf.flushAsync();
-    } catch {
-      /* ignore */
-    }
+    flushAfterResponse(lf);
   }
 }

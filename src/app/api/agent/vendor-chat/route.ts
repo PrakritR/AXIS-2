@@ -16,6 +16,8 @@ import {
   PENDING_ACTION_SAVE_FAILED_NOTE,
 } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
+import { selectAgentRoute } from "@/lib/agent/model";
+import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
 
@@ -72,6 +74,14 @@ export async function POST(req: Request) {
       sessionId: sessionId ?? undefined,
       metadata: { role: "vendor", managerIds: ctx.managerIds },
     };
+    const hasVision = messagesNeedVisionModel(messages);
+    const routing = hasVision
+      ? visionPinnedModel()
+      : selectAgentRoute({
+          messages,
+          actorKey: ctx.userId,
+          availableTools: [...vendorAgentRegistry.keys()],
+        });
     const result = await traceAgentTurn(
       traceActor,
       messages.map((m) => ({ role: m.role, content: String(m.content) })),
@@ -82,7 +92,8 @@ export async function POST(req: Request) {
           system: VENDOR_SYSTEM_PROMPT,
           messages,
           observer,
-          ...(messagesNeedVisionModel(messages) ? { model: visionPinnedModel() } : {}),
+          model: routing,
+          ...("toolNames" in routing ? { toolNames: routing.toolNames, readOnly: routing.readOnly } : {}),
         }),
     );
     track("assistant_message_sent", ctx.userId, {
@@ -90,6 +101,10 @@ export async function POST(req: Request) {
       tools: result.toolTrace.length,
       model: result.model,
       tier: result.tier,
+      provider: result.provider,
+      route: result.route,
+      fallback: Boolean(result.fallbackReason),
+      latencyMs: result.latencyMs,
       images: attached.imageCount,
       documents: attached.documentCount,
     });
@@ -126,12 +141,16 @@ export async function POST(req: Request) {
           tools: result.toolTrace,
           model: result.model,
           tier: result.tier,
+          provider: result.provider,
+          route: result.route,
+          fallback: Boolean(result.fallbackReason),
+          latencyMs: result.latencyMs,
           ...(proposal ? { pendingAction: { toolName: proposal.toolName } } : {}),
         },
       },
     ]);
 
-    return NextResponse.json({
+    return assistantResponse(req, {
       reply,
       toolTrace: result.toolTrace,
       sessionId,

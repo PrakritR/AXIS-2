@@ -129,6 +129,23 @@ created.
   `assistant_action_cancelled` — it died with the standalone confirm route;
   denials are `assistant_action_denied`.
 
+### Latency-aware model routing
+
+Interactive text turns use a conservative two-provider route. When enabled,
+clear product questions use no tools and clear single-record lookups expose
+exactly one read tool to OpenRouter's `google/gemini-3.5-flash-lite` model.
+Attachments, writes, ambiguous/multi-step questions, SMS, and complex analysis
+remain on Anthropic. The fast lane is read-only and has one Anthropic retry, so
+an OpenRouter failure cannot execute or duplicate an action. Every trace and
+`assistant_message_sent` event records provider, route, fallback, and latency.
+
+Configure the server-only `OPENROUTER_API_KEY`, then set
+`AXIS_AGENT_FAST_ENABLED=true` and move `AXIS_AGENT_FAST_ROLLOUT_PERCENT` from
+0 to 10, 50, and 100 only after checking latency and fallback rates. Requests
+set OpenRouter `data_collection: "deny"`; disable OpenRouter input/output
+logging and data-discount sharing in its dashboard. Never expose the key in a
+`NEXT_PUBLIC_*` variable.
+
 ## Security model
 
 - **Confirmed-by-human is the backstop.** The model can only produce a
@@ -253,8 +270,10 @@ W-9/tax, and document uploads stay on the Profile page (deep-link only).
 
 | Var | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | yes | the agent loop (`new Anthropic()`) |
+| `ANTHROPIC_API_KEY` | yes | the agent loop and fast-lane fallback |
+| `OPENROUTER_API_KEY` | no | optional server-only fast lane |
 | `AXIS_AGENT_MODEL` (+ `_SIMPLE/_STANDARD/_COMPLEX`) | no | model overrides per tier |
+| `AXIS_AGENT_FAST_ENABLED` / `_ROLLOUT_PERCENT` / `_MODEL` / `_TIMEOUT_MS` | no | OpenRouter fast-lane rollout controls |
 | `LANGFUSE_SECRET_KEY` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_BASE_URL` | no | tracing (no-op when unset) |
 | `POSTHOG_KEY` / `POSTHOG_HOST` | no | analytics |
 | `RESEND_API_KEY` / `RESEND_FROM` | no | outbound email (tools degrade to portal-only delivery) |

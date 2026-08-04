@@ -17,7 +17,8 @@ import {
   previewWriteTool,
 } from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
-import { selectModel, type ModelTier } from "./model";
+import { selectModel, type ModelTier, type AgentProvider, type AgentRoute, type AgentModelSelection } from "./model";
+import { completeAgentModel } from "./provider";
 
 const MAX_ITERATIONS = 8;
 
@@ -38,6 +39,10 @@ export type AgentTurnResult = {
   toolTrace: ToolTraceEntry[];
   model: string;
   tier: ModelTier;
+  provider: AgentProvider;
+  route: AgentRoute;
+  fallbackReason?: string;
+  latencyMs: number;
   usage: TurnUsage;
   /** Present => the turn halted on a write-tool proposal awaiting confirmation. */
   pendingAction?: PendingActionProposal;
@@ -55,6 +60,10 @@ export type LlmCallEvent = {
   usage: TurnUsage; // THIS call only, not the turn accumulator
   stopReason: string | null;
   toolsChosen: string[];
+  provider: AgentProvider;
+  route: AgentRoute;
+  latencyMs: number;
+  fallbackReason?: string;
   input: Anthropic.MessageParam[]; // messages sent for this call
   assistantContent: Anthropic.ContentBlock[]; // the response blocks
 };
@@ -73,7 +82,7 @@ export type PendingActionEvent = {
   error?: string;
 };
 export type AgentObserver = {
-  onStart?(info: { system: string; toolsAvailable: string[]; model: string; tier: ModelTier }): void;
+  onStart?(info: { system: string; toolsAvailable: string[]; model: string; tier: ModelTier; provider: AgentProvider; route: AgentRoute }): void;
   onLlmCall?(e: LlmCallEvent): void;
   onToolCall?(e: ToolCallEvent): void;
   onPendingAction?(e: PendingActionEvent): void;
@@ -97,7 +106,9 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
   system?: string;
   observer?: AgentObserver;
   /** Pin the model instead of routing by complexity (the SMS agents do this). */
-  model?: { model: string; tier: ModelTier };
+  model?: Partial<AgentModelSelection> & { model: string; tier: ModelTier };
+  /** Explicit tool shortlist for a read-only fast lane. */
+  toolNames?: readonly string[];
   /**
    * Write tools this surface lets the model call WITHOUT a confirmation card.
    * An explicit per-surface allowlist (e.g. the vendor SMS agent's
@@ -113,40 +124,50 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
    */
   readOnly?: boolean;
 }): Promise<AgentTurnResult> {
-  const client = new Anthropic(); // ANTHROPIC_API_KEY from env
   const system = opts.system ?? SYSTEM_PROMPT;
   const allowWrite = opts.allowWriteTools ?? [];
-  const tools = toAnthropicTools(opts.registry, { allowWrite, readOnly: opts.readOnly });
+  const allTools = toAnthropicTools(opts.registry, { allowWrite, readOnly: opts.readOnly });
+  const tools = opts.toolNames ? allTools.filter((tool) => opts.toolNames!.includes(tool.name)) : allTools;
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
   // Route the turn once, up front, based on its complexity, and use that model
   // for every iteration of the loop (switching models mid-turn would thrash the
   // prompt cache). Token usage accumulates across iterations for cost tracing.
-  const { model, tier } = opts.model ?? selectModel(opts.messages);
+  const selected = opts.model ?? ({ ...selectModel(opts.messages), provider: "anthropic", route: "anthropic" } as AgentModelSelection);
+  const selection: AgentModelSelection = {
+    model: selected.model,
+    tier: selected.tier,
+    provider: selected.provider ?? "anthropic",
+    route: selected.route ?? "anthropic",
+    ...(selected.fallbackModel ? { fallbackModel: selected.fallbackModel } : {}),
+  };
+  const { model, tier } = selection;
+  let effectiveModel = model;
+  let actualProvider: AgentProvider = selection.provider;
+  let fallbackReason: string | undefined;
+  let totalLatencyMs = 0;
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
   const observer = opts.observer;
   notify(
     observer?.onStart &&
-      (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier })),
+      (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier, provider: selection.provider, route: selection.route })),
   );
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // Snapshot the messages sent for this call before we mutate the array, so the
     // trace records the exact prompt for replay.
     const callInput = [...messages];
-    const response = await client.messages.create({
-      model,
-      max_tokens: 4096,
-      system,
-      tools: tools as unknown as Anthropic.Tool[],
-      messages,
-    });
+    const response = await completeAgentModel({ selection, system, tools, messages });
+    actualProvider = response.provider;
+    if (response.fallbackReason) effectiveModel = selection.fallbackModel || model;
+    fallbackReason ??= response.fallbackReason;
+    totalLatencyMs += response.latencyMs;
 
     const callUsage: TurnUsage = {
-      inputTokens: response.usage?.input_tokens ?? 0,
-      outputTokens: response.usage?.output_tokens ?? 0,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
     };
     usage.inputTokens += callUsage.inputTokens;
     usage.outputTokens += callUsage.outputTokens;
@@ -160,27 +181,31 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
         (() =>
           observer.onLlmCall!({
             iteration: i,
-            model,
+            model: response.fallbackReason ? selection.fallbackModel || model : model,
             usage: callUsage,
-            stopReason: response.stop_reason ?? null,
+            stopReason: response.stopReason,
             toolsChosen: toolUses.map((u) => u.name),
             input: callInput,
             assistantContent: response.content,
+            provider: response.provider,
+            route: selection.route,
+            latencyMs: response.latencyMs,
+            fallbackReason: response.fallbackReason,
           })),
     );
 
-    if (response.stop_reason === "pause_turn") {
+    if (response.stopReason === "pause_turn") {
       messages.push({ role: "assistant", content: response.content });
       continue;
     }
 
-    if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
+    if (response.stopReason !== "tool_use" || toolUses.length === 0) {
       const reply = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("")
         .trim();
-      return { reply: reply || "I couldn't find an answer to that.", toolTrace, model, tier, usage };
+      return { reply: reply || "I couldn't find an answer to that.", toolTrace, model: effectiveModel, tier, usage, provider: actualProvider, route: selection.route, fallbackReason, latencyMs: totalLatencyMs };
     }
 
     // A confirm-gated write proposal halts the turn. Only the FIRST such call
@@ -216,9 +241,13 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
         return {
           reply,
           toolTrace,
-          model,
+          model: effectiveModel,
           tier,
           usage,
+          provider: actualProvider,
+          route: selection.route,
+          fallbackReason,
+          latencyMs: totalLatencyMs,
           pendingAction: {
             toolName: gatedWrite.name,
             input: prepared.input,
@@ -263,19 +292,22 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
 
     messages.push({ role: "assistant", content: response.content });
 
-    const results: Anthropic.ToolResultBlockParam[] = [];
-    for (const use of toolUses) {
-      results.push(await runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, allowWrite, observer));
-    }
+    const results = await Promise.all(
+      toolUses.map((use) => runInlineTool(opts.registry, opts.ctx, use, i, toolTrace, allowWrite, observer)),
+    );
     messages.push({ role: "user", content: results });
   }
 
   return {
     reply: "I reached the maximum number of steps without finishing. Please try a more specific question.",
     toolTrace,
-    model,
+    model: effectiveModel,
     tier,
     usage,
+    provider: actualProvider,
+    route: selection.route,
+    fallbackReason,
+    latencyMs: totalLatencyMs,
   };
 }
 

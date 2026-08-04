@@ -40,6 +40,62 @@ export type ActionPreview = {
 };
 export type PendingAction = { id: string; preview: ActionPreview };
 
+type AssistantTransportData = {
+  reply?: string;
+  toolTrace?: ToolTraceEntry[];
+  pendingAction?: PendingAction;
+  error?: string;
+  sessionId?: string | null;
+};
+
+/** Parse the SSE transport while retaining JSON compatibility for older routes. */
+async function readAssistantTransport(
+  res: Response,
+  onDelta: (text: string) => void,
+): Promise<AssistantTransportData> {
+  const contentType = res.headers?.get?.("content-type") ?? "";
+  if (!contentType.includes("text/event-stream") || !res.body) {
+    return (await res.json()) as AssistantTransportData;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+  let pendingAction: PendingAction | undefined;
+  let done: AssistantTransportData = {};
+  const consume = (record: string) => {
+    const event = record.match(/^event:\s*(.+)$/m)?.[1]?.trim();
+    const data = record.match(/^data:\s*(.+)$/m)?.[1];
+    if (!event || !data) return;
+    let parsed: AssistantTransportData | { text?: string };
+    try {
+      parsed = JSON.parse(data) as AssistantTransportData | { text?: string };
+    } catch {
+      return;
+    }
+    if (event === "delta" && typeof parsed.text === "string") {
+      reply += parsed.text;
+      onDelta(parsed.text);
+    } else if (event === "pending_action") {
+      pendingAction = parsed as PendingAction;
+    } else if (event === "done") {
+      done = parsed as AssistantTransportData;
+    }
+  };
+  while (true) {
+    const { done: finished, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !finished });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      consume(buffer.slice(0, boundary));
+      buffer = buffer.slice(boundary + 2);
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (finished) break;
+  }
+  return { ...done, reply, pendingAction };
+}
+
 /**
  * Confirm outcomes the server answers WITHOUT claiming the proposal, so the
  * action is still live and pressing Confirm again is genuinely valid: the
@@ -128,23 +184,32 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
       setAttachments([]);
       setLoading(true);
       setLastTools([]);
+      let streamingAssistant = false;
       try {
         const res = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
           body: JSON.stringify({ messages: next, ...attachmentPayload }),
         });
-        const data = (await res.json()) as {
-          reply?: string;
-          toolTrace?: ToolTraceEntry[];
-          pendingAction?: PendingAction;
-          error?: string;
-        };
+        const data = await readAssistantTransport(res, (text) => {
+          setMessages((current) => {
+            if (!streamingAssistant) {
+              streamingAssistant = true;
+              return [...current, { role: "assistant", content: text }];
+            }
+            const last = current.length - 1;
+            return current.map((message, index) =>
+              index === last && message.role === "assistant"
+                ? { ...message, content: message.content + text }
+                : message,
+            );
+          });
+        });
         if (!res.ok || data.error) {
           setError(data.error ?? "Something went wrong.");
           setAttachments(sentAttachments);
         } else {
-          setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+          if (!streamingAssistant) setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
           setLastTools(data.toolTrace ?? []);
           setPendingAction(data.pendingAction ?? null);
           // A freshly proposed draft (or one that was cleared by re-asking) should

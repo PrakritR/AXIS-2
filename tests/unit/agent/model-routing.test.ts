@@ -34,7 +34,9 @@ describe("classifyComplexity", () => {
 
   it("routes analytical intent to complex", () => {
     expect(classifyComplexity(convo("Compare delinquency across all my properties"))).toBe("complex");
-    expect(classifyComplexity(convo("Why is my income down this quarter?"))).toBe("complex");
+    // A lone "why" is a normal lookup/explanation, not enough to pay the
+    // Opus latency penalty. Multi-factor analysis remains complex.
+    expect(classifyComplexity(convo("Why is my income down this quarter?"))).toBe("standard");
     expect(classifyComplexity(convo("Forecast next month's cash flow"))).toBe("complex");
     expect(classifyComplexity(convo("Break down vendor spend by category"))).toBe("complex");
   });
