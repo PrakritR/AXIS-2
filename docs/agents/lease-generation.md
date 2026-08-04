@@ -278,7 +278,14 @@ Rules for any new consent/attestation control here:
   review modal's `drafts`/`note`, which are submitted as human-confirmed
   overrides and badged "Manager entered" — whenever a **content-derived**
   identity of what is being attested to changes. Each component has a documented
-  `…Subject()` helper; extend that rather than adding a second scheme.
+  `…Subject()` helper; extend that rather than adding a second scheme — **unless
+  the new trigger must reset the tick ALONE**. The review modal's
+  `attestationWording` is that case: the checkbox reads "The terms above are
+  correct" with no disagreements and "I accept the differences listed above"
+  with them, so a manager's own edit that introduces or clears a disagreement
+  changes which statement they are signing. Folding it into `attestationSubject`
+  would re-seed `drafts`/`note` too and wipe their typing on every keystroke, so
+  it is a separate render-time guard that resets `attested` and nothing else.
 - **Never key on object identity.** The pipeline re-syncs on a cadence and hands
   back an equal-but-new object; clearing the box under a manager's fingers on a
   background refresh is its own bug. Equally, keep the identity narrow enough
@@ -290,7 +297,8 @@ Rules for any new consent/attestation control here:
   `sourceSha256: null`, no `extractedAtIso` and no fields, so identity must also
   include the upload (`managerUploadedPdf` file name + `uploadedAt`).
 - Coverage: `tests/unit/lease-signing-consent-carryover.test.tsx`,
-  `tests/unit/uploaded-lease-attestation-carryover.test.tsx`.
+  `tests/unit/uploaded-lease-attestation-carryover.test.tsx`,
+  `tests/unit/uploaded-lease-mismatch-warning.test.tsx`.
 
 ### Signed documents are immutable in practice
 
@@ -601,7 +609,11 @@ four terms with a counterpart on the record. `landlordName`, `propertyAddress`,
 `rentDueDay` and `lateFee` carry `mapsTo: null`, so there is nothing to disagree
 with; they stay review-only. Names are the loosest test on purpose — a real lease
 names co-tenants, middle names and suffixes, so a disagreement is reported only
-when the two names share **no word at all**.
+when the two names share **no word at all**. Names also compare in every script
+by default, and a pair the module cannot judge honestly (one side Latin and the
+other not, or a script that does not delimit words with whitespace) is skipped
+rather than guessed at; `namesDisagree` in that module carries the reasoning and
+is the place to change it.
 
 **A confirmation is bound to BOTH sides of that comparison.**
 `confirmUploadedLeaseParse` stamps the parse's `sourceSha256` onto
@@ -672,8 +684,11 @@ coerced, an unknown field status reads as `not_found` (blank and flagged, never
 a term), unknown keys and uncoercible rows are dropped, and a `version` this
 build does not know degrades the whole parse to `failed` with its confirmation
 discarded. What it must never do is return `null` for a parse that is present
-but unreadable — that would unblock signing. Absent still means absent (`null`
-→ `null`), which is what keeps pre-parse rows behaving as before.
+but unreadable — that would unblock signing. It still maps `null` → `null`, but
+that no longer means the row ends up without a reading: the gate is closed one
+level up, where `normalizeLeasePipelineRow` substitutes an
+`unreadUploadedLeaseParse` for any upload this returns nothing for (see
+**"No parse" is NOT an exemption** above).
 
 Extraction is deterministic regex over `unpdf` page text, server-side
 (`/api/portal/parse-uploaded-lease`, manager-authenticated + rate limited). No
