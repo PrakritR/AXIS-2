@@ -44,8 +44,7 @@ vi.mock("@/lib/supabase/service", () => ({
 let GOOGLE_TIME_MAX: string[] = [];
 
 vi.mock("@/lib/google-calendar/api.server", () => ({
-  GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS: 12_000,
-  GOOGLE_CALENDAR_FETCH_TIMEOUT_MS: 6_000,
+  GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS: 9_000,
   listGoogleCalendarEvents: vi.fn(async (_db: unknown, _id: string, _min: string, max: string) => {
     GOOGLE_TIME_MAX.push(max);
     if (GOOGLE_THROWS) throw new Error("Google Calendar is not connected.");
@@ -57,7 +56,7 @@ vi.mock("@/lib/public-host-label", () => ({
 }));
 
 import { GET as getAvailability } from "@/app/api/public/property-tour-availability/route";
-import { DEFAULT_TOUR_HORIZON_DAYS } from "@/lib/tour-slot-math";
+import { DEFAULT_TOUR_HORIZON_DAYS, slotStartMs } from "@/lib/tour-slot-math";
 
 function availabilityRow(recordType: string, slots: string[]) {
   return {
@@ -298,13 +297,19 @@ describe("public tour availability subtracts what is already taken", () => {
   });
 
   it("reads busy time across the ENTIRE range it can offer, not the default horizon", async () => {
-    // The published fixture sits far past `DEFAULT_TOUR_HORIZON_DAYS`. Bounding
-    // the busy read by that constant left a manager's Google-busy morning
-    // bookable again past day 21 — the same double-booking defect, moved later.
+    // A manager who paints a week two months out is well past
+    // `DEFAULT_TOUR_HORIZON_DAYS`. Bounding the busy read by that constant left
+    // their Google-busy morning bookable again past day 21 — the same
+    // double-booking defect, merely moved later.
+    const twoMonthsOut = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const farDay = `${twoMonthsOut.getFullYear()}-${pad(twoMonthsOut.getMonth() + 1)}-${pad(twoMonthsOut.getDate())}`;
+    const farSlot = `${farDay}:20`;
+    PROPERTY_AVAILABILITY_SLOTS = [farSlot];
+
     await offeredSlots();
-    const furthestOffered = Date.parse(TEN_AM_END);
     expect(GOOGLE_TIME_MAX).toHaveLength(1);
-    expect(Date.parse(GOOGLE_TIME_MAX[0]!)).toBeGreaterThanOrEqual(furthestOffered);
+    expect(Date.parse(GOOGLE_TIME_MAX[0]!)).toBeGreaterThanOrEqual(slotStartMs(farSlot)! + 30 * 60 * 1000);
   });
 
   it("subtracts busy time from a published slot well past the default horizon", async () => {
@@ -313,6 +318,37 @@ describe("public tour availability subtracts what is already taken", () => {
     ];
     const slots = await offeredSlots();
     expect(slots.has(TEN_AM)).toBe(false);
+  });
+
+  it("clamps the busy window so one far-future slotKey cannot stretch it by decades", async () => {
+    PROPERTY_AVAILABILITY_SLOTS = [`${DAY}:18`, "9999-01-01:20"];
+    await offeredSlots();
+    // A year past the default horizon is the ceiling; the malformed-looking
+    // far-future key must not turn into a multi-millennium Google query.
+    const twoYearsOut = Date.now() + 2 * 365 * 24 * 60 * 60 * 1000;
+    expect(Date.parse(GOOGLE_TIME_MAX[0]!)).toBeLessThan(twoYearsOut);
+  });
+
+  it("retries a failed busy read within seconds instead of caching the blank for a minute", async () => {
+    // A failed read caches an EMPTY busy list, which is fail-OPEN. Holding that
+    // for the full success TTL un-subtracts a manager's whole calendar for a
+    // minute on the one route whose purpose is preventing a double book.
+    GOOGLE_THROWS = true;
+    await offeredSlots();
+    expect(GOOGLE_TIME_MAX).toHaveLength(1);
+
+    GOOGLE_THROWS = false;
+    GOOGLE_BUSY = [{ id: "g1", summary: "Busy", start: TEN_AM_START, end: TEN_AM_END }];
+    const realNow = Date.now;
+    const skew = 6_000;
+    vi.spyOn(Date, "now").mockImplementation(() => realNow() + skew);
+    try {
+      const slots = await offeredSlots();
+      expect(GOOGLE_TIME_MAX).toHaveLength(2);
+      expect(slots.has(TEN_AM)).toBe(false);
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
   });
 
   it("still serves availability when the calendar link is broken", async () => {

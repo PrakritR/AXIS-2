@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS,
-  GOOGLE_CALENDAR_FETCH_TIMEOUT_MS,
+  GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS,
   listGoogleCalendarEvents,
 } from "@/lib/google-calendar/api.server";
 import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
@@ -43,6 +42,18 @@ export const runtime = "nodejs";
  * not resurrect a slot that was just booked.
  */
 const GOOGLE_BUSY_TTL_MS = 60_000;
+/**
+ * A FAILED read is cached far more briefly than a successful one.
+ *
+ * Caching the failure at all is deliberate — otherwise a Google outage is
+ * hammered once per request on a public endpoint. But a failure caches an EMPTY
+ * busy list, and empty means fail-OPEN: every slot the manager is actually busy
+ * for goes back on offer. Failing open is still the right trade (failing closed
+ * would break booking entirely on a blip), so what matters is bounding how long
+ * one blip keeps doing it — seconds, not a full minute, on the one route whose
+ * purpose is preventing a double book.
+ */
+const GOOGLE_BUSY_FAILURE_TTL_MS = 5_000;
 /** Hard ceiling on distinct managers held at once; the map is module-global. */
 const GOOGLE_BUSY_CACHE_MAX_ENTRIES = 500;
 const googleBusyCache = new Map<string, { expiresAt: number; windowEndMs: number; blocks: TourBlock[] }>();
@@ -54,12 +65,17 @@ const googleBusyCache = new Map<string, { expiresAt: number; windowEndMs: number
  * queried. The FIFO trim after the sweep bounds the pathological case where
  * every entry is still live.
  */
-function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[], windowEndMs: number): void {
+function cacheGoogleBusyBlocks(
+  managerUserId: string,
+  blocks: TourBlock[],
+  windowEndMs: number,
+  ttlMs: number = GOOGLE_BUSY_TTL_MS,
+): void {
   const now = Date.now();
   for (const [key, entry] of googleBusyCache) {
     if (entry.expiresAt <= now) googleBusyCache.delete(key);
   }
-  googleBusyCache.set(managerUserId, { expiresAt: now + GOOGLE_BUSY_TTL_MS, windowEndMs, blocks });
+  googleBusyCache.set(managerUserId, { expiresAt: now + ttlMs, windowEndMs, blocks });
   while (googleBusyCache.size > GOOGLE_BUSY_CACHE_MAX_ENTRIES) {
     const oldest = googleBusyCache.keys().next();
     if (oldest.done) break;
@@ -68,10 +84,14 @@ function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[], windo
 }
 
 /**
- * Ceiling on one manager's busy read, covering the token hop and every page.
- * Above the library's own budget so this only ever fires for a genuine stall.
+ * Ceiling on one manager's busy read.
+ *
+ * The SAME whole-operation budget the cancel/reschedule paths race on, not a
+ * second independently-chosen number: `listGoogleCalendarEvents` already bounds
+ * its own token hop and page walk below this, and two hand-picked constants are
+ * exactly how the two drifted apart before.
  */
-const GOOGLE_BUSY_READ_BUDGET_MS = GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS + 2_000;
+const GOOGLE_BUSY_READ_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS;
 
 /** Reject once `budgetMs` has passed, so a stalled call cannot hold the response. */
 function withDeadline<T>(work: Promise<T>, budgetMs: number): Promise<T> {
@@ -93,9 +113,16 @@ function withDeadline<T>(work: Promise<T>, budgetMs: number): Promise<T> {
  * all, so a manager who paints a week six weeks out would otherwise get their
  * busy morning bookable again past the default horizon, which is the exact
  * double-booking defect this route exists to close.
+ *
+ * Clamped at the far end all the same: the slots here are unfiltered, so one
+ * far-future or malformed `slotKey` in a stored payload would otherwise stretch
+ * Google's `timeMax` by decades, costing pages and latency on a public uncached
+ * route. A year past the default horizon is far beyond any real published range.
  */
 function googleBusyWindowEndMs(offeredSlots: readonly string[], now: number = Date.now()): number {
-  const defaultEnd = now + DEFAULT_TOUR_HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const defaultEnd = now + DEFAULT_TOUR_HORIZON_DAYS * dayMs;
+  const maxEnd = defaultEnd + 365 * dayMs;
   let furthest = defaultEnd;
   for (const slot of offeredSlots) {
     const startMs = slotStartMs(slot);
@@ -104,7 +131,7 @@ function googleBusyWindowEndMs(offeredSlots: readonly string[], now: number = Da
     const slotEnd = startMs + 30 * 60 * 1000;
     if (slotEnd > furthest) furthest = slotEnd;
   }
-  return furthest;
+  return Math.min(furthest, maxEnd);
 }
 
 /**
@@ -121,27 +148,27 @@ async function googleBusyBlocks(
   const windowEndMs = Date.parse(timeMax);
   const cached = googleBusyCache.get(managerUserId);
   if (cached && cached.expiresAt > Date.now() && cached.windowEndMs >= windowEndMs) return cached.blocks;
-  let blocks: TourBlock[] = [];
   try {
     // A whole-operation deadline on top of the per-hop ones: this route is
     // PUBLIC and uncached, so a slow Google must never stretch a prospect's
-    // booking page. Timing out contributes no busy time, exactly like a broken
-    // link — the tradeoff the fail-open policy below already accepts.
+    // booking page.
     const events = await withDeadline(
       listGoogleCalendarEvents(db, managerUserId, timeMin, timeMax),
       GOOGLE_BUSY_READ_BUDGET_MS,
     );
-    blocks = events
+    const blocks = events
       .filter(googleEventBlocksTours)
       .map((event) => ({ start: event.start, end: event.end }));
+    cacheGoogleBusyBlocks(managerUserId, blocks, windowEndMs);
+    return blocks;
   } catch {
-    // Not linked, revoked, quota, API disabled — a manager without a working
-    // calendar link simply contributes no busy time. Never fail the whole
-    // availability read over one manager's integration.
-    blocks = [];
+    // Not linked, revoked, quota, API disabled, stalled — a manager without a
+    // working calendar link simply contributes no busy time. Never fail the
+    // whole availability read over one manager's integration; the short failure
+    // TTL is what keeps that fail-open from outliving the blip.
+    cacheGoogleBusyBlocks(managerUserId, [], windowEndMs, GOOGLE_BUSY_FAILURE_TTL_MS);
+    return [];
   }
-  cacheGoogleBusyBlocks(managerUserId, blocks, windowEndMs);
-  return blocks;
 }
 
 type ScheduleRecordRow = {
