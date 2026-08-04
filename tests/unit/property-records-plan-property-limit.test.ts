@@ -31,6 +31,8 @@ let EXISTING_ROW: { manager_user_id: string; status?: string } | null = null;
 /** Rows the owner already holds, as the route's count query would see them. */
 let SLOT_ROWS: Array<{ id: string; manager_user_id: string; status: string }> = [];
 let COUNT_ERROR: { message: string } | null = null;
+/** The plan read itself failing — distinct from the account having no plan. */
+let TIER_READ_ERROR: string | null = null;
 let UPSERTS: Record<string, unknown>[] = [];
 let DELETED_IDS: string[] = [];
 /** Every filter the count query applied, so the test can prove HOW it counted. */
@@ -55,7 +57,8 @@ vi.mock("@/lib/supabase/server", () => ({
  * `manager-effective-plan-tier.test.ts`.
  */
 vi.mock("@/lib/manager-access-server", () => ({
-  getEffectiveManagerSkuTier: async () => EFFECTIVE_TIER,
+  getEffectiveManagerSkuTier: async () =>
+    TIER_READ_ERROR ? { ok: false, error: TIER_READ_ERROR } : { ok: true, tier: EFFECTIVE_TIER },
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -143,6 +146,7 @@ beforeEach(() => {
   EXISTING_ROW = null;
   SLOT_ROWS = [];
   COUNT_ERROR = null;
+  TIER_READ_ERROR = null;
   UPSERTS = [];
   DELETED_IDS = [];
   COUNT_FILTERS = [];
@@ -318,6 +322,39 @@ describe("Free plan — a second property listing is refused by the server", () 
 
     expect(res.status).toBe(500);
     expect(UPSERTS).toEqual([]);
+  });
+
+  it("answers 500, not a Free refusal, when the PLAN cannot be read", async () => {
+    // Regression: quota-tier-read-fails-to-free. The purchase-row read used to
+    // discard its PostgREST error, so a transient failure returned zero rows,
+    // which resolves to "free" — a paying Business manager with five listings
+    // was refused their sixth with the Free copy. The two halves of the gate
+    // fail closed the same way now.
+    TIER_READ_ERROR = "Could not read this account's plan.";
+    SLOT_ROWS = liveRows(FREE_MANAGER, BUSINESS_MAX_PROPERTIES - 1);
+
+    const res = await post({ action: "upsert", id: "mgr-x", status: "live", propertyData: {} });
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string; code?: string };
+    expect(body.error).toBe("Could not read this account's plan.");
+    expect(body.code).toBeUndefined();
+    expect(body.error).not.toContain("Free includes");
+    expect(UPSERTS).toEqual([]);
+    expect(DELETED_IDS).toEqual([]);
+  });
+
+  it("still lets an unreadable plan edit and unlist what it already has", async () => {
+    // Fail-closed must not become "the portfolio is frozen": a write that does
+    // not take a NEW slot never consults the plan at all.
+    TIER_READ_ERROR = "Could not read this account's plan.";
+    EXISTING_ROW = { manager_user_id: FREE_MANAGER, status: "live" };
+
+    const edit = await post({ action: "upsert", id: "mgr-existing", status: "live", propertyData: {} });
+    const unlist = await post({ action: "upsert", id: "mgr-existing", status: "unlisted", rowData: {} });
+
+    expect(edit.status).toBe(200);
+    expect(unlist.status).toBe(200);
   });
 });
 

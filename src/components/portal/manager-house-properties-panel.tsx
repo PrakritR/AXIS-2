@@ -1005,7 +1005,9 @@ export function ManagerHousePropertiesPanel({
     if (!isDemoModeActive()) {
       void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
         setTick((t) => t + 1);
-        void mirrorLocalPropertyPipelineToServer(scopeUserId, collectLinkedPropertyIds(scopeUserId));
+        void mirrorLocalPropertyPipelineToServer(scopeUserId, collectLinkedPropertyIds(scopeUserId), {
+          onError: (message) => showToast(message),
+        });
       });
     } else {
       setTick((t) => t + 1);
@@ -1026,7 +1028,7 @@ export function ManagerHousePropertiesPanel({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [scopeUserId]);
+  }, [scopeUserId, showToast]);
 
 
   const rows = useMemo(() => {

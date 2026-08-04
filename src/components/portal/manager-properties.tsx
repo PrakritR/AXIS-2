@@ -42,7 +42,7 @@ import {
   managerTierPropertyLimitReached,
   maxPropertiesForManagerTier,
 } from "@/lib/manager-access";
-import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
+import { loadManagerEffectivePlanTierClient } from "@/lib/manager-subscription-client";
 
 export function ManagerProperties({
   stage: stageProp = "listed",
@@ -107,7 +107,11 @@ export function ManagerProperties({
       return;
     }
     try {
-      const tier = await loadManagerSubscriptionTierClient();
+      // The EFFECTIVE plan, not the raw SKU: this value only ever feeds the
+      // property-limit pre-checks here and in the properties panel, and
+      // `POST /api/property-records` re-resolves the same one. Reading the raw
+      // tier would let the interface promise a publish the server refuses.
+      const tier = await loadManagerEffectivePlanTierClient();
       setSkuTier(tier);
     } catch {
       /* ignore */
@@ -128,7 +132,11 @@ export function ManagerProperties({
         // Only push local state up once a real sync has run (userId resolved) — otherwise
         // this re-uploads a stale locally-cached snapshot and can clobber an admin-side
         // status change (e.g. request-change) that happened since this browser last synced.
-        if (userId) void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId));
+        if (userId) {
+          void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId), {
+            onError: (message) => showToast(message),
+          });
+        }
       });
     });
     const on = (e: Event) => {
@@ -147,7 +155,7 @@ export function ManagerProperties({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [refreshPortfolio, userId, scopeUserId]);
+  }, [refreshPortfolio, userId, scopeUserId, showToast]);
 
   const stageCounts = useMemo(() => {
     void portfolioTick;

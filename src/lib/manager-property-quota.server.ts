@@ -91,7 +91,14 @@ export async function assertManagerPropertyListingQuota(
   const ownerUserId = params.ownerUserId?.trim();
   if (!ownerUserId) return { ok: true };
 
-  const tier = await getEffectiveManagerSkuTier(ownerUserId);
+  // A plan we could not read is not the Free plan. Zero purchase rows come back
+  // both when the account never bought anything and when the read failed, and
+  // that resolves to Free — so treating an unreadable plan as a resolved one
+  // would cap a paying manager on a transient error. Fail closed with a 500,
+  // the same way the slot count below refuses to be read as "zero used".
+  const tierResult = await getEffectiveManagerSkuTier(ownerUserId);
+  if (!tierResult.ok) return { ok: false, status: 500, error: tierResult.error };
+  const tier = tierResult.tier;
   const limit = maxPropertiesForManagerTier(tier);
   if (limit === null) return { ok: true };
 
