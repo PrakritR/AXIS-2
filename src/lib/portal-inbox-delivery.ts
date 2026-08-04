@@ -129,13 +129,30 @@ export async function resolveInboxThreadReplyTarget(
   };
 }
 
-/** Write the reply onto an already-authorized thread. Call only once the send is cleared. */
+/**
+ * Write the reply onto an already-authorized thread. Call only once the send is
+ * cleared.
+ *
+ * The authorization decision stays on `target`, but the body is merged onto a
+ * FRESH read of `row_data`: the gates between resolve and commit are several DB
+ * round trips wide, and an inbound `deliverPortalMessageThreadSide` (or a
+ * concurrent reply) landing in that window would otherwise be dropped by this
+ * last-write-wins upsert. A thread deleted in the same window is left deleted —
+ * the upsert must not resurrect it.
+ */
 export async function commitInboxThreadReply(
   db: SupabaseClient,
   target: InboxThreadReplyTarget,
   opts: { fromName: string; text: string; attachments?: { url: string; name?: string }[] },
 ): Promise<void> {
-  const messages = Array.isArray(target.rowData.messages) ? [...target.rowData.messages] : [];
+  const { data: freshRow } = await db
+    .from("portal_inbox_thread_records")
+    .select("id, row_data")
+    .eq("id", target.threadId)
+    .maybeSingle();
+  if (!freshRow) return;
+  const rowData = (freshRow.row_data ?? {}) as Record<string, unknown>;
+  const messages = Array.isArray(rowData.messages) ? [...(rowData.messages as unknown[])] : [];
   const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   messages.push({
     id: `reply-${Date.now().toString(36)}`,
@@ -151,7 +168,7 @@ export async function commitInboxThreadReply(
       owner_user_id: target.ownerUserId,
       participant_email: target.participantEmail,
       row_data: {
-        ...target.rowData,
+        ...rowData,
         messages,
         preview: opts.text.slice(0, 100).replace(/\n/g, " "),
         unread: false,
