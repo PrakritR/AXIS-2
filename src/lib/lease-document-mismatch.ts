@@ -63,12 +63,24 @@ export type LeaseRecordTerms = {
 
 const HONORIFICS = new Set(["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "madam"]);
 
-/** Comparable words of a person's name: lowercased, punctuation dropped, initials and honorifics ignored. */
+/**
+ * Comparable words of a person's name: accents folded away, punctuation and
+ * digits dropped, initials and honorifics ignored.
+ *
+ * Unicode-aware on purpose. An ASCII-only filter produced an empty token set for
+ * any name outside the Latin alphabet, and `namesDisagree` fails open on an
+ * empty set — so the tenant-name half of this guard was permanently inert for
+ * those residents, missing exactly the case it exists to catch. NFD plus a
+ * combining-mark strip also makes "José" and "Jose" the same party rather than
+ * two, which is a false mismatch avoided rather than a check loosened.
+ */
 function nameTokens(raw: string): Set<string> {
   return new Set(
     raw
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
       .toLowerCase()
-      .replace(/[^a-z\s]/g, " ")
+      .replace(/[^\p{L}\s]/gu, " ")
       .split(/\s+/)
       .map((t) => t.trim())
       .filter((t) => t.length >= 2 && !HONORIFICS.has(t)),
@@ -157,15 +169,28 @@ export function leaseDocumentMismatches(
  * Stamped onto the review at confirm time so an acknowledgement of "these
  * differences" cannot outlive the record it was made against: the document
  * digest pins WHAT was read, this pins what it was compared TO. Derived from
- * exactly the four terms `leaseDocumentMismatches` compares, so a record edit
- * that cannot change the answer cannot needlessly re-gate a lease either.
+ * exactly the four terms `leaseDocumentMismatches` compares, IN THE SAME
+ * NORMALIZED FORM it compares them in, so a record edit that cannot change the
+ * answer cannot needlessly re-gate a lease either: rewriting `2026-03-01` as
+ * `March 1, 2026`, or recomputing `signedRentLabel` into another format for the
+ * same amount, leaves this identical.
+ *
+ * Each term falls back to its trimmed raw string where normalization declines
+ * to produce one (an unparseable date, a rent label carrying no plain amount),
+ * so the fingerprint stays defined and specific rather than collapsing several
+ * different records onto one empty value.
  */
 export function leaseRecordFingerprint(record: LeaseRecordTerms): string {
+  const name = (record.residentName ?? "").trim();
+  const start = (record.leaseStart ?? "").trim();
+  const end = (record.leaseEnd ?? "").trim();
+  const rent = (record.rentLabel ?? "").trim();
+  const nameKey = [...nameTokens(name)].sort().join(" ");
   return [
-    (record.residentName ?? "").trim(),
-    (record.leaseStart ?? "").trim(),
-    (record.leaseEnd ?? "").trim(),
-    (record.rentLabel ?? "").trim(),
+    nameKey || name,
+    normalizeLeaseDate(start) ?? start,
+    normalizeLeaseDate(end) ?? end,
+    amountFromLabel(rent) ?? rent,
   ].join("~");
 }
 

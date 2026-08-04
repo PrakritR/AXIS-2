@@ -268,6 +268,95 @@ describe("the modal never claims a lease is sendable when it is not", () => {
   });
 });
 
+/**
+ * The banner, the footer and the tick answer to the STORED reading — the same
+ * thing `leaseSendGateBlocker` reads. Deriving them from the manager's unsaved
+ * typing let a correction that was never persisted flip the modal into
+ * "Confirmed … can be sent for signature" with the Confirm button gone, while
+ * every send path still refused: a dead end recoverable only by reloading.
+ */
+describe("unsaved typing never settles the review", () => {
+  const SHA = "a".repeat(64);
+  // Tenant agrees, rent does not — so correcting the rent empties the
+  // draft-aware list while the STORED parse still disagrees.
+  const WRONG_RENT_PAGES = [
+    [
+      "RESIDENTIAL LEASE AGREEMENT",
+      "This Lease is between Cascade Holdings LLC (Landlord) and Diego Morales (Tenant).",
+      "Tenant shall pay rent of $1,450.00 per month.",
+    ].join("\n"),
+  ];
+
+  function supersededParse(fingerprint: string | null): UploadedLeaseParse {
+    const base = parseOf(WRONG_RENT_PAGES);
+    return {
+      ...base,
+      review: {
+        ...base.review,
+        status: "confirmed" as const,
+        confirmedByName: "Pat Manager",
+        confirmedAtIso: "2026-08-01T12:00:00.000Z",
+        confirmedDocumentSha256: SHA,
+        confirmedRecordFingerprint: fingerprint,
+      },
+    };
+  }
+
+  function rowWith(parse: UploadedLeaseParse) {
+    return row({ uploadedLeaseParse: parse });
+  }
+
+  it("keeps the Confirm affordance when a stored mismatch is corrected but not confirmed", () => {
+    const parse = supersededParse(null);
+    renderModal(parse, rowWith(parse));
+
+    expect(document.body.querySelector('[data-attr="uploaded-lease-superseded"]')).not.toBeNull();
+    fireEvent.change(rentInput()!, { target: { value: "$1,050.00" } });
+
+    // The panel is draft-aware, so the corrected term stops being listed...
+    expect(panel()).toBeNull();
+    // ...but nothing was saved, so the review is still unsettled: Confirm stays
+    // reachable and the modal does not claim the lease is sendable.
+    expect(document.body.querySelector('[data-attr="uploaded-lease-confirm"]')).not.toBeNull();
+    expect(attestBox()).not.toBeNull();
+    expect(document.body.querySelector('[data-attr="uploaded-lease-superseded"]')).not.toBeNull();
+    expect(shownText()).not.toContain("can be sent for signature");
+  });
+
+  it("opens unticked, with Confirm disabled, for a confirmation that names no record", () => {
+    const parse = supersededParse(null);
+    renderModal(parse, rowWith(parse));
+
+    expect(shownText()).toContain("cannot tell which record it was confirmed against");
+    expect(attestBox()!.checked).toBe(false);
+    const confirmButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-attr="uploaded-lease-confirm"]',
+    );
+    expect(confirmButton!.disabled).toBe(true);
+
+    fireEvent.click(attestBox()!);
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[data-attr="uploaded-lease-confirm"]')!.disabled,
+    ).toBe(false);
+  });
+
+  it("opens unticked, with Confirm disabled, when the record has changed since", () => {
+    const parse = supersededParse("Someone Else~~~99.00");
+    renderModal(parse, rowWith(parse));
+
+    expect(shownText()).toContain("The lease record has changed since");
+    expect(attestBox()!.checked).toBe(false);
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[data-attr="uploaded-lease-confirm"]')!.disabled,
+    ).toBe(true);
+
+    fireEvent.click(attestBox()!);
+    expect(
+      document.body.querySelector<HTMLButtonElement>('[data-attr="uploaded-lease-confirm"]')!.disabled,
+    ).toBe(false);
+  });
+});
+
 describe("an upload nobody has read says so", () => {
   it("does not claim the document could not be structured", () => {
     renderModal(unreadUploadedLeaseParse("lease.pdf"));

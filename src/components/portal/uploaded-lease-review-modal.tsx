@@ -18,6 +18,7 @@ import {
   LEASE_MOVE_BACK_TO_REVIEW_MESSAGE,
   leaseAllowsManagerDocumentEdits,
   leaseRecordTerms,
+  leaseSendHeldByUploadedLeaseReview,
   leaseSendStillReachable,
 } from "@/lib/lease-pipeline-storage";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
@@ -145,11 +146,52 @@ export function UploadedLeaseReviewModal({
   /** Re-read the PDF already on the row. Never confirms; the review stays open. */
   onRetryRead?: () => Promise<void> | void;
 }) {
+  /**
+   * Three different questions, three different predicates — a surface reads the
+   * one for the claim IT makes:
+   *
+   * - `storedConfirmed` — did a human confirm this reading at all? Owns the
+   *   "Confirmed by X on Y" attribution, which stays true even once the
+   *   confirmation stops covering the record.
+   * - `supersededCause` — does that confirmation still cover the record's
+   *   current disagreements? Owns whether the Confirm affordance comes back.
+   * - `sendable` — could this lease be sent at all? Owns the SENDABILITY claim,
+   *   read from the shared `leaseSendHeldByUploadedLeaseReview` predicate rather
+   *   than recomposed here, because a hand-composed copy is how the two drift.
+   *   A Fully Signed or Voided lease is refused on status alone, so telling its
+   *   manager it "can be sent for signature" is the same class of lie as a green
+   *   banner over a gated lease.
+   *
+   * All of them are judged against the STORED reading — never the manager's
+   * unsaved drafts — because that is what the send gate reads. Typing a
+   * correction into a mismatched field without confirming it must not flip this
+   * modal into "can be sent for signature" with the Confirm button gone while
+   * `leaseSendGateBlocker` still refuses the send: that state is unrecoverable
+   * without a reload, and it is the UI denying the reason the send is dead.
+   */
+  const storedConfirmed = uploadedLeaseReviewIsConfirmed(parse);
+  const storedMismatches = leaseDocumentMismatches(parse, leaseRecordTerms(row));
+  const supersededCause =
+    storedConfirmed && storedMismatches.length > 0
+      ? leaseMismatchAcknowledgementGap(parse, leaseRecordTerms(row))
+      : null;
+  /** The review is settled for THIS record: nothing here for the manager to act on. */
+  const confirmed = storedConfirmed && !supersededCause;
+  const sendable = leaseSendStillReachable(row) && !leaseSendHeldByUploadedLeaseReview(row);
+  /** A superseded row out for signature cannot be confirmed where it stands. */
+  const needsMoveBackFirst = Boolean(supersededCause) && !leaseAllowsManagerDocumentEdits(row);
+
   const [drafts, setDrafts] = useState<Partial<Record<UploadedLeaseFieldKey, string>>>(
     () => ({ ...(parse.review.overrides ?? {}) }),
   );
   const [note, setNote] = useState(parse.review.note ?? "");
-  const [attested, setAttested] = useState(uploadedLeaseReviewIsConfirmed(parse));
+  // Seeded from "is the review settled for THIS record", never from the bare
+  // stored confirmation. A superseded confirmation — including the legacy
+  // `record_unknown` cohort, which is every confirmation predating the
+  // fingerprint field — must open UNTICKED, or the re-acknowledgement that
+  // `confirmedRecordFingerprint` exists to force is satisfied by one Confirm
+  // click with nothing re-affirmed.
+  const [attested, setAttested] = useState(confirmed);
   const [tab, setTab] = useState<"terms" | "document">("terms");
 
   // Reset everything the manager staged whenever what they are attesting to
@@ -162,7 +204,7 @@ export function UploadedLeaseReviewModal({
   const [attestedSubject, setAttestedSubject] = useState(subject);
   if (attestedSubject !== subject) {
     setAttestedSubject(subject);
-    setAttested(uploadedLeaseReviewIsConfirmed(parse));
+    setAttested(confirmed);
     // `drafts` are submitted by `onConfirm` as overrides and badged "Manager
     // entered", so carrying them would attribute a value to the manager that
     // they never typed for this document; `note` is recorded as part of the
@@ -171,22 +213,6 @@ export function UploadedLeaseReviewModal({
     setNote(parse.review.note ?? "");
   }
 
-  /**
-   * Three different questions, three different predicates — a surface reads the
-   * one for the claim IT makes:
-   *
-   * - `storedConfirmed` — did a human confirm this reading at all? Owns the
-   *   "Confirmed by X on Y" attribution, which stays true even once the
-   *   confirmation stops covering the record.
-   * - `acknowledgementGap` — does that confirmation still cover the record's
-   *   current disagreements? Owns whether the Confirm affordance comes back.
-   * - `sendStillReachable` — could this lease be sent at all? Owns the
-   *   SENDABILITY claim. A Fully Signed or Voided lease is refused on status
-   *   alone, so telling its manager it "can be sent for signature" is the same
-   *   class of lie as a green banner over a gated lease.
-   */
-  const storedConfirmed = uploadedLeaseReviewIsConfirmed(parse);
-  const sendStillReachable = leaseSendStillReachable(row);
   /** Kept visible in every confirmed state — the confirmation happened, whatever else changed. */
   const confirmationAttribution = `Confirmed${parse.review.confirmedByName ? ` by ${parse.review.confirmedByName}` : ""}${
     parse.review.confirmedAtIso ? ` on ${new Date(parse.review.confirmedAtIso).toLocaleString()}` : ""
@@ -205,39 +231,22 @@ export function UploadedLeaseReviewModal({
 
   /**
    * Terms this document states that disagree with the record the manager opened.
-   * Computed against the manager's staged edits, so correcting a value clears
-   * its row here immediately rather than after a save.
+   *
+   * The one draft-aware value in this component, and deliberately so: this list
+   * is what the manager is editing against, so correcting a value clears its row
+   * here immediately rather than after a save. It drives the PANEL and the
+   * wording of the attestation — never the banner, the footer, or any claim
+   * about whether the lease can be sent, all of which read the stored parse the
+   * send gate reads.
    */
   const mismatches = useMemo(
     () =>
       leaseDocumentMismatches(
         { ...parse, review: { ...parse.review, overrides: { ...(parse.review.overrides ?? {}), ...drafts } } },
-        {
-          residentName: row.residentName,
-          leaseStart: row.application?.leaseStart ?? null,
-          leaseEnd: row.application?.leaseEnd ?? null,
-          rentLabel: row.signedRentLabel ?? null,
-        },
+        leaseRecordTerms(row),
       ),
     [parse, drafts, row],
   );
-
-  /**
-   * Does the stored confirmation still cover the disagreements on screen?
-   *
-   * Judged against the `parse` PROP — the reading this modal is actually
-   * rendering — rather than `row.uploadedLeaseParse`, so the banner can never
-   * describe a different reading than the table below it. Draft-aware, so a
-   * manager who corrects every disagreement clears the banner too.
-   */
-  const supersededCause =
-    storedConfirmed && mismatches.length > 0
-      ? leaseMismatchAcknowledgementGap(parse, leaseRecordTerms(row))
-      : null;
-  /** The review is settled: nothing here for the manager to act on. */
-  const confirmed = storedConfirmed && !supersededCause;
-  /** A superseded row out for signature cannot be confirmed where it stands. */
-  const needsMoveBackFirst = Boolean(supersededCause) && !leaseAllowsManagerDocumentEdits(row);
 
   /**
    * Untick when the manager's OWN edits change which statement they are being
@@ -253,7 +262,7 @@ export function UploadedLeaseReviewModal({
   const [attestedWording, setAttestedWording] = useState(attestationWording);
   if (attestedWording !== attestationWording) {
     setAttestedWording(attestationWording);
-    setAttested(uploadedLeaseReviewIsConfirmed(parse));
+    setAttested(confirmed);
   }
 
   if (parse.status !== "parsed") {
@@ -417,7 +426,7 @@ export function UploadedLeaseReviewModal({
               : "PropLane cannot tell which record it was confirmed against, so the differences below have to be accepted again."}
             {needsMoveBackFirst ? ` ${LEASE_MOVE_BACK_TO_REVIEW_MESSAGE}` : ""}
           </p>
-        ) : confirmed && sendStillReachable ? (
+        ) : confirmed && sendable ? (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
             {confirmationAttribution} This lease can be sent for signature.
           </p>

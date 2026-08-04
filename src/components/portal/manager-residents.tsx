@@ -133,6 +133,7 @@ import {
   leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
   confirmUploadedLeaseParse,
+  leaseNeedsUploadedLeaseReviewAction,
   leaseSendGateBlocker,
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   readLeasePipeline,
@@ -1392,9 +1393,11 @@ export function ManagerResidents({
     const gateBlocker = leaseSendGateBlocker(lease);
     if (gateBlocker) {
       showToast(gateBlocker);
-      // The review is where a manager acts on both a mismatch and an unread
-      // import, so open it rather than leaving them with a toast and no next step.
-      if (lease.uploadedLeaseParse) setImportReviewLeaseId(lease.id);
+      // Only for the blockers the review can actually clear — the same scoping
+      // as the "Review import" CTA. An unapproved applicant is fixed in
+      // Applications, and a Confirm flow that still ends in the same refusal is
+      // a dead end.
+      if (leaseNeedsUploadedLeaseReviewAction(lease)) setImportReviewLeaseId(lease.id);
       return;
     }
     const recipient = res.email.trim();

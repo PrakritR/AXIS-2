@@ -299,9 +299,12 @@ export function ManagerLeasesPipelinePanel({
     const gateBlocker = leaseSendGateBlocker(row);
     if (gateBlocker) {
       showToast(gateBlocker);
-      // The review is where a manager acts on both a mismatch and an unread
-      // import, so open it rather than leaving them with a toast and no next step.
-      if (row.uploadedLeaseParse) setImportReviewRowId(row.id);
+      // Open the review only for the blockers it can actually clear — an unread
+      // import or an unacknowledged mismatch, which is exactly what the "Review
+      // import" CTA is scoped to. An unapproved applicant is fixed in
+      // Applications, so dropping that manager into a Confirm flow that still
+      // ends in the same refusal is a dead end; the toast alone is the answer.
+      if (leaseNeedsUploadedLeaseReviewAction(row)) setImportReviewRowId(row.id);
       return;
     }
     const unit = row.unit.trim() || "your unit";
@@ -457,14 +460,6 @@ export function ManagerLeasesPipelinePanel({
           // an import nobody has confirmed. `sendLeaseToResident` refuses on the
           // same three; this is the affordance.
           leaseSendGateBlocker(row);
-    // Deliberately NOT disabled when there is a reason. Disabling makes the
-    // click handler — the only thing that states the reason and opens the
-    // review that clears it — unreachable, and `title` is invisible on touch,
-    // so a blocked Send became a dead button with no sentence anywhere. The
-    // gate is `sendLeaseToResident`, never the button ("greying out a button is
-    // not the gate"), so an enabled Send that explains itself is strictly safer
-    // than a dead one.
-    const sendToResidentDisabled = false;
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
     const showDelete = row.status !== "Fully Signed";
     const showMoveToReview = row.status === "Resident Signature Pending";
@@ -507,12 +502,19 @@ export function ManagerLeasesPipelinePanel({
     ) : null;
 
     const sendToResidentButton = showSendToResident ? (
+      // Disabled only while this row's send is in flight, never for a gate
+      // reason. Disabling for a reason makes the click handler — the only thing
+      // that states that reason and opens the review which clears it —
+      // unreachable, and `title` is invisible on touch, so a blocked Send became
+      // a dead button with no sentence anywhere. The gate is
+      // `sendLeaseToResident`, never the button ("greying out a button is not
+      // the gate"), so an enabled Send that explains itself is strictly safer.
       <Button
         type="button"
         variant="outline"
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="lease-send-resident"
-        disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
+        disabled={sendingToResidentRowId === row.id}
         title={sendBlockedReason ?? undefined}
         onClick={() => openSendLeasePreview(row)}
       >
