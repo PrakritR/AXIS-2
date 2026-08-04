@@ -3,9 +3,8 @@ import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
 import { randomUUID } from "node:crypto";
 import {
-  UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   leaseAllowsManagerDocumentEdits,
-  leaseAwaitsUploadedLeaseReview,
+  leaseSendGateBlockerAmong,
   normalizeLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -315,13 +314,22 @@ function sendForSignatureBlocker(row: LeasePipelineRow): string | null {
   if (!row.residentEmail.trim().toLowerCase().includes("@")) {
     return "This lease has no resident email on file, so the resident cannot be notified to sign.";
   }
-  // The confirm-before-sign gate, same predicate and same wording the store
-  // uses — an imported lease nobody has read must not become signable just
-  // because the request came through the assistant instead of the UI.
-  if (leaseAwaitsUploadedLeaseReview(row)) {
-    return UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE;
-  }
   return null;
+}
+
+/**
+ * Every reason the Leases UI would refuse this send, including the ones that
+ * need the landlord's applications. The assistant is not a second door with
+ * weaker checks: it runs `leaseSendGateBlockerAmong`, the same ordering and the
+ * same wording the manager gets from a disabled Send button.
+ */
+async function sendForSignatureBlockerWithContext(
+  ctx: AgentContext,
+  row: LeasePipelineRow,
+): Promise<string | null> {
+  const blocker = sendForSignatureBlocker(row);
+  if (blocker) return blocker;
+  return leaseSendGateBlockerAmong(row, await loadManagerApplications(ctx));
 }
 
 export const sendLeaseForSignatureTool = defineWriteTool({
@@ -339,7 +347,7 @@ export const sendLeaseForSignatureTool = defineWriteTool({
       throw new Error(`No lease with id ${input.leaseId} belongs to this landlord. Use list_leases to get valid lease ids.`);
     }
     const row = normalizeLeasePipelineRow(record.row_data);
-    const blocker = sendForSignatureBlocker(row);
+    const blocker = await sendForSignatureBlockerWithContext(ctx, row);
     if (blocker) throw new Error(blocker);
     const residentEmail = row.residentEmail.trim().toLowerCase();
     return {
@@ -360,7 +368,7 @@ export const sendLeaseForSignatureTool = defineWriteTool({
     const record = await findOwnedLeaseRecord(ctx, input.leaseId);
     if (!record) throw new Error("No matching lease for this landlord.");
     const row = normalizeLeasePipelineRow(record.row_data);
-    const blocker = sendForSignatureBlocker(row);
+    const blocker = await sendForSignatureBlockerWithContext(ctx, row);
     if (blocker) throw new Error(blocker);
     const residentEmail = row.residentEmail.trim().toLowerCase();
 

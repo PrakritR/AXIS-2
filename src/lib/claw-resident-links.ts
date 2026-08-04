@@ -47,7 +47,10 @@ export function residentPortalPath(
     case "applications":
       return "/resident/applications";
     case "login":
-      return "/auth/login";
+      // `/auth/sign-in` is the real route; `/auth/login` 404s. Every resident
+      // onboarding email and SMS routes through here, so a wrong token here is a
+      // dead end for the recipient of a lease, a charge, or a welcome message.
+      return "/auth/sign-in";
     case "signup":
       return "/auth/resident-setup";
     case "browse":

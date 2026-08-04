@@ -133,7 +133,7 @@ import {
   leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
   confirmUploadedLeaseParse,
-  leaseAwaitsUploadedLeaseReview,
+  leaseSendGateBlocker,
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   readLeasePipeline,
   residentCanViewLeaseRow,
@@ -1387,6 +1387,16 @@ export function ManagerResidents({
       showToast("Generate or upload a lease document first.");
       return;
     }
+    // Same refusals `sendLeaseToResident` makes, before the preview opens —
+    // being refused at "Send lease & notification" reads as a broken send.
+    const gateBlocker = leaseSendGateBlocker(lease);
+    if (gateBlocker) {
+      showToast(gateBlocker);
+      // The review is where a manager acts on both a mismatch and an unread
+      // import, so open it rather than leaving them with a toast and no next step.
+      if (lease.uploadedLeaseParse) setImportReviewLeaseId(lease.id);
+      return;
+    }
     const recipient = res.email.trim();
     const unit = lease.unit.trim() || "your unit";
     setLeaseSentPreview({
@@ -2369,9 +2379,10 @@ export function ManagerResidents({
         sendToResidentDisabled={
           !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
           (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl) ||
-          // An imported lease is not signable until a person has confirmed the
-          // extraction. `sendLeaseToResident` refuses too; this is the affordance.
-          leaseAwaitsUploadedLeaseReview(residentLease)
+          // Unapproved applicant, a document that disagrees with the record, or
+          // an import nobody has confirmed. `sendLeaseToResident` refuses on the
+          // same three; this is the affordance.
+          Boolean(leaseSendGateBlocker(residentLease))
         }
         onMoveToManagerReview={() => {
           const moveResult = sendLeaseBackToManager(residentLease.id, userId);

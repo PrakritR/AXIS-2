@@ -1,0 +1,161 @@
+/**
+ * Does the uploaded lease document describe the tenancy PropLane has on record?
+ *
+ * A lease page headed "Diego Morales / Cascade Lofts · Unit 2A" once rendered a
+ * PDF naming a different tenant, that person's real personal email, a different
+ * room and a different rent — with Send fully enabled and no warning anywhere.
+ * Nothing in the product objected. This module is what objects.
+ *
+ * Two rules shape every comparison here, because a FALSE mismatch is expensive
+ * too — it blocks a legitimate send and teaches managers to click past the
+ * warning:
+ *
+ * 1. **Only compare what the document actually states.** An `ambiguous` or
+ *    `not_found` field is already blank-and-flagged in the review; treating an
+ *    unread term as a disagreement would flag almost every document.
+ * 2. **Only compare in the comparable form.** Dates and money are compared as
+ *    normalized values, so `March 1, 2026` and `2026-03-01` agree and
+ *    `01/02/2026` (which means two different days in two conventions, so
+ *    `normalizeLeaseDate` deliberately refuses it) is not compared at all.
+ *
+ * Names are the loosest test on purpose: a real lease names co-tenants, middle
+ * names and suffixes, so a disagreement is only reported when the two names
+ * share NO word at all. That still catches the case this exists for — an
+ * entirely different person — while leaving "Diego Morales" and
+ * "Diego A. Morales and Jane Doe" alone.
+ *
+ * `landlordName`, `propertyAddress`, `rentDueDay` and `lateFee` are NOT compared:
+ * they have no counterpart on the lease record (`mapsTo: null`), so there is
+ * nothing to disagree with. They stay review-only, shown in the review table.
+ */
+
+import {
+  normalizeLeaseDate,
+  normalizeLeaseMoney,
+  resolvedFieldValue,
+  type UploadedLeaseFieldKey,
+  type UploadedLeaseParse,
+} from "@/lib/uploaded-lease-extraction";
+
+export type LeaseDocumentMismatch = {
+  key: UploadedLeaseFieldKey;
+  /** Human label for the term, e.g. "Tenant / Resident". */
+  label: string;
+  /** What the uploaded document says. */
+  documentValue: string;
+  /** What the PropLane lease record says. */
+  recordValue: string;
+};
+
+/**
+ * The record side of the comparison. Deliberately a plain shape rather than
+ * `LeasePipelineRow`, so this module stays free of the storage layer that
+ * imports it.
+ */
+export type LeaseRecordTerms = {
+  residentName?: string | null;
+  leaseStart?: string | null;
+  leaseEnd?: string | null;
+  /** `signedRentLabel`, e.g. "$1,050.00 / month". */
+  rentLabel?: string | null;
+};
+
+const HONORIFICS = new Set(["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "madam"]);
+
+/** Comparable words of a person's name: lowercased, punctuation dropped, initials and honorifics ignored. */
+function nameTokens(raw: string): Set<string> {
+  return new Set(
+    raw
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2 && !HONORIFICS.has(t)),
+  );
+}
+
+/** True when two names cannot plausibly be the same party — they share no word. */
+function namesDisagree(documentValue: string, recordValue: string): boolean {
+  const a = nameTokens(documentValue);
+  const b = nameTokens(recordValue);
+  if (a.size === 0 || b.size === 0) return false;
+  for (const token of a) if (b.has(token)) return false;
+  return true;
+}
+
+/** Amount from a label like "$1,050.00 / month", or null when there is no plain amount in it. */
+function amountFromLabel(raw: string): string | null {
+  const match = /\$?\s?\d[\d,]*(?:\.\d{1,2})?/.exec(raw.trim());
+  return match ? normalizeLeaseMoney(match[0]) : null;
+}
+
+/**
+ * Every term the uploaded document states that disagrees with the lease record.
+ *
+ * Empty when there is no parse, when the parse could not be read, or when
+ * nothing comparable disagrees — this never reports a term it did not read.
+ */
+export function leaseDocumentMismatches(
+  parse: UploadedLeaseParse | null | undefined,
+  record: LeaseRecordTerms,
+): LeaseDocumentMismatch[] {
+  if (!parse || parse.status !== "parsed") return [];
+  const mismatches: LeaseDocumentMismatch[] = [];
+
+  for (const field of parse.fields) {
+    // A value the manager typed IS the manager's decision about this term, so it
+    // is compared exactly like an extracted one — a manager who types the wrong
+    // tenant should still be told the record disagrees.
+    const { value } = resolvedFieldValue(field, parse.review);
+    const documentValue = value.trim();
+    if (!documentValue) continue;
+    if (field.status !== "extracted" && !parse.review.overrides?.[field.key]) continue;
+
+    switch (field.key) {
+      case "tenantName": {
+        const recordValue = (record.residentName ?? "").trim();
+        if (!recordValue || recordValue === "—") break;
+        if (namesDisagree(documentValue, recordValue)) {
+          mismatches.push({ key: field.key, label: field.label, documentValue, recordValue });
+        }
+        break;
+      }
+      case "leaseStart":
+      case "leaseEnd": {
+        const recordRaw = (field.key === "leaseStart" ? record.leaseStart : record.leaseEnd) ?? "";
+        const recordValue = recordRaw.trim();
+        if (!recordValue) break;
+        const docDate = normalizeLeaseDate(documentValue);
+        const recordDate = normalizeLeaseDate(recordValue);
+        if (docDate && recordDate && docDate !== recordDate) {
+          mismatches.push({ key: field.key, label: field.label, documentValue, recordValue });
+        }
+        break;
+      }
+      case "monthlyRent": {
+        const recordValue = (record.rentLabel ?? "").trim();
+        if (!recordValue) break;
+        const docAmount = amountFromLabel(documentValue);
+        const recordAmount = amountFromLabel(recordValue);
+        if (docAmount && recordAmount && docAmount !== recordAmount) {
+          mismatches.push({ key: field.key, label: field.label, documentValue, recordValue });
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return mismatches;
+}
+
+export const LEASE_DOCUMENT_MISMATCH_MESSAGE =
+  "This document disagrees with the lease record. Review the imported lease and confirm the differences before sending it for signature.";
+
+/** One-line summary naming exactly what disagrees, for a toast or a tool error. */
+export function describeLeaseDocumentMismatches(mismatches: LeaseDocumentMismatch[]): string {
+  return mismatches
+    .map((m) => `${m.label}: document says “${m.documentValue}”, record says “${m.recordValue}”`)
+    .join("; ");
+}

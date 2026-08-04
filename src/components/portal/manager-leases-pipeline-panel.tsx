@@ -41,6 +41,7 @@ import {
   managerSignLease,
   confirmUploadedLeaseParse,
   leaseAwaitsUploadedLeaseReview,
+  leaseSendGateBlocker,
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   runLeaseDownload,
   sendLeaseBackToManager,
@@ -292,6 +293,17 @@ export function ManagerLeasesPipelinePanel({
       showToast("Generate or upload a lease document first.");
       return;
     }
+    // The same refusals `sendLeaseToResident` makes, checked BEFORE the preview
+    // opens. Reaching "Send lease & notification" and only then being refused
+    // reads as a broken send; being told why up front is the affordance.
+    const gateBlocker = leaseSendGateBlocker(row);
+    if (gateBlocker) {
+      showToast(gateBlocker);
+      // The review is where a manager acts on both a mismatch and an unread
+      // import, so open it rather than leaving them with a toast and no next step.
+      if (row.uploadedLeaseParse) setImportReviewRowId(row.id);
+      return;
+    }
     const unit = row.unit.trim() || "your unit";
     setLeaseSentPreview({
       row,
@@ -435,12 +447,17 @@ export function ManagerLeasesPipelinePanel({
       !residentAccountEmails.has(row.residentEmail.trim().toLowerCase());
 
     const hasDocument = hasLeaseDocument(row);
-    const sendToResidentDisabled =
-      !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-      (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) ||
-      // An imported lease is not signable until a person has confirmed the
-      // extraction. `sendLeaseToResident` refuses too; this is the affordance.
-      leaseAwaitsUploadedLeaseReview(row);
+    // Every reason `sendLeaseToResident` would refuse, in the same order, so a
+    // disabled Send always has a sentence behind it rather than being a mystery.
+    const sendBlockedReason = !residentAccountEmails.has(row.residentEmail.trim().toLowerCase())
+      ? "Resident must create their PropLane resident account before you can send the lease."
+      : !row.generatedHtml && !row.managerUploadedPdf?.dataUrl
+        ? "Generate or upload a lease document first."
+        : // Unapproved applicant, a document that disagrees with the record, or
+          // an import nobody has confirmed. `sendLeaseToResident` refuses on the
+          // same three; this is the affordance.
+          leaseSendGateBlocker(row);
+    const sendToResidentDisabled = Boolean(sendBlockedReason);
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
     const showDelete = row.status !== "Fully Signed";
     const showMoveToReview = row.status === "Resident Signature Pending";
@@ -489,6 +506,7 @@ export function ManagerLeasesPipelinePanel({
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="lease-send-resident"
         disabled={sendingToResidentRowId === row.id || sendToResidentDisabled}
+        title={sendBlockedReason ?? undefined}
         onClick={() => openSendLeasePreview(row)}
       >
         {sendingToResidentRowId === row.id ? "Sending…" : "Send"}

@@ -6,7 +6,7 @@
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
+import { type DemoApplicantRow, type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication, leaseTemplateDocForContext } from "@/lib/generated-lease";
 import {
   isLeaseGenerationSupported,
@@ -42,10 +42,18 @@ import {
   confirmedUploadedLeaseReview,
   normalizeUploadedLeaseParse,
   pendingUploadedLeaseParse,
+  unreadUploadedLeaseParse,
   uploadedLeaseNeedsManagerConfirmation,
+  uploadedLeaseReviewIsConfirmed,
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
+import {
+  LEASE_DOCUMENT_MISMATCH_MESSAGE,
+  describeLeaseDocumentMismatches,
+  leaseDocumentMismatches,
+  type LeaseDocumentMismatch,
+} from "@/lib/lease-document-mismatch";
 import {
   buildBundleApplicationGroups,
   bundleGroupKey,
@@ -205,13 +213,22 @@ export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean 
 }
 
 /**
- * True when an uploaded lease has been parsed but no human has confirmed the
- * reading yet, so it must not become signable.
+ * True when an uploaded lease has not been confirmed by a human, so it must not
+ * become signable.
  *
  * Machine extraction of a contract promoted straight to a signable document is
- * how someone ends up signing terms nobody checked. Scoped to rows that
- * actually carry a parse: a row uploaded before parsing existed, and an
- * off-platform `externallySignedLease` filing, both have none and are untouched.
+ * how someone ends up signing terms nobody checked — and an upload nobody read
+ * at all is the same hazard with less evidence, not less of it. This used to be
+ * scoped to rows that carried a parse, which exempted every legacy and seeded
+ * upload: "Send → preview → Send lease & notification" released those with no
+ * review step, no attestation, and no confirmation of the document's terms.
+ * `normalizeLeasePipelineRow` now gives an unread upload an explicit
+ * `unreadUploadedLeaseParse`, so this one predicate covers both.
+ *
+ * An off-platform `externallySignedLease` filing, and any row already carrying
+ * a signature, are still untouched — normalize leaves those without a parse,
+ * because a filing is evidence of an executed lease rather than a document
+ * waiting to be sent.
  */
 export function leaseAwaitsUploadedLeaseReview(row: LeasePipelineRow): boolean {
   return uploadedLeaseNeedsManagerConfirmation(row.uploadedLeaseParse);
@@ -219,6 +236,125 @@ export function leaseAwaitsUploadedLeaseReview(row: LeasePipelineRow): boolean {
 
 export const UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE =
   "Review the imported lease and confirm it before sending it for signature.";
+
+/**
+ * Terms the uploaded document states that disagree with this lease record.
+ *
+ * The record side comes from the row the manager is looking at, so this is
+ * literally "does the PDF on this page describe the tenancy this page is
+ * about". See `lease-document-mismatch.ts` for why each comparison is as
+ * conservative as it is.
+ */
+export function leaseDocumentMismatchesForRow(row: LeasePipelineRow): LeaseDocumentMismatch[] {
+  return leaseDocumentMismatches(row.uploadedLeaseParse, {
+    residentName: row.residentName,
+    leaseStart: row.application?.leaseStart ?? null,
+    leaseEnd: row.application?.leaseEnd ?? null,
+    rentLabel: row.signedRentLabel ?? null,
+  });
+}
+
+export const LEASE_APPLICATION_NOT_APPROVED_MESSAGE =
+  "This applicant's application has not been approved. Approve it in Applications before sending a lease for signature.";
+
+/**
+ * The application this lease belongs to, when the manager's own applications
+ * store has it. Same matching order `findLeaseRowIndexForApprovedApp` uses in
+ * the other direction: the Axis id binds exactly, email + property is the
+ * fallback for a row whose id was never stamped.
+ */
+function applicationRowForLease(row: LeasePipelineRow, apps: DemoApplicantRow[]) {
+  const email = row.residentEmail.trim().toLowerCase();
+  const axisId = row.axisId?.trim();
+  if (axisId) {
+    const normalized = normalizeApplicationAxisId(axisId);
+    const byAxisId = apps.find((a) => a.id?.trim() && normalizeApplicationAxisId(a.id) === normalized);
+    if (byAxisId) return byAxisId;
+  }
+  if (!email) return null;
+  const propertyId = row.propertyId?.trim() ?? "";
+  const byEmailProperty = apps.find(
+    (a) =>
+      a.email?.trim().toLowerCase() === email &&
+      (a.assignedPropertyId?.trim() || a.propertyId?.trim() || a.application?.propertyId?.trim() || "") === propertyId,
+  );
+  if (byEmailProperty) return byEmailProperty;
+  return apps.find((a) => a.email?.trim().toLowerCase() === email) ?? null;
+}
+
+/**
+ * Why this lease may not be sent for signature yet, or null when it may.
+ *
+ * A lease is a binding contract, so the applicant must have been approved
+ * before one is put in front of them. This is reachable in normal use, not just
+ * from seeded data: `syncApprovedApplications` creates the lease row on
+ * approval, and moving the application back to Pending afterwards leaves the
+ * lease behind, fully sendable.
+ *
+ * Deliberately fails OPEN when no application row is found. Not every lease has
+ * one — an existing resident onboarded off-platform does not — and the
+ * applications store is loaded lazily, so refusing on absence would block real
+ * sends and look exactly like the "leases not sending" report this lane exists
+ * to fix. Refusing on a row that is present and NOT approved is the check with
+ * evidence behind it.
+ *
+ * Pure in `apps` so the assistant's `send_lease_for_signature` can apply the
+ * identical rule to rows it read from the database — one decision, never a
+ * second weaker copy on the server side.
+ */
+export function leaseApplicationApprovalBlockerAmong(
+  row: LeasePipelineRow,
+  apps: DemoApplicantRow[],
+): string | null {
+  const app = applicationRowForLease(row, apps);
+  if (!app) return null;
+  if (app.withdrawnAt) {
+    return "This applicant withdrew their application. It cannot be sent a lease for signature.";
+  }
+  if (app.bucket === "approved") return null;
+  const state = app.bucket === "rejected" ? "was rejected" : "is still pending review";
+  return `${LEASE_APPLICATION_NOT_APPROVED_MESSAGE} (${app.name?.trim() || row.residentName}'s application ${state}.)`;
+}
+
+/** The browser's view: judged against the manager's own applications store. */
+export function leaseApplicationApprovalBlocker(row: LeasePipelineRow): string | null {
+  return leaseApplicationApprovalBlockerAmong(row, readManagerApplicationRows());
+}
+
+/**
+ * Why this lease may not be sent for signature, or null when it may.
+ *
+ * ONE ordering, shared by `sendLeaseToResident`, both manager surfaces, and the
+ * assistant's `send_lease_for_signature`, so a disabled Send, a refused click
+ * and a refused tool call always give the same reason. Ordered by how much the
+ * answer tells the manager: an unapproved applicant is a fact about the person,
+ * a mismatch names the exact terms that disagree, and the generic review
+ * message is the fallback when there is nothing more specific to say.
+ *
+ * The row's own state (no document, already finalized, already signed) is
+ * checked by the callers, which know it without consulting anything else.
+ */
+export function leaseSendGateBlockerAmong(row: LeasePipelineRow, apps: DemoApplicantRow[]): string | null {
+  const approval = leaseApplicationApprovalBlockerAmong(row, apps);
+  if (approval) return approval;
+  // Parties-mismatch guard. Confirming the review IS the explicit
+  // acknowledgement — the attestation subject includes the extracted values and
+  // the record they are compared against, so a tick never carries over onto
+  // different terms.
+  const mismatches = leaseDocumentMismatchesForRow(row);
+  if (mismatches.length > 0 && !uploadedLeaseReviewIsConfirmed(row.uploadedLeaseParse)) {
+    return `${LEASE_DOCUMENT_MISMATCH_MESSAGE} ${describeLeaseDocumentMismatches(mismatches)}`;
+  }
+  // The confirm-before-sign gate. `sendLeaseToResident` is the only way a lease
+  // becomes signable, so guarding it there closes the path rather than only
+  // greying out a button.
+  if (leaseAwaitsUploadedLeaseReview(row)) return UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE;
+  return null;
+}
+
+export function leaseSendGateBlocker(row: LeasePipelineRow): string | null {
+  return leaseSendGateBlockerAmong(row, readManagerApplicationRows());
+}
 
 /** True when editing a resident should refresh the lease document (manager-side review only). */
 export function leaseSyncsFromResidentEdit(row: LeasePipelineRow): boolean {
@@ -359,9 +495,12 @@ export type LeasePipelineRow = {
    * which stays the executed artifact (`lease-execution-evidence.ts`).
    *
    * Present and unconfirmed means the lease cannot be sent for signature: see
-   * `leaseAwaitsUploadedLeaseReview`. Absent means the row predates parsing (or
-   * is an off-platform `externallySignedLease` filing), and behaves exactly as
-   * it always did.
+   * `leaseAwaitsUploadedLeaseReview`. `normalizeLeasePipelineRow` guarantees
+   * that any row carrying an upload carries one of these — a row that stored
+   * none gets an `unreadUploadedLeaseParse`, so "no reading" cannot mean "no
+   * gate". It is absent only when there is no upload to review, or when the row
+   * is an executed filing (an off-platform `externallySignedLease`, or anything
+   * already signed) that is evidence rather than a document to send.
    */
   uploadedLeaseParse?: UploadedLeaseParse | null;
   thread: LeaseThreadMessage[];
@@ -501,6 +640,12 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     managerUploadedPdf: r.managerUploadedPdf ?? null,
   });
   const stageLabel = stageLabelForStatus(status);
+  // A row that is already executed is a FILING, not a document waiting to be
+  // sent: an off-platform `externallySignedLease`, or anything already carrying
+  // a signature. There is nothing left to gate, and asking a manager to review
+  // a lease both parties already signed is noise.
+  const isExecutedFiling =
+    r.externallySignedLease === true || Boolean(residentSignature) || Boolean(managerSignature);
   const versionNumber =
     typeof r.versionNumber === "number" && Number.isFinite(r.versionNumber)
       ? Math.max(1, Math.floor(r.versionNumber))
@@ -535,7 +680,19 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     // null` through this function, so clearing the derived reading here covers
     // all of them at once instead of leaving a list to keep in sync — and a
     // manager can never be asked to attest against a PDF the row no longer has.
-    uploadedLeaseParse: r.managerUploadedPdf?.dataUrl ? normalizeUploadedLeaseParse(r.uploadedLeaseParse) : null,
+    //
+    // An upload with NO stored reading is not exempt from review — it is the
+    // least reviewed document there is. It gets an explicit "never read" record
+    // so the confirm-before-sign gate holds and the review modal has something
+    // to render, instead of the absence quietly meaning "signable".
+    uploadedLeaseParse: r.managerUploadedPdf?.dataUrl
+      ? normalizeUploadedLeaseParse(r.uploadedLeaseParse) ??
+        (isExecutedFiling
+          ? null
+          : unreadUploadedLeaseParse(
+              String(r.managerUploadedPdf.fileName ?? "").trim() || "Uploaded lease.pdf",
+            ))
+      : null,
     thread: safeThread,
     managerSignature,
     residentSignature,
@@ -1840,7 +1997,9 @@ export function managerUploadLeasePdf(
         // closed for the whole window in which the parse could still be running
         // or could fail. A parse that never completes leaves the lease held,
         // not quietly signable. /demo has no parse round trip (it must not call
-        // real routes), so it stays on the pre-parse behaviour.
+        // real routes) so it stores none — but it is NOT thereby exempt:
+        // normalize gives it an `unreadUploadedLeaseParse`, so the demo shows
+        // the same attest-before-send gate with the read step absent.
         uploadedLeaseParse: isDemoModeActive() ? null : pendingUploadedLeaseParse(file.name),
         generatedHtml: null,
         generatedAtIso: null,
@@ -2192,12 +2351,8 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   if (residentHasSignedLease(logical) || logical.managerSignature) {
     return { ok: false, error: "This lease already has signatures and cannot be re-sent." };
   }
-  // The confirm-before-sign gate. `sendLeaseToResident` is the only way a lease
-  // becomes signable, so guarding it here closes the path rather than only
-  // greying out a button.
-  if (leaseAwaitsUploadedLeaseReview(logical)) {
-    return { ok: false, error: UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE };
-  }
+  const gateBlocker = leaseSendGateBlocker(logical);
+  if (gateBlocker) return { ok: false, error: gateBlocker };
   const raw = [...materializeLeasePipeline(managerUserId)];
   const idx = findRawLeaseRowIndex(rowId, managerUserId);
   if (idx === -1) return { ok: false, error: "Lease record could not be saved locally." };

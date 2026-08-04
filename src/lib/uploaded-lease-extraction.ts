@@ -539,6 +539,31 @@ export function failedUploadedLeaseParse(fileName: string, reason: string): Uplo
   return { ...pendingUploadedLeaseParse(fileName), status: "failed", failureReason: reason };
 }
 
+export const UNREAD_UPLOADED_LEASE_REASON =
+  "PropLane has no reading of this document. It was uploaded before import parsing existed, or the read never ran.";
+
+/**
+ * The reading of an upload that was never read at all.
+ *
+ * "No parse" used to mean "no gate": an uploaded contract with no
+ * `uploadedLeaseParse` was sent for signature with no review step of any kind.
+ * That is the state every legacy and seeded upload is in, so the escape hatch
+ * was wider than the rule. Synthesizing this record instead makes the absence
+ * explicit — an unread document is an unreviewed one — and it reaches the same
+ * review modal, so it is held rather than stranded.
+ *
+ * `failed` rather than `pending` on purpose: `pending` means a read is running
+ * and offers no confirm affordance, which would be a one-way door.
+ */
+export function unreadUploadedLeaseParse(fileName: string): UploadedLeaseParse {
+  return failedUploadedLeaseParse(fileName, UNREAD_UPLOADED_LEASE_REASON);
+}
+
+/** True when this reading records that no read was ever attempted. */
+export function uploadedLeaseWasNeverRead(parse: UploadedLeaseParse | null | undefined): boolean {
+  return parse?.status === "failed" && parse.failureReason === UNREAD_UPLOADED_LEASE_REASON;
+}
+
 export function buildUploadedLeaseParse(args: {
   pages: string[];
   fileName: string;

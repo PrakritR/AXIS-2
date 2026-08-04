@@ -8,10 +8,12 @@ import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import {
   resolvedFieldValue,
   uploadedLeaseReviewIsConfirmed,
+  uploadedLeaseWasNeverRead,
   type UploadedLeaseField,
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
+import { leaseDocumentMismatches } from "@/lib/lease-document-mismatch";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
 
 /**
@@ -78,6 +80,11 @@ function placementFor(row: LeasePipelineRow) {
  *   digest alone would miss a new reading of the same PDF.
  * - the resolved field values — what "the terms above are correct" actually
  *   points at, including stored overrides, since those change the value shown.
+ * - the record side of the parties comparison — the mismatch panel and the
+ *   wording of the attestation itself are derived from it, so a manager who
+ *   ticked "I accept the differences listed above" must not keep that tick
+ *   after the differences change (or disappear, which would silently upgrade a
+ *   narrow acceptance into "the terms above are correct").
  *
  * Deliberately derived from CONTENT rather than object identity: the pipeline
  * re-syncs on a cadence and hands back an equal-but-new `parse` object, and
@@ -93,6 +100,10 @@ function attestationSubject(parse: UploadedLeaseParse, row: LeasePipelineRow): s
     parse.sourceSha256 ?? "",
     parse.extractedAtIso ?? "",
     parse.fields.map((f) => `${f.key}:${f.status}:${resolvedFieldValue(f, parse.review).value}`).join("|"),
+    row.residentName ?? "",
+    row.application?.leaseStart ?? "",
+    row.application?.leaseEnd ?? "",
+    row.signedRentLabel ?? "",
   ].join("~");
 }
 
@@ -167,12 +178,35 @@ export function UploadedLeaseReviewModal({
   const setDraft = (key: UploadedLeaseFieldKey, value: string) =>
     setDrafts((d) => ({ ...d, [key]: value }));
 
+  /**
+   * Terms this document states that disagree with the record the manager opened.
+   * Computed against the manager's staged edits, so correcting a value clears
+   * its row here immediately rather than after a save.
+   */
+  const mismatches = useMemo(
+    () =>
+      leaseDocumentMismatches(
+        { ...parse, review: { ...parse.review, overrides: { ...(parse.review.overrides ?? {}), ...drafts } } },
+        {
+          residentName: row.residentName,
+          leaseStart: row.application?.leaseStart ?? null,
+          leaseEnd: row.application?.leaseEnd ?? null,
+          rentLabel: row.signedRentLabel ?? null,
+        },
+      ),
+    [parse, drafts, row],
+  );
+
   if (parse.status !== "parsed") {
     // A read that is still running has no result to attest to, and confirming
     // now would make the parse that lands a moment later unstorable — leaving
     // the row on an empty reading of a document that structured fine. So the
     // confirm affordance exists only once the read has finished and failed.
     const stillReading = parse.status === "pending";
+    // "Never read" and "read and failed" are different facts about the same
+    // document, and telling a manager PropLane could not structure a PDF it
+    // never opened sends them looking for a problem with the file.
+    const neverRead = uploadedLeaseWasNeverRead(parse);
     // `pending` is written before any text is read, so a manager who closed the
     // tab mid-read owns a row that can never be sent. Re-reading the bytes
     // already on the row is the way out — no re-upload, so the executed
@@ -186,7 +220,7 @@ export function UploadedLeaseReviewModal({
         data-attr="uploaded-lease-retry-read"
         onClick={() => onRetryRead?.()}
       >
-        {stillReading ? "Retry read" : "Read it again"}
+        {stillReading ? "Retry read" : neverRead ? "Read it now" : "Read it again"}
       </Button>
     ) : null;
     return (
@@ -223,19 +257,33 @@ export function UploadedLeaseReviewModal({
                 ? "rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
                 : "rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3 text-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
             }
-            data-attr={stillReading ? "uploaded-lease-still-reading" : "uploaded-lease-unreadable"}
+            data-attr={
+              stillReading
+                ? "uploaded-lease-still-reading"
+                : neverRead
+                  ? "uploaded-lease-never-read"
+                  : "uploaded-lease-unreadable"
+            }
           >
             <p className="font-semibold">
-              {stillReading ? "Still reading this document…" : "This document could not be structured."}
+              {stillReading
+                ? "Still reading this document…"
+                : neverRead
+                  ? "Nobody has reviewed this document yet."
+                  : "This document could not be structured."}
             </p>
             {parse.failureReason ? <p className="mt-1">{parse.failureReason}</p> : null}
             <p className="mt-2">
               The uploaded PDF is stored unchanged and is still the document that gets signed.
               {stillReading
                 ? " This lease stays held until the read finishes."
-                : " Nothing was shortened or rewritten — PropLane simply could not read it into sections."}
+                : neverRead
+                  ? " It cannot be sent for signature until you have read it and said it is the right lease."
+                  : " Nothing was shortened or rewritten — PropLane simply could not read it into sections."}
               {canRetry
-                ? " Read it again to run the same document through PropLane once more — the PDF is not re-uploaded or altered."
+                ? neverRead
+                  ? " Read it now to have PropLane pull out its terms for you to check — the PDF is not re-uploaded or altered."
+                  : " Read it again to run the same document through PropLane once more — the PDF is not re-uploaded or altered."
                 : null}
             </p>
           </div>
@@ -303,6 +351,39 @@ export function UploadedLeaseReviewModal({
             original PDF, fill in what is missing, then confirm.
           </p>
         )}
+
+        {/*
+          The parties-mismatch guard, stated. A lease page headed with one
+          tenant once rendered a PDF naming an entirely different person, their
+          real personal email address, another property and another rent, with
+          Send fully enabled and nothing anywhere objecting. Naming each
+          disagreement — document value beside record value — is what makes
+          confirming it a decision rather than an accident.
+        */}
+        {mismatches.length > 0 ? (
+          <div
+            className="rounded-xl border border-rose-300 bg-rose-50/70 px-4 py-3 text-sm text-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
+            data-attr="uploaded-lease-mismatch"
+          >
+            <p className="font-semibold">
+              This document disagrees with the PropLane record for {row.residentName}
+              {row.unit && row.unit !== "—" ? ` · ${row.unit}` : ""}.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {mismatches.map((m) => (
+                <li key={m.key} data-attr={`uploaded-lease-mismatch-${m.key}`}>
+                  <span className="font-semibold">{m.label}</span> — document says “{m.documentValue}”, this record
+                  says “{m.recordValue}”.
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              Check you uploaded the right PDF onto the right lease. Correct a value below if the document is right
+              and PropLane misread it; otherwise upload the correct document. Confirming sends this document, as it
+              is, to {row.residentEmail || "the resident"} for signature.
+            </p>
+          </div>
+        ) : null}
 
         <div className="flex gap-1.5">
           {(["terms", "document"] as const).map((id) => (
@@ -434,8 +515,9 @@ export function UploadedLeaseReviewModal({
                 onChange={(e) => setAttested(e.target.checked)}
               />
               <span>
-                I have compared this against the original PDF. The terms above are correct and this is the lease I
-                intend to send for signature.
+                {mismatches.length > 0
+                  ? "I have compared this against the original PDF. I accept the differences listed above, and this is the lease I intend to send for signature."
+                  : "I have compared this against the original PDF. The terms above are correct and this is the lease I intend to send for signature."}
               </span>
             </label>
             <textarea

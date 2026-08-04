@@ -23,6 +23,7 @@ import {
   failedUploadedLeaseParse,
   pendingUploadedLeaseParse,
   uploadedLeaseReviewIsConfirmed,
+  uploadedLeaseWasNeverRead,
 } from "@/lib/uploaded-lease-extraction";
 import { retryUploadedLeaseParse } from "@/lib/uploaded-lease-parse.client";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
@@ -138,14 +139,57 @@ describe("an imported lease is not signable until a manager confirms it", () => 
     expect(review?.overrides).toEqual({ securityDeposit: "$3,000.00" });
   });
 
-  it("leaves a lease with no parse behaving exactly as before", async () => {
+  /**
+   * An upload with no stored reading is the LEAST reviewed document there is,
+   * and it is the state every legacy and seeded upload is in. It used to be
+   * exempt: Send → preview → "Send lease & notification" released it with no
+   * review step, no attestation and no confirmation of its terms.
+   */
+  it("holds an uploaded lease that was never read, rather than exempting it", async () => {
     seedDemoLeasePipeline([uploadedRow()], MANAGER_ID);
-    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
+
+    const parse = storedRow()!.uploadedLeaseParse;
+    // The absence is made explicit rather than meaning "signable", so the
+    // review modal has something to render instead of stranding the row.
+    expect(uploadedLeaseWasNeverRead(parse)).toBe(true);
+    expect(parse?.sourceFileName).toBe("harbour-point.pdf");
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(true);
 
     const result = await sendLeaseToResident(ROW_ID, MANAGER_ID);
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/confirm it before sending/i);
+    expect(storedRow()?.status).toBe("Manager Review");
+    expect(storedRow()?.sentToResidentAt ?? null).toBeNull();
+  });
+
+  it("sends a never-read upload once a manager attests to it, so the gate is not a dead end", async () => {
+    seedDemoLeasePipeline([uploadedRow()], MANAGER_ID);
+
+    expect(
+      confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat Manager" }).ok,
+    ).toBe(true);
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
+
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
     expect(storedRow()?.status).toBe("Resident Signature Pending");
+  });
+
+  it("leaves an off-platform filing alone — it is executed evidence, not a document to send", () => {
+    seedDemoLeasePipeline(
+      [
+        uploadedRow({
+          externallySignedLease: true,
+          bucket: "signed",
+          residentSignature: { role: "resident", name: "Dana Whitfield", signedAtIso: "2026-07-01T00:00:00.000Z" },
+          managerSignature: { role: "manager", name: "Pat Manager", signedAtIso: "2026-07-01T00:00:00.000Z" },
+        }),
+      ],
+      MANAGER_ID,
+    );
+
+    expect(storedRow()?.uploadedLeaseParse ?? null).toBeNull();
+    expect(leaseAwaitsUploadedLeaseReview(storedRow()!)).toBe(false);
   });
 
   it("leaves a natively generated lease behaving exactly as before", async () => {

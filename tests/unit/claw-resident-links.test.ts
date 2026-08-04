@@ -1,11 +1,15 @@
+import { readdirSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   defaultResidentOnboardingSmsLinks,
   ensureSmsIncludesPortalLink,
+  managerPortalPath,
   residentPortalPath,
   residentPortalUrl,
   residentSmsLinkOrigin,
   smsLinkKindForThreadTopic,
+  type ResidentSmsLinkKind,
 } from "@/lib/claw-resident-links";
 
 const ORIGIN_KEYS = [
@@ -64,8 +68,129 @@ describe("claw-resident-links", () => {
   it("onboarding footer includes sign-in, payments, and lease", () => {
     process.env.CLAW_MESSENGER_LINK_ORIGIN = "https://www.axis-seattle-housing.com";
     const lines = defaultResidentOnboardingSmsLinks();
-    expect(lines.some((l) => l.includes("/auth/login"))).toBe(true);
+    // `/auth/login` has never existed — it 404s. Every resident onboarding
+    // email and SMS carries this link, so the wrong token here means the lease
+    // sends and the recipient lands on a dead page, which from the manager's
+    // chair is indistinguishable from "the lease never sent".
+    expect(lines.some((l) => l.includes("/auth/sign-in"))).toBe(true);
+    expect(lines.some((l) => l.includes("/auth/login"))).toBe(false);
     expect(lines.some((l) => l.includes("/resident/payments/pending"))).toBe(true);
     expect(lines.some((l) => l.includes("/resident/lease"))).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Route existence
+ * ------------------------------------------------------------------ */
+
+const APP_DIR = resolve(__dirname, "../../src/app");
+
+const OPTIONAL_CATCH_ALL = /^\[\[\.{3}.+\]\]$/;
+const CATCH_ALL = /^\[\.{3}.+\]$/;
+const DYNAMIC = /^\[(?!\[|\.{3}).+\]$/;
+const ROUTE_GROUP = /^\(.+\)$/;
+
+function childDirs(dir: string): string[] {
+  try {
+    return readdirSync(dir).filter((e) => statSync(join(dir, e)).isDirectory());
+  } catch {
+    return [];
+  }
+}
+
+function hasPage(dir: string): boolean {
+  try {
+    return readdirSync(dir).some((f) => /^(page|route)\.(t|j)sx?$/.test(f));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when the app router can resolve `pathname` to a page or route handler.
+ *
+ * Models the four things that decide it: literal segments, `[dynamic]` ones,
+ * `[...catchAll]` / `[[...optional]]` (the optional form matches ZERO segments,
+ * which is how `/portal/properties` resolves through
+ * `portal/[section]/[[...tab]]/page.tsx` even though `portal/properties/` holds
+ * only `[stage]/`), and `(group)` directories, which are invisible in the URL.
+ */
+function routeResolves(pathname: string, dir = APP_DIR): boolean {
+  const path = pathname.split("?")[0] ?? "/";
+  const segments = path.split("/").filter(Boolean);
+  const children = childDirs(dir);
+
+  if (segments.length === 0) {
+    if (hasPage(dir)) return true;
+    // An optional catch-all also matches no segments at all.
+    if (children.some((c) => OPTIONAL_CATCH_ALL.test(c) && hasPage(join(dir, c)))) return true;
+    return children.some((c) => ROUTE_GROUP.test(c) && routeResolves("/", join(dir, c)));
+  }
+
+  const [head, ...rest] = segments;
+  const restPath = `/${rest.join("/")}`;
+  const ordered = [
+    ...children.filter((c) => c === head),
+    ...children.filter((c) => DYNAMIC.test(c)),
+    ...children.filter((c) => CATCH_ALL.test(c) || OPTIONAL_CATCH_ALL.test(c)),
+  ];
+  for (const candidate of ordered) {
+    const next = join(dir, candidate);
+    // Either catch-all form swallows every remaining segment.
+    if ((CATCH_ALL.test(candidate) || OPTIONAL_CATCH_ALL.test(candidate)) && hasPage(next)) return true;
+    if (routeResolves(restPath, next)) return true;
+  }
+  // Route groups do not consume a segment.
+  return children.some((c) => ROUTE_GROUP.test(c) && routeResolves(path, join(dir, c)));
+}
+
+/**
+ * A link builder that names a path with no route is a dead end nobody sees
+ * until a recipient clicks it — `/auth/login` shipped in every resident
+ * onboarding message and 404'd for as long as it existed. A build does not
+ * catch it and neither does an assertion on the literal string, so the paths
+ * are checked against the real app router tree.
+ */
+describe("every path the link builders hand out resolves to a real route", () => {
+  const RESIDENT_KINDS: ResidentSmsLinkKind[] = [
+    "payments",
+    "lease",
+    "move_in",
+    "inbox",
+    "services",
+    "services_work_orders",
+    "applications",
+    "login",
+    "signup",
+    "browse",
+    "apply",
+  ];
+
+  it("resolves this test's own fixtures, so a false pass is not possible", () => {
+    expect(routeResolves("/auth/sign-in")).toBe(true);
+    expect(routeResolves("/rent/browse")).toBe(true); // inside the (public) route group
+    expect(routeResolves("/resident/lease")).toBe(true); // via [section]
+    expect(routeResolves("/auth/login")).toBe(false); // the bug this guards
+    expect(routeResolves("/auth/definitely-not-a-page")).toBe(false);
+  });
+
+  it.each(RESIDENT_KINDS)("resident link %s", (kind) => {
+    expect(routeResolves(residentPortalPath(kind, { propertyId: "p1" }))).toBe(true);
+  });
+
+  it.each([
+    "properties",
+    "calendar",
+    "applications",
+    "leases",
+    "residents",
+    "payments",
+    "services_work_orders",
+    "services_requests",
+    "inbox",
+    "relationships",
+    "promotion",
+  ] as const)("manager link %s", (kind) => {
+    expect(routeResolves(managerPortalPath(kind))).toBe(true);
   });
 });
