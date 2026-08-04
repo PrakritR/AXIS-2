@@ -309,14 +309,16 @@ or resize the panel.
   raised sheet is always tall enough to contain its widest menu below its chrome; the
   dead space under a lone field is the accepted price of "stationary AND contained".
   Re-measure and re-pin whenever the chrome changes.
-- **The menu names its own field** (`FieldSelectMenuHeader`), because it covers its
-  trigger and, on a tight host, every label in the panel — measured on the 3-field
-  panel, an open menu covered all three. The header is BUDGETED into
-  `fieldSelectMenuContentPx` alongside the search row, never paid for with an option
-  row. `FIELD_SELECT_MENU_HEADER_PX` is bounded by the 3-field panel, and the real
-  headroom is **10px**, not the 32px an earlier note claimed: the panel is 23rem/368px,
-  its chrome is 58px, the containment gap is 8px, and the menu is 292px. Grow either
-  past that and menus silently start escaping the panel — or eating its chrome — again.
+- **The menu does NOT repeat the field name.** The trigger row already renders the
+  label (`FILTER_FIELD_LABEL_CLASS`) and the portaled menu no longer covers it, so an
+  in-menu header just printed "PROPERTY" twice on Residents and every other sheet.
+  `fieldSelectMenuContentPx` therefore budgets only the search row —
+  `FILTER_MENU_CONTENT_PX` is 5×40 + 12 + 52 = **264px**, and everything derived from
+  it (`PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX`, the containment math) follows.
+  `FieldSelectMenuHeader` / `FIELD_SELECT_MENU_HEADER_PX` are still declared in
+  `field-select-menu.tsx` with no callers; anything that re-adds a header must budget
+  it in `fieldSelectMenuContentPx` — never pay for it with an option row — and re-check
+  the tightest host, the 3-field panel (23rem/368px, 58px chrome, 8px containment gap).
 - **The menu's row count is reported by the list that renders it**, via
   `useRegisterFilterMenuOptionCount` in a layout effect, so it overrides
   `FilterCollapsibleSection`'s `menuOptionCount` prop before paint. The count feeds
