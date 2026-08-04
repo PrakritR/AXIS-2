@@ -44,15 +44,19 @@ import {
   pendingUploadedLeaseParse,
   unreadUploadedLeaseParse,
   uploadedLeaseNeedsManagerConfirmation,
-  uploadedLeaseReviewIsConfirmed,
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
 import {
   LEASE_DOCUMENT_MISMATCH_MESSAGE,
+  LEASE_DOCUMENT_MISMATCH_RECORD_CHANGED_MESSAGE,
   describeLeaseDocumentMismatches,
   leaseDocumentMismatches,
+  leaseMismatchAcknowledgementGap,
+  leaseRecordFingerprint,
+  type LeaseAcknowledgementGap,
   type LeaseDocumentMismatch,
+  type LeaseRecordTerms,
 } from "@/lib/lease-document-mismatch";
 import {
   buildBundleApplicationGroups,
@@ -245,14 +249,81 @@ export const UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE =
  * about". See `lease-document-mismatch.ts` for why each comparison is as
  * conservative as it is.
  */
-export function leaseDocumentMismatchesForRow(row: LeasePipelineRow): LeaseDocumentMismatch[] {
-  return leaseDocumentMismatches(row.uploadedLeaseParse, {
+export function leaseRecordTerms(row: LeasePipelineRow): LeaseRecordTerms {
+  return {
     residentName: row.residentName,
     leaseStart: row.application?.leaseStart ?? null,
     leaseEnd: row.application?.leaseEnd ?? null,
     rentLabel: row.signedRentLabel ?? null,
-  });
+  };
 }
+
+export function leaseDocumentMismatchesForRow(row: LeasePipelineRow): LeaseDocumentMismatch[] {
+  return leaseDocumentMismatches(row.uploadedLeaseParse, leaseRecordTerms(row));
+}
+
+/**
+ * Why this row's confirmation does not cover its current disagreements, or null
+ * when there is nothing outstanding — no mismatches, or an acknowledgement that
+ * still binds.
+ *
+ * ONE answer to "is the record superseded", shared by the send gate, the
+ * "Review import" CTA and the review modal. They differ in what they DO about
+ * it (below); they must never differ on whether it is true.
+ */
+export function leaseMismatchAcknowledgementGapForRow(row: LeasePipelineRow): LeaseAcknowledgementGap | null {
+  if (leaseDocumentMismatchesForRow(row).length === 0) return null;
+  return leaseMismatchAcknowledgementGap(row.uploadedLeaseParse, leaseRecordTerms(row));
+}
+
+/**
+ * True when a send is still a thing that could happen to this row.
+ *
+ * NOT `leaseAllowsManagerDocumentEdits`: `sendLeaseToResident` and the agent's
+ * `send_lease_for_signature` both accept a row already out for signature
+ * (`bucket: "resident"`, no signatures), so scoping the gate to editable rows
+ * would leave the assistant able to re-send a lease whose record drifted after
+ * it went out. This is the set those send paths actually accept.
+ */
+export function leaseSendStillReachable(row: LeasePipelineRow): boolean {
+  if (row.status === "Fully Signed" || row.status === "Voided") return false;
+  return !hasAnyLeaseSignature(row);
+}
+
+/**
+ * True when the manager should be pointed at the review — the "Review import"
+ * CTA and the modal's Confirm button.
+ *
+ * Narrower than the gate ON PURPOSE. `confirmUploadedLeaseParse` refuses a row
+ * that no longer allows document edits, so offering the CTA outside that set
+ * would render a primary button whose action always fails and which nothing on
+ * screen can clear: a Fully Signed lease whose resident's rent is edited later
+ * would grow a permanent, unclearable nag. A row the gate holds but this does
+ * not is reachable — "Move to manager review" restores edits and the CTA — and
+ * the refusal message says so.
+ */
+export function leaseNeedsUploadedLeaseReviewAction(row: LeasePipelineRow): boolean {
+  if (!leaseAllowsManagerDocumentEdits(row)) return false;
+  return leaseAwaitsUploadedLeaseReview(row) || leaseMismatchAcknowledgementGapForRow(row) !== null;
+}
+
+/**
+ * True when the review is what stands between this row and a signature — the
+ * predicate any SENDABILITY claim must read.
+ *
+ * A surface reads the predicate for the claim it makes: a claim about whether a
+ * lease can be sent reads this; an affordance saying "do something here" reads
+ * `leaseNeedsUploadedLeaseReviewAction`. Mixing them is how a green
+ * "Confirmed … can be sent for signature" banner once sat above a lease every
+ * send path refused.
+ */
+export function leaseSendHeldByUploadedLeaseReview(row: LeasePipelineRow): boolean {
+  if (!leaseSendStillReachable(row)) return false;
+  return leaseAwaitsUploadedLeaseReview(row) || leaseMismatchAcknowledgementGapForRow(row) !== null;
+}
+
+export const LEASE_MOVE_BACK_TO_REVIEW_MESSAGE =
+  "Move this lease back to manager review, then confirm the import again before re-sending it.";
 
 export const LEASE_APPLICATION_NOT_APPROVED_MESSAGE =
   "This applicant's application has not been approved. Approve it in Applications before sending a lease for signature.";
@@ -279,7 +350,13 @@ function applicationRowForLease(row: LeasePipelineRow, apps: DemoApplicantRow[])
       (a.assignedPropertyId?.trim() || a.propertyId?.trim() || a.application?.propertyId?.trim() || "") === propertyId,
   );
   if (byEmailProperty) return byEmailProperty;
-  return apps.find((a) => a.email?.trim().toLowerCase() === email) ?? null;
+  // Last resort: the person, not the placement. Prefer an approved, live row —
+  // someone can hold a pending or withdrawn application for a DIFFERENT property
+  // alongside the approved one this lease came from, and picking that first
+  // would manufacture a hard, override-less block out of an unrelated record.
+  // The whole helper fails open by design; it must not invent a refusal.
+  const byEmail = apps.filter((a) => a.email?.trim().toLowerCase() === email);
+  return byEmail.find((a) => a.bucket === "approved" && !a.withdrawnAt) ?? byEmail[0] ?? null;
 }
 
 /**
@@ -338,17 +415,27 @@ export function leaseSendGateBlockerAmong(row: LeasePipelineRow, apps: DemoAppli
   const approval = leaseApplicationApprovalBlockerAmong(row, apps);
   if (approval) return approval;
   // Parties-mismatch guard. Confirming the review IS the explicit
-  // acknowledgement — the attestation subject includes the extracted values and
-  // the record they are compared against, so a tick never carries over onto
-  // different terms.
-  const mismatches = leaseDocumentMismatchesForRow(row);
-  if (mismatches.length > 0 && !uploadedLeaseReviewIsConfirmed(row.uploadedLeaseParse)) {
-    return `${LEASE_DOCUMENT_MISMATCH_MESSAGE} ${describeLeaseDocumentMismatches(mismatches)}`;
+  // acknowledgement, and it is bound to BOTH sides of the comparison: the
+  // document by its digest, the record by `confirmedRecordFingerprint`. A
+  // manager who accepts a document's differences and then edits the rent has
+  // not accepted the new differences, so the gate re-closes.
+  const gap = leaseMismatchAcknowledgementGapForRow(row);
+  if (gap) {
+    const detail = describeLeaseDocumentMismatches(leaseDocumentMismatchesForRow(row));
+    const head = gap === "record_changed" ? LEASE_DOCUMENT_MISMATCH_RECORD_CHANGED_MESSAGE : LEASE_DOCUMENT_MISMATCH_MESSAGE;
+    // A row already out for signature cannot be confirmed where it stands
+    // (`confirmUploadedLeaseParse` needs document edits), so name the action
+    // that IS available rather than a button that is not on screen.
+    const next = leaseAllowsManagerDocumentEdits(row) ? "" : ` ${LEASE_MOVE_BACK_TO_REVIEW_MESSAGE}`;
+    return `${head} ${detail}${next}`;
   }
   // The confirm-before-sign gate. `sendLeaseToResident` is the only way a lease
   // becomes signable, so guarding it there closes the path rather than only
   // greying out a button.
-  if (leaseAwaitsUploadedLeaseReview(row)) return UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE;
+  if (leaseAwaitsUploadedLeaseReview(row)) {
+    const next = leaseAllowsManagerDocumentEdits(row) ? "" : ` ${LEASE_MOVE_BACK_TO_REVIEW_MESSAGE}`;
+    return `${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}${next}`;
+  }
   return null;
 }
 
@@ -2108,6 +2195,10 @@ export function confirmUploadedLeaseParse(
           atIso: iso,
           note: args.note,
           documentSha256: parse.sourceSha256,
+          // The record the manager was comparing against. Read from the row as
+          // it is NOW, including the overrides just merged, so the acknowledgement
+          // names the terms actually on screen at confirm time.
+          recordFingerprint: leaseRecordFingerprint(leaseRecordTerms(row)),
         },
       ),
     },

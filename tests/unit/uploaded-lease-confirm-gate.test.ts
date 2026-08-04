@@ -22,6 +22,8 @@ import {
   buildUploadedLeaseParse,
   failedUploadedLeaseParse,
   pendingUploadedLeaseParse,
+  UNREAD_UPLOADED_LEASE_REASON,
+  unreadUploadedLeaseParse,
   uploadedLeaseReviewIsConfirmed,
   uploadedLeaseWasNeverRead,
 } from "@/lib/uploaded-lease-extraction";
@@ -173,6 +175,22 @@ describe("an imported lease is not signable until a manager confirms it", () => 
 
     expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
     expect(storedRow()?.status).toBe("Resident Signature Pending");
+  });
+
+  /**
+   * `uploadedLeaseWasNeverRead` recognises the state by this exact string, and
+   * normalize PERSISTS it into `row_data` for every legacy upload. Reword the
+   * constant and every already-stored row reclassifies as "could not be
+   * structured" — the wrong diagnosis the never-read branch exists to avoid,
+   * sending managers to look for a problem with a file PropLane never opened.
+   * Change the wording only with a migration for the rows already carrying it.
+   */
+  it("pins the never-read marker, which is persisted into stored rows", () => {
+    expect(UNREAD_UPLOADED_LEASE_REASON).toBe(
+      "PropLane has no reading of this document. It was uploaded before import parsing existed, or the read never ran.",
+    );
+    expect(uploadedLeaseWasNeverRead(unreadUploadedLeaseParse("x.pdf"))).toBe(true);
+    expect(uploadedLeaseWasNeverRead(failedUploadedLeaseParse("x.pdf", "Image-only PDF."))).toBe(false);
   });
 
   it("leaves an off-platform filing alone — it is executed evidence, not a document to send", () => {

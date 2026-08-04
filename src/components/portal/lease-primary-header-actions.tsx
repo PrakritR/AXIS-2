@@ -12,7 +12,7 @@ import {
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
-import { leaseAwaitsUploadedLeaseReview, residentHasSignedLease } from "@/lib/lease-pipeline-storage";
+import { leaseNeedsUploadedLeaseReviewAction, residentHasSignedLease } from "@/lib/lease-pipeline-storage";
 import { cn } from "@/lib/utils";
 
 const FOOTER_ACTION_ROW = "flex w-full min-w-0 flex-nowrap items-stretch gap-2";
@@ -283,7 +283,10 @@ export function LeasePrimaryHeaderActions({
   // manager can no longer replace the document, but they must still be able to
   // read what PropLane extracted from it.
   const showReviewImport = Boolean(row.uploadedLeaseParse) && Boolean(onReviewImportedLease);
-  const importNeedsReview = leaseAwaitsUploadedLeaseReview(row);
+  // The CTA predicate, not the send gate: it is scoped to rows where
+  // confirming can actually succeed, so this button is never a nag whose
+  // action always fails.
+  const importNeedsReview = leaseNeedsUploadedLeaseReviewAction(row);
 
   const compactBtnClass = cn(btnClass, FOOTER_ACTION_BTN);
   const deleteBtnClass = cn(

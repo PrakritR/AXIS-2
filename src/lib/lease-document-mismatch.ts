@@ -33,6 +33,7 @@ import {
   normalizeLeaseDate,
   normalizeLeaseMoney,
   resolvedFieldValue,
+  uploadedLeaseReviewIsConfirmed,
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
@@ -150,8 +151,56 @@ export function leaseDocumentMismatches(
   return mismatches;
 }
 
+/**
+ * A stable identity for the record side of the comparison.
+ *
+ * Stamped onto the review at confirm time so an acknowledgement of "these
+ * differences" cannot outlive the record it was made against: the document
+ * digest pins WHAT was read, this pins what it was compared TO. Derived from
+ * exactly the four terms `leaseDocumentMismatches` compares, so a record edit
+ * that cannot change the answer cannot needlessly re-gate a lease either.
+ */
+export function leaseRecordFingerprint(record: LeaseRecordTerms): string {
+  return [
+    (record.residentName ?? "").trim(),
+    (record.leaseStart ?? "").trim(),
+    (record.leaseEnd ?? "").trim(),
+    (record.rentLabel ?? "").trim(),
+  ].join("~");
+}
+
+/** Why a confirmation does not cover the record it is being checked against. */
+export type LeaseAcknowledgementGap =
+  /** No confirmation at all. */
+  | "unconfirmed"
+  /** Confirmed, and the record has demonstrably changed since. */
+  | "record_changed"
+  /** Confirmed before the record was ever recorded, so it cannot be compared. */
+  | "record_unknown";
+
+/**
+ * Whether a confirmation covers the disagreements this record currently has.
+ *
+ * Only asked when mismatches EXIST — an agreeing lease is never re-gated by a
+ * record edit. Fails closed on a missing fingerprint: every confirmation made
+ * before that field existed is in that state, and a stored acknowledgement that
+ * cannot name what it acknowledged is not evidence a human saw these terms.
+ */
+export function leaseMismatchAcknowledgementGap(
+  parse: UploadedLeaseParse | null | undefined,
+  record: LeaseRecordTerms,
+): LeaseAcknowledgementGap | null {
+  if (!parse || !uploadedLeaseReviewIsConfirmed(parse)) return "unconfirmed";
+  const stored = parse.review.confirmedRecordFingerprint;
+  if (!stored) return "record_unknown";
+  return stored === leaseRecordFingerprint(record) ? null : "record_changed";
+}
+
 export const LEASE_DOCUMENT_MISMATCH_MESSAGE =
   "This document disagrees with the lease record. Review the imported lease and confirm the differences before sending it for signature.";
+
+export const LEASE_DOCUMENT_MISMATCH_RECORD_CHANGED_MESSAGE =
+  "This document disagrees with the lease record, and the record has changed since this import was confirmed. Review the imported lease and confirm the differences again before sending it for signature.";
 
 /** One-line summary naming exactly what disagrees, for a toast or a tool error. */
 export function describeLeaseDocumentMismatches(mismatches: LeaseDocumentMismatch[]): string {

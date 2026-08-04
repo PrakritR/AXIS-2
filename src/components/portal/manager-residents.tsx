@@ -2376,14 +2376,11 @@ export function ManagerResidents({
         moveToManagerReviewDataAttr="resident-lease-move-manager-review"
         onSendToResident={() => openLeaseSendPreview(selected, residentLease)}
         sendToResidentBusy={leaseSendBusy}
-        sendToResidentDisabled={
-          !residentAccountEmails.has(selected.email.trim().toLowerCase()) ||
-          (!residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl) ||
-          // Unapproved applicant, a document that disagrees with the record, or
-          // an import nobody has confirmed. `sendLeaseToResident` refuses on the
-          // same three; this is the affordance.
-          Boolean(leaseSendGateBlocker(residentLease))
-        }
+        // Deliberately never disabled for a blocked send: `openLeaseSendPreview`
+        // states the reason and opens the review that clears it, and disabling
+        // makes that unreachable. The gate is `sendLeaseToResident`, not the
+        // button. Same reasoning as the Leases pipeline panel.
+        sendToResidentDisabled={false}
         onMoveToManagerReview={() => {
           const moveResult = sendLeaseBackToManager(residentLease.id, userId);
           if (!moveResult.ok) {

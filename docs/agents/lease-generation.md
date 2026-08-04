@@ -493,41 +493,128 @@ Three rules, each with a test that goes red if it is broken
 
 **The gate.** `managerUploadLeasePdf` writes a `pending` parse *synchronously*,
 before any text is read, so a parse that fails or never returns still holds the
-lease. `sendLeaseToResident` — the only path to signability — refuses while
-`leaseAwaitsUploadedLeaseReview(row)`, and both manager surfaces
-(`manager-residents.tsx`, `manager-leases-pipeline-panel.tsx`) disable Send and
-offer "Review import" (`UploadedLeaseReviewModal`). Confirming records who,
-when, and which values the human typed (`review.overrides`), and every surface
-renders manager-entered values differently from machine-extracted ones. **A row
-with NO parse is untouched** — legacy uploads, `externallySignedLease` filings,
-and generated leases all behave exactly as before, and `/demo` writes no parse
-at all.
+lease. `sendLeaseToResident` — the only path to signability — refuses via
+`leaseSendGateBlocker`, and both manager surfaces (`manager-residents.tsx`,
+`manager-leases-pipeline-panel.tsx`) offer "Review import"
+(`UploadedLeaseReviewModal`). Confirming records who, when, and which values the
+human typed (`review.overrides`), and every surface renders manager-entered
+values differently from machine-extracted ones.
+
+**"No parse" is NOT an exemption.** It used to be: the gate asked
+`uploadedLeaseNeedsManagerConfirmation`, which answers `false` for an absent
+parse, so every legacy and seeded upload — the widest cohort there is — was sent
+with no review step, no attestation and no confirmation of its terms.
+`normalizeLeasePipelineRow` now gives an upload with no stored reading an
+explicit `unreadUploadedLeaseParse`, so absence means *unreviewed*, and the
+review modal has something to render instead of stranding the row unsendable and
+un-confirmable. `/demo` still stores no parse (it must not call the parse route)
+and is gated all the same, with the read step simply absent. Still untouched:
+generated leases, and executed filings (`externallySignedLease`, or any row
+already carrying a signature) — normalize leaves those parse-less because a
+filing is evidence of an executed lease, not a document waiting to be sent.
 
 **The gate is on the transition, not on a button, so the agent layer is inside
 it.** `send_lease_for_signature` performs the same transition from the assistant
 that the Leases UI performs, so `sendForSignatureBlocker`
-(`src/lib/tools/domains/leases.ts`) calls the SAME
-`leaseAwaitsUploadedLeaseReview` predicate and returns the same
-`UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE`. Any future path that writes
+(`src/lib/tools/domains/leases.ts`) runs `leaseSendGateBlockerAmong` — the same
+ordering and the same wording the manager gets. Any future path that writes
 `bucket: "resident"` must clear this gate too — greying out a button is not the
-gate.
+gate. The Send buttons are deliberately **not** disabled for a gate reason:
+disabling makes the click handler, the only thing that states the reason and
+opens the review that clears it, unreachable, and `title` is invisible on touch.
+
+**Three ordered reasons, one ordering.** `leaseSendGateBlocker` answers in the
+order that tells the manager the most: an unapproved application (a fact about
+the person — see "A lease needs an approved application" below), then a
+parties/terms mismatch (which names the exact terms that disagree), then the
+generic review message. One function, so a refused click, a refused tool call
+and any surface that explains itself cannot drift apart.
+
+**Gate and CTA are different questions, and they are scoped differently.**
+
+| Predicate | Question | Scope |
+| --- | --- | --- |
+| `leaseSendHeldByUploadedLeaseReview` | is the review what stands between this row and a signature? | everything the send paths accept — `leaseSendStillReachable`: no signatures, not Fully Signed / Voided |
+| `leaseNeedsUploadedLeaseReviewAction` | should the manager be pointed at the review? | only `leaseAllowsManagerDocumentEdits`, where confirming can actually succeed |
+
+The gate is the wider one because `sendLeaseToResident` and
+`send_lease_for_signature` both accept a row **already out for signature**
+(`bucket: "resident"`, no signatures); scoping it to editable rows would let the
+assistant re-send a lease whose record drifted after it went out. The CTA is the
+narrower one because `confirmUploadedLeaseParse` refuses a row that no longer
+allows document edits, so a wider CTA would be a primary button whose action
+always fails and which nothing on screen can clear — a Fully Signed lease whose
+rent is edited later would grow a permanent, unclearable nag. Rows in the gap
+are reachable: "Move to manager review" restores edits, and the refusal says so
+(`LEASE_MOVE_BACK_TO_REVIEW_MESSAGE`) instead of naming a button that is not on
+screen.
+
+**A surface reads the predicate for the claim IT makes.** A claim about
+sendability ("this lease can be sent for signature") reads the gate; an
+affordance saying *do something here* reads the CTA. Mixing them is how a green
+"Confirmed … can be sent for signature" banner ends up above a lease every send
+path refuses. The review modal's banner therefore also checks
+`leaseSendStillReachable`, so it never tells a manager a Fully Signed or Voided
+lease can be sent.
 
 **One predicate decides "has a human confirmed this reading".**
 `uploadedLeaseReviewIsConfirmed` (and its inverse
 `uploadedLeaseNeedsManagerConfirmation`, wrapped row-side as
-`leaseAwaitsUploadedLeaseReview`) is that decision. The review modal, both
-"Review import" buttons, the rendered PropLane document, `saveUploadedLeaseParse`
-and the send gate all route through it. **Never compare `review.status` to
+`leaseAwaitsUploadedLeaseReview`) is that decision, and it is the building block
+the composite predicates above are built from — it answers "has this reading been
+confirmed", never "may this be sent" or "should the CTA show". The review modal,
+both "Review import" buttons, the rendered PropLane document,
+`saveUploadedLeaseParse` and the send gate all reach it through one of those
+three. **Never compare `review.status` to
 `"confirmed"` at a call site** — that re-implements a weaker rule, and the last
 time five sites did, a lease could render a green "Confirmed … can be sent for
 signature" banner with no Confirm button while every send path refused it. A
 manager cannot debug a Send button that is dead for a reason the UI denies.
 
-**A confirmation is bound to the parse it was made against.**
+**A lease needs an approved application.** A lease is a binding contract, so
+`leaseSendGateBlocker` refuses one whose applicant was never approved. Reachable
+in ordinary use, not just from seeded data: `syncApprovedApplications` creates
+the lease row *on approval*, and moving the application back to Pending
+afterwards leaves the lease behind. It fails **open** when no application row is
+found — an existing resident onboarded off-platform has none, and the
+applications store loads lazily, so refusing on absence would block real sends
+and read exactly like "leases not sending". For the same reason the email-only
+fallback in `applicationRowForLease` prefers an approved, non-withdrawn row:
+someone can hold a pending application for a *different* property alongside the
+approved one this lease came from, and picking that first would manufacture a
+hard, override-less block out of an unrelated record.
+
+**A parties/terms mismatch is named, not merely refused.**
+`lease-document-mismatch.ts` compares the document's own words against the
+record — and is deliberately conservative in both directions, because a FALSE
+mismatch blocks a legitimate send and teaches managers to click past warnings.
+It compares only terms the document actually **states** (`extracted`, or a value
+the manager typed; `ambiguous` and `not_found` are already blank-and-flagged),
+only in **comparable normalized form** (so `March 1, 2026` and `2026-03-01`
+agree, and `01/02/2026` — which `normalizeLeaseDate` refuses because it means two
+different days in two conventions — is not compared at all), and only for the
+four terms with a counterpart on the record. `landlordName`, `propertyAddress`,
+`rentDueDay` and `lateFee` carry `mapsTo: null`, so there is nothing to disagree
+with; they stay review-only. Names are the loosest test on purpose — a real lease
+names co-tenants, middle names and suffixes, so a disagreement is reported only
+when the two names share **no word at all**.
+
+**A confirmation is bound to BOTH sides of that comparison.**
 `confirmUploadedLeaseParse` stamps the parse's `sourceSha256` onto
-`review.confirmedDocumentSha256`, and the predicate honours a confirmation ONLY
-when that digest equals the parse's current `sourceSha256`. Absent or mismatched
-reads as `needs_review`. Be precise about its reach:
+`review.confirmedDocumentSha256` *and* a fingerprint of the record's four
+comparable terms onto `review.confirmedRecordFingerprint`
+(`leaseRecordFingerprint`). The document digest alone is not enough: a manager
+who accepts a document's differences and then edits the resident's rent or dates
+has their acknowledgement carried onto terms they never saw — the document never
+changed, so the digest still matches. `leaseMismatchAcknowledgementGap` returns
+why a confirmation does not cover the record (`unconfirmed`, `record_changed`,
+or `record_unknown`) and is asked **only when mismatches exist**, so an agreeing
+lease is never re-gated by an unrelated record edit. It fails **closed** on a
+missing fingerprint — every confirmation predating the field is in that state —
+and the UI must say which of the two it is: telling that cohort "the record
+changed" states a cause that is false for all of them.
+
+The digest half's reach is narrower than it looks:
 
 - It proves the confirmation matches the PARSE it was made against — a re-read
   producing a new digest, or a parse swapped for one describing other bytes,

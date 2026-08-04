@@ -19,6 +19,10 @@ import {
   confirmUploadedLeaseParse,
   leaseApplicationApprovalBlocker,
   leaseDocumentMismatchesForRow,
+  leaseMismatchAcknowledgementGapForRow,
+  leaseNeedsUploadedLeaseReviewAction,
+  leaseSendHeldByUploadedLeaseReview,
+  leaseSendStillReachable,
   readLeasePipeline,
   seedDemoLeasePipeline,
   sendLeaseToResident,
@@ -257,6 +261,207 @@ describe("a lease document that contradicts its record is not sent silently", ()
     seedDemoLeasePipeline([leaseRow()], MANAGER_ID);
 
     expect(leaseDocumentMismatchesForRow(storedRow()!)).toEqual([]);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+  });
+});
+
+/**
+ * An acknowledgement is a statement about a document AND about the record it
+ * was compared to. `confirmedDocumentSha256` pins the first; without the second,
+ * a manager who accepts a document's differences and then edits the rent has
+ * their acknowledgement silently carried onto terms they never saw — the
+ * document never changed, so the digest still matches and the guard waves it
+ * through. Same F-LEASE-1 class, reached by a different sequence.
+ */
+describe("a confirmation covers the record it was made against, not any later one", () => {
+  beforeEach(resetStores);
+
+  const AGREEING_PAGES = [
+    "RESIDENTIAL LEASE\nTenant: Diego Morales",
+    "Monthly rent is $1,050.00 per month. The term commences on September 1, 2026 and ends on August 31, 2027.",
+  ];
+
+  function seedConfirmedUpload(appOverrides: Partial<DemoApplicantRow> = {}) {
+    const parse = buildUploadedLeaseParse({
+      pages: AGREEING_PAGES,
+      fileName: "lease.pdf",
+      sourceSha256: "a".repeat(64),
+      extractedAtIso: "2026-08-01T00:00:00.000Z",
+    });
+    seedDemoManagerApplicationRows([applicationRow(appOverrides)], MANAGER_ID);
+    seedDemoLeasePipeline(
+      [
+        leaseRow({
+          generatedHtml: null,
+          managerUploadedPdf: {
+            dataUrl: PDF,
+            originalDataUrl: PDF,
+            fileName: "lease.pdf",
+            uploadedAt: "2026-08-01T00:00:00.000Z",
+          },
+          uploadedLeaseParse: parse,
+        }),
+      ],
+      MANAGER_ID,
+    );
+    expect(confirmUploadedLeaseParse(ROW_ID, { managerUserId: MANAGER_ID, confirmedByName: "Pat" }).ok).toBe(true);
+  }
+
+  it("re-gates when the record changes under a confirmed, agreeing lease", async () => {
+    seedConfirmedUpload();
+    expect(leaseDocumentMismatchesForRow(storedRow()!)).toEqual([]);
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+
+    // The manager renegotiates the rent. The document is untouched, so the
+    // document digest still matches — only the record moved.
+    resetStores();
+    seedConfirmedUpload();
+    const confirmedParse = storedRow()!.uploadedLeaseParse!;
+    seedDemoManagerApplicationRows([applicationRow({ signedMonthlyRent: 1450 })], MANAGER_ID);
+    seedDemoLeasePipeline(
+      [leaseRow({ generatedHtml: null, managerUploadedPdf: storedRow()!.managerUploadedPdf, uploadedLeaseParse: confirmedParse })],
+      MANAGER_ID,
+    );
+
+    expect(leaseMismatchAcknowledgementGapForRow(storedRow()!)).toBe("record_changed");
+    const result = await sendLeaseToResident(ROW_ID, MANAGER_ID);
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/record has changed since/i);
+    expect(result.error).toContain("1,050.00");
+  });
+
+  it("does not re-gate a lease whose document still agrees after a record edit", async () => {
+    seedConfirmedUpload();
+    const confirmedParse = storedRow()!.uploadedLeaseParse!;
+    const upload = storedRow()!.managerUploadedPdf;
+
+    // A record change that cannot alter the answer — the document states no
+    // landlord, so editing one could never create a disagreement.
+    seedDemoLeasePipeline(
+      [leaseRow({ generatedHtml: null, managerUploadedPdf: upload, uploadedLeaseParse: confirmedParse, notes: "edited" })],
+      MANAGER_ID,
+    );
+
+    expect(leaseDocumentMismatchesForRow(storedRow()!)).toEqual([]);
+    expect(leaseMismatchAcknowledgementGapForRow(storedRow()!)).toBeNull();
+    expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+  });
+
+  /**
+   * The gate must cover everything the SEND PATHS accept, which is wider than
+   * what the manager can edit: both `sendLeaseToResident` and the agent's
+   * `send_lease_for_signature` accept a row already out for signature. Scoping
+   * the gate to editable rows would leave the assistant able to re-send a lease
+   * whose record drifted after it went out.
+   */
+  it("still refuses a re-send of a lease already out for signature", async () => {
+    seedConfirmedUpload();
+    const confirmedParse = storedRow()!.uploadedLeaseParse!;
+    const upload = storedRow()!.managerUploadedPdf;
+    seedDemoManagerApplicationRows([applicationRow({ signedMonthlyRent: 1450 })], MANAGER_ID);
+    seedDemoLeasePipeline(
+      [
+        leaseRow({
+          generatedHtml: null,
+          managerUploadedPdf: upload,
+          uploadedLeaseParse: confirmedParse,
+          bucket: "resident",
+          status: "Resident Signature Pending",
+        }),
+      ],
+      MANAGER_ID,
+    );
+
+    const row = storedRow()!;
+    expect(leaseSendStillReachable(row)).toBe(true);
+    const result = await sendLeaseToResident(ROW_ID, MANAGER_ID);
+    expect(result.ok).toBe(false);
+    // It cannot be confirmed where it stands, so the refusal names the action
+    // that IS available rather than a button that is not on screen.
+    expect(result.error).toMatch(/move this lease back to manager review/i);
+  });
+
+  /**
+   * ...but the CTA is narrower than the gate on purpose. `confirmUploadedLeaseParse`
+   * refuses a row that no longer allows document edits, so offering "Review
+   * import" there would be a primary button whose action always fails and which
+   * nothing on screen can clear.
+   */
+  it("never asks for review on a finalized lease, where confirming could not succeed", () => {
+    seedConfirmedUpload();
+    const confirmedParse = storedRow()!.uploadedLeaseParse!;
+    const upload = storedRow()!.managerUploadedPdf;
+    seedDemoManagerApplicationRows([applicationRow({ signedMonthlyRent: 1450 })], MANAGER_ID);
+    seedDemoLeasePipeline(
+      [
+        leaseRow({
+          generatedHtml: null,
+          managerUploadedPdf: upload,
+          uploadedLeaseParse: confirmedParse,
+          bucket: "signed",
+          status: "Fully Signed",
+          residentSignature: { role: "resident", name: "Diego Morales", signedAtIso: "2026-08-05T00:00:00.000Z" },
+          managerSignature: { role: "manager", name: "Pat", signedAtIso: "2026-08-06T00:00:00.000Z" },
+        }),
+      ],
+      MANAGER_ID,
+    );
+
+    const row = storedRow()!;
+    expect(leaseSendStillReachable(row)).toBe(false);
+    expect(leaseNeedsUploadedLeaseReviewAction(row)).toBe(false);
+    expect(leaseSendHeldByUploadedLeaseReview(row)).toBe(false);
+  });
+
+  it("treats a confirmation that names no record as not covering one", async () => {
+    seedConfirmedUpload();
+    const confirmedParse = storedRow()!.uploadedLeaseParse!;
+    const upload = storedRow()!.managerUploadedPdf;
+    // The legacy cohort: confirmed before the fingerprint field existed.
+    seedDemoManagerApplicationRows([applicationRow({ signedMonthlyRent: 1450 })], MANAGER_ID);
+    seedDemoLeasePipeline(
+      [
+        leaseRow({
+          generatedHtml: null,
+          managerUploadedPdf: upload,
+          uploadedLeaseParse: {
+            ...confirmedParse,
+            review: { ...confirmedParse.review, confirmedRecordFingerprint: null },
+          },
+        }),
+      ],
+      MANAGER_ID,
+    );
+
+    // Fails closed, and does NOT claim the record changed — PropLane cannot tell.
+    expect(leaseMismatchAcknowledgementGapForRow(storedRow()!)).toBe("record_unknown");
+    const result = await sendLeaseToResident(ROW_ID, MANAGER_ID);
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toMatch(/record has changed since/i);
+  });
+});
+
+/**
+ * The email fallback exists so a lease whose row was never stamped with an Axis
+ * id still finds its application. It must not invent a refusal: someone can hold
+ * a pending or withdrawn application for a DIFFERENT property alongside the
+ * approved one this lease came from.
+ */
+describe("the application lookup never manufactures a block from an unrelated row", () => {
+  beforeEach(resetStores);
+
+  it("prefers the approved, live application among several for one person", async () => {
+    seedDemoManagerApplicationRows(
+      [
+        applicationRow({ id: "AXIS-OTHERPROP", bucket: "pending", stage: "Submitted", property: "Somewhere Else" }),
+        applicationRow({ id: "AXIS-WITHDRAWN", withdrawnAt: "2026-07-01T00:00:00.000Z" }),
+        applicationRow({ id: "AXIS-REAL" }),
+      ],
+      MANAGER_ID,
+    );
+    seedDemoLeasePipeline([leaseRow({ axisId: undefined, propertyId: "unmatched-property" })], MANAGER_ID);
+
+    expect(leaseApplicationApprovalBlocker(storedRow()!)).toBeNull();
     expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
   });
 });

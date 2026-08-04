@@ -17,7 +17,8 @@ import {
   unreadUploadedLeaseParse,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
-import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { leaseRecordTerms, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import { leaseRecordFingerprint } from "@/lib/lease-document-mismatch";
 
 const WRONG_PARTY_PAGES = [
   [
@@ -114,6 +115,37 @@ describe("the review names what the document disagrees with", () => {
     expect(shownText()).toContain("The terms above are correct");
   });
 
+  /**
+   * The manager's OWN typing can change which statement they are signing. A
+   * tick on "The terms above are correct" must not be counted as agreement to
+   * "I accept the differences listed above" — and the reset must not wipe their
+   * typing, which is why it is separate from the document-identity reset.
+   */
+  it("unticks when the manager's own edit introduces a disagreement", () => {
+    renderModal(parseOf(RIGHT_PARTY_PAGES));
+
+    fireEvent.click(attestBox()!);
+    expect(attestBox()!.checked).toBe(true);
+    expect(shownText()).toContain("The terms above are correct");
+
+    fireEvent.change(rentInput()!, { target: { value: "$4,000.00" } });
+
+    expect(shownText()).toContain("I accept the differences listed above");
+    expect(attestBox()!.checked).toBe(false);
+    // ...and the value they typed survives the reset.
+    expect(rentInput()!.value).toBe("$4,000.00");
+  });
+
+  it("keeps the tick while edits do not change which statement is being signed", () => {
+    renderModal(parseOf(RIGHT_PARTY_PAGES));
+
+    fireEvent.click(attestBox()!);
+    fireEvent.change(rentInput()!, { target: { value: "$1,050.00" } });
+
+    // Still agreeing, so still the same statement — do not clear it under them.
+    expect(attestBox()!.checked).toBe(true);
+  });
+
   it("clears a term from the warning as soon as the manager corrects it", () => {
     renderModal(parseOf(WRONG_PARTY_PAGES));
 
@@ -158,6 +190,81 @@ describe("the review names what the document disagrees with", () => {
     );
 
     expect(attestBox()!.checked).toBe(false);
+  });
+});
+
+/**
+ * The banner makes a claim, so it must read the predicate for that claim. A
+ * green "Confirmed … can be sent for signature" over a lease every send path
+ * refuses is the failure the one-predicate rule exists for.
+ */
+describe("the modal never claims a lease is sendable when it is not", () => {
+  const SHA = "a".repeat(64);
+
+  function confirmedParse(fingerprint: string | null) {
+    const base = parseOf(RIGHT_PARTY_PAGES);
+    return {
+      ...base,
+      review: {
+        ...base.review,
+        status: "confirmed" as const,
+        confirmedByName: "Pat Manager",
+        confirmedAtIso: "2026-08-01T12:00:00.000Z",
+        confirmedDocumentSha256: SHA,
+        confirmedRecordFingerprint: fingerprint,
+      },
+    };
+  }
+
+  it("shows the sendable banner for a confirmed lease still awaiting signature", () => {
+    const r = row();
+    renderModal(confirmedParse(leaseRecordFingerprint(leaseRecordTerms(r))), r);
+
+    expect(shownText()).toContain("Confirmed by Pat Manager");
+    expect(shownText()).toContain("can be sent for signature");
+  });
+
+  it("keeps the attribution but drops the sendability claim on a finalized lease", () => {
+    const finalized = row({
+      bucket: "signed",
+      status: "Fully Signed",
+      residentSignature: { role: "resident", name: "Diego Morales", signedAtIso: "2026-08-05T00:00:00.000Z" },
+      managerSignature: { role: "manager", name: "Pat Manager", signedAtIso: "2026-08-06T00:00:00.000Z" },
+    });
+    renderModal(confirmedParse(leaseRecordFingerprint(leaseRecordTerms(finalized))), finalized);
+
+    expect(shownText()).toContain("Confirmed by Pat Manager");
+    expect(shownText()).not.toContain("can be sent for signature");
+  });
+
+  it("says the record changed only when it can actually tell that it did", () => {
+    // Confirmed against a different rent — PropLane knows exactly what moved.
+    const r = row();
+    renderModal(
+      { ...parseOf(WRONG_PARTY_PAGES), review: confirmedParse("Someone Else~~~$99.00 / month").review },
+      r,
+    );
+
+    expect(document.body.querySelector('[data-attr="uploaded-lease-superseded"]')).not.toBeNull();
+    expect(shownText()).toContain("Confirmed by Pat Manager");
+    expect(shownText()).toContain("The lease record has changed since");
+  });
+
+  it("does not blame a record change for a confirmation that predates the fingerprint", () => {
+    // The legacy cohort: every confirmation made before the field existed. For
+    // them nothing changed — PropLane simply cannot tell what was confirmed.
+    renderModal({ ...parseOf(WRONG_PARTY_PAGES), review: confirmedParse(null).review }, row());
+
+    expect(shownText()).toContain("cannot tell which record it was confirmed against");
+    expect(shownText()).not.toContain("The lease record has changed since");
+  });
+
+  it("names the move-back step when the lease is already out for signature", () => {
+    const sent = row({ bucket: "resident", status: "Resident Signature Pending" });
+    renderModal({ ...parseOf(WRONG_PARTY_PAGES), review: confirmedParse(null).review }, sent);
+
+    expect(shownText()).toContain("Move this lease back to manager review");
+    expect(shownText()).not.toContain("can be sent for signature");
   });
 });
 

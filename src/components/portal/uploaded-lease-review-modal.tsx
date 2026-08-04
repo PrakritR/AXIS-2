@@ -13,7 +13,13 @@ import {
   type UploadedLeaseFieldKey,
   type UploadedLeaseParse,
 } from "@/lib/uploaded-lease-extraction";
-import { leaseDocumentMismatches } from "@/lib/lease-document-mismatch";
+import { leaseDocumentMismatches, leaseMismatchAcknowledgementGap } from "@/lib/lease-document-mismatch";
+import {
+  LEASE_MOVE_BACK_TO_REVIEW_MESSAGE,
+  leaseAllowsManagerDocumentEdits,
+  leaseRecordTerms,
+  leaseSendStillReachable,
+} from "@/lib/lease-pipeline-storage";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
 
 /**
@@ -165,7 +171,26 @@ export function UploadedLeaseReviewModal({
     setNote(parse.review.note ?? "");
   }
 
-  const confirmed = uploadedLeaseReviewIsConfirmed(parse);
+  /**
+   * Three different questions, three different predicates — a surface reads the
+   * one for the claim IT makes:
+   *
+   * - `storedConfirmed` — did a human confirm this reading at all? Owns the
+   *   "Confirmed by X on Y" attribution, which stays true even once the
+   *   confirmation stops covering the record.
+   * - `acknowledgementGap` — does that confirmation still cover the record's
+   *   current disagreements? Owns whether the Confirm affordance comes back.
+   * - `sendStillReachable` — could this lease be sent at all? Owns the
+   *   SENDABILITY claim. A Fully Signed or Voided lease is refused on status
+   *   alone, so telling its manager it "can be sent for signature" is the same
+   *   class of lie as a green banner over a gated lease.
+   */
+  const storedConfirmed = uploadedLeaseReviewIsConfirmed(parse);
+  const sendStillReachable = leaseSendStillReachable(row);
+  /** Kept visible in every confirmed state — the confirmation happened, whatever else changed. */
+  const confirmationAttribution = `Confirmed${parse.review.confirmedByName ? ` by ${parse.review.confirmedByName}` : ""}${
+    parse.review.confirmedAtIso ? ` on ${new Date(parse.review.confirmedAtIso).toLocaleString()}` : ""
+  }.`;
 
   const previewHtml = useMemo(() => {
     const withDrafts: UploadedLeaseParse = {
@@ -196,6 +221,40 @@ export function UploadedLeaseReviewModal({
       ),
     [parse, drafts, row],
   );
+
+  /**
+   * Does the stored confirmation still cover the disagreements on screen?
+   *
+   * Judged against the `parse` PROP — the reading this modal is actually
+   * rendering — rather than `row.uploadedLeaseParse`, so the banner can never
+   * describe a different reading than the table below it. Draft-aware, so a
+   * manager who corrects every disagreement clears the banner too.
+   */
+  const supersededCause =
+    storedConfirmed && mismatches.length > 0
+      ? leaseMismatchAcknowledgementGap(parse, leaseRecordTerms(row))
+      : null;
+  /** The review is settled: nothing here for the manager to act on. */
+  const confirmed = storedConfirmed && !supersededCause;
+  /** A superseded row out for signature cannot be confirmed where it stands. */
+  const needsMoveBackFirst = Boolean(supersededCause) && !leaseAllowsManagerDocumentEdits(row);
+
+  /**
+   * Untick when the manager's OWN edits change which statement they are being
+   * asked to sign — the checkbox reads "The terms above are correct" with no
+   * disagreements and "I accept the differences listed above" with them, and a
+   * tick on the first must never be counted as agreement to the second.
+   *
+   * Deliberately separate from `attestationSubject`: that value also drives the
+   * `setDrafts` / `setNote` re-seed, so folding drafts into it would wipe the
+   * manager's typing on every keystroke. This one resets ONLY `attested`.
+   */
+  const attestationWording = mismatches.length > 0 ? "accepts-differences" : "terms-correct";
+  const [attestedWording, setAttestedWording] = useState(attestationWording);
+  if (attestedWording !== attestationWording) {
+    setAttestedWording(attestationWording);
+    setAttested(uploadedLeaseReviewIsConfirmed(parse));
+  }
 
   if (parse.status !== "parsed") {
     // A read that is still running has no result to attest to, and confirming
@@ -338,11 +397,38 @@ export function UploadedLeaseReviewModal({
       }
     >
       <div className="space-y-4">
-        {confirmed ? (
+        {supersededCause ? (
+          <p
+            className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+            data-attr="uploaded-lease-superseded"
+          >
+            <strong className="font-semibold">Needs confirming again.</strong>{" "}
+            {confirmationAttribution}{" "}
+            {/*
+              Two different facts, and only one of them is "the record changed".
+              Every confirmation made before this branch shipped carries no
+              record fingerprint, so that cohort is the common case today —
+              telling those managers the record changed states a cause that is
+              false, in a module whose rule is that the UI must not misstate
+              what the gate does.
+            */}
+            {supersededCause === "record_changed"
+              ? "The lease record has changed since, so the differences below are not the ones that were accepted."
+              : "PropLane cannot tell which record it was confirmed against, so the differences below have to be accepted again."}
+            {needsMoveBackFirst ? ` ${LEASE_MOVE_BACK_TO_REVIEW_MESSAGE}` : ""}
+          </p>
+        ) : confirmed && sendStillReachable ? (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-            Confirmed{parse.review.confirmedByName ? ` by ${parse.review.confirmedByName}` : ""}
-            {parse.review.confirmedAtIso ? ` on ${new Date(parse.review.confirmedAtIso).toLocaleString()}` : ""}. This
-            lease can be sent for signature.
+            {confirmationAttribution} This lease can be sent for signature.
+          </p>
+        ) : confirmed ? (
+          // Confirmed, but finalized or already signed: the attestation is still
+          // a true fact about this lease; "can be sent for signature" is not.
+          <p
+            className="rounded-xl border border-border bg-accent/20 px-4 py-3 text-sm text-foreground"
+            data-attr="uploaded-lease-confirmed-not-sendable"
+          >
+            {confirmationAttribution}
           </p>
         ) : (
           <p className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">

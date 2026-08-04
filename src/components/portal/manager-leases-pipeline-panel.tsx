@@ -40,7 +40,7 @@ import {
   leaseGenerationSupportedForRow,
   managerSignLease,
   confirmUploadedLeaseParse,
-  leaseAwaitsUploadedLeaseReview,
+  leaseNeedsUploadedLeaseReviewAction,
   leaseSendGateBlocker,
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   runLeaseDownload,
@@ -447,8 +447,8 @@ export function ManagerLeasesPipelinePanel({
       !residentAccountEmails.has(row.residentEmail.trim().toLowerCase());
 
     const hasDocument = hasLeaseDocument(row);
-    // Every reason `sendLeaseToResident` would refuse, in the same order, so a
-    // disabled Send always has a sentence behind it rather than being a mystery.
+    // Every reason `sendLeaseToResident` would refuse, in the same order, so the
+    // manager gets a sentence rather than a mystery.
     const sendBlockedReason = !residentAccountEmails.has(row.residentEmail.trim().toLowerCase())
       ? "Resident must create their PropLane resident account before you can send the lease."
       : !row.generatedHtml && !row.managerUploadedPdf?.dataUrl
@@ -457,7 +457,14 @@ export function ManagerLeasesPipelinePanel({
           // an import nobody has confirmed. `sendLeaseToResident` refuses on the
           // same three; this is the affordance.
           leaseSendGateBlocker(row);
-    const sendToResidentDisabled = Boolean(sendBlockedReason);
+    // Deliberately NOT disabled when there is a reason. Disabling makes the
+    // click handler — the only thing that states the reason and opens the
+    // review that clears it — unreachable, and `title` is invisible on touch,
+    // so a blocked Send became a dead button with no sentence anywhere. The
+    // gate is `sendLeaseToResident`, never the button ("greying out a button is
+    // not the gate"), so an enabled Send that explains itself is strictly safer
+    // than a dead one.
+    const sendToResidentDisabled = false;
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
     const showDelete = row.status !== "Fully Signed";
     const showMoveToReview = row.status === "Resident Signature Pending";
@@ -552,7 +559,8 @@ export function ManagerLeasesPipelinePanel({
     ) : null;
 
     const showReviewImport = Boolean(row.uploadedLeaseParse);
-    const importNeedsReview = leaseAwaitsUploadedLeaseReview(row);
+    // The CTA predicate, not the send gate — see lease-pipeline-storage.
+    const importNeedsReview = leaseNeedsUploadedLeaseReviewAction(row);
     const reviewImportLabel = importNeedsReview ? "Review import" : "Imported lease";
     const reviewImportButton = showReviewImport ? (
       <Button

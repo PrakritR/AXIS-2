@@ -119,6 +119,22 @@ export type UploadedLeaseReview = {
    */
   confirmedDocumentSha256?: string | null;
   /**
+   * The OTHER half of what was confirmed: a fingerprint of the lease record's
+   * own terms at confirm time (`leaseRecordFingerprint`).
+   *
+   * `confirmedDocumentSha256` pins the document; this pins what the document
+   * was compared AGAINST. Without it, a manager who accepts a document's
+   * differences and then edits the resident's rent or dates has their
+   * acknowledgement silently carried onto terms they never saw — the document
+   * never changed, so the digest still matches, and the parties-mismatch guard
+   * would wave the send through.
+   *
+   * Absent means the confirmation predates this field. That is treated as "does
+   * not cover the record" wherever a mismatch actually exists — see
+   * `leaseMismatchAcknowledged`.
+   */
+  confirmedRecordFingerprint?: string | null;
+  /**
    * Values a human typed. Presence of a key is what marks a value
    * human-confirmed rather than machine-extracted, and the review UI and the
    * rendered document both distinguish the two.
@@ -677,6 +693,8 @@ export function confirmedUploadedLeaseReview(
     note?: string | null;
     /** The `sourceSha256` of the parse being confirmed; null when it has none. */
     documentSha256?: string | null;
+    /** Fingerprint of the record's terms at confirm time; null when unknown. */
+    recordFingerprint?: string | null;
   },
 ): UploadedLeaseReview {
   return {
@@ -686,6 +704,7 @@ export function confirmedUploadedLeaseReview(
     confirmedByName: by.name ?? null,
     confirmedAtIso: by.atIso,
     confirmedDocumentSha256: by.documentSha256 ?? null,
+    confirmedRecordFingerprint: by.recordFingerprint ?? null,
     note: by.note?.trim() || null,
   };
 }
@@ -863,6 +882,10 @@ export function normalizeUploadedLeaseParse(raw: unknown): UploadedLeaseParse | 
       confirmedDocumentSha256:
         typeof reviewRaw.confirmedDocumentSha256 === "string" && /^[0-9a-f]{64}$/.test(reviewRaw.confirmedDocumentSha256)
           ? reviewRaw.confirmedDocumentSha256
+          : null,
+      confirmedRecordFingerprint:
+        typeof reviewRaw.confirmedRecordFingerprint === "string" && reviewRaw.confirmedRecordFingerprint.trim()
+          ? reviewRaw.confirmedRecordFingerprint
           : null,
       overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
       note: typeof reviewRaw.note === "string" ? reviewRaw.note : null,
