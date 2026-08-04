@@ -277,55 +277,88 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
   return null;
 }
 
+/** Page size, at the Calendar API's documented maximum. */
+const GOOGLE_CALENDAR_EVENTS_PAGE_SIZE = 2500;
+
+/** How many pages one busy-window read will follow before it gives up. */
+export const GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT = 5;
+
+export type GoogleCalendarEventsPage = {
+  events: GoogleCalendarApiEvent[];
+  /**
+   * The calendar had more events in this window than the page bound allowed.
+   *
+   * Results come back ordered by start time, so the events dropped are the LAST
+   * ones in the range — exactly the far weeks a wide busy window exists to
+   * cover. A short list that reads as a complete one would render those weeks as
+   * a free, fully selectable grid, which is the double-booking failure the busy
+   * overlay is there to prevent, so callers MUST surface this rather than
+   * silently showing fewer conflicts.
+   */
+  truncated: boolean;
+};
+
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
   managerUserId: string,
   timeMin: string,
   timeMax: string,
-): Promise<GoogleCalendarApiEvent[]> {
+): Promise<GoogleCalendarEventsPage> {
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
-  if (!connection.syncEnabled) return [];
+  if (!connection.syncEnabled) return { events: [], truncated: false };
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: "250",
-  });
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params.toString()}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  const data = (await res.json()) as {
-    items?: Array<{
-      id?: string;
-      summary?: string;
-      description?: string;
-      htmlLink?: string;
-      start?: { dateTime?: string; date?: string };
-      end?: { dateTime?: string; date?: string };
-    }>;
-    error?: { message?: string };
-  };
-  if (!res.ok) {
-    throw new Error(data.error?.message ?? "Could not load Google Calendar events.");
-  }
-  return (data.items ?? [])
-    .map((item) => {
+
+  const events: GoogleCalendarApiEvent[] = [];
+  let pageToken: string | undefined;
+  let truncated = false;
+
+  for (let page = 0; page < GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT; page += 1) {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: String(GOOGLE_CALENDAR_EVENTS_PAGE_SIZE),
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const data = (await res.json()) as {
+      items?: Array<{
+        id?: string;
+        summary?: string;
+        description?: string;
+        htmlLink?: string;
+        start?: { dateTime?: string; date?: string };
+        end?: { dateTime?: string; date?: string };
+      }>;
+      nextPageToken?: string;
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      throw new Error(data.error?.message ?? "Could not load Google Calendar events.");
+    }
+    for (const item of data.items ?? []) {
       const start = item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : "");
       const end = item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T23:59:59` : "");
-      if (!item.id || !start || !end) return null;
-      return {
+      if (!item.id || !start || !end) continue;
+      events.push({
         id: item.id,
         summary: item.summary?.trim() || "Google Calendar event",
         description: item.description?.trim() || undefined,
         start,
         end,
         htmlLink: item.htmlLink,
-      } satisfies GoogleCalendarApiEvent;
-    })
-    .filter(Boolean) as GoogleCalendarApiEvent[];
+      } satisfies GoogleCalendarApiEvent);
+    }
+    pageToken = data.nextPageToken?.trim() || undefined;
+    if (!pageToken) break;
+    if (page === GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT - 1) truncated = true;
+  }
+
+  return { events, truncated };
 }
 
 export type GoogleCalendarEventWriteInput = {

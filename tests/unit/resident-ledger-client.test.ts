@@ -66,6 +66,38 @@ describe("loadResidentLedgerRows", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("never serves one window's rows to a caller asking for another", async () => {
+    const fetchMock = vi.fn(async (url: unknown) => {
+      const from = new URL(String(url), "https://example.test").searchParams.get("from");
+      return jsonResponse([{ payment: "$100.00", date: from }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const year = await loadResidentLedgerRows("u-1|maya@example.com", {
+      from: "2025-08-03",
+      to: "2026-08-03",
+    });
+    const month = await loadResidentLedgerRows("u-1|maya@example.com", {
+      from: "2026-07-03",
+      to: "2026-08-03",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(year).toEqual([{ payment: "$100.00", date: "2025-08-03" }]);
+    expect(month).toEqual([{ payment: "$100.00", date: "2026-07-03" }]);
+  });
+
+  it("still reuses a fresh read of the SAME window", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse([{ payment: "$100.00" }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const range = { from: "2026-07-03", to: "2026-08-03" };
+    await loadResidentLedgerRows("u-1|maya@example.com", range);
+    await loadResidentLedgerRows("u-1|maya@example.com", { ...range });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("never serves one resident's rows to another", async () => {
     const fetchMock = vi.fn(async () => {
       const call = fetchMock.mock.calls.length;

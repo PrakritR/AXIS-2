@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applicantDisplayName,
+  applicantSecondaryEmail,
   isPlaceholderApplicantName,
   realApplicantName,
 } from "@/lib/rental-application/applicant-name";
@@ -34,6 +35,17 @@ describe("applicant placeholder names (F-FIN-2)", () => {
     expect(applicantDisplayName({ name: "Applicant", email: "maya@example.com" })).toBe("maya@example.com");
     expect(applicantDisplayName({ name: "Maya Chen", email: "maya@example.com" })).toBe("Maya Chen");
     expect(applicantDisplayName({ name: "", email: "" })).toBe("Applicant");
+  });
+
+  it("does not print the email twice when it IS the display name", () => {
+    expect(applicantSecondaryEmail({ name: "", email: "maya@example.com" })).toBe("");
+    expect(applicantSecondaryEmail({ name: "Applicant", email: "maya@example.com" })).toBe("");
+    // A case-only difference must not defeat it.
+    expect(applicantSecondaryEmail({ name: "MAYA@example.com", email: "maya@example.com" })).toBe("");
+    expect(applicantSecondaryEmail({ name: "Maya Chen", email: "maya@example.com" })).toBe(
+      "maya@example.com",
+    );
+    expect(applicantSecondaryEmail({ name: "Maya Chen", email: "" })).toBe("");
   });
 
   it("a nameless draft is no longer STORED under the placeholder", () => {

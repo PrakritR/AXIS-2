@@ -48,8 +48,17 @@ export async function GET(req: Request) {
     if (!connection.connected) {
       return NextResponse.json({ meetings: [] });
     }
-    const events = await listGoogleCalendarEvents(ctx.db, ctx.userId, timeMin, timeMax);
-    return NextResponse.json({ meetings: googleCalendarEventsToMeetings(events) });
+    const { events, truncated } = await listGoogleCalendarEvents(ctx.db, ctx.userId, timeMin, timeMax);
+    const meetings = googleCalendarEventsToMeetings(events);
+    if (truncated) {
+      return NextResponse.json({
+        meetings,
+        truncated: true,
+        warning: "calendar_events_truncated",
+        hint: "This calendar has more events than PropLane can load for the dates shown, so some busy time may be missing. Check Google Calendar before publishing availability far out.",
+      });
+    }
+    return NextResponse.json({ meetings, truncated: false });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     debugGoogleCalendarLog("events/route.ts:GET", "events fetch failed", {

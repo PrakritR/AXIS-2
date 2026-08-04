@@ -41,3 +41,17 @@ export function applicantDisplayName(
 ): string {
   return realApplicantName(row.name) || String(row.email ?? "").trim() || fallback;
 }
+
+/**
+ * The email to print BESIDE {@link applicantDisplayName} — empty when the
+ * display name already IS that email.
+ *
+ * A nameless draft resolves to its own address, so a row that prints the name
+ * line and the email line unconditionally shows the same address twice and
+ * derives its avatar initials from it. One identity, printed once.
+ */
+export function applicantSecondaryEmail(row: { name?: string | null; email?: string | null }): string {
+  const email = String(row.email ?? "").trim();
+  if (!email) return "";
+  return applicantDisplayName(row).trim().toLowerCase() === email.toLowerCase() ? "" : email;
+}
