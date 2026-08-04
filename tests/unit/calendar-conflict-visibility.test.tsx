@@ -83,7 +83,12 @@ describe("property availability calendar shows the same conflicts (F-CAL-6)", ()
     );
     const { ManagerPropertyTourPanel } = await import("@/components/portal/manager-property-tour-panel");
     render(
-      <ManagerPropertyTourPanel listingId="mgr-demo-ballard" managerUserId="m1" propertyLabel="Ballard House" />,
+      <ManagerPropertyTourPanel
+        listingId="mgr-demo-ballard"
+        managerUserId="m1"
+        propertyLabel="Ballard House"
+        showToast={() => {}}
+      />,
     );
     await waitFor(() => {
       const latest = capturedProps.at(-1);
@@ -97,7 +102,12 @@ describe("property availability calendar shows the same conflicts (F-CAL-6)", ()
     const { GOOGLE_BUSY_DEFAULT_DAYS_AHEAD } = await import("@/hooks/use-google-calendar-busy");
     const { ManagerPropertyTourPanel } = await import("@/components/portal/manager-property-tour-panel");
     render(
-      <ManagerPropertyTourPanel listingId="mgr-demo-ballard" managerUserId="m1" propertyLabel="Ballard House" />,
+      <ManagerPropertyTourPanel
+        listingId="mgr-demo-ballard"
+        managerUserId="m1"
+        propertyLabel="Ballard House"
+        showToast={() => {}}
+      />,
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
@@ -119,7 +129,12 @@ describe("property availability calendar shows the same conflicts (F-CAL-6)", ()
     vi.stubGlobal("fetch", fetchMock);
     const { ManagerPropertyTourPanel } = await import("@/components/portal/manager-property-tour-panel");
     render(
-      <ManagerPropertyTourPanel listingId="mgr-demo-ballard" managerUserId={null} propertyLabel="Ballard House" />,
+      <ManagerPropertyTourPanel
+        listingId="mgr-demo-ballard"
+        managerUserId={null}
+        propertyLabel="Ballard House"
+        showToast={() => {}}
+      />,
     );
     await waitFor(() => expect(capturedProps.length).toBeGreaterThan(0));
     expect(fetchMock).not.toHaveBeenCalled();
@@ -173,6 +188,35 @@ describe("an incomplete busy read is never presented as a free calendar", () => 
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: "Failed" }) })),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(toasts).toHaveLength(1));
+    expect(toasts[0]).toMatch(/could not load/i);
+  });
+
+  it("does not believe a 200 that carries no meetings list", async () => {
+    // An edge or proxy error page is an HTML 200 — parsing to nothing is not
+    // evidence that the calendar is free.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => {
+          throw new Error("Unexpected token < in JSON");
+        },
+      })),
+    );
+
+    const toasts = await renderPropertyPanel();
+    await waitFor(() => expect(toasts).toHaveLength(1));
+    expect(toasts[0]).toMatch(/could not load/i);
+  });
+
+  it("does not believe a 200 whose body omits the meetings array", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({}) })),
     );
 
     const toasts = await renderPropertyPanel();

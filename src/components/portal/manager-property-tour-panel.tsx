@@ -21,7 +21,12 @@ export function ManagerPropertyTourPanel({
   listingId: string;
   managerUserId: string | null;
   propertyLabel: string;
-  showToast?: (message: string) => void;
+  /**
+   * REQUIRED: this panel publishes availability, so it must be able to tell the
+   * manager when its conflict overlay is incomplete. Optional, it could be
+   * dropped by a new call site and the warning would vanish silently.
+   */
+  showToast: (message: string) => void;
   /** Parent header "Send tour link" — same handler as the former section footer button. */
   onRegisterSendTour?: (openSendTour: (() => void) | null) => void;
 }) {
@@ -59,7 +64,7 @@ export function ManagerPropertyTourPanel({
     enabled: Boolean(managerUserId),
     onWarning: ({ warning, hint }) => {
       if (!isGoogleBusyIncompleteWarning(warning)) return;
-      showToast?.(
+      showToast(
         hint ??
           "PropLane could not load all your Google Calendar busy time, so this grid may be missing conflicts.",
       );
