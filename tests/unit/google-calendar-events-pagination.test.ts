@@ -26,8 +26,8 @@ vi.mock("@/lib/google-calendar/settings", () => ({
 vi.mock("@/lib/google-calendar/debug-log.server", () => ({ debugGoogleCalendarLog: () => {} }));
 
 import {
-  GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT,
-  listGoogleCalendarEvents,
+  GOOGLE_CALENDAR_EVENT_PAGE_LIMIT,
+  listGoogleCalendarEventsPaged,
 } from "@/lib/google-calendar/api.server";
 
 const db = {} as never;
@@ -55,7 +55,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("listGoogleCalendarEvents pagination", () => {
+describe("listGoogleCalendarEventsPaged pagination", () => {
   it("follows nextPageToken so the far end of the window is not dropped", async () => {
     const fetchMock = pagedFetch([
       { items: [event("a")], nextPageToken: "p2" },
@@ -64,7 +64,7 @@ describe("listGoogleCalendarEvents pagination", () => {
     ]);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { events, truncated } = await listGoogleCalendarEvents(db, "mgr-1", "min", "max");
+    const { events, truncated } = await listGoogleCalendarEventsPaged(db, "mgr-1", "min", "max");
 
     expect(events.map((e) => e.id)).toEqual(["a", "b", "c"]);
     expect(truncated).toBe(false);
@@ -79,7 +79,7 @@ describe("listGoogleCalendarEvents pagination", () => {
     const fetchMock = pagedFetch([{ items: [event("a")] }]);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { events, truncated } = await listGoogleCalendarEvents(db, "mgr-1", "min", "max");
+    const { events, truncated } = await listGoogleCalendarEventsPaged(db, "mgr-1", "min", "max");
 
     expect(events).toHaveLength(1);
     expect(truncated).toBe(false);
@@ -92,10 +92,10 @@ describe("listGoogleCalendarEvents pagination", () => {
     const fetchMock = pagedFetch([{ items: [event("a")], nextPageToken: "more" }]);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { events, truncated } = await listGoogleCalendarEvents(db, "mgr-1", "min", "max");
+    const { events, truncated } = await listGoogleCalendarEventsPaged(db, "mgr-1", "min", "max");
 
-    expect(fetchMock).toHaveBeenCalledTimes(GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT);
-    expect(events).toHaveLength(GOOGLE_CALENDAR_EVENTS_PAGE_LIMIT);
+    expect(fetchMock).toHaveBeenCalledTimes(GOOGLE_CALENDAR_EVENT_PAGE_LIMIT);
+    expect(events).toHaveLength(GOOGLE_CALENDAR_EVENT_PAGE_LIMIT);
     expect(truncated).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe("listGoogleCalendarEvents pagination", () => {
       }) as unknown as Response),
     );
 
-    await expect(listGoogleCalendarEvents(db, "mgr-1", "min", "max")).rejects.toThrow(
+    await expect(listGoogleCalendarEventsPaged(db, "mgr-1", "min", "max")).rejects.toThrow(
       /Calendar API has not been used/,
     );
   });

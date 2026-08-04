@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { classifyGoogleCalendarEventsFetchError, listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
+import { classifyGoogleCalendarEventsFetchError, listGoogleCalendarEventsPaged } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { googleCalendarEventsToMeetings } from "@/lib/google-calendar/meetings";
 import { deleteProplaneGoogleCalendarEvent } from "@/lib/google-calendar/sync.server";
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     if (!connection.connected) {
       return NextResponse.json({ meetings: [] });
     }
-    const { events, truncated } = await listGoogleCalendarEvents(ctx.db, ctx.userId, timeMin, timeMax);
+    const { events, truncated } = await listGoogleCalendarEventsPaged(ctx.db, ctx.userId, timeMin, timeMax);
     const meetings = googleCalendarEventsToMeetings(events);
     if (truncated) {
       return NextResponse.json({

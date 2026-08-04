@@ -305,7 +305,7 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
 }
 
 /** Pages of 250 events to walk before giving up; bounds a pathological calendar. */
-const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
+export const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
 
 /**
  * The whole timeout ladder for Google Calendar, derived from one number.
