@@ -61,6 +61,11 @@ import {
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
+  recordedPaymentsMissingFromCharges,
+  residentLedgerReceiptRange,
+} from "@/lib/resident-recorded-payments";
+import type { ReportRow } from "@/lib/reports/types";
+import {
   residentChargeDetailHref,
   residentChargesListHref,
 } from "@/lib/portal-detail-routes";
@@ -202,6 +207,12 @@ export function ResidentPaymentsPanel({
     return readChargesForResident(email, userId);
   }, [email, userId, tick]);
 
+  // Payments the LEDGER recorded whose charge row no longer exists. Without
+  // these, Paid reads 0 while Documents › Rent receipts lists the same
+  // payments (F6). Read-only and always `status: "paid"`, so they can never
+  // enter a pay/select path (every one of those filters on `pending`).
+  const [recordedPayments, setRecordedPayments] = useState<HouseholdCharge[]>([]);
+
   const unpaidPayableCharges = useMemo(
     () => charges.filter((c) => isPayableHouseholdCharge(c)),
     [charges],
@@ -311,6 +322,32 @@ export function ResidentPaymentsPanel({
     return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, onApplications);
   }, []);
 
+  // Reconcile Paid against the accounting ledger — the same source Documents ›
+  // Rent receipts reads (F6). Best-effort: a failed read leaves Paid showing
+  // exactly the live paid charges, which is what it showed before.
+  useEffect(() => {
+    if (!session.ready || !email || isDemoModeActive()) {
+      setRecordedPayments([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const params = new URLSearchParams(residentLedgerReceiptRange());
+        const res = await fetch(`/api/reports/resident-ledger?${params}`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { rows?: ReportRow[] };
+        if (cancelled) return;
+        setRecordedPayments(recordedPaymentsMissingFromCharges(data.rows ?? [], charges));
+      } catch {
+        /* the ledger is a reconciliation, never a blocker for paying */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.ready, email, charges]);
+
   useEffect(() => {
     if (!paymentsUnlocked) {
       setCheckout(null);
@@ -373,7 +410,7 @@ export function ResidentPaymentsPanel({
   }, [refresh, router, searchParams, showToast]);
 
   const rows = useMemo(() => {
-    return [...charges].sort((a, b) => {
+    return [...charges, ...recordedPayments].sort((a, b) => {
       if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
       if (a.status === "pending") {
         const aOverdue = isHouseholdChargeOverdue(a);
@@ -385,7 +422,7 @@ export function ResidentPaymentsPanel({
       // Paid history: most recently due first.
       return compareChargesByDueDate(a, b, "desc");
     });
-  }, [charges]);
+  }, [charges, recordedPayments]);
 
   // `processing` (ACH clearing, 3–5 business days) shows alongside pending so
   // the charge doesn't vanish mid-payment — but it is never overdue or payable.
@@ -940,6 +977,12 @@ export function ResidentPaymentsPanel({
       </div>
     ) : null;
 
+  // On Paid, the outstanding balance is $0.00 by definition — showing it turns
+  // every paid row into "$0.00" and hides what the resident actually paid. The
+  // unpaid buckets keep showing what is still owed.
+  const rowAmountLabel = (row: HouseholdCharge) =>
+    row.status === "paid" ? row.amountLabel || row.balanceLabel : row.balanceLabel;
+
   const renderChargeList = () => (
     <div className={PORTAL_LIST_PAGE_BODY}>
       <DataList
@@ -956,7 +999,7 @@ export function ResidentPaymentsPanel({
             { omitBalance: true },
           ),
           trailing: (
-            <span className="text-sm font-semibold tabular-nums text-foreground">{row.balanceLabel}</span>
+            <span className="text-sm font-semibold tabular-nums text-foreground">{rowAmountLabel(row)}</span>
           ),
           selected: selectedIds.has(row.id),
           onSelectedChange: () => toggleSelected(row.id),
@@ -969,7 +1012,7 @@ export function ResidentPaymentsPanel({
           {
             id: "amount",
             header: "Amount",
-            cell: (row) => row.balanceLabel,
+            cell: (row) => rowAmountLabel(row),
             headerClassName: "text-right",
             cellClassName: "text-right tabular-nums",
           },

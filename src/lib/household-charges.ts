@@ -3740,11 +3740,25 @@ export function residentLeaseBlockedReasons(email: string, userId: string | null
   return [];
 }
 
-export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
+/**
+ * The ONE Pending / Overdue / Paid decision for a manager-facing charge.
+ *
+ * Every manager surface that counts charges must go through this — the
+ * dashboard "Payments" group used to bucket on `status === "pending"` alone,
+ * which silently dropped clearing ACH ("processing") rows the Payments page
+ * counts under Pending. Two money counters reading the same store disagreed.
+ */
+export function householdChargeManagerBucket(c: HouseholdCharge): ManagerPaymentBucket {
+  if (c.status === "paid") return "paid";
   // A clearing ACH payment ("processing") is never overdue — the resident has
   // already paid; the bank is settling.
-  const overdue = c.status !== "paid" && c.status !== "processing" && isHouseholdChargeOverdue(c, startOfTodayLocal());
-  const bucket: ManagerPaymentBucket = c.status === "paid" ? "paid" : overdue ? "overdue" : "pending";
+  const overdue = c.status !== "processing" && isHouseholdChargeOverdue(c, startOfTodayLocal());
+  return overdue ? "overdue" : "pending";
+}
+
+export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
+  const bucket = householdChargeManagerBucket(c);
+  const overdue = bucket === "overdue";
   // If the stored label looks like a raw internal ID (pending property not yet resolved at charge-creation
   // time), try to resolve the human-readable title now via getPropertyById which now includes pending props.
   let propertyName = c.propertyLabel;

@@ -526,14 +526,22 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
       /* Corrupt or partial submission in localStorage — fall back to generic layout. */
     }
   }
-  const mid = parseMonthlyRent(property.rentLabel) ?? 875;
-  const low = Math.max(500, mid - 125);
-  const high = mid + 100;
+  // A listing with no rent yet (an unfinished draft) has no price to show. The
+  // fabricated band below used to run anyway: mid=0 gave `low = max(500, -125)`
+  // and `high = 100`, printing the range BACKWARDS as "from $500–$100/mo"
+  // (F-DRAFT-2). The same floor inverted any genuine rent under $400/mo, so the
+  // bounds are ordered rather than assumed. No rent → no price label, never an
+  // invented one.
+  const parsedRent = parseMonthlyRent(property.rentLabel);
+  const mid = parsedRent === null ? 875 : parsedRent;
+  const hasRent = mid > 0;
+  const low = Math.min(Math.max(500, mid - 125), mid + 100);
+  const high = Math.max(Math.max(500, mid - 125), mid + 100);
   return {
     heroTagline: property.tagline,
     houseRulesBody: DEFAULT_LISTING_HOUSE_RULES_FALLBACK,
-    priceRangeLabel: `from $${low}–$${high}/mo`,
-    startingRentLabel: `$${mid}/mo`,
+    priceRangeLabel: hasRent ? `from $${low}–$${high}/mo` : "—",
+    startingRentLabel: hasRent ? `$${mid}/mo` : "—",
     floorPlans: defaultFloors,
     bathrooms: defaultBathrooms,
     sharedSpaces: defaultShared,

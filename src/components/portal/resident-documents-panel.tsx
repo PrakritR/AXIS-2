@@ -62,12 +62,7 @@ import { safeFormatDateTime } from "@/lib/pacific-time";
 import type { ReportResult } from "@/lib/reports/types";
 import { readChargesForResident } from "@/lib/household-charges";
 import { DEMO_RESIDENT_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
-
-function defaultReceiptRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-  return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
-}
+import { receiptRowLabel, residentLedgerReceiptRange } from "@/lib/resident-recorded-payments";
 
 function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
   if (bucket === "approved") return "Approved";
@@ -166,7 +161,7 @@ function RentReceiptsTab() {
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [generated, setGenerated] = useState(false);
-  const [range, setRange] = useState(defaultReceiptRange);
+  const [range, setRange] = useState(() => residentLedgerReceiptRange());
   // Track the open receipt by its stable id, NOT by (date/amount/description)
   // value — the ledger contains true-duplicate payments, and value equality
   // makes them indistinguishable so a row never opens inline. See buildReceiptRows.
@@ -244,7 +239,7 @@ function RentReceiptsTab() {
   const downloadReceipt = useCallback(
     (row: ReceiptRow) => {
       if (demoMode) {
-        void buildDemoReceipt(row).then((url) => triggerDocumentDownload(url, `rent-receipt-${row.date}.pdf`));
+        void buildDemoReceipt(row).then((url) => triggerDocumentDownload(url, `payment-receipt-${row.date}.pdf`));
         return;
       }
       triggerDocumentDownload(receiptPdfHref(row.date));
@@ -321,7 +316,7 @@ function RentReceiptsTab() {
                   <>
                     <td className={`${PORTAL_TABLE_TD} align-middle`}>
                       <PortalTableInlineExpand expanded={isOpen} className="min-w-0 truncate font-medium text-foreground">
-                        Rent receipt
+                        {receiptRowLabel(row.description)}
                       </PortalTableInlineExpand>
                     </td>
                     <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
@@ -330,7 +325,7 @@ function RentReceiptsTab() {
                 ),
                 card: (
                   <PortalMobileSummaryCard
-                    title="Rent receipt"
+                    title={receiptRowLabel(row.description)}
                     subtitle={row.amount}
                     meta={row.date}
                     expanded={isOpen}
@@ -340,7 +335,7 @@ function RentReceiptsTab() {
                 detail: isOpen ? (
                   <DocumentInlineViewer
                     embedded
-                    title={`Rent receipt ${row.date}`}
+                    title={`${receiptRowLabel(row.description)} ${row.date}`}
                     srcDoc={previewHtml}
                     onDownload={() => downloadReceipt(row)}
                   />

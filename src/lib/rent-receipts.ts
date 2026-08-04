@@ -33,7 +33,10 @@ export function buildReceiptRows(rows: ReadonlyArray<ReportRow>): ReceiptRow[] {
     .map((row, index) => ({
       id: String(index),
       date: String(row.date ?? ""),
-      description: String(row.description ?? "").trim() || "Rent payment",
+      // NOT "Rent payment" — this ledger row may be utilities, a deposit or an
+      // application fee, and the label built from it is an exportable financial
+      // record (resident audit U9).
+      description: String(row.description ?? "").trim() || "Payment",
       amount: String(row.payment),
     }))
     .reverse();

@@ -1011,6 +1011,11 @@ export async function queryResidentLedger(
       charge: e.entry_type === "charge" ? centsToUsd(cents) : "",
       payment: e.entry_type === "payment" ? centsToUsd(cents) : "",
       balance: centsToUsd(running),
+      // Not columns — exports iterate `columns`, so these are inert there. They
+      // let the resident Payments "Paid" tab reconcile against the live charge
+      // list instead of contradicting Documents › Rent receipts (F6).
+      sourceChargeId: e.source_charge_id ?? "",
+      property: e.unit_label ?? "",
     };
   });
 
