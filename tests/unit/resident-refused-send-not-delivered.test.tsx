@@ -105,6 +105,42 @@ function stubFetch(sendResponse: { status: number; body: Record<string, unknown>
   return calls;
 }
 
+/**
+ * Two-channel variant: the panel posts email first, then SMS, to the SAME
+ * endpoint, so responses are handed out in call order.
+ */
+function stubFetchSequence(sendResponses: { status: number; body: Record<string, unknown> }[]) {
+  let sendCall = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/portal/send-inbox-message")) {
+        const next = sendResponses[Math.min(sendCall, sendResponses.length - 1)]!;
+        sendCall += 1;
+        return new Response(JSON.stringify(next.body), { status: next.status });
+      }
+      if (url.includes("/api/resident/sms-conversations")) {
+        return new Response(JSON.stringify({ smsConfigured: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ rows: [], messages: [], threads: [] }), { status: 200 });
+    }),
+  );
+}
+
+/**
+ * Turn the SMS leg on through the real channel picker, so the test exercises the
+ * same two-request path a resident does. The panel renders a composer for each
+ * breakpoint, so scope to the first picker — they share one piece of state.
+ */
+async function enableSmsChannel() {
+  await waitFor(() => expect(document.querySelectorAll('[aria-label="Send via"]').length).toBeGreaterThan(0));
+  const picker = document.querySelectorAll('[aria-label="Send via"]')[0] as HTMLElement;
+  fireEvent.click(picker);
+  fireEvent.pointerDown(await screen.findByRole("option", { name: /^SMS$/i }));
+  await waitFor(() => expect(picker.textContent).toContain("Email & SMS"));
+}
+
 async function openThreadAndReply(text: string) {
   // Same mount shape Communication uses in the real portal (resident-communication.tsx).
   render(
@@ -173,5 +209,90 @@ describe("resident reply that the server refuses", () => {
     await waitFor(() => expect(upsertPersistedInboxRows).toHaveBeenCalled());
     const [, changedRows] = upsertPersistedInboxRows.mock.calls[0] as unknown as [string, { preview?: string }[]];
     expect(changedRows.some((row) => row.preview === "ACCEPTED probe")).toBe(true);
+  });
+});
+
+/**
+ * A partly-delivered reply must be reported for what it is. The message DID go
+ * out over email, so withdrawing the bubble would be the refused-send bug in
+ * reverse — but claiming "sent via email and text" is the same lie about
+ * delivery that this file exists to pin, just on the SMS half.
+ */
+describe("resident reply where one channel succeeds and the other fails", () => {
+  async function replyOverBothChannels(
+    text: string,
+    responses: { status: number; body: Record<string, unknown> }[],
+  ) {
+    stubFetchSequence(responses);
+    render(
+      <ResidentInboxPanel
+        tabId="all"
+        embeddedInCommunication
+        externalTitleActions
+        suppressListPane
+        smsUiEnabled
+        controlledExpandedId={THREAD.id}
+      />,
+    );
+    // Turn the SMS leg on through the real channel picker, so the test exercises
+    // the same two-request path a resident does.
+    await enableSmsChannel();
+
+    const composer = await screen.findByPlaceholderText(/reply/i);
+    fireEvent.change(composer, { target: { value: text } });
+    fireEvent.click(document.querySelector("[data-attr=resident-inbox-reply-send]") as HTMLButtonElement);
+  }
+
+  it("keeps the delivered reply but names the SMS failure", async () => {
+    await replyOverBothChannels("PARTIAL probe", [
+      { status: 200, body: { ok: true } },
+      { status: 500, body: { ok: false, error: "sms gateway down" } },
+    ]);
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(showToast).toHaveBeenCalledWith("Reply sent via email. Text message failed.");
+    // Email accepted it, so the reply is delivered and must reach the store.
+    await waitFor(() => expect(upsertPersistedInboxRows).toHaveBeenCalled());
+    const [, changedRows] = upsertPersistedInboxRows.mock.calls[0] as unknown as [string, { preview?: string }[]];
+    expect(changedRows.some((row) => row.preview === "PARTIAL probe")).toBe(true);
+  });
+
+  it("keeps the delivered reply when the SMS request rejects outright", async () => {
+    let sendCall = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/portal/send-inbox-message")) {
+          sendCall += 1;
+          if (sendCall > 1) throw new TypeError("Failed to fetch");
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (url.includes("/api/resident/sms-conversations")) {
+          return new Response(JSON.stringify({ smsConfigured: true }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ rows: [], messages: [], threads: [] }), { status: 200 });
+      }),
+    );
+    render(
+      <ResidentInboxPanel
+        tabId="all"
+        embeddedInCommunication
+        externalTitleActions
+        suppressListPane
+        smsUiEnabled
+        controlledExpandedId={THREAD.id}
+      />,
+    );
+    await enableSmsChannel();
+    const composer = await screen.findByPlaceholderText(/reply/i);
+    fireEvent.change(composer, { target: { value: "REJECTED SMS probe" } });
+    fireEvent.click(document.querySelector("[data-attr=resident-inbox-reply-send]") as HTMLButtonElement);
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(showToast).toHaveBeenCalledWith("Reply sent via email. Text message failed.");
+    await waitFor(() => expect(upsertPersistedInboxRows).toHaveBeenCalled());
+    const bubbles = [...document.querySelectorAll(".portal-inbox-outbound-bubble")];
+    expect(bubbles.some((b) => b.textContent?.includes("REJECTED SMS probe"))).toBe(true);
   });
 });
