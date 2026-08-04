@@ -10,7 +10,14 @@ import { Modal } from "@/components/ui/modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { formatPacificDate } from "@/lib/pacific-time";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition } from "@/data/manager-plan-tiers";
-import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
+import {
+  BUSINESS_MAX_PROPERTIES,
+  FREE_MAX_PROPERTIES,
+  PRO_MAX_PROPERTIES,
+  maxAccountLinksForTier,
+  normalizeManagerSkuTier,
+  type ManagerSkuTier,
+} from "@/lib/manager-access";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { submitBugFeedbackReport } from "@/lib/portal-bug-feedback";
@@ -82,6 +89,44 @@ function planPriceLabel(tiers: ManagerPlanTierDefinition[], tierId: ManagerSkuTi
 function periodEndLabel(unix: number | null | undefined): string | null {
   if (unix == null || typeof unix !== "number" || !Number.isFinite(unix) || unix <= 0) return null;
   return formatPacificDate(new Date(unix * 1000), { month: "long", day: "numeric", year: "numeric" });
+}
+
+function tierPropertyCap(t: ManagerSkuTier): number {
+  if (t === "free") return FREE_MAX_PROPERTIES;
+  if (t === "pro") return PRO_MAX_PROPERTIES;
+  return BUSINESS_MAX_PROPERTIES;
+}
+
+/**
+ * What actually happens on a downgrade, stated plainly before it is confirmed.
+ * The plan limits are creation gates only (see "Plan entitlements" in
+ * AGENTS.md): an over-limit portfolio keeps every listing and co-manager link
+ * it already has — the account just can't add MORE until it's under the new
+ * cap. Free additionally paywalls the Pro-only sections; the data behind them
+ * is kept, not deleted.
+ */
+function DowngradeConsequences({ target }: { target: ManagerSkuTier }) {
+  const cap = tierPropertyCap(target);
+  const links = maxAccountLinksForTier(target) ?? 0;
+  return (
+    <ul className="list-disc space-y-1.5 ps-5 text-sm leading-6 text-muted">
+      <li>
+        Nothing is deleted — every property, resident, lease, payment record, and message you&apos;ve created stays on
+        your account.
+      </li>
+      <li>
+        {tierLabel(target)} includes {cap === 1 ? "1 property listing" : `up to ${cap} property listings`} and{" "}
+        {links === 1 ? "1 co-manager link" : `up to ${links} co-manager links`}. If you&apos;re over either limit, what
+        you already have keeps working — you just can&apos;t add new ones until you&apos;re under the limit.
+      </li>
+      {target === "free" ? (
+        <li>
+          On Free, the Residents, Leases, Services, Documents, and Communication sections are locked behind an upgrade
+          prompt. Everything in them is kept and unlocks again if you re-subscribe.
+        </li>
+      ) : null}
+    </ul>
+  );
 }
 
 type PlanModalState =
@@ -572,11 +617,124 @@ export function ManagerPlan({
     return () => window.cancelAnimationFrame(id);
   }, [embedded]);
 
+  const isTrialBilling = sub?.billing?.toLowerCase().trim() === "trial";
+
+  /** Scheduled-change notice + its actions — must stay reachable in BOTH the
+   * full summary card and the compact Settings strip, or a manager who
+   * schedules a downgrade from Settings has no way to cancel it there. */
+  const pendingChangeBanner =
+    sub && sub.stripeManaged && (sub.scheduledDowngrade || sub.cancelAtPeriodEnd) ? (
+      <div className="border-t border-[var(--status-pending-bg)] bg-[var(--status-pending-bg)] px-6 py-4 sm:px-8">
+        {sub.cancelAtPeriodEnd ? (
+          <p className="text-sm text-[var(--status-pending-fg)]">
+            <span className="font-semibold">Cancellation scheduled.</span>{" "}
+            {renewalLabel
+              ? `Paid access ends ${renewalLabel}.`
+              : "Paid access ends at the close of your billing period."}
+          </p>
+        ) : sub.scheduledDowngrade ? (
+          <p className="text-sm text-[var(--status-pending-fg)]">
+            <span className="font-semibold">
+              {scheduledBillingChange ? "Billing change scheduled." : "Downgrade scheduled."}
+            </span>{" "}
+            {scheduledBillingChange
+              ? renewalLabel
+                ? `You'll switch to monthly billing on ${renewalLabel}.`
+                : "You'll switch to monthly billing at the end of your annual period."
+              : renewalLabel
+                ? `You'll move to ${tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} (${sub.scheduledDowngrade.billing}) on ${renewalLabel}.`
+                : `You'll move to ${tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} at your next renewal.`}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {sub.cancelAtPeriodEnd ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-[13px]"
+              disabled={resumeBusy}
+              onClick={() => resumeSubscription()}
+            >
+              {resumeBusy ? "Resuming…" : "Keep my plan"}
+            </Button>
+          ) : null}
+          {sub.scheduledDowngrade && !sub.cancelAtPeriodEnd ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-[13px]"
+              disabled={cancelDowngradeBusy}
+              onClick={() => cancelScheduledDowngrade()}
+            >
+              {cancelDowngradeBusy ? "Cancelling…" : "Cancel downgrade"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    ) : null;
+
+  /** Compact current-plan strip for the Settings embed (`showCurrentPlan={false}`):
+   * the current plan stays clearly marked, with renewal/trial/cancel state and
+   * the scheduled-change actions, without the full "Your plan" card. */
+  const compactCurrentPlan = sub ? (
+    <section className="surface-panel overflow-hidden rounded-2xl border border-border">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-base font-bold tracking-tight text-foreground">{tierLabel(currentTier)}</span>
+          <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            Current plan
+          </span>
+          {isTrialBilling ? (
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+              Free trial
+            </span>
+          ) : null}
+          {sub.cancelAtPeriodEnd ? (
+            <span className="rounded-full bg-[var(--status-pending-bg)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--status-pending-fg)]">
+              Cancelling
+            </span>
+          ) : null}
+          {sub.scheduledDowngrade && !sub.cancelAtPeriodEnd ? (
+            <span className="rounded-full bg-[var(--status-pending-bg)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--status-pending-fg)]">
+              {scheduledBillingChange ? "Billing change scheduled" : "Downgrade scheduled"}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted">
+            {currentTier === "free"
+              ? "No subscription"
+              : sub.stripeManaged
+                ? `Billed ${currentBilling === "annual" ? "annually" : "monthly"}${renewalLabel ? ` · renews ${renewalLabel}` : ""}`
+                : isTrialBilling
+                  ? "14-day trial · no card on file"
+                  : tierTagline(currentTier)}
+          </p>
+          {sub.stripeManaged && currentTier !== "free" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 min-h-0 rounded-full px-4 text-[13px]"
+              disabled={anyBusy}
+              onClick={() => openBillingPortal()}
+            >
+              {billingPortalBusy ? "Opening…" : "Payment & invoices"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {pendingChangeBanner}
+    </section>
+  ) : (
+    <div className="h-16 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
+  );
+
   const planBody = (
     <div
       className={embedded ? "space-y-6" : "mx-auto max-w-5xl space-y-8"}
       id={embedded ? MANAGER_PLAN_PORTAL_SECTION_ID : undefined}
     >
+        {!showCurrentPlan ? compactCurrentPlan : null}
         {/* Current plan summary */}
         {showCurrentPlan && (!sub ? (
           <div className="h-36 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
@@ -671,55 +829,7 @@ export function ManagerPlan({
               </div>
             ) : null}
 
-            {sub.stripeManaged && (sub.scheduledDowngrade || sub.cancelAtPeriodEnd) ? (
-              <div className="border-t border-[var(--status-pending-bg)] bg-[var(--status-pending-bg)] px-6 py-4 sm:px-8">
-                {sub.cancelAtPeriodEnd ? (
-                  <p className="text-sm text-[var(--status-pending-fg)]">
-                    <span className="font-semibold">Cancellation scheduled.</span>{" "}
-                    {renewalLabel
-                      ? `Paid access ends ${renewalLabel}.`
-                      : "Paid access ends at the close of your billing period."}
-                  </p>
-                ) : sub.scheduledDowngrade ? (
-                  <p className="text-sm text-[var(--status-pending-fg)]">
-                    <span className="font-semibold">
-                      {scheduledBillingChange ? "Billing change scheduled." : "Downgrade scheduled."}
-                    </span>{" "}
-                    {scheduledBillingChange
-                      ? renewalLabel
-                        ? `You'll switch to monthly billing on ${renewalLabel}.`
-                        : "You'll switch to monthly billing at the end of your annual period."
-                      : renewalLabel
-                        ? `You'll move to ${tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} (${sub.scheduledDowngrade.billing}) on ${renewalLabel}.`
-                        : `You'll move to ${tierLabel(sub.scheduledDowngrade.tier as ManagerSkuTier)} at your next renewal.`}
-                  </p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {sub.cancelAtPeriodEnd ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-[13px]"
-                      disabled={resumeBusy}
-                      onClick={() => resumeSubscription()}
-                    >
-                      {resumeBusy ? "Resuming…" : "Keep my plan"}
-                    </Button>
-                  ) : null}
-                  {sub.scheduledDowngrade && !sub.cancelAtPeriodEnd ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-[13px]"
-                      disabled={cancelDowngradeBusy}
-                      onClick={() => cancelScheduledDowngrade()}
-                    >
-                      {cancelDowngradeBusy ? "Cancelling…" : "Cancel downgrade"}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+            {pendingChangeBanner}
           </section>
         ))}
 
@@ -814,9 +924,26 @@ export function ManagerPlan({
 
                     <div className="mt-5 min-h-[52px]">
                       {isCurrent ? (
-                        <div className="flex h-[52px] items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary">
-                          You&apos;re on this plan
-                        </div>
+                        sub.stripeManaged &&
+                        tierId !== "free" &&
+                        !sub.cancelAtPeriodEnd &&
+                        priceView !== currentBilling ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-[52px] w-full rounded-xl text-[15px] font-semibold"
+                            disabled={anyBusy}
+                            onClick={() => switchBillingInterval(priceView)}
+                          >
+                            {billingSyncBusy
+                              ? "Processing…"
+                              : `Switch to ${priceView === "annual" ? "annual" : "monthly"} billing`}
+                          </Button>
+                        ) : (
+                          <div className="flex h-[52px] items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 text-sm font-semibold text-primary">
+                            You&apos;re on this plan
+                          </div>
+                        )
                       ) : isScheduled ? (
                         <div className="flex h-[52px] items-center justify-center rounded-xl border border-[var(--status-pending-bg)] bg-[var(--status-pending-bg)] px-4 text-sm font-semibold text-[var(--status-pending-fg)]">
                           Downgrade scheduled
@@ -962,8 +1089,9 @@ export function ManagerPlan({
               ) : (
                 " until the end of your billing period"
               )}
-              .
+              . Here&apos;s what changes:
             </p>
+            <DowngradeConsequences target={planModal.target} />
             <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep {tierLabel(currentTier)}
@@ -1042,19 +1170,31 @@ export function ManagerPlan({
           </div>
         ) : planModal?.kind === "cancel_plan" ? (
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-muted">
-              You&apos;ll keep <span className="font-semibold text-foreground">{tierLabel(planModal.fromTier)}</span>{" "}
-              until
-              {renewalLabel ? (
-                <>
-                  {" "}
-                  <span className="font-semibold text-foreground">{renewalLabel}</span>
-                </>
-              ) : (
-                " the end of your billing period"
-              )}
-              , then move to Free. Paid features stay available until then. Nothing changes immediately.
-            </p>
+            {sub?.stripeManaged ? (
+              <p className="text-sm leading-6 text-muted">
+                You&apos;ll keep <span className="font-semibold text-foreground">{tierLabel(planModal.fromTier)}</span>{" "}
+                until
+                {renewalLabel ? (
+                  <>
+                    {" "}
+                    <span className="font-semibold text-foreground">{renewalLabel}</span>
+                  </>
+                ) : (
+                  " the end of your billing period"
+                )}
+                , then move to Free. Paid features stay available until then. Nothing changes immediately. When Free
+                starts:
+              </p>
+            ) : (
+              // Trial / comped plans have no billing period to run out — the
+              // switch to Free happens as soon as it's confirmed. Say so.
+              <p className="text-sm leading-6 text-muted">
+                Your <span className="font-semibold text-foreground">{tierLabel(planModal.fromTier)}</span>
+                {isTrialBilling ? " trial" : " plan"} isn&apos;t billed through Stripe, so this switch takes effect{" "}
+                <span className="font-semibold text-foreground">immediately</span>. On Free:
+              </p>
+            )}
+            <DowngradeConsequences target="free" />
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground" htmlFor="plan-cancel-reason">
                 Why are you cancelling? *
@@ -1098,6 +1238,7 @@ export function ManagerPlan({
       stripeManaged={Boolean(sub?.stripeManaged)}
       appleManaged={Boolean(sub?.appleManaged)}
       isFree={Boolean(sub?.isFree ?? currentTier === "free")}
+      trialActive={isTrialBilling}
       onReload={load}
     />
   );

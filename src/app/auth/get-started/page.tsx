@@ -119,6 +119,12 @@ function GetStartedContent() {
       setBusy(null);
       return;
     }
+    if (result.direct) {
+      // An in-flow step (the manager plan chooser) — go there verbatim; the
+      // post-auth resolver would route past it to a portal dashboard.
+      window.location.replace(result.redirectTo);
+      return;
+    }
     await navigateAfterRoleSignup(result.redirectTo);
   };
 

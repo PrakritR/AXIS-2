@@ -141,8 +141,9 @@ describe("native manager plan surface — StoreKit only, no external purchase ro
     );
     expect(screen.queryByRole("button", { name: /subscribe/i })).toBeNull();
     expect(getManagerOfferings).not.toHaveBeenCalled();
-    // Manage-in-App-Store copy, never a link to cancel/manage on the web.
-    expect(screen.getByText(/App Store/i)).toBeTruthy();
+    // Manage-in-App-Store copy (now also present in the 3.1.2 legal footer),
+    // never a link to cancel/manage on the web.
+    expect(screen.getAllByText(/App Store/i).length).toBeGreaterThan(0);
   });
 });
 

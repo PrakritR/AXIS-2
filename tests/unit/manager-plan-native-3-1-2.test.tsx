@@ -1,0 +1,142 @@
+// @vitest-environment jsdom
+//
+// App Store Guideline 3.1.2: the native purchase screen itself must carry
+//
+//   1. the subscription title,
+//   2. the subscription length (a 1-month subscription that renews monthly),
+//   3. the price per period,
+//   4. a plain auto-renew statement,
+//   5. a working Terms of Use (EULA) link, and
+//   6. a working Privacy Policy link,
+//
+// and PropLane was already rejected once for the missing Terms link. The legal
+// links are BUTTONS driving the in-app browser (`openAppUrl`) — never `<a href>`
+// anchors, which the companion 3.1.1 test forbids on this surface and which
+// would bounce the manager out of the WebView, losing their session.
+//
+// The screen also shows all three tiers with the current one marked, so a
+// manager can see where they stand — Free included, with an honest
+// "Switch to Free" for trial/comped accounts (no store purchase involved).
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+vi.mock("@/hooks/use-is-native-app", () => ({
+  useIsNativeApp: () => ({ isNative: true, platform: "ios" }),
+}));
+vi.mock("@/hooks/use-manager-user-id", () => ({
+  useManagerUserId: () => ({ userId: "u1", email: "m@x.com", ready: true }),
+}));
+const showToast = vi.fn();
+vi.mock("@/components/providers/app-ui-provider", () => ({
+  useAppUi: () => ({ showToast }),
+}));
+vi.mock("@/lib/analytics/track-client", () => ({ track: vi.fn() }));
+
+const openAppUrl = vi.fn(async () => undefined);
+vi.mock("@/lib/native/open-url", () => ({
+  openAppUrl: (...a: unknown[]) => openAppUrl(...a),
+}));
+
+const proPkg = { __pkg: "pro" };
+const businessPkg = { __pkg: "business" };
+vi.mock("@/lib/native/revenuecat-client", () => ({
+  configureRevenueCat: vi.fn(async () => true),
+  getManagerOfferings: vi.fn(async () => [
+    { productId: "space.proplane.app.pro.monthly", tier: "pro", priceString: "$20.00", title: "Pro", pkg: proPkg },
+    {
+      productId: "space.proplane.app.business.monthly",
+      tier: "business",
+      priceString: "$200.00",
+      title: "Business",
+      pkg: businessPkg,
+    },
+  ]),
+  purchaseManagerPackage: vi.fn(async () => ({ status: "cancelled" as const })),
+  restoreManagerPurchases: vi.fn(async () => ({ ok: true, hasActiveEntitlement: false })),
+}));
+
+import {
+  ManagerPlanNative,
+  NATIVE_PLAN_PRIVACY_URL,
+  NATIVE_PLAN_TERMS_URL,
+} from "@/components/portal/manager-plan-native";
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+function renderPurchaseSurface(overrides: Partial<Parameters<typeof ManagerPlanNative>[0]> = {}) {
+  return render(
+    <ManagerPlanNative
+      currentTier="free"
+      subLoaded
+      stripeManaged={false}
+      appleManaged={false}
+      isFree
+      onReload={vi.fn()}
+      {...overrides}
+    />,
+  );
+}
+
+describe("native purchase screen — Guideline 3.1.2 required elements", () => {
+  it("shows title, length, price per period, and an auto-renew statement for each paid tier", async () => {
+    renderPurchaseSurface();
+
+    // Title + price per period (localized store price), for both paid tiers.
+    expect(await screen.findByText("PropLane Pro")).toBeTruthy();
+    expect(screen.getByText("PropLane Business")).toBeTruthy();
+    expect(screen.getByText("$20.00")).toBeTruthy();
+    expect(screen.getByText("$200.00")).toBeTruthy();
+
+    // Length: a 1-month subscription that renews monthly.
+    expect(screen.getAllByText(/1-month subscription · renews monthly until canceled/i).length).toBe(2);
+
+    // Plain auto-renew statement.
+    expect(screen.getByText(/renew automatically each month/i)).toBeTruthy();
+    expect(screen.getByText(/cancel anytime in your App Store account settings/i)).toBeTruthy();
+  });
+
+  it("Terms of Use (EULA) and Privacy Policy open in-app via openAppUrl — never an anchor", async () => {
+    const { container } = renderPurchaseSurface();
+    await screen.findByText("PropLane Pro");
+
+    const terms = screen.getByRole("button", { name: /terms of use/i });
+    const privacy = screen.getByRole("button", { name: /privacy policy/i });
+
+    fireEvent.click(terms);
+    await waitFor(() => expect(openAppUrl).toHaveBeenCalledWith(NATIVE_PLAN_TERMS_URL));
+    fireEvent.click(privacy);
+    await waitFor(() => expect(openAppUrl).toHaveBeenCalledWith(NATIVE_PLAN_PRIVACY_URL));
+
+    expect(NATIVE_PLAN_TERMS_URL).toBe("https://prop-lane.space/tos");
+    expect(NATIVE_PLAN_PRIVACY_URL).toBe("https://prop-lane.space/privacy");
+
+    // The 3.1.1 companion test's rule, restated here: no anchors at all.
+    expect(container.querySelectorAll("a[href]").length).toBe(0);
+  });
+
+  it("marks the current tier — Free badge when free, paid card badge when trialing that tier", async () => {
+    renderPurchaseSurface();
+    await screen.findByText("PropLane Pro");
+    expect(screen.getByText(/current plan/i)).toBeTruthy();
+
+    cleanup();
+
+    renderPurchaseSurface({ currentTier: "pro", isFree: false, trialActive: true });
+    await screen.findByText("PropLane Pro");
+    expect(screen.getByText(/current · trial/i)).toBeTruthy();
+    // Trial accounts can honestly step down to Free — a server-side plan
+    // change, not a purchase and not an Apple-subscription cancellation.
+    expect(screen.getByRole("button", { name: /switch to free/i })).toBeTruthy();
+  });
+
+  it("the legal footer also renders on the Apple-managed manage-only branch", () => {
+    renderPurchaseSurface({ currentTier: "pro", isFree: false, appleManaged: true });
+    expect(screen.getByRole("button", { name: /terms of use/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /privacy policy/i })).toBeTruthy();
+    // Downgrade honesty: Apple subscriptions change in App Store settings.
+    expect(screen.getByText(/Apple Account › Subscriptions/i)).toBeTruthy();
+  });
+});
