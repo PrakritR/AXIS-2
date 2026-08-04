@@ -221,6 +221,14 @@ export async function upsertPropertyRecordToServer(input: {
   rowData?: unknown;
   propertyData?: unknown;
   editRequestNote?: string | null;
+  /**
+   * Receives the server's own explanation when the write is refused, so a
+   * caller can say WHY instead of a generic "Could not submit listing." The
+   * plan property-limit 403 is the reason this exists: the refusal names the
+   * limit and the plan that lifts it, and that sentence has to survive the trip
+   * back to the wizard's toast.
+   */
+  onError?: (message: string) => void;
 }): Promise<boolean> {
   if (typeof window === "undefined") return false;
   // /demo is browser-local — there is no real record to mirror, but the local
@@ -242,6 +250,11 @@ export async function upsertPropertyRecordToServer(input: {
         editRequestNote: input.editRequestNote ?? null,
       }),
     });
+    if (!res.ok && input.onError) {
+      const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+      const message = typeof body?.error === "string" ? body.error.trim() : "";
+      if (message) input.onError(message);
+    }
     return res.ok;
   } catch {
     return false;
@@ -768,6 +781,7 @@ export async function publishManagerListingSubmissionToServer(
   listingId: string,
   input: ManagerPropertyDraftInput,
   managerUserId: string,
+  opts?: { onError?: (message: string) => void },
 ): Promise<boolean> {
   if (!managerUserId.trim() || !listingId.trim()) return false;
   const legacy = deriveLegacyFields(input);
@@ -794,7 +808,11 @@ export async function publishManagerListingSubmissionToServer(
       listingId,
       managerUserId,
     },
+    onError: opts?.onError,
   });
+  // The local catalog is only appended once the SERVER accepted the listing, so
+  // a plan-limit refusal cannot leave a listing that exists in this browser and
+  // nowhere else.
   if (!ok) return false;
   appendExtraListing(prop, managerUserId);
   return true;
@@ -803,12 +821,13 @@ export async function publishManagerListingSubmissionToServer(
 export async function submitManagerPendingPropertyToServer(
   input: ManagerPropertyDraftInput,
   managerUserId: string,
+  opts?: { onError?: (message: string) => void },
 ): Promise<string | null> {
   if (!managerUserId.trim()) return null;
   const legacy = deriveLegacyFields(input);
   const draftId = `pend-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const listingId = `mgr-${slugPart(legacy.buildingName)}-${slugPart(legacy.unitLabel)}-${draftId.slice(-6)}`;
-  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId))) return null;
+  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId, opts))) return null;
   await syncPropertyPipelineFromServer({ force: true });
   return listingId;
 }

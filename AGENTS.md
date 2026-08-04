@@ -1313,6 +1313,54 @@ either.
   the canonical demo manager and refuses to run when `E2E_MANAGER_EMAIL` names
   a different account.
 
+# Plan entitlements: the displayed plan and the enforced plan are one value
+
+`MANAGER_PLAN_TIERS` (`src/data/manager-plan-tiers.ts`) is the advertised copy;
+`src/lib/manager-access.ts` is the enforcement model. Two rules, both learned the
+hard way (audit F-SET-1: Settings read "CURRENT PLAN Free · 1 property listing"
+on an account with five listings and no paywall anywhere).
+
+- **`resolveEffectiveManagerSkuTier` is the ONLY plan a quota may read.**
+  `manager_purchases.tier` is `null` for an ordinary account that signed up and
+  never reached pricing (`provisionPendingManagerAccount` inserts `tier: null`),
+  and `maxPropertiesForManagerTier(null)` means *uncapped* — so the raw column
+  reported "Free" to `getManagerSubscriptionTier` and "no limit" to the property
+  cap for the same row. No committed SKU and no live Stripe/Apple grant behind
+  it → Free. `GET /api/manager/subscription` exposes it as `effectiveTier` and
+  derives `propertyLimit` / `accountLinkLimit` from it;
+  `getEffectiveManagerSkuTier` is the server-side twin;
+  `loadManagerSubscriptionTierClient` caches that value, not `tier`.
+- **The property cap is enforced in `POST /api/property-records`, not the
+  wizard.** `assertManagerPropertyListingQuota`
+  (`src/lib/manager-property-quota.server.ts`) runs on every upsert. The client
+  checks are courtesy pre-checks so a manager hears it before their photos
+  upload; both layers print the same sentence from
+  `managerPropertyLimitMessage`, and the route's 403 body
+  (`code: "property_limit_reached"`) travels back through
+  `upsertPropertyRecordToServer`'s `onError` into the wizard toast — a refusal
+  must never degrade to "Could not submit listing."
+- **It gates the TRANSITION INTO a listing slot, never the state of being over
+  the cap.** `LISTING_SLOT_PROPERTY_STATUSES` (`persisted-property-records.ts`)
+  is `pending`/`live`/`review` — derived from `propertyRowsToSnapshot`, which is
+  what the portal itself counts, so drafts and unlisted rows are free. A row
+  already in a slot is never re-charged, which is what lets a seeded or
+  downgraded over-limit portfolio keep editing, unlisting, relisting-in-place
+  and deleting. **Block creation; never delete or hide a manager's records.** A
+  failed slot count is a 500, never "zero used".
+- **Section entitlements are a separate, page-level gate** and deliberately
+  unchanged here: `managerSectionAllowedForTier` + `subscriptionGated` in
+  `render-portal-section.tsx` paywall Residents/Leases/Services/Communication
+  for a committed Free plan, but an account with NO `manager_purchases` row
+  still resolves to `null` in `getManagerSubscriptionTier` (legacy full access).
+  Locking those sections would make existing records unreachable, so it is a
+  product decision, not a bug to quietly fix. Their API routes are also ungated
+  — a free manager can still read/write residents, leases and inbox rows over
+  HTTP. Known gap, deliberately not closed alongside the property cap.
+- Coverage: `tests/unit/manager-effective-plan-tier.test.ts`,
+  `property-records-plan-property-limit.test.ts`,
+  `property-listing-slot-statuses.test.ts`,
+  `manager-listing-publish-limit-feedback.test.ts`.
+
 # Property drafts (save add-property progress)
 
 A manager can save an in-progress "add property" wizard and finish it later. This

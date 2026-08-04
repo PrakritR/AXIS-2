@@ -718,10 +718,11 @@ export async function publishManagerPropertyDraftToServer(
   draftId: string,
   input: ManagerPropertyDraftInput,
   managerUserId: string,
+  opts?: { onError?: (message: string) => void },
 ): Promise<string | null> {
   if (!managerUserId.trim() || !draftId.trim()) return null;
   const listingId = draftId.trim();
-  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId))) return null;
+  if (!(await publishManagerListingSubmissionToServer(listingId, input, managerUserId, opts))) return null;
   const side = readSide(managerUserId);
   const nextDrafts = side.drafts.filter((r) => r.adminRefId !== listingId);
   if (nextDrafts.length !== side.drafts.length) {

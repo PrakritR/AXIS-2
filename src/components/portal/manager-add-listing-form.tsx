@@ -58,11 +58,8 @@ import {
 import { uploadLeaseTemplateDataUrl } from "@/lib/lease-template-storage";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
-  BUSINESS_MAX_PROPERTIES,
-  FREE_MAX_PROPERTIES,
+  managerPropertyLimitMessage,
   managerTierPropertyLimitReached,
-  normalizeManagerSkuTier,
-  PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import {
   applyListingBedroomSlots,
@@ -2767,18 +2764,11 @@ export function ManagerAddListingForm({
         showToast("Sign in to submit a property.");
         return;
       }
+      // A courtesy pre-check so the manager is told before their photos upload.
+      // It is NOT the limit — `POST /api/property-records` re-checks against the
+      // server's own count and plan, and its refusal is surfaced below.
       if (!isEditMode && managerTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
-        const n = normalizeManagerSkuTier(skuTier);
-        // On native iOS, drop the "Upgrade to …" clause (App Store Guideline
-        // 2.1(b) — no subscription upgrade CTAs outside IAP). Web is unchanged.
-        const upsell = (clause: string) => (isNativeRuntimeSync() ? "" : ` ${clause}`);
-        showToast(
-          n === "free"
-            ? `Free includes ${FREE_MAX_PROPERTIES} property.${upsell("Upgrade to Pro or Business to add more.")}`
-            : n === "pro"
-              ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties.${upsell("Upgrade to Business to add more.")}`
-              : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
-        );
+        showToast(managerPropertyLimitMessage(skuTier, { omitUpgradeCta: isNativeRuntimeSync() }));
         return;
       }
       let uploadedSubmission: typeof submission;
@@ -2833,11 +2823,20 @@ export function ManagerAddListingForm({
       // the manager's saved progress already carries becomes the listing's
       // permanent public URL — never a second row alongside the draft.
       const draftId = draftIdRef.current;
+      // A refusal the server explains — the plan property-limit 403 — must reach
+      // the manager verbatim; falling back to "Could not submit listing." would
+      // read as a broken button rather than a limit with a way past it.
+      let serverError = "";
+      const publishOpts = {
+        onError: (message: string) => {
+          serverError = message;
+        },
+      };
       const id = draftId
-        ? await publishManagerPropertyDraftToServer(draftId, uploadedSubmission, userId)
-        : await submitManagerPendingPropertyToServer(uploadedSubmission, userId);
+        ? await publishManagerPropertyDraftToServer(draftId, uploadedSubmission, userId, publishOpts)
+        : await submitManagerPendingPropertyToServer(uploadedSubmission, userId, publishOpts);
       if (!id) {
-        showToast("Could not submit listing.");
+        showToast(serverError || "Could not submit listing.");
         return;
       }
       draftIdRef.current = null;

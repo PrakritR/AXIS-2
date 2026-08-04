@@ -38,12 +38,9 @@ import { isServerSyncOriginatedEvent } from "@/lib/property-pipeline-events";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
-  BUSINESS_MAX_PROPERTIES,
-  FREE_MAX_PROPERTIES,
+  managerPropertyLimitMessage,
   managerTierPropertyLimitReached,
   maxPropertiesForManagerTier,
-  normalizeManagerSkuTier,
-  PRO_MAX_PROPERTIES,
 } from "@/lib/manager-access";
 import { loadManagerSubscriptionTierClient } from "@/lib/manager-subscription-client";
 
@@ -182,17 +179,7 @@ export function ManagerProperties({
       return;
     }
     if (atPropertyLimit) {
-      const n = normalizeManagerSkuTier(skuTier);
-      // On native iOS, drop the "Upgrade to …" clause — Apple forbids surfacing
-      // subscription upgrade CTAs outside IAP (Guideline 2.1(b)). Web is unchanged.
-      const upsell = (clause: string) => (isNativeRuntimeSync() ? "" : ` ${clause}`);
-      showToast(
-        n === "free"
-          ? `Free includes ${FREE_MAX_PROPERTIES} property.${upsell("Upgrade to Pro or Business for more.")}`
-          : n === "pro"
-            ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties.${upsell("Upgrade to Business for more.")}`
-            : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
-      );
+      showToast(managerPropertyLimitMessage(skuTier, { omitUpgradeCta: isNativeRuntimeSync() }));
       return;
     }
     setWizardOpen(true);
