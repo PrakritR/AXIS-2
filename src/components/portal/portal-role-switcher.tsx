@@ -6,7 +6,18 @@ import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-swi
 import { portalSwitchTargets, type PortalSwitchTarget } from "@/lib/portal-switch-targets";
 import type { PortalKind } from "@/lib/portal-types";
 
-export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind }) {
+export function PortalRoleSwitcher({
+  currentKind,
+  asSettingsRow = false,
+}: {
+  currentKind: PortalKind;
+  /**
+   * Wrap the switcher in the Settings card's row chrome. Opt-in because the
+   * dropdown-menu call sites (top bar, mobile nav bar) supply their own
+   * padding and must stay aligned with their sibling menu items.
+   */
+  asSettingsRow?: boolean;
+}) {
   const router = useRouter();
   const [targets, setTargets] = useState<PortalSwitchTarget[]>([]);
   const [busyRole, setBusyRole] = useState<AuthRole | null>(null);
@@ -44,22 +55,22 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
     }
   };
 
-  return (
-    <div className="border-b border-border px-4 py-3.5 last:border-0">
-      {targets.map((target) => (
-        <button
-          key={target.role}
-          type="button"
-          onClick={() => void switchPortal(target.role)}
-          disabled={busyRole !== null}
-          className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-card hover:text-foreground disabled:opacity-50"
-        >
-          <span className="text-base leading-none" aria-hidden>
-            ⇄
-          </span>
-          {busyRole === target.role ? "Switching…" : target.label}
-        </button>
-      ))}
-    </div>
-  );
+  const buttons = targets.map((target) => (
+    <button
+      key={target.role}
+      type="button"
+      onClick={() => void switchPortal(target.role)}
+      disabled={busyRole !== null}
+      className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-card hover:text-foreground disabled:opacity-50"
+    >
+      <span className="text-base leading-none" aria-hidden>
+        ⇄
+      </span>
+      {busyRole === target.role ? "Switching…" : target.label}
+    </button>
+  ));
+
+  if (!asSettingsRow) return <>{buttons}</>;
+
+  return <div className="border-b border-border px-4 py-3.5 last:border-0">{buttons}</div>;
 }

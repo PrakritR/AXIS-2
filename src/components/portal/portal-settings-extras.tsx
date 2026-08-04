@@ -41,7 +41,7 @@ export function PortalSettingsExtras({
           </PortalSettingsRow>
         ) : null}
 
-        <PortalRoleSwitcher currentKind={currentKind} />
+        <PortalRoleSwitcher currentKind={currentKind} asSettingsRow />
 
         <div className="border-b border-border px-4 py-3.5 last:border-0">
           <PortalSignOutButton className="text-sm font-medium text-foreground underline-offset-2 transition hover:underline disabled:opacity-60" />

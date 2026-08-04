@@ -29,6 +29,7 @@ import {
   PortalSettingsSections,
 } from "@/components/portal/portal-settings-ui";
 import { ManagerPlan } from "@/components/portal/manager-plan";
+import { MANAGER_PLAN_PORTAL_HASH } from "@/lib/portals/manager-plan-path";
 import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -256,20 +257,69 @@ export function PortalProfileClient({
     return list;
   }, [demo, idLabel]);
 
+  // Legacy upgrade CTAs across the product still link to
+  // `/portal/profile#portal-plan`, and Stripe returns to
+  // `/portal/profile?checkout=…&session_id=…`. Both need the billing pane
+  // mounted so ManagerPlan's own hash-scroll and checkout-confirm effects run.
+  // ManagerPlan clears those params itself (`replaceState` to the bare
+  // pathname), so this override is sticky until the manager navigates.
+  const [billingOverride, setBillingOverride] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (window.location.hash === MANAGER_PLAN_PORTAL_HASH || q.has("checkout")) {
+      setBillingOverride(true);
+    }
+  }, []);
+
   const rawTab = searchParams.get(SETTINGS_TAB_PARAM);
-  const activeGroup = groups.find((g) => g.id === rawTab) ?? null;
+  const billingGroup = groups.find((g) => g.id === "billing") ?? null;
+  const activeGroup =
+    groups.find((g) => g.id === rawTab) ?? (billingOverride ? billingGroup : null) ?? null;
   // Desktop always shows a pane; with no tab selected it defaults to Profile.
   const paneGroup = activeGroup ?? groups[0];
 
+  // Depth of history entries this component pushed, so the in-page back
+  // chevron unwinds the stack (matching the iOS back gesture) instead of
+  // appending a "forward"-feeling entry.
+  const pushedDepthRef = useRef(0);
+  useEffect(() => {
+    const onPop = () => {
+      pushedDepthRef.current = Math.max(0, pushedDepthRef.current - 1);
+      setBillingOverride(false);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const urlForTab = useCallback(
+    (id: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (id) params.set(SETTINGS_TAB_PARAM, id);
+      else params.delete(SETTINGS_TAB_PARAM);
+      const query = params.toString();
+      return query ? `${pathname}?${query}` : pathname;
+    },
+    [pathname, searchParams],
+  );
+
   const openGroup = useCallback(
     (id: string) => {
-      window.history.pushState(null, "", `${pathname}?${SETTINGS_TAB_PARAM}=${id}`);
+      setBillingOverride(false);
+      pushedDepthRef.current += 1;
+      window.history.pushState(null, "", urlForTab(id));
     },
-    [pathname],
+    [urlForTab],
   );
   const backToRoot = useCallback(() => {
-    window.history.pushState(null, "", pathname);
-  }, [pathname]);
+    setBillingOverride(false);
+    if (pushedDepthRef.current > 0) {
+      // popstate decrements the depth once the entry actually unwinds.
+      window.history.back();
+      return;
+    }
+    window.history.pushState(null, "", urlForTab(null));
+  }, [urlForTab]);
 
   // Reset scroll when the pane changes — the shell scrolls in an inner
   // container, so a router-style scroll-to-top never happens on its own.
@@ -286,24 +336,22 @@ export function PortalProfileClient({
   const renderPane = (id: SettingsGroupId): ReactNode => {
     switch (id) {
       case "profile":
-        return <PortalSettingsSections>{personalInfoSection}</PortalSettingsSections>;
+        return personalInfoSection;
       case "billing":
         // Slot for the plan/billing feature — ManagerPlan owns everything
         // inside this card; Settings only provides the section frame.
         return (
-          <PortalSettingsSections>
-            <PortalSettingsSection title="Billing & plan" description="Subscription and payment details.">
-              <PortalSettingsGroup>
-                <div className="p-4">
-                  <ManagerPlan embedded showCurrentPlan={false} />
-                </div>
-              </PortalSettingsGroup>
-            </PortalSettingsSection>
-          </PortalSettingsSections>
+          <PortalSettingsSection title="Billing & plan" description="Subscription and payment details.">
+            <PortalSettingsGroup>
+              <div className="p-4">
+                <ManagerPlan embedded showCurrentPlan={false} />
+              </div>
+            </PortalSettingsGroup>
+          </PortalSettingsSection>
         );
       case "preferences":
         return (
-          <PortalSettingsSections>
+          <>
             <PortalSettingsSection title="Appearance" description="How PropLane looks on this device.">
               <PortalSettingsGroup>
                 <PortalSettingsRow label="Theme" description="Choose light or dark mode.">
@@ -313,26 +361,14 @@ export function PortalProfileClient({
             </PortalSettingsSection>
             <AssistantDisplaySetting />
             <NotificationsToggle />
-          </PortalSettingsSections>
+          </>
         );
       case "security":
-        return (
-          <PortalSettingsSections>
-            <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-          </PortalSettingsSections>
-        );
+        return <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />;
       case "feedback":
-        return (
-          <PortalSettingsSections>
-            <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
-          </PortalSettingsSections>
-        );
+        return <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />;
       case "account":
-        return (
-          <PortalSettingsSections>
-            <PortalSettingsExtras currentKind={portalKind} variant="session" />
-          </PortalSettingsSections>
-        );
+        return <PortalSettingsExtras currentKind={portalKind} variant="session" />;
     }
   };
 
@@ -386,9 +422,9 @@ export function PortalProfileClient({
                 />
               </div>
             )}
-            <div className={activeGroup === null ? "max-lg:hidden" : undefined}>
+            <PortalSettingsSections className={activeGroup === null ? "max-lg:hidden" : undefined}>
               {renderPane(paneGroup.id)}
-            </div>
+            </PortalSettingsSections>
           </div>
         </div>
       </ManagerPortalPageShell>
