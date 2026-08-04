@@ -42,6 +42,7 @@ import {
   upsertPersistedInboxRows,
   inboxThreadMessages,
   appendReplyToInboxThread,
+  formatInboxStamp,
   collapsePersonInboxThreads,
   inboxThreadCounterpartyEmail,
   type InboxThreadMessage,
@@ -777,7 +778,7 @@ export const ResidentInboxPanel = forwardRef<
         id: replyId,
         from: "Resident",
         body: text,
-        at: new Date().toLocaleString(),
+        at: formatInboxStamp(new Date()),
         outbound: true,
         delivery: "sending",
         attachments: attachmentMeta.length ? attachmentMeta : undefined,
@@ -799,15 +800,25 @@ export const ResidentInboxPanel = forwardRef<
             if (t.id !== thread.id) return t;
             const messages = (t.messages ?? []).filter((m) => m.id !== replyId);
             // Nothing else moved in this thread, so restore every field the
-            // optimistic append touched — messages, preview AND unread.
+            // optimistic append touched — messages, preview, time AND unread.
+            // Leaving `time` advanced would keep a refused send floating the
+            // thread to the top of a list that sorts on it, stamped with an
+            // activity that never happened.
             if (messages.length === (thread.messages ?? []).length) {
-              return { ...t, messages, preview: thread.preview, unread: thread.unread };
+              return {
+                ...t,
+                messages,
+                preview: thread.preview,
+                time: thread.time,
+                unread: thread.unread,
+              };
             }
             const last = messages[messages.length - 1];
             return {
               ...t,
               messages,
               preview: last ? last.body.slice(0, 100).replace(/\n/g, " ") : thread.preview,
+              time: last?.at ?? thread.time,
             };
           }),
         );

@@ -46,6 +46,14 @@ vi.mock("@/lib/portal-inbox-storage", () => ({
   stagePersistedInboxRows: () => {},
   upsertPersistedInboxRows: (...args: unknown[]) => upsertPersistedInboxRows(...(args as [])),
   deleteInboxThreadIds: () => Promise.resolve(true),
+  formatInboxStamp: (value: Date) =>
+    value.toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
   // Must surface appended replies, not just the root message — otherwise the
   // "optimistic bubble is withdrawn" assertion below can never see one and
   // passes vacuously against the buggy code too.
