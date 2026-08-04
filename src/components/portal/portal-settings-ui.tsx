@@ -101,18 +101,31 @@ export function PortalSettingsLinkRow({
   label,
   description,
   value,
+  icon,
   href,
   onClick,
+  dataAttr,
 }: {
   label: string;
   description?: string;
   value?: string;
+  /** Leading icon rendered in a muted tile (settings category rows). */
+  icon?: ReactNode;
   href?: string;
   onClick?: () => void;
+  dataAttr?: string;
 }) {
   const inner = (
     <>
-      <div className="min-w-0">
+      {icon ? (
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/60 text-muted"
+          aria-hidden
+        >
+          {icon}
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
       </div>
@@ -128,14 +141,14 @@ export function PortalSettingsLinkRow({
 
   if (href) {
     return (
-      <Link href={href} className={className}>
+      <Link href={href} className={className} data-attr={dataAttr}>
         {inner}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" onClick={onClick} className={className} data-attr={dataAttr}>
       {inner}
     </button>
   );
@@ -177,4 +190,72 @@ export function PortalSettingsProfileHeader({
 
 export function PortalSettingsFormBody({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("space-y-4 px-4 py-4", className)}>{children}</div>;
+}
+
+export type PortalSettingsNavItem = {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+};
+
+/**
+ * Desktop settings navigation — identity block + one item per settings
+ * category, styled to match the portal sidebar (`navLinkClass` in
+ * portal-sidebar.tsx) so Settings reads as part of the same product.
+ */
+export function PortalSettingsNav({
+  name,
+  email,
+  items,
+  activeId,
+  onSelect,
+  className,
+}: {
+  name: string;
+  email: string;
+  items: PortalSettingsNavItem[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  className?: string;
+}) {
+  return (
+    <aside className={cn("w-60 shrink-0", className)}>
+      <div className="flex items-center gap-3 px-2.5 pb-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+          {profileInitials(name, email)}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-foreground">{name.trim() || "Account"}</p>
+          {email ? <p className="truncate text-xs text-muted">{email}</p> : null}
+        </div>
+      </div>
+      <nav aria-label="Settings sections" className="space-y-0.5">
+        {items.map((item) => {
+          const active = item.id === activeId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              aria-current={active ? "page" : undefined}
+              data-attr={`settings-nav-${item.id}`}
+              className={cn(
+                "flex min-h-9 w-full items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-left text-[13px] font-medium tracking-[-0.01em] transition-colors duration-150",
+                active
+                  ? "bg-[var(--secondary)] text-foreground"
+                  : "text-muted hover:bg-[var(--secondary)]/60 hover:text-foreground",
+              )}
+            >
+              {item.icon ? (
+                <span className={cn("shrink-0", active ? "text-primary" : "opacity-80")} aria-hidden>
+                  {item.icon}
+                </span>
+              ) : null}
+              <span className="min-w-0 truncate">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
+  );
 }

@@ -22,6 +22,8 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
       .catch(() => {});
   }, [currentKind]);
 
+  // Renders nothing (not even the settings row wrapper) for single-portal
+  // accounts, so the Account card never shows an empty padded strip.
   if (!targets.length) return null;
 
   const switchPortal = async (role: AuthRole) => {
@@ -43,7 +45,7 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
   };
 
   return (
-    <>
+    <div className="border-b border-border px-4 py-3.5 last:border-0">
       {targets.map((target) => (
         <button
           key={target.role}
@@ -58,6 +60,6 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
           {busyRole === target.role ? "Switching…" : target.label}
         </button>
       ))}
-    </>
+    </div>
   );
 }
