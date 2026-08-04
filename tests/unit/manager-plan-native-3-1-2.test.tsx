@@ -149,6 +149,23 @@ describe("native purchase screen — Guideline 3.1.2 required elements", () => {
     expect(screen.getByRole("button", { name: /restore purchases/i })).toBeTruthy();
   });
 
+  it("a PARTIAL read failure that still knows the subscription keeps the manage-only notice", async () => {
+    // `readFailed` is ORed across the profile / by-user-id / by-email lookups,
+    // so `planUnknown` can arrive alongside a real Apple or Stripe signal. The
+    // more specific state wins there — the generic retry card would tell an
+    // Apple subscriber nothing about where their plan is managed.
+    renderPurchaseSurface({ currentTier: "pro", isFree: false, appleManaged: true, planUnknown: true });
+    expect(screen.getByText(/Apple Account › Subscriptions/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /terms of use/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /subscribe to/i })).toBeNull();
+
+    cleanup();
+
+    renderPurchaseSurface({ currentTier: "pro", isFree: false, stripeManaged: true, planUnknown: true });
+    expect(screen.getByText(/nothing to purchase here/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /subscribe to/i })).toBeNull();
+  });
+
   it("the legal footer also renders on the Apple-managed manage-only branch", () => {
     renderPurchaseSurface({ currentTier: "pro", isFree: false, appleManaged: true });
     expect(screen.getByRole("button", { name: /terms of use/i })).toBeTruthy();

@@ -248,11 +248,44 @@ export function ManagerPlanNative({
     );
   }
 
-  // A purchase row we could not READ reports no Stripe and no Apple
-  // subscription, so both manage-only branches below would be bypassed and a
-  // manager who already pays would be offered a second, duplicate subscription.
-  // Same rule as `!subLoaded`: never act on an unverified plan. Restore stays,
-  // because it only re-reads what the App Store already knows.
+  // Manage-only branches: already paid on one of the two stores. These run
+  // BEFORE the unknown-plan branch because `planUnknown` is also set by a
+  // PARTIAL read failure, which still returns the purchase row — when the paid
+  // signals are genuinely known, the specific notice is the honest one.
+  if (appleManaged) {
+    return (
+      <div className="native-only mx-auto max-w-lg space-y-4">
+        <div className="rounded-2xl border border-border surface-panel p-6 text-center">
+          <p className="text-lg font-semibold text-foreground">You&apos;re on {TIER_LABEL[currentTier]}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Your subscription is billed through the App Store. To change your plan, or to downgrade or cancel, open the
+            Settings app and go to Apple Account › Subscriptions — plan changes aren&apos;t made inside PropLane.
+          </p>
+        </div>
+        <NativePlanLegalFooter />
+      </div>
+    );
+  }
+
+  if (stripeManaged) {
+    // App Store 3.1.1: don't steer the user to an external site to manage/buy.
+    // They already have an active plan, so there is simply nothing to purchase
+    // here — no website named, no "manage on the web" instruction.
+    return (
+      <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
+        <p className="text-lg font-semibold text-foreground">You&apos;re on {TIER_LABEL[currentTier]}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          Your plan is already active — there&apos;s nothing to purchase here.
+        </p>
+      </div>
+    );
+  }
+
+  // No paid signal, but the purchase row could not be READ — that report is
+  // indistinguishable from a free/trial account, so an active subscription may
+  // be hidden behind it. Same rule as `!subLoaded`: never act on an unverified
+  // plan, or a paying manager is billed a second time. Restore stays, because
+  // it only re-reads what the App Store already knows.
   if (planUnknown) {
     return (
       <div className="native-only mx-auto max-w-lg space-y-4">
@@ -283,36 +316,6 @@ export function ManagerPlanNative({
             {restoring ? "Restoring…" : "Restore purchases"}
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // Manage-only branches: already paid on one of the two stores.
-  if (appleManaged) {
-    return (
-      <div className="native-only mx-auto max-w-lg space-y-4">
-        <div className="rounded-2xl border border-border surface-panel p-6 text-center">
-          <p className="text-lg font-semibold text-foreground">You&apos;re on {TIER_LABEL[currentTier]}</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Your subscription is billed through the App Store. To change your plan, or to downgrade or cancel, open the
-            Settings app and go to Apple Account › Subscriptions — plan changes aren&apos;t made inside PropLane.
-          </p>
-        </div>
-        <NativePlanLegalFooter />
-      </div>
-    );
-  }
-
-  if (stripeManaged) {
-    // App Store 3.1.1: don't steer the user to an external site to manage/buy.
-    // They already have an active plan, so there is simply nothing to purchase
-    // here — no website named, no "manage on the web" instruction.
-    return (
-      <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
-        <p className="text-lg font-semibold text-foreground">You&apos;re on {TIER_LABEL[currentTier]}</p>
-        <p className="mt-2 text-sm leading-relaxed text-muted">
-          Your plan is already active — there&apos;s nothing to purchase here.
-        </p>
       </div>
     );
   }
