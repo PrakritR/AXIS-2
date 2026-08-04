@@ -189,3 +189,50 @@ only beat Stripe above ~1,000 payments/month once monthly minimums are counted
 Pending / Overdue / Paid are in-section status pills, not tabs. `RESIDENT_PAYMENTS_LEGACY_TABS` is a `{ status?: string }` map of every old sub-path (`charges`, `summary`, `statements`, `balance`, `pending`, `overdue`, `paid`); `renderPortalSection` redirects all of them to `/resident/payments`, preserving `?status=` for the three that map to a pill (forwarded as the panel's `initialStatus`). `/resident/financials/*` redirects the same way. The map is a **null-prototype** object so inherited `Object.prototype` keys (`toString`, `constructor`, `__proto__`, `hasOwnProperty`) do not read as known tabs — unknown sub-paths still `notFound()`. See AGENTS.md "Financials UI cleanup" for the routing gotchas, and `tests/unit/resident-payments-charges-only.test.ts` for the regression coverage on the empty `tabs`, the bare smoke path, and the legacy map (including the prototype-key case).
 
 `/api/reports/resident-ledger` is live (resident Documents → Rent receipts).
+
+## Paid is reconciled against the ledger, and receipts are named from it
+
+Payments › **Paid** and Documents › **Rent receipts** answer the same question
+("what have I paid") from two different stores — the live charge list
+(`portal_household_charge_records`) and the accounting record (`ledger_entries`)
+— so they used to contradict each other outright: eleven receipts on one screen,
+"Paid 0" on the other, because a paid charge that is later deleted leaves its
+ledger payment behind. `src/lib/resident-recorded-payments.ts` is the one place
+that reconciles them; its header comment carries the full rationale. Rules:
+
+- **Paid reconciles UP to the ledger, never down.** A recorded payment with no
+  surviving charge row is synthesized as a READ-ONLY row that is always
+  `status: "paid"` — so every pay/select path (all of which filter on `pending`)
+  ignores it by construction, and it opens no charge detail page. Nothing is
+  deleted from either store, and no payable state is invented. The ledger/GL
+  write model is untouched: a deleted charge still does not reverse its ledger
+  entry, which is a financials-domain change, not a display one.
+- **Both surfaces read the same window** (`residentLedgerReceiptRange`, trailing
+  12 months). Two windows would make the counts disagree again for a new reason.
+- **Paid rows show the amount PAID, not the balance** — the outstanding balance
+  is `$0.00` by definition on Paid, so showing it turned every settled row into
+  `$0.00`. The unpaid buckets still show what is owed.
+- **A receipt is named from its own ledger description**
+  (`receiptRowLabel` / `recordedPaymentTitle`), so a utilities or deposit payment
+  no longer reads "Rent receipt". The empty-description fallback is a neutral
+  `"Payment"`, never `"Rent payment"` — this label lands on an exportable
+  financial record. The Documents tab itself is still called "Rent receipts".
+- `queryResidentLedger` emits `sourceChargeId` and `property` on each row for the
+  match. They are deliberately NOT `columns`, and exports iterate `columns`, so
+  CSV/PDF output is unchanged.
+
+Coverage: `tests/unit/resident-recorded-payments.test.ts`,
+`tests/unit/rent-receipts.test.ts`.
+
+## Application-fee copy comes from one module
+
+The wizard's Review step and its fee step must never quote different amounts for
+the same charge — Review printed the LISTING's published fee unconditionally
+while the next screen said no fee was required. Both now derive their copy from
+`src/lib/rental-application/application-fee-display.ts`: Review shows what will
+actually be charged (`$0.00` when waived) plus a note naming the listing's
+published fee and the waiver reason, and the waiver sentence itself comes from
+the shared `applicationFeeWaiverExplanation`. Add any new fee-copy surface there
+rather than re-deriving it. Coverage:
+`tests/unit/application-fee-display.test.ts`,
+`tests/unit/application-fee-review-step.test.tsx`.
