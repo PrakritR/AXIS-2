@@ -245,14 +245,21 @@ or resize the panel.
   (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an already-selected
   option; the shared `CheckboxMultiSelect` / `FieldSingleSelect` still show one
   only above 5 options.
-- **The mobile filter sheet is RAISED statically and never moves.** `autoElevate`
-  on `VaulBottomSheet` applies a fixed `bottom: max(32vh, …)` plus a max-height
-  derived from that same offset. It used to be gated on a
+- **The mobile filter sheet is bottom-anchored and FILLS the viewport.**
+  `PortalFilterSortSheet` passes `fillViewport` to `VaulBottomSheet`, which opens the
+  sheet at its own max height and seats it on
+  `--portal-native-bottom-nav-inset`, so the card background reaches the tab bar
+  instead of hugging its fields and leaving a lit gap below. That is the default
+  (`mobileSheetFillsViewport`, default true); browse-homes still passes it
+  explicitly, where it is now documentary.
+- **`mobileSheetRaised` is the legacy raised placement** — opt-in, currently used by
+  nothing, and the only path that still reads
+  `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX`. It sets `autoElevate` on
+  `VaulBottomSheet`: a fixed `bottom: max(32vh, …)` plus a max-height derived from
+  that same offset. It is a PROP, never a measurement — it used to be gated on a
   `height < viewport * 0.52` measurement, so a sheet whose content changed while
-  open flipped placement and visibly JUMPED — a measured placement can always jump,
-  which is why this one is a prop. Only a sheet that already fills the viewport
-  (browse-homes, via `mobileSheetFillsViewport`) stays bottom-anchored, because
-  raising it would push its top off screen. Three consequences worth knowing:
+  open flipped placement and visibly JUMPED, and a measured placement can always
+  jump. Three consequences if you re-enable it:
   a raised sheet must suppress Vaul's `::after` overscroll fill (`globals.css`,
   keyed on `data-elevated`) or that fill paints across the gap below it; the
   sheet body must NOT impose its own smaller max-height, or the lower fields get
