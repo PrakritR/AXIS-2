@@ -22,7 +22,9 @@
  * names and suffixes, so a disagreement is only reported when the two names
  * share NO word at all. That still catches the case this exists for — an
  * entirely different person — while leaving "Diego Morales" and
- * "Diego A. Morales and Jane Doe" alone.
+ * "Diego A. Morales and Jane Doe" alone. Rule 2 applies to names too: a
+ * cross-script pair and a script with no word boundaries are both refused rather
+ * than guessed at — see `namesDisagree`.
  *
  * `landlordName`, `propertyAddress`, `rentDueDay` and `lateFee` are NOT compared:
  * they have no counterpart on the lease record (`mapsTo: null`), so there is
@@ -70,9 +72,9 @@ const HONORIFICS = new Set(["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "mad
  * Unicode-aware on purpose. An ASCII-only filter produced an empty token set for
  * any name outside the Latin alphabet, and `namesDisagree` fails open on an
  * empty set — so the tenant-name half of this guard was permanently inert for
- * those residents, missing exactly the case it exists to catch. NFD plus a
- * combining-mark strip also makes "José" and "Jose" the same party rather than
- * two, which is a false mismatch avoided rather than a check loosened.
+ * those residents. NFD plus a combining-mark strip also makes "José" and "Jose"
+ * the same party rather than two, which is a false mismatch avoided rather than
+ * a check loosened.
  */
 function nameTokens(raw: string): Set<string> {
   return new Set(
@@ -87,11 +89,78 @@ function nameTokens(raw: string): Set<string> {
   );
 }
 
-/** True when two names cannot plausibly be the same party — they share no word. */
+/**
+ * Scripts a name can be written in, and whether that script separates the words
+ * of a name with whitespace. The second column is what decides whether the
+ * "share no word" test means anything at all.
+ */
+const NAME_SCRIPTS: readonly { readonly id: string; readonly test: RegExp; readonly wordDelimited: boolean }[] = [
+  { id: "latin", test: /\p{Script=Latin}/u, wordDelimited: true },
+  { id: "cyrillic", test: /\p{Script=Cyrillic}/u, wordDelimited: true },
+  { id: "greek", test: /\p{Script=Greek}/u, wordDelimited: true },
+  { id: "arabic", test: /\p{Script=Arabic}/u, wordDelimited: true },
+  { id: "hebrew", test: /\p{Script=Hebrew}/u, wordDelimited: true },
+  { id: "devanagari", test: /\p{Script=Devanagari}/u, wordDelimited: true },
+  { id: "han", test: /\p{Script=Han}/u, wordDelimited: false },
+  { id: "hiragana", test: /\p{Script=Hiragana}/u, wordDelimited: false },
+  { id: "katakana", test: /\p{Script=Katakana}/u, wordDelimited: false },
+  { id: "hangul", test: /\p{Script=Hangul}/u, wordDelimited: false },
+  { id: "thai", test: /\p{Script=Thai}/u, wordDelimited: false },
+];
+
+/** The script most of a name's letters are written in, or null when none is known. */
+function dominantNameScript(tokens: Set<string>): (typeof NAME_SCRIPTS)[number] | null {
+  const counts = new Map<string, number>();
+  for (const token of tokens) {
+    for (const char of token) {
+      const script = NAME_SCRIPTS.find((s) => s.test.test(char));
+      if (script) counts.set(script.id, (counts.get(script.id) ?? 0) + 1);
+    }
+  }
+  let best: (typeof NAME_SCRIPTS)[number] | null = null;
+  let bestCount = 0;
+  for (const script of NAME_SCRIPTS) {
+    const count = counts.get(script.id) ?? 0;
+    if (count > bestCount) {
+      best = script;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * True when two names cannot plausibly be the same party — they share no word.
+ *
+ * Which pairs this compares, and which it deliberately refuses to, follows the
+ * module's own rule: **only compare in the comparable form**, the same reason
+ * `normalizeLeaseDate` refuses `01/02/2026` rather than picking a convention.
+ *
+ * - **Same script, whitespace-delimited** (Latin, Cyrillic, Greek, Arabic,
+ *   Hebrew, Devanagari) — compared. This is the case the guard exists for, and
+ *   accented Latin now compares properly instead of dropping out.
+ * - **Different scripts** — NOT compared. A record holding "Wei Zhang" against a
+ *   document stating "张伟" is one romanization decision apart, not two people;
+ *   reporting it would hard-block a whole cohort of real leases, and a false
+ *   mismatch is what teaches managers to click past the warning.
+ * - **A script that does not delimit words with whitespace** (Han, Kana,
+ *   Hangul, Thai) — NOT compared. "Share no word" needs words; with none, any
+ *   differing character reads as a total disagreement, so the leniency that
+ *   keeps "Diego Morales" and "Diego A. Morales and Jane Doe" quiet has no
+ *   effect there.
+ *
+ * Both refusals fail OPEN, which is the direction this module has consistently
+ * chosen: under-reporting a mismatch it cannot judge honestly beats manufacturing
+ * one. The rent and term comparisons are unaffected and still object.
+ */
 function namesDisagree(documentValue: string, recordValue: string): boolean {
   const a = nameTokens(documentValue);
   const b = nameTokens(recordValue);
   if (a.size === 0 || b.size === 0) return false;
+  const scriptA = dominantNameScript(a);
+  const scriptB = dominantNameScript(b);
+  if (!scriptA || !scriptB || scriptA.id !== scriptB.id) return false;
+  if (!scriptA.wordDelimited) return false;
   for (const token of a) if (b.has(token)) return false;
   return true;
 }

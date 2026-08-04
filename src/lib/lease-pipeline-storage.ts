@@ -443,6 +443,24 @@ export function leaseSendGateBlocker(row: LeasePipelineRow): string | null {
   return leaseSendGateBlockerAmong(row, readManagerApplicationRows());
 }
 
+/**
+ * True when nothing stands between this row and a signature — the ONE predicate
+ * a SENDABILITY claim reads.
+ *
+ * The whole gate, not a subset of it: `leaseSendStillReachable` for the row's
+ * own state (a Fully Signed or Voided lease is refused on status alone) plus
+ * every reason `leaseSendGateBlocker` answers, in the same order the send paths
+ * apply them. A surface that recomposed part of the gate instead drifted three
+ * times — the last of them a green "can be sent for signature" banner above a
+ * lease whose applicant had been moved back to Pending, which `sendLeaseToResident`
+ * refuses. An unapproved application, a parties mismatch and an unread import
+ * now all suppress that claim identically.
+ */
+export function leaseCanBeSentForSignature(row: LeasePipelineRow): boolean {
+  if (!leaseSendStillReachable(row)) return false;
+  return leaseSendGateBlocker(row) === null;
+}
+
 /** True when editing a resident should refresh the lease document (manager-side review only). */
 export function leaseSyncsFromResidentEdit(row: LeasePipelineRow): boolean {
   if (!leaseAllowsManagerDocumentEdits(row)) return false;

@@ -19,6 +19,10 @@ import {
 } from "@/lib/uploaded-lease-extraction";
 import { leaseRecordTerms, type LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { leaseRecordFingerprint } from "@/lib/lease-document-mismatch";
+import {
+  resetManagerApplicationRowsToDemo,
+  seedDemoManagerApplicationRows,
+} from "@/lib/manager-applications-storage";
 
 const WRONG_PARTY_PAGES = [
   [
@@ -83,6 +87,9 @@ const shownText = () => document.body.textContent ?? "";
 
 afterEach(() => {
   cleanup();
+  resetManagerApplicationRowsToDemo();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -264,6 +271,34 @@ describe("the modal never claims a lease is sendable when it is not", () => {
     renderModal({ ...parseOf(WRONG_PARTY_PAGES), review: confirmedParse(null).review }, sent);
 
     expect(shownText()).toContain("Move this lease back to manager review");
+    expect(shownText()).not.toContain("can be sent for signature");
+  });
+
+  /**
+   * The review half of the gate is not the whole gate. A confirmed,
+   * mismatch-free import whose applicant was moved back to Pending is refused by
+   * every send path, so the banner must not claim otherwise — reading a subset
+   * of `leaseSendGateBlocker` is exactly how this drifted before.
+   */
+  it("drops the sendability claim while the applicant is not approved", () => {
+    const r = row();
+    seedDemoManagerApplicationRows(
+      [
+        {
+          id: "AXIS-MODAL-1",
+          name: "Diego Morales",
+          email: r.residentEmail,
+          property: "Cascade Lofts",
+          stage: "Submitted",
+          bucket: "pending",
+          detail: "",
+        },
+      ],
+      "manager-modal-gate",
+    );
+    renderModal(confirmedParse(leaseRecordFingerprint(leaseRecordTerms(r))), r);
+
+    expect(shownText()).toContain("Confirmed by Pat Manager");
     expect(shownText()).not.toContain("can be sent for signature");
   });
 });

@@ -534,6 +534,7 @@ and any surface that explains itself cannot drift apart.
 
 | Predicate | Question | Scope |
 | --- | --- | --- |
+| `leaseCanBeSentForSignature` | can this lease be sent at all? | the WHOLE gate — `leaseSendStillReachable` plus every reason `leaseSendGateBlocker` answers |
 | `leaseSendHeldByUploadedLeaseReview` | is the review what stands between this row and a signature? | everything the send paths accept — `leaseSendStillReachable`: no signatures, not Fully Signed / Voided |
 | `leaseNeedsUploadedLeaseReviewAction` | should the manager be pointed at the review? | only `leaseAllowsManagerDocumentEdits`, where confirming can actually succeed |
 
@@ -550,12 +551,15 @@ are reachable: "Move to manager review" restores edits, and the refusal says so
 screen.
 
 **A surface reads the predicate for the claim IT makes.** A claim about
-sendability ("this lease can be sent for signature") reads the gate; an
-affordance saying *do something here* reads the CTA. Mixing them is how a green
-"Confirmed … can be sent for signature" banner ends up above a lease every send
-path refuses. The review modal's banner therefore also checks
-`leaseSendStillReachable`, so it never tells a manager a Fully Signed or Voided
-lease can be sent.
+sendability ("this lease can be sent for signature") reads
+`leaseCanBeSentForSignature`; an affordance saying *do something here* reads the
+CTA. Mixing them is how a green "Confirmed … can be sent for signature" banner
+ends up above a lease every send path refuses. **Read the whole gate, never a
+subset of it** — that has drifted three times, most recently a banner that
+covered only the review half and so stayed green over a lease whose applicant had
+been moved back to Pending. `leaseCanBeSentForSignature` is the one call the
+review modal's banner makes, so the row's own state (Fully Signed / Voided) and
+all three ordered blocker reasons suppress it identically.
 
 **One predicate decides "has a human confirmed this reading".**
 `uploadedLeaseReviewIsConfirmed` (and its inverse

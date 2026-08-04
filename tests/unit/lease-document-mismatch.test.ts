@@ -1,8 +1,13 @@
 // The tenant-name half of the parties guard has to work for residents whose
 // names are not written in the Latin alphabet. An ASCII-only token filter left
 // both sides empty, and the comparison fails open on an empty set — so for
-// those residents a document naming an entirely different person passed
-// unflagged, which is precisely the case this guard exists to catch.
+// those residents the guard was simply inert.
+//
+// Widening it is only half the job: a pair this module cannot judge honestly
+// must still fail OPEN rather than manufacture a mismatch, because a false
+// mismatch is what teaches managers to click past the warning. A romanized
+// record against a native-script document, and a script with no word
+// boundaries, are both in that category.
 //
 // The fingerprint is the other half: it must move only when the COMPARISON
 // could move, or a reformatted date re-gates a send and tells the manager the
@@ -44,34 +49,52 @@ function tenantMismatch(documentName: string, recordName: string) {
   return leaseDocumentMismatches(parseNaming(documentName), { residentName: recordName });
 }
 
-describe("names are compared in every script, not only the Latin alphabet", () => {
+describe("names are compared in every script that can be compared honestly", () => {
   it("treats an accented name and its unaccented spelling as the same party", () => {
     expect(tenantMismatch("José Álvarez", "Jose Alvarez")).toEqual([]);
-  });
-
-  it("treats a non-Latin name matching the record as the same party", () => {
-    expect(tenantMismatch("张伟", "张伟")).toEqual([]);
     expect(tenantMismatch("Дмитрий Соколов", "Дмитрий Соколов")).toEqual([]);
   });
 
-  it("flags a non-Latin document name that names an entirely different person", () => {
-    const cjk = tenantMismatch("李娜", "张伟");
-    expect(cjk.map((m) => m.key)).toEqual(["tenantName"]);
-    expect(cjk[0]?.documentValue).toBe("李娜");
-    expect(cjk[0]?.recordValue).toBe("张伟");
-
-    expect(tenantMismatch("Ольга Петрова", "Дмитрий Соколов").map((m) => m.key)).toEqual([
-      "tenantName",
-    ]);
+  it("flags a same-script non-Latin document name that names an entirely different person", () => {
+    const cyrillic = tenantMismatch("Ольга Петрова", "Дмитрий Соколов");
+    expect(cyrillic.map((m) => m.key)).toEqual(["tenantName"]);
+    expect(cyrillic[0]?.documentValue).toBe("Ольга Петрова");
+    expect(cyrillic[0]?.recordValue).toBe("Дмитрий Соколов");
   });
 
   it("still shares a surname without complaint", () => {
     expect(tenantMismatch("Дмитрий А. Соколов и Ольга Петрова", "Дмитрий Соколов")).toEqual([]);
   });
 
+  /**
+   * A romanization decision is not a different person, and hard-blocking that
+   * whole cohort is the false-mismatch failure this module warns about.
+   */
+  it("never reports a cross-script pair as a disagreement", () => {
+    expect(tenantMismatch("张伟", "Wei Zhang")).toEqual([]);
+    expect(tenantMismatch("Wei Zhang", "张伟")).toEqual([]);
+    expect(tenantMismatch("Дмитрий Соколов", "Dmitry Sokolov")).toEqual([]);
+  });
+
+  /**
+   * "Share no word" needs words. With no whitespace to delimit them, any
+   * differing character would read as a total disagreement, so the leniency
+   * that keeps co-tenants and middle names quiet has no effect at all.
+   */
+  it("does not compare a script that has no word boundaries", () => {
+    expect(tenantMismatch("李娜", "张伟")).toEqual([]);
+    expect(tenantMismatch("김민준", "박서준")).toEqual([]);
+  });
+
   it("keeps failing open when either side has no comparable word at all", () => {
     expect(tenantMismatch("—", "Diego Morales")).toEqual([]);
     expect(tenantMismatch("Diego Morales", "1234")).toEqual([]);
+  });
+
+  it("still objects to a Latin-script document naming someone else", () => {
+    expect(tenantMismatch("Shivansh Nikhra", "Diego Morales").map((m) => m.key)).toEqual([
+      "tenantName",
+    ]);
   });
 });
 

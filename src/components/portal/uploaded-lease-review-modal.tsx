@@ -17,9 +17,8 @@ import { leaseDocumentMismatches, leaseMismatchAcknowledgementGap } from "@/lib/
 import {
   LEASE_MOVE_BACK_TO_REVIEW_MESSAGE,
   leaseAllowsManagerDocumentEdits,
+  leaseCanBeSentForSignature,
   leaseRecordTerms,
-  leaseSendHeldByUploadedLeaseReview,
-  leaseSendStillReachable,
 } from "@/lib/lease-pipeline-storage";
 import { buildUploadedLeaseProplaneHtml } from "@/lib/uploaded-lease-proplane-format";
 
@@ -156,11 +155,11 @@ export function UploadedLeaseReviewModal({
    * - `supersededCause` — does that confirmation still cover the record's
    *   current disagreements? Owns whether the Confirm affordance comes back.
    * - `sendable` — could this lease be sent at all? Owns the SENDABILITY claim,
-   *   read from the shared `leaseSendHeldByUploadedLeaseReview` predicate rather
-   *   than recomposed here, because a hand-composed copy is how the two drift.
-   *   A Fully Signed or Voided lease is refused on status alone, so telling its
-   *   manager it "can be sent for signature" is the same class of lie as a green
-   *   banner over a gated lease.
+   *   read whole from `leaseCanBeSentForSignature` rather than recomposed here,
+   *   because a hand-composed subset is how this drifted three times. That
+   *   predicate covers the row's own state AND all three ordered reasons
+   *   `leaseSendGateBlocker` answers, so an unapproved application, a parties
+   *   mismatch and an unread import all suppress the claim identically.
    *
    * All of them are judged against the STORED reading — never the manager's
    * unsaved drafts — because that is what the send gate reads. Typing a
@@ -177,7 +176,7 @@ export function UploadedLeaseReviewModal({
       : null;
   /** The review is settled for THIS record: nothing here for the manager to act on. */
   const confirmed = storedConfirmed && !supersededCause;
-  const sendable = leaseSendStillReachable(row) && !leaseSendHeldByUploadedLeaseReview(row);
+  const sendable = leaseCanBeSentForSignature(row);
   /** A superseded row out for signature cannot be confirmed where it stands. */
   const needsMoveBackFirst = Boolean(supersededCause) && !leaseAllowsManagerDocumentEdits(row);
 
