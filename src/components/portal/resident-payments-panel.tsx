@@ -61,6 +61,7 @@ import {
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
+  isRecordedPaymentRow,
   recordedPaymentsMissingFromCharges,
   residentLedgerReceiptRange,
 } from "@/lib/resident-recorded-payments";
@@ -1003,7 +1004,11 @@ export function ResidentPaymentsPanel({
           ),
           selected: selectedIds.has(row.id),
           onSelectedChange: () => toggleSelected(row.id),
-          onClick: () => portalNavigate(residentChargeDetailHref(basePath, bucket, row.id)),
+          // A recorded payment is a read-only reconstruction of a ledger entry
+          // with no charge record behind it, so there is no detail page to open.
+          onClick: isRecordedPaymentRow(row)
+            ? undefined
+            : () => portalNavigate(residentChargeDetailHref(basePath, bucket, row.id)),
         }))}
         columns={[
           { id: "charge", header: "Charge", cell: (row) => row.title || "Charge" },

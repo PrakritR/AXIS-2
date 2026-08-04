@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { ReportRow } from "@/lib/reports/types";
 import { buildReceiptRows } from "@/lib/rent-receipts";
 import {
+  isRecordedPaymentRow,
   receiptRowLabel,
   recordedPaymentTitle,
   recordedPaymentsMissingFromCharges,
@@ -83,8 +86,52 @@ describe("recordedPaymentsMissingFromCharges (F6)", () => {
     expect(recordedPaymentsMissingFromCharges(twins, [])).toHaveLength(2);
   });
 
+  it("gives a source-id-less payment the same id no matter where it sits in the ledger", () => {
+    const twins: ReportRow[] = [
+      { date: "2026-06-14", description: "Payment — Application fee", payment: "$45.00" },
+      { date: "2026-06-14", description: "Payment — Application fee", payment: "$45.00" },
+    ];
+    const earlier: ReportRow = { date: "2026-05-01", description: "Payment — Rent — May 2026", payment: "$2400.00" };
+
+    const before = recordedPaymentsMissingFromCharges(twins, []).map((c) => c.id);
+    const after = recordedPaymentsMissingFromCharges([earlier, ...twins], []).map((c) => c.id);
+
+    // A ledger row appearing ahead of them must not renumber their ids.
+    expect(new Set(before).size).toBe(2);
+    expect(after.slice(1)).toEqual(before);
+  });
+
+  it("marks every synthesized row as a recorded payment, and no real charge", () => {
+    const out = recordedPaymentsMissingFromCharges(ledgerRows, []);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every(isRecordedPaymentRow)).toBe(true);
+    expect(isRecordedPaymentRow(paidCharge("hc_util_1"))).toBe(false);
+  });
+
   it("Documents and Payments read the same ledger window", () => {
     const range = residentLedgerReceiptRange(new Date("2026-08-03T12:00:00Z"));
     expect(range).toEqual({ from: "2025-08-03", to: "2026-08-03" });
+  });
+});
+
+describe("recorded payments are not links to a detail page", () => {
+  /**
+   * A synthesized row has no charge record behind it, so the resident charge
+   * detail page — which looks the id up in the live charge list — renders
+   * "Charge not found." for every one of them. The Paid list must therefore not
+   * hand those rows an `onClick`.
+   */
+  it("gates the Paid row click on isRecordedPaymentRow", () => {
+    const src = readFileSync(
+      path.join(process.cwd(), "src/components/portal/resident-payments-panel.tsx"),
+      "utf8",
+    );
+    // Every navigation to the charge detail page must sit on the non-recorded
+    // branch of that guard — an unguarded one is the dead link this covers.
+    const navigations = src.match(/[^\n]*portalNavigate\(residentChargeDetailHref\([^\n]*/g) ?? [];
+    expect(navigations).toHaveLength(1);
+    expect(src).toMatch(
+      /onClick: isRecordedPaymentRow\(row\)\s*\?\s*undefined\s*:\s*\(\) => portalNavigate\(residentChargeDetailHref\(/,
+    );
   });
 });

@@ -3747,18 +3747,39 @@ export function residentLeaseBlockedReasons(email: string, userId: string | null
  * dashboard "Payments" group used to bucket on `status === "pending"` alone,
  * which silently dropped clearing ACH ("processing") rows the Payments page
  * counts under Pending. Two money counters reading the same store disagreed.
+ *
+ * `ManagerPaymentBucket` has exactly three values, so every one of the seven
+ * `HouseholdCharge` statuses has to land in one of them. The bucket answers
+ * "is this money the manager still has to chase", so the split is:
+ *
+ *  - `paid`, `cancelled`, `refunded` → **paid**. Settled: nothing is owed.
+ *    `cancelled` / `refunded` are not "paid" in the accounting sense, but they
+ *    are not actionable either, and leaving them in Pending/Overdue would have
+ *    the dashboard's "Needs attention → Payments" list dun a resident for money
+ *    that was voided or already returned. The GL is the accounting record; this
+ *    helper is only the collections view.
+ *  - `processing` → **pending**, never overdue. The ACH debit is clearing
+ *    (3–5 business days) — the resident has paid; the bank is settling.
+ *  - `pending`, `partially_paid`, `failed` → **pending**, or **overdue** once
+ *    past due. `failed` stays owed on purpose: the payment ATTEMPT failed, the
+ *    charge did not go away.
  */
 export function householdChargeManagerBucket(c: HouseholdCharge): ManagerPaymentBucket {
-  if (c.status === "paid") return "paid";
-  // A clearing ACH payment ("processing") is never overdue — the resident has
-  // already paid; the bank is settling.
+  if (c.status === "paid" || c.status === "cancelled" || c.status === "refunded") return "paid";
   const overdue = c.status !== "processing" && isHouseholdChargeOverdue(c, startOfTodayLocal());
   return overdue ? "overdue" : "pending";
 }
 
+function managerChargeStatusLabel(c: HouseholdCharge, bucket: ManagerPaymentBucket): string {
+  if (c.status === "cancelled") return "Cancelled";
+  if (c.status === "refunded") return "Refunded";
+  if (bucket === "paid") return "Paid";
+  return bucket === "overdue" ? "Overdue" : "Pending";
+}
+
 export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPaymentLedgerRow {
   const bucket = householdChargeManagerBucket(c);
-  const overdue = bucket === "overdue";
+  const settled = bucket === "paid";
   // If the stored label looks like a raw internal ID (pending property not yet resolved at charge-creation
   // time), try to resolve the human-readable title now via getPropertyById which now includes pending props.
   let propertyName = c.propertyLabel;
@@ -3777,11 +3798,11 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     chargeTitle: c.title,
     lineAmount: c.amountLabel,
     amountPaid: c.status === "paid" ? c.amountLabel : "$0.00",
-    balanceDue: c.status === "paid" ? "$0.00" : c.balanceLabel,
+    balanceDue: settled ? "$0.00" : c.balanceLabel,
     dueDate: chargeDueLabel(c),
     dueDateSortMs: householdChargeDueDate(c)?.getTime() ?? null,
     bucket,
-    statusLabel: c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending",
+    statusLabel: managerChargeStatusLabel(c, bucket),
     cancelledReminders: c.cancelledReminders,
     manualPaymentChannel: c.manualPaymentChannel,
     manualPaymentReportedAt: c.manualPaymentReportedAt,
