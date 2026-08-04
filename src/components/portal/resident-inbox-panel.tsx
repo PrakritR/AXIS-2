@@ -112,6 +112,32 @@ class InboxSendRefusal extends Error {
   }
 }
 
+/**
+ * What each channel ACTUALLY did. The reply toast is built from this, never from
+ * the channels the resident asked for: telling someone their text message went
+ * out when the SMS leg failed is the same "shown as delivered when it wasn't"
+ * defect as persisting a refused reply.
+ */
+export type ResidentReplySendOutcome = {
+  emailRequested: boolean;
+  smsRequested: boolean;
+  emailOk: boolean;
+  smsOk: boolean;
+};
+
+export function residentReplySentToastMessage(outcome: ResidentReplySendOutcome): string {
+  const emailDelivered = outcome.emailRequested && outcome.emailOk;
+  const smsDelivered = outcome.smsRequested && outcome.smsOk;
+  if (!emailDelivered && !smsDelivered) return "Could not send reply.";
+  const emailFailed = outcome.emailRequested && !outcome.emailOk;
+  const smsFailed = outcome.smsRequested && !outcome.smsOk;
+  if (smsFailed) return "Reply sent via email. Text message failed.";
+  if (emailFailed) return "Reply sent via text. Email failed.";
+  if (emailDelivered && smsDelivered) return "Reply sent via email and text.";
+  if (smsDelivered) return "Reply sent via text.";
+  return "Reply sent.";
+}
+
 export type ResidentInboxPanelHandle = {
   openCompose: () => void;
   emptyTrash: () => void;
@@ -731,13 +757,12 @@ export const ResidentInboxPanel = forwardRef<
         );
       };
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
-      let emailOk = !channels.email;
-      let smsOk = !channels.sms;
+      // These record what a channel ACTUALLY did, never what was requested — the
+      // caller's toast reads them, and once either is true the reply IS
+      // delivered, so no later error may withdraw the bubble or report a failure.
+      let emailOk = false;
+      let smsOk = false;
       let failureMessage = "";
-      // Flips the moment a channel actually accepts the message. Past that point
-      // the reply IS delivered, so no later error — including a rejected SMS
-      // fetch after a 200 email — may withdraw the bubble or report a failure.
-      let anyChannelDelivered = false;
       // One window, one exit contract: the "sending" bubble and the disabled
       // persist flag can never outlive this call, including when a fetch REJECTS
       // (offline, aborted, DNS) rather than answering.
@@ -765,7 +790,6 @@ export const ResidentInboxPanel = forwardRef<
               failureMessage = data.error ?? "";
               throw new InboxSendRefusal(failureMessage.trim() || null);
             }
-            anyChannelDelivered = true;
           }
           if (channels.sms && activeSmsAvailable) {
             const res = await fetch("/api/portal/send-inbox-message", {
@@ -785,19 +809,20 @@ export const ResidentInboxPanel = forwardRef<
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
             smsOk = res.ok && data.ok === true;
-            if (smsOk) {
-              anyChannelDelivered = true;
-            } else if (!channels.email) {
+            if (!smsOk && !emailOk) {
               failureMessage = data.error ?? "";
               throw new InboxSendRefusal(failureMessage.trim() || null);
             }
           }
           if (!emailOk && !smsOk) throw new InboxSendRefusal(failureMessage.trim() || null);
         } catch (e) {
-          if (!anyChannelDelivered) {
+          if (!emailOk && !smsOk) {
             rollbackReply();
             throw e;
           }
+          // Delivered on another channel, so this cannot be reported as a failed
+          // send — but a client-side fault here would otherwise vanish entirely.
+          console.warn("[resident-inbox] reply send error after delivery", e);
         }
 
         // Delivered on at least one channel — only now may it enter the store,
@@ -821,6 +846,7 @@ export const ResidentInboxPanel = forwardRef<
         persistInboxRef.current = true;
       }
       void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).catch(() => {});
+      return { emailRequested: channels.email, smsRequested: channels.sms, emailOk, smsOk };
     },
     [activeSmsAvailable],
   );
@@ -1159,7 +1185,7 @@ export const ResidentInboxPanel = forwardRef<
     }
     setReplySending(true);
     try {
-      await handleReply(
+      const outcome = await handleReply(
         {
           id: activeThread.id,
           name: activeThread.from,
@@ -1172,12 +1198,16 @@ export const ResidentInboxPanel = forwardRef<
         { email: viaEmail, sms: viaSms },
         attachmentUrls,
       );
+      if (!outcome) {
+        showToast("Could not send reply.");
+        return;
+      }
       setReplyDraft("");
       setReplyAttachments((prev) => {
         prev.forEach(revokeInboxAttachmentPreview);
         return [];
       });
-      showToast(viaEmail && viaSms ? "Reply sent via email and text." : viaSms ? "Reply sent via text." : "Reply sent.");
+      showToast(residentReplySentToastMessage(outcome));
     } catch (e) {
       // Say WHY when the server told us — "you can only message people connected
       // to your account" is actionable; "could not send" reads as a glitch worth
