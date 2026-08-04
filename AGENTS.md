@@ -1351,11 +1351,17 @@ on an account with five listings and no paywall anywhere).
 - **The property cap is enforced server-side, not in the wizard.**
   `assertManagerPropertyListingQuota`
   (`src/lib/manager-property-quota.server.ts`) runs on every
-  `POST /api/property-records` upsert AND in the assistant's `update_property`
-  write tool, which writes `manager_property_records` directly and never passes
-  through that route — otherwise a manager at their cap could ask the agent for
-  the relist the portal's Relist button refuses. Any NEW writer that can move a
-  record into a listing slot needs the same call. The client checks are courtesy
+  `POST /api/property-records` upsert AND in the two assistant write tools that
+  put a record into a slot without passing through that route —
+  `create_property` (inserts `pending`) and `update_property` (sets `live`).
+  Otherwise a manager at their cap could ask the agent for the listing the
+  portal's disabled "+ Add property" and its Relist button both refuse. The
+  other tool-layer writers of `manager_property_records` are deliberately
+  ungated and say so in a comment: `copy_listing_photos`,
+  `update_property_lease_config` and `apply_listing_photos` patch only
+  `row_data`/`property_data`, and `upsertManagerListingDraft` always writes
+  `draft`. Any NEW writer that can move a record into a listing slot needs the
+  same call. The client checks are courtesy
   pre-checks so a manager hears it before their photos upload; every layer
   prints the same sentence from `managerPropertyLimitMessage`, and the route's
   403 body (`MANAGER_PROPERTY_LIMIT_ERROR_CODE`) travels back through

@@ -308,6 +308,70 @@ describe("create_property", () => {
   });
 });
 
+/**
+ * Regression: agent-create-property-bypasses-quota.
+ *
+ * The other half of the same bypass as `agent-relist-bypasses-quota` below:
+ * this tool inserts `manager_property_records` with status "pending", which IS
+ * a listing slot, and never passes through `POST /api/property-records` where
+ * the cap lives. So a Free manager whose "+ Add property" button is disabled
+ * could just ask the assistant to create the listing instead.
+ */
+describe("create_property respects the plan's listing cap", () => {
+  const draft = { title: "Loft", address: "9 Z St", beds: 3, baths: 1, rentUsd: 1800 };
+
+  it("refuses a create that would take a second listing slot on Free", async () => {
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [liveProperty("manager_a", "p_live")],
+    });
+
+    const res = await executeWrite(createPropertyTool, ctx, draft);
+
+    expect(res.ok).toBe(false);
+    // The manager reads the same sentence the portal shows, not a bare failure.
+    if (!res.ok) expect(res.error).toBe(managerPropertyLimitMessage("free"));
+    // Nothing was inserted, and the refusal did not burn the dedupe key.
+    expect(tables.manager_property_records).toHaveLength(1);
+    expect(auditRows(tables)).toEqual([]);
+  });
+
+  it("allows the create while the manager is still under the cap", async () => {
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({ manager_property_records: [] });
+
+    const res = await executeWrite(createPropertyTool, ctx, draft);
+
+    expect(res.ok).toBe(true);
+    expect(tables.manager_property_records).toHaveLength(1);
+    expect(tables.manager_property_records![0]).toMatchObject({ status: "pending" });
+  });
+
+  it("does not count another manager's listings against this one", async () => {
+    EFFECTIVE_TIER = "free";
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: [liveProperty("manager_b", "p_other")],
+    });
+
+    const res = await executeWrite(createPropertyTool, ctx, draft);
+
+    expect(res.ok).toBe(true);
+    expect(tables.manager_property_records).toHaveLength(2);
+  });
+
+  it("leaves a landlord with no numeric cap unaffected", async () => {
+    EFFECTIVE_TIER = null;
+    const { ctx, tables } = makeWriteCtx({
+      manager_property_records: Array.from({ length: 12 }, (_, i) => liveProperty("manager_a", `p_live_${i}`)),
+    });
+
+    const res = await executeWrite(createPropertyTool, ctx, draft);
+
+    expect(res.ok).toBe(true);
+    expect(tables.manager_property_records).toHaveLength(13);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // update_property
 // ---------------------------------------------------------------------------
