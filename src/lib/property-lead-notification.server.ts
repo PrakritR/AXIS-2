@@ -2,6 +2,7 @@
  * Notify property manager when a prospect sends a leasing message.
  */
 
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   resolveManagerRecipientProfiles,
   resolvePropertyLeadRecipientIds,
@@ -31,7 +32,7 @@ async function upsertManagerInbox(
   input: { subject: string; body: string; fromName: string; fromEmail: string },
 ): Promise<void> {
   const threadId = `lead-msg-${Date.now().toString(36)}`;
-  const now = new Date().toLocaleString();
+  const now = formatPacificDateTime(new Date());
   await db.from("portal_inbox_thread_records").upsert(
     {
       id: threadId,

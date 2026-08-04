@@ -1,3 +1,4 @@
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { z } from "zod";
 import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
@@ -156,12 +157,7 @@ async function sendReminderForCharge(
   if (delivery === "emailed" || delivery === "portal_only") {
     const ts = Date.now();
     const rand = Math.random().toString(36).slice(2, 6);
-    const when = new Date().toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const when = formatPacificDateTime(new Date());
     try {
       await deliverPortalMessageThreadSide(ctx.db, {
         scope: "axis_portal_inbox_manager_v1",
