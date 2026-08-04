@@ -62,6 +62,19 @@ describe("names are compared in every script that can be compared honestly", () 
     expect(cyrillic[0]?.recordValue).toBe("Дмитрий Соколов");
   });
 
+  /**
+   * No script allowlist: a whitespace-delimited script nobody enumerated has to
+   * compare like any other, or the guard is inert for that cohort — which is
+   * the exact failure the Unicode-aware tokenizer set out to remove.
+   */
+  it("compares a whitespace-delimited script no list ever named", () => {
+    expect(tenantMismatch("Արամ Պետրոսյան", "Անի Սարգսյան").map((m) => m.key)).toEqual([
+      "tenantName",
+    ]);
+    expect(tenantMismatch("করিম আলী", "রহিম উদ্দিন").map((m) => m.key)).toEqual(["tenantName"]);
+    expect(tenantMismatch("Արամ Պետրոսյան", "Անի Պետրոսյան")).toEqual([]);
+  });
+
   it("still shares a surname without complaint", () => {
     expect(tenantMismatch("Дмитрий А. Соколов и Ольга Петрова", "Дмитрий Соколов")).toEqual([]);
   });
@@ -74,16 +87,27 @@ describe("names are compared in every script that can be compared honestly", () 
     expect(tenantMismatch("张伟", "Wei Zhang")).toEqual([]);
     expect(tenantMismatch("Wei Zhang", "张伟")).toEqual([]);
     expect(tenantMismatch("Дмитрий Соколов", "Dmitry Sokolov")).toEqual([]);
+    expect(tenantMismatch("Արամ Պետրոսյան", "Aram Petrosyan")).toEqual([]);
+  });
+
+  it("compares a document that carries both scripts against the romanized record", () => {
+    expect(tenantMismatch("张伟 (Wei Zhang)", "Wei Zhang")).toEqual([]);
+    expect(tenantMismatch("张伟 (Wei Zhang)", "Diego Morales").map((m) => m.key)).toEqual([
+      "tenantName",
+    ]);
   });
 
   /**
    * "Share no word" needs words. With no whitespace to delimit them, any
    * differing character would read as a total disagreement, so the leniency
-   * that keeps co-tenants and middle names quiet has no effect at all.
+   * that keeps co-tenants and middle names quiet has no effect at all. Detected
+   * from the values themselves — both sides one dense non-Latin token — rather
+   * than from a list of script names.
    */
   it("does not compare a script that has no word boundaries", () => {
     expect(tenantMismatch("李娜", "张伟")).toEqual([]);
     expect(tenantMismatch("김민준", "박서준")).toEqual([]);
+    expect(tenantMismatch("田中太郎", "山田花子")).toEqual([]);
   });
 
   it("keeps failing open when either side has no comparable word at all", () => {

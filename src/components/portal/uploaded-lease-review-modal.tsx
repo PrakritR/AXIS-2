@@ -176,7 +176,11 @@ export function UploadedLeaseReviewModal({
       : null;
   /** The review is settled for THIS record: nothing here for the manager to act on. */
   const confirmed = storedConfirmed && !supersededCause;
-  const sendable = leaseCanBeSentForSignature(row);
+  // Keyed on the row, which carries the STORED parse the gate reads, and never
+  // on `drafts`. The gate reads stored state only, so keying it on unsaved
+  // typing would re-read the whole applications store on every keystroke AND
+  // quietly re-couple the banner to typing the send gate cannot see.
+  const sendable = useMemo(() => leaseCanBeSentForSignature(row), [row]);
   /** A superseded row out for signature cannot be confirmed where it stands. */
   const needsMoveBackFirst = Boolean(supersededCause) && !leaseAllowsManagerDocumentEdits(row);
 
