@@ -33,12 +33,19 @@ function loadSubscription(): Promise<void> {
       const body = (await res.json().catch(() => ({}))) as {
         tier?: string | null;
         effectiveTier?: string | null;
+        planUnknown?: boolean;
       };
       if (!res.ok) {
         cachedTier = null;
         cachedEffectiveTier = null;
         return;
       }
+      // The route could not read this account's plan. Caching that would freeze
+      // a transient database error into the whole session — the pre-checks
+      // would keep judging against a plan nobody ever resolved. Leave both
+      // slots empty so the next caller retries; until then every reader sees
+      // `null`, which pre-judges nothing and defers to the server gate.
+      if (body.planUnknown === true) return;
       cachedTier = body.tier ?? null;
       // An older deployment of the route sends no `effectiveTier`; falling back
       // to the raw tier keeps the pre-check at its pre-cap behaviour rather

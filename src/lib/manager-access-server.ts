@@ -226,13 +226,21 @@ export async function getManagerServiceFeePayerByManagerId(managerId: string): P
   }
 }
 
-/** Raw tier + billing from manager_purchases (service role). */
+/**
+ * Raw tier + billing from manager_purchases (service role).
+ *
+ * `readFailed` is carried out with the columns because a caller that DERIVES a
+ * quota from `tier` cannot tell an absent plan from an unread one otherwise —
+ * both arrive as `tier: null`, and that resolves to Free. Anything that only
+ * wants a Stripe id can keep ignoring it.
+ */
 export async function getManagerPurchaseSku(userId: string): Promise<{
   tier: string | null;
   billing: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   appleOriginalTransactionId: string | null;
+  readFailed: boolean;
 }> {
   const row = await getManagerPurchaseRowByUserId(userId);
   return {
@@ -241,6 +249,7 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
     stripeCustomerId: row.stripeCustomerId,
     stripeSubscriptionId: row.stripeSubscriptionId,
     appleOriginalTransactionId: row.appleOriginalTransactionId,
+    readFailed: row.readFailed,
   };
 }
 

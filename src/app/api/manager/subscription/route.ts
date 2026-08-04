@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 function subscriptionJson(
   tier: string | null,
   billing: string | null,
-  opts: { stripeSubscriptionId: string | null; appleManaged: boolean },
+  opts: { stripeSubscriptionId: string | null; appleManaged: boolean; planUnknown: boolean },
 ) {
   const t = tier?.toLowerCase() ?? null;
   /**
@@ -32,15 +32,26 @@ function subscriptionJson(
    * Settings said "Free · 1 property listing" beside a Properties tab with no
    * cap at all (audit F-SET-1). Every quota below is derived from this, and
    * `POST /api/property-records` re-resolves the same value server-side.
+   *
+   * A plan we could not READ is not a plan. A failed purchase-row read also
+   * arrives as `tier: null`, which resolves to Free — so reporting it would
+   * hand a paying manager `propertyLimit: 1`, draw the red "reached your plan
+   * limit" banner and pre-refuse "+ Add property" for the whole session, while
+   * the route that pre-check is previewing would answer 500 rather than a Free
+   * refusal. Unknown means the client stops pre-judging and lets the server
+   * decide; nothing is waved through, because that server gate fails closed.
    */
-  const effective = resolveEffectiveManagerSkuTier({
-    tier: t,
-    stripeSubscriptionId: opts.stripeSubscriptionId,
-    appleManaged: opts.appleManaged,
-  });
+  const effective = opts.planUnknown
+    ? null
+    : resolveEffectiveManagerSkuTier({
+        tier: t,
+        stripeSubscriptionId: opts.stripeSubscriptionId,
+        appleManaged: opts.appleManaged,
+      });
   return {
     tier: t,
     effectiveTier: effective,
+    planUnknown: opts.planUnknown,
     billing,
     isPro: isProSkuTier(t),
     isBusiness: isBusinessSkuTier(t),
@@ -48,8 +59,8 @@ function subscriptionJson(
     /** No purchase row — legacy / unknown; not treated as Pro-capped. */
     isLegacyUnlimited: t === null,
     proPropertyLimit: PRO_MAX_PROPERTIES,
-    propertyLimit: maxPropertiesForManagerTier(effective),
-    accountLinkLimit: maxAccountLinksForTier(effective),
+    propertyLimit: opts.planUnknown ? null : maxPropertiesForManagerTier(effective),
+    accountLinkLimit: opts.planUnknown ? null : maxAccountLinksForTier(effective),
     monthlyAmountUsd: monthlyUsdForManagerTier(t),
     monthlyLabel: formatManagerMonthlyLabel(t),
   };
@@ -71,16 +82,20 @@ export async function GET() {
       /* Stripe not configured or transient error — serve last known DB state */
     }
 
-    const { tier, billing, stripeSubscriptionId, appleOriginalTransactionId } =
+    const { tier, billing, stripeSubscriptionId, appleOriginalTransactionId, readFailed } =
       await getManagerPurchaseSku(user.id);
     const stripeManaged = Boolean(stripeSubscriptionId);
     // Apple-billed grant → the plan is managed in the App Store: on native we
     // don't re-offer IAP, on web we hide Stripe checkout (report §3.4).
     const appleManaged = isAppleBilledManagerPurchase(billing, appleOriginalTransactionId);
-    const base = subscriptionJson(tier, billing, { stripeSubscriptionId, appleManaged });
+    const base = subscriptionJson(tier, billing, {
+      stripeSubscriptionId,
+      appleManaged,
+      planUnknown: readFailed,
+    });
     const missingTier = tier == null || String(tier).trim() === "";
     /** Treat missing tier row as Free in the plan UI when there is no paid Stripe subscription. */
-    const isFree = base.isFree || (missingTier && !stripeManaged && !appleManaged);
+    const isFree = !readFailed && (base.isFree || (missingTier && !stripeManaged && !appleManaged));
 
     let cancelAtPeriodEnd = false;
     let currentPeriodEnd: number | null = null;

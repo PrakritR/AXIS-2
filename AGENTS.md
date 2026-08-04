@@ -1332,7 +1332,15 @@ on an account with five listings and no paywall anywhere).
   — an unreadable plan and "no committed SKU" both produce zero purchase rows,
   so collapsing them would enforce Free on a transient DB error and refuse a
   paying Business manager their sixth listing. Callers fail closed on
-  `ok: false`. **`manager-subscription-client.ts` caches BOTH values and they
+  `ok: false`. **That rule has to reach BOTH halves or it is worse than not
+  having it**, because the client caches what the route says: a plan the server
+  could not read is reported as `planUnknown: true` with `effectiveTier`,
+  `propertyLimit` and `accountLinkLimit` all `null` and `isFree: false`, so
+  Properties draws no limit banner and pre-refuses nothing — the client stops
+  pre-judging and the server gate, which already 500s on that path, decides.
+  `manager-subscription-client.ts` does NOT cache an unknown read, or one
+  transient error would freeze a Business manager at "reached your plan limit of
+  1 property" for the whole session. **It caches BOTH values and they
   are not interchangeable**: `loadManagerEffectivePlanTierClient`
   (`effectiveTier`) is for the property-limit pre-checks only, because the
   server re-resolves that same value; every other client gate mirroring a server
@@ -1350,13 +1358,19 @@ on an account with five listings and no paywall anywhere).
   record into a listing slot needs the same call. The client checks are courtesy
   pre-checks so a manager hears it before their photos upload; every layer
   prints the same sentence from `managerPropertyLimitMessage`, and the route's
-  403 body (`code: "property_limit_reached"`) travels back through
-  `upsertPropertyRecordToServer`'s `onError` into the wizard toast — a refusal
-  must never degrade to "Could not submit listing."
+  403 body (`MANAGER_PROPERTY_LIMIT_ERROR_CODE`) travels back through
+  `upsertPropertyRecordToServer`'s `onError(message, code)` into the wizard
+  toast — a refusal must never degrade to "Could not submit listing."
   `mirrorLocalPropertyPipelineToServer` sends its writes SEQUENTIALLY for the
   same reason: fired concurrently, N creates each read the slot count before any
   of them lands, so the cap would be racy on the path most likely to send
-  several at once. It reports the first refusal once per run, never per row.
+  several at once. It reports the first refusal once per run, never per row —
+  and it has exactly ONE owner (`ManagerProperties`; the properties panel it
+  renders deliberately does not mirror, or every load doubled the writes and
+  toasted twice). The mirror keys on the `code`, never on "the body had an
+  error": it is background work the manager never initiated, so a 500's raw
+  Postgres text stays silent. Only a caller the manager is waiting on — the
+  wizard — shows the server's message verbatim.
 - **It gates the TRANSITION INTO a listing slot, never the state of being over
   the cap.** `LISTING_SLOT_PROPERTY_STATUSES` (`persisted-property-records.ts`)
   is `pending`/`live`/`review` — derived from `propertyRowsToSnapshot`, which is
@@ -1380,6 +1394,7 @@ on an account with five listings and no paywall anywhere).
   `property-listing-slot-statuses.test.ts`,
   `manager-listing-publish-limit-feedback.test.ts`,
   `manager-subscription-tier-client.test.ts`,
+  `manager-subscription-route-unknown-plan.test.ts`,
   `tools/property-resident-writes.test.ts`.
 
 # Property drafts (save add-property progress)
