@@ -40,8 +40,14 @@ let GOOGLE_THROWS: boolean;
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: () => makeServiceClient(),
 }));
+/** The `timeMax` the route asked Google for, per call. */
+let GOOGLE_TIME_MAX: string[] = [];
+
 vi.mock("@/lib/google-calendar/api.server", () => ({
-  listGoogleCalendarEvents: vi.fn(async () => {
+  GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS: 12_000,
+  GOOGLE_CALENDAR_FETCH_TIMEOUT_MS: 6_000,
+  listGoogleCalendarEvents: vi.fn(async (_db: unknown, _id: string, _min: string, max: string) => {
+    GOOGLE_TIME_MAX.push(max);
     if (GOOGLE_THROWS) throw new Error("Google Calendar is not connected.");
     return GOOGLE_BUSY;
   }),
@@ -161,6 +167,7 @@ describe("public tour availability subtracts what is already taken", () => {
     PLANNED_EVENTS = [];
     GOOGLE_BUSY = [];
     GOOGLE_THROWS = false;
+    GOOGLE_TIME_MAX = [];
   });
 
   it("offers published availability when nothing is taken", async () => {
@@ -290,6 +297,24 @@ describe("public tour availability subtracts what is already taken", () => {
     expect(slots.size).toBe(4);
   });
 
+  it("reads busy time across the ENTIRE range it can offer, not the default horizon", async () => {
+    // The published fixture sits far past `DEFAULT_TOUR_HORIZON_DAYS`. Bounding
+    // the busy read by that constant left a manager's Google-busy morning
+    // bookable again past day 21 — the same double-booking defect, moved later.
+    await offeredSlots();
+    const furthestOffered = Date.parse(TEN_AM_END);
+    expect(GOOGLE_TIME_MAX).toHaveLength(1);
+    expect(Date.parse(GOOGLE_TIME_MAX[0]!)).toBeGreaterThanOrEqual(furthestOffered);
+  });
+
+  it("subtracts busy time from a published slot well past the default horizon", async () => {
+    GOOGLE_BUSY = [
+      { id: "g-far", summary: "Busy", start: TEN_AM_START, end: TEN_AM_END },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.has(TEN_AM)).toBe(false);
+  });
+
   it("still serves availability when the calendar link is broken", async () => {
     GOOGLE_THROWS = true;
     const slots = await offeredSlots();
@@ -330,6 +355,7 @@ describe("a property with no published availability still offers the 9-5 default
     PLANNED_EVENTS = [];
     GOOGLE_BUSY = [];
     GOOGLE_THROWS = false;
+    GOOGLE_TIME_MAX = [];
   });
 
   it("bounds the default grid to the 21-day horizon", async () => {

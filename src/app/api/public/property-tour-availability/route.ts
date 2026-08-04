@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { listGoogleCalendarEvents } from "@/lib/google-calendar/api.server";
+import {
+  GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS,
+  GOOGLE_CALENDAR_FETCH_TIMEOUT_MS,
+  listGoogleCalendarEvents,
+} from "@/lib/google-calendar/api.server";
 import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
 import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -12,6 +16,7 @@ import {
   shouldOfferDefaultTourGrid,
   slotBlocked,
   slotIsBookable,
+  slotStartMs,
   windowsFromPayload,
   type TourBlock,
 } from "@/lib/tour-slot-math";
@@ -40,7 +45,7 @@ export const runtime = "nodejs";
 const GOOGLE_BUSY_TTL_MS = 60_000;
 /** Hard ceiling on distinct managers held at once; the map is module-global. */
 const GOOGLE_BUSY_CACHE_MAX_ENTRIES = 500;
-const googleBusyCache = new Map<string, { expiresAt: number; blocks: TourBlock[] }>();
+const googleBusyCache = new Map<string, { expiresAt: number; windowEndMs: number; blocks: TourBlock[] }>();
 
 /**
  * Store a manager's busy blocks, sweeping expired entries first. Without this
@@ -49,12 +54,12 @@ const googleBusyCache = new Map<string, { expiresAt: number; blocks: TourBlock[]
  * queried. The FIFO trim after the sweep bounds the pathological case where
  * every entry is still live.
  */
-function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[]): void {
+function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[], windowEndMs: number): void {
   const now = Date.now();
   for (const [key, entry] of googleBusyCache) {
     if (entry.expiresAt <= now) googleBusyCache.delete(key);
   }
-  googleBusyCache.set(managerUserId, { expiresAt: now + GOOGLE_BUSY_TTL_MS, blocks });
+  googleBusyCache.set(managerUserId, { expiresAt: now + GOOGLE_BUSY_TTL_MS, windowEndMs, blocks });
   while (googleBusyCache.size > GOOGLE_BUSY_CACHE_MAX_ENTRIES) {
     const oldest = googleBusyCache.keys().next();
     if (oldest.done) break;
@@ -62,17 +67,70 @@ function cacheGoogleBusyBlocks(managerUserId: string, blocks: TourBlock[]): void
   }
 }
 
+/**
+ * Ceiling on one manager's busy read, covering the token hop and every page.
+ * Above the library's own budget so this only ever fires for a genuine stall.
+ */
+const GOOGLE_BUSY_READ_BUDGET_MS = GOOGLE_CALENDAR_EVENT_LIST_BUDGET_MS + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS + 2_000;
+
+/** Reject once `budgetMs` has passed, so a stalled call cannot hold the response. */
+function withDeadline<T>(work: Promise<T>, budgetMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("Google Calendar did not respond in time.")), budgetMs);
+  });
+  return Promise.race([work, deadline]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+/**
+ * How far ahead to read Google busy time.
+ *
+ * The invariant: calendar-busy time is subtracted across the ENTIRE range of
+ * slots this response can offer, never a shorter one. `DEFAULT_TOUR_HORIZON_DAYS`
+ * bounds only the DEFAULT grid — published availability is not bounded by it at
+ * all, so a manager who paints a week six weeks out would otherwise get their
+ * busy morning bookable again past the default horizon, which is the exact
+ * double-booking defect this route exists to close.
+ */
+function googleBusyWindowEndMs(offeredSlots: readonly string[], now: number = Date.now()): number {
+  const defaultEnd = now + DEFAULT_TOUR_HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  let furthest = defaultEnd;
+  for (const slot of offeredSlots) {
+    const startMs = slotStartMs(slot);
+    if (startMs === null) continue;
+    // The slot's own half hour has to be inside the window, not just its start.
+    const slotEnd = startMs + 30 * 60 * 1000;
+    if (slotEnd > furthest) furthest = slotEnd;
+  }
+  return furthest;
+}
+
+/**
+ * A cached entry is only reusable for a window it actually COVERS — an entry
+ * fetched for a 21-day read would otherwise be served to a request offering
+ * slots three months out, silently un-subtracting the tail.
+ */
 async function googleBusyBlocks(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   managerUserId: string,
   timeMin: string,
   timeMax: string,
 ): Promise<TourBlock[]> {
+  const windowEndMs = Date.parse(timeMax);
   const cached = googleBusyCache.get(managerUserId);
-  if (cached && cached.expiresAt > Date.now()) return cached.blocks;
+  if (cached && cached.expiresAt > Date.now() && cached.windowEndMs >= windowEndMs) return cached.blocks;
   let blocks: TourBlock[] = [];
   try {
-    const events = await listGoogleCalendarEvents(db, managerUserId, timeMin, timeMax);
+    // A whole-operation deadline on top of the per-hop ones: this route is
+    // PUBLIC and uncached, so a slow Google must never stretch a prospect's
+    // booking page. Timing out contributes no busy time, exactly like a broken
+    // link — the tradeoff the fail-open policy below already accepts.
+    const events = await withDeadline(
+      listGoogleCalendarEvents(db, managerUserId, timeMin, timeMax),
+      GOOGLE_BUSY_READ_BUDGET_MS,
+    );
     blocks = events
       .filter(googleEventBlocksTours)
       .map((event) => ({ start: event.start, end: event.end }));
@@ -82,7 +140,7 @@ async function googleBusyBlocks(
     // availability read over one manager's integration.
     blocks = [];
   }
-  cacheGoogleBusyBlocks(managerUserId, blocks);
+  cacheGoogleBusyBlocks(managerUserId, blocks, windowEndMs);
   return blocks;
 }
 
@@ -332,7 +390,7 @@ export async function GET(req: Request) {
       // time is honoured "so tour availability stays accurate", and until now
       // this route never read it, so a manager's busy morning stayed bookable.
       const busyWindowMin = new Date().toISOString();
-      const busyWindowMax = new Date(Date.now() + DEFAULT_TOUR_HORIZON_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      const busyWindowMax = new Date(googleBusyWindowEndMs(offerings.flatMap((o) => o.slots))).toISOString();
       const busyByManager = await Promise.all(
         availabilityManagerIds.map(async (managerUserId) => ({
           managerUserId,

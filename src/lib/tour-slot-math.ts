@@ -193,16 +193,6 @@ export function tourCalendarDateStr(ms: number, timeZone: string = TOUR_CALENDAR
 }
 
 /**
- * The 9 am - 5 pm grid a property offers when its manager has published no
- * availability of their own.
- *
- * This is a DEFAULT, not an invention of open time: a manager who paints a week
- * replaces it entirely, and every caller still subtracts calendar-busy time and
- * already-booked slots from whatever base set it gets. Without it a property
- * whose manager has not opened the calendar yet offers a prospect nothing at
- * all, which reads as a dead booking page.
- */
-/**
  * Should a property fall back to {@link buildDefaultTourSlotKeys}?
  *
  * The rule is "no FUTURE slot is published". A manager who painted a week that
@@ -224,6 +214,16 @@ export function shouldOfferDefaultTourGrid(publishedFutureSlots: readonly string
   return publishedFutureSlots.length === 0;
 }
 
+/**
+ * The 9 am - 5 pm grid a property offers when its manager has published no
+ * availability of their own.
+ *
+ * This is a DEFAULT, not an invention of open time: a manager who paints a week
+ * replaces it entirely, and every caller still subtracts calendar-busy time and
+ * already-booked slots from whatever base set it gets. Without it a property
+ * whose manager has not opened the calendar yet offers a prospect nothing at
+ * all, which reads as a dead booking page.
+ */
 export function buildDefaultTourSlotKeys(
   now: number = Date.now(),
   days: number = DEFAULT_TOUR_HORIZON_DAYS,
