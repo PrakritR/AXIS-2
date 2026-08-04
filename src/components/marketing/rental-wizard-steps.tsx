@@ -8,6 +8,11 @@ import { PropertySearchPicker } from "@/components/marketing/property-search-pic
 import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import {
+  applicationFeeChargeLabel,
+  applicationFeeReviewNote,
+  applicationFeeWaiverExplanation,
+} from "@/lib/rental-application/application-fee-display";
 import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import {
   LEASE_TERM_OPTIONS,
@@ -1836,7 +1841,19 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </ReviewSection>
           {prop?.listingSubmission?.v === 1 ? (
             <ReviewSection title="Housing charges (this listing)" stepTarget={3} onEdit={editFromReview}>
-              <ReviewRow k="Application fee" v={displayOrDash(applicationFeeGate.pending ? "…" : applicationFeeGate.displayLabel)} />
+              <ReviewRow
+                k="Application fee"
+                v={
+                  <>
+                    <span>{applicationFeeChargeLabel(applicationFeeGate)}</span>
+                    {applicationFeeReviewNote(applicationFeeGate, Boolean(form.applicationFeeWaived)) ? (
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {applicationFeeReviewNote(applicationFeeGate, Boolean(form.applicationFeeWaived))}
+                      </span>
+                    ) : null}
+                  </>
+                }
+              />
               <ReviewRow k="Security deposit" v={displayOrDash(prop.listingSubmission.securityDeposit)} />
               <ReviewRow k="Move-in fee" v={displayOrDash(prop.listingSubmission.moveInFee)} />
               <ReviewRow k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
@@ -2011,11 +2028,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            {codeWaived
-              ? "No application fee is due — your waiver code covers it in full."
-              : applicationFeeGate.waived
-              ? "No application fee is required. Your first application fee already covers additional applications."
-              : "No application fee is required for this listing."}
+            {applicationFeeWaiverExplanation(applicationFeeGate, codeWaived)}
           </div>
         )}
 

@@ -43,6 +43,11 @@ vi.mock("@/lib/household-charges", () => ({
   syncHouseholdChargesFromServer: () => Promise.resolve(),
   readChargesForManager: () => CHARGES,
   isHouseholdChargeOverdue: (c: { __overdue?: boolean }) => Boolean(c.__overdue),
+  // The dashboard now buckets through the same helper the Payments tabs use, so
+  // the two surfaces can't disagree (F-PAY-1). Mirror the scenario's __overdue flag.
+  householdChargeManagerBucket: (c: { status?: string; __overdue?: boolean }) =>
+    c.status === "paid" ? "paid" : c.__overdue ? "overdue" : "pending",
+  isManagerAddedOneOffCharge: () => false,
   chargeDueLabel: (c: { __overdue?: boolean }) => (c.__overdue ? "Due May 1, 2026" : "Due Jul 20, 2026"),
 }));
 

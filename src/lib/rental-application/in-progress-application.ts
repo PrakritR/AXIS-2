@@ -135,6 +135,21 @@ export function isSubmittedPendingApplicationRow(row: DemoApplicantRow): boolean
   return row.bucket === "pending" && !isInProgressApplicationRow(row) && !isWithdrawnApplicationRow(row);
 }
 
+/**
+ * The "Started …" / "Submitted …" / "Updated …" stamp an application row keeps
+ * in `detail` (written here and by the wizard). `detail` also carries free
+ * prose for approved rows ("Lease signed — move-in scheduled"), so only the
+ * timestamped shapes are returned — a list that prints this must not print a
+ * sentence where it promised a date.
+ *
+ * Resident audit F7: twelve byte-identical application rows were genuinely
+ * indistinguishable because the list showed neither date, status nor id.
+ */
+export function applicationStartedLabel(row: Pick<DemoApplicantRow, "detail">): string {
+  const detail = row.detail?.trim() ?? "";
+  return /^(started|submitted|updated)\s/i.test(detail) ? detail : "";
+}
+
 export function inProgressApplicationResumeUrl(origin: string, row: DemoApplicantRow): string {
   const base = origin.replace(/\/$/, "");
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
@@ -203,7 +218,11 @@ export function buildInProgressApplicationRow(input: {
   const pid = input.form.propertyId.trim();
   const prop = pid ? getPropertyById(pid) : undefined;
   const email = input.residentEmail.trim();
-  const name = input.form.fullLegalName.trim() || "Applicant";
+  // NOT a literal "Applicant" placeholder: this value is stored, and the
+  // report display context indexes resident names off it, so a nameless draft
+  // used to rename the person on every one of their finance rows (F-FIN-2).
+  // Empty means "no name yet"; every display site falls back to the email.
+  const name = input.form.fullLegalName.trim();
 
   // The live step wins over whatever the form snapshot happened to carry — step
   // lives in wizard state, not the form, so it is injected fresh on every sync.

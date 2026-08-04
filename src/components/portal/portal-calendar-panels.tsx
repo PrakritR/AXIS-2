@@ -49,7 +49,7 @@ import {
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
 import { buildScheduledTourMeetings } from "@/lib/manager-calendar-tour-meetings";
-import { isGoogleCalendarPrivateBlock, meetingCalendarGridLabel, calendarMeetingSupportsDelete, isPropPlaneGoogleTourMeeting } from "@/lib/google-calendar/meetings";
+import { isGoogleCalendarPrivateBlock, meetingCalendarGridLabel, calendarMeetingSupportsDelete, isPropPlaneGoogleTourMeeting, scheduledCalendarMeetings } from "@/lib/google-calendar/meetings";
 import { deleteProplaneGoogleTourFromServer } from "@/lib/google-calendar/delete-tour.client";
 
 type CalendarMode = "day" | "week" | "month";
@@ -401,6 +401,16 @@ export function PortalCalendarPanels({
     });
     return [...tourMeetings, ...filteredExternal];
   }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter, externalMeetings]);
+
+  /**
+   * Personal Google busy time is drawn as "Blocked", never as an event, and the
+   * view tabs above this grid count only tours + service visits. Counting busy
+   * blocks in the day header made it read "9 EVENTS" on Wednesday directly
+   * under a tab reading "All 0" (F-CAL-1). The header counts the same set the
+   * tabs do; the blocks stay visible in the grid, labelled Blocked.
+   */
+  const scheduledMeetings = useMemo(() => scheduledCalendarMeetings(meetings), [meetings]);
+  const showEventCountsInDayHeader = readOnly || preferEventCountsInDayHeader;
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -1500,8 +1510,8 @@ export function PortalCalendarPanels({
                   <div className="grid w-full grid-cols-7 gap-1 pb-1 sm:gap-1.5">
                     {activeBlockDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
-                      const count = readOnly
-                        ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                      const count = showEventCountsInDayHeader
+                        ? scheduledMeetings.filter((meeting) => meeting.dateStr === ds).length
                         : visibleSlotIndices.reduce(
                             (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
                             0,
@@ -1523,7 +1533,7 @@ export function PortalCalendarPanels({
                             {d.toLocaleDateString(undefined, { weekday: "short" })}
                           </span>
                           <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
-                          <span className="text-[9px] font-medium opacity-80">{readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}</span>
+                          <span className="text-[9px] font-medium opacity-80">{showEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}</span>
                         </button>
                       );
                     })}
@@ -1557,8 +1567,8 @@ export function PortalCalendarPanels({
                         <div className={`px-1.5 py-2 sm:px-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                         {activeBlockDates.map((d) => {
                           const ds = toLocalDateStr(d);
-                          const count = readOnly || preferEventCountsInDayHeader
-                            ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                          const count = showEventCountsInDayHeader
+                            ? scheduledMeetings.filter((meeting) => meeting.dateStr === ds).length
                             : visibleSlotIndices.reduce(
                                 (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
                                 0,
@@ -1572,7 +1582,7 @@ export function PortalCalendarPanels({
                                 {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                               </p>
                               <p className={`mt-0.5 text-[10px] font-medium sm:text-[11px] ${CALENDAR_OPEN_COUNT}`}>
-                                {readOnly || preferEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}
+                                {showEventCountsInDayHeader ? `${count} event${count === 1 ? "" : "s"}` : `${count} open`}
                               </p>
                               {renderFlexibleToggle(d.getDay())}
                             </div>
