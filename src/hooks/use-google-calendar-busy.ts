@@ -20,7 +20,25 @@ export type GoogleCalendarBusyWarning = { warning?: string; hint?: string };
  * all resolve to an empty list, and the caller decides whether to surface the
  * warning (only the portfolio calendar toasts, so a manager never gets the same
  * toast twice).
+ *
+ * ## The window is BOUNDED — conflicts outside it are NOT shown
+ *
+ * One request covers a fixed window around today ({@link GOOGLE_BUSY_DAYS_BEFORE}
+ * back through `daysAhead` forward), not whichever week the calendar is
+ * showing. A manager who navigates past the end of it sees zero busy cells and
+ * can publish tour availability straight on top of a Google meeting. That is a
+ * narrower guarantee than either calendar implies, so the window is wide rather
+ * than week-sized: one larger request is cheaper than refetching on every week
+ * navigation, and every extra day is a conflict that becomes visible on BOTH
+ * calendars.
  */
+
+/** Trailing days included so today's week is complete, not clipped at "now". */
+export const GOOGLE_BUSY_DAYS_BEFORE = 7;
+
+/** Forward span of the busy window. Beyond this, conflicts are not shown. */
+export const GOOGLE_BUSY_DEFAULT_DAYS_AHEAD = 56;
+
 export function useGoogleCalendarBusyMeetings(input: {
   enabled: boolean;
   /** Bump to refetch (a reconnect, a manual refresh). */
@@ -28,7 +46,7 @@ export function useGoogleCalendarBusyMeetings(input: {
   daysAhead?: number;
   onWarning?: (warning: GoogleCalendarBusyWarning) => void;
 }): DemoMeeting[] {
-  const { enabled, refreshSignal, daysAhead = 14, onWarning } = input;
+  const { enabled, refreshSignal, daysAhead = GOOGLE_BUSY_DEFAULT_DAYS_AHEAD, onWarning } = input;
   const [meetings, setMeetings] = useState<DemoMeeting[]>([]);
 
   useEffect(() => {
@@ -38,8 +56,9 @@ export function useGoogleCalendarBusyMeetings(input: {
     }
     let cancelled = false;
     const weekStart = startOfWeekMonday(new Date());
+    weekStart.setDate(weekStart.getDate() - GOOGLE_BUSY_DAYS_BEFORE);
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + daysAhead);
+    weekEnd.setDate(weekEnd.getDate() + GOOGLE_BUSY_DAYS_BEFORE + daysAhead);
     void fetch(
       `/api/portal/google-calendar/events?timeMin=${encodeURIComponent(
         weekStart.toISOString(),

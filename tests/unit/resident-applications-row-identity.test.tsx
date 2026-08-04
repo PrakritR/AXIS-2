@@ -143,3 +143,33 @@ describe("ResidentApplicationsPanel — each row opens its OWN application", () 
     expect(portalNavigate).toHaveBeenCalledWith("/resident/applications/pending/PROPLANE-BBBB0002");
   });
 });
+
+/**
+ * Resident audit F7 also covers the EMBEDDED (apply-mode) table. The routed
+ * list gained status + date, but the embedded variant still showed only
+ * name, property and room, so two applications for the same room read the same.
+ */
+describe("ResidentApplicationsPanel — the embedded table distinguishes its rows too", () => {
+  it("shows each row's status and when it was started", async () => {
+    ROWS = [
+      {
+        ...inProgressRow("PROPLANE-AAAA0001", "mgr-test-magnolia", "Magnolia House"),
+        detail: "Started 8/1/2026, 7:48:40 PM",
+      },
+      {
+        ...submittedRow("PROPLANE-BBBB0002", "mgr-test-magnolia", "Magnolia House"),
+        detail: "Submitted 8/3/2026, 5:24:39 PM",
+      },
+    ];
+    await act(async () => {
+      render(<ResidentApplicationsPanel applyMode />);
+    });
+
+    const first = desktopRow("PROPLANE-AAAA0001").textContent ?? "";
+    const second = desktopRow("PROPLANE-BBBB0002").textContent ?? "";
+    expect(first).toContain("Started 8/1/2026, 7:48:40 PM");
+    expect(second).toContain("Submitted 8/3/2026, 5:24:39 PM");
+    // Same property and room — the rows still have to read differently.
+    expect(first).not.toBe(second);
+  });
+});

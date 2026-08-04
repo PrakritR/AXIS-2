@@ -63,8 +63,8 @@ import { applicationsForResidentEmail } from "@/lib/rental-application/applicati
 import {
   isRecordedPaymentRow,
   recordedPaymentsMissingFromCharges,
-  residentLedgerReceiptRange,
 } from "@/lib/resident-recorded-payments";
+import { loadResidentLedgerRows, residentLedgerIdentityKey } from "@/lib/resident-ledger-client";
 import type { ReportRow } from "@/lib/reports/types";
 import {
   residentChargeDetailHref,
@@ -125,6 +125,12 @@ function formatUsd(cents: number): string {
 }
 
 type PaymentStatusBucket = "overdue" | "pending" | "paid";
+
+const EMPTY_LEDGER_ROWS: ReportRow[] = [];
+const EMPTY_LEDGER_PAYMENTS: { identity: string; rows: ReportRow[] } = {
+  identity: "",
+  rows: EMPTY_LEDGER_ROWS,
+};
 
 function isPaymentStatusBucket(value: string | undefined): value is PaymentStatusBucket {
   return value === "overdue" || value === "pending" || value === "paid";
@@ -212,7 +218,18 @@ export function ResidentPaymentsPanel({
   // these, Paid reads 0 while Documents › Rent receipts lists the same
   // payments (F6). Read-only and always `status: "paid"`, so they can never
   // enter a pay/select path (every one of those filters on `pending`).
-  const [ledgerPaymentRows, setLedgerPaymentRows] = useState<ReportRow[]>([]);
+  //
+  // STORED AGAINST THE IDENTITY THEY WERE READ FOR. `email`/`userId` are
+  // reactive, so an in-session account switch re-runs the read without
+  // remounting; rows whose identity no longer matches the viewer are not
+  // readable at all, so a refused or failed read can only fall back to the
+  // live paid charges — never to the previous resident's money.
+  const ledgerIdentity = useMemo(() => residentLedgerIdentityKey(email, userId), [email, userId]);
+  const [ledgerPayments, setLedgerPayments] = useState(EMPTY_LEDGER_PAYMENTS);
+  const ledgerPaymentRows = useMemo(
+    () => (ledgerIdentity && ledgerPayments.identity === ledgerIdentity ? ledgerPayments.rows : EMPTY_LEDGER_ROWS),
+    [ledgerIdentity, ledgerPayments],
+  );
 
   // DERIVED, never stored. Storing the synthesized rows froze them against the
   // `charges` snapshot they were built from, so a charge that reappeared in the
@@ -336,31 +353,29 @@ export function ResidentPaymentsPanel({
 
   // Reconcile Paid against the accounting ledger — the same source Documents ›
   // Rent receipts reads (F6). Best-effort: a failed read leaves Paid showing
-  // exactly the live paid charges, which is what it showed before.
+  // exactly the live paid charges, which is what it showed before. Coalesced
+  // and TTL-guarded per viewer, because `tick` bumps on every charge event and
+  // the read is a 12-month ledger scan.
   useEffect(() => {
-    if (!session.ready || !email || isDemoModeActive()) {
-      setLedgerPaymentRows([]);
+    if (!session.ready || !ledgerIdentity || isDemoModeActive()) {
+      setLedgerPayments(EMPTY_LEDGER_PAYMENTS);
       return;
     }
     let cancelled = false;
-    void (async () => {
-      try {
-        const params = new URLSearchParams(residentLedgerReceiptRange());
-        const res = await fetch(`/api/reports/resident-ledger?${params}`, { credentials: "include" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { rows?: ReportRow[] };
+    void loadResidentLedgerRows(ledgerIdentity)
+      .then((rows) => {
         if (cancelled) return;
-        setLedgerPaymentRows(data.rows ?? []);
-      } catch {
+        setLedgerPayments({ identity: ledgerIdentity, rows });
+      })
+      .catch(() => {
         /* the ledger is a reconciliation, never a blocker for paying */
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
     // Keyed on `tick`, not `charges`: one ledger read per refresh, not one per
     // charge-list identity change.
-  }, [session.ready, email, tick]);
+  }, [session.ready, ledgerIdentity, tick]);
 
   useEffect(() => {
     if (!paymentsUnlocked) {

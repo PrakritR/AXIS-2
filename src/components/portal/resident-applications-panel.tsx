@@ -888,12 +888,14 @@ export function ResidentApplicationsPanel({
         // no way to tell them apart (resident audit F7). Status, when it was
         // started/submitted, and the application id make each row identifiable.
         // Status lives in `trailing`; repeating it here printed it twice on the
-        // same card.
+        // same card. The id leads because `meta` is a single truncated line on
+        // a phone — trailing it behind the property put the one field that
+        // tells two identical rows apart under the clip.
         const subtitle = [
+          row.id,
           stripPropertyRoomCountSuffix(row.property || ""),
           room !== "—" ? `Room ${room}` : "",
           applicationStartedLabel(row),
-          row.id,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -945,9 +947,14 @@ export function ResidentApplicationsPanel({
             onClick={() => openApplicationRow(row)}
             data-attr="resident-application-list-row"
           >
-            <p className="truncate font-semibold text-foreground">{applicantDisplayName(row)}</p>
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{applicantDisplayName(row)}</p>
+              <span className="shrink-0 text-xs text-muted">{applicationStageDisplayLabel(row)}</span>
+            </div>
             <p className="mt-0.5 truncate text-xs text-muted">
-              {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
+              {[row.property || "—", `Room ${displayRoomForRow(row)}`, applicationStartedLabel(row)]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
             <p className="mt-1 font-mono text-[10px] text-muted/90">{row.id}</p>
           </button>
@@ -971,6 +978,12 @@ export function ResidentApplicationsPanel({
                   </td>
                   <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
                   <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>
+                    {applicationStageDisplayLabel(row)}
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>
+                    {applicationStartedLabel(row) || "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
