@@ -245,18 +245,22 @@ or resize the panel.
   (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an already-selected
   option; the shared `CheckboxMultiSelect` / `FieldSingleSelect` still show one
   only above 5 options.
-- **The mobile filter sheet is RAISED statically and never moves.** `autoElevate`
-  on `VaulBottomSheet` applies a fixed `bottom: max(32vh, …)` plus a max-height
-  derived from that same offset. It used to be gated on a
-  `height < viewport * 0.52` measurement, so a sheet whose content changed while
-  open flipped placement and visibly JUMPED — a measured placement can always jump,
-  which is why this one is a prop. Only a sheet that already fills the viewport
-  (browse-homes, via `mobileSheetFillsViewport`) stays bottom-anchored, because
-  raising it would push its top off screen. Three consequences worth knowing:
-  a raised sheet must suppress Vaul's `::after` overscroll fill (`globals.css`,
-  keyed on `data-elevated`) or that fill paints across the gap below it; the
-  sheet body must NOT impose its own smaller max-height, or the lower fields get
-  pushed past the sheet's bottom edge; and the raised content must publish
+- **The mobile filter sheet is BOTTOM-ANCHORED and fills down to the tab bar.**
+  `PortalFilterSortSheet` defaults `mobileSheetFillsViewport` to true, which passes
+  `fillViewport` to `VaulBottomSheet`: the sheet is anchored at
+  `bottom: var(--portal-native-bottom-nav-inset)` and opens at its own max-height,
+  so the card background reaches the nav bar instead of hugging field content and
+  leaving a strip of scrim below it. No caller opts out today; browse-homes just
+  states the default explicitly.
+  The RAISED placement (`autoElevate` — a fixed `bottom: max(32vh, …)` plus a
+  max-height derived from that same offset) survives only behind the opt-in
+  `mobileSheetRaised` prop. It is still a prop rather than a measurement because it
+  used to be gated on `height < viewport * 0.52`, so a sheet whose content changed
+  while open flipped placement and visibly JUMPED. If you re-enable it, three
+  consequences still apply: a raised sheet must suppress Vaul's `::after` overscroll
+  fill (`globals.css`, keyed on `data-elevated`) or that fill paints across the gap
+  below it; the sheet body must NOT impose its own smaller max-height, or the lower
+  fields get pushed past the sheet's bottom edge; and the raised content must publish
   `--initial-transform: calc(100% + var(--portal-raised-sheet-offset))`
   (`RAISED_SHEET_STYLE`), because Vaul's `slideToBottom` exit keyframe translates
   only 100% of the drawer's OWN height — a raised sheet left on the default ends
@@ -299,8 +303,8 @@ or resize the panel.
   over-reserved, because under-reserving is what hides the dismiss control.
   `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX` is DERIVED
   (`FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12`), never typed in, so a
-  raised sheet is always tall enough to contain its widest menu below its chrome; the
-  dead space under a lone field is the accepted price of "stationary AND contained".
+  raised sheet (`mobileSheetRaised`) is always tall enough to contain its widest menu
+  below its chrome; the viewport-filling default clears that bar on its own.
   Re-measure and re-pin whenever the chrome changes.
 - **The menu names its own field** (`FieldSelectMenuHeader`), because it covers its
   trigger and, on a tight host, every label in the panel — measured on the 3-field
