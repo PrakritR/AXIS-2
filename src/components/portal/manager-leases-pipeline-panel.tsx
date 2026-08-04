@@ -43,6 +43,7 @@ import {
   confirmUploadedLeaseParse,
   leaseNeedsUploadedLeaseReviewAction,
   leaseSendGateBlocker,
+  leaseSendGateBlockerAmong,
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   runLeaseDownload,
   sendLeaseBackToManager,
@@ -53,6 +54,8 @@ import {
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
+import type { DemoApplicantRow } from "@/data/demo-portal";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { retryUploadedLeaseParse, uploadAndParseLeasePdf } from "@/lib/uploaded-lease-parse.client";
 import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
 import type { UploadedLeaseFieldKey } from "@/lib/uploaded-lease-extraction";
@@ -239,6 +242,14 @@ export function ManagerLeasesPipelinePanel({
       body: leaseReminderBody(row),
     });
   }
+
+  // `leaseSendGateBlocker` re-normalizes the whole applications store on every
+  // call, so the RENDER path reads it at most once per pass and shares the
+  // snapshot across rows. Rebuilt each render, so it is never stale; event
+  // handlers still call `leaseSendGateBlocker` for a read fresh at click time.
+  let renderPassApplicationRows: DemoApplicantRow[] | null = null;
+  const sendGateBlockerForRender = (row: LeasePipelineRow) =>
+    leaseSendGateBlockerAmong(row, (renderPassApplicationRows ??= readManagerApplicationRows()));
 
   const generationGate = (row: LeasePipelineRow) => leaseGenerationSupportedForRow(row);
   const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
@@ -463,7 +474,7 @@ export function ManagerLeasesPipelinePanel({
         : // Unapproved applicant, a document that disagrees with the record, or
           // an import nobody has confirmed. `sendLeaseToResident` refuses on the
           // same three; this is the affordance.
-          leaseSendGateBlocker(row);
+          sendGateBlockerForRender(row);
     const showSendToResident = row.status === "Manager Review" || row.status === "Draft";
     const showDelete = row.status !== "Fully Signed";
     const showMoveToReview = row.status === "Resident Signature Pending";

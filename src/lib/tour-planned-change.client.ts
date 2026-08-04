@@ -8,14 +8,29 @@
  * did exactly that rewrite, which is why a cancelled tour reached nobody.
  */
 
+export type TourGuestNotification = { ok: boolean; skipped?: boolean; error?: string } | null;
+
 type ChangeResult = {
   ok: boolean;
   message?: string;
   error?: string;
-  guestNotification?: { ok: boolean; skipped?: boolean; error?: string } | null;
+  guestNotification?: TourGuestNotification;
   /** The manager's linked Google Calendar; a failure here is reported, not fatal. */
-  calendarSync?: { ok: boolean; skipped?: boolean; error?: string } | null;
+  calendarSync?: TourGuestNotification;
 };
+
+/**
+ * Did the guest actually hear about the change?
+ *
+ * The ONE read of that question, because `ok` alone is not it: a delivery that
+ * errored can still carry `ok: true` from an older shape, and an `error` is a
+ * failure however the flag reads. A deliberate `skipped` (sandbox address, no
+ * mail provider) is NOT a failure and must stay out of this.
+ */
+export function tourGuestNotificationFailed(notification: TourGuestNotification | undefined): boolean {
+  if (!notification) return false;
+  return notification.ok === false || Boolean(notification.error);
+}
 
 async function postTourChange(path: string, body: Record<string, unknown>): Promise<ChangeResult> {
   try {

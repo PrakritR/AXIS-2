@@ -55,6 +55,7 @@ import { deleteProplaneGoogleTourFromServer } from "@/lib/google-calendar/delete
 import {
   cancelPlannedTourFromServer,
   reschedulePlannedTourFromServer,
+  tourGuestNotificationFailed,
 } from "@/lib/tour-planned-change.client";
 
 type CalendarMode = "day" | "week" | "month";
@@ -1202,7 +1203,7 @@ export function PortalCalendarPanels({
       onMeetingsChanged?.();
       reloadAvailability();
       showToast(
-        result.guestNotification?.ok === false
+        tourGuestNotificationFailed(result.guestNotification)
           ? "Tour moved, but the guest could not be notified."
           : result.calendarSync?.ok === false
             ? "Tour moved and the guest was notified, but your Google Calendar did not update."
@@ -1233,7 +1234,7 @@ export function PortalCalendarPanels({
       onMeetingsChanged?.();
       reloadAvailability();
       showToast(
-        result.guestNotification?.ok === false
+        tourGuestNotificationFailed(result.guestNotification)
           ? "Tour cancelled, but the guest could not be notified."
           : result.calendarSync?.ok === false
             ? "Tour cancelled and the guest was notified, but your Google Calendar did not update."

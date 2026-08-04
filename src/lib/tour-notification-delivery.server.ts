@@ -432,7 +432,9 @@ async function notifyTenantTourChanged(
         )}. Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
   });
 
-  if (email.error) return { ok: true, skipped: true, error: email.error };
+  // `skipped` means "deliberately not sent" (a sandbox address, no mail
+  // provider) and reads as "nothing went wrong". A failed send is not that.
+  if (email.error) return { ok: false, skipped: false, error: email.error };
   return { ok: true, skipped: email.skipped };
 }
 
