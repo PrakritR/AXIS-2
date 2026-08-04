@@ -306,8 +306,8 @@ or resize the panel.
   over-reserved, because under-reserving is what hides the dismiss control.
   `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX` is DERIVED
   (`FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12`), never typed in, so a
-  raised sheet is always tall enough to contain its widest menu below its chrome; the
-  dead space under a lone field is the accepted price of "stationary AND contained".
+  raised sheet (`mobileSheetRaised`) is always tall enough to contain its widest menu
+  below its chrome; the viewport-filling default clears that bar on its own.
   Re-measure and re-pin whenever the chrome changes.
 - **The menu does NOT repeat the field name.** The trigger row already renders the
   label (`FILTER_FIELD_LABEL_CLASS`) and the portaled menu no longer covers it, so an

@@ -123,3 +123,29 @@ Phase 3 excludes non-income accounts properly.
 **Settings** — `src/lib/manager-billing-settings.ts` (`paymentApplicationOrder`, NSF toggle/amount).
 
 **Deploy:** `npm run db:push` for Phase 5+6 tables before bill/NSF paths succeed.
+
+# Manager charge counts: one bucket rule, one scoping rule
+
+Two manager surfaces show the same money — the dashboard "Payments" attention
+group and `/portal/payments`, which that group's "View all N →" links to — and
+they used to compute it two different ways, so the dashboard advertised counts
+the destination page did not have. Both rules now live in one place each; the
+modules' header comments carry the full rationale.
+
+- **`householdChargeManagerBucket` (`src/lib/household-charges.ts`) is the ONE
+  Pending / Overdue / Paid decision** for a manager-facing charge, and every
+  manager surface that counts charges must go through it. All seven statuses land
+  in one of the three: `paid` / `cancelled` / `refunded` → **paid** (settled, and
+  nothing actionable — the GL is the accounting record, this is only the
+  collections view); `processing` → **pending**, never overdue (the ACH debit is
+  clearing); `pending` / `partially_paid` / `failed` → **pending**, or **overdue**
+  once past due. Bucketing on `status === "pending"` alone is what dropped
+  clearing-ACH rows from the dashboard while Payments counted them.
+- **`src/lib/manager-payments-scope.ts` is the ONE Payments-ledger scoping.**
+  `readChargesForManager` is narrowed by two extra rules — internal payer accounts
+  are dropped, and so are charges belonging to someone who is no longer a current
+  resident (except a manager-entered one-off, which stays visible deliberately).
+  The rules live in that module rather than being copied into each caller, and
+  **Payments is the authority**: align a new counter to it, not the reverse.
+
+Coverage: `tests/unit/manager-payments-dashboard-agreement.test.ts`.
