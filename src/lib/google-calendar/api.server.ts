@@ -346,16 +346,32 @@ export const GOOGLE_CALENDAR_FETCH_TIMEOUT_MS = 3_000;
 export const GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
 
 /**
- * The outer budget a caller races a whole Calendar operation against.
+ * The outer budget a caller races a whole paged READ against.
  *
- * Above every bounded chain below it — a paged read (paging budget), and a
- * token hop plus one write — with a hop of slack, so it fires only for a
- * genuine stall. The one chain that can exceed it is an upsert whose update
- * times out and falls through to a create (three hops); by then two hops have
- * already stalled, so reporting the operation as unfinished is accurate.
+ * Above the paging budget by one hop of slack, so it fires only for a genuine
+ * stall rather than for a walk that was still going to finish.
  */
 export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS =
   GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS;
+
+/**
+ * The outer budget for a WRITE (create / update / delete), which is a token hop
+ * plus one API call and never pages.
+ *
+ * Deliberately tighter than the read budget. A write runs on the cancel and
+ * reschedule handlers, where it is NOT the first external call: the guest
+ * notification (Resend email, consent-gated SMS) has already run, and those are
+ * not bounded here. Leaving the Google leg most of the platform's function
+ * budget would let a slow mailer get the whole request killed — the exact
+ * "could not reach the server" for an already-committed change that bounding
+ * this leg exists to prevent. Bounding the notification path belongs in its own
+ * change; keeping real headroom for it does not.
+ *
+ * The one chain that can exceed this is an upsert whose update times out and
+ * falls through to a create; by then two hops have already stalled, so
+ * reporting the operation as unfinished is accurate.
+ */
+export const GOOGLE_CALENDAR_WRITE_OPERATION_TIMEOUT_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
 
 /** `AbortSignal` bounding one Google Calendar round trip. */
 export function googleCalendarFetchSignal(): AbortSignal {

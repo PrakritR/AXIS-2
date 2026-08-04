@@ -16,7 +16,7 @@
  */
 import { PRODUCTION_APP_ORIGIN } from "@/lib/app-url";
 import {
-  GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS,
+  GOOGLE_CALENDAR_WRITE_OPERATION_TIMEOUT_MS,
   isGoogleCalendarNotLinkedError,
 } from "@/lib/google-calendar/api.server";
 import {
@@ -70,15 +70,19 @@ export type PlannedTourCalendarSync = { ok: boolean; skipped?: boolean; error?: 
 /**
  * Whole-operation ceiling on the Google side of a cancel or reschedule.
  *
- * The shared ladder's outer budget, unmodified — it is already sized above the
- * bounded worst case of the calls below it AND comfortably under the smallest
- * default platform function limit. Padding it here would put it back above that
- * limit, where the platform kills the request first and the guard never fires:
- * the client then reports "could not reach the server" for a change that
- * already committed and a guest who was already emailed, which is the exact
- * outcome this race exists to prevent.
+ * The shared ladder's WRITE budget, unmodified — already sized above the bounded
+ * worst case of the calls below it (a token hop plus one API call) and tight
+ * enough to leave the rest of the handler real headroom under the smallest
+ * default platform function limit. Padding it here would eat that headroom, and
+ * the platform kill it invites is the exact outcome this race exists to prevent:
+ * the client reporting "could not reach the server" for a change that already
+ * committed and a guest who was already emailed.
+ *
+ * Known gap, deliberately not widened here: the guest notification that runs
+ * BEFORE this (Resend email, consent-gated SMS) is unbounded. That path is
+ * shared with `confirmTourInquiry`, so bounding it belongs in its own change.
  */
-const CALENDAR_SYNC_BUDGET_MS = GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS;
+const CALENDAR_SYNC_BUDGET_MS = GOOGLE_CALENDAR_WRITE_OPERATION_TIMEOUT_MS;
 
 /**
  * Run the Google side of a change and CLASSIFY the outcome, never throw it.
