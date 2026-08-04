@@ -10,6 +10,12 @@ import {
 import { canSendResidentOutboundSms, sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { inboxDeepLinkForRole } from "@/lib/platform/parity";
+// Pinned to Pacific, matching `formatInboxStamp`. These stamps are persisted and
+// later re-parsed for conversation ordering, but carry no timezone: this writer
+// runs server-side (UTC on Vercel) while the client writer renders local, so the
+// same instant was stored as two different stamps and a server-delivered message
+// could outrank a later client reply by the UTC offset. Same rendered output.
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   resolveChannels,
@@ -153,7 +159,7 @@ export async function commitInboxThreadReply(
   if (!freshRow) return;
   const rowData = (freshRow.row_data ?? {}) as Record<string, unknown>;
   const messages = Array.isArray(rowData.messages) ? [...(rowData.messages as unknown[])] : [];
-  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const when = formatPacificDateTime(new Date());
   messages.push({
     id: `reply-${Date.now().toString(36)}`,
     from: opts.fromName,
@@ -171,6 +177,9 @@ export async function commitInboxThreadReply(
         ...rowData,
         messages,
         preview: opts.text.slice(0, 100).replace(/\n/g, " "),
+        // Advance the thread stamp: the conversation lists order on this field,
+        // so an append that leaves it stale never floats the thread.
+        time: when,
         unread: false,
       },
       updated_at: new Date().toISOString(),
@@ -545,7 +554,7 @@ export async function deliverPortalInboxMessage(
 
   if (deliverToPortalInbox) {
     const senderScope = scopeForRole(senderRole);
-    const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const when = formatPacificDateTime(new Date());
     const preview = text.slice(0, 100).replace(/\n/g, " ");
 
     for (const recipient of recipients) {

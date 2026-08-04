@@ -428,33 +428,53 @@ export const ResidentInboxPanel = forwardRef<
    * the next reload, when the row came back unread. That is why the resident
    * unread count only ever grew. Mirrors `moveToTrash` — stage locally, write
    * through, roll back if the write fails.
+   *
+   * `notify` is supplied only by the user-initiated flips, and its toast is
+   * decided by the OUTCOME: announcing success up-front left "Marked as read"
+   * on screen while the rollback put the unread dot straight back. The silent
+   * auto-mark-read path passes nothing and stays silent.
    */
-  const persistUnreadFlag = useCallback((id: string, unread: boolean) => {
-    void runInboxMutation(async () => {
-      persistInboxRef.current = false;
-      try {
-        const prev = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[];
-        const target = prev.find((t) => t.id === id);
-        if (!target || target.folder !== "inbox" || target.unread === unread) return;
-        const updated: InboxThread = { ...target, unread };
-        const next = prev.map((t) => (t.id === id ? updated : t));
-        stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, next);
-        setLocal(next);
-        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
-        if (!ok) {
-          stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, prev);
-          setLocal(prev);
+  const persistUnreadFlag = useCallback(
+    (id: string, unread: boolean, notify?: { success: string; failure: string }) => {
+      void runInboxMutation(async () => {
+        persistInboxRef.current = false;
+        try {
+          const prev = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[];
+          const target = prev.find((t) => t.id === id);
+          if (!target || target.folder !== "inbox") {
+            if (notify) showToast(notify.failure);
+            return;
+          }
+          if (target.unread === unread) {
+            if (notify) showToast(notify.success);
+            return;
+          }
+          const updated: InboxThread = { ...target, unread };
+          const next = prev.map((t) => (t.id === id ? updated : t));
+          stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, next);
+          setLocal(next);
+          const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
+          if (!ok) {
+            stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, prev);
+            setLocal(prev);
+            if (notify) showToast(notify.failure);
+            return;
+          }
+          if (notify) showToast(notify.success);
+        } finally {
+          persistInboxRef.current = true;
         }
-      } finally {
-        persistInboxRef.current = true;
-      }
-    });
-  }, []);
+      });
+    },
+    [showToast],
+  );
 
   const markRead = (id: string) => {
     setRetainedIds((prev) => new Set(prev).add(id));
-    persistUnreadFlag(id, false);
-    showToast("Marked as read. Moves to Opened after refresh.");
+    persistUnreadFlag(id, false, {
+      success: "Marked as read. Moves to Opened after refresh.",
+      failure: "Could not mark message as read.",
+    });
   };
 
   const markReadSilent = useCallback(
@@ -467,10 +487,12 @@ export const ResidentInboxPanel = forwardRef<
 
   const markUnread = useCallback(
     (id: string) => {
-      persistUnreadFlag(id, true);
-      showToast("Marked as unread.");
+      persistUnreadFlag(id, true, {
+        success: "Marked as unread.",
+        failure: "Could not mark message as unread.",
+      });
     },
-    [persistUnreadFlag, showToast],
+    [persistUnreadFlag],
   );
 
   function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {

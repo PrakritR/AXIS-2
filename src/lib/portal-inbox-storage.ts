@@ -1,4 +1,5 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 /** Persist portal inbox threads (demo localStorage) so actions survive navigation and reloads. */
 
 export type InboxThreadMessage = {
@@ -442,24 +443,38 @@ export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMe
  * the shape the conversation list's narrow time column is laid out for. Kept
  * pinned to en-US on purpose — the value is persisted and later re-parsed for
  * ordering, so it must not vary with the viewer's locale.
+ *
+ * Pinned to Pacific for the same reason. The stamp carries no timezone, and
+ * the two writers do not share one: the delivery path runs server-side (UTC on
+ * Vercel) while this one runs in the browser, so the SAME instant was stored as
+ * two different stamps and `parseInboxStampMs` — which reads both as
+ * viewer-local — let a server-delivered message outrank a client reply that
+ * actually happened later, by up to the UTC offset. One zone for every writer
+ * keeps ordering consistent; the rendered output is unchanged.
  */
 export function formatInboxStamp(value: Date): string {
-  return value.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatPacificDateTime(value);
 }
+
+/** The exact shape {@link formatInboxStamp} produces: "Aug 3, 5:31 PM". */
+const CANONICAL_INBOX_STAMP = /^[A-Za-z]{3} \d{1,2}, \d{1,2}:\d{2}\s?(AM|PM)$/;
 
 /**
  * Re-render any stamp into {@link formatInboxStamp}. An unreadable stamp falls
  * back to now rather than to the raw string: the only caller is appending a
  * reply that is happening right now, so "now" is both accurate and orderable,
  * whereas storing an unparseable string would leave the thread unsortable.
+ *
+ * An already-canonical stamp passes through untouched. `parseInboxStampMs`
+ * reads a stamp as viewer-local, so round-tripping one that was written in
+ * Pacific would shift it by the viewer's offset — the very drift pinning the
+ * zone exists to remove. Only a foreign shape (a raw `toLocaleString()`, which
+ * really is viewer-local) needs converting.
  */
 function normalizeInboxStamp(value: string): string {
-  const ms = parseInboxStampMs(value);
+  const raw = value.trim();
+  if (CANONICAL_INBOX_STAMP.test(raw)) return raw;
+  const ms = parseInboxStampMs(raw);
   return formatInboxStamp(ms === null ? new Date() : new Date(ms));
 }
 

@@ -291,7 +291,12 @@ export function ManagerUnifiedInbox({
         previewPrefix: lastOutbound ? "You: " : undefined,
         time: t.time,
         unread: t.folder === "inbox" && t.unread,
-        sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
+        // Sort on the SAME field the row is labelled with. `lastMsg.at` is the
+        // raw stamp its writer happened to build; only `thread.time` is
+        // normalized (`appendReplyToInboxThread` advances it to the latest
+        // reply), so sorting on the message stamp let an unparseable one fall
+        // back to the id's creation epoch and never float a reply to the top.
+        sortMs: inboxThreadSortMs(t.id, t.time),
       };
     });
   }, [filteredEmail, query, listSegment]);
