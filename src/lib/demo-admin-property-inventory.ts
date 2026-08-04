@@ -575,10 +575,20 @@ export function listAdminRow(row: AdminPropertyRow, forManagerUserId?: string | 
   const prop = row.submission
     ? buildMockPropertyFromDraft({ ...row, id: listingId, submittedAt: new Date().toISOString(), submission: row.submission, submittedByUserId: owner }, listingId)
     : buildMockPropertyFromAdminRow(row, listingId);
+  // Relisting transitions the SAME record `unlisted` -> `live` IN PLACE: every
+  // unlisted row comes from `unlistManagerListing`, which stores it via
+  // `mockToAdminRow(removed, listingId)`, so `adminRefId === listingId` and the
+  // upsert `appendExtraListing` mirrors already carries that id. Never pair it
+  // with a delete of the same id — that was a fire-and-forget delete aimed at
+  // the row a fire-and-forget upsert had just written, and it only looked
+  // harmless while the next mirror happened to re-create the row from the local
+  // copy. Once the plan cap can refuse the upsert, the delete would still land:
+  // the listing would be gone from `manager_property_records` (with
+  // `clearHousingAccessForDeletedProperty` stripping co-manager grants and
+  // scrubbing resident housing for that id) and survive only in this browser.
   appendExtraListing({ ...prop, managerUserId: owner, adminPublishLive: true }, owner);
   const nextUn = [...side.unlisted.slice(0, idx), ...side.unlisted.slice(idx + 1)];
   writeSideStorage({ ...side, unlisted: nextUn }, forManagerUserId);
-  deleteMirroredPropertyRecord(row.adminRefId);
   return listingId;
 }
 
