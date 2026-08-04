@@ -1016,8 +1016,24 @@ export function PortalCalendarPanels({
   /**
    * A confirmed tour: PropLane has told the guest it is happening. That is what
    * earns it reschedule and cancel-with-notice instead of a lone silent delete.
+   *
+   * `source === "planned"` ONLY. A PropLane-shaped Google event is `"external"`
+   * and its `sourceId` is a Google Calendar event id, which the two server
+   * routes look up in `axis_admin_planned_events_v1` — so offering those
+   * controls there can only ever 404. `Delete event` keeps working for them
+   * because it routes through the Google delete path instead.
    */
   const selectedIsConfirmedTour =
+    selectedBlock?.kind === "meeting" &&
+    selectedBlock.meeting.kind === "tour" &&
+    selectedBlock.meeting.source === "planned";
+
+  /**
+   * Whether PropLane already emailed the guest "your tour is confirmed" — true
+   * for a Google-sourced PropLane tour too, so the delete warning still names
+   * the consequence even where reschedule/cancel are unreachable.
+   */
+  const selectedTourGuestAlreadyTold =
     selectedBlock?.kind === "meeting" &&
     selectedBlock.meeting.kind === "tour" &&
     (selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting));
@@ -1070,7 +1086,9 @@ export function PortalCalendarPanels({
       showToast(
         result.guestNotification?.ok === false
           ? "Tour moved, but the guest could not be notified."
-          : "Tour moved and the guest was notified of the new time.",
+          : result.calendarSync?.ok === false
+            ? "Tour moved and the guest was notified, but your Google Calendar did not update."
+            : "Tour moved and the guest was notified of the new time.",
       );
     } finally {
       setTourActionBusy(false);
@@ -1099,7 +1117,9 @@ export function PortalCalendarPanels({
       showToast(
         result.guestNotification?.ok === false
           ? "Tour cancelled, but the guest could not be notified."
-          : "Tour cancelled and the guest was notified.",
+          : result.calendarSync?.ok === false
+            ? "Tour cancelled and the guest was notified, but your Google Calendar did not update."
+            : "Tour cancelled and the guest was notified.",
       );
     } finally {
       setTourActionBusy(false);
@@ -1351,7 +1371,7 @@ export function PortalCalendarPanels({
               <p className="font-semibold text-foreground">Delete without telling the guest?</p>
               <p className="mt-1 text-xs text-muted">
                 This removes the event from your calendar and sends nothing.
-                {selectedIsConfirmedTour
+                {selectedTourGuestAlreadyTold
                   ? " The guest was already told this tour is confirmed, so they will still expect it. Use Cancel tour instead unless you have already reached them."
                   : ""}
               </p>

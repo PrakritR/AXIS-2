@@ -79,13 +79,23 @@ function confirmedTour(): DemoMeeting {
   };
 }
 
-function renderCalendar(props: { onMeetingsChanged?: () => void } = {}) {
+/**
+ * The same shape as it arrives from the manager's linked Google Calendar: a
+ * PropLane-looking "Tour · …" event whose `sourceId` is a GOOGLE event id, not
+ * a row in `axis_admin_planned_events_v1`.
+ */
+function googleSourcedTour(): DemoMeeting {
+  return { ...confirmedTour(), id: "gcal-1", source: "external", sourceId: "gcal-event-1" };
+}
+
+function renderCalendar(props: { onMeetingsChanged?: () => void; meeting?: DemoMeeting } = {}) {
+  const { meeting, ...rest } = props;
   return render(
     <PortalCalendarPanels
       storageKey="axis_mgr_avail_slots_v2_test"
-      externalMeetings={[confirmedTour()]}
+      externalMeetings={[meeting ?? confirmedTour()]}
       scheduleOwnerLabel="Test Manager"
-      {...props}
+      {...rest}
     />,
   );
 }
@@ -199,6 +209,32 @@ describe("the detail modal for a CONFIRMED tour", () => {
     const call = rescheduleFromServer.mock.calls[0]![0] as { plannedEventId: string; start: string };
     expect(call.plannedEventId).toBe("planned-1");
     expect(new Date(call.start).getHours()).toBe(14);
+  });
+});
+
+describe("a tour that lives on GOOGLE, not in the planned-events record", () => {
+  it("offers no Reschedule or Cancel — both routes could only 404", async () => {
+    // A Google-sourced tour carries the Google Calendar event id as `sourceId`.
+    // The cancel/reschedule routes look that id up in
+    // `axis_admin_planned_events_v1`, where it does not exist, so offering the
+    // controls at all is a button that can only ever fail.
+    renderCalendar({ meeting: googleSourcedTour() });
+    await openTourModal();
+
+    expect(document.querySelector('[data-attr="tour-reschedule-open"]')).toBeNull();
+    expect(document.querySelector('[data-attr="tour-cancel-open"]')).toBeNull();
+  });
+
+  it("keeps the delete path, which does work for it", async () => {
+    renderCalendar({ meeting: googleSourcedTour() });
+    await openTourModal();
+
+    expect(document.querySelector('[data-attr="tour-delete-open"]')).not.toBeNull();
+    // And still warns that the guest was already told the tour is confirmed.
+    fireEvent.click(document.querySelector('[data-attr="tour-delete-open"]')!);
+    expect(document.querySelector('[data-attr="tour-delete-confirm"]')!.textContent).toContain(
+      "already told this tour is confirmed",
+    );
   });
 });
 

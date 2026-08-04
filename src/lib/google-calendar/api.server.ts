@@ -244,6 +244,12 @@ export type GoogleCalendarApiEvent = {
   start: string;
   end: string;
   htmlLink?: string;
+  /** Google's `transparency`; `"transparent"` is the manager marking it Free. */
+  transparency?: "opaque" | "transparent";
+  /** True when the manager declined this invite on their own calendar. */
+  declinedBySelf?: boolean;
+  /** All-day entries arrive as bare dates and cover the whole calendar day. */
+  allDay?: boolean;
 };
 
 export function isGoogleCalendarApiDisabledError(message: string): boolean {
@@ -277,6 +283,9 @@ export function classifyGoogleCalendarEventsFetchError(message: string): {
   return null;
 }
 
+/** Pages of 250 events to walk before giving up; bounds a pathological calendar. */
+const GOOGLE_CALENDAR_EVENT_PAGE_LIMIT = 8;
+
 export async function listGoogleCalendarEvents(
   db: SupabaseClient,
   managerUserId: string,
@@ -286,36 +295,55 @@ export async function listGoogleCalendarEvents(
   const { connection, accessToken } = await getGoogleCalendarAccessToken(db, managerUserId);
   if (!connection.syncEnabled) return [];
   const calendarId = encodeURIComponent(connection.calendarId ?? "primary");
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: "250",
-  });
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params.toString()}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  const data = (await res.json()) as {
-    items?: Array<{
-      id?: string;
-      summary?: string;
-      description?: string;
-      htmlLink?: string;
-      start?: { dateTime?: string; date?: string };
-      end?: { dateTime?: string; date?: string };
-    }>;
-    error?: { message?: string };
+  type GoogleCalendarListItem = {
+    id?: string;
+    summary?: string;
+    description?: string;
+    htmlLink?: string;
+    transparency?: string;
+    start?: { dateTime?: string; date?: string };
+    end?: { dateTime?: string; date?: string };
+    attendees?: Array<{ self?: boolean; responseStatus?: string }>;
   };
-  if (!res.ok) {
-    throw new Error(data.error?.message ?? "Could not load Google Calendar events.");
+
+  // Page rather than truncate: a single `maxResults` request silently dropped
+  // the tail for a busy manager, and public tour availability subtracts these
+  // windows — a missing event is a busy hour still on offer to a prospect.
+  const items: GoogleCalendarListItem[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < GOOGLE_CALENDAR_EVENT_PAGE_LIMIT; page += 1) {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "250",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const data = (await res.json()) as {
+      items?: GoogleCalendarListItem[];
+      nextPageToken?: string;
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      throw new Error(data.error?.message ?? "Could not load Google Calendar events.");
+    }
+    items.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
   }
-  return (data.items ?? [])
+
+  return items
     .map((item) => {
+      const allDay = !item.start?.dateTime && Boolean(item.start?.date);
       const start = item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : "");
       const end = item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T23:59:59` : "");
       if (!item.id || !start || !end) return null;
+      const self = item.attendees?.find((attendee) => attendee.self);
       return {
         id: item.id,
         summary: item.summary?.trim() || "Google Calendar event",
@@ -323,6 +351,9 @@ export async function listGoogleCalendarEvents(
         start,
         end,
         htmlLink: item.htmlLink,
+        transparency: item.transparency === "transparent" ? "transparent" : "opaque",
+        declinedBySelf: self?.responseStatus === "declined",
+        allDay,
       } satisfies GoogleCalendarApiEvent;
     })
     .filter(Boolean) as GoogleCalendarApiEvent[];

@@ -13,6 +13,8 @@ type ChangeResult = {
   message?: string;
   error?: string;
   guestNotification?: { ok: boolean; skipped?: boolean; error?: string } | null;
+  /** The manager's linked Google Calendar; a failure here is reported, not fatal. */
+  calendarSync?: { ok: boolean; skipped?: boolean; error?: string } | null;
 };
 
 async function postTourChange(path: string, body: Record<string, unknown>): Promise<ChangeResult> {

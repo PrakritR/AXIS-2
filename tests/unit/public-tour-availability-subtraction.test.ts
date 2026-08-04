@@ -26,7 +26,15 @@ let PROPERTY_AVAILABILITY_SLOTS: string[] | null;
 let GLOBAL_AVAILABILITY_SLOTS: string[] | null;
 let PENDING_INQUIRIES: Record<string, unknown>[];
 let PLANNED_EVENTS: Record<string, unknown>[];
-let GOOGLE_BUSY: { id: string; summary: string; start: string; end: string }[];
+let GOOGLE_BUSY: {
+  id: string;
+  summary: string;
+  start: string;
+  end: string;
+  transparency?: "opaque" | "transparent";
+  declinedBySelf?: boolean;
+  allDay?: boolean;
+}[];
 let GOOGLE_THROWS: boolean;
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -209,6 +217,44 @@ describe("public tour availability subtracts what is already taken", () => {
     expect(slots.has(`${DAY}:18`)).toBe(false); // 9:00 am, inside busy
     expect(slots.has(`${DAY}:19`)).toBe(false); // 9:30 am, inside busy
     expect(slots.has(TEN_AM)).toBe(true); // 10:00 am, busy has ended
+  });
+
+  it("ignores an event the manager marked Free", async () => {
+    // `transparency: "transparent"` is Google's "show me as available". Treating
+    // it as busy deletes tour slots the manager never blocked.
+    GOOGLE_BUSY = [
+      {
+        id: "g-free",
+        summary: "Focus time",
+        start: "2099-08-06T14:30:00.000Z",
+        end: "2099-08-06T18:00:00.000Z",
+        transparency: "transparent",
+      },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(4);
+  });
+
+  it("ignores an invite the manager declined", async () => {
+    GOOGLE_BUSY = [
+      {
+        id: "g-declined",
+        summary: "Someone else's meeting",
+        start: "2099-08-06T14:30:00.000Z",
+        end: "2099-08-06T18:00:00.000Z",
+        declinedBySelf: true,
+      },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(4);
+  });
+
+  it("still blocks an all-day entry — a trip is exactly when a manager cannot host", async () => {
+    GOOGLE_BUSY = [
+      { id: "g-allday", summary: "Out of town", start: `${DAY}T00:00:00`, end: `${DAY}T23:59:59`, allDay: true },
+    ];
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(0);
   });
 
   it("still serves availability when the calendar link is broken", async () => {
