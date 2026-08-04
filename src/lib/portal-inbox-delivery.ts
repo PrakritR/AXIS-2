@@ -340,9 +340,21 @@ export async function deliverPortalMessageThreadSide(
         thread_type: "portal_message",
         row_data: {
           ...existing.rowData,
-          // Keep the thread's original root body/subject; a person-thread groups
-          // by person, not subject, so "s" and "Re: s" stay one conversation.
+          // Keep the original root `body` — that is the first message's text and
+          // real thread history, not a display field.
+          //
+          // `subject` IS a display field: it labels the conversation in the list
+          // and thread header. Freezing it to the first message ever sent to this
+          // person meant a manager could send "Your lease for <unit> is ready" and
+          // still see whatever that person's first message was called — in the dev
+          // data, a one-character "N" — which reads as a broken inbox. Advance it
+          // to the latest message, keeping the previous value when a send carries
+          // no subject of its own.
+          //
+          // Thread IDENTITY is unchanged: it is keyed on owner scope +
+          // participant_email, so "s" and "Re: s" still stay one conversation.
           messages,
+          subject: args.subject?.trim() || existing.rowData.subject,
           preview: args.preview,
           time: args.when,
           unread: args.unread,
