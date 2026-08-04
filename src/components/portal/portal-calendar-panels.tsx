@@ -243,6 +243,25 @@ export function meetingOccupiedSlotKeys(
   return keys;
 }
 
+/**
+ * Which meeting a half hour DRAWS when two cover it — lower wins.
+ *
+ * A cell shows exactly one meeting, and the modal it opens is the only way to
+ * reach that meeting's controls. A PropLane-owned tour therefore has to beat an
+ * external Google busy block: a multi-day "Vacation" overlapping a confirmed
+ * tour must not replace it with an untitled block whose modal offers no
+ * Reschedule or Cancel tour. Ordering must be explicit rather than inherited
+ * from the order `meetings` happens to be concatenated in.
+ *
+ * Open-slot math is unaffected — {@link takenSlotKeys} unions every covering
+ * meeting, so a cell either kind covers is still not open.
+ */
+function calendarCellPriority(meeting: DemoMeeting): number {
+  if (meeting.source === "planned" || meeting.source === "inquiry") return 0;
+  if (isGoogleCalendarPrivateBlock(meeting)) return 2;
+  return 1;
+}
+
 type CalendarBlockSelection =
   | { kind: "availability"; dateStr: string; slotIndex: number }
   | { kind: "meeting"; meeting: DemoMeeting };
@@ -715,6 +734,8 @@ export function PortalCalendarPanels({
     const map = new Map<string, DemoMeeting>();
     for (const meeting of meetings) {
       for (const key of meetingOccupiedSlotKeys(meeting)) {
+        const current = map.get(key);
+        if (current && calendarCellPriority(current) < calendarCellPriority(meeting)) continue;
         map.set(key, meeting);
       }
     }
