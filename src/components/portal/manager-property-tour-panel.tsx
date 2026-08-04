@@ -60,6 +60,14 @@ export function ManagerPropertyTourPanel({
   // from a free one. The connection-SETUP warnings (not connected, OAuth not
   // configured, API disabled) stay with the portfolio calendar so the same
   // account-level problem is not toasted twice.
+  //
+  // KNOWN, ACCEPTED consequence: `renderSlotButton` bails on any cell a meeting
+  // covers, so a busy half hour here is not just marked — it is non-selectable,
+  // and the manager cannot publish availability over a personal Google event
+  // from this screen. That is the pre-existing portfolio-calendar behaviour now
+  // applied consistently, which is what F-CAL-6 asked for. Making busy time
+  // advisory rather than blocking is a product change and belongs on BOTH
+  // calendars at once, never on this one alone.
   const googleBusyMeetings = useGoogleCalendarBusyMeetings({
     enabled: Boolean(managerUserId),
     onWarning: ({ warning, hint }) => {
