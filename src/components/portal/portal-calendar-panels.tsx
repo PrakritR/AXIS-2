@@ -1059,6 +1059,11 @@ export function PortalCalendarPanels({
         return;
       }
       closeSelectedBlock();
+      // The change was made SERVER-side, so the browser's local schedule store
+      // still holds the old event. Without this pull the grid and the view-tab
+      // counts keep showing the pre-change tour until a manual reload — the
+      // same stale-count bug this sweep is closing.
+      await syncScheduleRecordsFromServer({ force: true });
       setMeetingRefresh((n) => n + 1);
       onMeetingsChanged?.();
       reloadAvailability();
@@ -1085,6 +1090,9 @@ export function PortalCalendarPanels({
         return;
       }
       closeSelectedBlock();
+      // Same reason as the reschedule path: pull the authoritative planned
+      // events back before anything recomputes off the local store.
+      await syncScheduleRecordsFromServer({ force: true });
       setMeetingRefresh((n) => n + 1);
       onMeetingsChanged?.();
       reloadAvailability();

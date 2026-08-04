@@ -23,6 +23,7 @@ let PAINTED_SLOTS = new Set<string>();
 const cancelFromServer = vi.fn(async () => ({ ok: true }));
 const rescheduleFromServer = vi.fn(async () => ({ ok: true }));
 const deletePlannedEvent = vi.fn(async () => true);
+const syncScheduleRecords = vi.fn(async () => undefined);
 
 vi.mock("@/components/providers/app-ui-provider", () => ({
   useAppUi: () => ({ showToast: vi.fn() }),
@@ -43,7 +44,7 @@ vi.mock("@/lib/demo-admin-scheduling", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    syncScheduleRecordsFromServer: vi.fn(async () => undefined),
+    syncScheduleRecordsFromServer: (...args: unknown[]) => syncScheduleRecords(...(args as [])),
     readAvailabilityDateSetForStorageKey: () => PAINTED_SLOTS,
     readPlannedEvents: () => [],
     deletePlannedEventFromServer: (...args: unknown[]) => deletePlannedEvent(...(args as [])),
@@ -236,5 +237,36 @@ describe("counts stay honest after a tour changes state", () => {
     fireEvent.click(document.querySelector('[data-attr="tour-delete-submit"]')!);
 
     await waitFor(() => expect(onMeetingsChanged).toHaveBeenCalled());
+  });
+
+  it("pulls the server's planned events back after a cancel", async () => {
+    // Cancel and reschedule run SERVER-side, so the browser's local schedule
+    // store still holds the old event. Without a forced resync the grid and the
+    // view-tab counts show the cancelled tour until a manual reload — verified
+    // in the browser, where "Tours 1" survived a successful cancel.
+    renderCalendar();
+    await openTourModal();
+
+    syncScheduleRecords.mockClear();
+    fireEvent.click(document.querySelector('[data-attr="tour-cancel-open"]')!);
+    fireEvent.click(document.querySelector('[data-attr="tour-cancel-submit"]')!);
+
+    await waitFor(() => expect(cancelFromServer).toHaveBeenCalled());
+    await waitFor(() => expect(syncScheduleRecords).toHaveBeenCalledWith({ force: true }));
+  });
+
+  it("pulls the server's planned events back after a reschedule", async () => {
+    renderCalendar();
+    await openTourModal();
+
+    syncScheduleRecords.mockClear();
+    fireEvent.click(document.querySelector('[data-attr="tour-reschedule-open"]')!);
+    fireEvent.change(document.querySelector('[data-attr="tour-reschedule-time"]') as HTMLInputElement, {
+      target: { value: "14:30" },
+    });
+    fireEvent.click(document.querySelector('[data-attr="tour-reschedule-save"]')!);
+
+    await waitFor(() => expect(rescheduleFromServer).toHaveBeenCalled());
+    await waitFor(() => expect(syncScheduleRecords).toHaveBeenCalledWith({ force: true }));
   });
 });
