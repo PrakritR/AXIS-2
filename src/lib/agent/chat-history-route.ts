@@ -29,6 +29,7 @@ export async function handleAgentChatHistoryRequest(
     return NextResponse.json({ conversation }, { headers: PRIVATE_HEADERS });
   }
 
-  const { threads, nextCursor } = await listAgentChatThreads(actor, portal, url.searchParams.get("cursor"));
+  const { threads, nextCursor, error } = await listAgentChatThreads(actor, portal, url.searchParams.get("cursor"));
+  if (error) return NextResponse.json({ error }, { status: 503, headers: PRIVATE_HEADERS });
   return NextResponse.json({ threads, nextCursor }, { headers: PRIVATE_HEADERS });
 }

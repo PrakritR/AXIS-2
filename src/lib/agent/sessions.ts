@@ -19,6 +19,24 @@ type SessionActor = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UNTITLED_THREAD = "New conversation";
+
+type DatabaseError = { code?: string | null; message?: string | null; details?: string | null };
+
+function isMissingColumn(error: unknown, column: string): boolean {
+  const candidate = error as DatabaseError | null;
+  const detail = `${candidate?.message ?? ""} ${candidate?.details ?? ""}`.toLowerCase();
+  return detail.includes(column.toLowerCase()) && (detail.includes("column") || candidate?.code === "PGRST204");
+}
+
+function reportPersistenceFailure(operation: string, error: unknown) {
+  const candidate = error as DatabaseError | null;
+  // Keep operational context without logging conversation text or account data.
+  console.error(`[agent/sessions] ${operation} failed`, {
+    code: candidate?.code ?? "unknown",
+    message: candidate?.message ?? "unknown database error",
+  });
+}
 
 /** A concise, server-owned title for archive list rows. */
 export function agentChatThreadTitle(text: string): string {
@@ -31,7 +49,8 @@ export function agentChatThreadTitle(text: string): string {
 /**
  * Reuse the supplied session when it exists AND belongs to this actor;
  * otherwise create a fresh one. Never trusts an unowned id. Returns null when
- * persistence is unavailable — callers treat that as "no session".
+ * persistence is unavailable so portal routes can surface an honest retryable
+ * error instead of answering in a conversation that cannot be reopened.
  */
 export async function ensureAgentSession(
   actor: SessionActor,
@@ -42,7 +61,7 @@ export async function ensureAgentSession(
     const kind = opts.kind?.trim() || PORTAL_CHAT_SESSION_KIND;
     const candidate = String(opts.sessionId ?? "").trim();
     if (candidate && UUID_RE.test(candidate)) {
-      const { data } = await actor.db
+      const { data, error } = await actor.db
         .from("agent_sessions")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", candidate)
@@ -51,23 +70,49 @@ export async function ensureAgentSession(
         .eq("kind", kind)
         .select("id")
         .maybeSingle();
+      if (error) {
+        reportPersistenceFailure("reuse session", error);
+        return null;
+      }
       if (data?.id) return String(data.id);
     }
-    const { data: created } = await actor.db
+    const sessionValues = {
+      landlord_id: actor.landlordId,
+      user_id: actor.userId,
+      portal,
+      kind,
+    };
+    let { data: created, error } = await actor.db
       .from("agent_sessions")
-      .insert({
-        landlord_id: actor.landlordId,
-        user_id: actor.userId,
-        portal,
-        kind,
-        title: agentChatThreadTitle(opts.title ?? ""),
-      })
+      .insert({ ...sessionValues, title: agentChatThreadTitle(opts.title ?? "") })
       .select("id")
       .single();
+    // Keep the archive usable while a deployment is waiting for the additive
+    // title migration. The thread gets the safe fallback title on reads.
+    if (error && isMissingColumn(error, "title")) {
+      ({ data: created, error } = await actor.db
+        .from("agent_sessions")
+        .insert(sessionValues)
+        .select("id")
+        .single());
+    }
+    if (error) {
+      reportPersistenceFailure("create session", error);
+      return null;
+    }
     return created?.id ? String(created.id) : null;
-  } catch {
+  } catch (error) {
+    reportPersistenceFailure("create session", error);
     return null;
   }
+}
+
+/** Create an empty server-owned portal thread as soon as the user presses New chat. */
+export function createPortalChatSession(actor: SessionActor, portal: AgentPortal): Promise<string | null> {
+  return ensureAgentSession(actor, portal, {
+    title: UNTITLED_THREAD,
+    kind: PORTAL_CHAT_SESSION_KIND,
+  });
 }
 
 /**
@@ -80,11 +125,11 @@ export async function appendAgentMessages(
   sessionId: string | null,
   rows: { role: "user" | "assistant"; content: string; toolTrace?: unknown }[],
   opts: { kind?: string } = {},
-): Promise<void> {
-  if (!sessionId || rows.length === 0) return;
+): Promise<boolean> {
+  if (!sessionId || rows.length === 0) return false;
   try {
     const kind = opts.kind?.trim() || PORTAL_CHAT_SESSION_KIND;
-    await actor.db.from("agent_messages").insert(
+    const { error: insertError } = await actor.db.from("agent_messages").insert(
       rows.map((r) => ({
         session_id: sessionId,
         landlord_id: actor.landlordId,
@@ -94,14 +139,24 @@ export async function appendAgentMessages(
         tool_trace: r.toolTrace ?? null,
       })),
     );
-    await actor.db
+    if (insertError) {
+      reportPersistenceFailure("append messages", insertError);
+      return false;
+    }
+    const { error: updateError } = await actor.db
       .from("agent_sessions")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId)
       .eq("user_id", actor.userId)
       .eq("portal", portal)
       .eq("kind", kind);
-  } catch {
-    /* persistence must not break a valid assistant response */
+    if (updateError) {
+      reportPersistenceFailure("update session timestamp", updateError);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    reportPersistenceFailure("append messages", error);
+    return false;
   }
 }

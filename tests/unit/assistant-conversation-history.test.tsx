@@ -21,6 +21,8 @@ function response(body: Record<string, unknown>, status = 200) {
 function installArchiveFetch(includeThreads = true) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
+      const body = JSON.parse(String(init.body)) as { newSession?: boolean };
+      if (body.newSession) return response({ sessionId: FRESH });
       return response({ reply: "Saved server reply.", sessionId: FRESH, toolTrace: [] });
     }
     if (url.includes(`sessionId=${OLDER}`)) {
@@ -79,16 +81,30 @@ describe("server-backed assistant conversation history", () => {
       { role: "assistant", content: "Latest answer" },
     ]);
 
-    act(() => result.current.startNewChat());
-    expect(result.current.activeThreadId).toBe("");
+    await act(async () => {
+      await result.current.startNewChat();
+    });
     expect(result.current.messages).toEqual([]);
+    const start = fetchMock.mock.calls.find(([, init]) => {
+      if ((init as RequestInit | undefined)?.method !== "POST") return false;
+      const body = JSON.parse(String((init as RequestInit | undefined)?.body)) as { newSession?: boolean };
+      return body.newSession === true;
+    });
+    expect(start).toBeTruthy();
+    await waitFor(() => expect(result.current.activeThreadId).toBe(FRESH));
+    expect(result.current.threads[0]).toMatchObject({ id: FRESH, title: "New conversation" });
 
     await act(async () => {
       await result.current.send("A brand new question");
     });
-    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    const post = fetchMock.mock.calls.find(([, init]) => {
+      if ((init as RequestInit | undefined)?.method !== "POST") return false;
+      const body = JSON.parse(String((init as RequestInit | undefined)?.body)) as { messages?: unknown[] };
+      return Array.isArray(body.messages);
+    });
     expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({
       archive: true,
+      sessionId: FRESH,
       messages: [{ role: "user", content: "A brand new question" }],
     });
     expect(result.current.activeThreadId).toBe(FRESH);

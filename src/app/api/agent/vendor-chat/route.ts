@@ -7,7 +7,7 @@ import { VENDOR_SYSTEM_PROMPT } from "@/lib/agent/vendor-system-prompt";
 import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
-import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { createPortalChatSession, ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
 import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
 import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
@@ -68,6 +68,17 @@ export async function POST(req: Request) {
   });
   if (decision) return decision;
 
+  if (body.newSession === true) {
+    const sessionId = await createPortalChatSession(ctx, "vendor");
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: "We couldn't start a saved conversation. Please try again." },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ sessionId });
+  }
+
   let messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
@@ -83,6 +94,12 @@ export async function POST(req: Request) {
     title: lastUserText(messages),
     kind: sessionKind,
   });
+  if (sessionKind === PORTAL_CHAT_SESSION_KIND && !sessionId) {
+    return NextResponse.json(
+      { error: "We couldn't start a saved conversation. Please try again." },
+      { status: 503 },
+    );
+  }
   const customInstructions = await loadAgentCustomInstructions(ctx.db, ctx.userId);
 
   try {
@@ -155,7 +172,7 @@ export async function POST(req: Request) {
       }
     }
 
-    await appendAgentMessages(ctx, "vendor", sessionId, [
+    const archiveSaved = await appendAgentMessages(ctx, "vendor", sessionId, [
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
@@ -186,6 +203,7 @@ export async function POST(req: Request) {
       toolTrace: result.toolTrace,
       sessionId,
       ...(traceId ? { traceId } : {}),
+      ...(sessionKind === PORTAL_CHAT_SESSION_KIND ? { archiveSaved } : {}),
       ...(pendingAction ? { pendingAction } : {}),
     });
   } catch (e) {

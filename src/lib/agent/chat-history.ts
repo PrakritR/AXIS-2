@@ -29,6 +29,28 @@ export type AgentChatTranscript = {
   pendingAction: { id: string; preview: ActionPreview } | null;
 };
 
+export type AgentChatThreadList = {
+  threads: AgentChatThreadSummary[];
+  nextCursor: string | null;
+  error?: string;
+};
+
+type DatabaseError = { code?: string | null; message?: string | null; details?: string | null };
+
+function isMissingTitleColumn(error: unknown): boolean {
+  const candidate = error as DatabaseError | null;
+  const detail = `${candidate?.message ?? ""} ${candidate?.details ?? ""}`.toLowerCase();
+  return detail.includes("title") && (detail.includes("column") || candidate?.code === "PGRST204");
+}
+
+function reportArchiveFailure(operation: string, error: unknown) {
+  const candidate = error as DatabaseError | null;
+  console.error(`[agent/chat-history] ${operation} failed`, {
+    code: candidate?.code ?? "unknown",
+    message: candidate?.message ?? "unknown database error",
+  });
+}
+
 function fallbackTitle(title: unknown): string {
   const value = String(title ?? "").trim();
   return value || "New conversation";
@@ -52,20 +74,27 @@ export async function listAgentChatThreads(
   actor: AgentChatHistoryActor,
   portal: AgentPortal,
   cursor?: string | null,
-): Promise<{ threads: AgentChatThreadSummary[]; nextCursor: string | null }> {
+): Promise<AgentChatThreadList> {
   try {
-    let query = actor.db
-      .from("agent_sessions")
-      .select("id, title, updated_at")
-      .eq("user_id", actor.userId)
-      .eq("portal", portal)
-      .eq("kind", PORTAL_CHAT_SESSION_KIND)
-      .order("updated_at", { ascending: false })
-      .limit(AGENT_CHAT_HISTORY_PAGE_SIZE + 1);
-    const before = validCursor(cursor ?? null);
-    if (before) query = query.lt("updated_at", before);
-    const { data, error } = await query;
-    if (error || !data) return { threads: [], nextCursor: null };
+    const load = async (includeTitle: boolean) => {
+      let query = actor.db
+        .from("agent_sessions")
+        .select(includeTitle ? "id, title, updated_at" : "id, updated_at")
+        .eq("user_id", actor.userId)
+        .eq("portal", portal)
+        .eq("kind", PORTAL_CHAT_SESSION_KIND)
+        .order("updated_at", { ascending: false })
+        .limit(AGENT_CHAT_HISTORY_PAGE_SIZE + 1);
+      const before = validCursor(cursor ?? null);
+      if (before) query = query.lt("updated_at", before);
+      return query;
+    };
+    let { data, error } = await load(true);
+    if (error && isMissingTitleColumn(error)) ({ data, error } = await load(false));
+    if (error || !data) {
+      reportArchiveFailure("list conversations", error);
+      return { threads: [], nextCursor: null, error: "Could not load conversations. Try again." };
+    }
     const rows = data as { id: string; title?: string | null; updated_at?: string | null }[];
     const visible = rows.slice(0, AGENT_CHAT_HISTORY_PAGE_SIZE).map((row) => ({
       id: String(row.id),
@@ -76,8 +105,9 @@ export async function listAgentChatThreads(
       threads: visible,
       nextCursor: rows.length > AGENT_CHAT_HISTORY_PAGE_SIZE ? visible.at(-1)?.updatedAt ?? null : null,
     };
-  } catch {
-    return { threads: [], nextCursor: null };
+  } catch (error) {
+    reportArchiveFailure("list conversations", error);
+    return { threads: [], nextCursor: null, error: "Could not load conversations. Try again." };
   }
 }
 
@@ -89,14 +119,19 @@ export async function loadAgentChatTranscript(
 ): Promise<AgentChatTranscript | null> {
   if (!isAgentChatSessionId(sessionId)) return null;
   try {
-    const { data: session, error: sessionError } = await actor.db
-      .from("agent_sessions")
-      .select("id, title, updated_at")
-      .eq("id", sessionId)
-      .eq("user_id", actor.userId)
-      .eq("portal", portal)
-      .eq("kind", PORTAL_CHAT_SESSION_KIND)
-      .maybeSingle();
+    const loadSession = async (includeTitle: boolean) =>
+      actor.db
+        .from("agent_sessions")
+        .select(includeTitle ? "id, title, updated_at" : "id, updated_at")
+        .eq("id", sessionId)
+        .eq("user_id", actor.userId)
+        .eq("portal", portal)
+        .eq("kind", PORTAL_CHAT_SESSION_KIND)
+        .maybeSingle();
+    let { data: session, error: sessionError } = await loadSession(true);
+    if (sessionError && isMissingTitleColumn(sessionError)) {
+      ({ data: session, error: sessionError } = await loadSession(false));
+    }
     if (sessionError || !session?.id) return null;
 
     const now = new Date().toISOString();

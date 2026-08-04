@@ -6,7 +6,7 @@ import {
   listAgentChatThreads,
   loadAgentChatTranscript,
 } from "@/lib/agent/chat-history";
-import { appendAgentMessages, ensureAgentSession } from "@/lib/agent/sessions";
+import { appendAgentMessages, createPortalChatSession, ensureAgentSession } from "@/lib/agent/sessions";
 
 type Row = Record<string, unknown> & { id: string };
 type TableName = "agent_sessions" | "agent_messages" | "agent_pending_actions";
@@ -18,7 +18,7 @@ const SESSION_A = "10000000-0000-4000-8000-000000000001";
 const SESSION_B = "10000000-0000-4000-8000-000000000002";
 
 /** Small in-memory chain that records the same equality/range behavior used by the archive. */
-function makeDb(seed: Partial<Record<TableName, Row[]>>) {
+function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessionTitle?: boolean } = {}) {
   const tables: Record<TableName, Row[]> = {
     agent_sessions: [...(seed.agent_sessions ?? [])],
     agent_messages: [...(seed.agent_messages ?? [])],
@@ -41,9 +41,21 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>) {
       let updateValues: Record<string, unknown> = {};
       let orderBy: { column: string; ascending: boolean } | null = null;
       let limitTo: number | null = null;
+      let selectedColumns = "";
       const chain: Record<string, unknown> = {};
 
       const materialize = () => {
+        const titleMissing =
+          options.withoutSessionTitle &&
+          table === "agent_sessions" &&
+          (selectedColumns.split(",").map((column) => column.trim()).includes("title") ||
+            (operation === "insert" && insertValues.some((value) => "title" in value)));
+        if (titleMissing) {
+          return {
+            data: null,
+            error: { code: "PGRST204", message: "Could not find the 'title' column of 'agent_sessions'" },
+          };
+        }
         const rows = tables[table];
         let result = rows.filter((row) => matches(row, filters));
         if (operation === "update") {
@@ -64,7 +76,10 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>) {
         return { data: result.map((row) => ({ ...row })), error: null };
       };
 
-      chain.select = () => chain;
+      chain.select = (columns = "") => {
+        selectedColumns = columns;
+        return chain;
+      };
       chain.eq = (column: string, value: unknown) => {
         filters.push({ op: "eq", column, value });
         return chain;
@@ -97,11 +112,11 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>) {
       };
       chain.maybeSingle = async () => {
         const { data, error } = materialize();
-        return { data: data[0] ?? null, error };
+        return { data: Array.isArray(data) ? data[0] ?? null : null, error };
       };
       chain.single = async () => {
         const { data, error } = materialize();
-        return { data: data[0] ?? null, error };
+        return { data: Array.isArray(data) ? data[0] ?? null : null, error };
       };
       chain.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
         Promise.resolve(materialize()).then(resolve, reject);
@@ -257,6 +272,20 @@ describe("portal chat archive", () => {
     expect(reopened?.messages).toEqual([
       { role: "user", content: "Can you send a reminder?" },
       { role: "assistant", content: "I can draft one for your approval." },
+    ]);
+  });
+
+  it("creates and lists a blank thread even while an additive title migration is pending", async () => {
+    const db = makeDb({}, { withoutSessionTitle: true });
+    const actor = { userId: USER_A, landlordId: USER_A, db };
+
+    const sessionId = await createPortalChatSession(actor, "manager");
+    expect(sessionId).toBe("created-1");
+
+    const archive = await listAgentChatThreads(actor, "manager");
+    expect(archive.error).toBeUndefined();
+    expect(archive.threads).toEqual([
+      expect.objectContaining({ id: sessionId, title: "New conversation" }),
     ]);
   });
 });

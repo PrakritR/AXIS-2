@@ -288,8 +288,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                   <AssistantChatHistoryControls
                     onOpenHistory={openHistory}
                     onNewChat={() => {
-                      startNewChat();
-                      requestAnimationFrame(() => inputRef.current?.focus());
+                      void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
                     }}
                     showNewChat
                   />
@@ -332,8 +331,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
               activeThreadId={activeThreadId}
               onSelect={selectThread}
               onNewChat={() => {
-                startNewChat();
-                requestAnimationFrame(() => inputRef.current?.focus());
+                void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
               }}
               onClose={closeHistory}
               loading={historyLoading}

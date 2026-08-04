@@ -173,8 +173,7 @@ export function AssistantDockPanel({
               <AssistantChatHistoryControls
                 onOpenHistory={openHistory}
                 onNewChat={() => {
-                  startNewChat();
-                  requestAnimationFrame(() => inputRef.current?.focus());
+                  void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
                 }}
                 showNewChat
               />
@@ -223,8 +222,7 @@ export function AssistantDockPanel({
             activeThreadId={activeThreadId}
             onSelect={selectThread}
             onNewChat={() => {
-              startNewChat();
-              requestAnimationFrame(() => inputRef.current?.focus());
+              void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
             }}
             onClose={closeHistory}
             loading={historyLoading}

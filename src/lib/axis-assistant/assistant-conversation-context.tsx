@@ -41,7 +41,7 @@ export type AssistantConversationValue = {
   selectThread: (threadId: string) => Promise<void>;
   loadMoreHistory: () => void;
   hydrateArchive: () => Promise<void>;
-  startNewChat: () => void;
+  startNewChat: () => Promise<void>;
 };
 
 const AssistantConversationContext = createContext<AssistantConversationValue | null>(null);
