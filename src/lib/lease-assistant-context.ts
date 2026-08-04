@@ -55,10 +55,10 @@ export function buildLeasePacketEditAssistantContext(row: LeasePipelineRow): str
       `documentSections=${sections.map((section) => `${section.id}:${section.title}`).join(";")}`,
     );
     parts.push(
-      "UI: the full lease is directly editable in Visual/HTML mode. Double-click a section to focus it and edit in place.",
+      "UI: choose a section in the React-side section list to edit it as text or limited rich text.",
     );
     parts.push(
-      "Propose update_lease_document_sections with sectionBodies (section id → body HTML) for clause wording, tables, or addenda. Propose update_lease_packet for rent, fees, dates, term, room, stay type, unit label, or notes (regenerates the document).",
+      "Use list_lease_sections, then propose_lease_section_edit with text or rich text for one editable section. Propose update_lease_packet for rent, fees, dates, term, room, stay type, unit label, or notes.",
     );
   } else {
     parts.push(

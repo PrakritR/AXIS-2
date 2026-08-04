@@ -12,9 +12,8 @@ import {
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { assertManagerPropertyListingQuota } from "@/lib/manager-property-quota.server";
 import { acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
-import { leaseTemplateObjectPath } from "@/lib/lease-template-storage";
+import { leaseTemplateObjectPath, legacyLeaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import { copyListingMediaBetweenSubmissions } from "@/lib/listing-media-copy";
-import { listingMediaObjectPath } from "@/lib/listing-media-storage";
 import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
@@ -827,7 +826,7 @@ function validateLeaseConfigInput(input: {
     // base64 `data:` PDF behind a benign label, substituting the document
     // residents sign — and the preview shows the file NAME, so the human at the
     // confirm gate would never see it.
-    return leaseTemplateObjectPath(url) || listingMediaObjectPath(url)
+    return leaseTemplateObjectPath(url) || legacyLeaseTemplateObjectPath(url)
       ? null
       : "leaseTemplateDocUrl must be a lease template already uploaded through the Lease modal.";
   }
@@ -911,7 +910,7 @@ export const updatePropertyLeaseConfigTool = defineWriteTool({
       // The document itself, not just its label — a name is manager-supplied
       // text and cannot tell the approver which file they are about to attach.
       const path =
-        leaseTemplateObjectPath(input.leaseTemplateDocUrl) ?? listingMediaObjectPath(input.leaseTemplateDocUrl);
+        leaseTemplateObjectPath(input.leaseTemplateDocUrl) ?? legacyLeaseTemplateObjectPath(input.leaseTemplateDocUrl);
       if (path) lines.push({ label: "Stored file", value: path });
     }
     return {

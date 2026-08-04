@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { snapshotJordanLee } from "@/data/manager-application-snapshots";
 import { leaseContextFromApplication } from "@/lib/generated-lease";
 import {
+  CALIFORNIA_LEASE_CONFIG,
+  SAN_FRANCISCO_LEASE_CONFIG,
+  SEATTLE_LEASE_CONFIG,
+  WASHINGTON_LEASE_CONFIG,
+} from "@/lib/lease-templates/types";
+import {
   isLeaseGenerationSupported,
+  jurisdictionConfig,
+  jurisdictionRuleScopes,
+  resolveJurisdiction,
   resolveLeaseJurisdiction,
   unsupportedJurisdictionMessage,
 } from "@/lib/lease-jurisdiction";
@@ -87,5 +96,151 @@ describe("lease-jurisdiction", () => {
       "san_francisco",
     );
     expect(resolveLeaseJurisdiction({ listingProperty: { address: "1500 Pike St, Seattle, WA" } })).toBe("seattle");
+  });
+
+  it.each([
+    ["Fremont, California", "3200 Walnut Ave, Fremont, CA 94538", { state: "CA" }],
+    ["San Francisco, California", "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102", { state: "CA", city: "san_francisco" }],
+    ["Seattle, Washington", "1500 Pike St, Seattle, WA 98101", { state: "WA", city: "seattle" }],
+    ["Spokane, Washington", "808 W Spokane Falls Blvd, Spokane, WA 99201", { state: "WA" }],
+    ["Austin, Texas", "301 W 2nd St, Austin, TX 78701", null],
+  ])("resolves %s to the typed jurisdiction key", (_name, address, expected) => {
+    expect(resolveJurisdiction({ listingProperty: { address } })).toEqual(expected);
+  });
+
+  it("prefers structured property city and state fields before the joined address fallback", () => {
+    const key = resolveJurisdiction({
+      listingProperty: {
+        address: "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102",
+        city: "Fremont",
+        state: "CA",
+      },
+    });
+    expect(key).toEqual({ state: "CA" });
+    expect(jurisdictionConfig(key!)).not.toBeNull();
+  });
+
+  it("treats the listing property as authoritative when structured sources differ", () => {
+    expect(
+      resolveJurisdiction({
+        listingProperty: { city: "Spokane", state: "WA" },
+        submission: { city: "San Francisco", state: "CA" },
+      }),
+    ).toEqual({ state: "WA" });
+  });
+
+  it("does not select a city overlay when an address explicitly names another supported state", () => {
+    expect(resolveJurisdiction({ listingProperty: { address: "123 San Francisco St, Spokane, WA 99201" } })).toEqual({
+      state: "WA",
+    });
+    expect(resolveJurisdiction({ listingProperty: { address: "94105 Market St, Seattle, WA 98101" } })).toEqual({
+      state: "WA",
+      city: "seattle",
+    });
+  });
+
+  it("uses a joined city match when state is structured but city is omitted", () => {
+    expect(
+      resolveJurisdiction({
+        listingProperty: { address: "1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102", state: "CA" },
+      }),
+    ).toEqual({ state: "CA", city: "san_francisco" });
+  });
+
+  it("selects the registered state config or verified city overlay", () => {
+    expect(jurisdictionConfig({ state: "CA" })).toBe(CALIFORNIA_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "CA", city: "san_francisco" })).toBe(SAN_FRANCISCO_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "WA" })).toBe(WASHINGTON_LEASE_CONFIG);
+    expect(jurisdictionConfig({ state: "WA", city: "seattle" })).toBe(SEATTLE_LEASE_CONFIG);
+  });
+
+  it("maps jurisdiction keys to the disclosure catalog inheritance scopes", () => {
+    expect(jurisdictionRuleScopes({ state: "CA", city: "san_francisco" })).toEqual([
+      "federal",
+      "california",
+      "san_francisco",
+    ]);
+    expect(jurisdictionRuleScopes({ state: "CA" })).toEqual(["federal", "california"]);
+    expect(jurisdictionRuleScopes({ state: "WA", city: "seattle" })).toEqual([
+      "federal",
+      "washington",
+      "seattle",
+    ]);
+    expect(jurisdictionRuleScopes({ state: "WA" })).toEqual(["federal", "washington"]);
+  });
+});
+
+/**
+ * The Oregon exclusion matched the English word "or", so a real Seattle address on SW Oregon
+ * St, or any address written "Unit A or B", produced NO lease at all.
+ */
+describe("Oregon is matched as a state token, not as English", () => {
+  const resolve = (address: string) => resolveLeaseJurisdiction({ submission: { address, zip: "", neighborhood: "" } });
+
+  it("still refuses a genuine Oregon address", () => {
+    expect(resolve("123 Washington St, Portland, OR 97204")).toBe("unsupported");
+    expect(resolve("500 SW Oak, Portland, Oregon")).toBe("unsupported");
+  });
+
+  it("does not veto a Seattle street that merely contains the letters", () => {
+    expect(resolve("4200 SW Oregon St, Seattle, WA 98116")).not.toBe("unsupported");
+  });
+
+  it("does not veto free text containing the word or", () => {
+    expect(resolve("Unit A or B, 1200 Brooklyn Ave NE, Seattle, WA 98105")).not.toBe("unsupported");
+  });
+});
+
+/**
+ * Round-3 regression: narrowing the Oregon veto to a comma or ZIP position missed a record
+ * whose state lives in its own structured field, so a Portland property on SW Washington St
+ * generated a Washington lease citing the RCW.
+ */
+describe("an explicit out-of-scope state is authoritative", () => {
+  it("refuses Oregon given as a structured state, with no comma or zip anywhere", () => {
+    expect(
+      resolveLeaseJurisdiction({
+        submission: { address: "1200 SW Washington St", city: "Portland", state: "OR", zip: "" },
+      }),
+    ).toBe("unsupported");
+    expect(
+      resolveLeaseJurisdiction({
+        submission: { address: "800 SW California Dr", city: "Portland", state: "OR", zip: "" },
+      }),
+    ).toBe("unsupported");
+  });
+
+  it("refuses Oregon in free text with no comma before it", () => {
+    expect(
+      resolveLeaseJurisdiction({ submission: { address: "1200 SW Washington St Portland Oregon", zip: "", neighborhood: "" } }),
+    ).toBe("unsupported");
+  });
+
+  it("still allows a supported state given structurally", () => {
+    expect(
+      resolveLeaseJurisdiction({ submission: { address: "5259 Brooklyn Ave NE", city: "Seattle", state: "WA", zip: "98105" } }),
+    ).toBe("seattle");
+  });
+});
+
+/**
+ * Round-4 CRITICAL. No property shape carries a `state` field in production, but the rental
+ * wizard REQUIRES the applicant's current state, so reading it here made the applicant's home
+ * state decide the property's jurisdiction: anyone relocating to Seattle from out of state
+ * could not get a lease at all.
+ */
+describe("the applicant's own state never decides the property's jurisdiction", () => {
+  const seattleProperty = { address: "5259 Brooklyn Ave NE, Seattle, WA", zip: "98105", neighborhood: "U District" };
+
+  it.each(["OR", "TX", "NY", "FL", "CA"])("resolves a Seattle property for an applicant currently in %s", (currentState) => {
+    expect(
+      resolveLeaseJurisdiction({ submission: seattleProperty, application: { currentCity: "Portland", currentState } }),
+    ).toBe("seattle");
+  });
+
+  it("ignores a garbage state value instead of refusing to generate", () => {
+    for (const state of ["n/a", "--", "Washington State", ""]) {
+      expect(resolveLeaseJurisdiction({ submission: { ...seattleProperty, state } })).toBe("seattle");
+    }
   });
 });

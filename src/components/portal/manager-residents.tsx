@@ -2154,12 +2154,12 @@ export function ManagerResidents({
     return gate.ok ? undefined : gate.error;
   }
 
-  function runGenerateLease(rowId: string) {
+  function runGenerateLease(rowId: string, discardManagerEdits = false) {
     if (generatingLeaseRowId) return;
     setGeneratingLeaseRowId(rowId);
     window.setTimeout(() => {
       try {
-        const result = generateLeaseHtmlForRow(rowId, userId);
+        const result = generateLeaseHtmlForRow(rowId, userId, { discardManagerEdits });
         if (result.ok) {
           setLeaseTick((n) => n + 1);
           showToast(`Lease generated (v${result.version}).`);
@@ -2838,12 +2838,13 @@ export function ManagerResidents({
       <LeaseRegenerateConfirmModal
         open={regenerateConfirmLeaseId !== null}
         busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
+        replacesManagerEdits={false}
         onClose={() => {
           if (generatingLeaseRowId) return;
           setRegenerateConfirmLeaseId(null);
         }}
         onConfirm={() => {
-          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId);
+          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId, true);
         }}
       />
       {signingLease ? (

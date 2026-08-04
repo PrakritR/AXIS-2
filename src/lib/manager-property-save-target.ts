@@ -8,10 +8,12 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import {
+  createPropertyLeaseTemplate,
   readPropertyLeaseTemplates,
   syncLegacyLeaseFieldsFromTemplates,
   type PropertyLeaseTemplateKind,
 } from "@/lib/property-lease-templates";
+import { leaseSourceFromDraft } from "@/lib/property-lease-source";
 import type { MockProperty } from "@/data/types";
 import type { ManagerPendingPropertyRow } from "@/lib/demo-property-pipeline";
 
@@ -101,19 +103,31 @@ export function persistLeaseConfigToPropertyIds(
       failed += 1;
       continue;
     }
-    let next: ManagerListingSubmissionV1 = {
-      ...hit.sub,
-      ...leaseFields,
-    };
-    if (leaseKind) {
-      const templates = readPropertyLeaseTemplates(next);
-      if (templates.length > 0) {
-        const [primary, ...rest] = templates;
-        next = syncLegacyLeaseFieldsFromTemplates(next, [
-          { ...primary!, kind: leaseKind, updatedAt: new Date().toISOString() },
-          ...rest,
-        ]);
-      }
+    let next: ManagerListingSubmissionV1;
+    if (!leaseKind) {
+      next = { ...hit.sub, ...leaseFields };
+    } else {
+      const templates = readPropertyLeaseTemplates(hit.sub);
+      const seedKey: "short-term" | "primary" = leaseKind === "short-term" ? "short-term" : "primary";
+      const index = templates.findIndex((template) => template.listingSeedKey === seedKey || template.kind === leaseKind);
+      const updated = {
+        ...leaseFields,
+        kind: leaseKind,
+        updatedAt: new Date().toISOString(),
+      };
+      const nextTemplates = index === -1
+        ? [
+            ...templates,
+            {
+              ...createPropertyLeaseTemplate({ kind: leaseKind, source: leaseSourceFromDraft(leaseFields) }),
+              ...updated,
+              listingSeedKey: seedKey,
+            },
+          ]
+        : templates.map((template, templateIndex) =>
+            templateIndex === index ? { ...template, ...updated } : template,
+          );
+      next = syncLegacyLeaseFieldsFromTemplates(hit.sub, nextTemplates);
     }
     if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) {
       saved += 1;

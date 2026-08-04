@@ -49,6 +49,9 @@ export function leaseCss(): string {
     th { background: #f0f0f0; font-weight: 700; }
     .total-row td { font-weight: 700; background: #f9f9f9; }
     .addendum { border-top: 3px double #333; margin-top: 3rem; padding-top: 1.5rem; }
+    .disclosure-review { border: 2px solid #7f1d1d; padding: 10px 12px; margin: 0 0 1.25rem; background: #fff7ed; }
+    .disclosure-review p:first-child { margin-top: 0; }
+    .disclosure-review p:last-child, .disclosure-review ul:last-child { margin-bottom: 0; }
     .page-break { page-break-before: always; }
     @media print { body { padding: 12px; font-size: 10pt; } }
   `;
@@ -75,6 +78,14 @@ export type LeaseJurisdictionTemplateConfig = {
    * only safe default. Never populate this without a verified source.
    */
   landlordMaintenanceStatuteRef?: string;
+  /** Optional citation for returned-payment rules, rendered only when verified for this jurisdiction. */
+  returnedPaymentStatuteRef?: string;
+  /** Optional citation for a resident's ongoing liability after an early termination. */
+  earlyTerminationStatuteRef?: string;
+  /** Optional citation for smoke-alarm requirements. */
+  smokeAlarmStatuteRef?: string;
+  /** Optional citation for carbon-monoxide-alarm requirements. */
+  carbonMonoxideAlarmStatuteRef?: string;
   /**
    * Jurisdiction-specific NUMERIC lease terms.
    *
@@ -153,4 +164,49 @@ export const SAN_FRANCISCO_LEASE_CONFIG: LeaseJurisdictionTemplateConfig = {
     "If the Premises are located within the City and County of San Francisco, the parties agree that the San Francisco Rent Ordinance (SF Administrative Code Chapter 37) and other applicable local rental regulations shall apply to the minimum extent required by law, including notice, habitability, and relocation requirements where applicable.",
   governingLawParagraph:
     "This Agreement is governed by the laws of the <strong>State of California</strong> and, where applicable, the ordinances of the City and County of San Francisco. If any provision is found invalid, the remainder shall remain in full force. This document, together with any signed addenda, constitutes the entire agreement between the parties. No oral representations are binding. Amendments require written signatures of both parties.",
+};
+
+/**
+ * Code-owned lease configuration registry. Adding a jurisdiction requires one verified
+ * state entry here, its disclosure rules in `leases/disclosure-clause-rules.json`, and
+ * no new HTML builder. A city may overlay its state's config only where a verified local
+ * rule requires a difference.
+ */
+export type LeaseJurisdictionRegistryEntry = {
+  config: LeaseJurisdictionTemplateConfig;
+  /** Scope name used by the disclosure rules catalog for state-level rules. */
+  ruleScope: string;
+  cities?: Readonly<
+    Record<
+      string,
+      {
+        config: LeaseJurisdictionTemplateConfig;
+        /** Scope name used by the disclosure rules catalog for city-level rules. */
+        ruleScope: string;
+      }
+    >
+  >;
+};
+
+export const LEASE_JURISDICTION_TEMPLATE_REGISTRY: Readonly<Record<string, LeaseJurisdictionRegistryEntry>> = {
+  CA: {
+    config: CALIFORNIA_LEASE_CONFIG,
+    ruleScope: "california",
+    cities: {
+      san_francisco: {
+        config: SAN_FRANCISCO_LEASE_CONFIG,
+        ruleScope: "san_francisco",
+      },
+    },
+  },
+  WA: {
+    config: WASHINGTON_LEASE_CONFIG,
+    ruleScope: "washington",
+    cities: {
+      seattle: {
+        config: SEATTLE_LEASE_CONFIG,
+        ruleScope: "seattle",
+      },
+    },
+  },
 };

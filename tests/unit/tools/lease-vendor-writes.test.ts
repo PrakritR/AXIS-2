@@ -416,6 +416,37 @@ describe("send_lease_for_signature", () => {
     expect(foreign.ok).toBe(false);
   });
 
+  // The applicant half of that same gate. `sendForSignatureBlockerWithContext`
+  // runs `leaseSendGateBlockerAmong` over the landlord's OWN applications, so a
+  // lease whose applicant was never approved is refused through the tool layer
+  // exactly as the Leases UI refuses it. Pinned here because the check is one
+  // import away from disappearing while everything still compiles.
+  it("preview and execute both refuse a lease whose application is still pending", async () => {
+    const { ctx, store } = makeCtx({
+      portal_lease_pipeline_records: [leaseRecord("manager_a", draftLease("lease_pending"))],
+      manager_application_records: [
+        {
+          id: "app_pending",
+          manager_user_id: "manager_a",
+          row_data: { id: "AXIS-PENDING1", name: "Casey Doe", email: "casey@example.com", bucket: "pending" },
+        },
+      ],
+    });
+
+    const preview = await previewWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_pending" });
+    expect(preview.ok).toBe(false);
+    if (!preview.ok) expect(preview.error).toMatch(/still pending review/i);
+
+    const executed = await executeWrite(sendLeaseForSignatureTool, ctx, { leaseId: "lease_pending" });
+    expect(executed.ok).toBe(false);
+
+    const rowData = store.tables.portal_lease_pipeline_records![0]!.row_data as Row;
+    expect(rowData.bucket).toBe("manager");
+    expect(rowData.status).toBeUndefined();
+    expect(store.tables.audit_log ?? []).toHaveLength(0);
+    expect(deliverPortalInboxMessage).not.toHaveBeenCalled();
+  });
+
   // The assistant reaches the same transition the Leases UI does, so it has to
   // clear the same gate: a machine reading of an uploaded contract that no
   // person has confirmed must not become signable through the tool layer.

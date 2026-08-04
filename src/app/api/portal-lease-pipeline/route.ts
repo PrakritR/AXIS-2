@@ -11,10 +11,14 @@ import { resolveResidentScopedActorRole } from "@/lib/auth/resident-role-access"
 import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
 import {
   introducesUntrustedLeaseDocument,
+  leaseAllowsManagerDocumentEdits,
   leaseDocumentBody,
+  leaseDocumentBodyChanged,
   replacesSignedLeaseDocument,
+  rowHasAnySignature,
 } from "@/lib/lease-execution-evidence";
 import { leaseBodyMatchesManagerFiledLease } from "@/lib/lease-manager-filed-document.server";
+import { sanitizeLeaseDocumentHtml, sanitizeManagerLeaseDocumentEdit } from "@/lib/lease-document-sanitizer";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -48,8 +52,10 @@ async function getUserContext() {
   };
 }
 
-function normalizeRow(row: Record<string, unknown>) {
-  return row;
+function normalizeRow(row: Record<string, unknown>, { sanitizeGeneratedHtml = false }: { sanitizeGeneratedHtml?: boolean } = {}) {
+  const generatedHtml =
+    sanitizeGeneratedHtml && typeof row.generatedHtml === "string" ? sanitizeLeaseDocumentHtml(row.generatedHtml) : row.generatedHtml;
+  return { ...row, generatedHtml };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -371,7 +377,10 @@ export async function POST(req: Request) {
     >();
 
     for (const row of rows) {
-      const normalized = normalizeRow(row);
+      // Sanitization is deferred until we can compare against the stored body: rewriting an
+      // UNCHANGED body on an unrelated save silently mutates a signed lease's evidence bytes,
+      // and the certificate's hash describes those exact bytes.
+      let normalized: Record<string, unknown> = normalizeRow(row);
       if (!normalized.id) return NextResponse.json({ error: "row id required" }, { status: 400 });
       const id = String(normalized.id);
 
@@ -386,6 +395,53 @@ export async function POST(req: Request) {
       const existingRecord = (existing ?? [])[0] as
         | (LeaseScopeRecord & StoredLeaseScopeColumns & { row_data?: Record<string, unknown> })
         | undefined;
+
+      // The client edit helper restores P7 verbatim blocks too, but this is a
+      // public route. Re-run that comparison against the stored source before
+      // accepting a manager-authored replacement from devtools or another
+      // client, then build the row_data payload from the restored value.
+      const storedForSanitization = existingRecord?.row_data as LeasePipelineRow | undefined;
+      const storedGeneratedHtml = typeof storedForSanitization?.generatedHtml === "string" ? storedForSanitization.generatedHtml : null;
+      const incomingHasGeneratedHtml = Object.hasOwn(row, "generatedHtml");
+      const incomingClearsSignatures = Boolean(
+        storedForSanitization && rowHasAnySignature(storedForSanitization) && !rowHasAnySignature(normalized as LeasePipelineRow),
+      );
+      // EVERY body that differs from the stored one is sanitized, whatever else the write does.
+      // Making this conditional on `!incomingClearsSignatures` meant a request that nulled the
+      // signatures stored raw HTML, which removed the server half of the XSS defense and let a
+      // manager drop every statutory clause with no trick at all. Only an exact echo of the
+      // stored body is left alone, because rewriting an UNCHANGED body silently mutates the
+      // evidence bytes a signed lease's certificate hash describes.
+      if (incomingHasGeneratedHtml && row.generatedHtml != null && typeof row.generatedHtml !== "string") {
+        return NextResponse.json({ error: "Lease document must be text." }, { status: 400 });
+      }
+      const bodyDiffersFromStored =
+        typeof row.generatedHtml === "string" && row.generatedHtml !== storedGeneratedHtml;
+      // The clause gate runs whenever there IS a stored body, including a write that clears the
+      // signatures. Exempting that path let a manager drop every statutory disclosure simply by
+      // nulling the signatures in the same request. A legitimate renewal or amendment carries a
+      // freshly generated body for the same property, so it still contains those clauses and
+      // passes; a body that merely deletes them does not.
+      const editableAgainstStored = Boolean(storedGeneratedHtml);
+      if (bodyDiffersFromStored && !editableAgainstStored) {
+        const cleaned = sanitizeLeaseDocumentHtml(row.generatedHtml as string);
+        if (cleaned !== row.generatedHtml) {
+          normalized = { ...normalized, generatedHtml: cleaned };
+        }
+      }
+      if (storedGeneratedHtml && incomingHasGeneratedHtml) {
+        // Removing the body is judged once, further down, where the signature-clearing
+        // exemption is also in scope — a resident uploading their own signed PDF legitimately
+        // nulls `generatedHtml`, and refusing it here would have made that write unreachable.
+        if (typeof row.generatedHtml === "string" && row.generatedHtml !== storedGeneratedHtml) {
+          // Only a body that actually CHANGED is a manager edit, and only that is sanitized.
+          // Echoing the stored body back is left byte-identical so an unrelated save cannot
+          // rewrite an executed lease underneath its own signature hash.
+          const sanitized = sanitizeManagerLeaseDocumentEdit(storedGeneratedHtml, row.generatedHtml);
+          if (!sanitized.ok) return NextResponse.json({ error: sanitized.error }, { status: 400 });
+          normalized = { ...normalized, generatedHtml: sanitized.html };
+        }
+      }
 
       // Evidence integrity, authoritative copy. The client store runs the same
       // predicate, but it runs IN the browser against a store the browser owns,
@@ -419,6 +475,84 @@ export async function POST(req: Request) {
           existingRecord?.manager_user_id,
           leaseDocumentBody(normalized as unknown as LeasePipelineRow),
         ));
+
+      // P4's signature check above is authoritative once signing begins. These two
+      // companion checks close the earlier window: a document must not be replaced
+      // after the lease left manager review, even before the first signature lands.
+      const nextRow = normalized as unknown as LeasePipelineRow;
+      const documentChanged = Boolean(storedRow && leaseDocumentBodyChanged(storedRow, nextRow));
+
+      // A resident may legitimately replace a body (uploading their own signed PDF, seeding
+      // the onboarding lease), so the refusal is scoped to the MANAGER's editing window
+      // rather than to residents generally: while the lease sits in manager review, the
+      // document is the manager's to change and nobody else's. Outside that window
+      // `untrustedDocument` is what judges the resident's write.
+      if (storedRow && documentChanged && ctx.user.role === "resident" && leaseAllowsManagerDocumentEdits(storedRow)) {
+        return NextResponse.json({ error: "Only a manager can replace a lease document." }, { status: 403 });
+      }
+
+      // Scoped to non-resident actors on purpose: this is the "a manager cannot replace the
+      // document after sending it" rule. A resident's body writes are judged by the 403 above
+      // (never during the manager's window) and by `untrustedDocument` (never together with an
+      // execution claim), and applying this rule to them too would refuse `residentUploadLeasePdf`.
+      if (storedRow && documentChanged && ctx.user.role !== "resident" && !leaseAllowsManagerDocumentEdits(storedRow)) {
+        const clearingSignatures = rowHasAnySignature(storedRow) && !rowHasAnySignature(nextRow);
+        const previousBody = leaseDocumentBody(storedRow);
+        // Filling a previously ABSENT body is not replacing one. The stored `externallySignedLease`
+        // flag is one way to reach it; the other is a write the corroboration above already
+        // vouched for, which is how the existing-resident onboarding seed arrives — that flag
+        // rides on the INCOMING row, and this route never lets a request vouch for itself.
+        const fillingAbsentBody = !previousBody.html && !previousBody.pdf;
+        const filingExternalBody = fillingAbsentBody && (storedRow.externallySignedLease || !untrustedDocument);
+        if (!clearingSignatures && !filingExternalBody) {
+          return NextResponse.json(
+            { error: "This lease is no longer in manager review; its document cannot be replaced." },
+            { status: 409 },
+          );
+        }
+      }
+
+      // Manager save-path invariant, hence non-resident only: `residentUploadLeasePdf` nulls
+      // `generatedHtml` by design, and the resident's own rules already judged that write.
+      if (
+        ctx.user.role !== "resident" &&
+        storedGeneratedHtml &&
+        typeof nextRow.generatedHtml !== "string" &&
+        !incomingClearsSignatures
+      ) {
+        const materializingTemplatePdf = Boolean(storedRow?.templateDocumentUrl && nextRow.managerUploadedPdf?.dataUrl);
+        if (!materializingTemplatePdf) {
+          return NextResponse.json({ error: "A generated lease body cannot be removed through this save path." }, { status: 400 });
+        }
+      }
+
+      // A client may submit this generic row endpoint directly, so a generated
+      // body replacement must still carry the same exact version increment the
+      // dedicated edit path performs. The route stamps the server-confirmed
+      // generation time rather than trusting a browser-provided timestamp.
+      if (
+        storedRow &&
+        documentChanged &&
+        ctx.user.role !== "resident" &&
+        !incomingClearsSignatures &&
+        typeof storedRow.generatedHtml === "string" &&
+        typeof nextRow.generatedHtml === "string"
+      ) {
+        const expectedVersion = (storedRow.versionNumber ?? storedRow.pdfVersion ?? 1) + 1;
+        if (nextRow.versionNumber !== expectedVersion || nextRow.pdfVersion !== expectedVersion) {
+          return NextResponse.json({ error: "Replacing a generated lease requires the next document version." }, { status: 400 });
+        }
+        const editedAtIso = new Date().toISOString();
+        normalized = {
+          ...normalized,
+          generatedAtIso: editedAtIso,
+          // This public route cannot trust a browser-provided "generation"
+          // marker. Every in-place generated HTML replacement is conservatively
+          // treated as a manager edit, so automatic regeneration never erases it.
+          managerDocumentEditedAtIso: editedAtIso,
+          managerDocumentRegenerationRequiredAtIso: null,
+        };
+      }
 
       let scope: LeaseScopeColumns;
       if (ctx.user.role === "admin") {
