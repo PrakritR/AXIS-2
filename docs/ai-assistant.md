@@ -112,10 +112,12 @@ opening, pinning, or unpinning the assistant never starts a second transport or
 strands a pending confirmation. Their archive is server-backed and follows the
 signed-in person across devices:
 
-- A main portal turn has `agent_sessions.kind = 'portal_chat'`, a server-owned
-  title from the first user message, and a stable `sessionId` reused on later
-  turns. `agent_sessions_portal_chat_archive_idx` supports newest-first paging
-  by `(user_id, portal, updated_at)`.
+- Pressing **New chat** immediately creates a main portal
+  `agent_sessions.kind = 'portal_chat'` record with a server-owned title, then
+  reuses that stable `sessionId` for later turns. Failed database writes are
+  logged and reported to the UI rather than being mistaken for an empty archive.
+  `agent_sessions_portal_chat_archive_idx` supports newest-first paging by
+  `(user_id, portal, updated_at)`.
 - Each role-scoped chat route exposes `GET`: without `sessionId` it returns a
   paginated list; with one it returns a transcript and, only when it is still
   proposed and unexpired, its safe confirmation preview. Stored pending-action

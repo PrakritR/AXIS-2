@@ -189,20 +189,23 @@ export function PublicNavbar() {
   if (hideOnNative) return null;
 
   return (
-    <div
-      id="axis-public-navbar"
-      className="sticky top-0 z-50 border-b border-border bg-background pt-[env(safe-area-inset-top,0px)]"
-    >
-      <Navbar1
-        logoSlot={<AxisLogoLink href="/" size="compact" />}
-        menu={menu}
-        auth={{
-          login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=manager" },
-        }}
-        portalLink={portalLink}
-        actionsSlot={<GeneralAssistantTrigger />}
-      />
-    </div>
+    <>
+      <div
+        id="axis-public-navbar"
+        className="sticky top-0 z-50 border-b border-border bg-background pt-[env(safe-area-inset-top,0px)]"
+      >
+        <Navbar1
+          logoSlot={<AxisLogoLink href="/" size="compact" />}
+          menu={menu}
+          auth={{
+            login: { text: "Log in", url: "/auth/sign-in" },
+            signup: { text: "Get started", url: "/auth/create-account?mode=create&role=manager" },
+          }}
+          portalLink={portalLink}
+          actionsSlot={pathname === "/" ? undefined : <GeneralAssistantTrigger />}
+        />
+      </div>
+      {pathname === "/" ? <GeneralAssistantTrigger floating /> : null}
+    </>
   );
 }
