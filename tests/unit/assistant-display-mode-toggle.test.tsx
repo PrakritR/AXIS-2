@@ -48,6 +48,15 @@ function renderPortal({ dockable = true }: { dockable?: boolean } = {}) {
   );
 }
 
+function renderPortalWithTopBar() {
+  return render(
+    <AxisAssistant managerName="Jordan Lee" dockable>
+      <PortalTopBar kind="pro" basePath="/portal" name="Jordan Lee" email="mgr@example.com" />
+      <PortalAssistantDockRail managerName="Jordan Lee" />
+    </AxisAssistant>,
+  );
+}
+
 const rail = () => document.querySelector('[data-attr="portal-assistant-dock-rail"]');
 const dock = () => document.querySelector('[data-attr="dashboard-assistant-dock"]');
 const askPropLane = () => document.querySelector<HTMLButtonElement>('[data-attr="portal-ask-proplane"]')!;
@@ -101,6 +110,23 @@ describe("assistant display mode", () => {
     expect(rail()!.className).toContain("hidden");
     expect(rail()!.className).toContain("lg:flex");
     expect(document.querySelector('[data-attr="axis-assistant-fab"]')).toBeNull();
+  });
+
+  it("opens Ask PropLane in the right-side conversation rail on desktop", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    );
+    renderPortalWithTopBar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask PropLane" }));
+
+    await waitFor(() => expect(rail()).not.toBeNull());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Ask the PropLane Assistant about your portfolio")).toHaveFocus(),
+    );
+    expect(readAssistantDisplayMode(USER)).toBe("docked");
+    expect(screen.queryByText("Opening PropLane Assistant")).toBeNull();
   });
 
   it("unpins from the dock header, back to the popup default", async () => {

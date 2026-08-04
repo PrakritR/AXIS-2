@@ -2,7 +2,7 @@
 
 import { ChevronDown, User } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useEffect, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useEffect, useSyncExternalStore } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { track } from "@/lib/analytics/track-client";
 import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
+import { useAxisAssistantDock } from "@/components/portal/axis-assistant";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -24,28 +25,10 @@ import {
 import type { PortalKind } from "@/lib/portal-types";
 
 /**
- * Opens the in-portal PropLane Assistant from the sole named header entry point.
- * It records the same conversion event and defers the panel mount so the click
- * stays off the interaction's critical path (INP budget).
- *
- * When the manager has pinned the assistant to the right rail it is ALREADY on
- * screen, so this focuses that input instead of stacking a modal popup (and a
- * second, separate conversation) on top of it. The rail is `hidden lg:flex`, so
- * `offsetParent` is the check: below `lg` the input exists but is not laid out,
- * and the popup is still the right answer.
+ * The full-height assistant rail is the desktop destination for the top-bar
+ * action and ⌘K. It is `lg`-only, so smaller viewports retain the popup fallback
+ * rather than attempting to focus an off-screen composer.
  */
-function openAskProPlane() {
-  track("assistant_opened");
-  const dockInput = document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null;
-  if (dockInput?.offsetParent) {
-    dockInput.focus();
-    return;
-  }
-  startTransition(() => {
-    openAxisAssistant();
-  });
-}
-
 function initials(name: string | null, email: string | null): string {
   const src = (name ?? "").trim() || (email ?? "").trim();
   if (!src) return "?";
@@ -76,9 +59,44 @@ export function PortalTopBar({
     getAxisAssistantOpen,
     () => false,
   );
+  const { dockable, setMode } = useAxisAssistantDock();
+
+  const openAskProPlane = useCallback(() => {
+    track("assistant_opened");
+
+    const dockInput = document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null;
+    if (dockInput?.offsetParent) {
+      dockInput.focus();
+      return;
+    }
+
+    // The rail is intentionally `lg`-only. On a wide, dock-enabled portal,
+    // make it the active presentation and wait for React to mount its composer
+    // before moving focus into it.
+    if (dockable && window.matchMedia?.("(min-width: 1024px)").matches) {
+      setMode("docked");
+      closeAxisAssistant();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          (document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null)?.focus();
+        });
+      });
+      return;
+    }
+
+    startTransition(() => {
+      openAxisAssistant();
+    });
+  }, [dockable, setMode]);
 
   function toggleAssistant() {
+    const dockInput = document.getElementById(ASSISTANT_DOCK_INPUT_ID) as HTMLTextAreaElement | null;
     if (assistantOpen) {
+      closeAxisAssistant();
+      return;
+    }
+    if (dockInput?.offsetParent) {
+      setMode("popup");
       closeAxisAssistant();
       return;
     }
@@ -96,7 +114,7 @@ export function PortalTopBar({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [openAskProPlane]);
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-4 sm:px-5">
