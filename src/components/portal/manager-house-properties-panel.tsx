@@ -54,7 +54,6 @@ import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   PROPERTY_PIPELINE_EVENT,
   countManagerManagedPropertiesForUser,
-  mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
 } from "@/lib/demo-property-pipeline";
 import { samePropertyId } from "@/lib/co-manager-calendar";
@@ -1003,11 +1002,12 @@ export function ManagerHousePropertiesPanel({
   useEffect(() => {
     if (!scopeUserId) return;
     if (!isDemoModeActive()) {
+      // The local-pipeline mirror is NOT run here. `ManagerProperties` — this
+      // panel's only parent — already mirrors the same owner's rows on mount,
+      // and the writes are sequential now, so a second run doubled the POSTs
+      // per page load and toasted a plan refusal twice. One owner, one run.
       void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
         setTick((t) => t + 1);
-        void mirrorLocalPropertyPipelineToServer(scopeUserId, collectLinkedPropertyIds(scopeUserId), {
-          onError: (message) => showToast(message),
-        });
       });
     } else {
       setTick((t) => t + 1);
@@ -1028,7 +1028,7 @@ export function ManagerHousePropertiesPanel({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [scopeUserId, showToast]);
+  }, [scopeUserId]);
 
 
   const rows = useMemo(() => {

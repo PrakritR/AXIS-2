@@ -117,4 +117,23 @@ describe("caching", () => {
     expect(readManagerSubscriptionTierClient()).toBeUndefined();
     expect(readManagerEffectivePlanTierClient()).toBeUndefined();
   });
+
+  /**
+   * Regression: subscription-route-still-collapses-unreadable-plan-to-free.
+   * A plan the server could not read must not stick for the whole session —
+   * that is how one transient database error turned into a Business manager
+   * staring at "reached your plan limit of 1 property" until they reloaded.
+   */
+  it("does not cache a plan the server could not read", async () => {
+    body = { tier: null, effectiveTier: null, planUnknown: true };
+
+    await expect(loadManagerEffectivePlanTierClient()).resolves.toBeNull();
+    await expect(loadManagerSubscriptionTierClient()).resolves.toBeNull();
+    expect(readManagerEffectivePlanTierClient()).toBeUndefined();
+    expect(readManagerSubscriptionTierClient()).toBeUndefined();
+
+    // The next read retries and picks up the real plan.
+    body = { tier: "business", effectiveTier: "business" };
+    await expect(loadManagerEffectivePlanTierClient()).resolves.toBe("business");
+  });
 });

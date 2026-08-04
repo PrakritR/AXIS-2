@@ -1,4 +1,5 @@
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
+import { MANAGER_PROPERTY_LIMIT_ERROR_CODE } from "@/lib/manager-access";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
@@ -227,8 +228,13 @@ export async function upsertPropertyRecordToServer(input: {
    * plan property-limit 403 is the reason this exists: the refusal names the
    * limit and the plan that lifts it, and that sentence has to survive the trip
    * back to the wizard's toast.
+   *
+   * `code` is the route's machine tag (`property_limit_reached`). A caller the
+   * manager did not initiate — the background mirror — must key on it rather
+   * than on the presence of a message, because a 500 carries raw Postgres text
+   * that has no business appearing in a toast.
    */
-  onError?: (message: string) => void;
+  onError?: (message: string, code?: string) => void;
 }): Promise<boolean> {
   if (typeof window === "undefined") return false;
   // /demo is browser-local — there is no real record to mirror, but the local
@@ -251,9 +257,10 @@ export async function upsertPropertyRecordToServer(input: {
       }),
     });
     if (!res.ok && input.onError) {
-      const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+      const body = (await res.json().catch(() => null)) as { error?: unknown; code?: unknown } | null;
       const message = typeof body?.error === "string" ? body.error.trim() : "";
-      if (message) input.onError(message);
+      const code = typeof body?.code === "string" ? body.code : undefined;
+      if (message) input.onError(message, code);
     }
     return res.ok;
   } catch {
@@ -464,9 +471,16 @@ export async function mirrorLocalPropertyPipelineToServer(
   linkedPropertyIds?: Iterable<string>,
   /**
    * Receives the server's explanation the FIRST time a mirrored write is
-   * refused. A refused row never persists anywhere but this browser, so
-   * dropping the response left the manager looking at a listing that exists
-   * nowhere else and no reason why. One message per run, not one per row.
+   * refused BY THE PLAN. A refused row never persists anywhere but this
+   * browser, so dropping the response left the manager looking at a listing
+   * that exists nowhere else and no reason why. One message per run, not one
+   * per row — and, because only one component may own this call, not one per
+   * component either.
+   *
+   * Deliberately narrow: this is background work the manager never initiated,
+   * so every OTHER failure stays silent exactly as it did before. The route
+   * answers 500 with raw Postgres text and with the "could not read this
+   * account's plan" message, and neither belongs in a toast on page load.
    */
   opts?: { onError?: (message: string) => void },
 ): Promise<void> {
@@ -518,8 +532,8 @@ export async function mirrorLocalPropertyPipelineToServer(
   for (const job of jobs) {
     await upsertPropertyRecordToServer({
       ...job,
-      onError: (message) => {
-        if (!refusal) refusal = message;
+      onError: (message, code) => {
+        if (!refusal && code === MANAGER_PROPERTY_LIMIT_ERROR_CODE) refusal = message;
       },
     });
   }

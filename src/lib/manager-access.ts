@@ -118,6 +118,15 @@ export function resolveEffectiveManagerSkuTier(input: {
 }
 
 /**
+ * The machine tag `POST /api/property-records` puts on the property-limit 403.
+ *
+ * A background caller (the local-pipeline mirror) must decide whether to show
+ * the manager anything from THIS code, never from "the body had an error
+ * string" — every other refusal on that route carries raw server text.
+ */
+export const MANAGER_PROPERTY_LIMIT_ERROR_CODE = "property_limit_reached";
+
+/**
  * The one refusal message for "you are at your plan's property limit".
  *
  * Shared by the client pre-checks (add-property wizard, Properties header,

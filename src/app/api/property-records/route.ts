@@ -7,6 +7,7 @@ import { asStringArray } from "@/app/api/pro/account-links/route";
 import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { MANAGER_PROPERTY_LIMIT_ERROR_CODE } from "@/lib/manager-access";
 import { assertManagerPropertyListingQuota } from "@/lib/manager-property-quota.server";
 import { propertyRowsToSnapshot, type ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 
@@ -277,7 +278,7 @@ export async function POST(req: Request) {
         quota.status === 403
           ? {
               error: quota.error,
-              code: "property_limit_reached",
+              code: MANAGER_PROPERTY_LIMIT_ERROR_CODE,
               tier: quota.tier,
               limit: quota.limit,
               current: quota.current,
