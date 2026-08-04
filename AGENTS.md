@@ -1034,6 +1034,22 @@ conversations) plus the archive toggle. Invariants:
   so copy the resident panel's shape rather than theirs. Coverage:
   `tests/unit/resident-refused-send-not-delivered.test.tsx`,
   `tests/integration/portal/send-inbox-message.test.ts`.
+- **A conversation's `time` is BOTH its label and its sort key, so every writer
+  must stamp it identically.** The canonical shape is `formatInboxStamp`
+  (`portal-inbox-storage.ts`) — `"Aug 3, 5:31 PM"`, en-US and pinned to
+  **Pacific** (`formatPacificDateTime`), which server-side writers call
+  directly. The stamp carries no year and no timezone and is re-parsed by
+  `parseInboxStampMs`, so a bare `toLocaleString()` is never acceptable: the
+  delivery path runs UTC on Vercel while the browser renders local, and the same
+  instant stored two ways let an older message outrank a newer one.
+  `appendReplyToInboxThread` normalizes a foreign stamp on the way in AND
+  advances `thread.time`, and rows sort on `inboxThreadSortMs(id, thread.time)`
+  — the thread's own normalized stamp, never a message's raw `at`, with the id's
+  millisecond epoch only as a last resort. A withdrawn (refused) optimistic
+  reply must restore `time` alongside `messages` / `preview` / `unread`, or a
+  send that never happened keeps the thread pinned to the top. Coverage:
+  `tests/unit/inbox-thread-recency-order.test.ts`,
+  `tests/unit/portal-inbox-send-threading.test.ts`.
 - **Client surfaces re-filter on the email embedded in `row_data`, while the
   server authorizes on the `resident_email` COLUMN.** When the two disagree the
   server hands the row over and the client silently discards it — a Fully Signed

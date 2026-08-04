@@ -21,7 +21,7 @@ Use this checklist (also in `src/lib/platform/parity.ts` as `PLATFORM_CHANGE_CHE
 3. **Push notification** — Use `sendPushToUser` with an in-app `url`. Register the path in `REGISTERED_PUSH_DEEP_LINKS`; `assertInAppPushPath` validates at send time.
 4. **Photo upload** — Use `useNativeCamera()` so the app gets the native picker and the web keeps `<input type="file">`.
 5. **Layout on notched phones** — Use `portal-layout-classes.ts` and `html[data-native]` CSS (set by `NativeBridge`).
-6. **Manager subscription purchase** — On iOS the plan is bought via Apple In-App Purchase (`manager-plan-native.tsx`), never a web purchase link (App Store 3.1.1); web keeps Stripe checkout. See [`docs/agents/apple-iap.md`](agents/apple-iap.md).
+6. **Manager subscription purchase** — On iOS the plan is bought via Apple In-App Purchase (`manager-plan-native.tsx`), never a web purchase link (App Store 3.1.1); web keeps Stripe checkout. See [`docs/agents/apple-iap.md`](agents/apple-iap.md). Plan-limit copy follows the same rule: entitlement refusals go through `managerPropertyLimitMessage(tier, { omitUpgradeCta: isNativeRuntimeSync() })`, which still names the limit but drops the "Upgrade to …" clause inside the shell (Guideline 2.1(b)).
 7. **Tests** — Run `npm run test:unit` — `tests/unit/platform-parity.test.ts` and `tests/unit/portal-nav-order.test.ts` guard registries and web/native nav parity.
 8. **Native shell only** — Plugins, icons, `Info.plist` permissions (incl. `@revenuecat/purchases-capacitor`): `npx cap sync` and rebuild in Xcode / Android Studio.
 

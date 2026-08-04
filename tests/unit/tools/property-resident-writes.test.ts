@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { managerPropertyLimitMessage } from "@/lib/manager-access";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
@@ -989,5 +991,94 @@ describe("order_background_check", () => {
     const res = await executeWrite(orderBackgroundCheckTool, ctx, { applicationId: "app_foreign", provider: "certn" });
     expect(res).toMatchObject({ ok: false });
     expect(auditRows(tables)).toHaveLength(0);
+  });
+});
+
+/**
+ * Reviewer-facing transcript of the assistant path, so the plan cap can be read
+ * rather than inferred from assertions. Set `PROPERTY_LIMIT_EVIDENCE_DIR` to
+ * write it to that directory; the assertions run either way.
+ */
+describe("assistant transcript at the plan's listing cap", () => {
+  it("answers create_property and the relist with the portal's own sentence", async () => {
+    const lines: string[] = [];
+    const say = (text = "") => lines.push(text);
+
+    say("=".repeat(78));
+    say("assistant write tools — real handlers, real plan quota");
+    say("=".repeat(78));
+    say();
+    say('Manager on Free (1 listing) already has one live listing "p_live".');
+    say();
+
+    EFFECTIVE_TIER = "free";
+    const create = makeWriteCtx({ manager_property_records: [liveProperty("manager_a", "p_live")] });
+    const draft = { title: "Loft", address: "9 Z St", beds: 3, baths: 1, rentUsd: 1800 };
+    const createRes = await executeWrite(createPropertyTool, create.ctx, draft);
+
+    say('  manager: "add a listing at 9 Z St, 3 bed, $1800"');
+    say("    tool: create_property (would insert status=pending, a listing slot)");
+    say(`    <- ${createRes.ok ? "ok" : `refused: ${createRes.error}`}`);
+    say(`       records for this manager: ${JSON.stringify(
+      (create.tables.manager_property_records ?? []).map((r) => [r.id, r.status]),
+    )}`);
+    say(`       audit rows written: ${auditRows(create.tables).length}`);
+    say();
+    expect(createRes.ok).toBe(false);
+    if (!createRes.ok) expect(createRes.error).toBe(managerPropertyLimitMessage("free"));
+
+    const relist = makeWriteCtx({
+      manager_property_records: [
+        { ...liveProperty("manager_a", "p_down"), status: "unlisted" },
+        liveProperty("manager_a", "p_live"),
+      ],
+    });
+    const relistRes = await executeWrite(updatePropertyTool, relist.ctx, { propertyId: "p_down", status: "live" });
+
+    say('  manager: "set p_down live again"');
+    say("    tool: update_property { status: live }");
+    say(`    <- ${relistRes.ok ? "ok" : `refused: ${relistRes.error}`}`);
+    say(`       records for this manager: ${JSON.stringify(
+      (relist.tables.manager_property_records ?? []).map((r) => [r.id, r.status]),
+    )}`);
+    say(`       audit rows written: ${auditRows(relist.tables).length}`);
+    say();
+    expect(relistRes.ok).toBe(false);
+    if (!relistRes.ok) expect(relistRes.error).toBe(managerPropertyLimitMessage("free"));
+
+    const edit = makeWriteCtx({
+      manager_property_records: [liveProperty("manager_a", "p1"), liveProperty("manager_a", "p2")],
+    });
+    const editRes = await executeWrite(updatePropertyTool, edit.ctx, { propertyId: "p1", rentUsd: 2400 });
+    const unlistRes = await executeWrite(updatePropertyTool, edit.ctx, { propertyId: "p2", status: "unlisted" });
+
+    say("  the same account, ALREADY over the cap with two live listings:");
+    say(`    edit the rent on p1     -> ${editRes.ok ? "ok" : `refused: ${editRes.error}`}`);
+    say(`    unlist p2               -> ${unlistRes.ok ? "ok" : `refused: ${unlistRes.error}`}`);
+    say(`    nothing deleted or hidden: ${JSON.stringify(
+      (edit.tables.manager_property_records ?? []).map((r) => [r.id, r.status]),
+    )}`);
+    say();
+    expect(editRes.ok).toBe(true);
+    expect(unlistRes.ok).toBe(true);
+
+    const free = makeWriteCtx({
+      manager_property_records: [{ ...liveProperty("manager_a", "p_down"), status: "unlisted" }],
+    });
+    const freeRes = await executeWrite(updatePropertyTool, free.ctx, { propertyId: "p_down", status: "live" });
+    say("  once the slot is free again, the same relist goes through:");
+    say(`    update_property { status: live } -> ${freeRes.ok ? "ok" : `refused: ${freeRes.error}`}`);
+    say(`    ${JSON.stringify((free.tables.manager_property_records ?? []).map((r) => [r.id, r.status]))}`);
+    say();
+    expect(freeRes.ok).toBe(true);
+    say("=".repeat(78));
+
+    const outDir = process.env.PROPERTY_LIMIT_EVIDENCE_DIR;
+    if (outDir) {
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(path.join(outDir, "property-limit-assistant-transcript.txt"), `${lines.join("\n")}\n`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(lines.join("\n"));
   });
 });
