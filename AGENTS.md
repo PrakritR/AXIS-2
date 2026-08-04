@@ -1013,6 +1013,32 @@ conversations) plus the archive toggle. Invariants:
   from the separate rule that resident-originated scheduled rows are cancel-only.
   The resident send path still handles `scheduleLater`, so reversing it is a
   one-line prop change.
+- **A message enters the thread store only AFTER the send is authorized — on
+  both sides.** `/api/portal/send-inbox-message` can still answer
+  `403 "You can only message people connected to your account."` well past the
+  thread-ownership check, so the route RESOLVES the target thread up front
+  (`resolveInboxThreadReplyTarget`, read-only) and defers the write
+  (`commitInboxThreadReply`) until after `filterRecipientsBySenderScope` passes;
+  the combined `appendInboxThreadReply` is safe only where ownership is the only
+  gate. The client mirrors this: `resident-inbox-panel.tsx` renders the
+  optimistic bubble in local state but calls `upsertPersistedInboxRows` only
+  once a channel succeeds, withdrawing the bubble and surfacing the server's own
+  error text on refusal. Appending first shipped a 403-then-200 sequence where a
+  refused message became the thread's `preview`, so the conversation list read
+  "You: …" and residents believed a maintenance request had been delivered.
+  Coverage: `tests/unit/resident-refused-send-not-delivered.test.tsx`,
+  `tests/integration/portal/send-inbox-message.test.ts`.
+- **Client surfaces re-filter on the email embedded in `row_data`, while the
+  server authorizes on the `resident_email` COLUMN.** When the two disagree the
+  server hands the row over and the client silently discards it — a Fully Signed
+  lease vanishes from `/resident/lease` while the charge generator keeps billing
+  under it. Only the applications path carries a legacy-domain shim
+  (`resident-application-ownership.ts`); lease and messaging do NOT, by
+  decision. Repair drifted dev data with
+  `npm run test:seed:repair-identity-drift` (dev/test only, verifies after
+  writing); it also realigns `profiles.manager_id` / `user_metadata.axis_id`,
+  which `residentLeaseAuthorized` compares against `row.axisId` and which hides
+  a lease just as effectively as a stale email.
 
 ## Inbox attachments
 

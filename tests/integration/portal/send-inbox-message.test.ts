@@ -266,4 +266,70 @@ describe("POST /api/portal/send-inbox-message", () => {
     const res = await sendInboxMessage(req);
     expect(res.status).toBe(403);
   });
+
+  /**
+   * The thread append used to run at the TOP of the route, before the
+   * recipient-scope gate. So a refused send answered 403 while the message was
+   * already written into `portal_inbox_thread_records` — and, because the append
+   * also rewrites `preview`, the conversation list showed it as the newest
+   * message in the thread. A resident whose linked rows named a stale manager
+   * address hit this on every send and believed their messages had gone out.
+   */
+  it("a refused send writes nothing into the thread it targeted", async () => {
+    const { managerOwnsResident } = await import("@/lib/auth/resident-relationship");
+    vi.mocked(managerOwnsResident).mockResolvedValue(false);
+
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "res_1", email: "resident@example.com" } } }) },
+    } as never);
+
+    const threadUpserts: unknown[] = [];
+    const threadRow = {
+      id: "thr_1",
+      owner_user_id: "res_1",
+      participant_email: "resident@example.com",
+      scope: RESIDENT_SCOPE,
+      thread_type: "",
+      row_data: { subject: "Leak", preview: "original preview", messages: [{ id: "m1", from: "Test Manager", body: "hi", at: "Jul 1" }] },
+    };
+
+    const from = vi.fn().mockImplementation((table: string) => ({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: table === "portal_inbox_thread_records" ? threadRow : { role: "resident" },
+            error: null,
+          }),
+        }),
+        in: vi.fn().mockResolvedValue({
+          data: table === "profiles" ? [{ id: "other_mgr", email: "other@example.com", role: "manager" }] : [],
+          error: null,
+        }),
+        ilike: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: { role: "resident" }, error: null }),
+      }),
+      upsert: vi.fn().mockImplementation((row: unknown) => {
+        if (table === "portal_inbox_thread_records") threadUpserts.push(row);
+        return Promise.resolve({ error: null });
+      }),
+    }));
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({ from } as never);
+
+    const req = jsonRequest("http://localhost/api/portal/send-inbox-message", {
+      method: "POST",
+      body: {
+        threadId: "thr_1",
+        subject: "Re: Leak",
+        text: "REFUSED reply must not land in the thread",
+        toUserIds: ["other_mgr"],
+        deliverToPortalInbox: true,
+        deliverViaEmail: false,
+      },
+    });
+    const res = await sendInboxMessage(req);
+
+    expect(res.status).toBe(403);
+    expect(threadUpserts).toHaveLength(0);
+  });
 });
