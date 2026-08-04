@@ -77,7 +77,7 @@ export function buildTraceObserver(trace: TraceLike, actor: TraceActor): AgentOb
           metadata: {
             ...actorMeta,
             toolsAvailable: info.toolsAvailable,
-            systemPromptChars: info.system.length,
+            systemPrompt: info.system,
           },
         }),
       ),

@@ -58,7 +58,9 @@ describe("portal chat routes bind their own registry + persona", () => {
   ])("%s", (file, registry, prompt, portal) => {
     const source = read(file);
     expect(source).toContain(`registry: ${registry}`);
-    expect(source).toContain(`system: ${prompt}`);
+    expect(source).toContain(`system: withAgentCustomInstructions(${prompt}, customInstructions)`);
+    expect(source).toContain("loadAgentCustomInstructions(ctx.db, ctx.userId)");
+    expect(source).toContain("handleAgentChatHistoryRequest");
     // The confirm gate is bound to the SAME portal, so a proposal made in one
     // portal can never be confirmed against another portal's tool of the same name.
     expect(source).toContain(`portal: ${portal}`);

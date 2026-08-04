@@ -23,6 +23,9 @@ export type AssistantChatComposerProps = {
   onAttachmentsChange: (next: PendingChatAttachment[]) => void;
   onAttachmentError?: (message: string) => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /** Stable hook for a layout-level assistant entry point to focus this composer. */
+  inputId?: string;
+  inputAriaLabel?: string;
   className?: string;
 };
 
@@ -37,6 +40,8 @@ export function AssistantChatComposer({
   onAttachmentsChange,
   onAttachmentError,
   inputRef,
+  inputId,
+  inputAriaLabel,
   className,
 }: AssistantChatComposerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -159,6 +164,8 @@ export function AssistantChatComposer({
         </button>
         <textarea
           ref={inputRef}
+          id={inputId}
+          aria-label={inputAriaLabel}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

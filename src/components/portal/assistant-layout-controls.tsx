@@ -39,8 +39,8 @@ export function AssistantUndockToPopupButton({
     <button
       type="button"
       onClick={onClick}
-      aria-label="Open assistant as a popup"
-      title="Open as popup"
+      aria-label="Unpin PropLane Assistant, use the floating popup instead"
+      title="Unpin — back to the floating popup"
       data-attr="assistant-undock-to-popup"
       className={cn(iconBtnClass, className)}
     >

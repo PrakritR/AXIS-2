@@ -31,6 +31,7 @@ import {
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { MANAGER_PLAN_PORTAL_HASH } from "@/lib/portals/manager-plan-path";
 import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
+import { AssistantCustomInstructionsSetting } from "@/components/portal/assistant-custom-instructions-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -367,6 +368,7 @@ export function PortalProfileClient({
               </PortalSettingsGroup>
             </PortalSettingsSection>
             <AssistantDisplaySetting />
+            <AssistantCustomInstructionsSetting role={variant} />
             <NotificationsToggle />
           </>
         );
@@ -448,6 +450,7 @@ export function PortalProfileClient({
       <PortalSettingsSections>
         <PortalSettingsProfileHeader name={emptyToDash(fullName)} email={initialEmail} />
         {personalInfoSection}
+        <AssistantCustomInstructionsSetting role={variant} />
         <NotificationsToggle />
         <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
         <PortalSettingsExtras currentKind={portalKind} />

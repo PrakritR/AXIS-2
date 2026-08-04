@@ -8,6 +8,9 @@ import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
+import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
@@ -20,6 +23,13 @@ import { selectAgentRoute } from "@/lib/agent/model";
 import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
+
+/** Resident archive, never shared with another resident under the same manager. */
+export async function GET(req: Request) {
+  const ctx = await resolveResidentAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryRequest(req, ctx, "resident");
+}
 
 /**
  * Resident-portal assistant turn. Same loop and gating as the manager chat,
@@ -66,7 +76,13 @@ export async function POST(req: Request) {
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
 
-  const sessionId = await ensureAgentSession(ctx, "resident", body.sessionId as string | undefined);
+  const sessionKind = body.archive === false ? MODAL_CHAT_SESSION_KIND : PORTAL_CHAT_SESSION_KIND;
+  const sessionId = await ensureAgentSession(ctx, "resident", {
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
+    title: lastUserText(messages),
+    kind: sessionKind,
+  });
+  const customInstructions = await loadAgentCustomInstructions(ctx.db, ctx.userId);
 
   try {
     const registry = buildResidentRegistry(ctx);
@@ -90,7 +106,7 @@ export async function POST(req: Request) {
         runAgentTurn({
           ctx,
           registry,
-          system: RESIDENT_SYSTEM_PROMPT,
+          system: withAgentCustomInstructions(RESIDENT_SYSTEM_PROMPT, customInstructions),
           messages,
           observer,
           model: routing,
@@ -133,7 +149,7 @@ export async function POST(req: Request) {
       }
     }
 
-    appendAgentMessages(ctx, "resident", sessionId, [
+    await appendAgentMessages(ctx, "resident", sessionId, [
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
@@ -149,7 +165,7 @@ export async function POST(req: Request) {
           ...(proposal ? { pendingAction: { toolName: proposal.toolName } } : {}),
         },
       },
-    ]);
+    ], { kind: sessionKind });
 
     return assistantResponse(req, {
       reply,

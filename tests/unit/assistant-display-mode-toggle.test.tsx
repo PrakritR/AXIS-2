@@ -129,6 +129,17 @@ describe("assistant display mode", () => {
     expect(screen.queryByText("Opening PropLane Assistant")).toBeNull();
   });
 
+  it("keeps the popup panel fixed to its viewport anchor when it opens", async () => {
+    renderPortal();
+    fireEvent.click(askPropLane());
+
+    await waitFor(() => expect(document.querySelector(".axis-assistant-panel")).not.toBeNull());
+    const panel = document.querySelector(".axis-assistant-panel");
+    expect(panel).not.toBeNull();
+    expect(panel!.className).toContain("fixed");
+    expect(panel!.className).not.toContain("relative");
+  });
+
   it("unpins from the dock header, back to the popup default", async () => {
     renderPortal();
     fireEvent.click(askPropLane());

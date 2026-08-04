@@ -14,6 +14,7 @@ import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { PortalTextNotificationsBlock } from "@/components/portal/portal-text-notifications-block";
+import { AssistantCustomInstructionsSetting } from "@/components/portal/assistant-custom-instructions-setting";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_VENDOR_EMAIL, DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
@@ -1093,6 +1094,8 @@ export function VendorSettingsPanel() {
           </div>
           </PortalSettingsGroup>
         </PortalSettingsSection>
+
+        <AssistantCustomInstructionsSetting role="vendor" />
 
         <PortalTextNotificationsBlock dataAttrPrefix="vendor" demo={demo} />
 

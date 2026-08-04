@@ -33,9 +33,9 @@ describe("buildTraceObserver", () => {
     });
     obs.onToolCall!({ iteration: 0, name: "list_things", input: { limit: 2 }, ok: true, output: { things: ["a"] } });
 
-    const start = calls.update[0] as { metadata: { toolsAvailable: string[]; systemPromptChars: number } };
+    const start = calls.update[0] as { metadata: { toolsAvailable: string[]; systemPrompt: string } };
     expect(start.metadata.toolsAvailable).toEqual(["list_things"]);
-    expect(start.metadata.systemPromptChars).toBe(3);
+    expect(start.metadata.systemPrompt).toBe("SYS");
 
     const gen = calls.generation[0] as {
       usage: { input: number; output: number };
