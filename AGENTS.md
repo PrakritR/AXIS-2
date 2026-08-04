@@ -1380,6 +1380,18 @@ on an account with five listings and no paywall anywhere).
   and deleting. **Block creation; never delete or hide a manager's records.** A
   failed slot count — or a plan that cannot be read — is a 500, never "zero
   used" and never the Free cap.
+- **Relist transitions ONE record in place, and must never pair its upsert with
+  a delete of the same id.** Every unlisted row comes from
+  `unlistManagerListing` via `mockToAdminRow(removed, listingId)`, so
+  `adminRefId === listingId` and the upsert `listAdminRow` mirrors already
+  carries that id. `listAdminRow` used to follow it with a fire-and-forget
+  `deleteMirroredPropertyRecord` at that same id, which only looked harmless
+  while every upsert was accepted and the next mirror re-created the row. A
+  refusal the viewer-scoped client pre-check cannot predict — an owner at their
+  cap behind a co-managed listing, or a plan the server could not read — would
+  otherwise let the delete land alone and take
+  `clearHousingAccessForDeletedProperty` with it. Coverage:
+  `tests/unit/manager-relist-in-place.test.ts`.
 - **Section entitlements are a separate, page-level gate** and deliberately
   unchanged here: `managerSectionAllowedForTier` + `subscriptionGated` in
   `render-portal-section.tsx` paywall Residents/Leases/Services/Communication
@@ -1395,6 +1407,7 @@ on an account with five listings and no paywall anywhere).
   `manager-listing-publish-limit-feedback.test.ts`,
   `manager-subscription-tier-client.test.ts`,
   `manager-subscription-route-unknown-plan.test.ts`,
+  `manager-relist-in-place.test.ts`,
   `tools/property-resident-writes.test.ts`.
 
 # Property drafts (save add-property progress)
