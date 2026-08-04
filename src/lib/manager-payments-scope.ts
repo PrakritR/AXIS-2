@@ -23,39 +23,70 @@ import { collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-acces
  * Coverage: `tests/unit/manager-payments-dashboard-agreement.test.ts`.
  */
 
-/** Internal accounts that must never appear as a payer on the manager ledger. */
-export const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
+/**
+ * Internal accounts that must never appear as a payer on the manager ledger.
+ *
+ * Matched EXACTLY, never as a substring. This started as a substring match on
+ * name-or-email (commit 4dc87e57, "Exclude Sharad Ramachandran account from
+ * payments tab"), so any real resident whose name or email merely CONTAINED the
+ * token — "Sharada", "sharad.k@…" — silently lost every charge from every
+ * manager's money surfaces, with nothing on screen to say so. Exact matching
+ * keeps the intended exclusion and drops the collateral damage.
+ *
+ * An exact EMAIL is the right identifier and is checked first. The name list
+ * survives only because no address was ever recorded for this account; supply
+ * one and delete the name. Either way this is a data hack living in product
+ * code, and it belongs in configuration.
+ */
+export const PAYMENT_ACCOUNT_EXCLUDED_EMAILS: readonly string[] = [];
+export const PAYMENT_ACCOUNT_EXCLUDED_NAMES: readonly string[] = ["sharad ramachandran", "sharad"];
 
 export function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
-  const name = (residentName ?? "").trim().toLowerCase();
   const email = (residentEmail ?? "").trim().toLowerCase();
-  return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
+  if (email && PAYMENT_ACCOUNT_EXCLUDED_EMAILS.includes(email)) return true;
+  const name = (residentName ?? "").trim().toLowerCase();
+  return Boolean(name) && PAYMENT_ACCOUNT_EXCLUDED_NAMES.includes(name);
 }
 
 /**
  * The Payments ledger view of a manager's charges: everything
  * `readChargesForManager` returns, minus
  *  1. internal/system payer accounts, and
- *  2. charges belonging to someone who is no longer a current resident — except
- *     a manager "Add payment" one-off, which stays visible after the payer moves
- *     to Previous because the manager entered it deliberately.
+ *  2. charges belonging to a resident who has MOVED OUT — except a manager
+ *     "Add payment" one-off, which stays visible afterwards because the manager
+ *     entered it deliberately.
+ *
+ * "Moved out" is deliberately narrow. The rule used to drop the email of every
+ * application row that was not a current resident — which is also true of
+ * pending, in-progress, rejected and withdrawn rows — so a resident who merely
+ * held a SECOND application had every one of their charges disappear. On the
+ * audited portfolio that hid 38 charges across 4 people, not one of whom had
+ * moved out: three were pending applicants carrying real application fees, and
+ * one was a housed resident whose own portal was showing them the very charges
+ * their manager could not see. Money a manager cannot see is money they never
+ * chase, so an email is excluded only when it has an approved-but-no-longer-
+ * current row AND no current-resident row anywhere.
  */
 export function scopeChargesToManagerPaymentsLedger(
   charges: HouseholdCharge[],
   applications: DemoApplicantRow[],
 ): HouseholdCharge[] {
-  const previousResidentEmails = new Set(
+  const emailOf = (row: DemoApplicantRow) => row.email?.trim().toLowerCase() ?? "";
+  const currentResidentEmails = new Set(
+    applications.filter((row) => isCurrentResidentApplicationRow(row)).map(emailOf).filter(Boolean),
+  );
+  const movedOutEmails = new Set(
     applications
-      .filter((row) => !isCurrentResidentApplicationRow(row))
-      .map((row) => row.email?.trim().toLowerCase())
-      .filter((e): e is string => Boolean(e)),
+      .filter((row) => row.bucket === "approved" && !isCurrentResidentApplicationRow(row))
+      .map(emailOf)
+      .filter((e) => e && !currentResidentEmails.has(e)),
   );
   return charges
     .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
     .filter((charge) => {
       if (isManagerAddedOneOffCharge(charge)) return true;
       const email = charge.residentEmail?.trim().toLowerCase();
-      return !email || !previousResidentEmails.has(email);
+      return !email || !movedOutEmails.has(email);
     });
 }
 
