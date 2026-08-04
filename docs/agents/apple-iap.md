@@ -81,6 +81,14 @@ A manager could pay Stripe (web) AND Apple (iOS). Rules (report §3.4):
 - **Prevent in-app:** the native plan surface calls `/api/manager/subscription`
   first; if the account already has an active Stripe (or Apple) subscription it
   shows a manage-only notice and **never** offers a second purchase.
+- **A plan it could not READ is treated as paid, not as free.** `planUnknown`
+  (a failed `manager_purchases` read) reports `stripeManaged: false` /
+  `appleManaged: false`, so both manage-only branches would be bypassed and a
+  paying manager offered a duplicate subscription. `ManagerPlanNative` fails
+  closed on it — same rule as `subLoaded`: no Subscribe buttons, no Switch to
+  Free, just a retry. **Restore purchases stays**, because it only re-reads what
+  the App Store already knows. Coverage:
+  `tests/unit/manager-plan-native-3-1-2.test.tsx`.
 - **Prevent on web:** `appleManaged` is exposed on `/api/manager/subscription`;
   the web plan UI can hide Stripe checkout when an Apple sub is active.
 - **If both exist anyway:** the account stays **paid** (union). `upsertAppleManager

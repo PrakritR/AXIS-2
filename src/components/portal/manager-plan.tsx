@@ -26,6 +26,7 @@ import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 import { ManagerPlanNative } from "@/components/portal/manager-plan-native";
 import {
+  MANAGER_PLAN_BILLING_RETURN_PATH,
   MANAGER_PLAN_PORTAL_PATH,
   MANAGER_PLAN_PORTAL_SECTION_ID,
 } from "@/lib/portals/manager-plan-path";
@@ -345,7 +346,7 @@ export function ManagerPlan({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnPath: planSettingsPath }),
+        body: JSON.stringify({ returnPath: MANAGER_PLAN_BILLING_RETURN_PATH }),
       });
       const body = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !body.url) {

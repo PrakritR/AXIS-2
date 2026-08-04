@@ -132,14 +132,21 @@ describe("native purchase screen — Guideline 3.1.2 required elements", () => {
     expect(screen.getByRole("button", { name: /switch to free/i })).toBeTruthy();
   });
 
-  it("never offers Switch to Free when the plan could not be read", async () => {
-    // A failed purchase-row read reports `planUnknown` with the paid signals
-    // nulled, so the surface looks like a trial account. Writing tier=free off
-    // that guess would cancel a real paid plan.
+  it("offers no plan change at all when the plan could not be read — restore stays", async () => {
+    // A failed purchase-row read reports `planUnknown` with every paid signal
+    // nulled, so an active Stripe/Apple subscription is invisible: both
+    // manage-only branches would be bypassed. Writing tier=free off that guess
+    // cancels a real plan, and a StoreKit purchase bills a duplicate one.
     renderPurchaseSurface({ currentTier: "pro", isFree: false, trialActive: true, planUnknown: true });
-    await screen.findByText("PropLane Pro");
+
+    expect(await screen.findByText(/couldn’t load your plan|couldn't load your plan/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /switch to free/i })).toBeNull();
-    expect(screen.getByText(/load your current plan/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /subscribe to/i })).toBeNull();
+    expect(screen.queryByText("PropLane Pro")).toBeNull();
+    expect(screen.queryByText("PropLane Business")).toBeNull();
+    // Restore only re-reads what the App Store already knows — safe, and the
+    // way a manager whose row failed to read gets their entitlement back.
+    expect(screen.getByRole("button", { name: /restore purchases/i })).toBeTruthy();
   });
 
   it("the legal footer also renders on the Apple-managed manage-only branch", () => {

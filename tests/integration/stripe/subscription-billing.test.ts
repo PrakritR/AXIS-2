@@ -188,7 +188,11 @@ describe("Stripe subscription billing", () => {
     expect(status).toBe(200);
     expect(data.url).toContain("billing.stripe");
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ customer: "cus_test_123", return_url: expect.stringContaining("/portal/profile") }),
+      expect.objectContaining({
+        customer: "cus_test_123",
+        // Returns to the Settings billing tab, never a caller-supplied path.
+        return_url: expect.stringContaining("/portal/profile?tab=billing"),
+      }),
     );
   });
 

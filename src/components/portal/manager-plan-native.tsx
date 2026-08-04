@@ -98,8 +98,11 @@ type Props = {
   isFree: boolean;
   /**
    * True when the subscription route could not read the purchase row. The
-   * payload then looks exactly like a fresh trial account, so no plan WRITE may
-   * be offered off it — a "Switch to Free" here would rewrite a paying row.
+   * payload then looks exactly like a fresh trial account — `stripeManaged` and
+   * `appleManaged` both read false — so it can hide an active subscription.
+   * Neither plan WRITE on this surface may be offered off that guess: a
+   * "Switch to Free" would rewrite a paying row, and a StoreKit purchase would
+   * bill a second subscription past the double-subscribe guard.
    */
   planUnknown?: boolean;
   /** True while the account is on the no-card signup trial (`billing = 'trial'`). */
@@ -130,7 +133,7 @@ export function ManagerPlanNative({
   const [switchingToFree, setSwitchingToFree] = useState(false);
   const offeringsLoadedRef = useRef(false);
 
-  const canOffer = isIos && subLoaded && !stripeManaged && !appleManaged;
+  const canOffer = isIos && subLoaded && !planUnknown && !stripeManaged && !appleManaged;
 
   useEffect(() => {
     if (!canOffer || !userId || offeringsLoadedRef.current) return;
@@ -245,6 +248,45 @@ export function ManagerPlanNative({
     );
   }
 
+  // A purchase row we could not READ reports no Stripe and no Apple
+  // subscription, so both manage-only branches below would be bypassed and a
+  // manager who already pays would be offered a second, duplicate subscription.
+  // Same rule as `!subLoaded`: never act on an unverified plan. Restore stays,
+  // because it only re-reads what the App Store already knows.
+  if (planUnknown) {
+    return (
+      <div className="native-only mx-auto max-w-lg space-y-4">
+        <div className="rounded-2xl border border-border surface-panel p-6 text-center">
+          <p className="text-lg font-semibold text-foreground">We couldn&apos;t load your plan</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Your subscription details aren&apos;t available right now, so plans aren&apos;t shown here. Try again in a
+            moment — if you already subscribed, your plan is unaffected.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 w-full rounded-full"
+            data-attr="ios-plan-retry-load"
+            onClick={() => onReload()}
+          >
+            Try again
+          </Button>
+        </div>
+        <div className="text-center">
+          <button
+            type="button"
+            className="text-sm font-medium text-primary underline-offset-2 hover:underline disabled:opacity-60"
+            disabled={restoring}
+            data-attr="ios-restore-purchases"
+            onClick={() => void onRestore()}
+          >
+            {restoring ? "Restoring…" : "Restore purchases"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Manage-only branches: already paid on one of the two stores.
   if (appleManaged) {
     return (
@@ -306,10 +348,6 @@ export function ManagerPlanNative({
         <div className="mt-3">
           {isFree ? (
             <CurrentPlanChip />
-          ) : planUnknown ? (
-            <p className="text-sm leading-relaxed text-muted">
-              We couldn&apos;t load your current plan. Reopen this screen to change plans.
-            </p>
           ) : (
             <Button
               type="button"
@@ -323,7 +361,7 @@ export function ManagerPlanNative({
             </Button>
           )}
         </div>
-        {!isFree && !planUnknown ? (
+        {!isFree ? (
           <p className="mt-2 text-xs leading-relaxed text-muted">
             {trialActive ? "Ends your trial now. " : ""}Your properties and records stay — Free includes 1 property
             listing and locks resident, lease, and inbox tools until you subscribe again. A dedicated phone number
