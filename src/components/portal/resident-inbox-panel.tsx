@@ -716,6 +716,11 @@ export const ResidentInboxPanel = forwardRef<
           cur.map((t) => {
             if (t.id !== thread.id) return t;
             const messages = (t.messages ?? []).filter((m) => m.id !== replyId);
+            // Nothing else moved in this thread, so restore every field the
+            // optimistic append touched — messages, preview AND unread.
+            if (messages.length === (thread.messages ?? []).length) {
+              return { ...t, messages, preview: thread.preview, unread: thread.unread };
+            }
             const last = messages[messages.length - 1];
             return {
               ...t,
@@ -729,6 +734,10 @@ export const ResidentInboxPanel = forwardRef<
       let emailOk = !channels.email;
       let smsOk = !channels.sms;
       let failureMessage = "";
+      // Flips the moment a channel actually accepts the message. Past that point
+      // the reply IS delivered, so no later error — including a rejected SMS
+      // fetch after a 200 email — may withdraw the bubble or report a failure.
+      let anyChannelDelivered = false;
       // One window, one exit contract: the "sending" bubble and the disabled
       // persist flag can never outlive this call, including when a fetch REJECTS
       // (offline, aborted, DNS) rather than answering.
@@ -756,6 +765,7 @@ export const ResidentInboxPanel = forwardRef<
               failureMessage = data.error ?? "";
               throw new InboxSendRefusal(failureMessage.trim() || null);
             }
+            anyChannelDelivered = true;
           }
           if (channels.sms && activeSmsAvailable) {
             const res = await fetch("/api/portal/send-inbox-message", {
@@ -775,23 +785,27 @@ export const ResidentInboxPanel = forwardRef<
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
             smsOk = res.ok && data.ok === true;
-            if (!smsOk && !channels.email) {
+            if (smsOk) {
+              anyChannelDelivered = true;
+            } else if (!channels.email) {
               failureMessage = data.error ?? "";
               throw new InboxSendRefusal(failureMessage.trim() || null);
             }
           }
           if (!emailOk && !smsOk) throw new InboxSendRefusal(failureMessage.trim() || null);
         } catch (e) {
-          rollbackReply();
-          throw e;
+          if (!anyChannelDelivered) {
+            rollbackReply();
+            throw e;
+          }
         }
 
         // Delivered on at least one channel — only now may it enter the store,
         // merged onto the CURRENT row so a mid-send arrival survives. Everything
         // from here is bookkeeping over a message that WAS sent, so a failure
         // must never reach the resident as a failed send: the explicit upsert is
-        // the write we trust, and the forced sync reconciles when it reports
-        // false (it returns a boolean; it does not throw).
+        // the write we trust, and the forced sync below runs unconditionally as
+        // the reconciliation.
         const currentRows = localRef.current;
         const currentThread = currentRows.find((t) => t.id === thread.id);
         if (currentThread) {
