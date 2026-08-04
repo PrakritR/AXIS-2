@@ -308,6 +308,92 @@ describe("the delete confirmation says what is actually being deleted", () => {
   });
 });
 
+/**
+ * A cell draws exactly one meeting, and that modal is the only route to its
+ * controls. A multi-day Google block now covers every day it spans, so without
+ * an explicit precedence it silently replaces a confirmed tour on days 2..N —
+ * taking away the Reschedule / Cancel tour this branch exists to add. Invisible
+ * in a single-day fixture, which is why this one straddles two.
+ */
+describe("a multi-day Google block does not swallow a confirmed tour", () => {
+  /** Monday 00:00 of the rendered week, and the Tuesday after it. */
+  function weekDays() {
+    const monday = startOfWeekMonday(new Date());
+    const start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0);
+    const tuesday = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return { start, tuesday, dayOne: toLocalDateStr(start), dayTwo: toLocalDateStr(tuesday) };
+  }
+
+  /** A two-day "Vacation" block: Monday 00:00 through Wednesday 00:00. */
+  function multiDayGoogleBlock(start: Date, dayOne: string): DemoMeeting {
+    return {
+      id: "google_multi",
+      source: "external",
+      sourceId: "gcal-multi",
+      startIso: start.toISOString(),
+      endIso: new Date(start.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      dateStr: dayOne,
+      startSlot: 0,
+      span: 96,
+      durationMinutes: 2880,
+      title: "Blocked",
+      color: "bg-muted",
+      statusLabel: "Blocked",
+      googleCalendarPrivate: true,
+    };
+  }
+
+  /** The confirmed tour at 10 am on the block's SECOND day. */
+  function tourOnDayTwo(tuesday: Date, dayTwo: string): DemoMeeting {
+    const start = new Date(tuesday.getFullYear(), tuesday.getMonth(), tuesday.getDate(), 10, 0, 0, 0);
+    return {
+      ...confirmedTour(),
+      startIso: start.toISOString(),
+      endIso: new Date(start.getTime() + 30 * 60 * 1000).toISOString(),
+      dateStr: dayTwo,
+    };
+  }
+
+  it("still opens the tour, with Reschedule and Cancel tour, on day two", async () => {
+    const { start, tuesday, dayOne, dayTwo } = weekDays();
+    render(
+      <PortalCalendarPanels
+        storageKey="axis_mgr_avail_slots_v2_test"
+        externalMeetings={[tourOnDayTwo(tuesday, dayTwo), multiDayGoogleBlock(start, dayOne)]}
+        scheduleOwnerLabel="Test Manager"
+      />,
+    );
+
+    await openTourModal();
+
+    const labels = modalButtonLabels();
+    expect(labels.some((label) => /Reschedule/i.test(label))).toBe(true);
+    expect(labels.some((label) => /Cancel tour/i.test(label))).toBe(true);
+  });
+
+  it("still counts the block's day-two half hour as taken", async () => {
+    // Precedence decides what a cell DRAWS; it must not change what is open.
+    const { start, tuesday, dayOne, dayTwo } = weekDays();
+    PAINTED_SLOTS = new Set([`${dayTwo}:20`, `${dayTwo}:22`]);
+    render(
+      <PortalCalendarPanels
+        storageKey="axis_mgr_avail_slots_v2_test"
+        externalMeetings={[tourOnDayTwo(tuesday, dayTwo), multiDayGoogleBlock(start, dayOne)]}
+        scheduleOwnerLabel="Test Manager"
+      />,
+    );
+
+    const badge = await waitFor(() => {
+      const hit = [...document.querySelectorAll("*")].find(
+        (el) => el.children.length === 0 && /^\d+ open slots?$/.test((el.textContent ?? "").trim()),
+      );
+      if (!hit) throw new Error("week badge not rendered");
+      return hit;
+    });
+    expect(badge.textContent?.trim()).toBe("0 open slots");
+  });
+});
+
 describe("counts stay honest after a tour changes state", () => {
   /** The week's "N open slots" badge — painted availability minus what is booked. */
   function weekOpenSlotCount(): number | null {
