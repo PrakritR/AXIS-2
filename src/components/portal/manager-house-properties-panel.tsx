@@ -65,6 +65,8 @@ import {
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
 import { isServerSyncOriginatedEvent } from "@/lib/property-pipeline-events";
+import { managerPropertyLimitMessage, managerTierPropertyLimitReached } from "@/lib/manager-access";
+import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 
 function propertyIdIsLinked(pid: string, linkedIds: Set<string>): boolean {
   if (!pid) return false;
@@ -534,6 +536,19 @@ function ManagerPropertyInlineDetails({
               data-attr="listing-relist"
               onClick={(e) => {
                 e.stopPropagation();
+                // Relisting takes an unlisted row back into a live listing slot,
+                // so it spends plan quota exactly like publishing a new one.
+                // `listAdminRow` writes locally and mirrors the server write
+                // fire-and-forget, so the server's 403 would never be seen —
+                // check here, before anything moves, and say why.
+                if (!skuLoaded) {
+                  showToast("Loading subscription…");
+                  return;
+                }
+                if (managerTierPropertyLimitReached(skuTier, propCount)) {
+                  showToast(managerPropertyLimitMessage(skuTier, { omitUpgradeCta: isNativeRuntimeSync() }));
+                  return;
+                }
                 deferCatalogMutation(() => {
                   if (!row) return;
                   const id = listAdminRow(row, managerUserId);

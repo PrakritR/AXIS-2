@@ -5,11 +5,13 @@ import { generateManagerId } from "@/lib/manager-id";
 import {
   normalizeManagerSkuTier,
   pickBestManagerPurchaseRow,
+  resolveEffectiveManagerSkuTier,
   resolveManagerSubscriptionTierFromPurchase,
   type ManagerSkuTier,
   type ManagerSubscriptionTier,
   type ManagerPurchaseRowRecord,
 } from "@/lib/manager-access";
+import { isAppleBilledManagerPurchase } from "@/lib/manager-apple-purchase";
 import { loadManagerManualPaymentSettings } from "@/lib/manager-manual-payment-settings";
 import { resolveServiceFeePayer, type ServiceFeePayer } from "@/lib/payment-policy";
 
@@ -214,6 +216,21 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
     stripeSubscriptionId: row.stripeSubscriptionId,
     appleOriginalTransactionId: row.appleOriginalTransactionId,
   };
+}
+
+/**
+ * The plan this account is actually held to, resolved server-side from its own
+ * `manager_purchases` row — never from anything a client sent. Same inputs and
+ * same rule as the `isFree` the Settings plan page renders, so the enforced
+ * plan and the displayed plan can never disagree.
+ */
+export async function getEffectiveManagerSkuTier(userId: string): Promise<ManagerSkuTier | null> {
+  const row = await getManagerPurchaseRowByUserId(userId);
+  return resolveEffectiveManagerSkuTier({
+    tier: row.tier,
+    stripeSubscriptionId: row.stripeSubscriptionId,
+    appleManaged: isAppleBilledManagerPurchase(row.billing, row.appleOriginalTransactionId),
+  });
 }
 
 /**

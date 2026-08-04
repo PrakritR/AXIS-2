@@ -119,6 +119,32 @@ export function scopePropertyPipelineSnapshotForViewer(
   };
 }
 
+/**
+ * Statuses that occupy one of the plan's property-listing slots.
+ *
+ * Derived from `propertyRowsToSnapshot` below, which is what the portal counts:
+ * `pending` lands in `pendingByUser` and `live`/`review` in `extrasByUser`, and
+ * `countManagerManagedPropertiesForUser` is exactly those two. Everything else
+ * (`draft`, `unlisted`, `rejected`, `request_change`) goes to a side bucket and
+ * is deliberately uncapped — a draft is private and unpublished, an unlisted
+ * row is a listing the manager already took down.
+ *
+ * Keep this in step with the snapshot mapping: a new status that lands in
+ * `pendingByUser` / `extrasByUser` is a listing slot and belongs here, or the
+ * plan cap silently stops counting it.
+ */
+export const LISTING_SLOT_PROPERTY_STATUSES: readonly ManagerPropertyRecordStatus[] = [
+  "pending",
+  "live",
+  "review",
+];
+
+export function propertyStatusOccupiesListingSlot(
+  status: ManagerPropertyRecordStatus | string | null | undefined,
+): boolean {
+  return LISTING_SLOT_PROPERTY_STATUSES.includes(String(status ?? "") as ManagerPropertyRecordStatus);
+}
+
 export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): PropertyPipelineSnapshot {
   const snapshot = emptyPropertyPipelineSnapshot();
   for (const record of records) {
