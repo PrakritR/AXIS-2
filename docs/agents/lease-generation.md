@@ -1184,6 +1184,49 @@ on an executed lease is the worst thing this module can produce.
 `resolveLeaseJurisdiction` (`src/lib/lease-jurisdiction.ts`) regex-matches the property address.
 It resolves five values: `seattle`, `san_francisco`, `california`, `washington`, `unsupported`.
 
+### Jurisdiction registry and disclosure bridge
+
+The typed contract is `JurisdictionKey` (`{ state: string; city?: string }`), where state is a
+two-letter USPS abbreviation and a city is a normalized registry key. New code calls
+`resolveJurisdiction(ctx)`, `jurisdictionConfig(key)`, and `jurisdictionRuleScopes(key)`.
+`resolveLeaseJurisdiction` remains only as a compatibility adapter for legacy string-union callers.
+
+`LEASE_JURISDICTION_TEMPLATE_REGISTRY` in `src/lib/lease-templates/types.ts` is code-owned. A
+state entry provides its verified config and rules-catalog state scope; city entries provide only
+verified local config overlays. Adding a state therefore means adding one verified config entry
+and its verified disclosure rules, without adding an HTML builder. Do not add a state without
+verified sources for every populated config value.
+
+`jurisdictionRuleScopes` reads city inheritance from
+`leases/disclosure-clause-rules.json#jurisdiction_inheritance`. Its current mappings are:
+
+| JurisdictionKey | Rule scopes |
+| --- | --- |
+| `{ state: "CA", city: "san_francisco" }` | `federal`, `california`, `san_francisco` |
+| `{ state: "CA" }` | `federal`, `california` |
+| `{ state: "WA", city: "seattle" }` | `federal`, `washington`, `seattle` |
+| `{ state: "WA" }` | `federal`, `washington` |
+
+Property records currently have joined `address`, `neighborhood`, and separate ZIP values, but
+not separate property city/state columns. The resolver still accepts structured `city`, `state`,
+and `postalCode` fields for a future record shape, and prefers them when present; joined-address
+matching remains the fallback today.
+
+There is still no lodger-statute config field. The CA and WA rules catalog contains no verified
+lodger statute for this purpose, so none is inferred or cited.
+
+#### Router integration status
+
+The registry contract is independent of manager-template selection. The router migration must
+wait for P6's `selectLeaseTemplateDoc(ctx, stayKind)` interface: it resolves stay pricing before
+template selection, returns a typed unsupported-jurisdiction outcome instead of throwing, routes
+standard documents through `jurisdictionConfig`, and updates these callers: lease pipeline
+generation/gating, property lease preview, and lease amendment regeneration. It also writes the
+generated standard document's `executedJurisdiction` as `US-CA`, `US-CA/san_francisco`, `US-WA`,
+or `US-WA/seattle`; it never writes `documentSha256`. An uploaded template on an unsupported
+state remains generatable, but no generated jurisdiction provenance is asserted for that manager
+document.
+
 The two statewide values were added because the state rules used to fall through to the CITY
 templates, so a Fremont CA property generated a lease claiming "City and County of San
 Francisco" and citing the SF Rent Ordinance. Explicit city names, the Ave NE street pattern,
@@ -1264,6 +1307,58 @@ reintroduce a local lookup.
   own optional config field and a verified figure per jurisdiction.
 - **Dates render as raw ISO** (`2026-08-03`) on both documents rather than a written-out date.
 
+## Per-stay-kind templates and Terms Rider (P6)
+
+Lease configuration is already stored additively in `property_data` JSON through
+`ManagerListingSubmissionV1.propertyLeaseTemplates[]`. The auto-seeded rows use
+`listingSeedKey: "primary"` for long-term and `listingSeedKey: "short-term"`
+for short-term. Each row owns its own `leaseConfigMode`, `leaseCustomKind`,
+`customLeaseTerms`, `leaseTemplateDocUrl`, and `leaseTemplateDocName`. The legacy
+top-level fields remain the long-term compatibility representation for listings
+saved before the template array existed. No migration is needed.
+
+`selectLeaseTemplateDoc(ctx, stayKind)` in `generated-lease.ts` is the only
+uploaded-document selector for this path. Its behavior is intentional:
+
+| Long-term template | Short-term template | Long stay | Short stay |
+| --- | --- | --- | --- |
+| configured | configured | long-term PDF | short-term PDF |
+| configured | missing | long-term PDF | generated stay agreement |
+| missing | configured | generated long-form lease | short-term PDF |
+| missing | missing | generated long-form lease | generated stay agreement |
+| legacy single top-level PDF | no per-stay rows | legacy PDF | generated stay agreement |
+
+There is no long-term-to-short-term fallback. Serving a residential template to a
+guest is less safe than using PropLane's generated short-stay agreement. The manager
+lease modal states this rule and bulk editing applies only the selected agreement type,
+leaving the other type unchanged.
+
+For an uploaded PDF, PropLane does not rewrite, flatten, overlay, or otherwise edit
+the manager's source document. `buildManagerTemplateLeaseHtml` shows a Terms Rider
+instead of the old placement-summary table. The PDF path uses
+`appendLeaseTermsRiderToPdf`: base PDF, then rider, then the existing electronic
+signature certificate. The rider states the resident, property and room, stay dates,
+rent basis and resolved rate, deposit, any charge-backed fees, and this precedence
+clause: "If this Terms Rider conflicts with the base document, this Terms Rider
+controls for that conflict." Rates and deposits are resolved with `resolveStayPricing`;
+fees come only from the billing snapshot, so the rider does not invent a ledger value.
+
+The combined base-PDF-plus-rider bytes are stored in
+`managerUploadedPdf.originalDataUrl` before sending for signature. Therefore each
+signature's `documentSha256` covers both the uploaded legal document and the binding
+rider. The certificate stays outside that hash and is appended last because it is a
+post-signature platform artifact. A signed row cannot replace `originalDataUrl`, so
+the rider is never inserted after a party has signed. Manager-uploaded templates also
+record `templateVersion` as `<template id>@1.0.0` (or
+`legacy-manager-uploaded@1.0.0` for a pre-array listing). Generation freezes the
+selected template URL, display name, and version on the unsigned lease row, so a
+later listing-settings change cannot swap the reviewed PDF during send.
+
+Not built: AcroForm filling. A future upgrade can inspect
+`pdf.getForm().getFields().length`, set verified named text fields, and flatten the
+form when fields exist. PDFs without fields still use the rider. DOCX template upload
+remains out of scope.
+
 ## Coverage
 
 | Test | What it pins |
@@ -1273,3 +1368,141 @@ reintroduce a local lookup.
 | `tests/unit/daily-rent-charges.test.ts` | the monthly charge path is unmoved (`$851.61`, `Rent — April 2026`, no `/day`) |
 | `tests/unit/lease-jurisdiction.test.ts` | address to jurisdiction, including the statewide fallbacks |
 | `tests/unit/generated-lease.test.ts` | long-form document content |
+
+## P9 long-term lease parity
+
+### Measured reference and generated-document gap list
+
+On 2026-08-02, the Seattle reference at
+`/Users/akhilvemuri/Downloads/FILE_6215.pdf` was extracted with `pdftotext` and
+read in full. The comparison target was a Seattle long-term room placement from
+the generated builder, using the same room, rent, utilities, deposit, move-in
+fee, and charge snapshot inputs used by the new unit coverage.
+
+| Reference topic | Result in generated long form |
+| --- | --- |
+| Lease Summary | Already present for branded Seattle leases with billing data. P9 adds Landlord and reads rent, utilities, total monthly payment, and payment due at signing from the billing snapshot. First partial month is one combined ledger-derived amount. |
+| Parties, premises, lease term, rent, deposits, returned payments, utilities, occupancy, shared spaces, rules, pets, maintenance, entry, assignment, insurance, default, early termination, payment order, notices, lead paint, governing law, attorney fees, application, schedule, signature, Addenda A-E | Already present, with stable tested order. |
+| Delivery of possession | Added. It states delayed-possession rent abatement and defers remedies to applicable law. The reference's fourteen-day termination interval is deliberately not copied. |
+| Early termination economics | Added only when the listing configures a break-lease fee or lease-up percentage. Continuing liability remains until replacement possession or end of term. |
+| Holdover | Added only when the listing configures a daily rate. It explicitly says the fixed term does not convert to month-to-month. |
+| Deposit labor and reissue fees | The deduction categories were present. Labor and reissue amounts now render only from optional listing fields. |
+| Move-in condition | Existing Addendum A supplies the area-by-area report. P9 removes the unrelated five-day default and makes a signed report supersede the baseline acknowledgement. |
+| Utility usage, trash, cleaning access | Existing usage language is retained. Trash fee is listing-configured; cleaning and access responsibilities are now explicit. |
+| Bathroom sharing, quiet hours, guest cap | Bathroom wording now derives from the room-to-bathroom listing assignment. Quiet hours and guest cap render only when configured. |
+| Safety devices and fire safety | Maintenance now includes smoke alarms, CO alarms, egress, and water-heater controls. Citations are optional config fields and are unset pending verification. |
+| Keys and access devices | Already present in Landlord Entry. |
+| Move-out and professional cleaning | Added only when the listing requires it. It requires a paid invoice and limits any deduction to a documented invoice and applicable law. |
+| Venue | Renders only from the optional listing venue field. |
+
+### New optional listing fields
+
+All fields below live on `ManagerListingSubmissionV1`. Empty, invalid, or absent values
+normalize to `undefined`. The builder omits the associated term rather than printing a
+zero, a default amount, or a term borrowed from another listing.
+
+| Field | Renders when set | Unset behavior |
+| --- | --- | --- |
+| `longTermBreakLeaseFee` | fixed early-termination fee | fee sentence absent |
+| `longTermLeaseUpFeePercent` | percentage lease-up fee | fee sentence absent |
+| `longTermHoldoverDailyRate` | daily holdover rate and no-conversion statement | whole holdover clause absent |
+| `longTermReturnedPaymentFee` | returned-payment fee | fee sentence absent; general actual-cost language remains |
+| `longTermDepositLaborRate` | manager labor rate in deposit deductions | generic documented-cost language |
+| `longTermDepositReissueFee` | stop-payment or refund reissue fee | sentence absent |
+| `longTermTrashViolationFee` | per-occurrence trash fee | fee sentence absent |
+| `longTermQuietHours` | quiet-hours rule and Addendum E rule | quiet-hours rule absent |
+| `longTermGuestCap` | gathering cap and Addendum E rule | cap rule absent |
+| `longTermDisputeVenue` | venue sentence | sentence absent |
+| `longTermProfessionalCleaningRequired` | professional-cleaning move-out section | whole move-out section absent |
+
+`lateFeeAmount` and `lateFeeEnabled` already existed. The long form uses the listing's
+configured late fee when supplied and omits the late-fee paragraph when it is disabled.
+The existing `monthToMonthSurcharge` is not rendered because the billing snapshot and
+household-charge ledger do not charge it.
+
+### Citations added in the template config
+
+P9 adds optional config slots only: `returnedPaymentStatuteRef`,
+`earlyTerminationStatuteRef`, `smokeAlarmStatuteRef`, and
+`carbonMonoxideAlarmStatuteRef`. No new citation value was populated. The reference PDF
+is a source for this manager's commercial terms, not verification for a state statute.
+The regression test proves an unset citation still renders the returned-payment clause
+without a Washington citation.
+
+### Deliberately deferred clauses
+
+- The reference's fourteen-day delayed-possession termination, its 14-day move-in report
+  deadline, detailed liability cap and indemnity, crime, package, parking, bike-storage
+  allocation, and the complete lettered maintenance list are not default platform terms.
+  They need manager-controlled data and legal review before they can be emitted.
+- The reference's Washington citations for late possession, early termination, smoke
+  alarms, CO alarms, and cure procedures were not added or inferred. A verified official
+  source is required before populating a jurisdiction config.
+- The disclosure rules engine owns lead-paint disclosure content. P9 does not add a second
+  disclosure or change its trigger.
+- These optional fields have a normalization and generation path, but the manager listing
+  form does not yet expose controls for them. They are therefore available to trusted listing
+  imports and persisted submissions only. A manager-facing configuration surface is required
+  before presenting these terms as self-serve product functionality.
+
+### P9 coverage
+
+`tests/unit/long-term-lease-parity.test.ts` pins the long-form heading order, configured
+amount movement, absence of all new commercial clauses when unset, California output with
+an unset citation, summary values sourced from the billing snapshot, and byte-identical
+short-term output when only long-term fields change.
+
+## Manager lease-body edits (P8)
+
+The manager-side lease-pipeline editor is intentionally a small HTML-source editor with a
+side-by-side preview. It is available only for a generated HTML lease in Manager Review,
+while `leaseAllowsManagerDocumentEdits(row)` is true. Uploaded-template PDFs are excluded:
+their base document plus P6 Terms Rider remains the manager's original agreement bytes.
+
+### Stored HTML policy
+
+`src/lib/lease-document-sanitizer.ts` is the sole allowlist. It permits document structure
+and typography only: document, heading, text, list, table, and basic layout tags, plus a
+small set of structural attributes. It removes scripts, unsafe styles, event handlers, links and
+URL-bearing attributes, iframes, objects, images, forms, SVG, and external-resource tags.
+Existing document CSS is preserved byte-for-byte only when it contains no CSS escapes,
+URL-bearing syntax, external at-rules, or executable CSS constructs; unsafe styles are removed.
+It runs in three places:
+
+- `saveLeaseDocumentHtml` and section saves use it before a browser-store update.
+- `getLeaseDocumentHtml` uses it before an unsigned stored value is rendered anywhere in
+  the portal. After a signature, it renders the already-sanitized stored bytes unchanged,
+  because those bytes are P4 execution evidence.
+- `POST /api/portal-lease-pipeline` applies it before `row_data` is upserted, so a direct
+  route request cannot persist executable manager HTML.
+
+The preview iframe has an empty sandbox attribute. The sanitizer is still required because
+the same stored document is rendered for residents and exported as lease HTML.
+
+### Execution and regeneration
+
+Every saved body edit increments both `versionNumber` and `pdfVersion`, stamps
+`generatedAtIso`, and records `managerDocumentEditedAtIso`. The client persistence function
+rejects a row once either party has signed. The route refuses direct body replacements after
+the row leaves Manager Review, and its existing P4 `replacesSignedLeaseDocument` guard rejects
+the signed case with 409. The P4 hash therefore covers the edited body that was actually signed.
+
+Regeneration never silently replaces a manual edit. Both manager generate surfaces show a
+confirmation that says the current application/listing terms will replace the manager's
+saved body. Only the confirmed path passes `discardManagerEdits`. If application data changes
+through the automatic resident-sync path, the row records
+`managerDocumentRegenerationRequiredAtIso` and cannot be sent until the manager explicitly
+regenerates. This keeps the edited version visible without silently sending stale terms.
+
+### Verbatim disclosures
+
+P7's disclosure engine has not landed in this checkout, so no runtime clause is currently
+inserted from the catalog. P8 reserves immutable markers now:
+`<!-- proplane-verbatim-disclosure:start:<id> -->` and matching `end` markers. If a generated
+lease contains one, `sanitizeManagerLeaseDocumentEdit` restores the original marked block and
+rejects a save that removes or reorders it. P7 must emit those markers around each
+`verbatim_required` clause. P8 deliberately does not add or infer any statute text.
+
+Deliberately left out: a rich-text editor, arbitrary images/links/embedded documents, and
+editing of uploaded PDFs. The source textarea plus preview keeps the allowed document grammar
+visible and gives the persistence layer one narrow attack surface.

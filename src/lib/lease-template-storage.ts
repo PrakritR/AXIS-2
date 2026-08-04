@@ -63,6 +63,28 @@ export function leaseTemplateObjectPath(url: string | null | undefined): string 
 }
 
 /**
+ * Trusted read-through for templates uploaded to `listing-photos` before the
+ * private bucket existed. This parser is deliberately stricter than generic
+ * listing-media cleanup because this URL is fetched with credentials before a
+ * resident signs. New templates must use `leaseTemplateObjectPath` instead.
+ */
+export function legacyLeaseTemplateObjectPath(url: string | null | undefined): string | null {
+  const raw = url?.trim();
+  const configuredOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
+  if (!raw || !configuredOrigin) return null;
+  try {
+    const parsed = new URL(raw);
+    const expected = new URL(configuredOrigin);
+    const prefix = "/storage/v1/object/public/listing-photos/";
+    if (parsed.origin !== expected.origin || !parsed.pathname.startsWith(prefix)) return null;
+    const path = decodeURIComponent(parsed.pathname.slice(prefix.length)).trim();
+    return path && !path.includes("..") && /\.pdf$/i.test(path) ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Every lease-template object path a submission references. Walks
  * `propertyLeaseTemplates[]` as well as the top-level field — the per-property
  * lease templates carry their own uploads and were previously invisible to both

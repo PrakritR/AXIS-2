@@ -7,23 +7,31 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
-import { buildAiGeneratedLeaseHtml, leaseContextFromApplication, leaseTemplateDocForContext } from "@/lib/generated-lease";
 import {
-  isLeaseGenerationSupported,
-  resolveLeaseJurisdiction,
-  unsupportedJurisdictionMessage,
-} from "@/lib/lease-jurisdiction";
+  buildAiGeneratedLeaseHtml,
+  leaseContextFromApplication,
+  leaseTemplateDocForContext,
+  leaseTemplateVersionForContext,
+} from "@/lib/generated-lease";
 import {
   LEASE_ESIGN_CONSENT_TEXT,
   LEASE_ESIGN_CONSENT_VERSION,
   asDocumentSha256,
   documentFingerprintLabel,
+  leaseAllowsManagerDocumentEdits,
   leaseDocumentSha256,
   replacesSignedLeaseDocument,
   rowHasAnySignature,
   signedDocumentHashesDiverge,
 } from "@/lib/lease-execution-evidence";
-import { mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import { parseLeaseHtmlSections, rebuildLeaseHtmlFromSections } from "@/lib/lease-html-sections";
+import {
+  isEditableLeaseSection,
+  renderLeaseSectionEdit,
+  type LeaseSectionEdit,
+} from "@/lib/lease-section-text";
+import { appendLeaseTermsRiderToPdf, mergeUploadedLeasePdfWithSignatures } from "@/lib/lease-pdf-signing";
+import { leaseTemplateObjectPath, legacyLeaseTemplateObjectPath } from "@/lib/lease-template-storage";
 import {
   downloadDataUrl,
   downloadTextContent,
@@ -198,11 +206,7 @@ export function hasAnyLeaseSignature(row: LeasePipelineRow): boolean {
 }
 
 /** True when the manager may generate, upload, or replace the lease document (manager review only). */
-export function leaseAllowsManagerDocumentEdits(row: LeasePipelineRow): boolean {
-  if (row.status === "Voided" || row.status === "Fully Signed") return false;
-  if (hasAnyLeaseSignature(row)) return false;
-  return row.bucket === "manager";
-}
+export { leaseAllowsManagerDocumentEdits } from "@/lib/lease-execution-evidence";
 
 /**
  * True when an uploaded lease has been parsed but no human has confirmed the
@@ -352,6 +356,8 @@ export type LeasePipelineRow = {
   application?: Partial<RentalWizardFormState>;
   generatedHtml?: string | null;
   generatedAtIso?: string | null;
+  /** Manager-authored, typed section overrides. The generated HTML stays the source document. */
+  managerSectionEdits?: Record<string, LeaseSectionEdit> | null;
   managerUploadedPdf?: { dataUrl: string; fileName: string; uploadedAt: string; originalDataUrl?: string } | null;
   /**
    * PropLane's structured reading of `managerUploadedPdf`, and the manager's
@@ -380,6 +386,10 @@ export type LeasePipelineRow = {
   versionNumber?: number;
   /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
   leaseDocumentRemovedAt?: string | null;
+  /** Set only after a manager saves an edit to generated lease HTML. */
+  managerDocumentEditedAtIso?: string | null;
+  /** Underlying terms changed after a manual edit. Sending is blocked until regeneration is confirmed. */
+  managerDocumentRegenerationRequiredAtIso?: string | null;
   /** Off-platform lease — both parties treated as signed; no e-sign workflow. */
   externallySignedLease?: boolean;
   /**
@@ -391,6 +401,10 @@ export type LeasePipelineRow = {
   executedJurisdiction?: string | null;
   /** Template identifier plus semver, e.g. "ca-residential@1.2.0". */
   templateVersion?: string | null;
+  /** PDF selection frozen when an unsigned manager-review document is generated. */
+  templateDocumentUrl?: string | null;
+  /** Display name paired with `templateDocumentUrl`; not an authorization value. */
+  templateDocumentName?: string | null;
   /** SHA-256 of the document as first executed (see `LeaseSignature.documentSha256`). */
   documentSha256?: string | null;
   /**
@@ -453,6 +467,18 @@ function currentActorForStatus(status: LeaseWorkflowStatus): LeasePipelineRow["c
 function stageLabelForStatus(status: LeaseWorkflowStatus): string {
   if (status === "Fully Signed") return "Signed";
   return status;
+}
+
+function normalizeManagerSectionEdits(raw: unknown): Record<string, LeaseSectionEdit> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const edits: Record<string, LeaseSectionEdit> = {};
+  for (const [sectionId, candidate] of Object.entries(raw)) {
+    if (!sectionId.trim() || !candidate || typeof candidate !== "object") continue;
+    const edit = candidate as Partial<LeaseSectionEdit>;
+    if ((edit.format !== "text" && edit.format !== "rich") || typeof edit.value !== "string") continue;
+    edits[sectionId] = { format: edit.format, value: edit.value };
+  }
+  return Object.keys(edits).length ? edits : null;
 }
 
 /** Coerce partial rows from localStorage so UI never reads undefined thread / notes / bucket. */
@@ -526,8 +552,11 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     roomChoice: typeof r.roomChoice === "string" ? r.roomChoice : null,
     signedRentLabel: typeof r.signedRentLabel === "string" ? r.signedRentLabel : null,
     application: r.application,
+    // Do not alter persisted historical bytes on read. Section overrides stay
+    // separate until they are materialized for signing.
     generatedHtml: stripLeaseAiDisclaimerFromHtml(r.generatedHtml ?? null),
     generatedAtIso: r.generatedAtIso ?? null,
+    managerSectionEdits: normalizeManagerSectionEdits(r.managerSectionEdits),
     managerUploadedPdf: r.managerUploadedPdf ?? null,
     // The parse describes ONE uploaded document, so it cannot outlive it. Every
     // path that replaces the upload with generated HTML (the agent's
@@ -558,9 +587,14 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
     versionNumber,
     leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
+    managerDocumentEditedAtIso: typeof r.managerDocumentEditedAtIso === "string" ? r.managerDocumentEditedAtIso : null,
+    managerDocumentRegenerationRequiredAtIso:
+      typeof r.managerDocumentRegenerationRequiredAtIso === "string" ? r.managerDocumentRegenerationRequiredAtIso : null,
     externallySignedLease: r.externallySignedLease === true,
     executedJurisdiction: optionalTrimmedString(r.executedJurisdiction),
     templateVersion: optionalTrimmedString(r.templateVersion),
+    templateDocumentUrl: optionalTrimmedString(r.templateDocumentUrl),
+    templateDocumentName: optionalTrimmedString(r.templateDocumentName),
     // DERIVED, never carried forward from storage: it is the hash recorded by
     // the FIRST signature currently on the row. A stored copy went stale the
     // moment a document was replaced and the row re-signed (every reset path
@@ -1565,8 +1599,39 @@ export function updateLeasePipelineRow(id: string, patch: Partial<LeasePipelineR
 }
 
 export function getLeaseDocumentHtml(row: LeasePipelineRow): string | null {
-  const raw = hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, row.generatedHtml) : row.generatedHtml ?? null;
-  return stripLeaseAiDisclaimerFromHtml(raw);
+  const generatedHtml = stripLeaseAiDisclaimerFromHtml(row.generatedHtml ?? null);
+  if (!generatedHtml) return null;
+  const sections = parseLeaseHtmlSections(generatedHtml);
+  const edits = row.managerSectionEdits;
+  const rendered = !sections.length || !edits
+    ? generatedHtml
+    : rebuildLeaseHtmlFromSections(
+        generatedHtml,
+        sections.map((section) => {
+          const edit = edits[section.id];
+          // Stored row_data is client-controlled. A disclosure or ledger edit is
+          // never trusted, even if one was written before this invariant existed.
+          if (!edit || !isEditableLeaseSection(section)) return section;
+          return { ...section, bodyHtml: renderLeaseSectionEdit(edit) };
+        }),
+      );
+  return hasAnyLeaseSignature(row) ? applyLeaseSignaturesToHtml(row, rendered) : rendered;
+}
+
+/**
+ * Freeze typed manager overrides into the agreement body immediately before a
+ * signer can see it. Once a signature exists, this is deliberately a no-op:
+ * executed bytes must never be rebuilt from mutable row data.
+ */
+export function materializeManagerSectionEditsForSignature(row: LeasePipelineRow): LeasePipelineRow {
+  if (!row.generatedHtml || !row.managerSectionEdits || hasAnyLeaseSignature(row)) return row;
+  const generatedHtml = getLeaseDocumentHtml(row);
+  if (!generatedHtml) return row;
+  return normalizeLeasePipelineRow({
+    ...row,
+    generatedHtml,
+    managerSectionEdits: null,
+  });
 }
 
 export function appendLeaseThreadMessage(
@@ -1648,13 +1713,8 @@ export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: tru
   if (!ctx) {
     return { ok: false, error: "No application data on file." };
   }
-  // Properties with a manager-uploaded lease template can generate anywhere.
-  if (leaseTemplateDocForContext(ctx)) return { ok: true };
-  const jurisdiction = resolveLeaseJurisdiction(ctx);
-  if (!isLeaseGenerationSupported(jurisdiction)) {
-    return { ok: false, error: unsupportedJurisdictionMessage(jurisdiction) };
-  }
-  return { ok: true };
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  return outcome.kind === "generated" ? { ok: true } : { ok: false, error: outcome.error };
 }
 
 async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<LeasePipelineRow["managerUploadedPdf"]> {
@@ -1674,10 +1734,69 @@ async function refreshUploadedPdfSignatures(row: LeasePipelineRow): Promise<Leas
   }
 }
 
+function pdfDataUrl(bytes: ArrayBuffer): string {
+  const values = new Uint8Array(bytes);
+  let binary = "";
+  for (const value of values) binary += String.fromCharCode(value);
+  return `data:application/pdf;base64,${btoa(binary)}`;
+}
+
+/**
+ * A manager template remains byte-for-byte intact. Before the first signer sees
+ * it, attach the resolved Terms Rider and make that combined PDF the immutable
+ * agreement body. The certificate is added only after signatures are captured.
+ */
+async function prepareManagerTemplatePdfForSignature(
+  row: LeasePipelineRow,
+  managerUserId?: string | null,
+): Promise<{ row: LeasePipelineRow } | { error: string }> {
+  if (row.managerUploadedPdf?.dataUrl || hasAnyLeaseSignature(row)) return { row };
+  const ctx = leaseGenerationContextForRow(row, managerUserId);
+  if (!ctx) return { row };
+  const currentTemplate = leaseTemplateDocForContext(ctx);
+  const template = row.templateDocumentUrl
+    ? {
+        url: row.templateDocumentUrl,
+        name: row.templateDocumentName || currentTemplate?.name || "Lease template.pdf",
+      }
+    : currentTemplate;
+  if (!template) return { row };
+  if (!leaseTemplateObjectPath(template.url) && !legacyLeaseTemplateObjectPath(template.url)) {
+    return { error: "The selected lease template is not a stored manager document. Reopen the lease settings and try again." };
+  }
+
+  try {
+    const response = await fetch(template.url, { credentials: "include", cache: "no-store" });
+    if (!response.ok) {
+      return { error: "Could not read the selected lease template. Reopen the lease settings and try again." };
+    }
+    const originalDataUrl = await appendLeaseTermsRiderToPdf(pdfDataUrl(await response.arrayBuffer()), ctx);
+    const iso = new Date().toISOString();
+    return {
+      row: {
+        ...row,
+        generatedHtml: null,
+        generatedAtIso: iso,
+        managerUploadedPdf: {
+          dataUrl: originalDataUrl,
+          originalDataUrl,
+          fileName: template.name,
+          uploadedAt: iso,
+        },
+        templateVersion: row.templateVersion ?? leaseTemplateVersionForContext(ctx),
+      },
+    };
+  } catch {
+    return { error: "Could not prepare the lease terms rider. Check your connection and try again." };
+  }
+}
+
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
+  options?: { discardManagerEdits?: boolean },
 ): { ok: true; version: number } | { ok: false; error: string } {
+  void options;
   const rows = readLeasePipeline(managerUserId);
   const row = rows.find((r) => r.id === rowId);
   if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
@@ -1688,25 +1807,18 @@ export function generateLeaseHtmlForRow(
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  const supported = leaseGenerationSupportedForRow(row);
-  if (!supported.ok) return { ok: false, error: supported.error };
   const ctx = leaseGenerationContextForRow(row, managerUserId);
   if (!ctx) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  let html: string;
-  try {
-    html = buildAiGeneratedLeaseHtml(ctx);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Could not build lease from saved application.";
-    return { ok: false, error: msg };
-  }
+  const outcome = buildAiGeneratedLeaseHtml(ctx);
+  if (outcome.kind !== "generated") return { ok: false, error: outcome.error };
   const version = (row.versionNumber ?? row.pdfVersion) + 1;
   const ok = updateLeasePipelineRow(
     rowId,
     {
       application: app,
-      generatedHtml: html,
+      generatedHtml: outcome.html,
       managerUploadedPdf: null,
       // The parse is derived from the upload; it goes when the upload goes.
       uploadedLeaseParse: null,
@@ -1716,6 +1828,10 @@ export function generateLeaseHtmlForRow(
       status: "Manager Review",
       currentActorRole: "manager",
       leaseDocumentRemovedAt: null,
+      executedJurisdiction: outcome.executedJurisdiction,
+      templateVersion: outcome.templateVersion,
+      templateDocumentUrl: outcome.templateDocument?.url ?? null,
+      templateDocumentName: outcome.templateDocument?.name ?? null,
     },
     managerUserId,
   );
@@ -2201,7 +2317,9 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   const raw = [...materializeLeasePipeline(managerUserId)];
   const idx = findRawLeaseRowIndex(rowId, managerUserId);
   if (idx === -1) return { ok: false, error: "Lease record could not be saved locally." };
-  const row = raw[idx]!;
+  const prepared = await prepareManagerTemplatePdfForSignature(raw[idx]!, managerUserId);
+  if ("error" in prepared) return { ok: false, error: prepared.error };
+  const row = materializeManagerSectionEditsForSignature(prepared.row);
   const iso = new Date().toISOString();
   const updated = normalizeLeasePipelineRow({
     ...row,

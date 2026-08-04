@@ -3,6 +3,7 @@ import {
   collectSubmissionLeaseTemplatePaths,
   deleteSubmissionLeaseTemplates,
   isLeaseTemplatePath,
+  legacyLeaseTemplateObjectPath,
   leaseTemplateObjectPath,
   leaseTemplateUrlForPath,
 } from "@/lib/lease-template-storage";
@@ -56,6 +57,17 @@ describe("lease template object paths", () => {
     ]) {
       expect(leaseTemplateObjectPath(foreign), foreign).toBeNull();
     }
+  });
+
+  it("accepts a legacy PDF only from the configured Supabase origin", () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.co");
+    const path = "manager-id/lease.pdf";
+    expect(
+      legacyLeaseTemplateObjectPath(`https://project.supabase.co/storage/v1/object/public/listing-photos/${path}`),
+    ).toBe(path);
+    expect(
+      legacyLeaseTemplateObjectPath(`https://evil.example/storage/v1/object/public/listing-photos/${path}`),
+    ).toBeNull();
   });
 
   it("collects nested propertyLeaseTemplates, not just the top-level field", () => {

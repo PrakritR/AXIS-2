@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { applyLeaseSectionBodyEdits } from "@/lib/lease-html-sections";
+import { sanitizeManagerLeaseDocumentEdit } from "@/lib/lease-document-sanitizer";
 import { regenerateLeaseHtmlForApplication } from "@/lib/lease-amendment.server";
 import {
   leaseAllowsManagerDocumentEdits,
@@ -157,12 +158,14 @@ export async function patchLeaseDocumentSectionsForManagerReview(
     };
   }
   const baseHtml = leaseRow.generatedHtml?.trim();
-  if (!baseHtml || leaseRow.managerUploadedPdf?.dataUrl) {
+  if (!baseHtml || leaseRow.managerUploadedPdf?.dataUrl || leaseRow.templateDocumentUrl) {
     return { ok: false, error: "Section editing requires a generated HTML lease (not an uploaded PDF)." };
   }
 
-  const nextHtml = applyLeaseSectionBodyEdits(baseHtml, input.sectionBodies);
-  if (nextHtml === baseHtml) {
+  const editedHtml = applyLeaseSectionBodyEdits(baseHtml, input.sectionBodies);
+  const sanitized = sanitizeManagerLeaseDocumentEdit(baseHtml, editedHtml);
+  if (!sanitized.ok) return { ok: false, error: sanitized.error };
+  if (sanitized.html === baseHtml) {
     return { ok: false, error: "No section content changed." };
   }
 
@@ -170,11 +173,13 @@ export async function patchLeaseDocumentSectionsForManagerReview(
   const version = (leaseRow.versionNumber ?? leaseRow.pdfVersion ?? 0) + 1;
   const updatedRow = normalizeLeasePipelineRow({
     ...leaseRow,
-    generatedHtml: nextHtml,
+    generatedHtml: sanitized.html,
     managerUploadedPdf: null,
     generatedAtIso: iso,
     pdfVersion: version,
     versionNumber: version,
+    managerDocumentEditedAtIso: iso,
+    managerDocumentRegenerationRequiredAtIso: null,
     status: "Manager Review",
     currentActorRole: "manager",
     bucket: "manager",

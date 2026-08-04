@@ -70,6 +70,13 @@ vi.mock("@/lib/auth/manager-lease-scope", () => ({
 vi.mock("@/lib/documents/document-auto-file-hooks.server", () => ({
   autoFileLeaseDocument: async () => undefined,
 }));
+// Creating a lease record (no stored row) re-checks the manager role through the portal
+// context, not just the profile role this file's user mock carries.
+vi.mock("@/lib/auth/portal-access", () => ({
+  ACTIVE_PORTAL_COOKIE: "axis_active_portal",
+  hasRole: (ctx: { roles: string[] }, role: string) => ctx.roles.includes(role),
+  getPortalAccessContext: async () => ({ user: null, profile: null, roles: ["manager"] }),
+}));
 
 import { POST } from "@/app/api/portal-lease-pipeline/route";
 
@@ -158,6 +165,115 @@ describe("POST /api/portal-lease-pipeline: signed documents are immutable server
     expect((storedRowData().managerUploadedPdf as Row).originalDataUrl).toContain("AAA");
   });
 
+  it("refuses to replace a sent lease before the first signature", async () => {
+    const sent = executedRow({
+      bucket: "resident",
+      status: "Resident Signature Pending",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+    });
+    seedExecuted(sent);
+
+    const res = await post({
+      action: "upsert",
+      row: { ...sent, generatedHtml: "<html><body>Changed after send</body></html>" },
+    });
+
+    expect(res.status).toBe(409);
+    expect(storedRowData().generatedHtml).toBe(EXECUTED_HTML);
+  });
+
+  it("refuses a resident attempt to replace a manager-review document before signing", async () => {
+    const managerReview = executedRow({
+      bucket: "manager",
+      status: "Manager Review",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+      versionNumber: 2,
+      pdfVersion: 2,
+    });
+    seedExecuted(managerReview);
+    state.profile = { email: "jordan.lee@example.com", role: "resident" };
+    state.user = { id: "99999999-2222-4333-8444-555555555555", email: "jordan.lee@example.com" };
+
+    const res = await post({
+      action: "upsert",
+      row: { ...managerReview, generatedHtml: "<html><body>Resident forgery</body></html>", versionNumber: 3, pdfVersion: 3 },
+    });
+
+    expect(res.status).toBe(403);
+    expect(storedRowData().generatedHtml).toBe(EXECUTED_HTML);
+  });
+
+  it("requires the next document version for a manager-review body replacement", async () => {
+    const managerReview = executedRow({
+      bucket: "manager",
+      status: "Manager Review",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+      versionNumber: 2,
+      pdfVersion: 2,
+    });
+    seedExecuted(managerReview);
+
+    const res = await post({
+      action: "upsert",
+      row: { ...managerReview, generatedHtml: "<html><body>Missing version increment</body></html>" },
+    });
+
+    expect(res.status).toBe(400);
+    expect(storedRowData().generatedHtml).toBe(EXECUTED_HTML);
+  });
+
+  it("stamps manager-edit provenance after a versioned manager-review body replacement", async () => {
+    const managerReview = executedRow({
+      bucket: "manager",
+      status: "Manager Review",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+      versionNumber: 2,
+      pdfVersion: 2,
+    });
+    seedExecuted(managerReview);
+
+    const res = await post({
+      action: "upsert",
+      row: {
+        ...managerReview,
+        generatedHtml: "<html><head><style>p { font-weight: 700; }</style></head><body>Versioned manager edit</body></html>",
+        versionNumber: 3,
+        pdfVersion: 3,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(storedRowData().managerDocumentEditedAtIso).toEqual(expect.any(String));
+    expect(storedRowData().generatedAtIso).toEqual(expect.any(String));
+    expect(storedRowData().generatedHtml).toContain("<style>p { font-weight: 700; }</style>");
+  });
+
+  it("refuses a generated-body deletion that would remove protected disclosures", async () => {
+    const protectedBody = "<html><body><!-- proplane-verbatim-disclosure:start:lead --><p>Required disclosure</p><!-- proplane-verbatim-disclosure:end:lead --></body></html>";
+    const managerReview = executedRow({
+      generatedHtml: protectedBody,
+      bucket: "manager",
+      status: "Manager Review",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+    });
+    seedExecuted(managerReview);
+
+    const res = await post({ action: "upsert", row: { ...managerReview, generatedHtml: null } });
+
+    expect(res.status).toBe(400);
+    expect(storedRowData().generatedHtml).toBe(protectedBody);
+  });
+
   it("still accepts the certificate page being merged into the signed PDF", async () => {
     const base = "data:application/pdf;base64,AAA";
     seedExecuted(
@@ -207,5 +323,31 @@ describe("POST /api/portal-lease-pipeline: signed documents are immutable server
     expect(res.status).toBe(200);
     expect(storedRowData().notes).toBe("Filed with the county.");
     expect(storedRowData().generatedHtml).toBe(EXECUTED_HTML);
+  });
+
+  it("sanitizes manager-authored HTML before an unsigned lease row is persisted", async () => {
+    const unsigned = executedRow({
+      id: "lease_route_unsigned",
+      bucket: "manager",
+      status: "Manager Review",
+      residentSignature: null,
+      managerSignature: null,
+      fullySignedAt: null,
+    });
+    state.leases = [];
+
+    const res = await post({
+      action: "upsert",
+      row: {
+        ...unsigned,
+        generatedHtml:
+          '<html><body><p onclick="alert(1)">Edited wording</p><script>alert(2)</script><img src="https://evil.test/x" onerror="alert(3)"><a href="javascript:alert(4)">bad</a></body></html>',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const stored = String(storedRowData().generatedHtml);
+    expect(stored).toContain("Edited wording");
+    expect(stored).not.toMatch(/script|onclick|onerror|javascript:|evil\.test|<img|<a\b/i);
   });
 });

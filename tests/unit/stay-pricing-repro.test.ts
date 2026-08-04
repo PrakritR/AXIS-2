@@ -127,7 +127,9 @@ function documentTotalDue(html: string): number {
 }
 
 function leaseHtml(app: Partial<RentalWizardFormState>): string {
-  return buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+  const outcome = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+  if (outcome.kind !== "generated") throw new Error(outcome.error);
+  return outcome.html;
 }
 
 beforeEach(() => {
@@ -245,17 +247,17 @@ describe("stay pricing: document and ledger agree", () => {
     expect(html).not.toContain("SHORT-TERM ROOM STAY AGREEMENT");
   });
 
-  it("6. uploaded-template summary labels a daily rate as daily, not Monthly rent", () => {
+  it("6. uploaded-template rider labels a daily rate as daily, not Monthly rent", () => {
     const propertyId = "prop-stay-template";
     seedListing(propertyId, room({ rentBasis: "daily", dailyRentPrice: 55 }), {
       leaseConfigMode: "custom",
       leaseCustomKind: "document",
-      leaseTemplateDocUrl: "https://x/storage/lease-template.pdf",
+      leaseTemplateDocUrl: "/api/portal/lease-template?path=11111111-1111-1111-1111-111111111111/lease-template.pdf",
       leaseTemplateDocName: "House lease.pdf",
     });
 
     const html = leaseHtml(application(propertyId));
-    expect(html).toContain("<th>Daily rent</th>");
+    expect(html).toContain("<th>Daily rate</th>");
     expect(html).not.toContain("<th>Monthly rent</th>");
   });
 
@@ -421,7 +423,7 @@ describe("stay pricing: document and ledger agree", () => {
     expect(securityCharge?.amountLabel).toBe("$650.00");
 
     // The document does not move: same deposit, same total, same standing sentence.
-    const after = buildAiGeneratedLeaseHtml(leaseContextFromApplication(app));
+    const after = leaseHtml(app);
     expect(after.replace(/Generated [^<]*/, "")).toBe(before.replace(/Generated [^<]*/, ""));
     expect(documentTotalDue(after)).toBe(605 + 900);
   });

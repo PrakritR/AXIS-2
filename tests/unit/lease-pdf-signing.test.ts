@@ -4,7 +4,9 @@ import { snapshotJordanLee } from "@/data/manager-application-snapshots";
 import { leaseContextFromApplication } from "@/lib/generated-lease";
 import { LEASE_ESIGN_CONSENT_VERSION } from "@/lib/lease-execution-evidence";
 import {
+  appendLeaseTermsRiderToPdf,
   appendSignaturePageToPdf,
+  buildLeaseTermsRiderPdf,
   buildLeaseSignaturePagePdf,
 } from "@/lib/lease-pdf-signing";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
@@ -77,6 +79,21 @@ describe("lease-pdf-signing", () => {
     const bytes = Uint8Array.from(atob(merged.split(",")[1] ?? ""), (c) => c.charCodeAt(0));
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBe(2);
+  });
+
+  it("places the terms rider after the base PDF and before the certificate", async () => {
+    const ctx = leaseContextFromApplication(snapshotJordanLee());
+    const rider = await buildLeaseTermsRiderPdf(ctx);
+    expect((await PDFDocument.load(rider)).getPageCount()).toBe(1);
+
+    const baseAndRider = await appendLeaseTermsRiderToPdf(await createMinimalPdfDataUrl(), ctx);
+    expect((await PDFDocument.load(Uint8Array.from(atob(baseAndRider.split(",")[1] ?? ""), (c) => c.charCodeAt(0)))).getPageCount()).toBe(2);
+
+    const signed = await appendSignaturePageToPdf(baseAndRider, sampleRow());
+    const signedDoc = await PDFDocument.load(
+      Uint8Array.from(atob(signed.split(",")[1] ?? ""), (c) => c.charCodeAt(0)),
+    );
+    expect(signedDoc.getPageCount()).toBe(3);
   });
 
   it("draws the full evidence certificate (hashes, provenance, divergence warning, consent) on one page", async () => {

@@ -6,6 +6,7 @@ import {
   UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE,
   leaseAllowsManagerDocumentEdits,
   leaseAwaitsUploadedLeaseReview,
+  materializeManagerSectionEditsForSignature,
   normalizeLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -15,7 +16,6 @@ import {
   buildLeaseDraft,
   buildLeaseDraftPreview,
   buildLeasePacketPreview,
-  buildLeaseDocumentSectionsPreview,
   type CreateLeaseDraftInput,
   type UpdateLeaseDraftInput,
   type UpdateLeasePacketInput,
@@ -23,7 +23,9 @@ import {
 import { loadManagerApplications } from "./residents";
 import { findOwnedResident } from "./residents-logic";
 import { amendLeaseMoveOutDate, checkMoveOutAvailabilityForLease } from "@/lib/lease-amendment.server";
-import { patchLeasePacketForManagerReview, patchLeaseDocumentSectionsForManagerReview } from "@/lib/lease-packet-edit.server";
+import { patchLeasePacketForManagerReview } from "@/lib/lease-packet-edit.server";
+import { readLeaseSectionsForEdit } from "@/lib/lease-section-edit.client";
+import { isEditableLeaseSection, sectionSourceFromHtml } from "@/lib/lease-section-text";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { buildLeaseReadyForResidentMessage } from "@/lib/resident-portal-login-copy";
 import { loadAllManagerRows } from "./load-manager-rows";
@@ -71,6 +73,25 @@ export const listLeasesTool = defineTool({
         leaseStart: r.application?.leaseStart || null,
         leaseEnd: r.application?.leaseEnd || null,
         fullySignedAt: r.fullySignedAt || null,
+      })),
+    };
+  },
+});
+
+export const listLeaseSectionsTool = defineTool({
+  name: "list_lease_sections",
+  description: "List the sections in one of the landlord's generated HTML leases, including whether each section is editable. Use before proposing a lease section edit.",
+  kind: "read",
+  inputSchema: z.object({ leaseId: z.string().min(1).describe("Lease id from list_leases.") }).strict(),
+  handler: async (ctx, input) => {
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id belongs to this landlord.");
+    return {
+      leaseId: row.id,
+      sections: readLeaseSectionsForEdit(row).map((section) => ({
+        id: section.id,
+        title: section.title,
+        editable: isEditableLeaseSection(section),
       })),
     };
   },
@@ -386,8 +407,11 @@ export const sendLeaseForSignatureTool = defineWriteTool({
       string,
       unknown
     >;
+    const materialized = materializeManagerSectionEditsForSignature(row);
     const nextRowData = {
       ...current,
+      generatedHtml: materialized.generatedHtml,
+      managerSectionEdits: materialized.managerSectionEdits,
       bucket: "resident",
       status: "Resident Signature Pending",
       stageLabel: "Resident Signature Pending",
@@ -642,19 +666,19 @@ export const updateLeasePacketTool = defineWriteTool<UpdateLeasePacketInput, { r
   },
 });
 
-export const updateLeaseDocumentSectionsTool = defineWriteTool<
-  { leaseId: string; sectionBodies: Record<string, string> },
+export const proposeLeaseSectionEditTool = defineWriteTool<
+  { leaseId: string; sectionId: string; format: "text" | "rich"; value: string },
   { reply: string }
 >({
-  name: "update_lease_document_sections",
+  name: "propose_lease_section_edit",
   description:
-    "Edit one or more HTML section bodies inside a generated lease document (clause wording, summary table rows, addenda) without regenerating from application data. Section ids appear in Lease packet edit context as documentSections= (slug from each h2 title, or lease-document-header for the preamble). Use update_lease_packet for rent, dates, fees, unit, or notes instead.",
+    "Propose a text-only edit to one editable section of a lease in manager review. Use list_lease_sections first to obtain the section id and verify it is editable. Never provide HTML; text mode is plain paragraphs, rich mode supports a small markdown subset.",
   inputSchema: z
     .object({
       leaseId: z.string().min(1).describe("Lease id from list_leases or Lease packet edit context."),
-      sectionBodies: z
-        .record(z.string(), z.string())
-        .describe("Map of section id → new section body HTML (not including the h2 heading)."),
+      sectionId: z.string().min(1).describe("Editable section id from list_lease_sections."),
+      format: z.enum(["text", "rich"]).describe("Text is the default. Rich allows limited markdown formatting, never HTML."),
+      value: z.string().max(20_000).describe("Replacement section content as text, never HTML."),
     })
     .strict(),
   preview: async (ctx, input) => {
@@ -663,20 +687,43 @@ export const updateLeaseDocumentSectionsTool = defineWriteTool<
     if (!leaseAllowsManagerDocumentEdits(row)) {
       throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
     }
-    const ids = Object.keys(input.sectionBodies).filter((id) => id.trim());
-    if (!ids.length) throw new Error("Provide at least one section id and body HTML.");
-    return buildLeaseDocumentSectionsPreview(row, input.sectionBodies);
+    const section = readLeaseSectionsForEdit(row).find((candidate) => candidate.id === input.sectionId);
+    if (!section) throw new Error("That section does not exist on this generated lease. Use list_lease_sections first.");
+    if (!isEditableLeaseSection(section)) throw new Error("That section is a required disclosure or derived lease record and cannot be edited.");
+    const before = row.managerSectionEdits?.[section.id]?.value ?? sectionSourceFromHtml(section.bodyHtml);
+    return {
+      confirmedInput: { leaseId: row.id, sectionId: section.id, format: input.format, value: input.value },
+      kind: "lease_section_edit",
+      title: `Edit ${section.title}`,
+      summary: `Replace the wording in ${section.title} for ${row.residentName}'s lease.`,
+      fields: [
+        { label: "Section", value: section.title },
+        { label: "Before", value: before || "(empty)" },
+        { label: "After", value: input.value || "(empty)" },
+        { label: "Formatting", value: input.format === "rich" ? "Rich text" : "Plain text" },
+      ],
+      confirmLabel: "Save section edit",
+    };
   },
   handler: async (ctx, input) => {
-    const result = await patchLeaseDocumentSectionsForManagerReview(ctx.db, ctx.landlordId, {
-      leaseId: input.leaseId,
-      sectionBodies: input.sectionBodies,
+    const row = await loadOwnedLease(ctx, input.leaseId);
+    if (!row) throw new Error("No lease with that id in this landlord's portfolio.");
+    if (!leaseAllowsManagerDocumentEdits(row)) throw new Error("This lease can no longer be edited (it has signatures or has left manager review).");
+    const section = readLeaseSectionsForEdit(row).find((candidate) => candidate.id === input.sectionId);
+    if (!section || !isEditableLeaseSection(section)) throw new Error("That section is not editable.");
+    const updated = normalizeLeasePipelineRow({
+      ...row,
+      managerSectionEdits: {
+        ...(row.managerSectionEdits ?? {}),
+        [section.id]: { format: input.format, value: input.value },
+      },
+      updatedAtIso: new Date().toISOString(),
+      updated: "just now",
     });
-    if (!result.ok) throw new Error(result.error);
-    await writeLeaseAudit(ctx, "update_lease_document_sections", result.row.id, null);
+    await writeLeaseAudit(ctx, "propose_lease_section_edit", updated.id, null);
+    await upsertLeaseRow(ctx, updated);
     return {
-      reply: `Updated ${Object.keys(input.sectionBodies).length} section(s) on the lease for ${result.row.residentName}. The preview reflects the new wording.`,
+      reply: `Saved the ${section.title} edit for ${updated.residentName}'s lease.`,
     };
   },
 });
-

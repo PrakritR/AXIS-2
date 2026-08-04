@@ -419,6 +419,28 @@ export type ManagerListingSubmissionV1 = {
   lateFeeGraceDays?: number;
   /** Flat late fee amount (e.g. "50" or "$50"). Default $50. */
   lateFeeAmount?: string;
+  /** Optional fixed fee for an early termination of a long-term lease. */
+  longTermBreakLeaseFee?: string;
+  /** Optional percentage of one month's rent charged to lease up a replacement resident. */
+  longTermLeaseUpFeePercent?: number;
+  /** Optional daily charge for holding over after a fixed long-term lease ends. */
+  longTermHoldoverDailyRate?: string;
+  /** Optional fee for a returned check, ACH debit, or electronic payment. */
+  longTermReturnedPaymentFee?: string;
+  /** Optional hourly rate used when the manager performs a deposit-related repair or restoration. */
+  longTermDepositLaborRate?: string;
+  /** Optional fee when a deposit refund check must be stopped and reissued. */
+  longTermDepositReissueFee?: string;
+  /** Optional fee for each documented trash-rule violation. */
+  longTermTrashViolationFee?: string;
+  /** Optional manager-defined quiet-hours description for the long-term lease. */
+  longTermQuietHours?: string;
+  /** Optional maximum number of guests allowed at a gathering without written approval. */
+  longTermGuestCap?: number;
+  /** Optional jurisdiction selected by the manager for disputes arising from this lease. */
+  longTermDisputeVenue?: string;
+  /** Whether a resident must provide a paid professional-cleaning invoice at move-out. */
+  longTermProfessionalCleaningRequired?: boolean;
   /** When true, residents can pay rent via Axis ACH (low platform fee). Default true. */
   axisPaymentsEnabled?: boolean;
   rooms: ManagerRoomSubmission[];
@@ -737,6 +759,14 @@ export function activeCustomLeaseTerms(
   if (!sub || sub.leaseConfigMode !== "custom") return "";
   if (sub.leaseCustomKind === "document") return "";
   return typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms.trim() : "";
+}
+
+function normalizeOptionalPositiveMoney(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const value = raw.trim();
+  if (!/^\$?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(value)) return undefined;
+  const amount = Number(value.replace(/[$,]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? value : undefined;
 }
 
 /** Uploaded lease template to use instead of the Axis generated lease, or null. */
@@ -1494,6 +1524,25 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       return Number.isFinite(n) ? Math.max(0, Math.min(30, Math.round(n))) : 5;
     })(),
     lateFeeAmount: typeof sub.lateFeeAmount === "string" ? sub.lateFeeAmount : "50",
+    longTermBreakLeaseFee: normalizeOptionalPositiveMoney(sub.longTermBreakLeaseFee),
+    longTermLeaseUpFeePercent: (() => {
+      const n = Number(sub.longTermLeaseUpFeePercent);
+      return Number.isFinite(n) && n > 0 && n <= 100 ? n : undefined;
+    })(),
+    longTermHoldoverDailyRate: normalizeOptionalPositiveMoney(sub.longTermHoldoverDailyRate),
+    longTermReturnedPaymentFee: normalizeOptionalPositiveMoney(sub.longTermReturnedPaymentFee),
+    longTermDepositLaborRate: normalizeOptionalPositiveMoney(sub.longTermDepositLaborRate),
+    longTermDepositReissueFee: normalizeOptionalPositiveMoney(sub.longTermDepositReissueFee),
+    longTermTrashViolationFee: normalizeOptionalPositiveMoney(sub.longTermTrashViolationFee),
+    longTermQuietHours:
+      typeof sub.longTermQuietHours === "string" ? sub.longTermQuietHours.trim() : undefined,
+    longTermGuestCap: (() => {
+      const n = Number(sub.longTermGuestCap);
+      return Number.isFinite(n) && n > 0 && n <= 100 ? Math.round(n) : undefined;
+    })(),
+    longTermDisputeVenue:
+      typeof sub.longTermDisputeVenue === "string" ? sub.longTermDisputeVenue.trim() : undefined,
+    longTermProfessionalCleaningRequired: sub.longTermProfessionalCleaningRequired === true ? true : undefined,
     axisPaymentsEnabled: sub.axisPaymentsEnabled !== false,
     acceptedPaymentMethods: Array.isArray(sub.acceptedPaymentMethods)
       ? sub.acceptedPaymentMethods.filter(
