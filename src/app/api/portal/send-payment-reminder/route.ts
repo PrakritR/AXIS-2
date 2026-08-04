@@ -1,3 +1,4 @@
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
@@ -317,12 +318,7 @@ async function deliverToPortalInbox({
   const rand = Math.random().toString(36).slice(2, 6);
   const residentLower = residentEmail.toLowerCase();
   const senderLower = (managerEmail || "manager@example.com").toLowerCase();
-  const when = new Date().toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const when = formatPacificDateTime(new Date());
   const preview = messageBody.slice(0, 100).replace(/\n/g, " ");
 
   await deliverPortalMessageThreadSide(db, {

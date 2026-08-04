@@ -1,3 +1,4 @@
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import type { InboxBubbleMessage } from "@/components/portal/portal-inbox-ui";
 import type { InboxThreadMessage, PersistedInboxThread } from "@/lib/portal-inbox-storage";
 
@@ -88,12 +89,7 @@ export function buildOptimisticSentThread(params: {
 }): PersistedInboxThread {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 6);
-  const when = new Date().toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const when = formatPacificDateTime(new Date());
   const preview = params.body.slice(0, 100).replace(/\n/g, " ");
   return {
     id: `msg_opt_${ts}_${rand}`,

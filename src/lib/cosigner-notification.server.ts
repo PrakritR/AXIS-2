@@ -2,6 +2,7 @@
  * Notify property manager when a co-signer submits.
  */
 
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { buildPortalApplicationOpenHref } from "@/lib/manager-applications-storage";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
@@ -28,7 +29,7 @@ async function upsertManagerInbox(
   input: { subject: string; body: string; fromName: string; fromEmail: string },
 ): Promise<void> {
   const threadId = `cosigner-${Date.now().toString(36)}`;
-  const now = new Date().toLocaleString();
+  const now = formatPacificDateTime(new Date());
   await db.from("portal_inbox_thread_records").upsert(
     {
       id: threadId,
