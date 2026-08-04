@@ -61,13 +61,19 @@ export function ManagerPropertyTourPanel({
   // configured, API disabled) stay with the portfolio calendar so the same
   // account-level problem is not toasted twice.
   //
-  // KNOWN, ACCEPTED consequence: `renderSlotButton` bails on any cell a meeting
-  // covers, so a busy half hour here is not just marked — it is non-selectable,
-  // and the manager cannot publish availability over a personal Google event
-  // from this screen. That is the pre-existing portfolio-calendar behaviour now
-  // applied consistently, which is what F-CAL-6 asked for. Making busy time
-  // advisory rather than blocking is a product change and belongs on BOTH
-  // calendars at once, never on this one alone.
+  // KNOWN, ACCEPTED consequence (ticket `axis-busy-time-advisory-availability`):
+  // `renderSlotButton` bails on any cell a meeting covers, so a busy half hour is
+  // not just marked — it is non-selectable, and the manager cannot publish
+  // availability over a personal Google event. As of F-CAL-6 that is true on BOTH
+  // manager calendars, the portfolio one at /portal/calendar and this per-property
+  // one; it is the pre-existing portfolio behaviour now applied consistently, not
+  // a restriction unique to this screen.
+  //
+  // The OPEN product question that ticket holds is whether a manager may
+  // deliberately publish tour availability OVER their own busy time — i.e. whether
+  // Google busy should be advisory (marked, still selectable) rather than blocking.
+  // Answering it yes is a product change and must land on both calendars at once,
+  // never on this one alone.
   const googleBusyMeetings = useGoogleCalendarBusyMeetings({
     enabled: Boolean(managerUserId),
     onWarning: ({ warning, hint }) => {

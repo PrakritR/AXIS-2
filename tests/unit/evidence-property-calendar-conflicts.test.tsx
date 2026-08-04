@@ -19,7 +19,7 @@ import { startOfWeekMonday } from "@/lib/demo-admin-scheduling";
 const MANAGER_ID = "mgr-evidence";
 
 /** Three Google meetings in the CURRENT week, as the events route returns them. */
-function busyMeetings(): any[] {
+function busyMeetings() {
   const monday = startOfWeekMonday(new Date());
   const day = (offset: number) => {
     const d = new Date(monday);
