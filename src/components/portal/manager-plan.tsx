@@ -120,10 +120,16 @@ function DowngradeConsequences({ target }: { target: ManagerSkuTier }) {
         you already have keeps working — you just can&apos;t add new ones until you&apos;re under the limit.
       </li>
       {target === "free" ? (
-        <li>
-          On Free, the Residents, Leases, Services, Documents, and Communication sections are locked behind an upgrade
-          prompt. Everything in them is kept and unlocks again if you re-subscribe.
-        </li>
+        <>
+          <li>
+            On Free, the Residents, Leases, Services, Documents, and Communication sections are locked behind an
+            upgrade prompt. Everything in them is kept and unlocks again if you re-subscribe.
+          </li>
+          <li>
+            Your dedicated phone number &amp; texting are included only with an actively paid Pro or Business
+            subscription — downgrading to Free means losing your number.
+          </li>
+        </>
       ) : null}
     </ul>
   );

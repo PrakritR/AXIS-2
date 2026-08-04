@@ -315,7 +315,8 @@ export function ManagerPlanNative({
         {!isFree ? (
           <p className="mt-2 text-xs leading-relaxed text-muted">
             {trialActive ? "Ends your trial now. " : ""}Your properties and records stay — Free includes 1 property
-            listing and locks resident, lease, and inbox tools until you subscribe again.
+            listing and locks resident, lease, and inbox tools until you subscribe again. A dedicated phone number
+            &amp; texting are available only with an actively paid plan.
           </p>
         ) : null}
       </div>
