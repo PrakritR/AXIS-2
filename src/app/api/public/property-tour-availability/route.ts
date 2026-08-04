@@ -6,6 +6,7 @@ import {
 } from "@/lib/google-calendar/api.server";
 import { googleEventBlocksTours } from "@/lib/google-calendar/busy";
 import { publicSchedulingHostLabel } from "@/lib/public-host-label";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
   buildDefaultTourSlotKeys,
@@ -43,6 +44,29 @@ export const runtime = "nodejs";
  * not resurrect a slot that was just booked.
  */
 const GOOGLE_BUSY_TTL_MS = 60_000;
+/**
+ * The only listing status that may offer tours to the public.
+ *
+ * The house-key lookup below already selects `status = "live"`; the direct-id
+ * lookup deliberately does not, so a manager previewing their own draft can
+ * still resolve it. That was harmless while a property offered nothing unless
+ * its manager had painted availability by hand — the 9-5 default changed that,
+ * and a draft/pending/review/unlisted record would otherwise hand ~336 bookable
+ * half hours to anyone holding its id. The default is a convenience for a LIVE
+ * listing whose manager has not opened a calendar yet, never a way for a
+ * listing nobody has published to start taking bookings.
+ */
+const PUBLICLY_BOOKABLE_PROPERTY_STATUS = "live";
+/**
+ * This route is public, unauthenticated and `no-store`, and each request fans
+ * out one Google Calendar read per host manager — a call that can also refresh
+ * and write back the manager's OAuth token. The in-process busy cache blunts
+ * repeat load only per instance, which on a serverless platform is a weak
+ * throttle, so the request itself is capped per IP. Generous enough that a
+ * prospect flipping between properties never trips it.
+ */
+const TOUR_AVAILABILITY_RATE_LIMIT = 60;
+const TOUR_AVAILABILITY_RATE_LIMIT_WINDOW_MS = 60_000;
 /**
  * A TRANSIENT failure — a stall, an abort, a 5xx, a network error — is cached
  * far more briefly than a success.
@@ -241,6 +265,20 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const propertyId = searchParams.get("propertyId")?.trim();
     if (!propertyId) return NextResponse.json({ error: "propertyId required" }, { status: 400 });
+
+    if (
+      !rateLimit(
+        `property-tour-availability:${clientIpFrom(req)}`,
+        TOUR_AVAILABILITY_RATE_LIMIT,
+        TOUR_AVAILABILITY_RATE_LIMIT_WINDOW_MS,
+      ).ok
+    ) {
+      return NextResponse.json(
+        { error: "Too many requests. Please slow down." },
+        { status: 429, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     const requestedHouseKey = houseKeyFromParts(searchParams.get("buildingName"), searchParams.get("address"));
 
     const safeId = safePropertyId(propertyId);
@@ -394,9 +432,11 @@ export async function GET(req: Request) {
 
     /**
      * One manager's offering for this property. Published rows become offerings
-     * verbatim; when NOTHING is published the property still offers the default
-     * 9-5 grid, so a manager who has not opened their calendar yet does not show
-     * a prospect a dead booking page. Either way the subtraction below applies.
+     * verbatim; when NOTHING is published a LIVE property still offers the
+     * default 9-5 grid, so a manager who has not opened their calendar yet does
+     * not show a prospect a dead booking page. Either way the subtraction below
+     * applies, and a property that is not live offers nothing it never
+     * published.
      */
     type Offering = { managerUserId: string; propertyId?: string; slots: string[] };
     const publishedOfferings: Offering[] = rows
@@ -410,15 +450,20 @@ export async function GET(req: Request) {
     const publishedFutureSlots = publishedOfferings.flatMap((offering) =>
       offering.slots.filter((slot) => slotIsBookable(slot)),
     );
+    const defaultGridManagerIds = [
+      ...new Set(
+        matchingPropertyRecords
+          .filter(({ status }) => status === PUBLICLY_BOOKABLE_PROPERTY_STATUS)
+          .map(({ managerUserId }) => managerUserId),
+      ),
+    ].filter(Boolean);
     const offerings: Offering[] = !shouldOfferDefaultTourGrid(publishedFutureSlots)
       ? publishedOfferings
-      : [...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId))]
-          .filter(Boolean)
-          .map((managerUserId) => ({
-            managerUserId,
-            propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
-            slots: buildDefaultTourSlotKeys(),
-          }));
+      : defaultGridManagerIds.map((managerUserId) => ({
+          managerUserId,
+          propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
+          slots: buildDefaultTourSlotKeys(),
+        }));
 
     const availabilityManagerIds = [...new Set(offerings.map((offering) => offering.managerUserId))];
     const blockedSlotsByManager = new Map<string, TourBlock[]>();

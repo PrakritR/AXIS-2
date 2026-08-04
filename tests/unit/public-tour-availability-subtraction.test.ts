@@ -22,6 +22,9 @@ let MANAGER = "mgr-1";
 let managerCounter = 0;
 const PROPERTY_ID = "mgr-demo-ballard";
 
+/** The requested property's listing status; only `live` may offer the default grid. */
+let PROPERTY_STATUS = "live";
+
 let PROPERTY_AVAILABILITY_SLOTS: string[] | null;
 let GLOBAL_AVAILABILITY_SLOTS: string[] | null;
 let PENDING_INQUIRIES: Record<string, unknown>[];
@@ -92,7 +95,7 @@ function makeServiceClient() {
               maybeSingle: async () => ({
                 data: {
                   manager_user_id: MANAGER,
-                  status: "live",
+                  status: PROPERTY_STATUS,
                   property_data: { id: PROPERTY_ID, buildingName: "Ballard House", address: "1 Ballard Ave" },
                 },
                 error: null,
@@ -162,10 +165,20 @@ function makeServiceClient() {
   };
 }
 
+/**
+ * The route rate-limits per client IP, and the limiter's buckets are
+ * module-global, so a shared IP would let one test's requests spend another's
+ * budget. `managerCounter` already gives every test a distinct identity — reuse
+ * it here so each gets its own bucket.
+ */
+function availabilityRequest(ip: string = `10.0.0.${managerCounter}`): Request {
+  return new Request(`https://x.test/api/public/property-tour-availability?propertyId=${PROPERTY_ID}`, {
+    headers: { "x-forwarded-for": ip },
+  });
+}
+
 async function offeredSlots(): Promise<Set<string>> {
-  const res = await getAvailability(
-    new Request(`https://x.test/api/public/property-tour-availability?propertyId=${PROPERTY_ID}`),
-  );
+  const res = await getAvailability(availabilityRequest());
   const body = (await res.json()) as { slotHosts?: Record<string, unknown[]> };
   return new Set(Object.keys(body.slotHosts ?? {}));
 }
@@ -211,6 +224,7 @@ describe("public tour availability subtracts what is already taken", () => {
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
     PROPERTY_AVAILABILITY_QUERY_FILTERS = [];
+    PROPERTY_STATUS = "live";
     if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
@@ -437,10 +451,27 @@ describe("public tour availability subtracts what is already taken", () => {
   });
 
   it("is never edge-cached — a booked slot must not linger at the CDN", async () => {
-    const res = await getAvailability(
-      new Request(`https://x.test/api/public/property-tour-availability?propertyId=${PROPERTY_ID}`),
-    );
+    const res = await getAvailability(availabilityRequest());
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("rate-limits one IP rather than fanning out to Google on every request", async () => {
+    // Public, unauthenticated and `no-store`: each request reads Google
+    // Calendar once per host manager, and that read can refresh and write back
+    // the manager's OAuth token. The per-instance busy cache is not a throttle
+    // on a serverless platform, so the request itself has to be capped.
+    const ip = "198.51.100.7";
+    let limited: Response | null = null;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const res = await getAvailability(availabilityRequest(ip));
+      if (res.status === 429) {
+        limited = res;
+        break;
+      }
+      expect(res.status).toBe(200);
+    }
+    expect(limited).not.toBeNull();
+    expect(await limited!.json()).toMatchObject({ error: expect.stringContaining("Too many requests") });
   });
 });
 
@@ -458,6 +489,7 @@ describe("a property with no published availability still offers the 9-5 default
     GOOGLE_THROWS_NOT_LINKED = false;
     GOOGLE_TIME_MAX = [];
     PROPERTY_AVAILABILITY_QUERY_FILTERS = [];
+    PROPERTY_STATUS = "live";
     if (vi.isMockFunction(Date.now)) vi.mocked(Date.now).mockRestore();
   });
 
@@ -507,5 +539,24 @@ describe("a property with no published availability still offers the 9-5 default
     const slots = await offeredSlots();
     expect(slots.has(slotKey)).toBe(false);
     expect(slots.has(`${day}:22`)).toBe(true);
+  });
+
+  it.each(["draft", "pending", "review", "unlisted", ""])(
+    "offers nothing for a %s property — the default is for LIVE listings only",
+    async (status) => {
+      // The direct-id lookup accepts any status so a manager can resolve their
+      // own unpublished record. Before the default grid that meant such a
+      // property offered nothing unless availability had been painted by hand;
+      // it must not now hand ~336 bookable half hours to anyone with the id.
+      PROPERTY_STATUS = status;
+      const slots = await offeredSlots();
+      expect(slots.size).toBe(0);
+    },
+  );
+
+  it("never reads Google for a property that is not live", async () => {
+    PROPERTY_STATUS = "pending";
+    await offeredSlots();
+    expect(GOOGLE_TIME_MAX).toHaveLength(0);
   });
 });

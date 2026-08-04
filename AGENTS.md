@@ -1678,7 +1678,11 @@ The one rule behind `/api/public/property-tour-availability`:
   states the accepted sharp edge (a manager who clears their ENTIRE calendar has
   it silently reopened) and how to switch to the stricter "never published
   anything" rule in one line. The horizon is `DEFAULT_TOUR_HORIZON_DAYS = 21` —
-  the response is `no-store`, so every request pays for the whole grid.
+  the response is `no-store`, so every request pays for the whole grid. It fires
+  only for a **`live`** property (`PUBLICLY_BOOKABLE_PROPERTY_STATUS`): the
+  direct-id lookup deliberately resolves a record of any status, so without that
+  gate a draft/pending/review/unlisted listing would offer ~336 bookable half
+  hours to anyone holding its id. Published availability is unaffected.
 - **Already-booked** is pending inquiries AND confirmed planned tours; a
   reschedule drops the stale `slotKey` so the old window is not still blocked.
 - **Calendar-busy** is the manager's linked Google Calendar, cached per manager
@@ -1693,6 +1697,11 @@ The one rule behind `/api/public/property-tour-availability`:
   `blocksTourAvailability`, which only the "N open" math reads — so a declined or
   Free event stays visible on the grid without the headers disagreeing with what
   a prospect is offered.
+- **The route is IP rate-limited** (`rateLimit`, 60/min) because it is public,
+  unauthenticated and uncached, and each request fans out one Google read per
+  host manager — a read that can also refresh and write back that manager's
+  OAuth token. The in-process busy cache is a per-instance throttle only, so it
+  is not a substitute; do not drop the limiter to "restore" throughput.
 - **The response is `no-store` on purpose**, against the repo's prefer-caching
   rule: `s-maxage=300` meant a just-booked slot stayed on offer for minutes. A
   double-booked tour costs more than the egress.
