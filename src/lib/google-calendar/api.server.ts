@@ -355,8 +355,16 @@ export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS =
   GOOGLE_CALENDAR_EVENT_LIST_PAGING_BUDGET_MS + GOOGLE_CALENDAR_FETCH_TIMEOUT_MS;
 
 /**
- * The outer budget for a WRITE (create / update / delete), which is a token hop
- * plus one API call and never pages.
+ * The outer budget for a WRITE (create / update / delete), which never pages.
+ *
+ * This is a WHOLE-OPERATION ceiling, NOT a sum of the Google legs — do not
+ * "correct" it to `FETCH_TIMEOUT_MS * 2` on the theory that it wraps two
+ * fetches. The operation a caller races also contains unbounded Supabase round
+ * trips interleaved with the Google hops: `loadGoogleCalendarConnection` inside
+ * the token hop before, and `deletePlannedTourByGoogleCalendarEventId` (cancel)
+ * or `persistPlannedEventGoogleCalendarId` (reschedule) after. The value
+ * happens to equal two fetch timeouts; the DB hops are covered by the same
+ * ceiling rather than added to it, so a fully-stalled Google pair can trip it.
  *
  * Deliberately tighter than the read budget. A write runs on the cancel and
  * reschedule handlers, where it is NOT the first external call: the guest
@@ -367,9 +375,10 @@ export const GOOGLE_CALENDAR_OPERATION_TIMEOUT_MS =
  * this leg exists to prevent. Bounding the notification path belongs in its own
  * change; keeping real headroom for it does not.
  *
- * The one chain that can exceed this is an upsert whose update times out and
- * falls through to a create; by then two hops have already stalled, so
- * reporting the operation as unfinished is accurate.
+ * So a trip here reports the operation as unfinished when it may in fact have
+ * landed. That is the accepted trade: `calendarSync.ok === false` shows the
+ * manager a warning, which is recoverable, where a platform kill shows them a
+ * failure for a change that already committed.
  */
 export const GOOGLE_CALENDAR_WRITE_OPERATION_TIMEOUT_MS = GOOGLE_CALENDAR_FETCH_TIMEOUT_MS * 2;
 
