@@ -43,6 +43,7 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
 import { cn } from "@/lib/utils";
+import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import {
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
@@ -132,7 +133,16 @@ function buildMonthCells(year: number, month: number): (number | null)[] {
 function formatWeekRangeMonSun(monday: Date): string {
   const sunday = addDays(monday, 6);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
+  // Match the day strip and slot grid — they use local calendar dates, not Pacific labels.
+  return `${monday.toLocaleDateString(undefined, opts)}–${sunday.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
+}
+
+function unionAvailabilityForStorageKeys(keys: string[]): Set<string> {
+  const union = new Set<string>();
+  for (const key of keys) {
+    for (const slot of readAvailabilityDateSetForStorageKey(key)) union.add(slot);
+  }
+  return union;
 }
 
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
@@ -206,6 +216,8 @@ function weekdayLabelList(days: number[]) {
 
 export function PortalCalendarPanels({
   storageKey,
+  /** When set, availability edits apply to every key (union display). */
+  availabilityStorageKeys,
   calendarRefreshSignal,
   defaultViewMode = "week",
   pinMonthSchedule = false,
@@ -231,6 +243,7 @@ export function PortalCalendarPanels({
   bareSurface = false,
 }: {
   storageKey: string | null;
+  availabilityStorageKeys?: string[];
   calendarRefreshSignal?: number;
   defaultViewMode?: CalendarMode;
   pinMonthSchedule?: boolean;
@@ -270,6 +283,10 @@ export function PortalCalendarPanels({
   };
 }) {
   const { showToast } = useAppUi();
+  const writeStorageKeys = useMemo(() => {
+    if (availabilityStorageKeys?.length) return availabilityStorageKeys;
+    return storageKey ? [storageKey] : [];
+  }, [availabilityStorageKeys, storageKey]);
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
   const [monthPick, setMonthPick] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [uncontrolledAnchorDate, setUncontrolledAnchorDate] = useState(() => new Date());
@@ -284,7 +301,7 @@ export function PortalCalendarPanels({
     [anchorDateProp, onAnchorDateChange, uncontrolledAnchorDate],
   );
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() =>
-    storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
+    writeStorageKeys.length > 0 ? unionAvailabilityForStorageKeys(writeStorageKeys) : new Set(),
   );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
   // Mirrors dragSelection synchronously. mousedown and mouseup can land in the
@@ -317,7 +334,7 @@ export function PortalCalendarPanels({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
-    if (!storageKey) return;
+    if (writeStorageKeys.length === 0) return;
     let cancelled = false;
     const load = async () => {
       try {
@@ -326,20 +343,20 @@ export function PortalCalendarPanels({
         /* offline or dev server restart — calendar still renders */
       }
       if (!cancelled) {
-        setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+        setActiveSlots(unionAvailabilityForStorageKeys(writeStorageKeys));
       }
     };
     void load();
     return () => {
       cancelled = true;
     };
-  }, [storageKey]);
+  }, [writeStorageKeys]);
 
   // Poll every 60 s so approvals/cancellations from linked accounts propagate
   // automatically. Skip while the tab is hidden to avoid egress from background
   // tabs, and refresh once immediately when the tab becomes visible again.
   useEffect(() => {
-    if (!storageKey) return;
+    if (writeStorageKeys.length === 0) return;
     const refresh = () =>
       syncScheduleRecordsFromServer()
         .then(() => setMeetingRefresh((n) => n + 1))
@@ -356,7 +373,7 @@ export function PortalCalendarPanels({
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [storageKey]);
+  }, [writeStorageKeys]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
@@ -408,27 +425,32 @@ export function PortalCalendarPanels({
   );
 
   const reloadAvailability = useCallback(() => {
-    if (!storageKey) return;
-    setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+    if (writeStorageKeys.length === 0) return;
+    setActiveSlots(unionAvailabilityForStorageKeys(writeStorageKeys));
     void syncScheduleRecordsFromServer({ force: true }).finally(() => {
-      setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+      setActiveSlots(unionAvailabilityForStorageKeys(writeStorageKeys));
     });
-  }, [storageKey]);
+  }, [writeStorageKeys]);
 
-  const writeAvailability = useCallback(
-    (next: Set<string>) => {
-      if (!storageKey) return;
-      setActiveSlots(next);
+  const mutateAvailability = useCallback(
+    (mutate: (current: Set<string>) => Set<string>) => {
+      if (writeStorageKeys.length === 0) return;
       setSaveStatus("saving");
-      void writeAvailabilityDateSetForStorageKeyToServer(next, storageKey, { adminLabel: scheduleOwnerLabel })
-        .then(async (ok) => {
-          if (!ok) {
+      void Promise.all(
+        writeStorageKeys.map((key) => {
+          const current = new Set(readAvailabilityDateSetForStorageKey(key));
+          const next = mutate(current);
+          return writeAvailabilityDateSetForStorageKeyToServer(next, key, { adminLabel: scheduleOwnerLabel });
+        }),
+      )
+        .then(async (results) => {
+          if (results.some((ok) => !ok)) {
             setSaveStatus("error");
             reloadAvailability();
             return;
           }
           await syncScheduleRecordsFromServer({ force: true });
-          setActiveSlots(new Set(readAvailabilityDateSetForStorageKey(storageKey)));
+          setActiveSlots(unionAvailabilityForStorageKeys(writeStorageKeys));
           setSaveStatus("saved");
         })
         .catch(() => {
@@ -436,7 +458,7 @@ export function PortalCalendarPanels({
           reloadAvailability();
         });
     },
-    [reloadAvailability, scheduleOwnerLabel, storageKey],
+    [reloadAvailability, scheduleOwnerLabel, writeStorageKeys],
   );
 
   const openSlotDetails = useCallback(
@@ -465,11 +487,14 @@ export function PortalCalendarPanels({
 
   const deleteAvailabilitySlot = useCallback(() => {
     if (selectedBlock?.kind !== "availability") return;
-    const next = new Set(activeSlots);
-    next.delete(dateSlotKey(selectedBlock.dateStr, selectedBlock.slotIndex));
-    writeAvailability(next);
+    const slotKey = dateSlotKey(selectedBlock.dateStr, selectedBlock.slotIndex);
+    mutateAvailability((current) => {
+      const next = new Set(current);
+      next.delete(slotKey);
+      return next;
+    });
     setSelectedBlock(null);
-  }, [activeSlots, selectedBlock, writeAvailability]);
+  }, [mutateAvailability, selectedBlock]);
 
   const selectedDurationMinutes = useMemo(
     () =>
@@ -756,33 +781,40 @@ export function PortalCalendarPanels({
 
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
     setAnchorDate((d) => addDays(d, dir * 7));
-    if (compactAvailability) setMobileDayIndex(0);
-  }, [compactAvailability]);
+  }, []);
+
+  useEffect(() => {
+    if (!compactAvailability) return;
+    setMobileDayIndex(mondayBasedDayIndex(anchorDate));
+  }, [compactAvailability, weekMonday, anchorDate]);
 
   const copyPreviousWeek = useCallback(() => {
     const currentDates = activeBlockDates;
     const previousBlockDates = currentDates.map((date) => addDays(date, -7));
-    const next = new Set(activeSlots);
 
-    for (const targetDate of currentDates) {
-      const targetDateStr = toLocalDateStr(targetDate);
-      for (const slot of slotRowIndices) {
-        next.delete(dateSlotKey(targetDateStr, slot));
-      }
-    }
+    mutateAvailability((activeSlotsForKey) => {
+      const next = new Set(activeSlotsForKey);
 
-    previousBlockDates.forEach((sourceDate, idx) => {
-      const sourceDateStr = toLocalDateStr(sourceDate);
-      const targetDateStr = toLocalDateStr(currentDates[idx]!);
-      for (const slot of slotRowIndices) {
-        if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
-          next.add(dateSlotKey(targetDateStr, slot));
+      for (const targetDate of currentDates) {
+        const targetDateStr = toLocalDateStr(targetDate);
+        for (const slot of slotRowIndices) {
+          next.delete(dateSlotKey(targetDateStr, slot));
         }
       }
-    });
 
-    writeAvailability(next);
-  }, [activeBlockDates, activeSlots, writeAvailability]);
+      previousBlockDates.forEach((sourceDate, idx) => {
+        const sourceDateStr = toLocalDateStr(sourceDate);
+        const targetDateStr = toLocalDateStr(currentDates[idx]!);
+        for (const slot of slotRowIndices) {
+          if (activeSlotsForKey.has(dateSlotKey(sourceDateStr, slot))) {
+            next.add(dateSlotKey(targetDateStr, slot));
+          }
+        }
+      });
+
+      return next;
+    });
+  }, [activeBlockDates, mutateAvailability]);
 
   const toggleBlockWeekday = useCallback((weekday: number) => {
     setBlockWeekdays((current) =>
@@ -869,40 +901,42 @@ export function PortalCalendarPanels({
   const applyRecurringBlock = useCallback(() => {
     if (blockWeekdays.length === 0 || blockEndSlotExclusive <= blockStartSlot) return;
 
-    const next = new Set(activeSlots);
-    const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
-    // Anchor each selected weekday to the real date visible in the active block window
-    // (compact mode may start mid-week and even straddle a Monday boundary).
-    const baseDates = resolveBlockBaseDates(activeBlockDates, weekMonday, blockWeekdays);
+    mutateAvailability((current) => {
+      const next = new Set(current);
+      const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
+      const baseDates = resolveBlockBaseDates(activeBlockDates, weekMonday, blockWeekdays);
 
-    for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
-      const targetDates = baseDates.map((date) => {
-        if (blockCadence === "once" || blockCadence === "weekly") return addDays(date, occurrenceIndex * 7);
-        if (blockCadence === "biweekly") return addDays(date, occurrenceIndex * 14);
-        return addMonths(date, occurrenceIndex);
-      });
+      for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
+        const targetDates = baseDates.map((date) => {
+          if (blockCadence === "once" || blockCadence === "weekly") return addDays(date, occurrenceIndex * 7);
+          if (blockCadence === "biweekly") return addDays(date, occurrenceIndex * 14);
+          return addMonths(date, occurrenceIndex);
+        });
 
-      for (const targetDate of targetDates) {
-        const targetDateStr = toLocalDateStr(targetDate);
-        for (let slot = blockStartSlot; slot < blockEndSlotExclusive; slot += 1) {
-          next.add(dateSlotKey(targetDateStr, slot));
+        for (const targetDate of targetDates) {
+          const targetDateStr = toLocalDateStr(targetDate);
+          for (let slot = blockStartSlot; slot < blockEndSlotExclusive; slot += 1) {
+            next.add(dateSlotKey(targetDateStr, slot));
+          }
         }
       }
-    }
 
-    writeAvailability(next);
+      return next;
+    });
     setBlockModalOpen(false);
-  }, [activeBlockDates, activeSlots, blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays, weekMonday, writeAvailability]);
+  }, [activeBlockDates, blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays, mutateAvailability, weekMonday]);
 
   const clearCurrentWeek = useCallback(() => {
-    const next = new Set(activeSlots);
-    for (const ds of activeBlockDateStrs) {
-      for (const slot of slotRowIndices) {
-        next.delete(dateSlotKey(ds, slot));
+    mutateAvailability((current) => {
+      const next = new Set(current);
+      for (const ds of activeBlockDateStrs) {
+        for (const slot of slotRowIndices) {
+          next.delete(dateSlotKey(ds, slot));
+        }
       }
-    }
-    writeAvailability(next);
-  }, [activeBlockDateStrs, activeSlots, writeAvailability]);
+      return next;
+    });
+  }, [activeBlockDateStrs, mutateAvailability]);
 
   const blockSummary = useMemo(() => {
     const days = blockWeekdays.length > 0 ? weekdayLabelList(blockWeekdays) : "No days selected";
@@ -1186,7 +1220,7 @@ export function PortalCalendarPanels({
     />
   );
 
-  if (!storageKey && !readOnly) {
+  if (!storageKey && !readOnly && writeStorageKeys.length === 0) {
     return bareSurface ? (
       <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
     ) : (
@@ -1198,7 +1232,10 @@ export function PortalCalendarPanels({
 
   if (compactAvailability) {
     const vendorMode = Boolean(vendorDayFlexibility);
-    const compactShellClass = bareSurface ? "" : "overflow-hidden rounded-2xl border border-border bg-card shadow-sm";
+    const compactShellClass = cn(
+      "portal-calendar-compact flex min-h-0 flex-col",
+      !bareSurface && "overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
+    );
     const compactToolbarClass = cn(
       "portal-calendar-toolbar shrink-0",
       "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
@@ -1206,7 +1243,10 @@ export function PortalCalendarPanels({
         ? "border-b border-border/50"
         : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
     );
-    const compactBodyClass = bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5";
+    const compactBodyClass = cn(
+      "portal-calendar-compact-body min-h-0 flex-1",
+      bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5",
+    );
     return (
       <>
         <div className={compactShellClass}>
@@ -1240,7 +1280,13 @@ export function PortalCalendarPanels({
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+            <div
+              className={cn(
+                "flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1.5 sm:gap-2",
+                PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+              )}
+              {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
+            >
               {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
               {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
               {vendorMode ? (
@@ -1465,7 +1511,10 @@ export function PortalCalendarPanels({
                         <button
                           key={ds}
                           type="button"
-                          onClick={() => setMobileDayIndex(idx)}
+                          onClick={() => {
+                            setMobileDayIndex(idx);
+                            setAnchorDate(activeBlockDates[idx]!);
+                          }}
                           className={`flex min-w-0 w-full flex-col items-center justify-center rounded-xl px-1 py-1.5 text-center transition max-lg:py-2 ${
                             isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}

@@ -2410,6 +2410,18 @@ html[data-theme="dark"][data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-dark);
 }
 
+html[data-portal-sticky-chrome] .portal-calendar-compact {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+html[data-portal-sticky-chrome] .portal-calendar-compact-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 html[data-communication-surface] .portal-communication-inbox {
   flex: 1 1 0%;
   min-height: 0;
