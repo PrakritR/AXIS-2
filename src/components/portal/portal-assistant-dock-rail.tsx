@@ -1,6 +1,7 @@
 "use client";
 
-import { AssistantDock } from "@/components/portal/assistant-dock";
+import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
+import { ASSISTANT_DOCK_INPUT_ID } from "@/components/portal/assistant-dock-input-id";
 import { useAxisAssistantDock } from "@/components/portal/axis-assistant";
 
 /**
@@ -26,8 +27,13 @@ export function PortalAssistantDockRail({ managerName }: { managerName?: string 
       aria-label="PropLane Assistant"
       data-attr="portal-assistant-dock-rail"
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col">
-        <AssistantDock managerName={managerName} onUnpin={() => setMode("popup")} />
+      <div className="flex min-h-0 w-full flex-1 flex-col" data-attr="dashboard-assistant-dock">
+        <AssistantDockPanel
+          managerName={managerName}
+          onUndockToPopup={() => setMode("popup")}
+          inputId={ASSISTANT_DOCK_INPUT_ID}
+          className="h-full"
+        />
       </div>
     </aside>
   );

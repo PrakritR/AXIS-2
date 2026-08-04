@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { track } from "@/lib/analytics/posthog";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { TIER_MODELS } from "@/lib/agent/model";
-import { LEASING_SMS_SYSTEM_PROMPT } from "@/lib/agent/leasing-sms-system-prompt";
+import { leasingSmsSystemPromptForWorkNumberOwner } from "@/lib/agent/leasing-sms-custom-instructions";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { buildLeasingSmsAgentContext } from "@/lib/tools/context";
 import { leasingSmsAgentRegistry } from "@/lib/tools";
@@ -185,6 +185,9 @@ export async function runLeasingSmsAgentTurn(
 
   let result;
   try {
+    // `session.landlord_id` is the manager who owns the sending work number;
+    // it is resolved before this function, never supplied by a prospect.
+    const system = await leasingSmsSystemPromptForWorkNumberOwner(db, session.landlord_id);
     result = await traceAgentTurn(
       ctx,
       history as { role: string; content: string }[],
@@ -194,7 +197,7 @@ export async function runLeasingSmsAgentTurn(
           registry: leasingSmsAgentRegistry,
           messages: history,
           observer,
-          system: LEASING_SMS_SYSTEM_PROMPT,
+          system,
           model: { model: TIER_MODELS.standard, tier: "standard" },
           readOnly: true,
           allowWriteTools: [LEASING_ESCALATE_TOOL_NAME],

@@ -17,6 +17,7 @@ import {
 } from "@/components/portal/portal-settings-ui";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
+import { AssistantCustomInstructionsSetting } from "@/components/portal/assistant-custom-instructions-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -196,6 +197,7 @@ export function PortalProfileClient({
         </PortalSettingsSection>
       ) : null}
       {variant === "manager" ? <AssistantDisplaySetting /> : null}
+      <AssistantCustomInstructionsSetting role={variant} />
       <NotificationsToggle />
       <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
       {variant === "manager" ? (

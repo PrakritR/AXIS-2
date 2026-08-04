@@ -68,7 +68,7 @@ export async function handlePendingActionDecision<Ctx extends DecisionActor>(arg
   }
 
   track("assistant_action_confirmed", ctx.userId, { portal, action: result.toolName });
-  appendAgentMessages(ctx, portal, result.sessionId, [
+  await appendAgentMessages(ctx, portal, result.sessionId, [
     { role: "assistant", content: result.reply, toolTrace: { tools: [{ tool: result.toolName, ok: true }] } },
   ]);
   return NextResponse.json({

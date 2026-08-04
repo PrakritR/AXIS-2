@@ -4,7 +4,6 @@ import { ChevronsLeft } from "lucide-react";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import { AssistantDockPanel } from "@/components/portal/assistant-dock-panel";
-import { AssistantConversationProvider } from "@/lib/axis-assistant/assistant-conversation-context";
 import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 import { openAxisAssistant } from "@/lib/axis-assistant/open-store";
 import {
@@ -84,15 +83,13 @@ export function PortalAssistantRail({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col p-2 pt-0">
-          <AssistantConversationProvider endpoint={endpoint}>
-            <AssistantDockPanel
-              managerName={managerName}
-              endpoint={endpoint}
-              onCollapse={toggleAssistantDock}
-              onUndockToPopup={undockToPopup}
-              className="h-full"
-            />
-          </AssistantConversationProvider>
+          <AssistantDockPanel
+            managerName={managerName}
+            endpoint={endpoint}
+            onCollapse={toggleAssistantDock}
+            onUndockToPopup={undockToPopup}
+            className="h-full"
+          />
         </div>
       )}
     </aside>
