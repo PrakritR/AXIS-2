@@ -36,6 +36,8 @@ export type AssistantDockPanelProps = {
   onCollapse?: () => void;
   /** When set, shows a switch-to-popup control (desktop rail). */
   onUndockToPopup?: () => void;
+  /** Stable input hook for the portal header's Ask PropLane action. */
+  inputId?: string;
 };
 
 /**
@@ -52,8 +54,38 @@ export function AssistantDockPanel({
   pinnedComposer = false,
   onCollapse,
   onUndockToPopup,
+  inputId,
 }: AssistantDockPanelProps) {
-  const { input, setInput, attachments, setAttachments, messages, ratings, submitFeedback, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, multiThread, openHistory, closeHistory, selectThread, startNewChat } =
+  const {
+    input,
+    setInput,
+    attachments,
+    setAttachments,
+    messages,
+    ratings,
+    submitFeedback,
+    lastTools,
+    pendingAction,
+    loading,
+    error,
+    setError,
+    send,
+    resolvePendingAction,
+    reset,
+    threads,
+    activeThreadId,
+    historyOpen,
+    historyLoading,
+    historyError,
+    hasMoreHistory,
+    multiThread,
+    openHistory,
+    closeHistory,
+    selectThread,
+    loadMoreHistory,
+    hydrateArchive,
+    startNewChat,
+  } =
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -66,6 +98,10 @@ export function AssistantDockPanel({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!compact) void hydrateArchive();
+  }, [compact, hydrateArchive]);
 
   async function sendWithContext(prompt?: string) {
     if (!hint) {
@@ -191,6 +227,11 @@ export function AssistantDockPanel({
               requestAnimationFrame(() => inputRef.current?.focus());
             }}
             onClose={closeHistory}
+            loading={historyLoading}
+            error={historyError}
+            hasMore={hasMoreHistory}
+            onRetry={openHistory}
+            onLoadMore={loadMoreHistory}
             portalContainer={historyPortal}
           />
         ) : null}
@@ -304,6 +345,8 @@ export function AssistantDockPanel({
           loading={loading}
           compact={compact}
           inputRef={inputRef}
+          inputId={inputId}
+          inputAriaLabel={inputId ? "Ask the PropLane Assistant about your portfolio" : undefined}
           placeholder={compact ? "Ask PropPlane to help — attach images or PDFs with the paperclip" : "Ask about your portfolio… Attach images or PDFs with the paperclip."}
           onSend={() => void sendWithContext()}
         />

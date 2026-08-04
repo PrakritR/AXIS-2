@@ -8,6 +8,9 @@ import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
+import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
@@ -21,6 +24,13 @@ import { selectAgentRoute, fastLaneRunOptions, type AgentRouteSelection } from "
 import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
+
+/** Vendor archive, pinned to the signed-in vendor rather than a shared manager. */
+export async function GET(req: Request) {
+  const ctx = await resolveVendorAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryRequest(req, ctx, "vendor");
+}
 
 /**
  * Vendor-portal assistant turn. Same loop and gating as the manager chat,
@@ -67,7 +77,13 @@ export async function POST(req: Request) {
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
 
-  const sessionId = await ensureAgentSession(ctx, "vendor", body.sessionId as string | undefined);
+  const sessionKind = body.archive === false ? MODAL_CHAT_SESSION_KIND : PORTAL_CHAT_SESSION_KIND;
+  const sessionId = await ensureAgentSession(ctx, "vendor", {
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
+    title: lastUserText(messages),
+    kind: sessionKind,
+  });
+  const customInstructions = await loadAgentCustomInstructions(ctx.db, ctx.userId);
 
   try {
     const promptMeta = resolvePromptMeta(PROMPT_IDS.vendorAssistant, VENDOR_SYSTEM_PROMPT);
@@ -92,7 +108,7 @@ export async function POST(req: Request) {
         runAgentTurn({
           ctx,
           registry: vendorAgentRegistry,
-          system: VENDOR_SYSTEM_PROMPT,
+          system: withAgentCustomInstructions(VENDOR_SYSTEM_PROMPT, customInstructions),
           messages,
           observer,
           model: routing,
@@ -139,7 +155,7 @@ export async function POST(req: Request) {
       }
     }
 
-    appendAgentMessages(ctx, "vendor", sessionId, [
+    await appendAgentMessages(ctx, "vendor", sessionId, [
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
@@ -163,7 +179,7 @@ export async function POST(req: Request) {
               : {}),
         },
       },
-    ]);
+    ], { kind: sessionKind });
 
     return assistantResponse(req, {
       reply,

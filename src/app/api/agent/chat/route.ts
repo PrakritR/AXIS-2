@@ -8,6 +8,9 @@ import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
+import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
@@ -27,6 +30,13 @@ import { selectAgentRoute, fastLaneRunOptions, type AgentRouteSelection } from "
 import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
+
+/** Manager/admin archive, scoped entirely from the authenticated context. */
+export async function GET(req: Request) {
+  const ctx = await resolveAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryRequest(req, ctx, "manager");
+}
 
 /**
  * Manager-portal assistant turn. Write tools are exposed to the model but a
@@ -107,7 +117,13 @@ export async function POST(req: Request) {
     }
   }
 
-  const sessionId = await ensureAgentSession(ctx, "manager", body.sessionId as string | undefined);
+  const sessionKind = body.archive === false ? MODAL_CHAT_SESSION_KIND : PORTAL_CHAT_SESSION_KIND;
+  const sessionId = await ensureAgentSession(ctx, "manager", {
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
+    title: lastUserText(messages),
+    kind: sessionKind,
+  });
+  const customInstructions = await loadAgentCustomInstructions(ctx.db, ctx.userId);
 
   try {
     const promptMeta = resolvePromptMeta(PROMPT_IDS.managerAssistant, SYSTEM_PROMPT);
@@ -136,7 +152,7 @@ export async function POST(req: Request) {
         runAgentTurn({
           ctx,
           registry: agentRegistry,
-          system: SYSTEM_PROMPT,
+          system: withAgentCustomInstructions(SYSTEM_PROMPT, customInstructions),
           messages,
           observer,
           allowWriteTools: MANAGER_INLINE_WRITE_TOOLS,
@@ -184,7 +200,7 @@ export async function POST(req: Request) {
       }
     }
 
-    appendAgentMessages(ctx, "manager", sessionId, [
+    await appendAgentMessages(ctx, "manager", sessionId, [
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
@@ -210,7 +226,7 @@ export async function POST(req: Request) {
               : {}),
         },
       },
-    ]);
+    ], { kind: sessionKind });
 
     return assistantResponse(req, {
       reply,

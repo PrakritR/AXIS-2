@@ -22,6 +22,7 @@ import {
   PortalSettingsSections,
 } from "@/components/portal/portal-settings-ui";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
+import { AssistantCustomInstructionsSetting } from "@/components/portal/assistant-custom-instructions-setting";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
@@ -198,6 +199,8 @@ export function ResidentProfilePanel() {
             </PortalSettingsFormBody>
           </PortalSettingsGroup>
         </PortalSettingsSection>
+
+        <AssistantCustomInstructionsSetting role="resident" />
 
         <NotificationsToggle />
         <PortalChangePasswordPanel accountEmail={email} />
