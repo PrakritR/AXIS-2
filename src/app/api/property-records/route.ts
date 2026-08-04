@@ -7,6 +7,7 @@ import { asStringArray } from "@/app/api/pro/account-links/route";
 import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { assertManagerPropertyListingQuota } from "@/lib/manager-property-quota.server";
 import { propertyRowsToSnapshot, type ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 
 export const runtime = "nodejs";
@@ -129,7 +130,7 @@ export async function POST(req: Request) {
     // server-read value, never on body.managerUserId (which a caller controls).
     const { data: existing, error: existingError } = await db
       .from("manager_property_records")
-      .select("manager_user_id")
+      .select("manager_user_id, status")
       .eq("id", id)
       .maybeSingle();
     // A FAILED read is not an absent row. Falling through would answer 404 on a
@@ -252,6 +253,39 @@ export async function POST(req: Request) {
     // cannot launder a client-supplied owner: `body.managerUserId` only ever
     // reaches `ownerForWrite` on the create and admin branches.
     const managerUserIdForWrite = ownerForWrite?.trim() ? ownerForWrite.trim() : null;
+
+    // The plan's property-listing cap, enforced HERE rather than only in the
+    // wizard that normally calls this route. Every client posts here directly,
+    // so a hidden "+ Add property" button was the entire limit: publishing a
+    // second listing on Free needed nothing more than skipping the interface
+    // (audit F-SET-1).
+    //
+    // It charges only a write that moves the record INTO a listing slot, and
+    // the owner and the count are both resolved server-side — `ownerForWrite`
+    // above already refuses to take an owner from the request body. An account
+    // that is over its cap keeps every listing it has; it just cannot add
+    // another. Admins are not exempt: publishing on a manager's behalf still
+    // spends that manager's plan.
+    const quota = await assertManagerPropertyListingQuota(db, {
+      ownerUserId: managerUserIdForWrite,
+      recordId: id,
+      nextStatus: body.status,
+      existingStatus: (existing as { status?: string } | null)?.status ?? null,
+    });
+    if (!quota.ok) {
+      return NextResponse.json(
+        quota.status === 403
+          ? {
+              error: quota.error,
+              code: "property_limit_reached",
+              tier: quota.tier,
+              limit: quota.limit,
+              current: quota.current,
+            }
+          : { error: quota.error },
+        { status: quota.status },
+      );
+    }
 
     const { error } = await db.from("manager_property_records").upsert(
       {

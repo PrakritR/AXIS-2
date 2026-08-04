@@ -21,7 +21,14 @@ import { jsonRequest } from "../helpers/api-request";
 
 const getUser = vi.fn();
 let IS_ADMIN = false;
-let EXISTING_ROW: { manager_user_id: string } | null = null;
+/**
+ * Faithful to the SELECT the route issues (`manager_user_id, status`). The
+ * status matters: the plan property-limit gate charges only a write that moves
+ * a record INTO a listing slot, so an already-live listing being re-saved — the
+ * shape every case below models — is never re-charged and never reaches the
+ * quota count. Omitting it made these ownership cases look like publishes.
+ */
+let EXISTING_ROW: { manager_user_id: string; status?: string } | null = null;
 let UPSERTS: Record<string, unknown>[] = [];
 let DELETED_IDS: string[] = [];
 let CO_MANAGER_ACCESS: { ok: true } | { ok: false; error: string; status: number } = {
@@ -31,6 +38,13 @@ let CO_MANAGER_ACCESS: { ok: true } | { ok: false; error: string; status: number
 };
 
 vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => IS_ADMIN }));
+/**
+ * These accounts have no `manager_purchases` row, so the plan gate resolves no
+ * numeric cap and the real quota code returns without counting anything. That
+ * keeps this file about OWNERSHIP while leaving the gate itself in the path —
+ * the cap has its own file, `property-records-plan-property-limit.test.ts`.
+ */
+vi.mock("@/lib/manager-access-server", () => ({ getEffectiveManagerSkuTier: async () => null }));
 vi.mock("@/lib/auth/co-manager-access", () => ({
   assertCoManagerModuleAccess: async () => CO_MANAGER_ACCESS,
 }));
@@ -86,7 +100,7 @@ function post(body: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks();
   IS_ADMIN = false;
-  EXISTING_ROW = { manager_user_id: OWNER };
+  EXISTING_ROW = { manager_user_id: OWNER, status: "live" };
   UPSERTS = [];
   DELETED_IDS = [];
   CO_MANAGER_ACCESS = { ok: false, error: "Forbidden.", status: 403 };
@@ -203,7 +217,7 @@ describe("POST /api/property-records — creating a record still attributes norm
  */
 describe("POST /api/property-records — an EXISTING ownerless row is not a create", () => {
   beforeEach(() => {
-    EXISTING_ROW = { manager_user_id: "" };
+    EXISTING_ROW = { manager_user_id: "", status: "live" };
   });
 
   it("refuses a non-admin upsert onto an orphaned listing", async () => {

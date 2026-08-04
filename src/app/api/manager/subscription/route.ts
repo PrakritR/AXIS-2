@@ -7,6 +7,7 @@ import {
   maxPropertiesForManagerTier,
   monthlyUsdForManagerTier,
   PRO_MAX_PROPERTIES,
+  resolveEffectiveManagerSkuTier,
 } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { isAppleBilledManagerPurchase } from "@/lib/manager-apple-purchase";
@@ -18,10 +19,28 @@ import { syncManagerPurchaseTierState } from "@/lib/manager-tier-sync";
 
 export const runtime = "nodejs";
 
-function subscriptionJson(tier: string | null, billing: string | null) {
+function subscriptionJson(
+  tier: string | null,
+  billing: string | null,
+  opts: { stripeSubscriptionId: string | null; appleManaged: boolean },
+) {
   const t = tier?.toLowerCase() ?? null;
+  /**
+   * The plan the product HOLDS this account to. It exists because `tier` alone
+   * disagreed with the rest of this response: an account whose purchase row has
+   * no committed SKU reported `isFree: true` and `propertyLimit: null`, so
+   * Settings said "Free · 1 property listing" beside a Properties tab with no
+   * cap at all (audit F-SET-1). Every quota below is derived from this, and
+   * `POST /api/property-records` re-resolves the same value server-side.
+   */
+  const effective = resolveEffectiveManagerSkuTier({
+    tier: t,
+    stripeSubscriptionId: opts.stripeSubscriptionId,
+    appleManaged: opts.appleManaged,
+  });
   return {
     tier: t,
+    effectiveTier: effective,
     billing,
     isPro: isProSkuTier(t),
     isBusiness: isBusinessSkuTier(t),
@@ -29,8 +48,8 @@ function subscriptionJson(tier: string | null, billing: string | null) {
     /** No purchase row — legacy / unknown; not treated as Pro-capped. */
     isLegacyUnlimited: t === null,
     proPropertyLimit: PRO_MAX_PROPERTIES,
-    propertyLimit: maxPropertiesForManagerTier(t),
-    accountLinkLimit: maxAccountLinksForTier(t),
+    propertyLimit: maxPropertiesForManagerTier(effective),
+    accountLinkLimit: maxAccountLinksForTier(effective),
     monthlyAmountUsd: monthlyUsdForManagerTier(t),
     monthlyLabel: formatManagerMonthlyLabel(t),
   };
@@ -58,7 +77,7 @@ export async function GET() {
     // Apple-billed grant → the plan is managed in the App Store: on native we
     // don't re-offer IAP, on web we hide Stripe checkout (report §3.4).
     const appleManaged = isAppleBilledManagerPurchase(billing, appleOriginalTransactionId);
-    const base = subscriptionJson(tier, billing);
+    const base = subscriptionJson(tier, billing, { stripeSubscriptionId, appleManaged });
     const missingTier = tier == null || String(tier).trim() === "";
     /** Treat missing tier row as Free in the plan UI when there is no paid Stripe subscription. */
     const isFree = base.isFree || (missingTier && !stripeManaged && !appleManaged);

@@ -83,6 +83,70 @@ export function maxPropertiesForManagerTier(tier: string | null | undefined): nu
   return null;
 }
 
+/**
+ * The plan the product ENFORCES, which must equal the plan it DISPLAYS.
+ *
+ * `manager_purchases.tier` is `null` in two ordinary states — an account
+ * provisioned by `provisionPendingManagerAccount` that never reached the
+ * pricing step, and an older account with no purchase row at all — and
+ * `normalizeManagerSkuTier` maps both to `null`. Read as a cap that means
+ * "uncapped", which is how `/portal/properties` behaved: Settings said
+ * "CURRENT PLAN Free · 1 property listing" while nothing stopped a sixth
+ * listing (audit F-SET-1).
+ *
+ * The Settings page already resolves that same shape to Free
+ * (`subscriptionJson`'s `isFree`, and `getManagerSubscriptionTier`, which
+ * returns "free" for a row whose tier is unrecognized). This is that one rule,
+ * shared: no committed SKU and no live Stripe/Apple grant behind it → Free.
+ * A missing tier that IS backed by a live subscription stays `null` (uncapped)
+ * rather than being downgraded to Free on a billing-sync gap.
+ *
+ * It caps CREATION only. Nothing here removes or hides a listing an account
+ * already has — an over-limit portfolio keeps every row and simply cannot add
+ * another (see `POST /api/property-records`).
+ */
+export function resolveEffectiveManagerSkuTier(input: {
+  tier: string | null | undefined;
+  stripeSubscriptionId?: string | null | undefined;
+  appleManaged?: boolean;
+}): ManagerSkuTier | null {
+  const normalized = normalizeManagerSkuTier(input.tier);
+  if (normalized) return normalized;
+  if (input.stripeSubscriptionId?.trim()) return null;
+  if (input.appleManaged) return null;
+  return "free";
+}
+
+/**
+ * The one refusal message for "you are at your plan's property limit".
+ *
+ * Shared by the client pre-checks (add-property wizard, Properties header,
+ * Relist) and the server's 403 so a manager who trips the limit reads the same
+ * sentence whichever layer caught it — always naming the limit AND what lifts
+ * it, never an opaque failure.
+ *
+ * `omitUpgradeCta` is for the native iOS shell: App Store Guideline 2.1(b)
+ * forbids surfacing subscription upgrade CTAs outside IAP, so the limit is
+ * still stated, only the "Upgrade to …" clause is dropped.
+ */
+export function managerPropertyLimitMessage(
+  tier: string | null | undefined,
+  opts?: { omitUpgradeCta?: boolean },
+): string {
+  const n = normalizeManagerSkuTier(tier);
+  const cta = (clause: string) => (opts?.omitUpgradeCta ? "" : ` ${clause}`);
+  if (n === "free") {
+    return `Free includes ${FREE_MAX_PROPERTIES} property.${cta("Upgrade to Pro or Business to add more.")}`;
+  }
+  if (n === "pro") {
+    return `Pro includes up to ${PRO_MAX_PROPERTIES} properties.${cta("Upgrade to Business to add more.")}`;
+  }
+  if (n === "business") {
+    return `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`;
+  }
+  return "Your plan's property limit has been reached.";
+}
+
 /** True when the user cannot add another property without upgrading. */
 export function managerTierPropertyLimitReached(tier: string | null | undefined, propertyCount: number): boolean {
   const max = maxPropertiesForManagerTier(tier);
