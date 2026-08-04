@@ -435,6 +435,34 @@ export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMe
   return [root, ...(thread.messages ?? [])];
 }
 
+/**
+ * The canonical conversation stamp: "Aug 3, 5:31 PM".
+ *
+ * This is the shape `portal-inbox-delivery.ts` writes on send, and therefore
+ * the shape the conversation list's narrow time column is laid out for. Kept
+ * pinned to en-US on purpose — the value is persisted and later re-parsed for
+ * ordering, so it must not vary with the viewer's locale.
+ */
+export function formatInboxStamp(value: Date): string {
+  return value.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Re-render any stamp into {@link formatInboxStamp}. An unreadable stamp falls
+ * back to now rather than to the raw string: the only caller is appending a
+ * reply that is happening right now, so "now" is both accurate and orderable,
+ * whereas storing an unparseable string would leave the thread unsortable.
+ */
+function normalizeInboxStamp(value: string): string {
+  const ms = parseInboxStampMs(value);
+  return formatInboxStamp(ms === null ? new Date() : new Date(ms));
+}
+
 export function appendReplyToInboxThread(
   thread: PersistedInboxThread,
   reply: InboxThreadMessage,
@@ -446,7 +474,15 @@ export function appendReplyToInboxThread(
     // Carry the reply's stamp onto the thread. Without this the row kept its
     // ORIGINAL date after a reply ("replied today, still reads Jul 20") and,
     // because the list orders on this field, never floated to the top.
-    ...(reply.at ? { time: reply.at } : {}),
+    //
+    // Normalized on the way in: every reply call site builds `at` with a bare
+    // `new Date().toLocaleString()`, which renders "8/3/2026, 6:31:00 PM" —
+    // a different, much longer shape than the canonical stamp the server
+    // writes, and one a non-en locale renders as "3.8.2026, 18:31:00", which
+    // `parseInboxStampMs` cannot order on. Normalizing here keeps the list's
+    // narrow time column in one format and keeps the sort key readable,
+    // without asking three call sites to remember the convention.
+    ...(reply.at ? { time: normalizeInboxStamp(reply.at) } : {}),
     unread: false,
   };
 }

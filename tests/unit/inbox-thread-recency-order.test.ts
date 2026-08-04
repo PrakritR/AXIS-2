@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendReplyToInboxThread,
+  formatInboxStamp,
   inboxThreadSortMs,
   parseInboxStampMs,
   type PersistedInboxThread,
@@ -94,6 +95,51 @@ describe("inbox conversation ordering", () => {
         at: "Aug 3, 5:31 PM",
       });
       expect(replied.time).toBe("Aug 3, 5:31 PM");
+    });
+
+    /**
+     * Every reply call site (manager-inbox, resident-inbox-panel,
+     * vendor-inbox-panel) builds `at` with a bare `new Date().toLocaleString()`.
+     * Storing that verbatim changed the list row's label from "Aug 3, 5:31 PM"
+     * to "8/3/2026, 6:31:00 PM" in a narrow, fixed-width time column.
+     */
+    it("normalizes a toLocaleString() reply stamp to the canonical format", () => {
+      const raw = new Date("2026-08-03T17:31:00-07:00").toLocaleString("en-US");
+      expect(raw).toMatch(/\d{1,2}\/\d{1,2}\/\d{4}/); // guard: this IS the long shape
+      const replied = appendReplyToInboxThread(base, {
+        id: "reply-1",
+        from: "Manager",
+        body: "On our way.",
+        at: raw,
+      });
+      expect(replied.time).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{4}/);
+      expect(replied.time).toBe(formatInboxStamp(new Date("2026-08-03T17:31:00-07:00")));
+    });
+
+    it("keeps a normalized stamp orderable", () => {
+      const replied = appendReplyToInboxThread(base, {
+        id: "reply-1",
+        from: "Manager",
+        body: "On our way.",
+        at: new Date("2026-08-03T17:31:00-07:00").toLocaleString("en-US"),
+      });
+      expect(parseInboxStampMs(replied.time, NOW)).not.toBeNull();
+      expect(inboxThreadSortMs(replied.id, replied.time)).toBeGreaterThan(
+        inboxThreadSortMs("thread-other", "Jul 20, 2026"),
+      );
+    });
+
+    it("falls back to a readable stamp when the reply stamp is unparseable", () => {
+      // A non-en locale renders "3.8.2026, 18:31:00", which Date.parse cannot
+      // read. Storing it raw would leave the thread unsortable.
+      const replied = appendReplyToInboxThread(base, {
+        id: "reply-1",
+        from: "Manager",
+        body: "On our way.",
+        at: "3.8.2026, 18:31:00",
+      });
+      expect(parseInboxStampMs(replied.time, NOW)).not.toBeNull();
+      expect(replied.time).not.toBe("3.8.2026, 18:31:00");
     });
 
     it("floats the replied-to thread above an untouched newer thread", () => {
