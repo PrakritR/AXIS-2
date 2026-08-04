@@ -9,7 +9,11 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { inboxDeepLinkForRole } from "@/lib/platform/parity";
-import { appendInboxThreadReply, deliverPortalMessageThreadSide } from "@/lib/portal-inbox-delivery";
+import {
+  commitInboxThreadReply,
+  deliverPortalMessageThreadSide,
+  resolveInboxThreadReplyTarget,
+} from "@/lib/portal-inbox-delivery";
 import { sendPortalConversationEmails } from "@/lib/portal-email-send.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -217,20 +221,22 @@ export async function POST(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
 
-    if (threadId) {
-      const appended = await appendInboxThreadReply(db, {
-        threadId,
-        senderUserId: user.id,
-        senderEmail,
-        fromName,
-        text,
-        attachments: inboxAttachmentsFromUrls(attachmentUrls),
-      });
+    // Resolving the thread authorizes the sender against it but writes NOTHING
+    // yet: the recipient-scope gate below can still refuse this send with a 403,
+    // and a refused message must never appear in the thread store. The commit is
+    // deferred until that gate passes. See `resolveInboxThreadReplyTarget`.
+    const replyTarget = threadId
+      ? await resolveInboxThreadReplyTarget(db, { threadId, senderUserId: user.id, senderEmail })
+      : null;
+    const replyBody = { fromName, text, attachments: inboxAttachmentsFromUrls(attachmentUrls) };
 
+    if (replyTarget) {
       // A vendor replying in their agent thread talks to the agent, not to a
       // human recipient — run the turn after the response and skip the normal
-      // fan-out. Only the thread OWNER (the vendor) triggers it.
-      if (appended.ok && appended.thread?.threadType === "vendor_agent" && appended.thread.ownerUserId === user.id) {
+      // fan-out. Only the thread OWNER (the vendor) triggers it. There is no
+      // recipient to scope-check here, so this branch commits its own reply.
+      if (replyTarget.threadType === "vendor_agent" && replyTarget.ownerUserId === user.id) {
+        await commitInboxThreadReply(db, replyTarget, replyBody);
         const session = await findVendorAgentSessionByThread(db, threadId);
         if (session) {
           const turnTask = () =>
@@ -345,6 +351,10 @@ export async function POST(req: Request) {
       }
       recipients = allowed;
     }
+
+    // Every gate is now clear, so the reply may finally land in its thread. A
+    // send refused above returns before this line and writes nothing.
+    if (replyTarget) await commitInboxThreadReply(db, replyTarget, replyBody);
 
     // Per-recipient channel resolution (category mode) mirrors core delivery:
     // email/SMS follow each recipient's saved prefs; account-less (no userId)

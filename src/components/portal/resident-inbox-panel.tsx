@@ -616,7 +616,7 @@ export const ResidentInboxPanel = forwardRef<
                 eventCategory: "messages",
               }),
             });
-            const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
             if (!res.ok || !data.ok) {
               if (optimisticId) {
                 setPendingSendingThreadIds((prev) => {
@@ -624,8 +624,15 @@ export const ResidentInboxPanel = forwardRef<
                   next.delete(optimisticId!);
                   return next;
                 });
+                // Take the optimistic conversation back out. Clearing only the
+                // "sending" flag left a refused message sitting in the list as a
+                // delivered thread; re-arm persistence on the way out so the
+                // inbox does not stop saving for the rest of the session.
+                setLocal((cur) => cur.filter((t) => t.id !== optimisticId));
+                setExpandedId(null);
+                persistInboxRef.current = true;
               }
-              showToast("Message could not be sent.");
+              showToast(data.error ?? "Message could not be sent.");
               return;
             }
           }
@@ -679,17 +686,28 @@ export const ResidentInboxPanel = forwardRef<
       };
       const updated = appendReplyToInboxThread(thread, reply);
       const next = local.map((t) => (t.id === thread.id ? updated : t));
+      // Show the bubble immediately, but keep it LOCAL: persisting before the
+      // server accepts is what made a refused send look delivered — the row
+      // reached the thread store, so the conversation list previewed it as
+      // "You: …" and a reload showed it as an ordinary sent message. Nothing is
+      // written until a channel actually succeeds.
       persistInboxRef.current = false;
       setLocal(next);
-      const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
-      persistInboxRef.current = true;
-      if (!ok) {
+      // Drop the optimistic bubble. The restored rows are exactly what the store
+      // already holds, so re-arming the persist effect is a no-op write rather
+      // than leaving inbox persistence switched off for the rest of the session.
+      const revertReply = () => {
         setLocal(local);
-        throw new Error("persist failed");
-      }
+        persistInboxRef.current = true;
+      };
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
       let emailOk = !channels.email;
       let smsOk = !channels.sms;
+      let failureMessage = "";
+      const sendFailed = (message: string) => {
+        revertReply();
+        return new Error(message || "send failed");
+      };
       if (channels.email) {
         const res = await fetch("/api/portal/send-inbox-message", {
           method: "POST",
@@ -706,12 +724,11 @@ export const ResidentInboxPanel = forwardRef<
             attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
           }),
         });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
         emailOk = res.ok && data.ok === true;
         if (!emailOk) {
-          const failed = markThreadMessageDelivery(updated, replyId, "failed");
-          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
-          throw new Error("send failed");
+          failureMessage = data.error ?? "";
+          throw sendFailed(failureMessage);
         }
       }
       if (channels.sms && activeSmsAvailable) {
@@ -730,17 +747,21 @@ export const ResidentInboxPanel = forwardRef<
             attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
           }),
         });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean };
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
         smsOk = res.ok && data.ok === true;
         if (!smsOk && !channels.email) {
-          const failed = markThreadMessageDelivery(updated, replyId, "failed");
-          setLocal((cur) => cur.map((t) => (t.id === thread.id ? failed : t)));
-          throw new Error("send failed");
+          failureMessage = data.error ?? "";
+          throw sendFailed(failureMessage);
         }
       }
-      if (!emailOk && !smsOk) throw new Error("send failed");
+      if (!emailOk && !smsOk) throw sendFailed(failureMessage);
+      // Delivered on at least one channel — only now may it enter the store.
       const delivered = markThreadMessageDelivery(updated, replyId, undefined);
-      setLocal((cur) => cur.map((t) => (t.id === thread.id ? delivered : t)));
+      const persisted = local.map((t) => (t.id === thread.id ? delivered : t));
+      persistInboxRef.current = false;
+      setLocal(persisted);
+      await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [delivered], persisted);
+      persistInboxRef.current = true;
       void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
     },
     [activeSmsAvailable, local],
@@ -1099,8 +1120,12 @@ export const ResidentInboxPanel = forwardRef<
         return [];
       });
       showToast(viaEmail && viaSms ? "Reply sent via email and text." : viaSms ? "Reply sent via text." : "Reply sent.");
-    } catch {
-      showToast("Could not send reply.");
+    } catch (e) {
+      // Say WHY when the server told us — "you can only message people connected
+      // to your account" is actionable; "could not send" reads as a glitch worth
+      // retrying. The draft stays in the box either way.
+      const reason = e instanceof Error ? e.message : "";
+      showToast(reason && reason !== "send failed" && reason !== "no channel" ? reason : "Could not send reply.");
     } finally {
       setReplySending(false);
     }
