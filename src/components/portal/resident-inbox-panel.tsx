@@ -98,6 +98,20 @@ function previewLine(body: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
+/**
+ * A send the SERVER refused, carrying the server's own reason on a typed field.
+ * Only this class's `reason` is ever shown to the resident: inferring it from
+ * `Error.message` echoed unexpected client-side exceptions into a user toast.
+ */
+class InboxSendRefusal extends Error {
+  readonly reason: string | null;
+  constructor(reason: string | null) {
+    super(reason ?? "inbox send refused");
+    this.name = "InboxSendRefusal";
+    this.reason = reason;
+  }
+}
+
 export type ResidentInboxPanelHandle = {
   openCompose: () => void;
   emptyTrash: () => void;
@@ -646,6 +660,7 @@ export const ResidentInboxPanel = forwardRef<
           invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
+          persistInboxRef.current = true;
           showToast("Message sent.");
           if (embeddedInCommunication && primaryRecipient) {
             const threadId = findThreadForRecipient(primaryRecipient);
@@ -654,6 +669,7 @@ export const ResidentInboxPanel = forwardRef<
             navigate("/resident/communication/email/sent");
           }
         } catch {
+          persistInboxRef.current = true;
           showToast("Message could not be sent.");
         }
       })();
@@ -670,9 +686,9 @@ export const ResidentInboxPanel = forwardRef<
       channels: { email: boolean; sms: boolean },
       attachmentUrls: string[] = [],
     ) => {
-      const thread = local.find((t) => t.id === row.id);
+      const thread = localRef.current.find((t) => t.id === row.id);
       if (!thread) return;
-      if (!channels.email && !channels.sms) throw new Error("no channel");
+      if (!channels.email && !channels.sms) throw new InboxSendRefusal(null);
       const replyId = `reply-${Date.now().toString(36)}`;
       const attachmentMeta = attachmentMetaFromUrls(attachmentUrls);
       const reply: InboxThreadMessage = {
@@ -685,19 +701,18 @@ export const ResidentInboxPanel = forwardRef<
         attachments: attachmentMeta.length ? attachmentMeta : undefined,
       };
       const updated = appendReplyToInboxThread(thread, reply);
-      const next = local.map((t) => (t.id === thread.id ? updated : t));
       // Show the bubble immediately, but keep it LOCAL: persisting before the
       // server accepts is what made a refused send look delivered — the row
       // reached the thread store, so the conversation list previewed it as
       // "You: …" and a reload showed it as an ordinary sent message. Nothing is
       // written until a channel actually succeeds.
       persistInboxRef.current = false;
-      setLocal(next);
-      // Drop the optimistic bubble. The restored rows are exactly what the store
-      // already holds, so re-arming the persist effect is a no-op write rather
-      // than leaving inbox persistence switched off for the rest of the session.
+      setLocal((cur) => cur.map((t) => (t.id === thread.id ? updated : t)));
+      // Roll back THIS thread only. A whole-array restore would also undo rows
+      // that arrived from a background sync or PORTAL_INBOX_CHANGED_EVENT during
+      // the send, which the re-armed persist effect then deletes server-side.
       const revertReply = () => {
-        setLocal(local);
+        setLocal((cur) => cur.map((t) => (t.id === thread.id ? thread : t)));
         persistInboxRef.current = true;
       };
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
@@ -706,7 +721,7 @@ export const ResidentInboxPanel = forwardRef<
       let failureMessage = "";
       const sendFailed = (message: string) => {
         revertReply();
-        return new Error(message || "send failed");
+        return new InboxSendRefusal(message.trim() || null);
       };
       if (channels.email) {
         const res = await fetch("/api/portal/send-inbox-message", {
@@ -756,15 +771,22 @@ export const ResidentInboxPanel = forwardRef<
       }
       if (!emailOk && !smsOk) throw sendFailed(failureMessage);
       // Delivered on at least one channel — only now may it enter the store.
+      // Everything past this point is bookkeeping over a message that WAS sent,
+      // so it must never surface to the resident as a send failure.
       const delivered = markThreadMessageDelivery(updated, replyId, undefined);
-      const persisted = local.map((t) => (t.id === thread.id ? delivered : t));
+      const persisted = localRef.current.map((t) => (t.id === thread.id ? delivered : t));
       persistInboxRef.current = false;
       setLocal(persisted);
-      await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [delivered], persisted);
-      persistInboxRef.current = true;
-      void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
+      try {
+        await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [delivered], persisted);
+      } catch {
+        /* the re-armed persist effect below still writes the delivered row */
+      } finally {
+        persistInboxRef.current = true;
+      }
+      void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).catch(() => {});
     },
-    [activeSmsAvailable, local],
+    [activeSmsAvailable],
   );
 
   const threadActionBtn = embeddedInCommunication ? "min-h-0 rounded-full px-3 py-1.5 text-xs" : PORTAL_DETAIL_BTN;
@@ -1124,8 +1146,8 @@ export const ResidentInboxPanel = forwardRef<
       // Say WHY when the server told us — "you can only message people connected
       // to your account" is actionable; "could not send" reads as a glitch worth
       // retrying. The draft stays in the box either way.
-      const reason = e instanceof Error ? e.message : "";
-      showToast(reason && reason !== "send failed" && reason !== "no channel" ? reason : "Could not send reply.");
+      const reason = e instanceof InboxSendRefusal ? e.reason : null;
+      showToast(reason ?? "Could not send reply.");
     } finally {
       setReplySending(false);
     }
