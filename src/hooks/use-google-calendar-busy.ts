@@ -53,11 +53,13 @@ export function isGoogleBusyIncompleteWarning(code: string | undefined): boolean
  *
  * ## A read that FAILED is never reported as a free calendar
  *
- * A non-OK response and a network error both emit
- * {@link GOOGLE_BUSY_UNAVAILABLE_WARNING} through `onWarning` and leave the
- * previously loaded meetings in place rather than replacing them with an empty
- * list. "Could not load conflicts" and "there are no conflicts" render
- * identically on a grid, and only one of them is safe to publish over.
+ * A non-OK response, a network error, and a response whose body does not carry
+ * a `meetings` array all emit {@link GOOGLE_BUSY_UNAVAILABLE_WARNING} through
+ * `onWarning` and leave the previously loaded meetings in place rather than
+ * replacing them with an empty list. "Could not load conflicts" and "there are
+ * no conflicts" render identically on a grid, and only one of them is safe to
+ * publish over — so a 200 is only believed when it actually carries the list
+ * (an edge or proxy error page can be an HTML 200).
  *
  * ## The window is BOUNDED — conflicts outside it are NOT shown
  *
@@ -123,7 +125,7 @@ export function useGoogleCalendarBusyMeetings(input: {
     )
       .then(async (res): Promise<GoogleCalendarBusyResponse> => {
         const data = (await res.json().catch(() => ({}))) as GoogleCalendarBusyResponse;
-        if (!res.ok) return unavailableResponse();
+        if (!res.ok || !Array.isArray(data.meetings)) return unavailableResponse();
         return data;
       })
       .catch(unavailableResponse)
