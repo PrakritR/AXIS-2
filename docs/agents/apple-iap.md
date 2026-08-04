@@ -107,6 +107,22 @@ no-op off-iOS — same pattern as `push-client.ts`). The native tier paywall
 (where the IAP surface lives) instead of showing a dead-end notice — still no
 price/subscribe copy or web purchase link on native.
 
+**Guideline 3.1.2 (the second rejection) is satisfied ON the purchase screen**:
+each paid card carries the subscription title (`PropLane Pro`/`Business`), the
+length ("1-month subscription · renews monthly until canceled"), and the store's
+localized price per period; a footer carries the plain auto-renew statement plus
+**Terms of Use (EULA)** → `https://prop-lane.space/tos` and **Privacy Policy** →
+`https://prop-lane.space/privacy`. Both links are BUTTONS driving `openAppUrl`
+(in-app Capacitor Browser) — never `<a href>` anchors, which
+`tests/unit/manager-plan-native-no-external-purchase.test.tsx` forbids on this
+surface and which would bounce the manager out of the WebView. The screen also
+shows all three tiers with the current one marked; Free offers an honest
+"Switch to Free" for trial/comped accounts only (`canOffer` implies no Stripe
+and no Apple subscription, so it is a server-side plan change, never an
+Apple-subscription cancellation claim). Feature copy comes from
+`MANAGER_PLAN_TIERS` — never hand-written in the component. Coverage:
+`tests/unit/manager-plan-native-3-1-2.test.tsx`.
+
 ## Environment variables (NO secrets committed)
 
 Add to `.env` locally and Vercel (and GitHub Actions for the native build):
