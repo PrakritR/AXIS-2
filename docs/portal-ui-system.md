@@ -245,18 +245,26 @@ or resize the panel.
   (`FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH`) and never drops an already-selected
   option; the shared `CheckboxMultiSelect` / `FieldSingleSelect` still show one
   only above 5 options.
-- **The mobile filter sheet is RAISED statically and never moves.** `autoElevate`
-  on `VaulBottomSheet` applies a fixed `bottom: max(32vh, …)` plus a max-height
-  derived from that same offset. It used to be gated on a
-  `height < viewport * 0.52` measurement, so a sheet whose content changed while
-  open flipped placement and visibly JUMPED — a measured placement can always jump,
-  which is why this one is a prop. Only a sheet that already fills the viewport
-  (browse-homes, via `mobileSheetFillsViewport`) stays bottom-anchored, because
-  raising it would push its top off screen. Three consequences worth knowing:
-  a raised sheet must suppress Vaul's `::after` overscroll fill (`globals.css`,
-  keyed on `data-elevated`) or that fill paints across the gap below it; the
-  sheet body must NOT impose its own smaller max-height, or the lower fields get
-  pushed past the sheet's bottom edge; and the raised content must publish
+- **The mobile filter sheet is BOTTOM-ANCHORED and fills down to the tab bar.**
+  `PortalFilterSortSheet` defaults `mobileSheetFillsViewport` to **true**, which
+  passes `fillViewport` to `VaulBottomSheet`: the sheet sits at
+  `bottom: var(--portal-native-bottom-nav-inset, 0)` and opens at its own
+  max-height (`min-height` is derived from `maxHeightClass`), so the card
+  background reaches the tab bar instead of hugging the fields and leaving a
+  dead strip of scrim below them. Filter fields stay at the top of that box and
+  the body scrolls (`PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS`). The sheet body
+  must NOT impose its own smaller max-height, or the lower fields get pushed
+  past the sheet's bottom edge.
+- **The RAISED placement survives as an opt-in and currently has no callers.**
+  `mobileSheetRaised` → `VaulBottomSheet`'s `autoElevate` applies a fixed
+  `bottom: max(32vh, …)` plus a max-height derived from that same offset, and
+  `PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX` applies only there. Its constraints
+  still bind anything that reintroduces it: the placement is a PROP, never a
+  measurement (it used to be gated on `height < viewport * 0.52`, so a sheet whose
+  content changed while open flipped placement and visibly JUMPED); a raised sheet
+  must suppress Vaul's `::after` overscroll fill (`globals.css`, keyed on
+  `data-elevated`) or that fill paints across the gap below it; and the raised
+  content must publish
   `--initial-transform: calc(100% + var(--portal-raised-sheet-offset))`
   (`RAISED_SHEET_STYLE`), because Vaul's `slideToBottom` exit keyframe translates
   only 100% of the drawer's OWN height — a raised sheet left on the default ends
@@ -302,14 +310,16 @@ or resize the panel.
   raised sheet is always tall enough to contain its widest menu below its chrome; the
   dead space under a lone field is the accepted price of "stationary AND contained".
   Re-measure and re-pin whenever the chrome changes.
-- **The menu names its own field** (`FieldSelectMenuHeader`), because it covers its
-  trigger and, on a tight host, every label in the panel — measured on the 3-field
-  panel, an open menu covered all three. The header is BUDGETED into
-  `fieldSelectMenuContentPx` alongside the search row, never paid for with an option
-  row. `FIELD_SELECT_MENU_HEADER_PX` is bounded by the 3-field panel, and the real
-  headroom is **10px**, not the 32px an earlier note claimed: the panel is 23rem/368px,
-  its chrome is 58px, the containment gap is 8px, and the menu is 292px. Grow either
-  past that and menus silently start escaping the panel — or eating its chrome — again.
+- **The menu does NOT repeat the field name.** The trigger row already renders the
+  label (`FILTER_FIELD_LABEL_CLASS`) and the portaled menu no longer covers it, so an
+  in-menu header just printed "PROPERTY" twice on Residents and every other sheet.
+  `fieldSelectMenuContentPx` therefore budgets only the search row —
+  `FILTER_MENU_CONTENT_PX` is 5×40 + 12 + 52 = **264px**, and everything derived from
+  it (`PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX`, the containment math) follows.
+  `FieldSelectMenuHeader` / `FIELD_SELECT_MENU_HEADER_PX` are still declared in
+  `field-select-menu.tsx` with no callers; anything that re-adds a header must budget
+  it in `fieldSelectMenuContentPx` — never pay for it with an option row — and re-check
+  the tightest host, the 3-field panel (23rem/368px, 58px chrome, 8px containment gap).
 - **The menu's row count is reported by the list that renders it**, via
   `useRegisterFilterMenuOptionCount` in a layout effect, so it overrides
   `FilterCollapsibleSection`'s `menuOptionCount` prop before paint. The count feeds

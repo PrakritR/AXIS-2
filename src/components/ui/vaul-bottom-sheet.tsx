@@ -75,7 +75,8 @@ export function VaulBottomSheet({
   flushBody = false,
   lockBodyScroll = false,
   /**
-   * Override default `max-h-[min(88dvh,36rem)]` for tall filter sheets. IGNORED when
+   * Override the bottom-anchored default (88dvh, capped to the viewport above the tab-bar
+   * inset) for tall filter sheets. IGNORED when
    * `autoElevate` is set: an elevated sheet derives its max-height from the raised offset,
    * and letting a caller's `max-h-*` reach the same element would make the sheet's height
    * depend on which of two sources won a merge rather than on the placement it is in. Only
@@ -125,7 +126,8 @@ export function VaulBottomSheet({
      rather than fight — the point of the split is not to break a tie, it is that a single
      emitted utility per property is what lets a test pin the placement (and with it
      containment and the uncoverable chrome) instead of pinning a merge outcome. That is why
-     `bottom-0` lives on the non-elevated branch below rather than in the base class list.
+     the bottom-anchored `bottom-[var(--portal-native-bottom-nav-inset,0px)]` lives on the
+     non-elevated branch below rather than in the base class list.
      Both of these read {@link RAISED_SHEET_OFFSET_VAR}. */
   const elevatedPlacement =
     "bottom-[var(--portal-raised-sheet-offset)] top-auto " +
