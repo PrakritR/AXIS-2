@@ -165,8 +165,8 @@ describe("mirroring locally held rows back to the server", () => {
   let maxConcurrent = 0;
   let upsertedIds: string[] = [];
 
-  /** Records concurrency and order; refuses ids the predicate selects. */
-  function mirrorFetch(refuseId: (id: string) => boolean) {
+  /** Records concurrency and order; answers `failFor` ids with that failure. */
+  function mirrorFetch(failFor: (id: string) => { status: number; body: unknown } | null) {
     return vi.fn(async (url: unknown, init?: { body?: unknown }) => {
       const body = JSON.parse(String(init?.body ?? "{}")) as { action?: string; id?: string };
       if (!String(url).includes("/api/property-records") || body.action !== "upsert") {
@@ -177,11 +177,14 @@ describe("mirroring locally held rows back to the server", () => {
       upsertedIds.push(String(body.id));
       await new Promise((resolve) => setTimeout(resolve, 0));
       inFlight -= 1;
-      return refuseId(String(body.id))
-        ? ({ ok: false, status: 403, json: async () => ({ error: LIMIT_MESSAGE }) } as unknown as Response)
+      const failure = failFor(String(body.id));
+      return failure
+        ? ({ ok: false, status: failure.status, json: async () => failure.body } as unknown as Response)
         : ({ ok: true, status: 200, json: async () => ({}) } as unknown as Response);
     });
   }
+
+  const planRefusal = { status: 403, body: { error: LIMIT_MESSAGE, code: "property_limit_reached" } };
 
   async function seedTwoLocalListings(manager: string) {
     vi.stubGlobal("fetch", mockFetch());
@@ -198,7 +201,7 @@ describe("mirroring locally held rows back to the server", () => {
   it("sends the writes one at a time so the cap cannot be raced", async () => {
     const manager = nextManager();
     await seedTwoLocalListings(manager);
-    vi.stubGlobal("fetch", mirrorFetch(() => false));
+    vi.stubGlobal("fetch", mirrorFetch(() => null));
 
     await mirrorLocalPropertyPipelineToServer(manager);
 
@@ -206,10 +209,10 @@ describe("mirroring locally held rows back to the server", () => {
     expect(maxConcurrent).toBe(1);
   });
 
-  it("reports a refusal once, not once per row", async () => {
+  it("reports a plan refusal once, not once per row", async () => {
     const manager = nextManager();
     await seedTwoLocalListings(manager);
-    vi.stubGlobal("fetch", mirrorFetch(() => true));
+    vi.stubGlobal("fetch", mirrorFetch(() => planRefusal));
     const seen: string[] = [];
 
     await mirrorLocalPropertyPipelineToServer(manager, undefined, { onError: (m) => seen.push(m) });
@@ -221,10 +224,49 @@ describe("mirroring locally held rows back to the server", () => {
   it("stays silent when every row the server already has is re-mirrored", async () => {
     const manager = nextManager();
     await seedTwoLocalListings(manager);
-    vi.stubGlobal("fetch", mirrorFetch(() => false));
+    vi.stubGlobal("fetch", mirrorFetch(() => null));
 
     await mirrorLocalPropertyPipelineToServer(manager, undefined, {
       onError: () => expect.unreachable("an accepted mirror must not report an error"),
+    });
+
+    expect(upsertedIds).toHaveLength(2);
+  });
+
+  /**
+   * Regression: mirror-surfaces-any-server-error-text. This runs on page load
+   * from work the manager never asked for, so anything that is not the plan
+   * refusal it was built for must stay silent — the route answers 500 with raw
+   * Postgres text and with "Could not read this account's plan."
+   */
+  it("never toasts a server error it was not built to explain", async () => {
+    const manager = nextManager();
+    await seedTwoLocalListings(manager);
+    vi.stubGlobal(
+      "fetch",
+      mirrorFetch(() => ({
+        status: 500,
+        body: { error: 'null value in column "id" violates not-null constraint' },
+      })),
+    );
+
+    await mirrorLocalPropertyPipelineToServer(manager, undefined, {
+      onError: () => expect.unreachable("a background mirror must not surface internal error text"),
+    });
+
+    expect(upsertedIds).toHaveLength(2);
+  });
+
+  it("stays silent on a plan the server could not read", async () => {
+    const manager = nextManager();
+    await seedTwoLocalListings(manager);
+    vi.stubGlobal(
+      "fetch",
+      mirrorFetch(() => ({ status: 500, body: { error: "Could not read this account's plan." } })),
+    );
+
+    await mirrorLocalPropertyPipelineToServer(manager, undefined, {
+      onError: () => expect.unreachable("a fail-closed 500 is not a plan refusal"),
     });
 
     expect(upsertedIds).toHaveLength(2);
