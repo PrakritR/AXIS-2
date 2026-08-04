@@ -1679,10 +1679,13 @@ The one rule behind `/api/public/property-tour-availability`:
   it silently reopened) and how to switch to the stricter "never published
   anything" rule in one line. The horizon is `DEFAULT_TOUR_HORIZON_DAYS = 21` —
   the response is `no-store`, so every request pays for the whole grid. It fires
-  only for a **`live`** property (`PUBLICLY_BOOKABLE_PROPERTY_STATUS`): the
-  direct-id lookup deliberately resolves a record of any status, so without that
-  gate a draft/pending/review/unlisted listing would offer ~336 bookable half
-  hours to anyone holding its id. Published availability is unaffected.
+  only for a **`live`** property, and so does everything else: the direct-id
+  lookup deliberately resolves a record of any status, so
+  `PUBLICLY_BOOKABLE_PROPERTY_STATUS` gates `matchingPropertyRecords` itself and
+  a non-live property returns an empty grid before any availability is read.
+  Gating only the default branch is not enough — `manager_availability` rows are
+  GLOBAL to the manager, so a draft/pending/review/unlisted listing would still
+  hand its manager's real portfolio calendar to anyone holding its id.
 - **Already-booked** is pending inquiries AND confirmed planned tours; a
   reschedule drops the stale `slotKey` so the old window is not still blocked.
 - **Calendar-busy** is the manager's linked Google Calendar, cached per manager

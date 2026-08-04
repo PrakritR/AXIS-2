@@ -234,6 +234,36 @@ describe("public tour availability subtracts what is already taken", () => {
     expect(slots.size).toBe(4);
   });
 
+  it("offers a live property's global availability when it has published none of its own", async () => {
+    PROPERTY_AVAILABILITY_SLOTS = null;
+    GLOBAL_AVAILABILITY_SLOTS = [TEN_AM, `${DAY}:21`];
+    const slots = await offeredSlots();
+    expect(slots.has(TEN_AM)).toBe(true);
+    expect(slots.size).toBe(2);
+  });
+
+  it.each(["draft", "pending", "review", "unlisted"])(
+    "publishes nothing for a %s property whose manager HAS global availability",
+    async (status) => {
+      // `manager_availability` rows are GLOBAL to the manager and are the normal
+      // state for anyone using the portfolio calendar, so gating only the 9-5
+      // default left this wide open: anyone holding a non-live property's id got
+      // the manager's real published calendar for it.
+      PROPERTY_STATUS = status;
+      PROPERTY_AVAILABILITY_SLOTS = null;
+      GLOBAL_AVAILABILITY_SLOTS = [TEN_AM, `${DAY}:21`];
+      const slots = await offeredSlots();
+      expect(slots.size).toBe(0);
+      expect(GOOGLE_TIME_MAX).toHaveLength(0);
+    },
+  );
+
+  it("publishes nothing for a non-live property with property-scoped availability", async () => {
+    PROPERTY_STATUS = "unlisted";
+    const slots = await offeredSlots();
+    expect(slots.size).toBe(0);
+  });
+
   it("removes a confirmed tour's own slot", async () => {
     PLANNED_EVENTS = [
       {

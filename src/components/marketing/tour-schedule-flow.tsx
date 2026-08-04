@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -54,6 +54,23 @@ type TourRoomOption = {
   subtitle: string;
   property: MockProperty;
 };
+
+/**
+ * Why a FAILED availability read can never be rendered as an empty grid.
+ *
+ * "No tour windows are published for this property yet" is a confident claim
+ * about the property, and a prospect who reads it leaves. A throttled read (the
+ * public route is IP rate-limited, so a shared NAT can trip it) or a 500 says
+ * nothing at all about the property, and collapsing both into `{}` tells that
+ * prospect a lie about a house with a full calendar. Same invariant the
+ * resident tour panel holds: a failed read is a failed read, with a retry.
+ */
+export function tourAvailabilityReadErrorMessage(status: number): string {
+  if (status === 429) {
+    return "We're loading a lot of tour calendars right now. Wait a moment and try again — this property may well have open windows.";
+  }
+  return "We couldn't load this property's tour windows just now. Check your connection and try again.";
+}
 
 /** Sentinel when the prospect wants a property tour but has not picked a room yet. */
 export const TOUR_ROOM_UNDECIDED_KEY = "__tour-room-undecided__";
@@ -144,6 +161,7 @@ export function TourScheduleFlow({
   // behind a microtask. Starting false made the first paint claim "No tour
   // windows are published" before the request had even been sent.
   const [availabilityLoading, setAvailabilityLoading] = useState(true);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [bookingTour, setBookingTour] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -167,32 +185,48 @@ export function TourScheduleFlow({
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
+  const loadAvailability = useCallback(
+    async (stillWanted: () => boolean = () => true) => {
       const params = new URLSearchParams({
         propertyId: property.id,
         buildingName: property.buildingName,
         address: property.address,
       });
       setAvailabilityLoading(true);
-      void fetch(`/api/public/property-tour-availability?${params.toString()}`)
-      .then(async (res) => {
-        const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
-        if (!cancelled) setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
-      })
-      .catch(() => {
-        if (!cancelled) setSlotHosts({});
-      })
-      .finally(() => {
-        if (!cancelled) setAvailabilityLoading(false);
-      });
+      try {
+        const res = await fetch(`/api/public/property-tour-availability?${params.toString()}`);
+        const body = (await res.json().catch(() => ({}))) as {
+          slotHosts?: Record<string, PropertyManagerEntry[]>;
+        };
+        if (!stillWanted()) return;
+        if (!res.ok) {
+          setSlotHosts({});
+          setAvailabilityError(tourAvailabilityReadErrorMessage(res.status));
+          return;
+        }
+        setSlotHosts(body.slotHosts ?? {});
+        setAvailabilityError(null);
+      } catch {
+        if (!stillWanted()) return;
+        setSlotHosts({});
+        setAvailabilityError(tourAvailabilityReadErrorMessage(0));
+      } finally {
+        if (stillWanted()) setAvailabilityLoading(false);
+      }
+    },
+    [property],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      void loadAvailability(() => !cancelled);
     });
     return () => {
       cancelled = true;
     };
-  }, [property]);
+  }, [loadAvailability]);
 
   const selectedAvailability = useMemo(() => {
     void tick;
@@ -395,6 +429,8 @@ export function TourScheduleFlow({
             }}
             managersAtSelectedSlot={managersAtSelectedSlot}
             availabilityLoading={availabilityLoading}
+            availabilityError={availabilityError}
+            onRetryAvailability={() => void loadAvailability()}
           />
         )}
         {step === 3 && (
@@ -485,19 +521,7 @@ export function TourScheduleFlow({
                 showToast(failedResult.error ?? "That tour time is no longer available.");
                 setStep(2);
                 setSelectedSlotIndex(null);
-                const params = new URLSearchParams({
-                  propertyId: property.id,
-                  buildingName: property.buildingName,
-                  address: property.address,
-                });
-                setAvailabilityLoading(true);
-                void fetch(`/api/public/property-tour-availability?${params.toString()}`)
-                  .then(async (res) => {
-                    const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
-                    setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
-                  })
-                  .catch(() => setSlotHosts({}))
-                  .finally(() => setAvailabilityLoading(false));
+                void loadAvailability();
                 return;
               }
               setSubmitted(true);
@@ -632,6 +656,8 @@ function Step2({
   selectedDay, onSelectDay, selectedSlotIndex, onSelectSlotIndex,
   managersAtSelectedSlot,
   availabilityLoading,
+  availabilityError,
+  onRetryAvailability,
 }: {
   property: MockProperty;
   availability: Set<string>;
@@ -642,6 +668,8 @@ function Step2({
   selectedSlotIndex: number | null; onSelectSlotIndex: (slotIndex: number) => void;
   managersAtSelectedSlot: PropertyManagerEntry[];
   availabilityLoading: boolean;
+  availabilityError: string | null;
+  onRetryAvailability: () => void;
 }) {
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDay = getFirstDayOfMonth(calYear, calMonth);
@@ -655,6 +683,20 @@ function Step2({
         <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-info">
           Loading tour windows from the calendar...
         </p>
+      ) : availabilityError ? (
+        <div
+          data-attr="tour-availability-read-failed"
+          className="flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-danger"
+        >
+          <p className="min-w-0 flex-1">{availabilityError}</p>
+          <button
+            type="button"
+            onClick={onRetryAvailability}
+            className="rounded-full border border-current px-4 py-1.5 text-xs font-semibold"
+          >
+            Try again
+          </button>
+        </div>
       ) : availability.size === 0 ? (
         <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
           No tour windows are published for this property yet. Send a message to PropLane or ask your property manager.

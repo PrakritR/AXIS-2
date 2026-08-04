@@ -45,16 +45,23 @@ export const runtime = "nodejs";
  */
 const GOOGLE_BUSY_TTL_MS = 60_000;
 /**
- * The only listing status that may offer tours to the public.
+ * The only listing status that may offer tours to the public, whatever the
+ * source of the slots.
  *
  * The house-key lookup below already selects `status = "live"`; the direct-id
  * lookup deliberately does not, so a manager previewing their own draft can
- * still resolve it. That was harmless while a property offered nothing unless
- * its manager had painted availability by hand — the 9-5 default changed that,
- * and a draft/pending/review/unlisted record would otherwise hand ~336 bookable
- * half hours to anyone holding its id. The default is a convenience for a LIVE
- * listing whose manager has not opened a calendar yet, never a way for a
- * listing nobody has published to start taking bookings.
+ * still resolve it. Everything downstream of `matchingPropertyRecords` is
+ * therefore gated here rather than at any one branch — a non-live property
+ * offers NOTHING:
+ *
+ * - the 9-5 default would otherwise hand ~336 bookable half hours to anyone
+ *   holding a draft/pending/review/unlisted record's id, and
+ * - the PUBLISHED branch would otherwise expose the manager's real portfolio
+ *   calendar for that property, since `manager_availability` rows are global to
+ *   the manager and are the normal state for anyone using the calendar at all.
+ *
+ * Gating only the default leaves the second half open, which is why the gate
+ * lives at the record set both branches read from.
  */
 const PUBLICLY_BOOKABLE_PROPERTY_STATUS = "live";
 /**
@@ -343,9 +350,16 @@ export async function GET(req: Request) {
       );
     });
     const houseKeys = new Set(directMatches.map(({ property }) => propertyMatchKey(property)).filter(Boolean));
-    const matchingPropertyRecords = propertyRecords.filter(
-      ({ property }) => directMatches.some((match) => match.property === property) || houseKeys.has(propertyMatchKey(property)),
-    );
+    const matchingPropertyRecords = propertyRecords
+      .filter(
+        ({ property }) => directMatches.some((match) => match.property === property) || houseKeys.has(propertyMatchKey(property)),
+      )
+      .filter(({ status }) => status === PUBLICLY_BOOKABLE_PROPERTY_STATUS);
+
+    if (matchingPropertyRecords.length === 0) {
+      return NextResponse.json({ slotHosts: {} }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     const managerIds = [
       ...new Set(
         matchingPropertyRecords.map(({ managerUserId }) => managerUserId),
@@ -431,12 +445,11 @@ export async function GET(req: Request) {
     const rows = [...propertyRowsForHouse, ...globalRows];
 
     /**
-     * One manager's offering for this property. Published rows become offerings
-     * verbatim; when NOTHING is published a LIVE property still offers the
-     * default 9-5 grid, so a manager who has not opened their calendar yet does
-     * not show a prospect a dead booking page. Either way the subtraction below
-     * applies, and a property that is not live offers nothing it never
-     * published.
+     * One manager's offering for this property, which is live by the time we
+     * get here. Published rows become offerings verbatim; when NOTHING is
+     * published the property still offers the default 9-5 grid, so a manager
+     * who has not opened their calendar yet does not show a prospect a dead
+     * booking page. Either way the subtraction below applies.
      */
     type Offering = { managerUserId: string; propertyId?: string; slots: string[] };
     const publishedOfferings: Offering[] = rows
@@ -451,11 +464,7 @@ export async function GET(req: Request) {
       offering.slots.filter((slot) => slotIsBookable(slot)),
     );
     const defaultGridManagerIds = [
-      ...new Set(
-        matchingPropertyRecords
-          .filter(({ status }) => status === PUBLICLY_BOOKABLE_PROPERTY_STATUS)
-          .map(({ managerUserId }) => managerUserId),
-      ),
+      ...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId)),
     ].filter(Boolean);
     const offerings: Offering[] = !shouldOfferDefaultTourGrid(publishedFutureSlots)
       ? publishedOfferings
