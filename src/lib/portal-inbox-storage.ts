@@ -359,15 +359,58 @@ export function appendPersistedInboxThread(key: string, thread: PersistedInboxTh
 }
 
 /**
- * Newest-first sort key for a conversation row. Thread ids embed the creation
- * epoch (10+ digits); when they don't, fall back to parsing a display/ISO time.
+ * Parse a conversation stamp into epoch ms.
+ *
+ * Inbox rows store `time` as a LOCALE DISPLAY STRING, and the one written on
+ * send (`portal-inbox-delivery.ts`) carries no year: "Aug 3, 5:31 PM".
+ * `Date.parse` resolves that to **2001**, while an older row stamped with an
+ * explicit year ("Jul 20, 2026") resolves to 2026 — so raw `Date.parse` sorted
+ * every recent message ~25 years BELOW every dated one. That is what put
+ * today's threads underneath July rows in the conversation list.
+ *
+ * Year-less stamps are therefore resolved against the current year, rolling
+ * back one year when that would place them in the future (a Dec stamp read in
+ * January). Returns null when there is nothing parseable to order on.
+ */
+export function parseInboxStampMs(value?: string | null, now: Date = new Date()): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  // ISO / already-unambiguous stamps carry their own year.
+  if (/\d{4}/.test(raw)) {
+    const parsed = Date.parse(raw);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  const withYear = Date.parse(`${raw} ${now.getFullYear()}`);
+  if (Number.isNaN(withYear)) return null;
+  // Tolerate a little clock skew before deciding a stamp is "next year".
+  if (withYear - now.getTime() > 24 * 60 * 60 * 1000) {
+    const previous = Date.parse(`${raw} ${now.getFullYear() - 1}`);
+    return Number.isNaN(previous) ? withYear : previous;
+  }
+  return withYear;
+}
+
+/**
+ * Newest-first sort key for a conversation row.
+ *
+ * Ordering follows the thread's LATEST ACTIVITY, not its creation. The thread
+ * id embeds the creation epoch, so preferring it (as this once did) meant a
+ * reply never floated its conversation to the top — the id it sorted on had
+ * not changed. The id epoch is now only a last resort, for rows with no
+ * usable stamp at all.
+ *
  * One implementation for every portal inbox — manager, unified, vendor.
  */
-export function inboxThreadSortMs(id: string, fallbackTime?: string | null): number {
-  const match = String(id ?? "").match(/(\d{10,})/);
-  if (match) return parseInt(match[1]!, 10);
-  const parsed = Date.parse(fallbackTime ?? "");
-  return Number.isNaN(parsed) ? 0 : parsed;
+export function inboxThreadSortMs(id: string, activityTime?: string | null): number {
+  const fromActivity = parseInboxStampMs(activityTime);
+  if (fromActivity !== null) return fromActivity;
+  // Prefer a millisecond epoch; a bare 10-digit run also matches phone numbers
+  // and second-epochs, which are ~1000x smaller and would sort to the bottom.
+  const ms = String(id ?? "").match(/(\d{13,})/);
+  if (ms) return parseInt(ms[1]!, 10);
+  return 0;
 }
 
 /** Stable resident/counterparty key for collapsing duplicate person-threads. */
@@ -400,6 +443,10 @@ export function appendReplyToInboxThread(
     ...thread,
     messages: [...(thread.messages ?? []), reply],
     preview: reply.body.slice(0, 100).replace(/\n/g, " "),
+    // Carry the reply's stamp onto the thread. Without this the row kept its
+    // ORIGINAL date after a reply ("replied today, still reads Jul 20") and,
+    // because the list orders on this field, never floated to the top.
+    ...(reply.at ? { time: reply.at } : {}),
     unread: false,
   };
 }

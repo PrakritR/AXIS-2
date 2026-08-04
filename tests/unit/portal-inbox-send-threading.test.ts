@@ -125,6 +125,63 @@ describe("deliverPortalInboxMessage person-thread collapsing", () => {
     expect(inboxMessages[1]?.outbound).toBe(false);
   });
 
+  /**
+   * Regression for F-COMM-1. The append branch used to preserve the existing
+   * `subject`, so a person-thread was labelled forever by the FIRST message ever
+   * sent to that person. In the dev data the first send was a one-character "N",
+   * so nine of fourteen conversations rendered their subject as "N" — including
+   * a thread whose newest message was a lease titled "Your lease for ...".
+   */
+  it("advances the thread subject to the latest message", async () => {
+    const { db, tables } = makeFakeDb();
+
+    await deliverPortalInboxMessage(db, baseOpts("first message", "N"));
+    await deliverPortalInboxMessage(
+      db,
+      baseOpts("your lease is ready", "Your lease for Cascade Lofts · Unit 2A is ready to sign"),
+    );
+
+    const all = tables.portal_inbox_thread_records!;
+    for (const row of all) {
+      const thread = row.row_data as PersistedInboxThread;
+      expect(thread.subject).toBe("Your lease for Cascade Lofts · Unit 2A is ready to sign");
+    }
+  });
+
+  it("keeps the root message body as real history when the subject advances", async () => {
+    const { db, tables } = makeFakeDb();
+
+    await deliverPortalInboxMessage(db, baseOpts("first message", "N"));
+    await deliverPortalInboxMessage(db, baseOpts("second message", "New subject"));
+
+    const sent = tables.portal_inbox_thread_records!.find(
+      (r) => (r.row_data as PersistedInboxThread).folder === "sent",
+    )!;
+    const thread = sent.row_data as PersistedInboxThread;
+    // `body` is the first message's text, not a display field — advancing the
+    // subject must not rewrite the conversation's history.
+    expect(thread.body).toBe("first message");
+    expect(inboxThreadMessages(thread).map((m) => m.body)).toEqual(["first message", "second message"]);
+  });
+
+  it("rejects a blank-subject send outright, leaving the thread label intact", async () => {
+    const { db, tables } = makeFakeDb();
+
+    await deliverPortalInboxMessage(db, baseOpts("first message", "Move-in packet"));
+    const blank = await deliverPortalInboxMessage(db, {
+      ...baseOpts("second message", "Move-in packet"),
+      subject: "   ",
+    });
+
+    // `deliverPortalInboxMessage` requires a subject, so this never reaches the
+    // append branch — the guard is upstream, and the label is simply untouched.
+    expect(blank.ok).toBe(false);
+    const sent = tables.portal_inbox_thread_records!.find(
+      (r) => (r.row_data as PersistedInboxThread).folder === "sent",
+    )!;
+    expect((sent.row_data as PersistedInboxThread).subject).toBe("Move-in packet");
+  });
+
   it("keeps separate threads for different people", async () => {
     const { db, tables } = makeFakeDb();
 
