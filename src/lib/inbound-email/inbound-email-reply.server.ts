@@ -19,6 +19,7 @@
  * (one-of-two-rows) append safe.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   clampBody,
   fetchResendReceivedEmailBodyWithRetry,
@@ -76,7 +77,7 @@ function bestInlineBody(parsed: ParsedInboundEmail): string {
 function displayWhen(receivedAt: string): string {
   const at = new Date(receivedAt);
   const date = Number.isNaN(at.getTime()) ? new Date() : at;
-  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return formatPacificDateTime(date);
 }
 
 /** The two thread sides one reply writes to, shared by ingest and backfill. */

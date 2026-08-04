@@ -1,4 +1,5 @@
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { appendManualPaymentInstructions } from "@/lib/manual-payment-instructions";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -71,7 +72,7 @@ export async function deliverPaymentReminder(input: {
 
   const ts = Date.now();
   const rand = crypto.randomUUID().slice(0, 8);
-  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const when = formatPacificDateTime(new Date());
   const preview = text.slice(0, 100).replace(/\n/g, " ");
   const managerEmail = from.match(/<([^>]+)>/)?.[1] ?? from;
 

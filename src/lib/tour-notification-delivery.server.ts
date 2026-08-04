@@ -3,6 +3,7 @@
  */
 
 import { resolveAppOrigin } from "@/lib/app-url";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
@@ -107,7 +108,7 @@ async function upsertInboxThread(
     body: string;
   },
 ): Promise<void> {
-  const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const when = formatPacificDateTime(new Date());
   const preview = input.body.slice(0, 100).replace(/\n/g, " ");
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 6);

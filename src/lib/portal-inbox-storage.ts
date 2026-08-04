@@ -450,7 +450,9 @@ export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMe
  * two different stamps and `parseInboxStampMs` — which reads both as
  * viewer-local — let a server-delivered message outrank a client reply that
  * actually happened later, by up to the UTC offset. One zone for every writer
- * keeps ordering consistent; the rendered output is unchanged.
+ * keeps ordering consistent. A stamp written where local time was not Pacific
+ * now displays shifted by that offset, which is the point rather than a
+ * regression.
  */
 export function formatInboxStamp(value: Date): string {
   return formatPacificDateTime(value);

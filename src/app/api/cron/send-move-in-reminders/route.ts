@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isProductionRuntime } from "@/lib/server-env";
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -163,7 +164,7 @@ export async function GET(req: Request) {
       const ts = Date.now();
       const rand = Math.random().toString(36).slice(2, 6);
       const inboxId = `move_in_reminder_inbox_${ts}_${rand}`;
-      const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const when = formatPacificDateTime(new Date());
       const preview = text.slice(0, 100).replace(/\n/g, " ");
       await db.from("portal_inbox_thread_records").upsert(
         {

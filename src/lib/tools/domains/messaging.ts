@@ -6,6 +6,7 @@
  * landlord couldn't message from the UI.
  */
 import { z } from "zod";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { defineWriteTool } from "../registry";
 import { withBodyWarnings } from "../preview-body";
 import type { AgentContext } from "../context";
@@ -378,11 +379,12 @@ export const replyToThreadTool = defineWriteTool({
     // 1. Append the reply onto the landlord's own thread (same shape the
     //    interactive reply flow writes), so their inbox shows the exchange.
     const messages = Array.isArray(thread.messages) ? [...thread.messages] : [];
+    const when = formatPacificDateTime(new Date());
     messages.push({
       id: `reply-${Date.now().toString(36)}`,
       from: fromName,
       body,
-      at: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+      at: when,
     });
     const { error: threadError } = await ctx.db.from("portal_inbox_thread_records").upsert(
       {
@@ -394,6 +396,7 @@ export const replyToThreadTool = defineWriteTool({
           ...thread,
           messages,
           preview: body.slice(0, 100).replace(/\n/g, " "),
+          time: when,
           unread: false,
         },
         updated_at: new Date().toISOString(),
