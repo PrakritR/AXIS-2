@@ -54,6 +54,29 @@ const DENORMALIZED_EMAIL_TABLES = [
 
 const norm = (value) => String(value ?? "").trim().toLowerCase();
 
+/**
+ * PostgREST caps every select at `max_rows` (1000 in supabase/config.toml, and
+ * the hosted default), so a `.limit(5000)` is silently truncated to the first
+ * page. A scan that trusts it under-repairs, and a verification re-read that
+ * trusts it re-reads the SAME truncated window and reports success anyway.
+ * Every scan in this script therefore pages with `.range()` until a short page
+ * comes back, ordered by `id` so the pages partition the table.
+ */
+const SCAN_PAGE_SIZE = 1000;
+
+async function selectAllRows(supabase, { table, columns, label, filter }) {
+  const rows = [];
+  for (let from = 0; ; from += SCAN_PAGE_SIZE) {
+    let query = supabase.from(table).select(columns);
+    if (filter) query = filter(query);
+    const { data, error } = await query.order("id", { ascending: true }).range(from, from + SCAN_PAGE_SIZE - 1);
+    if (error) throw new Error(`repair: ${label ?? "select"} ${table}: ${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < SCAN_PAGE_SIZE) return rows;
+  }
+}
+
 /** The `@test.proplane.local` address a legacy sandbox address corresponds to, if any. */
 export function proplaneTwinForLegacyEmail(email) {
   const value = norm(email);
@@ -73,10 +96,9 @@ export async function repairDenormalizedResidentEmails(supabase, opts = {}) {
   const repaired = [];
 
   for (const { table, keys } of DENORMALIZED_EMAIL_TABLES) {
-    const { data, error } = await supabase.from(table).select("id, resident_email, row_data").limit(5000);
-    if (error) throw new Error(`repair: select ${table}: ${error.message}`);
+    const rows = await selectAllRows(supabase, { table, columns: "id, resident_email, row_data", label: "select" });
 
-    for (const row of data ?? []) {
+    for (const row of rows) {
       const column = norm(row.resident_email);
       const rowData = row.row_data && typeof row.row_data === "object" ? row.row_data : null;
       if (!column || !rowData) continue;
@@ -135,20 +157,21 @@ export async function repairCanonicalResidentThreadAddresses(supabase, opts = {}
     return { repaired: [], skipped: [] };
   }
 
-  const { data: threads, error } = await supabase
-    .from("portal_inbox_thread_records")
-    .select("id, owner_user_id, participant_email, row_data")
-    .or(`owner_user_id.eq.${profile.id},participant_email.eq.${residentEmail}`)
-    .limit(1000);
-  if (error) throw new Error(`repair: select threads: ${error.message}`);
+  const threads = await selectAllRows(supabase, {
+    table: "portal_inbox_thread_records",
+    columns: "id, owner_user_id, participant_email, row_data",
+    label: "select threads for",
+    filter: (q) => q.or(`owner_user_id.eq.${profile.id},participant_email.eq.${residentEmail}`),
+  });
 
-  const { data: profiles, error: allProfErr } = await supabase.from("profiles").select("email").limit(5000);
-  if (allProfErr) throw new Error(`repair: select profiles: ${allProfErr.message}`);
-  const knownEmails = new Set((profiles ?? []).map((p) => norm(p.email)).filter(Boolean));
+  // Truncating this scan would classify a real `@test.proplane.local` twin as
+  // "no account" and silently skip the thread, so it pages like the rest.
+  const profiles = await selectAllRows(supabase, { table: "profiles", columns: "id, email", label: "select" });
+  const knownEmails = new Set(profiles.map((p) => norm(p.email)).filter(Boolean));
 
   const repaired = [];
   const skipped = [];
-  for (const thread of threads ?? []) {
+  for (const thread of threads) {
     const rowData = thread.row_data && typeof thread.row_data === "object" ? thread.row_data : null;
     if (!rowData) continue;
     const current = norm(rowData.email);
@@ -263,9 +286,8 @@ export async function repairResidentAxisId(supabase, opts = {}) {
 async function verifyNoDenormalizedDrift(supabase) {
   const stillWrong = [];
   for (const { table, keys } of DENORMALIZED_EMAIL_TABLES) {
-    const { data, error } = await supabase.from(table).select("id, resident_email, row_data").limit(5000);
-    if (error) throw new Error(`repair: verify ${table}: ${error.message}`);
-    for (const row of data ?? []) {
+    const rows = await selectAllRows(supabase, { table, columns: "id, resident_email, row_data", label: "verify" });
+    for (const row of rows) {
       const column = norm(row.resident_email);
       const rowData = row.row_data && typeof row.row_data === "object" ? row.row_data : null;
       if (!column || !rowData) continue;
@@ -277,6 +299,56 @@ async function verifyNoDenormalizedDrift(supabase) {
   }
   if (stillWrong.length) {
     throw new Error(`repair: ${stillWrong.length} rows still drifted after the repair: ${stillWrong.join(", ")}`);
+  }
+}
+
+/** Re-read each re-addressed thread and throw if the new counterparty did not stick. */
+async function verifyThreadAddressesRepaired(supabase, repaired) {
+  const stillWrong = [];
+  for (const entry of repaired) {
+    const { data, error } = await supabase
+      .from("portal_inbox_thread_records")
+      .select("id, row_data")
+      .eq("id", entry.id)
+      .maybeSingle();
+    if (error) throw new Error(`repair: verify thread ${entry.id}: ${error.message}`);
+    const current = norm(data?.row_data?.email);
+    if (current !== entry.to) stillWrong.push(`${entry.id}.email=${current || "(missing)"} != ${entry.to}`);
+  }
+  if (stillWrong.length) {
+    throw new Error(`repair: ${stillWrong.length} threads still misaddressed after the repair: ${stillWrong.join(", ")}`);
+  }
+}
+
+/**
+ * Re-read BOTH halves of the axis-id repair. `auth.admin.updateUserById` is the
+ * easiest of the three writes to report success without taking effect, and a
+ * stale `user_metadata.axis_id` hides the lease exactly as a stale
+ * `profiles.manager_id` does — so neither is trusted on its own return value.
+ */
+async function verifyResidentAxisId(supabase, residentEmail, result) {
+  if (!result) return;
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id, manager_id")
+    .eq("email", residentEmail)
+    .maybeSingle();
+  if (error) throw new Error(`repair: verify resident profile: ${error.message}`);
+  if (!profile?.id) throw new Error(`repair: verify axis id: no profile for ${residentEmail} after the repair.`);
+
+  const problems = [];
+  const storedProfileAxisId = String(profile.manager_id ?? "").trim();
+  if (storedProfileAxisId !== result.axisId) {
+    problems.push(`profiles.manager_id=${storedProfileAxisId || "(none)"} != ${result.axisId}`);
+  }
+  const { data: authUser, error: authErr } = await supabase.auth.admin.getUserById(profile.id);
+  if (authErr) throw new Error(`repair: verify user_metadata.axis_id: ${authErr.message}`);
+  const storedMetaAxisId = String(authUser?.user?.user_metadata?.axis_id ?? "").trim();
+  if (storedMetaAxisId !== result.axisId) {
+    problems.push(`user_metadata.axis_id=${storedMetaAxisId || "(none)"} != ${result.axisId}`);
+  }
+  if (problems.length) {
+    throw new Error(`repair: axis id for ${residentEmail} did not stick: ${problems.join(", ")}`);
   }
 }
 
@@ -292,9 +364,13 @@ async function main() {
 
   const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
   await repairDenormalizedResidentEmails(supabase, { dryRun });
-  await repairCanonicalResidentThreadAddresses(supabase, { dryRun });
-  await repairResidentAxisId(supabase, { dryRun });
-  if (!dryRun) await verifyNoDenormalizedDrift(supabase);
+  const threadRepair = await repairCanonicalResidentThreadAddresses(supabase, { dryRun });
+  const axisIdRepair = await repairResidentAxisId(supabase, { dryRun });
+  if (!dryRun) {
+    await verifyNoDenormalizedDrift(supabase);
+    await verifyThreadAddressesRepaired(supabase, threadRepair.repaired);
+    await verifyResidentAxisId(supabase, CANONICAL_DEMO_RESIDENT_EMAIL, axisIdRepair);
+  }
   console.log(dryRun ? "Dry run complete — nothing written." : "Resident identity drift repaired and verified.");
 }
 
