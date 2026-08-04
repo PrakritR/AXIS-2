@@ -141,7 +141,9 @@ function VendorUnifiedInbox({
         previewPrefix: t.folder === "sent" ? "You: " : undefined,
         time: t.time,
         unread: t.folder === "inbox" && t.unread,
-        sortMs: inboxThreadSortMs(t.id, lastMsg?.at),
+        // Sort on the SAME field the row is labelled with — only `thread.time`
+        // is normalized; `lastMsg.at` is whatever shape its writer built.
+        sortMs: inboxThreadSortMs(t.id, t.time),
       };
     });
   }, [filteredEmail, searchQuery, listSegment]);
