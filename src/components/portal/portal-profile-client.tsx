@@ -283,9 +283,14 @@ export function PortalProfileClient({
   // chevron unwinds the stack (matching the iOS back gesture) instead of
   // appending a "forward"-feeling entry.
   const pushedDepthRef = useRef(0);
+  const backInFlightRef = useRef(false);
   useEffect(() => {
     const onPop = () => {
-      pushedDepthRef.current = Math.max(0, pushedDepthRef.current - 1);
+      if (backInFlightRef.current) {
+        backInFlightRef.current = false;
+      } else {
+        pushedDepthRef.current = Math.max(0, pushedDepthRef.current - 1);
+      }
       setBillingOverride(false);
     };
     window.addEventListener("popstate", onPop);
@@ -312,9 +317,11 @@ export function PortalProfileClient({
     [urlForTab],
   );
   const backToRoot = useCallback(() => {
+    if (backInFlightRef.current) return;
     setBillingOverride(false);
     if (pushedDepthRef.current > 0) {
-      // popstate decrements the depth once the entry actually unwinds.
+      pushedDepthRef.current -= 1;
+      backInFlightRef.current = true;
       window.history.back();
       return;
     }
