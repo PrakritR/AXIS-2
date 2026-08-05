@@ -18,6 +18,7 @@ import {
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import { DataList } from "@/components/ui/data-list";
 import {
   PortalListAddRow,
   PORTAL_LIST_ADD_ICONS,
@@ -117,6 +118,25 @@ function formatLedgerRoomLabel(roomNumber: string): string {
 
 function isStayTotalRow(row: DemoManagerPaymentLedgerRow): boolean {
   return row.chargeKind === "stay_total" || /^Stay total \(/i.test(row.chargeTitle);
+}
+
+function ledgerRowPrimaryLabel(row: DemoManagerPaymentLedgerRow): string {
+  if (row.manualPaymentReportedAt && row.manualPaymentChannel) {
+    return `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`;
+  }
+  return row.chargeTitle;
+}
+
+function ledgerRowMetaLine(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string {
+  const parts = [row.propertyName, formatLedgerRoomLabel(row.roomNumber)].filter(Boolean);
+  const due = row.dueDate?.trim();
+  if (due) parts.push(`Due ${due}`);
+  const reminder = paymentReminderLabel(row, scheduledMessages);
+  if (reminder) parts.push(reminder);
+  return parts.join(" · ");
 }
 
 export function ManagerPaymentsLedgerPanel({
@@ -1079,6 +1099,118 @@ export function ManagerPaymentsLedgerPanel({
     };
   }, [embeddedInResident]);
 
+  const renderInlineEditForm = (row: DemoManagerPaymentLedgerRow) => (
+    <div
+      className="border-b border-border/50 bg-accent/15 px-3 py-3 max-md:px-2.5"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="text-sm font-semibold text-foreground">{row.residentName}</p>
+      <p className="text-xs text-muted">
+        {isStayTotalRow(row) && editingRowId === row.id
+          ? shortTermStayChargeTitle(
+              parseInt(editNightsDraft, 10) || parseShortTermStayChargeTitle(row.chargeTitle)?.nights || 0,
+              parseShortTermStayChargeTitle(row.chargeTitle)?.nightlyRate ?? 0,
+            )
+          : row.chargeTitle}
+      </p>
+      <p className="mt-0.5 text-xs text-muted">
+        {[row.propertyName, formatLedgerRoomLabel(row.roomNumber)].filter(Boolean).join(" · ")}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {isStayTotalRow(row) ? (
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+              Nights
+            </label>
+            <Input
+              className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
+              inputMode="numeric"
+              value={editNightsDraft}
+              onChange={(e) => {
+                const next = e.target.value.replace(/[^\d]/g, "");
+                setEditNightsDraft(next);
+                const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
+                if (parsed && next) {
+                  const nights = parseInt(next, 10);
+                  if (Number.isFinite(nights) && nights >= 1) {
+                    setEditAmountDraft(shortTermStayTotalAmount(parsed.nightlyRate, nights).toFixed(2));
+                  }
+                }
+              }}
+              aria-label="Number of nights"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+              Amount
+            </label>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted">$</span>
+              <Input
+                className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
+                inputMode="decimal"
+                value={editAmountDraft}
+                onChange={(e) => setEditAmountDraft(e.target.value)}
+                aria-label="Amount owed"
+              />
+            </div>
+          </div>
+        )}
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Due date
+          </label>
+          <Input
+            type="date"
+            className="h-9 w-full rounded-lg px-2 py-1 text-sm"
+            value={editDueDateDraft}
+            onChange={(e) => setEditDueDateDraft(e.target.value)}
+            aria-label="Due date"
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEmbeddedChargeList = () => (
+    <DataList
+      hideColumnHeaders
+      selectable={showSelection}
+      rows={rows.map((row) => {
+        const isSelected = selectedIds.has(row.id);
+        const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
+        const primary = ledgerRowPrimaryLabel(row);
+        return {
+          id: row.id,
+          data: row,
+          primary,
+          meta: ledgerRowMetaLine(row, scheduledMessages),
+          trailing: (
+            <span className="text-sm font-semibold tabular-nums text-foreground">{row.lineAmount}</span>
+          ),
+          selected: isSelected,
+          onSelectedChange: () => toggleSelected(row.id),
+          onClick: isEditing ? undefined : () => openPaymentDetail(row),
+          expanded: isEditing,
+          expandedContent: isEditing ? renderInlineEditForm(row) : undefined,
+        };
+      })}
+      columns={[
+        { id: "charge", header: "Charge", cell: (row) => ledgerRowPrimaryLabel(row) },
+        { id: "property", header: "Property", cell: (row) => row.propertyName || "—" },
+        { id: "due", header: "Due", cell: (row) => row.dueDate || "—" },
+        {
+          id: "amount",
+          header: "Amount",
+          cell: (row) => row.lineAmount,
+          headerClassName: "text-right",
+          cellClassName: "text-right tabular-nums",
+        },
+      ]}
+    />
+  );
+
   return (
     <>
     {reminderPreview && (
@@ -1170,127 +1302,66 @@ export function ManagerPaymentsLedgerPanel({
       )
     ) : (
       <div className={PORTAL_LIST_PAGE_BODY}>
-        {showSelection ? (
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
-            <input
-              type="checkbox"
-              className="size-4 shrink-0 rounded border-border"
-              checked={allSelected}
-              onChange={toggleSelectAll}
-              aria-label="Select all payments"
-            />
-            <span className="text-xs text-muted">Select all</span>
-          </div>
-        ) : null}
-        {rows.map((row) => {
-          const isSelected = selectedIds.has(row.id);
-          const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
-          return (
-            <div key={row.id} className="flex items-stretch gap-2">
-              {showSelection ? (
-                <div className="flex items-center pl-3 max-md:pl-2.5">
-                  <input
-                    type="checkbox"
-                    className="size-4 shrink-0 rounded border-border"
-                    checked={isSelected}
-                    onChange={() => toggleSelected(row.id)}
-                    aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                  />
-                </div>
-              ) : null}
-              <div className="min-w-0 flex-1">
-                {isEditing ? (
-                  <div
-                    className="border-b border-border/50 bg-accent/15 px-3 py-3 max-md:px-2.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <p className="text-sm font-semibold text-foreground">{row.residentName}</p>
-                    <p className="text-xs text-muted">
-                      {isStayTotalRow(row) && editingRowId === row.id
-                        ? shortTermStayChargeTitle(
-                            parseInt(editNightsDraft, 10) || parseShortTermStayChargeTitle(row.chargeTitle)?.nights || 0,
-                            parseShortTermStayChargeTitle(row.chargeTitle)?.nightlyRate ?? 0,
-                          )
-                        : row.chargeTitle}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {[row.propertyName, formatLedgerRoomLabel(row.roomNumber)].filter(Boolean).join(" · ")}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      {isStayTotalRow(row) ? (
-                        <div>
-                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
-                            Nights
-                          </label>
-                          <Input
-                            className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
-                            inputMode="numeric"
-                            value={editNightsDraft}
-                            onChange={(e) => {
-                              const next = e.target.value.replace(/[^\d]/g, "");
-                              setEditNightsDraft(next);
-                              const parsed = parseShortTermStayChargeTitle(row.chargeTitle);
-                              if (parsed && next) {
-                                const nights = parseInt(next, 10);
-                                if (Number.isFinite(nights) && nights >= 1) {
-                                  setEditAmountDraft(shortTermStayTotalAmount(parsed.nightlyRate, nights).toFixed(2));
-                                }
-                              }
-                            }}
-                            aria-label="Number of nights"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
-                            Amount
-                          </label>
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted">$</span>
-                            <Input
-                              className="h-9 w-full rounded-lg px-2 py-1 text-sm tabular-nums"
-                              inputMode="decimal"
-                              value={editAmountDraft}
-                              onChange={(e) => setEditAmountDraft(e.target.value)}
-                              aria-label="Amount owed"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">
-                          Due date
-                        </label>
-                        <Input
-                          type="date"
-                          className="h-9 w-full rounded-lg px-2 py-1 text-sm"
-                          value={editDueDateDraft}
-                          onChange={(e) => setEditDueDateDraft(e.target.value)}
-                          aria-label="Due date"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <PortalPersonRecordRow
-                    name={row.residentName}
-                    subtitle={
-                      row.manualPaymentReportedAt && row.manualPaymentChannel
-                        ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-                        : row.chargeTitle
-                    }
-                    preview={paymentListPreview(row, scheduledMessages)}
-                    meta={row.lineAmount}
-                    selected={isSelected}
-                    onOpen={() => openPaymentDetail(row)}
-                    dataAttr="payment-list-row"
-                  />
-                )}
+        {embeddedInResident ? (
+          <>
+            {renderEmbeddedChargeList()}
+            {renderAddPaymentRow()}
+          </>
+        ) : (
+          <>
+            {showSelection ? (
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 rounded border-border"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all payments"
+                />
+                <span className="text-xs text-muted">Select all</span>
               </div>
-            </div>
-          );
-        })}
-        {renderAddPaymentRow()}
+            ) : null}
+            {rows.map((row) => {
+              const isSelected = selectedIds.has(row.id);
+              const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
+              return (
+                <div key={row.id} className="flex items-stretch gap-2">
+                  {showSelection ? (
+                    <div className="flex items-center pl-3 max-md:pl-2.5">
+                      <input
+                        type="checkbox"
+                        className="size-4 shrink-0 rounded border-border"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(row.id)}
+                        aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    {isEditing ? (
+                      renderInlineEditForm(row)
+                    ) : (
+                      <PortalPersonRecordRow
+                        name={row.residentName}
+                        subtitle={
+                          row.manualPaymentReportedAt && row.manualPaymentChannel
+                            ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
+                            : row.chargeTitle
+                        }
+                        preview={paymentListPreview(row, scheduledMessages)}
+                        meta={row.lineAmount}
+                        selected={isSelected}
+                        onOpen={() => openPaymentDetail(row)}
+                        dataAttr="payment-list-row"
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {renderAddPaymentRow()}
+          </>
+        )}
       </div>
     )}
     </>
