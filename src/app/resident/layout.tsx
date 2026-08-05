@@ -23,6 +23,7 @@ import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-serv
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
 import { resolveResidentPortalNavStage } from "@/lib/resident-portal-nav";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
+import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     email: profile?.email ?? user?.email ?? null,
     managerSubscriptionTier,
   });
-  const sidebarCollapsed = await getSidebarCollapsed();
+  const [sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
+    getSidebarCollapsed(),
+    getAssistantDockCollapsed(),
+  ]);
 
   const residentNavStage = resolveResidentPortalNavStage(access);
 
@@ -82,7 +86,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
             </div>
           </main>
         </div>
-        <PortalAssistantDockRail managerName={profile?.full_name ?? null} />
+        <PortalAssistantDockRail
+          managerName={profile?.full_name ?? null}
+          initialCollapsed={assistantDockCollapsed}
+        />
       </div>
     </div>
     </AxisAssistant>

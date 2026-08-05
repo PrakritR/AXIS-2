@@ -11,7 +11,10 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { handlePortaledFieldSelectOptionPointerDown } from "@/components/ui/field-select-portal-interaction";
+import {
+  deferAfterFieldSelectPick,
+  handlePortaledFieldSelectOptionPointerDown,
+} from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import {
   FIELD_SELECT_MENU_LIST_MAX_HEIGHT_PX,
@@ -585,7 +588,7 @@ export function FilterSingleSelectList({
                 onPointerDown={(event) =>
                   handlePortaledFieldSelectOptionPointerDown(event, () => {
                     onChange(opt.value);
-                    onPick?.();
+                    if (onPick) deferAfterFieldSelectPick(onPick);
                   })
                 }
               >

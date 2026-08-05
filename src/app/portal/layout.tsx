@@ -20,6 +20,7 @@ import {
   PORTAL_SHELL_ROOT_CLASS,
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
+import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
@@ -27,10 +28,11 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
   // portal even by typing the URL — hiding the switch is not access control.
   await assertPropertyPortalAccess();
 
-  const [nav, { profile }, sidebarCollapsed] = await Promise.all([
+  const [nav, { profile }, sidebarCollapsed, assistantDockCollapsed] = await Promise.all([
     buildProPortalDefinition(),
     getServerSessionProfile(),
     getSidebarCollapsed(),
+    getAssistantDockCollapsed(),
   ]);
 
   return (
@@ -72,7 +74,10 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
           </div>
           {/* Opt-in, desktop-only assistant rail. Renders nothing on the `popup`
               default, so the content column above keeps the full width. */}
-          <PortalAssistantDockRail managerName={profile?.full_name ?? null} />
+          <PortalAssistantDockRail
+            managerName={profile?.full_name ?? null}
+            initialCollapsed={assistantDockCollapsed}
+          />
         </div>
       </div>
     </AxisAssistant>

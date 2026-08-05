@@ -17,6 +17,7 @@ import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { readAssistantDisplayMode } from "@/lib/assistant-display-preferences";
+import { initAssistantDockState } from "@/lib/axis-assistant/dock-store";
 
 const USER = "mgr-1";
 
@@ -68,6 +69,7 @@ describe("assistant display mode", () => {
     // which IS a demo surface. Sit on a real portal route so the dock is offered.
     window.history.replaceState({}, "", "/portal");
     installFakeStorage();
+    initAssistantDockState({ collapsed: true, docked: false });
     // jsdom has no layout, so `Element.scrollTo` is missing entirely.
     Element.prototype.scrollTo = Element.prototype.scrollTo ?? (() => {});
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })));
@@ -152,7 +154,23 @@ describe("assistant display mode", () => {
     );
 
     await waitFor(() => expect(rail()).toBeNull());
+    await waitFor(() => expect(document.querySelector(".axis-assistant-panel")).not.toBeNull());
     expect(readAssistantDisplayMode(USER)).toBe("popup");
+  });
+
+  it("collapses the dock rail to a narrow strip like the left sidebar", async () => {
+    renderPortal();
+    fireEvent.click(askPropLane());
+    fireEvent.click(await screen.findByLabelText("Pin PropLane Assistant to the right side"));
+    await waitFor(() => expect(dock()).not.toBeNull());
+
+    fireEvent.click(screen.getByLabelText("Collapse PropLane Assistant"));
+    await waitFor(() => expect(dock()).toBeNull());
+    expect(rail()!.className).toContain("w-[58px]");
+    expect(screen.getByLabelText("Expand PropLane Assistant")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Expand PropLane Assistant"));
+    await waitFor(() => expect(dock()).not.toBeNull());
   });
 
   it("switches both ways from Settings, and the choice survives a remount", async () => {

@@ -5,8 +5,8 @@
 // the option list is capped at 5 rows and scrolls the rest, a search box appears
 // only once there are more than 5 options, and searching never drops an already-
 // selected option. One field open at a time; Escape closes.
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import {
   FIELD_SELECT_HOST_CHROME_ATTR,
@@ -34,7 +34,62 @@ import {
   filterMultiSelectSummary,
   portalFilterPanelSizeClass,
 } from "@/components/portal/filter-field-lists";
+import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { VaulBottomSheet } from "@/components/ui/vaul-bottom-sheet";
+
+function installMobilePortalViewport() {
+  const listeners = new Set<() => void>();
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn((query: string) => ({
+      matches: query === "(max-width: 1023px)",
+      media: query,
+      addEventListener: (_type: string, cb: () => void) => {
+        listeners.add(cb);
+      },
+      removeEventListener: (_type: string, cb: () => void) => {
+        listeners.delete(cb);
+      },
+      dispatchEvent: () => true,
+    })),
+  });
+}
+
+function openMobileFilterSheetHarness({ optionCount = 8 }: { optionCount?: number } = {}) {
+  const options = makeOptions(optionCount);
+  function MobileFilterSheetHarness() {
+    const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+    return (
+      <PortalFilterSortSheet activeCount={propertyFilters.length} onReset={() => setPropertyFilters([])}>
+        <FilterFieldsAccordion>
+          <FilterCollapsibleSection
+            sectionId="property"
+            label="Property"
+            summary={filterMultiSelectSummary(propertyFilters, options, "All properties")}
+            empty={propertyFilters.length === 0}
+            menuOptionCount={options.length}
+          >
+            <FilterCheckboxList
+              options={options}
+              selected={propertyFilters}
+              onChange={setPropertyFilters}
+              dataAttr="mobile-sheet-filter-property"
+            />
+          </FilterCollapsibleSection>
+        </FilterFieldsAccordion>
+      </PortalFilterSortSheet>
+    );
+  }
+  installMobilePortalViewport();
+  render(<MobileFilterSheetHarness />);
+  fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+}
+
+function expectOpenMobileFilterSheet() {
+  expect(document.querySelector('[data-slot="vaul-bottom-sheet"][data-state="open"]')).toBeTruthy();
+}
 
 afterEach(cleanup);
 
@@ -345,6 +400,44 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
         "All properties",
       ),
     ).toBe("2 selected");
+  });
+});
+
+describe("PortalFilterSortSheet — mobile sheet stays open while filtering", () => {
+  it("stays open after toggling a multi-select option", () => {
+    openMobileFilterSheetHarness();
+    expectOpenMobileFilterSheet();
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const listbox = screen.getByRole("listbox");
+    fireEvent.pointerDown(within(listbox).getByText("Property 0"));
+    expectOpenMobileFilterSheet();
+    expect(screen.getByRole("listbox")).toBeTruthy();
+  });
+
+  it("stays open after single-select pick even when the field menu closes", async () => {
+    const propertyOptions = makeOptions(3).map((opt) => ({ id: opt.value, label: opt.label }));
+    installMobilePortalViewport();
+    render(
+      <PortalFilterSortSheet activeCount={0} onReset={() => {}}>
+        <ApplicationFilterSortFields
+          propertyOptions={propertyOptions}
+          propertyFilters={[]}
+          onPropertyFiltersChange={() => {}}
+          selectionMode="single"
+        />
+      </PortalFilterSortSheet>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    expectOpenMobileFilterSheet();
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const listbox = screen.getByRole("listbox");
+    fireEvent.pointerDown(within(listbox).getByText("Property 0"));
+    const overlay = document.querySelector("[data-vaul-overlay]");
+    if (overlay) fireEvent.click(overlay);
+    await waitFor(() => {
+      expectOpenMobileFilterSheet();
+    });
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 

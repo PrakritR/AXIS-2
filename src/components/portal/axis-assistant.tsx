@@ -41,7 +41,13 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import type { AssistantDisplayMode } from "@/lib/assistant-display-preferences";
+import {
+  DEFAULT_ASSISTANT_DISPLAY_MODE,
+  readAssistantDisplayMode,
+  setAssistantDisplayMode,
+  type AssistantDisplayMode,
+} from "@/lib/assistant-display-preferences";
+import { getAssistantDocked, setAssistantDocked, expandAssistantDock } from "@/lib/axis-assistant/dock-store";
 import {
   closeAxisAssistant,
   getAxisAssistantOpen,
@@ -550,6 +556,16 @@ export function AxisAssistant({
 }) {
   const { userId, ready: authReady } = useManagerUserId();
   const { mode, setMode } = useAssistantDisplayMode(userId);
+
+  // One-time migration from the legacy cookie-backed dock flag to localStorage.
+  useEffect(() => {
+    if (!userId || !dockable || !authReady || isDemoModeActive()) return;
+    if (readAssistantDisplayMode(userId) !== DEFAULT_ASSISTANT_DISPLAY_MODE) return;
+    if (!getAssistantDocked()) return;
+    setAssistantDisplayMode(userId, "docked");
+    setAssistantDocked(false);
+    expandAssistantDock();
+  }, [authReady, dockable, userId]);
 
   useEffect(() => {
     return () => setAxisAssistantOpen(false);

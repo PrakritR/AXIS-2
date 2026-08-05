@@ -9,6 +9,7 @@ import {
   setAssistantDisplayMode,
   type AssistantDisplayMode,
 } from "@/lib/assistant-display-preferences";
+import { expandAssistantDock } from "@/lib/axis-assistant/dock-store";
 
 /**
  * Reactive per-manager assistant display mode. Renders the `popup` default on
@@ -42,7 +43,10 @@ export function useAssistantDisplayMode(userId: string | null | undefined): {
   }, [userId]);
 
   const setMode = useCallback(
-    (next: AssistantDisplayMode) => setAssistantDisplayMode(userId, next),
+    (next: AssistantDisplayMode) => {
+      setAssistantDisplayMode(userId, next);
+      if (next === "docked") expandAssistantDock();
+    },
     [userId],
   );
 

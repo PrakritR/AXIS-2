@@ -7,71 +7,57 @@ import {
   PortalSettingsRow,
   PortalSettingsSection,
 } from "@/components/portal/portal-settings-ui";
-import {
-  dockAssistantToRail,
-  undockAssistantFromRail,
-  useAssistantDocked,
-} from "@/lib/axis-assistant/dock-store";
+import { useAxisAssistantDock } from "@/components/portal/axis-assistant";
 import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { AssistantDisplayMode } from "@/lib/assistant-display-preferences";
 import { cn } from "@/lib/utils";
 
-const OPTIONS: { docked: boolean; label: string; description: string }[] = [
+const OPTIONS: { mode: AssistantDisplayMode; label: string; description: string }[] = [
   {
-    docked: false,
+    mode: "popup",
     label: "Floating popup",
     description: "Ask PropLane in the header opens the assistant over your work.",
   },
   {
-    docked: true,
+    mode: "docked",
     label: "Pinned to the right",
     description: "A full-height panel stays open beside the portal on wide screens.",
   },
 ];
 
-function selectOption(docked: boolean) {
-  if (docked) dockAssistantToRail();
-  else undockAssistantFromRail();
-}
-
 /**
  * Settings entry point for the assistant display mode, on the manager Settings
- * page. It is the third control over the SAME shipped preference the in-assistant
- * pin (`AssistantDockToRailButton` → `dockAssistantToRail`) and the rail's unpin
- * (`AssistantUndockToPopupButton` → `undockAssistantFromRail`) already drive, so
- * choosing here and choosing in the assistant stay in lockstep through
- * `dock-store` and its cookie. This adds no send/execute path — it only flips
- * which surface the assistant renders as.
- *
- * Hidden in the /demo sandbox (its scripted assistant must not gain the live
- * docked surface). The rail itself is desktop-only (`useIsSmallPortalViewport`
- * hides it below `lg`), so on a small screen the picker still writes the
- * preference but explains that the popup is used until there is room for a rail.
+ * page. It writes the SAME persisted preference as the in-assistant pin and the
+ * rail's unpin (`useAxisAssistantDock` / `assistant-display-preferences.ts`).
  */
 export function AssistantDisplaySetting() {
-  const docked = useAssistantDocked();
+  const { dockable, mode, setMode } = useAxisAssistantDock();
   const isSmall = useIsSmallPortalViewport();
   const groupId = useId();
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    const step =
-      event.key === "ArrowRight" || event.key === "ArrowDown"
-        ? 1
-        : event.key === "ArrowLeft" || event.key === "ArrowUp"
-          ? -1
-          : 0;
-    if (step === 0) return;
-    event.preventDefault();
+  const onKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const step =
+        event.key === "ArrowRight" || event.key === "ArrowDown"
+          ? 1
+          : event.key === "ArrowLeft" || event.key === "ArrowUp"
+            ? -1
+            : 0;
+      if (step === 0) return;
+      event.preventDefault();
 
-    const current = optionRefs.current.findIndex((node) => node === document.activeElement);
-    const from = current === -1 ? OPTIONS.findIndex((option) => option.docked === docked) : current;
-    const next = (from + step + OPTIONS.length) % OPTIONS.length;
-    selectOption(OPTIONS[next].docked);
-    optionRefs.current[next]?.focus();
-  }, [docked]);
+      const current = optionRefs.current.findIndex((node) => node === document.activeElement);
+      const from = current === -1 ? OPTIONS.findIndex((option) => option.mode === mode) : current;
+      const next = (from + step + OPTIONS.length) % OPTIONS.length;
+      setMode(OPTIONS[next]!.mode);
+      optionRefs.current[next]?.focus();
+    },
+    [mode, setMode],
+  );
 
-  if (isDemoModeActive()) return null;
+  if (isDemoModeActive() || !dockable) return null;
 
   return (
     <PortalSettingsSection
@@ -85,7 +71,7 @@ export function AssistantDisplaySetting() {
           description={
             isSmall
               ? "On this screen the assistant is always the floating popup — there is no room for a side panel."
-              : docked
+              : mode === "docked"
                 ? "Pinned to the right side of the portal."
                 : "Opens as a popup from Ask PropLane in the header."
           }
@@ -97,7 +83,7 @@ export function AssistantDisplaySetting() {
             className="flex flex-col gap-2 sm:flex-row"
           >
             {OPTIONS.map((option, index) => {
-              const selected = docked === option.docked;
+              const selected = mode === option.mode;
               const labelId = `${groupId}-${index}-label`;
               const descriptionId = `${groupId}-${index}-description`;
               return (
@@ -112,8 +98,8 @@ export function AssistantDisplaySetting() {
                   aria-labelledby={labelId}
                   aria-describedby={descriptionId}
                   tabIndex={selected ? 0 : -1}
-                  onClick={() => selectOption(option.docked)}
-                  data-attr={`assistant-display-${option.docked ? "docked" : "popup"}`}
+                  onClick={() => setMode(option.mode)}
+                  data-attr={`assistant-display-${option.mode === "docked" ? "docked" : "popup"}`}
                   className={cn(
                     "rounded-lg border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/25 sm:max-w-[15rem]",
                     selected

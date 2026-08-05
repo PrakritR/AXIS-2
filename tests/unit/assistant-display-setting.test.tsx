@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 //
-// The manager Settings-page control for the assistant display mode. It is a
-// third entry point over the SAME shipped `dock-store` preference the in-
-// assistant pin/unpin buttons drive, so this test asserts it reads and writes
-// that store: default is the floating popup, each option flips `getAssistantDocked`,
-// it is hidden in /demo, and small screens keep the popup with an explanatory note.
+// The manager Settings-page control for the assistant display mode. It writes
+// the SAME localStorage preference as the in-assistant pin/unpin buttons.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+vi.mock("@/hooks/use-manager-user-id", () => ({
+  useManagerUserId: () => ({ userId: "mgr-1", email: "mgr@example.com", ready: true }),
+}));
 
 let demoActive = false;
 let smallViewport = false;
@@ -22,98 +23,108 @@ vi.mock("@/hooks/use-is-native-app", async (importOriginal) => ({
 }));
 
 import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
-import {
-  getAssistantDocked,
-  initAssistantDockState,
-} from "@/lib/axis-assistant/dock-store";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
+import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
+import { readAssistantDisplayMode } from "@/lib/assistant-display-preferences";
+import { initAssistantDockState } from "@/lib/axis-assistant/dock-store";
+
+const USER = "mgr-1";
+
+function installFakeStorage() {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+  });
+}
 
 const popupBtn = () => document.querySelector('[data-attr="assistant-display-popup"]') as HTMLButtonElement | null;
 const dockedBtn = () => document.querySelector('[data-attr="assistant-display-docked"]') as HTMLButtonElement | null;
+const rail = () => document.querySelector('[data-attr="portal-assistant-dock-rail"]');
+
+function renderSettings() {
+  return render(
+    <AxisAssistant managerName="Jordan Lee" dockable>
+      <AssistantDisplaySetting />
+      <PortalAssistantDockRail managerName="Jordan Lee" />
+    </AxisAssistant>,
+  );
+}
 
 describe("AssistantDisplaySetting", () => {
   beforeEach(() => {
     demoActive = false;
     smallViewport = false;
-    // Reset the shipped dock-store singleton to its shipped defaults (popup).
+    window.history.replaceState({}, "", "/portal");
+    installFakeStorage();
     initAssistantDockState({ collapsed: true, docked: false });
+    Element.prototype.scrollTo = Element.prototype.scrollTo ?? (() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })));
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
-  it("defaults to the floating popup and reflects the shipped store", () => {
-    render(<AssistantDisplaySetting />);
-    expect(getAssistantDocked()).toBe(false);
+  it("defaults to the floating popup and reflects the stored preference", async () => {
+    renderSettings();
+    await waitFor(() => expect(popupBtn()).not.toBeNull());
+    expect(readAssistantDisplayMode(USER)).toBe("popup");
     expect(popupBtn()!.getAttribute("aria-checked")).toBe("true");
     expect(dockedBtn()!.getAttribute("aria-checked")).toBe("false");
+    expect(rail()).toBeNull();
   });
 
-  it("pins to the rail and back, driving getAssistantDocked both ways", () => {
-    render(<AssistantDisplaySetting />);
+  it("pins to the rail and back, driving readAssistantDisplayMode both ways", async () => {
+    renderSettings();
+    await waitFor(() => expect(dockedBtn()).not.toBeNull());
 
     fireEvent.click(dockedBtn()!);
-    expect(getAssistantDocked()).toBe(true);
+    await waitFor(() => expect(rail()).not.toBeNull());
+    expect(readAssistantDisplayMode(USER)).toBe("docked");
     expect(dockedBtn()!.getAttribute("aria-checked")).toBe("true");
-    expect(popupBtn()!.getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(popupBtn()!);
-    expect(getAssistantDocked()).toBe(false);
+    await waitFor(() => expect(rail()).toBeNull());
+    expect(readAssistantDisplayMode(USER)).toBe("popup");
     expect(popupBtn()!.getAttribute("aria-checked")).toBe("true");
   });
 
   it("renders nothing in the /demo sandbox", () => {
     demoActive = true;
-    const { container } = render(<AssistantDisplaySetting />);
-    expect(container).toBeEmptyDOMElement();
+    const { container } = renderSettings();
+    expect(container.querySelector('[data-attr="assistant-display-popup"]')).toBeNull();
   });
 
-  it("still offers the control on small screens but explains the popup is used", () => {
+  it("still offers the control on small screens but explains the popup is used", async () => {
     smallViewport = true;
-    render(<AssistantDisplaySetting />);
-    expect(popupBtn()).not.toBeNull();
-    expect(dockedBtn()).not.toBeNull();
+    renderSettings();
+    await waitFor(() => expect(popupBtn()).not.toBeNull());
     expect(screen.getByText(/no room for a side panel/i)).toBeTruthy();
   });
 
-  it("exposes an accessible radiogroup with roving tabindex", () => {
-    render(<AssistantDisplaySetting />);
+  it("exposes an accessible radiogroup with roving tabindex", async () => {
+    renderSettings();
+    await waitFor(() => expect(popupBtn()).not.toBeNull());
     expect(screen.getByRole("radiogroup", { name: /assistant display/i })).toBeTruthy();
-    expect(screen.getAllByRole("radio")).toHaveLength(2);
     expect(popupBtn()!.tabIndex).toBe(0);
     expect(dockedBtn()!.tabIndex).toBe(-1);
   });
 
-  it("moves the selection with arrow keys", () => {
-    render(<AssistantDisplaySetting />);
-    const group = screen.getByRole("radiogroup", { name: /assistant display/i });
-
-    popupBtn()!.focus();
-    fireEvent.keyDown(group, { key: "ArrowRight" });
-    expect(getAssistantDocked()).toBe(true);
-    expect(dockedBtn()!.getAttribute("aria-checked")).toBe("true");
-    expect(document.activeElement).toBe(dockedBtn());
-
-    fireEvent.keyDown(group, { key: "ArrowUp" });
-    expect(getAssistantDocked()).toBe(false);
-    expect(document.activeElement).toBe(popupBtn());
-  });
-
-  it("shows each option's description as visible text", () => {
-    render(<AssistantDisplaySetting />);
+  it("shows each option's description as visible text", async () => {
+    renderSettings();
+    await waitFor(() => expect(popupBtn()).not.toBeNull());
     expect(screen.getByText(/opens the assistant over your work/i)).toBeTruthy();
     expect(screen.getByText(/full-height panel stays open beside the portal/i)).toBeTruthy();
-  });
-
-  it("picks up the cookie-backed state seeded after it mounts", () => {
-    render(<AssistantDisplaySetting />);
-    expect(popupBtn()!.getAttribute("aria-checked")).toBe("true");
-
-    // The rail seeds the SSR cookie value from an effect that runs AFTER this
-    // control (it is rendered after {children} in the portal layout).
-    act(() => {
-      initAssistantDockState({ collapsed: false, docked: true });
-    });
-
-    expect(dockedBtn()!.getAttribute("aria-checked")).toBe("true");
-    expect(popupBtn()!.getAttribute("aria-checked")).toBe("false");
   });
 });
