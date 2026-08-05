@@ -23,6 +23,9 @@ export type AssistantConversationValue = {
   historyOpen: boolean;
   multiThread: boolean;
   lastTools: ToolTraceEntry[];
+  /** traceId -> this user's thumbs rating, so a rated reply keeps showing it. */
+  ratings: Record<string, "up" | "down">;
+  submitFeedback: (traceId: string, rating: "up" | "down") => Promise<boolean>;
   pendingAction: PendingAction | null;
   loading: boolean;
   error: string | null;

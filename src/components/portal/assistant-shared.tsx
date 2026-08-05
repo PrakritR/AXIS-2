@@ -15,6 +15,55 @@ export function AxisAssistantSparkleIcon({ className }: { className?: string }) 
 }
 
 /**
+ * Thumbs rating for one assistant reply — the agent's ONLY quality signal.
+ * Rendered by every assistant surface (popup and dock) so ratings can't depend
+ * on which one a manager happens to prefer, and only for a message that carries
+ * a `traceId` (i.e. Langfuse is configured and this turn was traced).
+ *
+ * Once rated it stays rated: re-scoring the same trace would overwrite the first
+ * honest reaction, and an undo affordance invites exactly that. The chosen side
+ * stays highlighted as the receipt.
+ */
+export function AssistantMessageRating({
+  traceId,
+  rating,
+  onRate,
+}: {
+  traceId: string;
+  rating?: "up" | "down";
+  onRate: (traceId: string, rating: "up" | "down") => void;
+}) {
+  if (rating) {
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted" aria-live="polite">
+        <span aria-hidden="true">{rating === "up" ? "👍" : "👎"}</span>
+        <span>Thanks for the feedback</span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-1">
+      <span className="sr-only" id={`rate-${traceId}`}>
+        Was this response helpful?
+      </span>
+      {(["up", "down"] as const).map((value) => (
+        <button
+          key={value}
+          type="button"
+          data-attr={`assistant-rate-${value}`}
+          aria-describedby={`rate-${traceId}`}
+          aria-label={value === "up" ? "Helpful" : "Not helpful"}
+          onClick={() => onRate(traceId, value)}
+          className="min-h-[28px] min-w-[28px] rounded-full px-1.5 text-[13px] leading-none text-muted opacity-60 transition hover:bg-[var(--surface-muted)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+        >
+          <span aria-hidden="true">{value === "up" ? "👍" : "👎"}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * "Pin to the right side" — a panel with its right column filled, i.e. what the
  * layout becomes once the assistant is docked.
  */

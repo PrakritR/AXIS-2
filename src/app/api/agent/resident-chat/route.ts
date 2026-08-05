@@ -11,6 +11,7 @@ import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import { PROMPT_IDS, resolvePromptMeta } from "@/lib/agent/prompt-metadata";
 import {
   formatAgentChatUserError,
   PENDING_ACTION_SAVE_FAILED_NOTE,
@@ -70,11 +71,13 @@ export async function POST(req: Request) {
 
   try {
     const registry = buildResidentRegistry(ctx);
+    const promptMeta = resolvePromptMeta(PROMPT_IDS.residentAssistant, RESIDENT_SYSTEM_PROMPT);
     const traceActor = {
       userId: ctx.userId,
       sessionId: sessionId ?? undefined,
       metadata: { role: "resident", managerIds: ctx.managerIds, phase: ctx.phase },
     };
+    let traceId: string | null = null;
     const hasVision = messagesNeedVisionModel(messages);
     const routing: AgentRouteSelection = hasVision
       ? visionPinnedModel()
@@ -96,6 +99,7 @@ export async function POST(req: Request) {
           model: routing,
           ...fastLaneRunOptions(routing),
         }),
+      { onTraceId: (id) => (traceId = id), promptMeta },
     );
     track("assistant_message_sent", ctx.userId, {
       portal: "resident",
@@ -108,6 +112,8 @@ export async function POST(req: Request) {
       latencyMs: result.latencyMs,
       images: attached.imageCount,
       documents: attached.documentCount,
+      promptId: promptMeta.promptId,
+      promptHash: promptMeta.promptHash,
     });
 
     // A proposal is persisted server-side; the client only ever receives the
@@ -120,6 +126,7 @@ export async function POST(req: Request) {
       const actionId = await createPendingAction(ctx, proposal.toolName, proposal.input, proposal.preview, {
         portal: "resident",
         sessionId,
+        proposalTraceId: traceId,
       });
       if (actionId) {
         pendingAction = { id: actionId, preview: proposal.preview };
@@ -146,7 +153,15 @@ export async function POST(req: Request) {
           route: result.route,
           fallback: Boolean(result.fallbackReason),
           latencyMs: result.latencyMs,
-          ...(proposal ? { pendingAction: { toolName: proposal.toolName } } : {}),
+          promptId: promptMeta.promptId,
+          promptHash: promptMeta.promptHash,
+          release: promptMeta.release,
+          ...(traceId ? { traceId } : {}),
+          ...(proposal && pendingAction
+            ? { pendingAction: { id: pendingAction.id, toolName: proposal.toolName } }
+            : proposal
+              ? { pendingAction: { toolName: proposal.toolName } }
+              : {}),
         },
       },
     ]);
@@ -155,6 +170,7 @@ export async function POST(req: Request) {
       reply,
       toolTrace: result.toolTrace,
       sessionId,
+      ...(traceId ? { traceId } : {}),
       ...(pendingAction ? { pendingAction } : {}),
     });
   } catch (e) {

@@ -47,6 +47,12 @@ export async function createPendingActionForUser(
     portal?: AgentPortal;
     sessionId?: string | null;
     expiresInMs?: number;
+    /**
+     * Langfuse trace id of the turn that proposed this action. Server-owned —
+     * never taken from the client. Null for system-initiated proposals (tours)
+     * that have no chat turn to score against.
+     */
+    proposalTraceId?: string | null;
   },
 ): Promise<string | null> {
   const row: Record<string, unknown> = {
@@ -62,6 +68,7 @@ export async function createPendingActionForUser(
     preview: args.preview,
   };
   if (args.sessionId) row.session_id = args.sessionId;
+  if (args.proposalTraceId) row.proposal_trace_id = args.proposalTraceId;
   if (args.expiresInMs && args.expiresInMs > 0) {
     row.expires_at = new Date(Date.now() + args.expiresInMs).toISOString();
   }
@@ -87,7 +94,7 @@ export async function createPendingAction(
   toolName: string,
   input: unknown,
   preview: ActionPreview,
-  opts: { portal?: AgentPortal; sessionId?: string | null } = {},
+  opts: { portal?: AgentPortal; sessionId?: string | null; proposalTraceId?: string | null } = {},
 ): Promise<string | null> {
   return createPendingActionForUser(ctx.db, {
     landlordId: ctx.landlordId || ctx.userId,
@@ -97,6 +104,7 @@ export async function createPendingAction(
     preview,
     portal: opts.portal,
     sessionId: opts.sessionId,
+    proposalTraceId: opts.proposalTraceId,
   });
 }
 
@@ -132,12 +140,14 @@ export async function listProposedActionsForUser(
   }));
 }
 
-/** What a successful claim hands the confirm gate. */
+/** What a successful claim/deny hands the confirm gate. */
 export type ClaimedAction = {
   toolName: string;
   input: unknown;
   portal: AgentPortal;
   sessionId: string | null;
+  /** Langfuse proposal-turn id, when the proposing chat turn was traced. */
+  proposalTraceId: string | null;
 };
 
 async function resolvePendingAction(
@@ -159,9 +169,15 @@ async function resolvePendingAction(
     .eq("user_id", actor.userId)
     .eq("status", "proposed")
     .gt("expires_at", new Date().toISOString())
-    .select("tool_name, input, portal, session_id");
+    .select("tool_name, input, portal, session_id, proposal_trace_id");
   const row = (data ?? [])[0] as
-    | { tool_name: string; input: unknown; portal?: string | null; session_id?: string | null }
+    | {
+        tool_name: string;
+        input: unknown;
+        portal?: string | null;
+        session_id?: string | null;
+        proposal_trace_id?: string | null;
+      }
     | undefined;
   if (error || !row) return null;
   const portal = row.portal === "resident" || row.portal === "vendor" ? row.portal : "manager";
@@ -170,6 +186,7 @@ async function resolvePendingAction(
     input: row.input,
     portal,
     sessionId: row.session_id ? String(row.session_id) : null,
+    proposalTraceId: row.proposal_trace_id ? String(row.proposal_trace_id) : null,
   };
 }
 
@@ -178,9 +195,16 @@ export function claimPendingAction(actor: PendingActionActor, id: string) {
   return resolvePendingAction(actor, id, "executed");
 }
 
-/** Mark a proposed action as denied. Same guards as claiming. */
-export async function denyPendingAction(actor: PendingActionActor, id: string): Promise<boolean> {
-  return (await resolvePendingAction(actor, id, "denied")) !== null;
+/**
+ * Mark a proposed action as denied. Same guards as claiming. Returns the claimed
+ * row (including `proposalTraceId`) so the caller can score the proposal
+ * without a second round-trip; null when the deny did not stick.
+ */
+export async function denyPendingAction(
+  actor: PendingActionActor,
+  id: string,
+): Promise<ClaimedAction | null> {
+  return resolvePendingAction(actor, id, "denied");
 }
 
 /**

@@ -20,7 +20,14 @@ import {
 import { traceAgentAction } from "@/lib/observability/langfuse";
 
 export type ConfirmGateResult =
-  | { ok: true; reply: string; toolName: string; sessionId: string | null; checkoutUrl?: string }
+  | {
+      ok: true;
+      reply: string;
+      toolName: string;
+      sessionId: string | null;
+      proposalTraceId: string | null;
+      checkoutUrl?: string;
+    }
   | { ok: false; status: number; error: string };
 
 /**
@@ -70,7 +77,12 @@ export async function runConfirmedPendingActionForPortal<Ctx extends PendingActi
   // re-resolves every target from live, actor-scoped data before writing.
   const executed = await traceAgentAction(
     { userId: ctx.userId, metadata: traceMetadata },
-    { toolName: claimed.toolName, actionId, decision: "confirm" },
+    {
+      toolName: claimed.toolName,
+      actionId,
+      decision: "confirm",
+      proposalTraceId: claimed.proposalTraceId,
+    },
     () => executeWriteTool(registry, ctx, claimed.toolName, claimed.input),
   );
   if (!executed.ok) {
@@ -85,6 +97,7 @@ export async function runConfirmedPendingActionForPortal<Ctx extends PendingActi
     reply: executed.result.reply,
     toolName: claimed.toolName,
     sessionId: claimed.sessionId,
+    proposalTraceId: claimed.proposalTraceId,
     ...(executed.result.checkoutUrl ? { checkoutUrl: executed.result.checkoutUrl } : {}),
   };
 }

@@ -35,6 +35,10 @@ Rent & utility payments (card incl. Apple Pay / Google Pay, ACH, Link via Stripe
 - **Data** — Supabase (Auth + Postgres), SQL migrations in `supabase/migrations/`
 - **Payments** — Stripe (subscriptions + Connect)
 - **Native** — Capacitor 8 (`space.proplane.app`)
+- **AI** — Anthropic SDK + a thin custom agent loop, exposed through the typed
+  tool layer in `src/lib/tools/`
+- **Observability** — PostHog (product analytics, performance, session replay)
+  and Langfuse (agent traces + the thumbs-rating eval loop)
 - **Tests** — Vitest (unit + integration), Playwright (e2e)
 
 Requires **Node 22.x** and **npm 10.x** (see `package.json` `engines`).
@@ -137,6 +141,8 @@ See [`docs/mobile-app.md`](docs/mobile-app.md) and [`docs/firebase-push-setup.md
 | [`docs/stripe-apple-pay-subscriptions.md`](docs/stripe-apple-pay-subscriptions.md) | Apple Pay for manager subscriptions |
 | [`docs/stripe-apple-pay-payments.md`](docs/stripe-apple-pay-payments.md) | Apple Pay for rent & rental-application fees |
 | [`docs/stripe-ach-local-test.md`](docs/stripe-ach-local-test.md) | Local ACH / webhook testing |
+| [`docs/observability.md`](docs/observability.md) | PostHog + Langfuse: what's captured, dashboards, the agent feedback loop |
+| [`docs/ai-assistant.md`](docs/ai-assistant.md) | AI assistant architecture, tool catalog, write-action gate |
 | [`docs/design.md`](docs/design.md) | Blue Steel design system |
 | [`docs/mobile-app.md`](docs/mobile-app.md) | Capacitor native app workflow |
 | [`docs/web-and-native-parity.md`](docs/web-and-native-parity.md) | Shared web + app changes, registries, CI checks |

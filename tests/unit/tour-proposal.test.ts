@@ -387,7 +387,7 @@ describe("proposeTourConfirmation → discard", () => {
     expect(proposal.proposed).toBe(true);
 
     const denied = await denyPendingAction(ctx, proposal.actionId!);
-    expect(denied).toBe(true);
+    expect(denied).toBeTruthy();
     expect(store.agent_pending_actions![0]).toMatchObject({ status: "denied" });
 
     // No planned tour was created, and the inquiry is untouched.

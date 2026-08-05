@@ -22,6 +22,9 @@ import { completeAgentModel } from "./provider";
 
 const MAX_ITERATIONS = 8;
 
+/** Public so health reports / tests can assert against the same cap. */
+export { MAX_ITERATIONS };
+
 export type ToolTraceEntry = { tool: string; ok: boolean };
 export type TurnUsage = { inputTokens: number; outputTokens: number };
 
@@ -46,6 +49,12 @@ export type AgentTurnResult = {
   usage: TurnUsage;
   /** Present => the turn halted on a write-tool proposal awaiting confirmation. */
   pendingAction?: PendingActionProposal;
+  /** 1-based count of LLM calls made this turn (capped at MAX_ITERATIONS). */
+  iterationCount: number;
+  /** Why the loop stopped — used by Langfuse turn-summary / health reports. */
+  terminationReason: "end_turn" | "pending_action" | "max_iterations";
+  /** Anthropic stop_reason of the last LLM call, when one ran. */
+  finalStopReason: string | null;
 };
 
 /**
@@ -150,6 +159,7 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
   const observer = opts.observer;
+  let lastStopReason: string | null = null;
   notify(
     observer?.onStart &&
       (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier, provider: selection.provider, route: selection.route })),
@@ -175,6 +185,7 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
     const toolUses = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
     );
+    lastStopReason = response.stopReason ?? null;
 
     notify(
       observer?.onLlmCall &&
@@ -205,7 +216,20 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
         .map((b) => b.text)
         .join("")
         .trim();
-      return { reply: reply || "I couldn't find an answer to that.", toolTrace, model: effectiveModel, tier, usage, provider: actualProvider, route: selection.route, fallbackReason, latencyMs: totalLatencyMs };
+      return {
+        reply: reply || "I couldn't find an answer to that.",
+        toolTrace,
+        model: effectiveModel,
+        tier,
+        usage,
+        provider: actualProvider,
+        route: selection.route,
+        fallbackReason,
+        latencyMs: totalLatencyMs,
+        iterationCount: i + 1,
+        terminationReason: "end_turn",
+        finalStopReason: lastStopReason,
+      };
     }
 
     // A confirm-gated write proposal halts the turn. Only the FIRST such call
@@ -248,6 +272,9 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
           route: selection.route,
           fallbackReason,
           latencyMs: totalLatencyMs,
+          iterationCount: i + 1,
+          terminationReason: "pending_action",
+          finalStopReason: lastStopReason,
           pendingAction: {
             toolName: gatedWrite.name,
             input: prepared.input,
@@ -308,6 +335,9 @@ export async function runAgentTurn<Ctx = AgentContext>(opts: {
     route: selection.route,
     fallbackReason,
     latencyMs: totalLatencyMs,
+    iterationCount: MAX_ITERATIONS,
+    terminationReason: "max_iterations",
+    finalStopReason: lastStopReason,
   };
 }
 

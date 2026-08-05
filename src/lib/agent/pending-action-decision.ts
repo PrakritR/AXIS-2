@@ -24,6 +24,7 @@ import type { ToolRegistry } from "@/lib/tools/registry";
 import { appendAgentMessages } from "@/lib/agent/sessions";
 import { track } from "@/lib/analytics/posthog";
 import { formatAgentChatUserError } from "@/lib/agent/assistant-turn-error";
+import { scoreActionApproval, traceAgentAction } from "@/lib/observability/langfuse";
 
 type DecisionActor = PendingActionActor & { landlordId: string };
 
@@ -39,10 +40,34 @@ export async function handlePendingActionDecision<Ctx extends DecisionActor>(arg
   traceMetadata?: Record<string, unknown>;
 }): Promise<NextResponse | null> {
   const { body, ctx, registry, portal } = args;
+  const traceMetadata = args.traceMetadata ?? { portal };
 
   if (typeof body.denyActionId === "string") {
-    const denied = await denyPendingAction(ctx, body.denyActionId);
-    track("assistant_action_denied", ctx.userId, { portal, known: denied });
+    const actionId = body.denyActionId;
+    const denied = await denyPendingAction(ctx, actionId);
+    track("assistant_action_denied", ctx.userId, { portal, known: !!denied });
+    if (denied) {
+      // Audit trace for the cancel, plus score the ORIGINAL proposal turn so
+      // the prompt/tools/args that produced the bad proposal are labelled.
+      await traceAgentAction(
+        { userId: ctx.userId, metadata: traceMetadata },
+        {
+          toolName: denied.toolName,
+          actionId,
+          decision: "cancel",
+          proposalTraceId: denied.proposalTraceId,
+        },
+        async () => ({ ok: true as const, result: { reply: "denied" } }),
+      );
+      if (denied.proposalTraceId) {
+        await scoreActionApproval({
+          traceId: denied.proposalTraceId,
+          approved: false,
+          actionId,
+          toolName: denied.toolName,
+        });
+      }
+    }
     return NextResponse.json({ reply: "Okay, cancelled. Nothing was sent or changed." });
   }
 
@@ -55,7 +80,7 @@ export async function handlePendingActionDecision<Ctx extends DecisionActor>(arg
       registry,
       portal,
       body.confirmActionId,
-      args.traceMetadata ?? { portal },
+      traceMetadata,
     );
   } catch (e) {
     console.error(`[agent/${portal}] confirm action failed:`, e);
@@ -68,6 +93,17 @@ export async function handlePendingActionDecision<Ctx extends DecisionActor>(arg
   }
 
   track("assistant_action_confirmed", ctx.userId, { portal, action: result.toolName });
+  // Score approval on the proposal trace when we have one. The confirm gate
+  // already claimed the row; scoring uses the server-stored proposalTraceId
+  // returned with the claim — never a client-supplied id.
+  if (result.proposalTraceId) {
+    await scoreActionApproval({
+      traceId: result.proposalTraceId,
+      approved: true,
+      actionId: body.confirmActionId,
+      toolName: result.toolName,
+    });
+  }
   appendAgentMessages(ctx, portal, result.sessionId, [
     { role: "assistant", content: result.reply, toolTrace: { tools: [{ tool: result.toolName, ok: true }] } },
   ]);

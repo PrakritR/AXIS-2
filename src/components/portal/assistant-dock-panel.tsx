@@ -13,6 +13,7 @@ import {
   AssistantUndockToPopupButton,
 } from "@/components/portal/assistant-layout-controls";
 import {
+  AssistantMessageRating,
   AssistantPendingActionCard,
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
@@ -52,7 +53,7 @@ export function AssistantDockPanel({
   onCollapse,
   onUndockToPopup,
 }: AssistantDockPanelProps) {
-  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, multiThread, openHistory, closeHistory, selectThread, startNewChat } =
+  const { input, setInput, attachments, setAttachments, messages, ratings, submitFeedback, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, multiThread, openHistory, closeHistory, selectThread, startNewChat } =
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -248,6 +249,13 @@ export function AssistantDockPanel({
                 >
                   {m.role === "user" ? m.content : <AssistantMarkdown text={m.content} />}
                 </span>
+                {m.role === "assistant" && m.traceId ? (
+                  <AssistantMessageRating
+                    traceId={m.traceId}
+                    rating={ratings[m.traceId]}
+                    onRate={submitFeedback}
+                  />
+                ) : null}
               </div>
             ))}
             {loading ? (

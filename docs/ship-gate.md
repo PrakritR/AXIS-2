@@ -1,8 +1,13 @@
 # Ship gate — web + iOS + reviews + feature testing
 
-Use this checklist whenever promoting `prakrit` → `main`, or when finishing a
+Use this checklist whenever promoting `main` → `production`, or when finishing a
 substantial feature. Agents must follow it (see `AGENTS.md` and
 `.cursor/rules/ship-and-review-gate.mdc`).
+
+> **The ladder is `main` → `production`.** `prakrit` was retired when the
+> Production Branch flipped on Jul 25, 2026; do not merge new work into it. Any
+> `bin/fm-proplane-promote-prakrit-*` script is kept only for historical
+> reference.
 
 ## Why
 
@@ -200,26 +205,19 @@ the broad one:
 not failing — they pass on CI retry and pass locally. Do not file them as
 failures.
 
-## Promote prakrit → main (Vercel Preview)
+## Land work on `main` (Vercel Preview)
 
-Captain yes required. Never push `fm/*` branches.
+Work goes straight to `main`, fast-forward only, never force. `main` builds a
+Preview deployment — verify there and on localhost before promoting.
 
-```bash
-bin/fm-proplane-promote-prakrit-to-main.sh
-```
+Before pushing:
 
-Pipeline order:
+1. `bin/fm-proplane-security-review.sh` — blocks Critical/High (report under `state/`)
+2. `no-mistakes axi run --skip=push,pr,ci` (review, test, document, lint)
+3. `npm run test:unit`
 
-1. Local branch `integrate/prakrit-to-main` from `origin/main` + merge `origin/prakrit`
-2. `bin/fm-proplane-security-review.sh` — blocks Critical/High (report under `state/`)
-3. `no-mistakes axi run --skip=push,pr,ci` on the integrate branch (review, test, document, lint)
-4. Fast-forward `main` and `git push origin main` only after captain approves localhost test:
-
-```bash
-bin/fm-proplane-promote-prakrit-to-main.sh --push-main
-```
-
-Never open a GitHub PR unless the captain explicitly asks.
+Never open a GitHub PR unless the captain explicitly asks. Never push `fm/*`
+branches.
 
 Scripts restart dev servers and open the browser via `bin/fm-proplane-open-localhost.sh`.
 
@@ -230,7 +228,7 @@ If no-mistakes parks at a gate, drive `no-mistakes axi respond` then re-run with
 ```bash
 git checkout main
 git pull
-# merge agent/prakrit work into main first, verify preview
+# verify main's Preview deploy (and localhost) first
 bash scripts/promote-main-to-production.sh
 ```
 

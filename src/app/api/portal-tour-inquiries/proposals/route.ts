@@ -4,6 +4,7 @@ import { denyPendingAction, listProposedActionsForUser } from "@/lib/tools/pendi
 import { runConfirmedPendingAction } from "@/lib/tools/confirm-gate.server";
 import { CONFIRM_TOUR_INQUIRY_TOOL } from "@/lib/tour-proposal.server";
 import { track } from "@/lib/analytics/posthog";
+import { scoreActionApproval } from "@/lib/observability/langfuse";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,20 @@ export async function POST(req: Request) {
 
   if (decision === "discard") {
     const denied = await denyPendingAction(ctx, actionId);
-    track("assistant_action_denied", ctx.userId, { known: denied, action: CONFIRM_TOUR_INQUIRY_TOOL });
+    track("assistant_action_denied", ctx.userId, {
+      known: !!denied,
+      action: CONFIRM_TOUR_INQUIRY_TOOL,
+    });
+    // Tour proposals are system-initiated and usually have no proposal trace;
+    // scoring is a no-op when proposalTraceId is null.
+    if (denied?.proposalTraceId) {
+      await scoreActionApproval({
+        traceId: denied.proposalTraceId,
+        approved: false,
+        actionId,
+        toolName: denied.toolName,
+      });
+    }
     return NextResponse.json({ ok: true, reply: "Proposal discarded. Nothing was booked or sent." });
   }
 
@@ -55,5 +69,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
   track("assistant_action_confirmed", ctx.userId, { action: result.toolName });
+  if (result.proposalTraceId) {
+    await scoreActionApproval({
+      traceId: result.proposalTraceId,
+      approved: true,
+      actionId,
+      toolName: result.toolName,
+    });
+  }
   return NextResponse.json({ ok: true, reply: result.reply });
 }

@@ -23,7 +23,14 @@ import {
 import { notifyAgentPendingActionsChanged } from "@/lib/axis-assistant/pending-actions-events";
 import { notifyListingAssistantUpdated } from "@/lib/listing-assistant-events";
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+/**
+ * `traceId` is the Langfuse trace behind an assistant reply. It is what a thumbs
+ * rating attaches to, so only assistant messages carry one, and only when
+ * Langfuse is configured — a message without it renders no rating control.
+ * Deliberately NOT sent back up as conversation history: the server re-derives
+ * every turn, and the feedback route re-verifies ownership server-side.
+ */
+export type ChatMessage = { role: "user" | "assistant"; content: string; traceId?: string };
 export type ToolTraceEntry = { tool: string; ok: boolean };
 
 /**
@@ -46,6 +53,7 @@ type AssistantTransportData = {
   pendingAction?: PendingAction;
   error?: string;
   sessionId?: string | null;
+  traceId?: string;
 };
 
 /** Parse the SSE transport while retaining JSON compatibility for older routes. */
@@ -67,9 +75,9 @@ async function readAssistantTransport(
     const event = record.match(/^event:\s*(.+)$/m)?.[1]?.trim();
     const data = record.match(/^data:\s*(.+)$/m)?.[1];
     if (!event || !data) return;
-    let parsed: AssistantTransportData | { text?: string };
+    let parsed: (AssistantTransportData & { text?: string }) | { text?: string };
     try {
-      parsed = JSON.parse(data) as AssistantTransportData | { text?: string };
+      parsed = JSON.parse(data) as AssistantTransportData & { text?: string };
     } catch {
       return;
     }
@@ -129,6 +137,8 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<PendingChatAttachment[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  /** traceId -> the rating this user gave it, so the control reflects the choice. */
+  const [ratings, setRatings] = useState<Record<string, "up" | "down">>({});
   const [activeThreadId, setActiveThreadId] = useState("");
   const [threads, setThreads] = useState<AssistantChatThreadSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -209,7 +219,22 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
           setError(data.error ?? "Something went wrong.");
           setAttachments(sentAttachments);
         } else {
-          if (!streamingAssistant) setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
+          if (!streamingAssistant) {
+            setMessages((m) => [
+              ...m,
+              { role: "assistant", content: data.reply ?? "", ...(data.traceId ? { traceId: data.traceId } : {}) },
+            ]);
+          } else if (data.traceId) {
+            // Stream already rendered the reply; attach the Langfuse id for rating.
+            setMessages((current) => {
+              const last = current.length - 1;
+              return current.map((message, index) =>
+                index === last && message.role === "assistant"
+                  ? { ...message, traceId: data.traceId }
+                  : message,
+              );
+            });
+          }
           setLastTools(data.toolTrace ?? []);
           setPendingAction(data.pendingAction ?? null);
           // A freshly proposed draft (or one that was cleared by re-asking) should
@@ -321,6 +346,31 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
     [activeThreadId, endpoint, messages, multiThread],
   );
 
+  /**
+   * Rate one assistant turn. Optimistic: the button state is local and the
+   * score is fire-and-forget, because a rating is a nice-to-have signal and
+   * blocking the UI on it (or surfacing an error toast) would cost more
+   * feedback than the occasional lost score does. Returns whether it stuck so a
+   * caller that wants to react can.
+   */
+  const submitFeedback = useCallback(
+    async (traceId: string, rating: "up" | "down"): Promise<boolean> => {
+      if (!traceId) return false;
+      setRatings((r) => ({ ...r, [traceId]: rating }));
+      try {
+        const res = await fetch("/api/agent/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ traceId, rating }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
+
   const startNewChat = useCallback(() => {
     reset();
     requestAnimationFrame(() => {
@@ -343,6 +393,8 @@ export function useAssistantConversation(endpoint: string, options: AssistantCon
     loading,
     error,
     setError,
+    ratings,
+    submitFeedback,
     send,
     resolvePendingAction,
     reset,

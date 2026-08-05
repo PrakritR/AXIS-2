@@ -9,17 +9,24 @@ Currently as we code there are two things to keep in mind for how we want to cod
 
 We run two monitoring systems. Instrument both when adding or changing
 relevant code — this is a build requirement, not optional cleanup.
+**Full model, dashboards, and the agent feedback loop:
+[`docs/observability.md`](docs/observability.md)** — read it before changing
+either system. (It is **Langfuse**, not LangGraph; LangGraph is not used here.)
 
 **PostHog — product & site analytics (current).**
 
 Coverage is layered. Lean on the lower (free) layers; only hand-write a named
 event when an action is worth a funnel or conversion metric.
 
-1. **Autocapture (automatic).** PostHog is initialized in
-   `instrumentation-client.ts` with autocapture on, so every click, pageview,
-   form submit, and frontend exception is already captured. Do NOT hand-roll a
-   "user clicked X" event — it already exists. This covers new features the
-   moment they ship, no code required.
+1. **Autocapture (automatic).** Every click, pageview, and form submit is
+   captured, plus frontend exceptions via `capture_exceptions` in
+   `instrumentation-client.ts`. Do NOT hand-roll a "user clicked X" event.
+   ⚠️ **Autocapture is a PROJECT setting, not a code setting.** It was opted OUT
+   in production until 2026-08-04 — one `$autocapture` event in 30 days — so this
+   layer, and the `data-attr` layer below that rides on it, were silently inert
+   however correct `posthog.init` looked. Same for web vitals, dead clicks, and
+   session replay. Verify in PostHog project settings before assuming coverage;
+   the event count is the only proof.
 2. **`data-attr` naming (one attribute).** Add `data-attr="kebab-name"` to any
    meaningful interactive element. Autocapture records it, so you can build a
    clean named Action in PostHog without a capture call. Use this for the long
@@ -42,16 +49,33 @@ Rules: `object_action` naming; **reuse existing event names** — grep
 create parallel naming. **Never send PII or secrets as event properties** (ids
 and enums only — no emails, names, addresses, free text).
 
-**Langfuse — AI agent observability (in development).**
+**Langfuse — AI agent observability (live in production).**
 - Every agent session, LLM call, and tool call MUST be traced: the prompt,
   tools available, tool chosen, tool arguments, tool result, token counts,
-  and cost.
+  and cost. `traceAgentTurn` / `traceAgentAction` in
+  `src/lib/observability/langfuse.ts` already do this for every existing surface.
 - Every trace must carry `landlordId` and the session/user id so sessions
-  are replayable and attributable.
+  are replayable and attributable. Stamp `promptId` / `promptHash` / `release`
+  via `resolvePromptMeta` so quality drops can be attributed to a prompt or deploy.
 - Langfuse traces are the source of truth for debugging agent behavior. A
   failure should be fully reproducible from its trace.
-- Failed or thumbs-down sessions feed our eval set — preserve enough
-  context in each trace to turn it into a test case.
+- **Quality scores (use ONE name per question):**
+  - `user-rating` — thumbs on the reply (sparse).
+  - `action-approved` — confirm/deny of a gated write (dense; scored on the
+    proposal trace via server-stored `proposal_trace_id`, never a client id).
+  - `numeric-grounding` — managed judge on `axis-agent-turn-summary` (100% of
+    tool-grounded production turns).
+- **Denied proposals are the primary eval set.** Sync with
+  `npm run langfuse:sync-eval-dataset` into `agent-rejected-actions`. See
+  `docs/observability.md`.
+- A NEW agent surface must thread `onTraceId`, return `traceId`, pass
+  `proposalTraceId` into `createPendingAction`, and stamp prompt metadata —
+  or it silently cannot be rated or approval-scored.
+- **A trace id is never authorization** — it arrives from the client. Re-derive
+  ownership server-side before writing any score. Never initialize Langfuse
+  under `NODE_ENV=test`.
+- Ops: `npm run langfuse:setup`, `langfuse:sync-eval-dataset`,
+  `langfuse:run-regression`, `langfuse:agent-health-report`.
 
 ## Performance & egress
 
@@ -481,15 +505,25 @@ with `sharp` (16/32/48 as 32-bit BMP entries plus a 256 PNG entry). Regenerate
 it whenever `icon.svg` changes — a stale `.ico` wins in the tab on browsers
 that prefer it, so editing only the SVG leaves the old mark visible.
 
-# Landing rule (keeper-branch ladder)
+# Landing rule
 
-**Any time there is a change, land it on `claude-2` first — fast-forward only, no
-PR.** `claude-2` is the captain's review lane: it is reviewed on localhost before
-anything moves onward. Land with `git push origin <your-branch>:claude-2`; never
-force. If that push is not a fast-forward, STOP (the branch diverged) rather than
-rebasing or forcing past it. **Never land straight to `prakrit`, `main`, or
-`production`** — those advance only when the captain asks. Open a PR only on
+**Work lands on `main`; `production` advances only when the captain asks.**
+Commit and push to `main` (fast-forward only, never force). Open a PR only on
 explicit request.
+
+The one hard stop is `production`: pushing it deploys the live site AND ships an
+iOS TestFlight build, so it is promoted deliberately via
+`scripts/promote-main-to-production.sh` after the ship gate below — never as part
+of ordinary work.
+
+If a push to `main` is not a fast-forward, STOP (the branch diverged) and
+reconcile rather than forcing past it.
+
+> Per-agent sandbox branches (`claude-2`, `cursor-1`, `cursor-2`) still exist on
+> the remote for lanes that want isolation while several agents work in parallel,
+> and `docs/agents/deployment-workflow.md` lists them. They are optional: use one
+> if you need an isolated lane, otherwise land on `main`. Nothing is required to
+> route through a named agent branch.
 
 # Branching & deployment (Vercel)
 
@@ -497,14 +531,14 @@ The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) builds **only**
 `main` and `production` (`vercel.json` → `git.deploymentEnabled`, plus
 `scripts/vercel-should-build.sh`); every other branch is skipped.
 
-Three rungs above the keeper branch — `claude-2` → `prakrit` → `main` →
-`production` (see [`docs/ship-gate.md`](docs/ship-gate.md) for the gated
-promotion of each):
+Two rungs — `main` → `production` (see [`docs/ship-gate.md`](docs/ship-gate.md)
+for the gated promotion between them):
 
-- **`prakrit` — integration.** Day-to-day work merges here; feature branches and
-  `prakrit` itself get preview URLs.
-- **`main` — staging.** Promoted from `prakrit` and verified on its Vercel Preview
-  deployment before going live.
+- **`main` — dev / integration / staging.** Day-to-day work lands here and gets a
+  Vercel Preview deployment; verify there (and on localhost) before promoting.
+- ~~`prakrit`~~ — **retired** when the Production Branch flipped to `production`
+  on Jul 25, 2026. Do not merge new work into it. `bin/fm-proplane-promote-*`
+  scripts and any doc still describing a `prakrit` rung are stale.
 - **`production` — the live site.** Deploys to the canonical `prop-lane.space` /
   `www.prop-lane.space`, the legacy `axis-seattle-housing.com` /
   `www.axis-seattle-housing.com` (still live, still recognized as production by
@@ -618,9 +652,9 @@ Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
 
 # Mandatory ship / change gate (agents)
 
-Before marking feature work done, and **always** before promoting `prakrit` →
-`main`, agents must complete this gate. Skipping is not allowed unless the user
-explicitly waives a named step.
+Before marking feature work done, and **always** before promoting `main` →
+`production`, agents must complete this gate. Skipping is not allowed unless the
+user explicitly waives a named step.
 
 ## 1. Reviews (run in parallel when possible)
 
@@ -670,8 +704,7 @@ list of known-failing / flaky specs (do not re-triage those) live in
 [ ] Reviews complete (security + bugbot + cache/rendering as applicable)
 [ ] Feature fully exercised + edge cases checked
 [ ] Unit/integration tests green for the change
-[ ] prakrit verified on staging preview
-[ ] ff-only merge prakrit → main + push; main verified on its Preview deploy
+[ ] Work landed on main; verified on localhost AND its Vercel Preview deploy
 [ ] ff-only promote main → production (scripts/promote-main-to-production.sh)
 [ ] Vercel production deploy healthy
 [ ] iOS TestFlight workflow green — its distribute step is what proves the build

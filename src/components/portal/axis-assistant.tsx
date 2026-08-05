@@ -19,6 +19,7 @@ import { ModalShell } from "@/components/ui/modal";
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
+  AssistantMessageRating,
   AssistantPendingActionCard,
   AssistantPinIcon,
   AssistantSuggestionChips,
@@ -104,6 +105,8 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     attachments,
     setAttachments,
     messages,
+    ratings,
+    submitFeedback,
     lastTools,
     pendingAction,
     loading,
@@ -342,6 +345,13 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       >
                         {m.role === "user" ? m.content : <AssistantMarkdown text={m.content} />}
                       </span>
+                      {m.role === "assistant" && m.traceId ? (
+                        <AssistantMessageRating
+                          traceId={m.traceId}
+                          rating={ratings[m.traceId]}
+                          onRate={submitFeedback}
+                        />
+                      ) : null}
                     </div>
                   ))}
                   {loading && (

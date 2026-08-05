@@ -220,9 +220,22 @@ describe("pending actions", () => {
     const { db, rows } = makeFakeDb();
     const actor = { userId: "user_a", db };
     const id = await propose(db);
-    expect(await denyPendingAction(actor, id!)).toBe(true);
+    const denied = await denyPendingAction(actor, id!);
+    expect(denied).toMatchObject({ toolName: "do_thing", proposalTraceId: null });
     expect(rows[0]!.status).toBe("denied");
     expect(await claimPendingAction(actor, id!)).toBeNull();
+  });
+
+  it("persists and returns proposalTraceId through claim and deny", async () => {
+    const { db } = makeFakeDb();
+    const actor = { userId: "user_a", db };
+    const id = await propose(db, { proposalTraceId: "lf-trace-1" });
+    const claimed = await claimPendingAction(actor, id!);
+    expect(claimed?.proposalTraceId).toBe("lf-trace-1");
+
+    const id2 = await propose(db, { proposalTraceId: "lf-trace-2", toolName: "other" });
+    const denied = await denyPendingAction(actor, id2!);
+    expect(denied?.proposalTraceId).toBe("lf-trace-2");
   });
 
   it("records a failed execution instead of leaving the row reading 'executed'", async () => {

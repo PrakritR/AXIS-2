@@ -5,6 +5,8 @@ export type AssistantWirePayload = {
   toolTrace: { tool: string; ok: boolean }[];
   sessionId?: string | null;
   pendingAction?: unknown;
+  /** Langfuse proposal-turn id, when tracing is configured. */
+  traceId?: string | null;
 };
 
 function event(name: string, data: unknown): string {
@@ -24,7 +26,15 @@ export function assistantResponse(req: Request, payload: AssistantWirePayload): 
       controller.enqueue(encoder.encode(event("meta", { sessionId: payload.sessionId ?? null })));
       if (payload.reply) controller.enqueue(encoder.encode(event("delta", { text: payload.reply })));
       if (payload.pendingAction) controller.enqueue(encoder.encode(event("pending_action", payload.pendingAction)));
-      controller.enqueue(encoder.encode(event("done", { toolTrace: payload.toolTrace, sessionId: payload.sessionId ?? null })));
+      controller.enqueue(
+        encoder.encode(
+          event("done", {
+            toolTrace: payload.toolTrace,
+            sessionId: payload.sessionId ?? null,
+            ...(payload.traceId ? { traceId: payload.traceId } : {}),
+          }),
+        ),
+      );
       controller.close();
     },
   });
