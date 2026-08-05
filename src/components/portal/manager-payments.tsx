@@ -3,6 +3,12 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
@@ -11,7 +17,9 @@ import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
@@ -642,11 +650,54 @@ export function ManagerPayments({
     </Button>
   );
 
+  const paymentsOverflowMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${PORTAL_HEADER_ACTION_BTN} max-lg:px-3 max-lg:text-base`}
+          data-attr="payments-more-actions"
+          aria-label="More payment actions"
+        >
+          …
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" backdrop>
+        {direction === "incoming" ? (
+          <DropdownMenuItem
+            data-attr="payments-reminder-settings-menu"
+            onSelect={() => setReminderSettingsOpen(true)}
+          >
+            Reminders
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem data-attr="payments-setup-menu" onSelect={() => setPaymentSetupOpen(true)}>
+          Payment setup
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   const paymentsHeaderActions = (
     <>
-      {paymentsRemindersButton}
-      {paymentsSetupButton}
-      {paymentsAddButton}
+      <div className="hidden items-center gap-2 lg:flex">
+        {paymentsRemindersButton}
+        {paymentsSetupButton}
+        {paymentsAddButton}
+      </div>
+      <div className="flex shrink-0 items-center gap-2 lg:hidden">
+        {paymentsOverflowMenu}
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
+          onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+          data-attr="payments-add"
+        >
+          {direction === "incoming" ? "Add charge" : "Add payment"}
+        </Button>
+      </div>
     </>
   );
 
