@@ -519,12 +519,6 @@ of ordinary work.
 If a push to `main` is not a fast-forward, STOP (the branch diverged) and
 reconcile rather than forcing past it.
 
-> Per-agent sandbox branches (`claude-2`, `cursor-1`, `cursor-2`) still exist on
-> the remote for lanes that want isolation while several agents work in parallel,
-> and `docs/agents/deployment-workflow.md` lists them. They are optional: use one
-> if you need an isolated lane, otherwise land on `main`. Nothing is required to
-> route through a named agent branch.
-
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) builds **only**
