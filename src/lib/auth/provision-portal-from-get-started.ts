@@ -1,9 +1,13 @@
 "use client";
 
 import type { AuthPortalPickerId } from "@/lib/auth/auth-portal-picker-options";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
+
+/** Where a freshly provisioned manager chooses Free / Pro / Business. */
+export const MANAGER_ENTRY_PLAN_PATH = "/auth/manager/choose-plan";
 
 export type ProvisionPortalResult =
-  | { ok: true; redirectTo: string }
+  | { ok: true; redirectTo: string; direct?: boolean }
   | { ok: false; error: string };
 
 async function setActivePortal(role: AuthPortalPickerId): Promise<void> {
@@ -43,6 +47,14 @@ export async function provisionPortalFromGetStarted(role: AuthPortalPickerId): P
       return { ok: false, error: managerProvisionError(body) };
     }
     await setActivePortal("manager");
+    // A just-provisioned manager chooses their plan (Free / Pro / Business)
+    // before entering the portal — a `direct` destination, so the caller doesn't
+    // let the post-auth resolver skip the step. Native shells go straight to the
+    // portal instead: the chooser is a subscription-purchase surface (App Store
+    // Guideline 2.1(b)); IAP in Settings is the native purchase path.
+    if (!detectNativePlatformSync()) {
+      return { ok: true, redirectTo: MANAGER_ENTRY_PLAN_PATH, direct: true };
+    }
     return { ok: true, redirectTo: body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard" };
   }
 

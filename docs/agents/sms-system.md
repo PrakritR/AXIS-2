@@ -280,6 +280,14 @@ server state machine in `src/lib/sms/manager-number-provisioning.server.ts`.
 - **Signup** (`scheduleManagerMessagingReady`) always seeds a parked record via
   `ensureManagerNumberRecord`. Release on deactivation is reversible
   (`releaseManagerNumber` → `released`, history kept; `restoreManagerNumber`).
+- **The number is ADVERTISED as a paid entitlement, but nothing here enforces
+  it yet.** `MANAGER_PLAN_TIERS` (`src/data/manager-plan-tiers.ts`) sells
+  "Dedicated phone number & texting" on Pro/Business with an *actively paid
+  plan — not during the free trial* qualifier, and the downgrade-to-Free and
+  native Switch-to-Free copy says the number is lost. That copy is ahead of the
+  code: no path in this file consults a plan tier, so a Free or trial manager is
+  still provisioned. Gate it here (not by hiding the copy) when the enforcement
+  lands.
 
 ## Per-manager SMS proxy relay (`src/lib/sms/manager-relay.server.ts`)
 
