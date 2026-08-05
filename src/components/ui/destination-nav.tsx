@@ -124,15 +124,16 @@ function destinationNavShellClassName(className?: string, itemLayout: "auto" | "
       : cn(
           "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
           PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-          "snap-x snap-mandatory scroll-px-1 md:snap-none",
+          "max-lg:snap-x max-lg:snap-mandatory max-lg:scroll-px-2.5 sm:max-lg:scroll-px-4 md:snap-none md:scroll-px-1",
         ),
     className,
   );
 }
 
-/** Few tabs share width; wider sets scroll horizontally instead of clipping. */
+/** Few tabs share width on desktop; on phones always scroll so long labels never clip. */
 function destinationNavItemWidthClass(compactItems: boolean) {
-  return compactItems ? "shrink-0 whitespace-nowrap" : "min-w-0 flex-1 basis-0";
+  if (compactItems) return "shrink-0 whitespace-nowrap";
+  return "min-w-0 flex-1 basis-0 max-lg:shrink-0 max-lg:flex-none max-lg:basis-auto max-lg:whitespace-nowrap";
 }
 
 function destinationNavItemClassName({

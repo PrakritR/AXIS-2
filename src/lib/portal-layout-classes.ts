@@ -18,15 +18,15 @@ export const PORTAL_NATIVE_BOTTOM_NAV_CLASS =
 
 /** One bottom-tab cell — fixed icon + label slots keep every tab on the same baseline. */
 export const PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS =
-  "portal-native-bottom-nav-item portal-pressable relative flex min-h-[3.25rem] min-w-0 flex-col items-center justify-end gap-1 px-0.5 pb-1.5 pt-2 transition active:opacity-90";
+  "portal-native-bottom-nav-item portal-pressable relative flex min-h-[3rem] min-w-0 max-w-full flex-col items-center justify-end gap-0.5 px-0 pb-1 pt-1.5 transition active:opacity-90";
 
 export const PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS =
-  "relative flex h-6 w-full shrink-0 items-center justify-center";
+  "relative flex h-[1.375rem] w-full shrink-0 items-center justify-center";
 
 export const PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS =
-  "block w-full truncate text-center text-[10px] font-medium leading-none [html[data-native]_&]:text-[9px]";
+  "portal-native-bottom-nav-label block w-full max-w-full truncate text-center text-[9px] font-medium leading-none tracking-[-0.01em]";
 
-export const PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS = "h-[22px] w-[22px] shrink-0";
+export const PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS = "h-5 w-5 shrink-0";
 
 /** Top-of-screen portal banners (upgrade strip, admin preview) — clears the notch. */
 export const PORTAL_TOP_BANNER_STRIP_CLASS =

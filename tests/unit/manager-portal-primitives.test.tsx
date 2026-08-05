@@ -44,6 +44,21 @@ describe("DestinationNav", () => {
     expect(screen.getByRole("link", { name: /Pending/ }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: /Paid/ }).getAttribute("aria-current")).toBeNull();
   });
+
+  it("uses horizontal scroll sizing on phones so long labels do not clip", () => {
+    render(
+      <DestinationNav
+        items={[
+          { id: "manager", label: "Manager review", shortLabel: "Mgr review", href: "/portal/leases/manager", count: 0 },
+          { id: "resident", label: "Resident signature", shortLabel: "Resident", href: "/portal/leases/resident", count: 0 },
+        ]}
+        activeId="manager"
+      />,
+    );
+    const link = screen.getByRole("link", { name: /Mgr review/ });
+    expect(link.className).toContain("max-lg:flex-none");
+    expect(link.className).toContain("max-lg:whitespace-nowrap");
+  });
 });
 
 describe("PageHeader", () => {

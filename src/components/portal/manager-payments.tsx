@@ -22,9 +22,6 @@ import {
   PORTAL_HEADER_PRIMARY_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
-import { PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
-import { PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
-import { cn } from "@/lib/utils";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -749,19 +746,10 @@ export function ManagerPayments({
         {paymentsSetupButton}
         {paymentsAddButton}
       </div>
-      <div className="flex w-full min-w-0 items-center gap-2 lg:hidden">
-        <h1 className={cn(PAGE_HEADER_TITLE_CLASS, "shrink-0")}>Payments</h1>
-        <div
-          className={cn(
-            "flex min-w-0 flex-1 items-center justify-end gap-2",
-            PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-            "overscroll-x-contain scroll-px-2",
-          )}
-        >
-          {paymentsFilterControl}
-          {paymentsOverflowMenu}
-          {paymentsAddButton}
-        </div>
+      <div className="flex w-full min-w-0 items-center justify-end gap-2 lg:hidden">
+        {paymentsFilterControl}
+        {paymentsAddButton}
+        {paymentsOverflowMenu}
       </div>
     </>
   );

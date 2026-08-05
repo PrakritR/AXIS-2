@@ -96,7 +96,7 @@ export function PortalListControlStack({
                 ariaLabel={destinationAriaLabel}
                 className={cn(
                   "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent",
-                  destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:p-0",
+                  destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:px-2.5 max-lg:py-0 sm:max-lg:px-4",
                 )}
               />
             )}

@@ -307,6 +307,14 @@ export function ManagerLeases({
           destinations={tabs.map((t) => ({
             id: t.id,
             label: t.label,
+            shortLabel:
+              t.id === "manager"
+                ? "Mgr review"
+                : t.id === "resident"
+                  ? "Resident"
+                  : t.id === "signed"
+                    ? "Mgr sign"
+                    : undefined,
             href: leaseListHref(basePath, t.id),
             count: t.count,
             dataAttr: t.dataAttr,
