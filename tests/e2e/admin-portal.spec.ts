@@ -75,7 +75,11 @@ test.describe("Admin portal", () => {
     // Communication is one unified conversation inbox: no Sent/Trash folder tabs.
     // Trash is reached via the "Archived" toggle; "Delete all trash" lives beside
     // it (see admin-communication.tsx / admin-inbox-client.tsx).
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/admin/communication/inbox/unopened");
+    await expect(page.getByRole("heading", { name: /^communication$/i })).toBeVisible({
+      timeout: 15_000,
+    });
     await page.getByRole("button", { name: "New message" }).click();
 
     const subject = `E2E trash check ${Date.now()}`;
@@ -91,10 +95,10 @@ test.describe("Admin portal", () => {
     // archive. The list dual-mounts (a lg:hidden mobile card list + a hidden
     // lg:block desktop table), so target the desktop table ROW — getByText(...)
     // .first() would resolve to the off-screen mobile copy at this viewport.
-    const row = page.getByRole("row").filter({ hasText: subject });
+    const row = page.locator("table tbody").getByRole("row").filter({ hasText: subject });
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.click();
-    await page.getByRole("button", { name: "Move to trash" }).click();
+    await row.getByRole("button", { name: "Move to trash" }).click();
 
     // Switch to the archived (trash) view; "Delete all trash" appears when trash
     // is non-empty.

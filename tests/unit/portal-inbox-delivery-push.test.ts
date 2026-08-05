@@ -104,7 +104,7 @@ describe("deliverPortalInboxMessage push notifications", () => {
     expect(sendPushToUser).toHaveBeenCalledWith("user-res-1", {
       title: "New message from Property manager",
       body: "You have a new message in your PropLane inbox.",
-      url: "/resident/communication/email/unopened",
+      url: "/resident/communication/active",
     });
   });
 
@@ -115,7 +115,7 @@ describe("deliverPortalInboxMessage push notifications", () => {
     expect(sendPushToUser).toHaveBeenCalledTimes(1);
     expect(sendPushToUser).toHaveBeenCalledWith(
       "user-res-2",
-      expect.objectContaining({ url: "/resident/communication/email/unopened" }),
+      expect.objectContaining({ url: "/resident/communication/active" }),
     );
   });
 

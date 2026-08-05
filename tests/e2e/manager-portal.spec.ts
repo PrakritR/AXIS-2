@@ -13,7 +13,7 @@ const PAID_MANAGER_NAV = [
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
-  { label: "Communication", path: "/portal/communication/inbox/unopened" },
+  { label: "Communication", path: "/portal/communication/active" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Team", path: "/portal/relationships" },
   { label: "Settings", path: "/portal/profile" },
@@ -38,7 +38,7 @@ test.describe("Manager portal", () => {
       await page.goto(path, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await expect(page, `${label} should land on ${path}`).toHaveURL(pathToUrlRegExp(path));
       await expect(
-        page.getByRole("heading").first().or(page.locator("main")),
+        page.getByRole("heading").first().or(page.locator("main")).first(),
         `${label} should render a heading or main landmark`,
       ).toBeVisible({ timeout: 30_000 });
     }
@@ -84,7 +84,7 @@ test.describe("Manager portal", () => {
   });
 
   test("inbox tab loads and compose modal appears", async ({ page }) => {
-    await page.goto("/portal/communication/inbox/unopened");
+    await page.goto("/portal/communication/active");
     await expect(page.getByRole("heading").first()).toBeVisible();
     const composeBtn = page.getByRole("button", { name: /new message|compose/i }).first();
     if (await composeBtn.count() > 0) {

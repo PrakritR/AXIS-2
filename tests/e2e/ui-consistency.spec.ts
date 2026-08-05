@@ -27,7 +27,7 @@ test.describe("UI consistency — portal shell", () => {
 
   test("portal inbox section uses canonical page shell heading", async ({ page }) => {
     await signInAsManager(page);
-    await page.goto("/portal/communication/inbox/unopened");
+    await page.goto("/portal/communication/active");
     await expect(page.getByRole("heading", { name: /^communication$/i })).toBeVisible();
   });
 
@@ -49,7 +49,7 @@ test.describe("UI consistency — dark mode portal routes", () => {
     await signInAsManager(page);
   });
 
-  const routes = ["/portal/communication/inbox/unopened", "/portal/payments", "/portal/services/requests"] as const;
+  const routes = ["/portal/communication/active", "/portal/payments", "/portal/services/requests"] as const;
 
   for (const route of routes) {
     test(`${route} renders in dark mode`, async ({ page }) => {

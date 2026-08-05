@@ -39,7 +39,7 @@ export const VENDOR_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/vendor/dashboard" },
   { label: "Services", path: "/vendor/work-orders" },
   { label: "Calendar", path: "/vendor/calendar" },
-  { label: "Communication", path: "/vendor/communication/inbox/unopened" },
+  { label: "Communication", path: "/vendor/communication/active" },
   { label: "Finances", path: "/vendor/financials/income" },
   { label: "Invoices", path: "/vendor/financials/invoices" },
   { label: "Payments", path: "/vendor/payments" },

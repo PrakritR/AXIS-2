@@ -173,7 +173,7 @@ describe("ingestInboundEmailReply", () => {
       expect.objectContaining({
         title: expect.stringContaining("Jane Resident"),
         // Owner is a manager → manager inbox deep link, not a hardcoded portal.
-        url: "/portal/communication/inbox/unopened",
+        url: "/portal/communication/active",
       }),
     );
   });

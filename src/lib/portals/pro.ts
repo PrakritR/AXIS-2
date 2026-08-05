@@ -94,7 +94,7 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
-  { label: "Communication", path: "/portal/communication/inbox/unopened" },
+  { label: "Communication", path: "/portal/communication/active" },
   { label: "Team", path: "/portal/relationships" },
   { label: "Promotion", path: "/portal/promotion" },
   { label: "Finances", path: "/portal/financials/income" },

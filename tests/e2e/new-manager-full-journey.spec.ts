@@ -31,7 +31,7 @@ const PORTAL_SECTIONS = [
   { name: "residents", path: "/portal/residents/current" },
   { name: "payments", path: "/portal/payments" },
   { name: "services", path: "/portal/services/requests" },
-  { name: "inbox", path: "/portal/communication/inbox/unopened" },
+  { name: "inbox", path: "/portal/communication/active" },
   { name: "documents", path: "/portal/documents/income-documents" },
   { name: "finances", path: "/portal/financials/income" },
   { name: "promotion", path: "/portal/promotion" },

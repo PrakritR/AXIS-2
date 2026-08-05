@@ -1,12 +1,12 @@
 ---
-description: Keeper branch cursor-2 — all commits land here
+description: Keeper branch cursor-1 — all commits land here
 alwaysApply: true
 ---
 
-# Local agent branch (cursor-2)
+# Local agent branch (cursor-1)
 
-You are in the **cursor-2** sandbox worktree.
+You are in the **cursor-1** sandbox worktree.
 
-- Commit and push to branch **`cursor-2`** only (no remote feature branches).
-- Full-stack test: **http://localhost:3011** (`bin/fm-proplane-open-localhost.sh cursor-2` from firstmate home).
-- Integration testing on **`prakrit`** (port 3000) happens only after captain-approved promote via `bin/fm-proplane-promote-to-prakrit.sh cursor-2`.
+- Commit and push to branch **`cursor-1`** only (no remote feature branches).
+- Full-stack test: **http://localhost:3010** (`bin/fm-proplane-open-localhost.sh cursor-1` from firstmate home).
+- Integration testing on **`prakrit`** (port 3000) happens only after captain-approved promote via `bin/fm-proplane-promote-to-prakrit.sh cursor-1`.
