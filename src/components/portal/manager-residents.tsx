@@ -3035,13 +3035,6 @@ export function ManagerResidents({
 
       <Modal open={addPaymentMethodOpen} title="Payment methods" onClose={() => setAddPaymentMethodOpen(false)}>
         <div className="space-y-4 text-sm">
-          <p className="text-muted">
-            {selected?.name ?? "This resident"}{" "}
-            chooses how to pay (bank/ACH, card, or Link) each time they check out a charge. The methods below apply to{" "}
-            {selected?.propertyLabel?.trim() || "this resident's property"}{" "}
-            and are the same settings shown under that property&apos;s payment settings in Properties. Editing here
-            updates them there too.
-          </p>
           {!pmPropertyId ? (
             <p className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
               This resident isn&apos;t linked to a property yet, so payment methods can&apos;t be edited here.
