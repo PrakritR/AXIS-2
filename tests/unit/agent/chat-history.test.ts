@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { handleAgentChatHistoryDeleteRequest, handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
 import {
   AGENT_CHAT_HISTORY_PAGE_SIZE,
+  deleteAgentChatThread,
   listAgentChatThreads,
   loadAgentChatTranscript,
 } from "@/lib/agent/chat-history";
@@ -10,7 +11,7 @@ import { appendAgentMessages, createPortalChatSession, ensureAgentSession } from
 
 type Row = Record<string, unknown> & { id: string };
 type TableName = "agent_sessions" | "agent_messages" | "agent_pending_actions";
-type Filter = { op: "eq" | "gt" | "lt"; column: string; value: unknown };
+type Filter = { op: "eq" | "gt" | "lt" | "in" | "ilike"; column: string; value: unknown };
 
 const USER_A = "00000000-0000-4000-8000-000000000001";
 const USER_B = "00000000-0000-4000-8000-000000000002";
@@ -29,6 +30,11 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
   const matches = (row: Row, filters: Filter[]) =>
     filters.every(({ op, column, value }) => {
       if (op === "eq") return row[column] === value;
+      if (op === "in") return Array.isArray(value) && value.includes(row[column]);
+      if (op === "ilike") {
+        const needle = String(value).replace(/^%|%$/g, "").toLocaleLowerCase();
+        return String(row[column] ?? "").toLocaleLowerCase().includes(needle);
+      }
       return op === "gt" ? String(row[column] ?? "") > String(value) : String(row[column] ?? "") < String(value);
     });
 
@@ -36,7 +42,7 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
     tables,
     from(table: TableName) {
       const filters: Filter[] = [];
-      let operation: "select" | "insert" | "update" = "select";
+      let operation: "select" | "insert" | "update" | "delete" = "select";
       let insertValues: Row[] = [];
       let updateValues: Record<string, unknown> = {};
       let orderBy: { column: string; ascending: boolean } | null = null;
@@ -49,7 +55,8 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
           options.withoutSessionTitle &&
           table === "agent_sessions" &&
           (selectedColumns.split(",").map((column) => column.trim()).includes("title") ||
-            (operation === "insert" && insertValues.some((value) => "title" in value)));
+            (operation === "insert" && insertValues.some((value) => "title" in value)) ||
+            (operation === "update" && "title" in updateValues));
         if (titleMissing) {
           return {
             data: null,
@@ -65,6 +72,10 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
           const inserted = insertValues.map((row) => ({ ...row, id: row.id || `created-${++sequence}` }));
           rows.push(...inserted);
           result = inserted;
+        }
+        if (operation === "delete") {
+          const deletedIds = new Set(result.map((row) => row.id));
+          tables[table] = rows.filter((row) => !deletedIds.has(row.id));
         }
         if (orderBy) {
           result = [...result].sort((a, b) => {
@@ -92,6 +103,14 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
         filters.push({ op: "lt", column, value });
         return chain;
       };
+      chain.in = (column: string, value: unknown) => {
+        filters.push({ op: "in", column, value });
+        return chain;
+      };
+      chain.ilike = (column: string, value: unknown) => {
+        filters.push({ op: "ilike", column, value });
+        return chain;
+      };
       chain.order = (column: string, options: { ascending?: boolean } = {}) => {
         orderBy = { column, ascending: options.ascending !== false };
         return chain;
@@ -108,6 +127,10 @@ function makeDb(seed: Partial<Record<TableName, Row[]>>, options: { withoutSessi
       chain.insert = (value: Row | Row[]) => {
         operation = "insert";
         insertValues = Array.isArray(value) ? value : [value];
+        return chain;
+      };
+      chain.delete = () => {
+        operation = "delete";
         return chain;
       };
       chain.maybeSingle = async () => {
@@ -205,6 +228,30 @@ describe("portal chat archive", () => {
     expect(await loadAgentChatTranscript({ userId: USER_A, db }, "resident", SESSION_A)).toBeNull();
   });
 
+  it("uses the second prompt after a vague opener and searches only the actor's portal conversations", async () => {
+    const db = makeDb({
+      agent_sessions: [
+        portalSession(SESSION_A, "2026-08-04T12:00:00.000Z"),
+        portalSession(SESSION_B, "2026-08-04T11:00:00.000Z"),
+        portalSession("10000000-0000-4000-8000-000000000003", "2026-08-04T10:00:00.000Z", { user_id: USER_B }),
+      ],
+      agent_messages: [
+        { id: "m1", session_id: SESSION_A, role: "user", content: "Hi", created_at: "2026-08-04T12:00:01.000Z" },
+        { id: "m2", session_id: SESSION_A, role: "user", content: "Show overdue rent for this month", created_at: "2026-08-04T12:00:02.000Z" },
+        { id: "m3", session_id: SESSION_B, role: "user", content: "How do I send a lease?", created_at: "2026-08-04T11:00:01.000Z" },
+        { id: "m4", session_id: "10000000-0000-4000-8000-000000000003", role: "user", content: "Show overdue rent for this month", created_at: "2026-08-04T10:00:01.000Z" },
+      ],
+    });
+
+    const archive = await listAgentChatThreads({ userId: USER_A, db }, "manager");
+    expect(archive.threads.find((thread) => thread.id === SESSION_A)?.title).toBe("Show overdue rent for this month");
+
+    const searched = await listAgentChatThreads({ userId: USER_A, db }, "manager", null, "overdue rent");
+    expect(searched.threads).toEqual([
+      expect.objectContaining({ id: SESSION_A, title: "Show overdue rent for this month" }),
+    ]);
+  });
+
   it("returns a generic not-found response for malformed and foreign conversation ids", async () => {
     const db = makeDb({ agent_sessions: [portalSession(SESSION_A, "2026-08-04T12:00:00.000Z")] });
     const actor = { userId: USER_B, db };
@@ -223,6 +270,20 @@ describe("portal chat archive", () => {
     );
     expect(foreign.status).toBe(404);
     expect((await foreign.json()).error).toBe("Conversation not found.");
+
+    const malformedDelete = await handleAgentChatHistoryDeleteRequest(
+      new Request("https://example.test/api/agent/chat?sessionId=not-a-uuid", { method: "DELETE" }),
+      actor,
+      "manager",
+    );
+    expect(malformedDelete.status).toBe(400);
+
+    const foreignDelete = await handleAgentChatHistoryDeleteRequest(
+      new Request(`https://example.test/api/agent/chat?sessionId=${SESSION_A}`, { method: "DELETE" }),
+      actor,
+      "manager",
+    );
+    expect(foreignDelete.status).toBe(404);
   });
 
   it("reuses a matching server session but replaces a foreign id with a fresh session", async () => {
@@ -249,7 +310,7 @@ describe("portal chat archive", () => {
       user_id: USER_A,
       portal: "manager",
       kind: "portal_chat",
-      title: "New thread title",
+      title: "New conversation",
     });
   });
 
@@ -273,6 +334,45 @@ describe("portal chat archive", () => {
       { role: "user", content: "Can you send a reminder?" },
       { role: "assistant", content: "I can draft one for your approval." },
     ]);
+  });
+
+  it("updates a blank thread title when the second prompt is the first useful request", async () => {
+    const db = makeDb({ agent_sessions: [portalSession(SESSION_A, "2026-08-04T12:00:00.000Z", { title: "New conversation" })] });
+    const actor = { userId: USER_A, landlordId: USER_A, db };
+
+    await appendAgentMessages(actor, "manager", SESSION_A, [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "How can I help?" },
+    ]);
+    await appendAgentMessages(actor, "manager", SESSION_A, [
+      { role: "user", content: "Show this month's overdue rent" },
+      { role: "assistant", content: "Here are the overdue balances." },
+    ]);
+
+    expect(db.tables.agent_sessions[0]?.title).toBe("ai:Show this month's overdue rent");
+  });
+
+  it("deletes only an owned portal chat and cancels its unconfirmed draft", async () => {
+    const db = makeDb({
+      agent_sessions: [portalSession(SESSION_A, "2026-08-04T12:00:00.000Z")],
+      agent_pending_actions: [
+        {
+          id: "pending-1",
+          session_id: SESSION_A,
+          user_id: USER_A,
+          portal: "manager",
+          status: "proposed",
+          created_at: "2026-08-04T12:00:01.000Z",
+        },
+      ],
+    });
+
+    await expect(deleteAgentChatThread({ userId: USER_B, db }, "manager", SESSION_A)).resolves.toEqual({ ok: false });
+    expect(db.tables.agent_sessions).toHaveLength(1);
+
+    await expect(deleteAgentChatThread({ userId: USER_A, db }, "manager", SESSION_A)).resolves.toEqual({ ok: true });
+    expect(db.tables.agent_sessions).toHaveLength(0);
+    expect(db.tables.agent_pending_actions[0]).toMatchObject({ status: "denied" });
   });
 
   it("creates and lists a blank thread even while an additive title migration is pending", async () => {

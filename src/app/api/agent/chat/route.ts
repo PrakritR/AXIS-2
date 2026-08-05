@@ -8,7 +8,7 @@ import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
 import { createPortalChatSession, ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
-import { handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { handleAgentChatHistoryDeleteRequest, handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
 import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
 import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
 import { rateLimit } from "@/lib/rate-limit";
@@ -36,6 +36,12 @@ export async function GET(req: Request) {
   const ctx = await resolveAgentContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   return handleAgentChatHistoryRequest(req, ctx, "manager");
+}
+
+export async function DELETE(req: Request) {
+  const ctx = await resolveAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryDeleteRequest(req, ctx, "manager");
 }
 
 /**

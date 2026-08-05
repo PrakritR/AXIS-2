@@ -23,6 +23,7 @@ export type AssistantConversationValue = {
   historyOpen: boolean;
   historyLoading: boolean;
   historyError: string | null;
+  historySearch: string;
   hasMoreHistory: boolean;
   multiThread: boolean;
   lastTools: ToolTraceEntry[];
@@ -38,7 +39,9 @@ export type AssistantConversationValue = {
   reset: () => void;
   openHistory: () => void;
   closeHistory: () => void;
+  searchHistory: (value: string) => void;
   selectThread: (threadId: string) => Promise<void>;
+  deleteThread: (threadId: string) => Promise<boolean>;
   loadMoreHistory: () => void;
   hydrateArchive: () => Promise<void>;
   startNewChat: () => Promise<void>;

@@ -119,7 +119,8 @@ signed-in person across devices:
   `agent_sessions_portal_chat_archive_idx` supports newest-first paging by
   `(user_id, portal, updated_at)`.
 - Each role-scoped chat route exposes `GET`: without `sessionId` it returns a
-  paginated list; with one it returns a transcript and, only when it is still
+  paginated list (and accepts an optional private `search` query over that
+  person's prompts); with one it returns a transcript and, only when it is still
   proposed and unexpired, its safe confirmation preview. Stored pending-action
   input is never returned to the browser.
 - Every session read/reuse is constrained by authenticated `user_id`, portal,
@@ -130,8 +131,14 @@ signed-in person across devices:
   `kind = 'modal_chat'`, and keep their text-only local storage isolated from
   the archive. Existing old browser history is intentionally not imported,
   because it was not user-scoped and could reveal a prior shared-device user's
-  chat. V1 provides new chat, browse, resume, pagination, and pending-preview
-  restoration; it intentionally has no rename, delete, or search.
+  chat. Thread labels use the lowest-cost configured Claude model (Haiku) to
+  produce a 2–4 word description of the first useful user prompt; a greeting or
+  generic help request defers title generation to the next useful prompt. A
+  deterministic prompt label is used only if title generation is unavailable.
+  Each role route also exposes scoped `DELETE` for one archive item; it removes
+  that transcript and marks an attached, unconfirmed draft as denied. V1
+  provides new chat, browse, prompt search, resume, pagination, delete, and
+  pending-preview restoration; it intentionally has no rename.
 
 #### Personal custom instructions
 
