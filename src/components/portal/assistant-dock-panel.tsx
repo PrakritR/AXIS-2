@@ -55,7 +55,7 @@ export function AssistantDockPanel({
   onUndockToPopup,
   inputId,
 }: AssistantDockPanelProps) {
-  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, historyLoading, historyError, hasMoreHistory, multiThread, openHistory, closeHistory, selectThread, loadMoreHistory, hydrateArchive, startNewChat } =
+  const { input, setInput, attachments, setAttachments, messages, lastTools, pendingAction, loading, error, setError, send, resolvePendingAction, reset, threads, activeThreadId, historyOpen, historyLoading, historyError, historySearch, hasMoreHistory, multiThread, openHistory, closeHistory, searchHistory, selectThread, deleteThread, loadMoreHistory, hydrateArchive, startNewChat } =
     useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -191,15 +191,18 @@ export function AssistantDockPanel({
             threads={threads}
             activeThreadId={activeThreadId}
             onSelect={selectThread}
+            onDelete={deleteThread}
             onNewChat={() => {
               void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
             }}
             onClose={closeHistory}
             loading={historyLoading}
             error={historyError}
+            searchQuery={historySearch}
             hasMore={hasMoreHistory}
             onRetry={openHistory}
             onLoadMore={loadMoreHistory}
+            onSearchQueryChange={searchHistory}
             portalContainer={historyPortal}
           />
         ) : null}

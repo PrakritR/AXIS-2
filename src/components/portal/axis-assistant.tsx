@@ -124,11 +124,14 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     historyOpen,
     historyLoading,
     historyError,
+    historySearch,
     hasMoreHistory,
     multiThread,
     openHistory,
     closeHistory,
+    searchHistory,
     selectThread,
+    deleteThread,
     loadMoreHistory,
     hydrateArchive,
     startNewChat,
@@ -327,15 +330,18 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
               threads={threads}
               activeThreadId={activeThreadId}
               onSelect={selectThread}
+              onDelete={deleteThread}
               onNewChat={() => {
                 void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
               }}
               onClose={closeHistory}
               loading={historyLoading}
               error={historyError}
+              searchQuery={historySearch}
               hasMore={hasMoreHistory}
               onRetry={openHistory}
               onLoadMore={loadMoreHistory}
+              onSearchQueryChange={searchHistory}
               portalContainer={historyPortal}
             />
           ) : null}

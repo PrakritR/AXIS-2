@@ -20,6 +20,7 @@ function response(body: Record<string, unknown>, status = 200) {
 
 function installArchiveFetch(includeThreads = true) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "DELETE") return response({ deleted: true });
     if (init?.method === "POST") {
       const body = JSON.parse(String(init.body)) as { newSession?: boolean };
       if (body.newSession) return response({ sessionId: FRESH });
@@ -46,6 +47,12 @@ function installArchiveFetch(includeThreads = true) {
         },
       });
     }
+    if (url.includes("search=Older")) {
+      return response({
+        threads: [{ id: OLDER, title: "Older question", updatedAt: "2026-08-03T12:00:00.000Z" }],
+        nextCursor: null,
+      });
+    }
     return response(
       includeThreads
         ? {
@@ -65,6 +72,7 @@ function installArchiveFetch(includeThreads = true) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("server-backed assistant conversation history", () => {
@@ -179,5 +187,41 @@ describe("server-backed assistant conversation history", () => {
       { role: "assistant", content: "Fresh reply." },
     ]);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("sessionId="))).toBe(false);
+  });
+
+  it("searches server-backed conversations while preserving the shared search state", async () => {
+    const fetchMock = installArchiveFetch();
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useAssistantConversation(ENDPOINT));
+
+    await act(async () => {
+      await result.current.hydrateArchive();
+    });
+    act(() => {
+      result.current.searchHistory("Older");
+    });
+    expect(result.current.historySearch).toBe("Older");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("search=Older"))).toBe(true);
+    expect(result.current.threads).toEqual([
+      expect.objectContaining({ id: OLDER, title: "Older question" }),
+    ]);
+  });
+
+  it("removes a deleted conversation from the shared archive", async () => {
+    installArchiveFetch();
+    const { result } = renderHook(() => useAssistantConversation(ENDPOINT));
+
+    await act(async () => {
+      await result.current.hydrateArchive();
+    });
+    await act(async () => {
+      await result.current.deleteThread(OLDER);
+    });
+
+    expect(result.current.threads).not.toContainEqual(expect.objectContaining({ id: OLDER }));
   });
 });

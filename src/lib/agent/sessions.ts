@@ -8,6 +8,15 @@
  */
 import type { AgentPortal } from "@/lib/tools/pending-actions";
 import { PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
+import {
+  agentChatThreadTitle,
+  agentChatThreadTitleFromPrompts,
+  generateAgentChatThreadTitle,
+  isVagueAgentChatThreadTitle,
+  storeGeneratedAgentChatThreadTitle,
+} from "@/lib/agent/chat-title";
+
+export { agentChatThreadTitle } from "@/lib/agent/chat-title";
 
 type SessionActor = {
   userId: string;
@@ -36,14 +45,6 @@ function reportPersistenceFailure(operation: string, error: unknown) {
     code: candidate?.code ?? "unknown",
     message: candidate?.message ?? "unknown database error",
   });
-}
-
-/** A concise, server-owned title for archive list rows. */
-export function agentChatThreadTitle(text: string): string {
-  const stripped = text.replace(/^\[Context:[^\]]+\]\s*\n+/i, "").trim();
-  const line = stripped.split("\n")[0]?.trim() ?? "";
-  if (!line) return "New conversation";
-  return line.length > 80 ? `${line.slice(0, 77)}…` : line;
 }
 
 /**
@@ -84,7 +85,12 @@ export async function ensureAgentSession(
     };
     let { data: created, error } = await actor.db
       .from("agent_sessions")
-      .insert({ ...sessionValues, title: agentChatThreadTitle(opts.title ?? "") })
+      .insert({
+        ...sessionValues,
+        // Portal titles are generated only after a complete turn. This avoids
+        // persisting a prompt echo while the response/title model is running.
+        title: kind === PORTAL_CHAT_SESSION_KIND ? UNTITLED_THREAD : agentChatThreadTitle(opts.title ?? ""),
+      })
       .select("id")
       .single();
     // Keep the archive usable while a deployment is waiting for the additive
@@ -143,13 +149,51 @@ export async function appendAgentMessages(
       reportPersistenceFailure("append messages", insertError);
       return false;
     }
-    const { error: updateError } = await actor.db
+    const { data: promptRows, error: promptError } = await actor.db
+      .from("agent_messages")
+      .select("content")
+      .eq("session_id", sessionId)
+      .eq("role", "user")
+      .order("created_at", { ascending: true })
+      .limit(3);
+    const prompts = ((promptRows ?? []) as { content?: unknown }[])
+      .map((row) => (typeof row.content === "string" ? row.content : ""))
+      .filter(Boolean);
+    const fallbackTitle = agentChatThreadTitleFromPrompts(prompts);
+    const shouldGenerateTitle =
+      !promptError &&
+      prompts.length > 0 &&
+      prompts.length <= 2 &&
+      !(prompts.length === 1 && isVagueAgentChatThreadTitle(fallbackTitle));
+    const title = shouldGenerateTitle
+      ? storeGeneratedAgentChatThreadTitle(
+          await generateAgentChatThreadTitle(prompts, {
+            userId: actor.userId,
+            sessionId,
+            metadata: { landlordId: actor.landlordId, portal },
+          }),
+        )
+      : null;
+
+    let { error: updateError } = await actor.db
       .from("agent_sessions")
-      .update({ updated_at: new Date().toISOString() })
+      .update({ updated_at: new Date().toISOString(), ...(title ? { title } : {}) })
       .eq("id", sessionId)
       .eq("user_id", actor.userId)
       .eq("portal", portal)
       .eq("kind", kind);
+    // The additive title migration may not be applied yet. Keep message
+    // persistence working in that window, then derive a readable label on
+    // archive reads instead.
+    if (updateError && isMissingColumn(updateError, "title")) {
+      ({ error: updateError } = await actor.db
+        .from("agent_sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("user_id", actor.userId)
+        .eq("portal", portal)
+        .eq("kind", kind));
+    }
     if (updateError) {
       reportPersistenceFailure("update session timestamp", updateError);
       return false;
