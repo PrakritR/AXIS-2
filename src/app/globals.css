@@ -2298,17 +2298,67 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
     border-radius: 0.75rem;
   }
 
+  /* G3 — keep the assistant FAB bottom-right without overlapping the send button. */
+  .portal-communication-inbox .portal-inbox-composer-row {
+    padding-right: 3.25rem;
+  }
+
+  /* Float above the fixed bottom tab bar (not inside it) on phone-width web + native. */
+  .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem) !important;
+    right: max(1rem, env(safe-area-inset-right)) !important;
+    z-index: 45;
+  }
+
   html[data-bulk-action-bar] #portal-main-content {
     padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
     scroll-padding-bottom: calc(var(--portal-mobile-scroll-bottom-inset) + 3.75rem);
   }
 
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.5rem) !important;
+  }
+
+  /* Record detail footer actions — float FAB above the centered action row. */
+  html:has([data-slot="portal-page-footer-actions"]) .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 5.75rem) !important;
+  }
+
+  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
+    bottom: calc(var(--portal-native-bottom-nav-inset, 0px) + 6.25rem) !important;
+  }
 }
 
+/* Lift assistant FAB when bulk selection bar is open (desktop). */
 @media (min-width: 1024px) {
+  html[data-bulk-action-bar] .axis-assistant-fab {
+    bottom: 5.5rem !important;
+  }
+
+  /* Pinned record-detail footer (resident profile sections) — sit above the action row. */
+  html:has([data-slot="portal-page-footer-actions"][data-pinned]) .axis-assistant-fab {
+    bottom: 5.75rem !important;
+  }
+
   html[data-portal-sidebar-collapsed] [data-slot="bulk-action-bar"][data-variant="payments"] {
     left: 58px;
   }
+}
+
+html[data-hide-assistant-fab] .axis-assistant-fab,
+html[data-communication-surface] .axis-assistant-fab {
+  display: none !important;
+}
+
+html[data-hide-assistant-fab],
+html[data-communication-surface] {
+  --portal-assistant-fab-clearance: 0px;
+  --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);
+}
+
+html[data-hide-assistant-fab] .portal-communication-inbox .portal-inbox-composer-row,
+html[data-communication-surface] .portal-inbox-composer-row {
+  padding-right: 0;
 }
 
 /* Communication + list pages: fixed chrome, scrollable body below. */
@@ -2552,13 +2602,13 @@ html[data-native] [data-listing-sections-root] {
   margin-bottom: 0;
 }
 
-/* Inline page title band (Communication, etc.): hide duplicate section label in mobile nav.
-   `position: absolute` takes the h1 out of flow, so the nav bar's Tailwind `flex-1` on it
-   stops applying and the sr-only recipe below is sufficient on its own — do not add
-   `flex`/`min-width` overrides here expecting them to do anything. Verified in-browser:
-   forcing `flex: 1 1 0% !important` back onto this h1 leaves it measuring 1px. */
+/* Inline page title band: hide duplicate section label in mobile nav only when the
+   band still shows the h1 on phones. Bands with `data-hide-title-on-mobile-nav`
+   hide their own title on mobile and rely on {@link PortalMobileNavBar} instead. */
 @media (max-width: 1023px) {
-  .portal-main-inner:has([data-slot="portal-page-title-band"]) > .portal-mobile-nav-bar h1 {
+  .portal-main-inner:has([data-slot="portal-page-title-band"]:not([data-hide-title-on-mobile-nav]))
+    > .portal-mobile-nav-bar
+    h1 {
     position: absolute;
     width: 1px;
     height: 1px;

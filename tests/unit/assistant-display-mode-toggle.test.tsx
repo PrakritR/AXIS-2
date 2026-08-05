@@ -59,6 +59,7 @@ function renderPortalWithTopBar() {
 
 const rail = () => document.querySelector('[data-attr="portal-assistant-dock-rail"]');
 const dock = () => document.querySelector('[data-attr="dashboard-assistant-dock"]');
+const fab = () => document.querySelector('[data-attr="axis-assistant-fab"]');
 const askPropLane = () => document.querySelector<HTMLButtonElement>('[data-attr="portal-ask-proplane"]')!;
 
 describe("assistant display mode", () => {
@@ -77,10 +78,10 @@ describe("assistant display mode", () => {
     vi.unstubAllGlobals();
   });
 
-  it("defaults to the popup opened from Ask PropLane, with no floating trigger or rail", () => {
+  it("defaults to the popup with a bottom-right FAB and no rail", async () => {
     renderPortal();
     expect(askPropLane()).toBeInTheDocument();
-    expect(document.querySelector('[data-attr="axis-assistant-fab"]')).toBeNull();
+    await waitFor(() => expect(fab()).not.toBeNull());
     expect(rail()).toBeNull();
     expect(dock()).toBeNull();
   });
@@ -109,7 +110,7 @@ describe("assistant display mode", () => {
     // The rail itself is desktop-only.
     expect(rail()!.className).toContain("hidden");
     expect(rail()!.className).toContain("lg:flex");
-    expect(document.querySelector('[data-attr="axis-assistant-fab"]')).toBeNull();
+    await waitFor(() => expect(fab()!.className).toContain("lg:hidden"));
   });
 
   it("opens Ask PropLane in the right-side conversation rail on desktop", async () => {

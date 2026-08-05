@@ -77,19 +77,25 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("width: 1.375rem");
   });
 
-  it("keeps assistant entry in the desktop named header button, not the bottom nav", () => {
+  it("keeps assistant entry in the floating FAB (plus desktop Ask PropLane), not the bottom nav", () => {
     const AXIS_ASSISTANT_SOURCE = readFileSync(
       join(process.cwd(), "src/components/portal/axis-assistant.tsx"),
       "utf8",
     );
     expect(AXIS_ASSISTANT_SOURCE).not.toContain("AxisAssistantNavButton");
-    expect(AXIS_ASSISTANT_SOURCE).not.toContain("axis-assistant-fab");
-    expect(GLOBALS_CSS).not.toContain(".axis-assistant-fab");
+    expect(AXIS_ASSISTANT_SOURCE).toContain("[html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]");
+    expect(GLOBALS_CSS).toContain(".axis-assistant-fab");
+    expect(GLOBALS_CSS).toContain("calc(var(--portal-native-bottom-nav-inset, 0px) + 0.75rem)");
     expect(PORTAL_TOP_BAR_SOURCE).toContain("Ask PropLane");
     expect(PORTAL_TOP_BAR_SOURCE).toContain("hidden");
     expect(PORTAL_TOP_BAR_SOURCE).toContain("lg:flex");
     expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
     expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
+  });
+
+  it("does not sr-only the mobile nav title when the inline band defers to it", () => {
+    expect(GLOBALS_CSS).toContain('[data-slot="portal-page-title-band"]:not([data-hide-title-on-mobile-nav])');
+    expect(GLOBALS_CSS).toContain("data-hide-title-on-mobile-nav");
   });
 
   it("hides Next.js dev issue badge on native", () => {

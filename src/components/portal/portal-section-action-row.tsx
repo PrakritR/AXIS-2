@@ -69,6 +69,7 @@ export function PortalPageTitleBand({
         className,
       )}
       data-slot="portal-page-title-band"
+      {...(hideTitleOnMobileNav ? { "data-hide-title-on-mobile-nav": "" } : {})}
     >
       <div
         className={cn(

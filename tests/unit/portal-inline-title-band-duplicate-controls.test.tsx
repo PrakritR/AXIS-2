@@ -485,6 +485,7 @@ describe("header controls reach mobile exactly once", () => {
     expect(screen.getAllByRole("button", { name: "Apply to property" })).toHaveLength(1);
     const band = document.querySelector('[data-slot="portal-page-title-band"]');
     expect(band).not.toBeNull();
+    expect(band).toHaveAttribute("data-hide-title-on-mobile-nav");
     expect(band?.querySelector('[data-attr="resident-applications-apply"]')).not.toBeNull();
     expect(document.querySelector('[data-slot="portal-page-header-mobile-actions"]')).toBeNull();
   });
