@@ -13,7 +13,6 @@ import { startObservation } from "@langfuse/tracing";
 import type { AgentObserver } from "@/lib/agent/loop";
 import { estimateCostUsd } from "@/lib/agent/model";
 import type { AgentPromptMeta } from "@/lib/agent/prompt-metadata";
-import { getLangfuseSpanProcessor } from "@/lib/observability/langfuse-otel.server";
 
 let client: Langfuse | null = null;
 let initialized = false;
@@ -397,6 +396,9 @@ async function emitManagedEvaluatorSummary(args: {
   output: unknown;
   metadata: Record<string, unknown>;
 }): Promise<void> {
+  const { getLangfuseSpanProcessor } = await import(
+    "@/lib/observability/langfuse-otel.server"
+  );
   const processor = getLangfuseSpanProcessor();
   if (!processor) return;
   try {

@@ -11,10 +11,10 @@ import { PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
 import {
   agentChatThreadTitle,
   agentChatThreadTitleFromPrompts,
-  generateAgentChatThreadTitle,
   isVagueAgentChatThreadTitle,
   storeGeneratedAgentChatThreadTitle,
 } from "@/lib/agent/chat-title";
+import { generateAgentChatThreadTitle } from "@/lib/agent/chat-title-generate.server";
 
 export { agentChatThreadTitle } from "@/lib/agent/chat-title";
 
