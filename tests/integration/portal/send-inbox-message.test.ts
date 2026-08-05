@@ -35,6 +35,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 import { POST as sendInboxMessage } from "@/app/api/portal/send-inbox-message/route";
+import * as inboxRecipientScope from "@/lib/inbox-recipient-scope";
 
 const MANAGER_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_SCOPE = "axis_portal_inbox_resident_v1";
@@ -64,6 +65,7 @@ function makeDbMock(options: { senderRole?: string; recipientEmail?: string; rec
 describe("POST /api/portal/send-inbox-message", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     process.env.RESEND_API_KEY = "re_test_key";
     process.env.RESEND_FROM = "PropLane <test@axis.local>";
     vi.mocked(rateLimit).mockReturnValue({ ok: true } as ReturnType<typeof rateLimit>);
@@ -192,6 +194,70 @@ describe("POST /api/portal/send-inbox-message", () => {
     const [senderCall, recipientCall] = upsert.mock.calls;
     expect(senderCall[0]).toMatchObject({ scope: MANAGER_SCOPE, row_data: expect.objectContaining({ folder: "sent" }) });
     expect(recipientCall[0]).toMatchObject({ scope: RESIDENT_SCOPE, row_data: expect.objectContaining({ folder: "inbox" }) });
+  });
+
+  it("vendor → manager via toEmails: recipient inbox uses manager scope", async () => {
+    const filterSpy = vi.spyOn(inboxRecipientScope, "filterRecipientsBySenderScope").mockImplementation(
+      async (_db, _sender, recipients) => ({ allowed: recipients, blocked: [] }),
+    );
+
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "ven_1", email: "vendor@example.com" } } }) },
+    } as never);
+
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const senderProfileMaybeSingle = vi.fn().mockResolvedValue({ data: { role: "vendor" }, error: null });
+    const recipientProfilesData = vi.fn().mockResolvedValue({
+      data: [{ id: "mgr_1", email: "mgr@example.com", role: "manager" }],
+      error: null,
+    });
+
+    const from = vi.fn().mockImplementation(() => {
+      const obj: Record<string, unknown> = {};
+      obj.upsert = upsert;
+      const threadQuery: Record<string, unknown> = {
+        eq: vi.fn(() => threadQuery),
+        order: vi.fn(() => threadQuery),
+        limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+        maybeSingle: senderProfileMaybeSingle,
+      };
+      obj.select = vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue(threadQuery),
+        in: vi.fn().mockReturnValue(recipientProfilesData()),
+        ilike: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        maybeSingle: senderProfileMaybeSingle,
+      });
+      return obj;
+    });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({ from } as never);
+
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "email_123" }), { status: 200 }),
+    ) as never;
+
+    const req = jsonRequest("http://localhost/api/portal/send-inbox-message", {
+      method: "POST",
+      body: {
+        subject: "Vendor note",
+        text: "Hello manager",
+        toEmails: "mgr@example.com",
+        deliverToPortalInbox: true,
+        deliverViaEmail: false,
+      },
+    });
+    const res = await sendInboxMessage(req);
+    expect(res.status).toBeLessThan(500);
+    expect(upsert).toHaveBeenCalledTimes(2);
+    const recipientCall = upsert.mock.calls.find(
+      (call) => (call[0] as { scope?: string }).scope === MANAGER_SCOPE,
+    );
+    expect(recipientCall).toBeTruthy();
+    expect(recipientCall![0]).toMatchObject({
+      scope: MANAGER_SCOPE,
+      owner_user_id: "mgr_1",
+      row_data: expect.objectContaining({ folder: "inbox" }),
+    });
   });
 
   it("deliverToPortalInbox:false skips upserts", async () => {

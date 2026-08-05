@@ -277,9 +277,9 @@ export const ResidentInboxPanel = forwardRef<
   }, [composeOpen]);
 
   useEffect(() => {
-    if (tabId !== "schedule" && !embeddedInCommunication) return;
+    if (tabId !== "schedule") return;
     void reloadScheduledMessages();
-  }, [embeddedInCommunication, reloadScheduledMessages, tabId]);
+  }, [reloadScheduledMessages, tabId]);
 
   useEffect(() => {
     persistInboxRef.current = false;

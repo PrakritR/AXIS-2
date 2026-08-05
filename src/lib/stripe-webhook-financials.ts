@@ -50,6 +50,34 @@ export async function handleStripeTransferCreated(db: SupabaseClient, transfer: 
   await db.from("ledger_entries").update(patch).eq("stripe_charge_id", chargeId).eq("entry_type", "payment");
 }
 
+/** Clears Connect transfer linkage when Stripe reverses a transfer (e.g. failed payout). */
+export async function handleStripeTransferReversed(db: SupabaseClient, transfer: Stripe.Transfer): Promise<void> {
+  const patch: Record<string, unknown> = {
+    stripe_transfer_id: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const byTransferId = await db
+    .from("ledger_entries")
+    .update(patch)
+    .eq("stripe_transfer_id", transfer.id)
+    .eq("entry_type", "payment");
+
+  if (byTransferId.error) throw new Error(byTransferId.error.message);
+
+  const chargeId =
+    typeof transfer.source_transaction === "string"
+      ? transfer.source_transaction
+      : transfer.source_transaction?.id ?? null;
+  if (!chargeId) return;
+
+  await db
+    .from("ledger_entries")
+    .update(patch)
+    .eq("stripe_charge_id", chargeId)
+    .eq("entry_type", "payment");
+}
+
 export async function upsertStripePayoutRecord(
   db: SupabaseClient,
   managerUserId: string,

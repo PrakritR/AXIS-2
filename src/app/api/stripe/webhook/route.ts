@@ -38,6 +38,7 @@ import {
   handleStripeDisputeEvent,
   handleStripeRefund,
   handleStripeTransferCreated,
+  handleStripeTransferReversed,
 } from "@/lib/stripe-webhook-financials";
 
 export const runtime = "nodejs";
@@ -265,6 +266,12 @@ export async function POST(req: Request) {
     if (event.type === "transfer.created") {
       await handleStripeTransferCreated(db, event.data.object as Stripe.Transfer).catch((e) => {
         console.error("[stripe webhook] transfer.created", e);
+      });
+    }
+
+    if (event.type === "transfer.reversed") {
+      await handleStripeTransferReversed(db, event.data.object as Stripe.Transfer).catch((e) => {
+        console.error("[stripe webhook] transfer.reversed", e);
       });
     }
 
