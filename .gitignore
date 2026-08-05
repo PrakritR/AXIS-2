@@ -56,6 +56,7 @@ coverage/
 
 # Cursor IDE (local editor settings)
 .cursor/settings.json
+.cursor/rules/local-agent-branch.mdc
 playwright.config.ts
 
 # Capacitor native projects (commit ios/ and android/, ignore build output)
