@@ -160,8 +160,20 @@ export function AssistantDockPanel({
             className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)]"
             aria-hidden
           />
-          <div className="relative flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="relative flex items-center gap-3">
+            {onCollapse ? (
+              <button
+                type="button"
+                onClick={onCollapse}
+                aria-label="Collapse PropLane Assistant"
+                aria-expanded
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] text-muted transition-colors duration-150 hover:bg-[var(--secondary)]/60 hover:text-foreground"
+                data-attr="portal-assistant-dock-collapse"
+              >
+                <ChevronsRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
                 <AxisAssistantSparkleIcon className="h-4 w-4" />
               </span>
@@ -199,17 +211,6 @@ export function AssistantDockPanel({
                     strokeLinejoin="round"
                   />
                 </svg>
-              </button>
-            ) : null}
-            {onCollapse ? (
-              <button
-                type="button"
-                onClick={onCollapse}
-                aria-label="Collapse PropLane Assistant"
-                aria-expanded
-                className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] text-muted transition-colors duration-150 hover:bg-[var(--secondary)]/60 hover:text-foreground"
-              >
-                <ChevronsRight className="h-4 w-4" aria-hidden />
               </button>
             ) : null}
             </div>

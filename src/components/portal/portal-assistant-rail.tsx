@@ -70,7 +70,7 @@ export function PortalAssistantRail({
       aria-label="PropLane Assistant"
     >
       {collapsed ? (
-        <div className="flex h-full flex-col items-center py-2">
+        <div className="flex h-14 shrink-0 items-center justify-center border-b border-border">
           <button
             type="button"
             onClick={toggleAssistantDock}
