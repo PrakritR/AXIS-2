@@ -1,0 +1,60 @@
+# Deploy to Vercel on every push to main (Preview) or production (live).
+# Belt-and-suspenders when the Vercel Git webhook misses a push (repo rename, etc.).
+#
+# Required GitHub secrets (repo Settings → Secrets → Actions):
+#   VERCEL_TOKEN          — https://vercel.com/account/tokens
+#   VERCEL_ORG_ID         — team_… from .vercel/project.json (vercel link)
+#   VERCEL_PROJECT_ID     — prj_… from .vercel/project.json
+name: Vercel Deploy
+
+on:
+  push:
+    branches: [main, production]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm run lockfile:verify
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: |
+          if [ "${{ github.ref_name }}" = "production" ]; then
+            vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+          else
+            vercel pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.ref_name }}" = "production" ]; then
+            vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          else
+            vercel build --token="${{ secrets.VERCEL_TOKEN }}"
+          fi
+
+      - name: Deploy
+        run: |
+          if [ "${{ github.ref_name }}" = "production" ]; then
+            vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
+          else
+            vercel deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}"
+          fi

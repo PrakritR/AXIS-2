@@ -62,7 +62,7 @@ export async function PATCH(req: Request) {
     const requestedPropertyIds = Array.isArray(propertyIds)
       ? propertyIds.filter((id): id is string => typeof id === "string")
       : undefined;
-    if (Array.isArray(propertyIds) && requestedPropertyIds.length === 0) {
+    if (requestedPropertyIds?.length === 0) {
       return NextResponse.json({ error: "Select at least one property." }, { status: 400 });
     }
     const propagation = requestedPropertyIds

@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/sync-manual-payments",
-      "schedule": "0 * * * *"
+      "schedule": "0 12 * * *"
     },
     {
       "path": "/api/cron/send-move-in-reminders",

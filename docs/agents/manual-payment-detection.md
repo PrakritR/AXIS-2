@@ -12,7 +12,7 @@ architecture reference behind it; keep the two in sync.
 
 | Path | Trigger | Latency |
 | --- | --- | --- |
-| **Linked Gmail** | Manager taps **Check payments** / **Sync now** (`POST /api/portal/gmail-payments/sync`); a resident's **Check payment** also runs a sync (`resident-check-manual-payment.server.ts`) | `GET /api/cron/sync-manual-payments` runs hourly; it checks managers with rent due in 48h each run, within 7d every 6h, and others daily |
+| **Linked Gmail** | Manager taps **Check payments** / **Sync now** (`POST /api/portal/gmail-payments/sync`); a resident's **Check payment** also runs a sync (`resident-check-manual-payment.server.ts`) | `GET /api/cron/sync-manual-payments` runs once daily on Vercel Hobby (managers with rent due in 48h are prioritized inside each run; urgent paths still use **Check payments** / resident sync) |
 | **Forwarded email** (`payments+<token>@…`) | A Gmail filter forwards receipts; the inbound webhook processes each on arrival | Instant |
 
 Both paths run the SAME parse → match → mark-paid pipeline
