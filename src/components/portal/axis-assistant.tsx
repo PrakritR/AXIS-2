@@ -17,6 +17,10 @@ import {
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { ModalShell } from "@/components/ui/modal";
 import { AssistantChatComposer } from "@/components/portal/assistant-chat-composer";
+import {
+  AssistantChatHistoryControls,
+  AssistantChatHistoryPanel,
+} from "@/components/portal/assistant-chat-history-panel";
 import { AssistantMarkdown } from "@/components/portal/assistant-markdown";
 import {
   AssistantMessageRating,
@@ -25,7 +29,10 @@ import {
   AssistantSuggestionChips,
   AxisAssistantSparkleIcon,
 } from "@/components/portal/assistant-shared";
-import { useAssistantConversation } from "@/lib/axis-assistant/use-assistant-conversation";
+import {
+  AssistantConversationProvider,
+  useOptionalAssistantConversation,
+} from "@/lib/axis-assistant/assistant-conversation-context";
 import { useAssistantDisplayMode } from "@/hooks/use-assistant-display-mode";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -97,8 +104,8 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
   const [panelReady, setPanelReady] = useState(false);
-  // Single shared conversation loop (same send/confirm/deny transport the
-  // dashboard dock uses), so the gated preview→confirm flow lives in one place.
+  // This is the same provider consumed by the dock rail, so switching layouts
+  // cannot fork the conversation or strand a pending confirmation.
   const {
     input,
     setInput,
@@ -115,10 +122,26 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     send,
     resolvePendingAction,
     reset,
-  } = useAssistantConversation(endpoint);
+    threads,
+    activeThreadId,
+    historyOpen,
+    historyLoading,
+    historyError,
+    historySearch,
+    hasMoreHistory,
+    multiThread,
+    openHistory,
+    closeHistory,
+    searchHistory,
+    selectThread,
+    deleteThread,
+    loadMoreHistory,
+    hydrateArchive,
+    startNewChat,
+  } = useOptionalAssistantConversation(endpoint);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [historyPortal, setHistoryPortal] = useState<HTMLElement | null>(null);
   const keyboardInset = useVisualViewportBottomInset(open && panelReady);
 
   const firstName = managerName?.trim().split(/\s+/)[0] || null;
@@ -145,6 +168,10 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     if (!open || !panelReady || showNativeChrome) return;
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [open, panelReady, showNativeChrome]);
+
+  useEffect(() => {
+    if (open) void hydrateArchive();
+  }, [hydrateArchive, open]);
 
   useEffect(() => {
     if (!open) {
@@ -217,7 +244,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           stackClassName="axis-assistant-root fixed inset-0 z-[65]"
           overlayClassName="axis-assistant-backdrop fixed inset-0"
           centerClassName="contents"
-          contentRef={panelRef}
+          contentRef={setHistoryPortal}
           panelStyle={panelReady ? panelStyle : undefined}
           panelClassName={assistantPanelClassName}
           ariaLabelledBy={panelReady ? "axis-assistant-title" : undefined}
@@ -260,7 +287,15 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                     <AssistantPinIcon className="h-4 w-4" />
                   </button>
                 )}
-                {hasConversation && (
+                {multiThread ? (
+                  <AssistantChatHistoryControls
+                    onOpenHistory={openHistory}
+                    onNewChat={() => {
+                      void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
+                    }}
+                    showNewChat
+                  />
+                ) : hasConversation ? (
                   <button
                     type="button"
                     onClick={resetConversation}
@@ -277,7 +312,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                       />
                     </svg>
                   </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={closePanel}
@@ -291,6 +326,28 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
               </div>
             </div>
           </div>
+
+          {multiThread ? (
+            <AssistantChatHistoryPanel
+              open={historyOpen}
+              threads={threads}
+              activeThreadId={activeThreadId}
+              onSelect={selectThread}
+              onDelete={deleteThread}
+              onNewChat={() => {
+                void startNewChat().then(() => requestAnimationFrame(() => inputRef.current?.focus()));
+              }}
+              onClose={closeHistory}
+              loading={historyLoading}
+              error={historyError}
+              searchQuery={historySearch}
+              hasMore={hasMoreHistory}
+              onRetry={openHistory}
+              onLoadMore={loadMoreHistory}
+              onSearchQueryChange={searchHistory}
+              portalContainer={historyPortal}
+            />
+          ) : null}
 
           {hideEmptyChrome ? null : (
             <div
@@ -458,8 +515,10 @@ export function AxisAssistant({
     <PortalAssistantConfigProvider endpoint={chatEndpoint} managerName={managerName ?? null}>
       <AxisAssistantPresenceContext.Provider value={true}>
         <AxisAssistantDockContext.Provider value={dockState}>
-          <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-          <AxisAssistantChrome managerName={managerName} endpoint={chatEndpoint} />
+          <AssistantConversationProvider endpoint={chatEndpoint}>
+            <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
+            <AxisAssistantChrome managerName={managerName} endpoint={chatEndpoint} />
+          </AssistantConversationProvider>
         </AxisAssistantDockContext.Provider>
       </AxisAssistantPresenceContext.Provider>
     </PortalAssistantConfigProvider>

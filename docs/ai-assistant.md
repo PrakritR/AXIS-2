@@ -1,7 +1,7 @@
-# Axis Assistant — architecture, tool catalog, and how to extend it
+# PropLane Assistant — architecture, tool catalog, and how to extend it
 
-The in-app AI assistant ("Axis Assistant") runs on **all three portals** —
-manager, resident, and vendor — with one shared agent core and a
+The in-app AI assistant ("PropLane Assistant") runs on **all three portals** —
+manager/admin, resident, and vendor — with one shared agent core and a
 portal-scoped tool registry per surface. Users ask in natural language; the
 assistant answers from live data and **proposes** actions that only execute
 after the user explicitly confirms.
@@ -12,9 +12,9 @@ after the user explicitly confirms.
 axis-assistant.tsx (one panel, portal-aware copy/suggestions/endpoints)
         │
         ▼
-POST /api/agent/chat            (manager)   ┐
-POST /api/agent/resident-chat   (resident)  ├─ resolve portal context → registry
-POST /api/agent/vendor-chat     (vendor)    ┘
+GET/POST /api/agent/chat            (manager/admin) ┐
+GET/POST /api/agent/resident-chat   (resident)      ├─ resolve portal context → registry
+GET/POST /api/agent/vendor-chat     (vendor)        ┘
 POST /api/agent/demo-chat       (public /demo sandbox, simulated actions)
         │
         ▼
@@ -98,10 +98,68 @@ Dedupe-key conventions:
 
 ### Sessions & memory
 
-Conversations persist best-effort into `agent_sessions` / `agent_messages`
-(`src/lib/agent/sessions.ts`, written via `after()` — zero turn latency, can
-never fail a turn). Cancelled/expired proposals stay in
+Conversations persist into `agent_sessions` / `agent_messages`
+(`src/lib/agent/sessions.ts`) before a successful chat response is returned,
+so a refresh, layout switch, or second device can immediately reopen the turn.
+Persistence failures remain fail-soft and never replace a valid assistant reply.
+Cancelled/expired proposals stay in
 `agent_pending_actions` and feed the eval set.
+
+#### Portal chat archive
+
+The portal-wide popup and dock share one `AssistantConversationProvider`, so
+opening, pinning, or unpinning the assistant never starts a second transport or
+strands a pending confirmation. Their archive is server-backed and follows the
+signed-in person across devices:
+
+- Pressing **New chat** immediately creates a main portal
+  `agent_sessions.kind = 'portal_chat'` record with a server-owned title, then
+  reuses that stable `sessionId` for later turns. Failed database writes are
+  logged and reported to the UI rather than being mistaken for an empty archive.
+  `agent_sessions_portal_chat_archive_idx` supports newest-first paging by
+  `(user_id, portal, updated_at)`.
+- Each role-scoped chat route exposes `GET`: without `sessionId` it returns a
+  paginated list (and accepts an optional private `search` query over that
+  person's prompts); with one it returns a transcript and, only when it is still
+  proposed and unexpired, its safe confirmation preview. Stored pending-action
+  input is never returned to the browser.
+- Every session read/reuse is constrained by authenticated `user_id`, portal,
+  and kind. A malformed id is rejected; a foreign/other-portal id returns the
+  same not-found response as an unknown id. The client never supplies a role
+  or ownership id.
+- Modal assistants remain task-scoped: they send `archive: false`, use
+  `kind = 'modal_chat'`, and keep their text-only local storage isolated from
+  the archive. Existing old browser history is intentionally not imported,
+  because it was not user-scoped and could reveal a prior shared-device user's
+  chat. Thread labels use the lowest-cost configured Claude model (Haiku) to
+  produce a 2–4 word description of the first useful user prompt; a greeting or
+  generic help request defers title generation to the next useful prompt. A
+  deterministic prompt label is used only if title generation is unavailable.
+  Each role route also exposes scoped `DELETE` for one archive item; it removes
+  that transcript and marks an attached, unconfirmed draft as denied. V1
+  provides new chat, browse, prompt search, resume, pagination, delete, and
+  pending-preview restoration; it intentionally has no rename.
+
+#### Personal custom instructions
+
+`agent_user_preferences` stores one private `custom_instructions` record per
+authenticated user. `GET/PATCH /api/agent/preferences` authenticates the user
+server-side, accepts at most 2,000 characters, and clears the row for an empty
+value. The shared Settings section is available in manager/admin, resident,
+and vendor profiles.
+
+The route loads this value into the relevant signed-in portal prompt, including
+task-bound modal assistants. It is deliberately a lower-priority prompt block:
+it may guide tone, format, and relevant drafted content for the intended
+recipient (for example, how to close a resident message), but it can never
+override platform instructions, tool scope, grounded facts, privacy,
+untrusted-content handling, or confirmation-gated writes.
+
+For automated prospect SMS, `runLeasingSmsAgentTurn` loads the preference of
+the manager who owns the sending work number (`session.landlord_id`), not a
+prospect-supplied identity. Those preferences may shape a relevant prospect
+reply, while the leasing agent's SMS brevity, listing-data access, escalation,
+and safety rules still win. Manager Settings explicitly call out this behavior.
 
 ### Images
 
@@ -120,7 +178,9 @@ created.
   with full args/results, `pending:<tool>` spans for proposals) and one
   `axis-agent-action` trace per confirm/cancel. Traces carry the
   `TraceActor` metadata: role + landlordId (manager) or managerIds
-  (resident/vendor). No-ops when `LANGFUSE_*` env is unset.
+  (resident/vendor). The trace session identity and fully composed system prompt
+  (including any saved custom-instruction block) are retained for replay.
+  No-ops when `LANGFUSE_*` env is unset.
 - **PostHog** (ids/enums only, never PII): `assistant_opened` (the `/demo`
   surface adds `{surface}`), `assistant_message_sent {portal, tools, model,
   tier}`, `assistant_action_proposed {portal, tool, batch}`,
@@ -288,3 +348,7 @@ claimed on `user_id` + status `proposed`, 15-minute default expiry) and
 `session_id` columns; it must never rename the claim key). Apply with
 `npm run db:push` (dev/test project only — see
 `docs/database-environments.md`).
+
+The archive/preferences extension is
+`20260804120000_agent_chat_archive_preferences.sql` (`agent_sessions.title`,
+the partial `portal_chat` archive index, and `agent_user_preferences`).

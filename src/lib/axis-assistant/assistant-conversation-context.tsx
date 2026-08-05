@@ -7,8 +7,8 @@ import {
   type ChatMessage,
   type PendingAction,
   type ToolTraceEntry,
+  type AssistantChatThreadSummary,
 } from "@/lib/axis-assistant/use-assistant-conversation";
-import type { AssistantChatThreadSummary } from "@/lib/axis-assistant/assistant-chat-threads";
 
 export type AssistantConversationValue = {
   input: string;
@@ -21,6 +21,10 @@ export type AssistantConversationValue = {
   threads: AssistantChatThreadSummary[];
   activeThreadId: string;
   historyOpen: boolean;
+  historyLoading: boolean;
+  historyError: string | null;
+  historySearch: string;
+  hasMoreHistory: boolean;
   multiThread: boolean;
   lastTools: ToolTraceEntry[];
   /** traceId -> this user's thumbs rating, so a rated reply keeps showing it. */
@@ -35,11 +39,32 @@ export type AssistantConversationValue = {
   reset: () => void;
   openHistory: () => void;
   closeHistory: () => void;
-  selectThread: (threadId: string) => void;
-  startNewChat: () => void;
+  searchHistory: (value: string) => void;
+  selectThread: (threadId: string) => Promise<void>;
+  deleteThread: (threadId: string) => Promise<boolean>;
+  loadMoreHistory: () => void;
+  hydrateArchive: () => Promise<void>;
+  startNewChat: () => Promise<void>;
 };
 
 const AssistantConversationContext = createContext<AssistantConversationValue | null>(null);
+
+function AssistantConversationState({
+  endpoint,
+  storageScope,
+  children,
+}: {
+  endpoint: string;
+  storageScope?: string;
+  children: ReactNode;
+}) {
+  const conversation = useAssistantConversation(endpoint, { storageScope });
+  return (
+    <AssistantConversationContext.Provider value={conversation}>
+      {children}
+    </AssistantConversationContext.Provider>
+  );
+}
 
 /** One conversation shared by the popup and the docked right rail (unless storageScope is set). */
 export function AssistantConversationProvider({
@@ -52,11 +77,10 @@ export function AssistantConversationProvider({
   storageScope?: string;
   children: ReactNode;
 }) {
-  const conversation = useAssistantConversation(endpoint, { storageScope });
   return (
-    <AssistantConversationContext.Provider value={conversation}>
+    <AssistantConversationState key={`${endpoint}:${storageScope ?? "portal-chat"}`} endpoint={endpoint} storageScope={storageScope}>
       {children}
-    </AssistantConversationContext.Provider>
+    </AssistantConversationState>
   );
 }
 

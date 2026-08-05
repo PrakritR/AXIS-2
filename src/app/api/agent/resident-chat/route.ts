@@ -7,7 +7,10 @@ import { RESIDENT_SYSTEM_PROMPT } from "@/lib/agent/resident-system-prompt";
 import { sanitizeChatMessages, lastUserText, applyChatAttachments } from "@/lib/agent/chat-handler";
 import { createPendingAction } from "@/lib/tools/pending-actions";
 import { handlePendingActionDecision } from "@/lib/agent/pending-action-decision";
-import { ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { createPortalChatSession, ensureAgentSession, appendAgentMessages } from "@/lib/agent/sessions";
+import { handleAgentChatHistoryDeleteRequest, handleAgentChatHistoryRequest } from "@/lib/agent/chat-history-route";
+import { MODAL_CHAT_SESSION_KIND, PORTAL_CHAT_SESSION_KIND } from "@/lib/agent/chat-history";
+import { loadAgentCustomInstructions, withAgentCustomInstructions } from "@/lib/agent/user-preferences";
 import { rateLimit } from "@/lib/rate-limit";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
@@ -21,6 +24,19 @@ import { selectAgentRoute, fastLaneRunOptions, type AgentRouteSelection } from "
 import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
+
+/** Resident archive, never shared with another resident under the same manager. */
+export async function GET(req: Request) {
+  const ctx = await resolveResidentAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryRequest(req, ctx, "resident");
+}
+
+export async function DELETE(req: Request) {
+  const ctx = await resolveResidentAgentContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  return handleAgentChatHistoryDeleteRequest(req, ctx, "resident");
+}
 
 /**
  * Resident-portal assistant turn. Same loop and gating as the manager chat,
@@ -58,6 +74,17 @@ export async function POST(req: Request) {
   });
   if (decision) return decision;
 
+  if (body.newSession === true) {
+    const sessionId = await createPortalChatSession(ctx, "resident");
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: "We couldn't start a saved conversation. Please try again." },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ sessionId });
+  }
+
   let messages = sanitizeChatMessages(body.messages);
   if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
     return NextResponse.json({ error: "A user message is required." }, { status: 400 });
@@ -67,7 +94,19 @@ export async function POST(req: Request) {
   if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 });
   messages = attached.messages;
 
-  const sessionId = await ensureAgentSession(ctx, "resident", body.sessionId as string | undefined);
+  const sessionKind = body.archive === false ? MODAL_CHAT_SESSION_KIND : PORTAL_CHAT_SESSION_KIND;
+  const sessionId = await ensureAgentSession(ctx, "resident", {
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
+    title: lastUserText(messages),
+    kind: sessionKind,
+  });
+  if (sessionKind === PORTAL_CHAT_SESSION_KIND && !sessionId) {
+    return NextResponse.json(
+      { error: "We couldn't start a saved conversation. Please try again." },
+      { status: 503 },
+    );
+  }
+  const customInstructions = await loadAgentCustomInstructions(ctx.db, ctx.userId);
 
   try {
     const registry = buildResidentRegistry(ctx);
@@ -93,7 +132,7 @@ export async function POST(req: Request) {
         runAgentTurn({
           ctx,
           registry,
-          system: RESIDENT_SYSTEM_PROMPT,
+          system: withAgentCustomInstructions(RESIDENT_SYSTEM_PROMPT, customInstructions),
           messages,
           observer,
           model: routing,
@@ -140,7 +179,7 @@ export async function POST(req: Request) {
       }
     }
 
-    appendAgentMessages(ctx, "resident", sessionId, [
+    const archiveSaved = await appendAgentMessages(ctx, "resident", sessionId, [
       { role: "user", content: lastUserText(messages) },
       {
         role: "assistant",
@@ -164,13 +203,14 @@ export async function POST(req: Request) {
               : {}),
         },
       },
-    ]);
+    ], { kind: sessionKind });
 
     return assistantResponse(req, {
       reply,
       toolTrace: result.toolTrace,
       sessionId,
       ...(traceId ? { traceId } : {}),
+      ...(sessionKind === PORTAL_CHAT_SESSION_KIND ? { archiveSaved } : {}),
       ...(pendingAction ? { pendingAction } : {}),
     });
   } catch (e) {

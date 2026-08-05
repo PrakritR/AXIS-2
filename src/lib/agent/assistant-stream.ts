@@ -4,6 +4,8 @@ export type AssistantWirePayload = {
   reply: string;
   toolTrace: { tool: string; ok: boolean }[];
   sessionId?: string | null;
+  /** Portal archive persistence is confirmed before a streamed turn completes. */
+  archiveSaved?: boolean;
   pendingAction?: unknown;
   /** Langfuse proposal-turn id, when tracing is configured. */
   traceId?: string | null;
@@ -32,6 +34,7 @@ export function assistantResponse(req: Request, payload: AssistantWirePayload): 
             toolTrace: payload.toolTrace,
             sessionId: payload.sessionId ?? null,
             ...(payload.traceId ? { traceId: payload.traceId } : {}),
+            ...(typeof payload.archiveSaved === "boolean" ? { archiveSaved: payload.archiveSaved } : {}),
           }),
         ),
       );

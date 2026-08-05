@@ -121,7 +121,7 @@ export function buildTraceObserver(
             ...actorMeta,
             ...promptFields,
             toolsAvailable: info.toolsAvailable,
-            systemPromptChars: info.system.length,
+            systemPrompt: info.system,
           },
         }),
       ),
