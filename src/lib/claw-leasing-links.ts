@@ -122,11 +122,22 @@ export function clawLeasingAgentPhoneE164(): string {
  * line or another manager. So this only normalizes and rejects: it returns a
  * well-formed E.164 number or `null`, never a malformed `sms:` target.
  */
-export function listingCtaSmsPhone(contactSmsPhone: string | null | undefined): string | null {
+/**
+ * Client-safe guard for any resolved listing CTA number before rendering `sms:`.
+ * Rejects malformed values, fictional 555 placeholders, and the shared Claw
+ * agent line — the latter is stamped on every manager's `sms_from_number` and is
+ * not anyone's personal cell, so it must never become a public listing CTA.
+ */
+export function usableCtaSmsPhone(contactSmsPhone: string | null | undefined): string | null {
   const e164 = normalizePhoneE164(String(contactSmsPhone ?? ""));
   if (!e164) return null;
   if (isFictionalUs555Number(e164)) return null;
+  if (isLegacyClawSharedSmsNumber(e164)) return null;
   return e164;
+}
+
+export function listingCtaSmsPhone(contactSmsPhone: string | null | undefined): string | null {
+  return usableCtaSmsPhone(contactSmsPhone);
 }
 
 /** Whether a listing may show "Text to …" CTAs — i.e. it has a real number. */

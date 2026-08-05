@@ -275,7 +275,13 @@ export async function POST(req: Request) {
       });
     }
 
-    if (event.type === "payout.paid" || event.type === "payout.failed" || event.type === "payout.canceled") {
+    if (
+      event.type === "payout.created" ||
+      event.type === "payout.updated" ||
+      event.type === "payout.paid" ||
+      event.type === "payout.failed" ||
+      event.type === "payout.canceled"
+    ) {
       await handleConnectPayoutEvent(db, event.data.object as Stripe.Payout, event.account).catch((e) => {
         console.error("[stripe webhook] payout event", e);
       });

@@ -1,0 +1,81 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { HouseholdCharge } from "@/lib/household-charges";
+import { householdChargeDueDate } from "@/lib/household-charges";
+import { centsToUsd } from "@/lib/reports/money";
+import type { ReportResult } from "@/lib/reports/types";
+import { householdChargeAmountCents } from "@/lib/stripe-household-charge";
+
+/**
+ * Resident balance summary for the resident agent tool — not a manager report.
+ * The orphaned `resident-balance` report id was removed from the reports API;
+ * this keeps the assistant balance read aligned with pending household charges.
+ */
+export async function queryResidentBalance(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<ReportResult> {
+  const [{ data: chargeRows }, { data: ledgerRows }] = await Promise.all([
+    db
+      .from("portal_household_charge_records")
+      .select("row_data")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`),
+    db
+      .from("ledger_entries")
+      .select("entry_type, amount_cents, posted_date")
+      .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${residentEmail}`)
+      .order("posted_date", { ascending: true }),
+  ]);
+
+  const charges = ((chargeRows ?? []) as { row_data: unknown }[]).map((r) => r.row_data as HouseholdCharge);
+  const outstanding = charges.filter((c) => String(c.status ?? "") === "pending");
+  const balanceCents = outstanding.reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+  const paidCents = charges
+    .filter((c) => String(c.status ?? "") === "paid")
+    .reduce((sum, c) => sum + householdChargeAmountCents(c), 0);
+
+  const next = outstanding
+    .map((c) => ({ charge: c, due: householdChargeDueDate(c) }))
+    .filter((c): c is { charge: HouseholdCharge; due: Date } => c.due !== null)
+    .sort((a, b) => a.due.getTime() - b.due.getTime())[0];
+  const nextDueLabel = next ? next.charge.dueDateLabel || next.due.toISOString().slice(0, 10) : "";
+
+  const lastPayment = (
+    (ledgerRows ?? []) as {
+      entry_type: string;
+      amount_cents: number | string | null;
+      posted_date: string | null;
+    }[]
+  )
+    .filter((e) => e.entry_type === "payment")
+    .at(-1);
+
+  const rows = [
+    { label: "Balance due", value: centsToUsd(balanceCents) },
+    { label: "Open charges", value: String(outstanding.length) },
+    { label: "Paid to date", value: centsToUsd(paidCents) },
+    {
+      label: "Next charge",
+      value: next
+        ? `${next.charge.title || next.charge.kind || "Charge"} — ${next.charge.balanceLabel || next.charge.amountLabel || "—"} due ${nextDueLabel}`
+        : "None scheduled",
+    },
+    {
+      label: "Last payment",
+      value: lastPayment
+        ? `${centsToUsd(Number(lastPayment.amount_cents ?? 0))} on ${lastPayment.posted_date ?? "—"}`
+        : "No payments recorded",
+    },
+  ];
+
+  return {
+    id: "resident-balance-summary",
+    title: "Balance summary",
+    columns: [
+      { key: "label", label: "Item" },
+      { key: "value", label: "Amount", align: "right" },
+    ],
+    rows,
+    meta: { balanceCents, openCharges: outstanding.length, paidCents },
+  };
+}

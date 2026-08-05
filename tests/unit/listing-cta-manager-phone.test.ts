@@ -8,7 +8,7 @@
  * `src/lib/listing-cta-phone.server.ts` and `docs/agents/sms-system.md`.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
+import { buildSmsDeepLink, isClawMessagingPubliclyEnabled, usableCtaSmsPhone } from "@/lib/claw-leasing-links";
 import { withListingContactSmsPhone } from "@/lib/listing-contact-sms";
 import {
   listingCtaSendsToManagerOwnPhone,
@@ -125,5 +125,11 @@ describe("listing CTA rendering", () => {
       "+14258909021",
     );
     expect(withListingContactSmsPhone(stored, null).contactSmsPhone).toBeUndefined();
+  });
+
+  it("rejects the shared Claw line and fictional 555 numbers from client CTA guard", () => {
+    expect(usableCtaSmsPhone(CLAW_LINE)).toBeNull();
+    expect(usableCtaSmsPhone("+12065550199")).toBeNull();
+    expect(usableCtaSmsPhone("+14258909021")).toBe("+14258909021");
   });
 });
