@@ -16,7 +16,7 @@ import {
   PENDING_ACTION_SAVE_FAILED_NOTE,
 } from "@/lib/agent/assistant-turn-error";
 import { messagesNeedVisionModel, visionPinnedModel } from "@/lib/agent/assistant-vision-turn";
-import { selectAgentRoute } from "@/lib/agent/model";
+import { selectAgentRoute, fastLaneRunOptions, type AgentRouteSelection } from "@/lib/agent/model";
 import { assistantResponse } from "@/lib/agent/assistant-stream";
 
 export const runtime = "nodejs";
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       metadata: { role: "resident", managerIds: ctx.managerIds, phase: ctx.phase },
     };
     const hasVision = messagesNeedVisionModel(messages);
-    const routing = hasVision
+    const routing: AgentRouteSelection = hasVision
       ? visionPinnedModel()
       : selectAgentRoute({
           messages,
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
           messages,
           observer,
           model: routing,
-          ...("toolNames" in routing ? { toolNames: routing.toolNames, readOnly: routing.readOnly } : {}),
+          ...fastLaneRunOptions(routing),
         }),
     );
     track("assistant_message_sent", ctx.userId, {

@@ -29,6 +29,21 @@ export type AgentModelSelection = {
   fallbackModel?: string;
 };
 
+/** Route selection plus optional read-only fast-lane tool shortlist. */
+export type AgentRouteSelection = AgentModelSelection & {
+  toolNames?: readonly string[];
+  readOnly?: boolean;
+};
+
+/** Pass-through for {@link runAgentTurn} when the route pins a tool shortlist. */
+export function fastLaneRunOptions(routing: AgentRouteSelection): {
+  toolNames?: readonly string[];
+  readOnly?: boolean;
+} {
+  if (routing.toolNames === undefined) return {};
+  return { toolNames: routing.toolNames, readOnly: routing.readOnly };
+}
+
 /**
  * Tier -> model id. Each tier is overridable via env for cost tuning without a
  * code change. `AXIS_AGENT_MODEL` (the original single-model env var) is kept as
@@ -212,7 +227,7 @@ export function selectAgentRoute(args: {
   actorKey: string;
   availableTools: readonly string[];
   hasAttachments?: boolean;
-}): AgentModelSelection & { toolNames?: string[]; readOnly?: boolean } {
+}): AgentRouteSelection {
   const normal = selectModel(args.messages);
   const fallback = process.env.AXIS_AGENT_MODEL_STANDARD?.trim() || "claude-sonnet-4-6";
   if (args.hasAttachments || !fastLaneEnabled(args.actorKey)) {

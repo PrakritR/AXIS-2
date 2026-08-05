@@ -73,7 +73,7 @@ async function readAssistantTransport(
     } catch {
       return;
     }
-    if (event === "delta" && typeof parsed.text === "string") {
+    if (event === "delta" && "text" in parsed && typeof parsed.text === "string") {
       reply += parsed.text;
       onDelta(parsed.text);
     } else if (event === "pending_action") {
