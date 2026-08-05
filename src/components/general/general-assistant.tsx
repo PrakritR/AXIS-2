@@ -22,9 +22,12 @@ import { useIsClient } from "@/hooks/use-is-client";
 import {
   closeGeneralAssistant,
   getGeneralAssistantOpen,
+  getPortalAssistantPresent,
   openGeneralAssistant,
   subscribeGeneralAssistantOpen,
+  subscribePortalAssistantPresence,
 } from "@/lib/general-assistant/open-store";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type Suggestion = { label: string; prompt: string };
@@ -60,8 +63,8 @@ function openAssistant() {
 }
 
 /**
- * Named entry point for the site-wide assistant. It belongs in a page header,
- * never as a floating control that competes with the portal assistant.
+ * Named header entry (auth chrome, legacy). Public marketing pages use
+ * {@link GeneralAssistantFab} in the bottom-right instead.
  */
 export function GeneralAssistantTrigger() {
   const open = useGeneralOpen();
@@ -85,6 +88,40 @@ export function GeneralAssistantTrigger() {
     >
       <ChatBubbleIcon className="h-4 w-4 shrink-0 text-primary" />
       <span className="tracking-[-0.01em]">Ask PropLane</span>
+    </button>
+  );
+}
+
+/** Floating chat control for public pages — bottom-right, hidden when the portal assistant is active. */
+export function GeneralAssistantFab() {
+  const open = useGeneralOpen();
+  const portalPresent = useSyncExternalStore(
+    subscribePortalAssistantPresence,
+    getPortalAssistantPresent,
+    () => false,
+  );
+  const { isNative } = useIsNativeApp();
+
+  if (open || portalPresent || isNative) return null;
+
+  function toggleAssistant() {
+    if (open) {
+      closeGeneralAssistant();
+      return;
+    }
+    openAssistant();
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggleAssistant}
+      data-attr="general-assistant-fab"
+      aria-label="Ask PropLane"
+      aria-expanded={open}
+      className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[60] flex h-14 w-14 items-center justify-center rounded-full border border-primary/20 bg-[var(--btn-primary)] text-white shadow-[0_12px_40px_-12px_rgba(47,107,255,0.75)] outline-none transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] lg:bottom-6 lg:right-6"
+    >
+      <ChatBubbleIcon className="h-6 w-6" />
     </button>
   );
 }
@@ -302,5 +339,11 @@ export function GeneralAssistant() {
     </div>
   ) : null;
 
-  return isClient ? createPortal(panel, document.body) : null;
+  return isClient ? createPortal(
+    <>
+      <GeneralAssistantFab />
+      {panel}
+    </>,
+    document.body,
+  ) : null;
 }

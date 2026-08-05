@@ -45,8 +45,7 @@ export default function RootLayout({
             <AuthOAuthErrorHandler />
             <NativeBridge />
             <NativeAppGate>{children}</NativeAppGate>
-            {/* The public-page assistant panel. Its single named trigger lives
-                in the public navigation; portal pages use their own header trigger. */}
+            {/* Public-page assistant: bottom-right FAB + popup panel (portal uses AxisAssistant). */}
             <GeneralAssistant />
           </AppUiProvider>
         </ThemeProvider>
