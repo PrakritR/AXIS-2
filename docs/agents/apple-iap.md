@@ -81,6 +81,17 @@ A manager could pay Stripe (web) AND Apple (iOS). Rules (report §3.4):
 - **Prevent in-app:** the native plan surface calls `/api/manager/subscription`
   first; if the account already has an active Stripe (or Apple) subscription it
   shows a manage-only notice and **never** offers a second purchase.
+- **A plan it could not READ is treated as paid, not as free.** `planUnknown`
+  (a failed `manager_purchases` read) reports `stripeManaged: false` /
+  `appleManaged: false`, so both manage-only branches would be bypassed and a
+  paying manager offered a duplicate subscription. `ManagerPlanNative` fails
+  closed on it — same rule as `subLoaded`: no Subscribe buttons, no Switch to
+  Free, just a retry. **Restore purchases stays**, because it only re-reads what
+  the App Store already knows. It is checked AFTER the two manage-only branches,
+  because `readFailed` is ORed across the profile / by-user-id / by-email
+  lookups: a PARTIAL failure still returns the row, so a known Apple or Stripe
+  subscription must still get its own notice rather than the generic retry card.
+  Coverage: `tests/unit/manager-plan-native-3-1-2.test.tsx`.
 - **Prevent on web:** `appleManaged` is exposed on `/api/manager/subscription`;
   the web plan UI can hide Stripe checkout when an Apple sub is active.
 - **If both exist anyway:** the account stays **paid** (union). `upsertAppleManager
@@ -106,6 +117,22 @@ no-op off-iOS — same pattern as `push-client.ts`). The native tier paywall
 (`portal-tier-paywall.tsx`) now links locked users to the in-app plan page
 (where the IAP surface lives) instead of showing a dead-end notice — still no
 price/subscribe copy or web purchase link on native.
+
+**Guideline 3.1.2 (the second rejection) is satisfied ON the purchase screen**:
+each paid card carries the subscription title (`PropLane Pro`/`Business`), the
+length ("1-month subscription · renews monthly until canceled"), and the store's
+localized price per period; a footer carries the plain auto-renew statement plus
+**Terms of Use (EULA)** → `https://prop-lane.space/tos` and **Privacy Policy** →
+`https://prop-lane.space/privacy`. Both links are BUTTONS driving `openAppUrl`
+(in-app Capacitor Browser) — never `<a href>` anchors, which
+`tests/unit/manager-plan-native-no-external-purchase.test.tsx` forbids on this
+surface and which would bounce the manager out of the WebView. The screen also
+shows all three tiers with the current one marked; Free offers an honest
+"Switch to Free" for trial/comped accounts only (`canOffer` implies no Stripe
+and no Apple subscription, so it is a server-side plan change, never an
+Apple-subscription cancellation claim). Feature copy comes from
+`MANAGER_PLAN_TIERS` — never hand-written in the component. Coverage:
+`tests/unit/manager-plan-native-3-1-2.test.tsx`.
 
 ## Environment variables (NO secrets committed)
 

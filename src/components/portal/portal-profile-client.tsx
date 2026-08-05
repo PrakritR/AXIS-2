@@ -1,23 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  CreditCard,
+  Lock,
+  MessageSquareText,
+  Settings2,
+  SlidersHorizontal,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
+import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import {
   PortalSettingsField,
   PortalSettingsFormBody,
   PortalSettingsGroup,
+  PortalSettingsLinkRow,
+  PortalSettingsNav,
   PortalSettingsProfileHeader,
+  PortalSettingsRow,
   PortalSettingsSection,
   PortalSettingsSections,
 } from "@/components/portal/portal-settings-ui";
 import { ManagerPlan } from "@/components/portal/manager-plan";
+import { MANAGER_PLAN_PORTAL_HASH } from "@/lib/portals/manager-plan-path";
 import { AssistantDisplaySetting } from "@/components/portal/assistant-display-setting";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { PortalKind } from "@/lib/portal-types";
@@ -30,6 +45,24 @@ function emptyToDash(v: string) {
   const t = v.trim();
   return t.length ? t : "—";
 }
+
+/**
+ * Settings categories for the manager layout. The `?tab=` query value is the
+ * category id, so `/portal/profile?tab=billing` deep-links to a pane. Category
+ * switches use `history.pushState` (which Next syncs into `useSearchParams`)
+ * so the browser/gesture back returns from a category to the settings root on
+ * phones without a server round trip.
+ */
+const SETTINGS_TAB_PARAM = "tab";
+
+type SettingsGroupId = "profile" | "billing" | "preferences" | "security" | "feedback" | "account";
+
+type SettingsGroup = {
+  id: SettingsGroupId;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+};
 
 export function PortalProfileClient({
   variant,
@@ -50,6 +83,8 @@ export function PortalProfileClient({
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
@@ -109,12 +144,6 @@ export function PortalProfileClient({
       setSaving(false);
     }
   }, [demo, fullName, phone, showToast]);
-
-  const cancel = useCallback(() => {
-    setFullName(dashToEmpty(initialFullName));
-    setPhone(dashToEmpty(initialPhone));
-    setEditing(false);
-  }, [initialFullName, initialPhone]);
 
   const editAction = editing ? (
     <div className="flex flex-wrap gap-2">
@@ -182,28 +211,173 @@ export function PortalProfileClient({
     </PortalSettingsSection>
   );
 
-  const settingsBody = (
-    <PortalSettingsSections>
-      <PortalSettingsProfileHeader name={emptyToDash(fullName)} email={initialEmail} />
-      {personalInfoSection}
-      {variant === "manager" && !demo ? (
-        <PortalSettingsSection title="Billing & plan" description="Subscription and payment details.">
-          <PortalSettingsGroup>
-            <div className="p-4">
-              <ManagerPlan embedded showCurrentPlan={false} />
-            </div>
-          </PortalSettingsGroup>
-        </PortalSettingsSection>
-      ) : null}
-      {variant === "manager" ? <AssistantDisplaySetting /> : null}
-      <NotificationsToggle />
-      <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
-      {variant === "manager" ? (
-        <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
-      ) : null}
-      <PortalSettingsExtras currentKind={portalKind} />
-    </PortalSettingsSections>
+  const groups = useMemo<SettingsGroup[]>(() => {
+    const list: SettingsGroup[] = [
+      {
+        id: "profile",
+        label: "Profile",
+        description: `Name, contact details, and ${idLabel}.`,
+        icon: UserRound,
+      },
+    ];
+    if (!demo) {
+      list.push({
+        id: "billing",
+        label: "Billing & plan",
+        description: "Subscription and payment details.",
+        icon: CreditCard,
+      });
+    }
+    list.push(
+      {
+        id: "preferences",
+        label: "Preferences",
+        description: "Appearance, assistant, and device options.",
+        icon: SlidersHorizontal,
+      },
+      {
+        id: "security",
+        label: "Login & security",
+        description: "Password and sign-in options.",
+        icon: Lock,
+      },
+      {
+        id: "feedback",
+        label: "Feedback",
+        description: "Report issues or share product feedback.",
+        icon: MessageSquareText,
+      },
+      {
+        id: "account",
+        label: "Account",
+        description: "Switch portals, sign out, or delete your account.",
+        icon: Settings2,
+      },
+    );
+    return list;
+  }, [demo, idLabel]);
+
+  // Legacy upgrade CTAs across the product still link to
+  // `/portal/profile#portal-plan`, and Stripe returns to
+  // `/portal/profile?checkout=…&session_id=…`. Both need the billing pane
+  // mounted so ManagerPlan's own hash-scroll and checkout-confirm effects run.
+  // ManagerPlan clears those params itself (`replaceState` to the bare
+  // pathname), so this override is sticky until the manager navigates.
+  const [billingOverride, setBillingOverride] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (window.location.hash === MANAGER_PLAN_PORTAL_HASH || q.has("checkout")) {
+      setBillingOverride(true);
+    }
+  }, []);
+
+  const rawTab = searchParams.get(SETTINGS_TAB_PARAM);
+  const billingGroup = groups.find((g) => g.id === "billing") ?? null;
+  const activeGroup =
+    groups.find((g) => g.id === rawTab) ?? (billingOverride ? billingGroup : null) ?? null;
+  // Desktop always shows a pane; with no tab selected it defaults to Profile.
+  const paneGroup = activeGroup ?? groups[0];
+
+  // Depth of history entries this component pushed, so the in-page back
+  // chevron unwinds the stack (matching the iOS back gesture) instead of
+  // appending a "forward"-feeling entry.
+  const pushedDepthRef = useRef(0);
+  const backInFlightRef = useRef(false);
+  useEffect(() => {
+    const onPop = () => {
+      if (backInFlightRef.current) {
+        backInFlightRef.current = false;
+      } else {
+        pushedDepthRef.current = Math.max(0, pushedDepthRef.current - 1);
+      }
+      setBillingOverride(false);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const urlForTab = useCallback(
+    (id: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (id) params.set(SETTINGS_TAB_PARAM, id);
+      else params.delete(SETTINGS_TAB_PARAM);
+      const query = params.toString();
+      return query ? `${pathname}?${query}` : pathname;
+    },
+    [pathname, searchParams],
   );
+
+  const openGroup = useCallback(
+    (id: string) => {
+      setBillingOverride(false);
+      pushedDepthRef.current += 1;
+      window.history.pushState(null, "", urlForTab(id));
+    },
+    [urlForTab],
+  );
+  const backToRoot = useCallback(() => {
+    if (backInFlightRef.current) return;
+    setBillingOverride(false);
+    if (pushedDepthRef.current > 0) {
+      pushedDepthRef.current -= 1;
+      backInFlightRef.current = true;
+      window.history.back();
+      return;
+    }
+    window.history.pushState(null, "", urlForTab(null));
+  }, [urlForTab]);
+
+  // Reset scroll when the pane changes — the shell scrolls in an inner
+  // container, so a router-style scroll-to-top never happens on its own.
+  const layoutTopRef = useRef<HTMLDivElement>(null);
+  const skipInitialScroll = useRef(true);
+  useEffect(() => {
+    if (skipInitialScroll.current) {
+      skipInitialScroll.current = false;
+      return;
+    }
+    layoutTopRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+  }, [activeGroup?.id]);
+
+  const renderPane = (id: SettingsGroupId): ReactNode => {
+    switch (id) {
+      case "profile":
+        return personalInfoSection;
+      case "billing":
+        // Slot for the plan/billing feature — ManagerPlan owns everything
+        // inside this card; Settings only provides the section frame.
+        return (
+          <PortalSettingsSection title="Billing & plan" description="Subscription and payment details.">
+            <PortalSettingsGroup>
+              <div className="p-4">
+                <ManagerPlan embedded showCurrentPlan={false} />
+              </div>
+            </PortalSettingsGroup>
+          </PortalSettingsSection>
+        );
+      case "preferences":
+        return (
+          <>
+            <PortalSettingsSection title="Appearance" description="How PropLane looks on this device.">
+              <PortalSettingsGroup>
+                <PortalSettingsRow label="Theme" description="Choose light or dark mode.">
+                  <ThemeToggle className="shrink-0" />
+                </PortalSettingsRow>
+              </PortalSettingsGroup>
+            </PortalSettingsSection>
+            <AssistantDisplaySetting />
+            <NotificationsToggle />
+          </>
+        );
+      case "security":
+        return <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />;
+      case "feedback":
+        return <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />;
+      case "account":
+        return <PortalSettingsExtras currentKind={portalKind} variant="session" />;
+    }
+  };
 
   if (variant === "manager") {
     return (
@@ -214,18 +388,70 @@ export function PortalProfileClient({
         // other manager section, drop the duplicate in-page title on phones.
         hideTitleOnMobileNav
       >
-        {settingsBody}
+        <div ref={layoutTopRef} className="lg:flex lg:items-start lg:gap-10">
+          <PortalSettingsNav
+            className="sticky top-0 max-lg:hidden"
+            name={emptyToDash(fullName)}
+            email={initialEmail}
+            items={groups.map((g) => ({
+              id: g.id,
+              label: g.label,
+              icon: <g.icon className="h-4 w-4" />,
+            }))}
+            activeId={paneGroup.id}
+            onSelect={openGroup}
+          />
+          <div className="min-w-0 flex-1 lg:max-w-3xl">
+            {activeGroup === null ? (
+              <div className="space-y-5 lg:hidden">
+                <PortalSettingsProfileHeader name={emptyToDash(fullName)} email={initialEmail} />
+                <PortalSettingsGroup>
+                  {groups.map((g) => (
+                    <PortalSettingsLinkRow
+                      key={g.id}
+                      icon={<g.icon className="h-4 w-4" />}
+                      label={g.label}
+                      description={g.description}
+                      onClick={() => openGroup(g.id)}
+                      dataAttr={`settings-open-${g.id}`}
+                    />
+                  ))}
+                </PortalSettingsGroup>
+              </div>
+            ) : (
+              <div className="mb-4 lg:hidden">
+                <PortalDetailHeader
+                  title={activeGroup.label}
+                  onBack={backToRoot}
+                  backLabel="Settings"
+                  bare
+                  dataAttrBack="settings-back-to-root"
+                />
+              </div>
+            )}
+            <PortalSettingsSections className={activeGroup === null ? "max-lg:hidden" : undefined}>
+              {renderPane(paneGroup.id)}
+            </PortalSettingsSections>
+          </div>
+        </div>
       </ManagerPortalPageShell>
     );
   }
 
+  // Admin keeps the legacy single-scroll settings composition unchanged.
   return (
     <div className="relative z-0 w-full min-w-0">
       <div className="mb-8 max-md:hidden">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <p className="mt-1 text-sm text-muted">Manage your account settings and preferences.</p>
       </div>
-      {settingsBody}
+      <PortalSettingsSections>
+        <PortalSettingsProfileHeader name={emptyToDash(fullName)} email={initialEmail} />
+        {personalInfoSection}
+        <NotificationsToggle />
+        <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
+        <PortalSettingsExtras currentKind={portalKind} />
+      </PortalSettingsSections>
     </div>
   );
 }
