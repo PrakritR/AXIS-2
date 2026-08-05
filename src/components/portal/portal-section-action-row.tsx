@@ -34,6 +34,7 @@ export function PortalPageTitleBand({
   actions,
   titleTrailing,
   className,
+  hideTitleOnMobileNav = false,
 }: {
   title: string;
   count?: number;
@@ -41,6 +42,8 @@ export function PortalPageTitleBand({
   actions?: ReactNode;
   titleTrailing?: ReactNode;
   className?: string;
+  /** When the mobile nav bar already shows the section name, drop the duplicate h1 on phones. */
+  hideTitleOnMobileNav?: boolean;
 }) {
   const headerActions = filter || actions ? (
     filter && actions ? (
@@ -61,12 +64,18 @@ export function PortalPageTitleBand({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5 sm:gap-2",
+        "flex w-full min-w-0 items-center gap-1.5 sm:gap-2",
+        hideTitleOnMobileNav ? "max-lg:min-w-0" : "flex-nowrap justify-between",
         className,
       )}
       data-slot="portal-page-title-band"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden sm:gap-2">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 overflow-hidden sm:gap-2",
+          hideTitleOnMobileNav ? "max-lg:hidden shrink-0" : "min-w-0 flex-1",
+        )}
+      >
         <h1 className={cn(PAGE_HEADER_TITLE_CLASS, "shrink-0")}>
           {title}
           {count != null ? (
@@ -79,7 +88,22 @@ export function PortalPageTitleBand({
           <div className="min-w-0 flex-1 overflow-hidden">{titleTrailing}</div>
         ) : null}
       </div>
-      {headerActions}
+      {headerActions ? (
+        <div
+          className={cn(
+            "flex min-w-0 shrink-0 items-center",
+            hideTitleOnMobileNav &&
+              cn(
+                "max-lg:min-w-0 max-lg:flex-1 max-lg:justify-end",
+                PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+                "max-lg:scroll-px-2.5 max-lg:overscroll-x-contain",
+              ),
+          )}
+          {...(hideTitleOnMobileNav ? { [HORIZONTAL_SCROLL_ATTR]: "" } : {})}
+        >
+          {headerActions}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -205,7 +229,8 @@ export function PortalSectionActionRow({
         className={cn(
           "flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3",
           "md:[&_button]:box-border md:[&_button]:h-10 md:[&_button]:min-h-0",
-          "[&_button]:w-auto [&_button]:max-w-none [&_a]:w-auto",
+          "[&_button]:w-auto [&_button]:max-w-none [&_button]:shrink-0 [&_a]:w-auto",
+          "max-lg:[&_button]:!w-auto",
           className,
         )}
         data-slot="portal-section-action-row"
