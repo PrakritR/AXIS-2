@@ -16,7 +16,6 @@ import {
 } from "@/components/portal/portal-data-table";
 
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { DataList } from "@/components/ui/data-list";
 import {
@@ -83,17 +82,6 @@ function paymentReminderLabel(
   return summarizeChargeReminders(reminders);
 }
 
-function paymentListPreview(
-  row: DemoManagerPaymentLedgerRow,
-  scheduledMessages: ScheduledPaymentMessage[],
-): string {
-  const parts = [row.propertyName];
-  if (row.dueDate?.trim()) parts.push(`Due ${row.dueDate}`);
-  const reminder = paymentReminderLabel(row, scheduledMessages);
-  if (reminder) parts.push(reminder);
-  return parts.filter(Boolean).join(" · ");
-}
-
 function dueDateDisplayToInputValue(display: string): string {
   const stripped = display.replace(/^(by|before)\s+/i, "").trim();
   const parsed = new Date(stripped);
@@ -132,6 +120,26 @@ function ledgerRowMetaLine(
   scheduledMessages: ScheduledPaymentMessage[],
 ): string {
   const parts = [row.propertyName, formatLedgerRoomLabel(row.roomNumber)].filter(Boolean);
+  const due = row.dueDate?.trim();
+  if (due) parts.push(`Due ${due}`);
+  const reminder = paymentReminderLabel(row, scheduledMessages);
+  if (reminder) parts.push(reminder);
+  return parts.join(" · ");
+}
+
+function ledgerRowManagerPrimaryLabel(row: DemoManagerPaymentLedgerRow): string {
+  return row.residentName;
+}
+
+function ledgerRowManagerMetaLine(
+  row: DemoManagerPaymentLedgerRow,
+  scheduledMessages: ScheduledPaymentMessage[],
+): string {
+  const parts = [
+    ledgerRowPrimaryLabel(row),
+    row.propertyName,
+    formatLedgerRoomLabel(row.roomNumber),
+  ].filter(Boolean);
   const due = row.dueDate?.trim();
   if (due) parts.push(`Due ${due}`);
   const reminder = paymentReminderLabel(row, scheduledMessages);
@@ -198,7 +206,6 @@ export function ManagerPaymentsLedgerPanel({
     [selectedRows],
   );
   const showSelection = rows.length > 0;
-  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
   const detailRow = useMemo(() => {
     if (!paymentIdProp) return null;
@@ -238,14 +245,6 @@ export function ManagerPaymentsLedgerPanel({
       else next.add(id);
       return next;
     });
-  };
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-      return;
-    }
-    setSelectedIds(new Set(rows.map((row) => row.id)));
   };
 
   const markSelectedAsPaid = async () => {
@@ -1173,19 +1172,24 @@ export function ManagerPaymentsLedgerPanel({
     </div>
   );
 
-  const renderEmbeddedChargeList = () => (
+  const renderChargeDataList = (variant: "embedded" | "manager") => (
     <DataList
       hideColumnHeaders
       selectable={showSelection}
       rows={rows.map((row) => {
         const isSelected = selectedIds.has(row.id);
         const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
-        const primary = ledgerRowPrimaryLabel(row);
+        const primary =
+          variant === "embedded" ? ledgerRowPrimaryLabel(row) : ledgerRowManagerPrimaryLabel(row);
+        const meta =
+          variant === "embedded"
+            ? ledgerRowMetaLine(row, scheduledMessages)
+            : ledgerRowManagerMetaLine(row, scheduledMessages);
         return {
           id: row.id,
           data: row,
           primary,
-          meta: ledgerRowMetaLine(row, scheduledMessages),
+          meta,
           trailing: (
             <span className="text-sm font-semibold tabular-nums text-foreground">{row.lineAmount}</span>
           ),
@@ -1302,66 +1306,10 @@ export function ManagerPaymentsLedgerPanel({
       )
     ) : (
       <div className={PORTAL_LIST_PAGE_BODY}>
-        {embeddedInResident ? (
-          <>
-            {renderEmbeddedChargeList()}
-            {renderAddPaymentRow()}
-          </>
-        ) : (
-          <>
-            {showSelection ? (
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2 max-md:px-2.5">
-                <input
-                  type="checkbox"
-                  className="size-4 shrink-0 rounded border-border"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
-                  aria-label="Select all payments"
-                />
-                <span className="text-xs text-muted">Select all</span>
-              </div>
-            ) : null}
-            {rows.map((row) => {
-              const isSelected = selectedIds.has(row.id);
-              const isEditing = editingRowId === row.id && Boolean(row.householdChargeId);
-              return (
-                <div key={row.id} className="flex items-stretch gap-2">
-                  {showSelection ? (
-                    <div className="flex items-center pl-3 max-md:pl-2.5">
-                      <input
-                        type="checkbox"
-                        className="size-4 shrink-0 rounded border-border"
-                        checked={isSelected}
-                        onChange={() => toggleSelected(row.id)}
-                        aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                      />
-                    </div>
-                  ) : null}
-                  <div className="min-w-0 flex-1">
-                    {isEditing ? (
-                      renderInlineEditForm(row)
-                    ) : (
-                      <PortalPersonRecordRow
-                        name={row.residentName}
-                        subtitle={
-                          row.manualPaymentReportedAt && row.manualPaymentChannel
-                            ? `${row.chargeTitle} · ${row.manualPaymentChannel === "zelle" ? "Zelle" : "Venmo"} reported`
-                            : row.chargeTitle
-                        }
-                        preview={paymentListPreview(row, scheduledMessages)}
-                        meta={row.lineAmount}
-                        selected={isSelected}
-                        onOpen={() => openPaymentDetail(row)}
-                        dataAttr="payment-list-row"
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {renderAddPaymentRow()}
-          </>
-        )}
+        <>
+          {renderChargeDataList(embeddedInResident ? "embedded" : "manager")}
+          {renderAddPaymentRow()}
+        </>
       </div>
     )}
     </>

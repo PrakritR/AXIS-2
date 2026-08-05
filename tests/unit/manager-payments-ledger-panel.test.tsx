@@ -71,6 +71,26 @@ function sampleRow(overrides: Partial<DemoManagerPaymentLedgerRow> = {}): DemoMa
 }
 
 describe("ManagerPaymentsLedgerPanel", () => {
+  it("uses resident-style DataList cards on the main payments ledger", () => {
+    const { container } = render(
+      <ManagerPaymentsLedgerPanel
+        rows={[sampleRow()]}
+        managerUserId="mgr-test"
+        activeBucket="pending"
+        direction="incoming"
+        onAddPayment={() => undefined}
+      />,
+    );
+
+    expect(container.querySelector('[data-slot="data-list"]')).toBeTruthy();
+    expect(container.querySelector('[data-slot="data-list-mobile-row"]')).toBeTruthy();
+    const mobileRow = container.querySelector('[data-slot="data-list-mobile-row"]');
+    expect(mobileRow?.textContent).toContain("Maya Chen");
+    expect(mobileRow?.textContent).toContain("July rent");
+    expect(mobileRow?.textContent).toContain("$1,850.00");
+    expect(container.querySelector('[data-attr="payment-list-row"]')).toBeNull();
+  });
+
   it("uses resident-style DataList cards when embedded in a resident profile", () => {
     const { container } = render(
       <ManagerPaymentsLedgerPanel
