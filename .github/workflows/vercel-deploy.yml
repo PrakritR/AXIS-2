@@ -1,9 +1,10 @@
 # Deploy to Vercel on every push to main (Preview) or production (live).
-# Belt-and-suspenders when the Vercel Git webhook misses a push (repo rename, etc.).
+# Backup when the Vercel Git webhook misses a push. If VERCEL_TOKEN is unset,
+# this workflow skips cleanly — native Vercel Git integration still deploys.
 #
-# Required GitHub secrets (repo Settings → Secrets → Actions):
-#   VERCEL_TOKEN          — https://vercel.com/account/tokens
-#   VERCEL_ORG_ID         — team_… from .vercel/project.json (vercel link)
+# Optional GitHub secrets (Settings → Secrets → Actions):
+#   VERCEL_TOKEN          — https://vercel.com/account/tokens (enables this workflow)
+#   VERCEL_ORG_ID         — team_… from .vercel/project.json
 #   VERCEL_PROJECT_ID     — prj_… from .vercel/project.json
 name: Vercel Deploy
 
@@ -18,6 +19,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ secrets.VERCEL_TOKEN != '' }}
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -58,3 +60,12 @@ jobs:
           else
             vercel deploy --prebuilt --token="${{ secrets.VERCEL_TOKEN }}"
           fi
+
+  git-integration:
+    if: ${{ secrets.VERCEL_TOKEN == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vercel Git deploy only
+        run: |
+          echo "::notice::VERCEL_TOKEN is not set — skipping CLI deploy job."
+          echo "main → Vercel Preview and production → prop-lane.space still deploy via the Vercel Git integration."
