@@ -98,14 +98,14 @@ export function PortalMobileNavBar({
   return (
     <div
       ref={barRef}
-      className="portal-mobile-nav-bar relative mb-0 flex min-h-11 w-full items-center justify-between gap-2 md:mb-3 md:hidden [html[data-native]_&]:mb-0"
+      className="portal-mobile-nav-bar relative mb-0 flex min-h-11 w-full items-center justify-between gap-2 lg:mb-3 lg:hidden [html[data-native]_&]:mb-0"
     >
       {/* Brand mark on tablet-only. */}
       <Link
         href={`${definition.basePath}/dashboard`}
         aria-label="Dashboard"
         data-attr="portal-mobile-brand-mark"
-        className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80 md:inline-flex"
+        className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80 lg:inline-flex"
       >
         <AxisLogoMark size="compact" />
       </Link>

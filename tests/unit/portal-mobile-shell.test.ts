@@ -77,7 +77,7 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("width: 1.375rem");
   });
 
-  it("keeps assistant entry in the named header button, not the bottom nav", () => {
+  it("keeps assistant entry in the desktop named header button, not the bottom nav", () => {
     const AXIS_ASSISTANT_SOURCE = readFileSync(
       join(process.cwd(), "src/components/portal/axis-assistant.tsx"),
       "utf8",
@@ -86,6 +86,8 @@ describe("portal mobile shell conventions", () => {
     expect(AXIS_ASSISTANT_SOURCE).not.toContain("axis-assistant-fab");
     expect(GLOBALS_CSS).not.toContain(".axis-assistant-fab");
     expect(PORTAL_TOP_BAR_SOURCE).toContain("Ask PropLane");
+    expect(PORTAL_TOP_BAR_SOURCE).toContain("hidden");
+    expect(PORTAL_TOP_BAR_SOURCE).toContain("lg:flex");
     expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
     expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
   });

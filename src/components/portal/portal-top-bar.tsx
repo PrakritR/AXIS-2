@@ -38,9 +38,9 @@ function initials(name: string | null, email: string | null): string {
 }
 
 /**
- * Slim desktop top bar holding the account menu in the top-right — the standard
- * SaaS location. On smaller screens, the named assistant entry point remains
- * visible while the account menu moves to the existing mobile navigation.
+ * Slim desktop top bar (`lg+`) with Ask PropLane and the account menu. On phones
+ * and tablets, this bar is hidden — {@link PortalMobileNavBar} owns the page
+ * title and profile avatar without a duplicate assistant strip above it.
  */
 export function PortalTopBar({
   kind,
@@ -117,7 +117,7 @@ export function PortalTopBar({
   }, [openAskProPlane]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-4 sm:px-5">
+    <header className="hidden h-14 shrink-0 items-center justify-end gap-3 border-b border-border bg-background px-4 sm:px-5 lg:flex">
       <button
         type="button"
         onClick={toggleAssistant}
