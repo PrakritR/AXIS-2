@@ -1,6 +1,7 @@
 "use client";
 
 import { AxisLogoLink } from "@/components/brand/axis-logo";
+import { GeneralAssistantTrigger } from "@/components/general/general-assistant";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
