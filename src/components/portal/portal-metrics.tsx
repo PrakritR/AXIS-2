@@ -683,6 +683,7 @@ export function ManagerPortalPageShell({
           filter={titleInlineFilter}
           titleTrailing={titleTrailing}
           actions={titleAside}
+          hideTitleOnMobileNav={hideTitleOnMobileNav}
         />
       ) : (
         <PageHeader
