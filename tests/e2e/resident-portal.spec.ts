@@ -35,7 +35,7 @@ test.describe("Resident portal", () => {
     for (const { path } of RESIDENT_SECTIONS) {
       await page.goto(path, { waitUntil: "domcontentloaded", timeout: 45_000 });
       await expect(page).toHaveURL(pathToUrlRegExp(path));
-      await expect(page.getByRole("heading").first().or(page.locator("main"))).toBeVisible({
+      await expect(page.getByRole("heading").first().or(page.locator("main")).first()).toBeVisible({
         timeout: 30_000,
       });
     }
@@ -49,7 +49,7 @@ test.describe("Resident portal", () => {
   });
 
   test("inbox tab loads and compose modal can be opened", async ({ page }) => {
-    await page.goto("/resident/communication/inbox/unopened");
+    await page.goto("/resident/communication/active");
     await expect(page.getByRole("heading").first()).toBeVisible();
     const composeBtn = page.getByRole("button", { name: /new message|compose/i }).first();
     if (await composeBtn.count() > 0) {

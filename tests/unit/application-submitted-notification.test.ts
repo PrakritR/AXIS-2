@@ -37,7 +37,7 @@ describe("application-submitted-notification", () => {
     expect(body).toContain("206-555-0100");
     expect(body).toContain("PROPLANE-TEST-1");
     expect(body).toContain("https://prop-lane.space/portal/applications");
-    expect(body).toContain("https://prop-lane.space/portal/communication/inbox/unopened");
+    expect(body).toContain("https://prop-lane.space/portal/communication/active");
     expect(body).toContain("4709A 8th Ave NE");
   });
 

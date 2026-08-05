@@ -34,20 +34,19 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/resident/payments",
   "/resident/dashboard",
   "/resident/applications",
-  "/resident/communication/email/unopened",
-  "/portal/communication/inbox/unopened",
-  "/portal/communication/sms",
-  "/admin/communication/email/unopened",
-  "/vendor/communication/email/unopened",
+  "/resident/communication/active",
+  "/portal/communication/active",
+  "/admin/communication/inbox/unopened",
+  "/vendor/communication/active",
 ] as const;
 
 /** Deep-link a message-notification tap into the recipient's own inbox. */
 export function inboxDeepLinkForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
-  if (normalized === "manager" || normalized === "pro") return "/portal/communication/inbox/unopened";
-  if (normalized === "admin") return "/admin/communication/email/unopened";
-  if (normalized === "vendor") return "/vendor/communication/email/unopened";
-  return "/resident/communication/email/unopened";
+  if (normalized === "manager" || normalized === "pro") return "/portal/communication/active";
+  if (normalized === "admin") return "/admin/communication/inbox/unopened";
+  if (normalized === "vendor") return "/vendor/communication/active";
+  return "/resident/communication/active";
 }
 
 export type PlatformSurface = "web" | "native-webview";

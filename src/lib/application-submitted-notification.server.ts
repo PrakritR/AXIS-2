@@ -63,7 +63,7 @@ export function buildApplicationSubmittedManagerBody(input: {
     "";
   const placement = [propertyTitle, room].filter(Boolean).join(" · ");
   const applicationsUrl = `${input.origin.replace(/\/$/, "")}/portal/applications`;
-  const communicationUrl = `${input.origin.replace(/\/$/, "")}/portal/communication/inbox/unopened`;
+  const communicationUrl = `${input.origin.replace(/\/$/, "")}/portal/communication/active`;
 
   const lines = [
     `A rental application was submitted for ${placement}.`,
