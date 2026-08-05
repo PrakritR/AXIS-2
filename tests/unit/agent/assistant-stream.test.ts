@@ -19,6 +19,7 @@ describe("assistant SSE transport", () => {
         reply: "Draft ready.",
         toolTrace: [{ tool: "send_message", ok: true }],
         sessionId: "session_1",
+        archiveSaved: false,
         pendingAction: { id: "action_1", preview: { title: "Send" } },
       },
     );
@@ -28,6 +29,7 @@ describe("assistant SSE transport", () => {
     expect(body).toContain("event: delta");
     expect(body).toContain("event: pending_action");
     expect(body).toContain("event: done");
+    expect(body).toContain('"archiveSaved":false');
     expect(body).not.toContain("confirmedInput");
   });
 });

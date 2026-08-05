@@ -108,7 +108,15 @@ export async function generateAgentChatThreadTitle(
       async (observer) => {
         const client = new Anthropic();
         const model = TIER_MODELS.simple;
-        observer?.onStart?.({ system: TITLE_SYSTEM_PROMPT, toolsAvailable: [], model, tier: "simple" });
+        const startedAt = Date.now();
+        observer?.onStart?.({
+          system: TITLE_SYSTEM_PROMPT,
+          toolsAvailable: [],
+          model,
+          tier: "simple",
+          provider: "anthropic",
+          route: "anthropic",
+        });
         const response = await client.messages.create({
           model,
           max_tokens: 24,
@@ -130,6 +138,9 @@ export async function generateAgentChatThreadTitle(
           usage,
           stopReason: response.stop_reason ?? null,
           toolsChosen: [],
+          provider: "anthropic",
+          route: "anthropic",
+          latencyMs: Date.now() - startedAt,
           input: [{ role: "user", content: titleInput }],
           assistantContent: response.content,
         });
