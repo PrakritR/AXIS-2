@@ -622,6 +622,37 @@ export function ManagerPayments({
     sortOptions,
   };
 
+  const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
+
+  const runCheckManualPayments = () => {
+    void (async () => {
+      setCheckingManualPayments(true);
+      try {
+        const response = await fetch("/api/portal/gmail-payments/sync", { method: "POST", credentials: "include" });
+        const body = (await response.json().catch(() => ({}))) as {
+          result?: { scanned?: number; markedPaid?: number; ambiguous?: number; unmatched?: number };
+          error?: string;
+        };
+        if (!response.ok) {
+          showToast(body.error ?? "Could not check payments. Link Gmail in Payment setup first.");
+          return;
+        }
+        const result = body.result;
+        showToast(
+          result
+            ? `Checked ${result.scanned ?? 0} receipt${result.scanned === 1 ? "" : "s"}; ${result.markedPaid ?? 0} confirmed.${result.ambiguous ? ` ${result.ambiguous} ambiguous — left pending.` : ""}`
+            : "Payment check complete.",
+        );
+        await syncHouseholdChargesFromServer(true);
+        setHcTick((n) => n + 1);
+      } catch {
+        showToast("Could not check payments.");
+      } finally {
+        setCheckingManualPayments(false);
+      }
+    })();
+  };
+
   const paymentsRemindersButton =
     direction === "incoming" ? (
       <Button
@@ -654,34 +685,7 @@ export function ManagerPayments({
       className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
       disabled={checkingManualPayments}
       data-attr="manager-check-manual-payments"
-      onClick={() => {
-        void (async () => {
-          setCheckingManualPayments(true);
-          try {
-            const response = await fetch("/api/portal/gmail-payments/sync", { method: "POST", credentials: "include" });
-            const body = (await response.json().catch(() => ({}))) as {
-              result?: { scanned?: number; markedPaid?: number; ambiguous?: number; unmatched?: number };
-              error?: string;
-            };
-            if (!response.ok) {
-              showToast(body.error ?? "Could not check payments. Link Gmail in Payment setup first.");
-              return;
-            }
-            const result = body.result;
-            showToast(
-              result
-                ? `Checked ${result.scanned ?? 0} receipt${result.scanned === 1 ? "" : "s"}; ${result.markedPaid ?? 0} confirmed.${result.ambiguous ? ` ${result.ambiguous} ambiguous — left pending.` : ""}`
-                : "Payment check complete.",
-            );
-            await syncHouseholdChargesFromServer(true);
-            setHcTick((n) => n + 1);
-          } catch {
-            showToast("Could not check payments.");
-          } finally {
-            setCheckingManualPayments(false);
-          }
-        })();
-      }}
+      onClick={runCheckManualPayments}
     >
       {checkingManualPayments ? "Checking…" : "Check payments"}
     </Button>
@@ -721,6 +725,15 @@ export function ManagerPayments({
             Reminders
           </DropdownMenuItem>
         ) : null}
+        {direction === "incoming" ? (
+          <DropdownMenuItem
+            data-attr="manager-check-manual-payments-menu"
+            disabled={checkingManualPayments}
+            onSelect={runCheckManualPayments}
+          >
+            {checkingManualPayments ? "Checking payments…" : "Check payments"}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem data-attr="payments-setup-menu" onSelect={() => setPaymentSetupOpen(true)}>
           Payment setup
         </DropdownMenuItem>
@@ -752,8 +765,6 @@ export function ManagerPayments({
       </div>
     </>
   );
-
-  const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
     const chips: PortalActiveFilterChip[] = [];
