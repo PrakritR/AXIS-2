@@ -163,6 +163,7 @@ export async function POST(req: Request) {
           actorKey: ctx.userId,
           availableTools: [...agentRegistry.keys()],
         });
+    const routeToolNames = "toolNames" in routing && Array.isArray(routing.toolNames) ? routing.toolNames : undefined;
     const result = await traceAgentTurn(
       traceActor,
       messages.map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content : "[image message]" })),
@@ -175,7 +176,7 @@ export async function POST(req: Request) {
           observer,
           allowWriteTools: MANAGER_INLINE_WRITE_TOOLS,
           model: routing,
-          ...("toolNames" in routing ? { toolNames: routing.toolNames, readOnly: routing.readOnly } : {}),
+          ...(routeToolNames ? { toolNames: routeToolNames, readOnly: true } : {}),
         }),
     );
     track("assistant_message_sent", ctx.userId, {

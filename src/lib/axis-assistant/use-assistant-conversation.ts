@@ -65,9 +65,10 @@ async function readAssistantTransport(
     } catch {
       return;
     }
-    if (event === "delta" && typeof parsed.text === "string") {
-      reply += parsed.text;
-      onDelta(parsed.text);
+    const delta = parsed as { text?: unknown };
+    if (event === "delta" && typeof delta.text === "string") {
+      reply += delta.text;
+      onDelta(delta.text);
     } else if (event === "pending_action") {
       pendingAction = parsed as PendingAction;
     } else if (event === "done") {

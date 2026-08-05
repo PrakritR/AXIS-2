@@ -4,6 +4,8 @@ export type AssistantWirePayload = {
   reply: string;
   toolTrace: { tool: string; ok: boolean }[];
   sessionId?: string | null;
+  /** Portal archive persistence is confirmed before a streamed turn completes. */
+  archiveSaved?: boolean;
   pendingAction?: unknown;
 };
 
@@ -24,7 +26,11 @@ export function assistantResponse(req: Request, payload: AssistantWirePayload): 
       controller.enqueue(encoder.encode(event("meta", { sessionId: payload.sessionId ?? null })));
       if (payload.reply) controller.enqueue(encoder.encode(event("delta", { text: payload.reply })));
       if (payload.pendingAction) controller.enqueue(encoder.encode(event("pending_action", payload.pendingAction)));
-      controller.enqueue(encoder.encode(event("done", { toolTrace: payload.toolTrace, sessionId: payload.sessionId ?? null })));
+      controller.enqueue(encoder.encode(event("done", {
+        toolTrace: payload.toolTrace,
+        sessionId: payload.sessionId ?? null,
+        ...(typeof payload.archiveSaved === "boolean" ? { archiveSaved: payload.archiveSaved } : {}),
+      })));
       controller.close();
     },
   });

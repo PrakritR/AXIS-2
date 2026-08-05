@@ -122,6 +122,7 @@ export async function POST(req: Request) {
           actorKey: ctx.userId,
           availableTools: [...registry.keys()],
         });
+    const routeToolNames = "toolNames" in routing && Array.isArray(routing.toolNames) ? routing.toolNames : undefined;
     const result = await traceAgentTurn(
       traceActor,
       messages.map((m) => ({ role: m.role, content: String(m.content) })),
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
           messages,
           observer,
           model: routing,
-          ...("toolNames" in routing ? { toolNames: routing.toolNames, readOnly: routing.readOnly } : {}),
+          ...(routeToolNames ? { toolNames: routeToolNames, readOnly: true } : {}),
         }),
     );
     track("assistant_message_sent", ctx.userId, {

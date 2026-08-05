@@ -60,13 +60,20 @@ export async function POST(req: Request) {
     const routing = messagesNeedVisionModel(messages)
       ? visionPinnedModel()
       : selectAgentRoute({ messages, actorKey: ip, availableTools: [] });
+    const provider = "provider" in routing && routing.provider === "openrouter" ? "openrouter" : "anthropic";
+    const route =
+      "route" in routing && (routing.route === "fast_direct" || routing.route === "fast_lookup")
+        ? routing.route
+        : "anthropic";
+    const fallbackModel =
+      "fallbackModel" in routing && typeof routing.fallbackModel === "string" ? routing.fallbackModel : undefined;
     const response = await completeAgentModel({
       selection: {
         model: routing.model,
         tier: routing.tier,
-        provider: routing.provider ?? "anthropic",
-        route: routing.route ?? "anthropic",
-        ...(routing.fallbackModel ? { fallbackModel: routing.fallbackModel } : {}),
+        provider,
+        route,
+        ...(fallbackModel ? { fallbackModel } : {}),
       },
       system: GENERAL_SYSTEM_PROMPT,
       tools: [],
