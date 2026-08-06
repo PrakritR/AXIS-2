@@ -95,17 +95,25 @@ async function loadSubscriptions(client, appId) {
   for (const group of groups) {
     const response = await client.get(`subscriptionGroups/${group.id}/subscriptions?limit=200`);
     for (const subscription of response?.data ?? []) {
-      const [localizations, prices] = await Promise.all([
+      const screenshotPromise = client
+        .get(`subscriptions/${subscription.id}/appStoreReviewScreenshot`)
+        .catch((error) => {
+          if (String(error.message).includes("HTTP 404")) return null;
+          throw error;
+        });
+      const [localizations, prices, screenshot] = await Promise.all([
         client.get(`subscriptions/${subscription.id}/subscriptionLocalizations?limit=50`),
         client.get(
           `subscriptions/${subscription.id}/prices?filter[territory]=USA&include=subscriptionPricePoint,territory&limit=200`,
         ),
+        screenshotPromise,
       ]);
       subscriptions.push({
         ...subscription,
         groupName: group.attributes?.referenceName ?? group.id,
         localizations: localizations?.data ?? [],
         usd: currentUsdPrice(prices),
+        reviewScreenshot: screenshot?.data ?? null,
       });
     }
   }
@@ -138,8 +146,14 @@ export async function auditAppStoreSubmission(client = new AscClient()) {
         `${subscription.attributes?.subscriptionPeriod ?? "no duration"}, ` +
         `${subscription.usd ? `$${subscription.usd} USD` : "no US price"}, ` +
         `${subscription.attributes?.state ?? "unknown state"}, ` +
-        `${subscription.localizations.length} localization(s)`,
+        `${subscription.localizations.length} localization(s), ` +
+        `${subscription.reviewScreenshot ? `review screenshot ${subscription.reviewScreenshot.attributes?.fileName ?? subscription.reviewScreenshot.id}` : "no review screenshot"}`,
     );
+    if (subscription.reviewScreenshot?.attributes?.imageAsset) {
+      console.log(
+        `    imageAsset: ${JSON.stringify(subscription.reviewScreenshot.attributes.imageAsset)}`,
+      );
+    }
   }
 
   const problems = [
