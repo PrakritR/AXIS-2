@@ -31,6 +31,7 @@ import {
 } from "@/lib/property-application-templates";
 import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
 import { formatApplicationLeaseTermsLabel } from "@/lib/property-lease-template-sync";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
   applicationConfigForVariant,
   resolveListingApplicationFields,
@@ -53,6 +54,13 @@ function applicationQuestionsSummary(
   return `${count} question${count === 1 ? "" : "s"} · ${mode}`;
 }
 
+function propertyApplicationPreviewHref(listingId: string, template: PropertyApplicationTemplate): string {
+  return buildRentalApplyHref({
+    propertyId: listingId,
+    rentalType: template.kind === "short-term" ? "short_term" : "standard",
+  });
+}
+
 /**
  * Per-property application templates — same list chrome as the lease tab.
  */
@@ -61,6 +69,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
   saveTarget,
   managerUserId,
   propertyIds,
+  listingId,
   onUpdated,
   showToast,
   onRegisterAddApplication,
@@ -70,6 +79,8 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId: string | null;
   /** When set, template changes apply to every listed property (bulk edit). */
   propertyIds?: string[];
+  /** Live listing id — used for the public application preview link. */
+  listingId?: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
   onRegisterAddApplication?: (openAdd: (() => void) | null) => void;
@@ -167,6 +178,40 @@ export function ManagerPropertyApplicationQuestionsPanel({
     setQuestionsModalOpen(true);
   };
 
+  const openEditMetadata = (templateId: string) => {
+    setFormMode("edit");
+    setEditingTemplateId(templateId);
+    setFormOpen(true);
+  };
+
+  const openApplicationPreview = (template: PropertyApplicationTemplate) => {
+    const pid = listingId?.trim();
+    if (!pid) {
+      showToast("Publish this listing before previewing the application.");
+      return;
+    }
+    const href = propertyApplicationPreviewHref(pid, template);
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const handleFormSave = (nextTemplates: PropertyApplicationTemplate[]) => {
+    if (!persistTemplates(nextTemplates)) {
+      showToast("Could not save application.");
+      return false;
+    }
+    onUpdated();
+    if (formMode === "add") {
+      const added = nextTemplates[nextTemplates.length - 1];
+      if (added) {
+        setFormOpen(false);
+        setEditingTemplateId(null);
+        setQuestionsVariant(added.formVariant);
+        setQuestionsModalOpen(true);
+      }
+    }
+    return true;
+  };
+
   const handleRemove = (templateId: string) => {
     if (templates.length <= 1) {
       showToast("Keep at least one application on this property.");
@@ -193,7 +238,14 @@ export function ManagerPropertyApplicationQuestionsPanel({
         {templates.map((template) => (
           <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">{template.label}</p>
+              <button
+                type="button"
+                className="text-left text-sm font-semibold text-foreground hover:underline"
+                data-attr={`application-rename-${template.id}`}
+                onClick={() => openEditMetadata(template.id)}
+              >
+                {template.label}
+              </button>
               <p className="mt-0.5 text-xs text-muted">
                 {propertyApplicationTypeLabel(template.kind)} · {applicationQuestionsSummary(syncedSub, template)}
               </p>
@@ -204,6 +256,15 @@ export function ManagerPropertyApplicationQuestionsPanel({
               ) : null}
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                data-attr={`application-view-${template.id}`}
+                onClick={() => openApplicationPreview(template)}
+              >
+                View application
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -247,20 +308,14 @@ export function ManagerPropertyApplicationQuestionsPanel({
           setFormOpen(false);
           setEditingTemplateId(null);
         }}
-        onSave={(nextTemplates) => {
-          if (!persistTemplates(nextTemplates)) {
-            showToast("Could not save application.");
-            return false;
-          }
-          onUpdated();
-          return true;
-        }}
+        onSave={handleFormSave}
       />
 
       <ManagerApplicationQuestionsEditorModal
         open={questionsModalOpen}
         initialVariant={questionsVariant}
         lockVariant
+        title="Edit application questions"
         sub={syncedSub}
         saveTarget={saveTarget ?? undefined}
         propertyIds={bulkPropertyIds.length > 0 ? bulkPropertyIds : undefined}
