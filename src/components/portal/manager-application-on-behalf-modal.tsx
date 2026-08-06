@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, NativeSelect } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
@@ -118,32 +118,35 @@ function buildResidentOptions(managerUserId: string | null): ResidentOption[] {
 
 function initManagerApplicationDraft(input: {
   propertyId: string;
-  residentEmail: string;
+  residentEmail?: string;
   residentName?: string;
   managerUserId: string | null;
 }): string {
-  const email = input.residentEmail.trim().toLowerCase();
-  const inProgress = readManagerApplicationRows().filter(
-    (row) =>
-      isInProgressApplicationRow(row) &&
-      row.email?.trim().toLowerCase() === email,
-  );
-  const existing = findInProgressRowForTarget(inProgress, { propertyId: input.propertyId });
+  const email = input.residentEmail?.trim().toLowerCase() ?? "";
+  if (email.includes("@")) {
+    const inProgress = readManagerApplicationRows().filter(
+      (row) =>
+        isInProgressApplicationRow(row) &&
+        row.email?.trim().toLowerCase() === email,
+    );
+    const existing = findInProgressRowForTarget(inProgress, { propertyId: input.propertyId });
 
-  clearRentalWizardDraft();
-  if (existing?.application) {
-    saveRentalWizardDraftAxisId(existing.id);
-    const form = {
-      ...createInitialRentalWizardState(),
-      ...existing.application,
-      propertyId: input.propertyId,
-      email,
-      fullLegalName: existing.application.fullLegalName?.trim() || existing.name?.trim() || input.residentName?.trim() || "",
-    };
-    saveRentalWizardDraft(form);
-    return existing.id;
+    if (existing?.application) {
+      clearRentalWizardDraft();
+      saveRentalWizardDraftAxisId(existing.id);
+      const form = {
+        ...createInitialRentalWizardState(),
+        ...existing.application,
+        propertyId: input.propertyId,
+        email,
+        fullLegalName: existing.application.fullLegalName?.trim() || existing.name?.trim() || input.residentName?.trim() || "",
+      };
+      saveRentalWizardDraft(form);
+      return existing.id;
+    }
   }
 
+  clearRentalWizardDraft();
   const axisId = mintApplicationAxisId();
   saveRentalWizardDraftAxisId(axisId);
   const form = {
@@ -153,13 +156,15 @@ function initManagerApplicationDraft(input: {
     fullLegalName: input.residentName?.trim() || "",
   };
   saveRentalWizardDraft(form);
-  syncInProgressApplicationRow({
-    axisId,
-    form,
-    residentEmail: email,
-    wizardStep: 1,
-    wizardMaxStepReached: 1,
-  });
+  if (email.includes("@")) {
+    syncInProgressApplicationRow({
+      axisId,
+      form,
+      residentEmail: email,
+      wizardStep: 1,
+      wizardMaxStepReached: 1,
+    });
+  }
   return axisId;
 }
 
@@ -182,7 +187,6 @@ export function ManagerApplicationOnBehalfModal({
   const [phase, setPhase] = useState<"pick" | "wizard" | "send">("pick");
   const [propertyId, setPropertyId] = useState("");
   const [residentId, setResidentId] = useState("");
-  const [newResidentEmail, setNewResidentEmail] = useState("");
   const [activeAxisId, setActiveAxisId] = useState<string | null>(null);
   const [activeEmail, setActiveEmail] = useState("");
   const [activeName, setActiveName] = useState("");
@@ -194,7 +198,6 @@ export function ManagerApplicationOnBehalfModal({
     setPhase("pick");
     setPropertyId("");
     setResidentId("");
-    setNewResidentEmail("");
     setActiveAxisId(null);
     setActiveEmail("");
     setActiveName("");
@@ -247,14 +250,10 @@ export function ManagerApplicationOnBehalfModal({
     [residentId, residentsForProperty],
   );
 
-  const resolvedEmail = residentId === NEW_RESIDENT_ID ? newResidentEmail.trim().toLowerCase() : selectedResident?.residentEmail ?? "";
+  const resolvedEmail = selectedResident?.residentEmail ?? "";
   const resolvedName = selectedResident?.residentName ?? "";
 
-  const canStartWizard = Boolean(
-    propertyId &&
-      residentId &&
-      (residentId !== NEW_RESIDENT_ID || /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(resolvedEmail)),
-  );
+  const canStartWizard = Boolean(propertyId && residentId);
 
   const handleClose = () => {
     reset();
@@ -345,7 +344,7 @@ export function ManagerApplicationOnBehalfModal({
         open={open && phase === "pick"}
         onClose={handleClose}
         title="Add application"
-        description="Choose a property and resident, then complete the application on their behalf."
+        description="Choose a property and resident. The resident enters their email in the application."
         dataAttr="manager-add-application-modal"
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -357,7 +356,6 @@ export function ManagerApplicationOnBehalfModal({
               onChange={(e) => {
                 setPropertyId(e.target.value);
                 setResidentId("");
-                setNewResidentEmail("");
               }}
               disabled={noProperties}
               data-attr="add-application-property"
@@ -393,20 +391,6 @@ export function ManagerApplicationOnBehalfModal({
               ))}
             </NativeSelect>
           </label>
-          {residentId === NEW_RESIDENT_ID ? (
-            <label className="flex flex-col gap-0.5 sm:col-span-2">
-              <span className={MODAL_FIELD_LABEL_CLASS}>Resident email</span>
-              <Input
-                className={compactField}
-                type="email"
-                value={newResidentEmail}
-                onChange={(e) => setNewResidentEmail(e.target.value)}
-                placeholder="resident@example.com"
-                autoComplete="off"
-                data-attr="add-application-new-email"
-              />
-            </label>
-          ) : null}
         </div>
         <ModalFooter>
           <Button type="button" variant="outline" onClick={handleClose}>
@@ -429,9 +413,8 @@ export function ManagerApplicationOnBehalfModal({
         onClose={handleClose}
         title={activeName ? `Application for ${activeName}` : "Application"}
         description="Complete the application, then send it to the resident to review and finish."
-        fullPage
-        dense
-        panelClassName="max-w-4xl"
+        panelClassName="flex max-h-[min(90vh,56rem)] w-full max-w-5xl flex-col"
+        fullScreenMobile={false}
         dataAttr="manager-application-on-behalf-wizard"
       >
         {phase === "wizard" && activeAxisId ? (

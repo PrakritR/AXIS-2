@@ -18,7 +18,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
+  PORTAL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
@@ -47,7 +47,7 @@ import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-ap
 import { ManagerApplicationOnBehalfModal } from "@/components/portal/manager-application-on-behalf-modal";
 import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
-import { ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
+import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
@@ -1303,7 +1303,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      className={PORTAL_HEADER_ACTION_BTN}
       data-attr="edit-application-open"
       onClick={() => setEditApplicationOpen(true)}
       disabled={propertyOptions.length === 0}
@@ -1317,7 +1317,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      className={PORTAL_HEADER_ACTION_BTN}
       onClick={() => setInviteModalOpen(true)}
       disabled={shareableProperties.length === 0}
       title={shareableProperties.length === 0 ? "List a property as active before sending to prospects" : undefined}
@@ -1330,7 +1330,7 @@ export function ManagerApplications({
     <Button
       type="button"
       variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      className={PORTAL_HEADER_ACTION_BTN}
       data-attr="applications-add"
       onClick={() => setAddApplicationOpen(true)}
       disabled={propertyOptions.length === 0}
@@ -1340,31 +1340,34 @@ export function ManagerApplications({
     </Button>
   );
 
+  const applicationsPromoButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN}
+      data-attr="application-settings-open"
+      onClick={() => setApplicationSettingsOpen(true)}
+    >
+      Promo
+    </Button>
+  );
+
+  const applicationsScreeningButton = (
+    <ManagerScreeningSettingsButton
+      className="w-full shrink-0 md:w-auto"
+      onClick={() => setScreeningModalOpen(true)}
+    />
+  );
+
   const applicationsHeaderActions = (
     <PortalAdaptiveHeaderActions
       className="w-full min-w-0"
       moreDataAttr="applications-more-actions"
       moreAriaLabel="More application actions"
-      pinnedMenuItems={[
-        <DropdownMenuItem
-          key="promo"
-          data-attr="application-settings-menu"
-          onSelect={() => setApplicationSettingsOpen(true)}
-        >
-          Promo
-        </DropdownMenuItem>,
-        <DropdownMenuItem
-          key="screening"
-          data-attr="application-screening-menu"
-          onSelect={() => setScreeningModalOpen(true)}
-        >
-          Screening
-        </DropdownMenuItem>,
-      ]}
       actions={[
         {
           id: "edit",
-          keepPriority: 2,
+          keepPriority: 4,
           node: applicationsEditButton,
           menuItem: (
             <DropdownMenuItem
@@ -1378,7 +1381,7 @@ export function ManagerApplications({
         },
         {
           id: "send",
-          keepPriority: 1,
+          keepPriority: 3,
           node: applicationsSendButton,
           menuItem: (
             <DropdownMenuItem
@@ -1386,6 +1389,32 @@ export function ManagerApplications({
               onSelect={() => setInviteModalOpen(true)}
             >
               Send
+            </DropdownMenuItem>
+          ),
+        },
+        {
+          id: "promo",
+          keepPriority: 2,
+          node: applicationsPromoButton,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="application-settings-menu"
+              onSelect={() => setApplicationSettingsOpen(true)}
+            >
+              Promo
+            </DropdownMenuItem>
+          ),
+        },
+        {
+          id: "screening",
+          keepPriority: 1,
+          node: applicationsScreeningButton,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="application-screening-menu"
+              onSelect={() => setScreeningModalOpen(true)}
+            >
+              Screening
             </DropdownMenuItem>
           ),
         },
@@ -1642,12 +1671,11 @@ export function ManagerApplications({
         </div>
       ) : rowsForBucket.length === 0 ? (
         <div className="px-3 py-2">
-          <PortalDataTableEmpty
-            icon="application"
-            message={
-              scopedRows.length === 0
-                ? "No applications yet. When someone starts applying on your website, they show up here as Incomplete as soon as they enter their email, then move to Pending once they submit."
-                : searchQuery.trim()
+          {scopedRows.length > 0 ? (
+            <PortalDataTableEmpty
+              icon="application"
+              message={
+                searchQuery.trim()
                   ? "No applications match your search."
                   : propertyFilters.length > 0
                     ? "No applications for this property yet."
@@ -1656,8 +1684,9 @@ export function ManagerApplications({
                       : bucket === "incomplete"
                         ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
                         : "No applications in this tab yet."
-            }
-          />
+              }
+            />
+          ) : null}
           <PortalListAddRow
             label="Add"
             icon={PORTAL_LIST_ADD_ICONS.application}

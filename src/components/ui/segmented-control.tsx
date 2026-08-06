@@ -56,9 +56,6 @@ export function SegmentedThree<T extends string>({
             style={active ? { background: "var(--btn-primary)" } : undefined}
           >
             {opt.label}
-            {opt.count !== undefined ? (
-              <span className="ml-1 tabular-nums opacity-80">{opt.count}</span>
-            ) : null}
           </button>
         );
       })}

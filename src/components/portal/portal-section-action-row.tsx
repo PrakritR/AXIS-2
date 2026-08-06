@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
-import { PAGE_HEADER_COUNT_CLASS, PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
+import { PAGE_HEADER_TITLE_CLASS } from "@/components/ui/page-header";
 
 const PORTAL_FOOTER_INLINE_ACTIONS_ROW = cn(
   "flex max-w-full min-w-0 shrink-0 flex-nowrap items-center justify-start gap-1 pb-0.5",
@@ -85,11 +85,6 @@ export function PortalPageTitleBand({
       >
         <h1 className={cn(PAGE_HEADER_TITLE_CLASS, "shrink-0")}>
           {title}
-          {count != null ? (
-            <span className="ml-2 align-middle">
-              <span className={PAGE_HEADER_COUNT_CLASS}>{count}</span>
-            </span>
-          ) : null}
         </h1>
         {titleTrailing ? (
           <div className="min-w-0 flex-1 overflow-hidden">{titleTrailing}</div>

@@ -669,7 +669,7 @@ export function ManagerPayments({
                     disabled={checkingManualPayments}
                     onClick={() => runCheckManualPayments()}
                   >
-                    {checkingManualPayments ? "Checking…" : "Check payments"}
+                    {checkingManualPayments ? "Checking…" : "Check"}
                   </Button>
                 ),
                 menuItem: (
@@ -678,7 +678,7 @@ export function ManagerPayments({
                     disabled={checkingManualPayments}
                     onSelect={() => runCheckManualPayments()}
                   >
-                    {checkingManualPayments ? "Checking payments…" : "Check payments"}
+                    {checkingManualPayments ? "Checking…" : "Check"}
                   </DropdownMenuItem>
                 ),
               },

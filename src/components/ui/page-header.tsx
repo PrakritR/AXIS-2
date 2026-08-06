@@ -58,11 +58,6 @@ export function PageHeader({
           )}
         >
           {title}
-          {count != null ? (
-            <span className="ml-2 align-middle">
-              <span className={PAGE_HEADER_COUNT_CLASS}>{count}</span>
-            </span>
-          ) : null}
         </h1>
         {titleTrailing ? (
           <HorizontalScrollCapture className="min-w-0 flex-1">{titleTrailing}</HorizontalScrollCapture>

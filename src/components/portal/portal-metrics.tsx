@@ -136,13 +136,6 @@ export function PortalStatusTierFilterBar({
             }`}
           >
             {tab.label}
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeStatusId === tab.id ? "bg-accent text-foreground" : "bg-accent/50 text-muted"
-              }`}
-            >
-              {tab.count}
-            </span>
           </button>
         ))}
       </div>
@@ -297,19 +290,6 @@ export function ManagerPortalStatusPills({
               <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--status-overdue-fg)]" />
             ) : null}
             {tab.label}
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                isMonochrome
-                  ? "bg-transparent text-muted"
-                  : active
-                    ? isPrimary
-                      ? "bg-primary-foreground/20 text-primary-foreground"
-                      : "bg-accent text-foreground [html[data-theme=dark]_&]:portal-status-pill-count-active"
-                    : "bg-accent/50 text-muted [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/75"
-              }`}
-            >
-              {tab.count}
-            </span>
           </button>
         );
       })}
@@ -330,7 +310,7 @@ export function ManagerPortalStatusPills({
         >
           {tabs.map((tab) => (
             <option key={tab.id} value={tab.id}>
-              {tab.label} ({tab.count})
+              {tab.label}
             </option>
           ))}
         </Select>

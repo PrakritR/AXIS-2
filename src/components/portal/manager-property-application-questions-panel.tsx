@@ -21,7 +21,6 @@ import {
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
 import {
-  normalizeCustomApplicationFields,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import {
@@ -37,10 +36,6 @@ import {
 } from "@/lib/property-application-templates";
 import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
 import { formatApplicationLeaseTermsLabel } from "@/lib/property-lease-template-sync";
-import {
-  applicationConfigForVariant,
-  resolveListingApplicationFields,
-} from "@/lib/rental-application/application-field-catalog";
 
 type QuestionsSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -50,15 +45,6 @@ type QuestionsSaveTarget =
 
 function isManagerOwnedApplicationTemplate(template: PropertyApplicationTemplate): boolean {
   return !template.listingSeedKey;
-}
-
-function applicationQuestionsSummary(
-  sub: ManagerListingSubmissionV1,
-  template: PropertyApplicationTemplate,
-): string {
-  const slice = applicationConfigForVariant(sub, template.formVariant);
-  const count = resolveListingApplicationFields(slice, normalizeCustomApplicationFields).length;
-  return `${count} question${count === 1 ? "" : "s"}`;
 }
 
 /**
@@ -259,7 +245,6 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   </button>
                 ) : null}
               </div>
-              <p className="mt-0.5 text-xs text-muted">{applicationQuestionsSummary(syncedSub, template)}</p>
               {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
                 <p className="mt-0.5 text-xs text-muted">
                   Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
@@ -290,14 +275,16 @@ export function ManagerPropertyApplicationQuestionsPanel({
         ))}
       </PortalPropertyDetailSection>
 
-      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
-        <PortalListAddRow
-          label="Add"
-          icon={PORTAL_LIST_ADD_ICONS.application}
-          onClick={openAdd}
-          dataAttr="property-application-add"
-        />
-      </div>
+      {onRegisterAddApplication == null ? (
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+          <PortalListAddRow
+            label="Add"
+            icon={PORTAL_LIST_ADD_ICONS.application}
+            onClick={openAdd}
+            dataAttr="property-application-add"
+          />
+        </div>
+      ) : null}
 
       {editorOpen ? (
         <ManagerApplicationQuestionsEditorModal
