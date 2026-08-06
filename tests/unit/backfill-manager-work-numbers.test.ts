@@ -20,10 +20,10 @@ describe("managerNeedsWorkNumber", () => {
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
 
-  it("keeps the shared Claw line when the bridge is on", () => {
+  it("does not let the legacy bridge flag preserve the shared Claw line", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
-    expect(managerNeedsWorkNumber("+12053690702")).toBe(false);
+    expect(managerNeedsWorkNumber("+12053690702")).toBe(true);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });

@@ -109,8 +109,6 @@ export async function provisionPendingManagerAccount(
     if (!existingPurchase.user_id) {
       await supabase.from("manager_purchases").update({ user_id: opts.userId }).eq("id", existingPurchase.id);
     }
-    const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
-    await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
     const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
     scheduleManagerMessagingReady(opts.userId);
     return { managerId: existingPurchase.manager_id, created: false };
@@ -155,9 +153,7 @@ export async function provisionPendingManagerAccount(
     if (insErr) throw insErr;
   }
 
-  // Auto-provision a Twilio work number (Claw shared-line assignment is a no-op).
-  const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
-  await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
+  // Prepare the manager's own SMS registration/number record; never stamp a shared line.
   const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
   scheduleManagerMessagingReady(opts.userId);
 

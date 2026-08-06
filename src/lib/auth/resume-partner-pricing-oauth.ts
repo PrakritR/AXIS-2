@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export type ResumePartnerPricingOAuthResult =
   | { status: "checkout"; clientSecret: string }
   | { status: "finish"; sessionId: string }
-  | { status: "portal" }
+  | { status: "portal"; redirectTo: string }
   | { status: "error"; message: string };
 
 export async function resumePartnerPricingOAuth(): Promise<ResumePartnerPricingOAuthResult> {

@@ -10,6 +10,7 @@ import { getStripe } from "@/lib/stripe";
 import { getPaymentWaiverCode } from "@/lib/server-env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 
 export const runtime = "nodejs";
 
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
     // (There is no STRIPE_PRICE_FREE_MONTHLY, so routing Free through checkout would fail.)
     if (tierRaw === "free") {
       if (prepared.kind === "complete") {
-        return NextResponse.json({ action: "portal" });
+        return NextResponse.json({ action: "portal", redirectTo: "/portal/dashboard" });
       }
       const { managerId: finalizedId } = await completeFreeManagerTierForUser(supabase, {
         userId: user.id,
@@ -90,12 +91,16 @@ export async function POST(req: Request) {
         billing: billingRaw,
         promo,
       });
-      return NextResponse.json({ action: "portal", managerId: finalizedId });
+      return NextResponse.json({
+        action: "portal",
+        managerId: finalizedId,
+        redirectTo: MANAGER_GOOGLE_SERVICES_PATH,
+      });
     }
 
     if (trialSignup && isManagerSignupTrialTier(tierRaw)) {
       if (prepared.kind === "complete") {
-        return NextResponse.json({ action: "portal" });
+        return NextResponse.json({ action: "portal", redirectTo: "/portal/dashboard" });
       }
       const { managerId: finalizedId } = await completeManagerSignupTrial(supabase, {
         userId: user.id,
@@ -103,7 +108,11 @@ export async function POST(req: Request) {
         fullName,
         tier: tierRaw,
       });
-      return NextResponse.json({ action: "portal", managerId: finalizedId });
+      return NextResponse.json({
+        action: "portal",
+        managerId: finalizedId,
+        redirectTo: MANAGER_GOOGLE_SERVICES_PATH,
+      });
     }
 
     let managerId: string;
@@ -129,7 +138,11 @@ export async function POST(req: Request) {
         billing: billingRaw,
         promo,
       });
-      return NextResponse.json({ action: "portal", managerId: finalizedId });
+      return NextResponse.json({
+        action: "portal",
+        managerId: finalizedId,
+        redirectTo: prepared.kind === "complete" ? "/portal/dashboard" : MANAGER_GOOGLE_SERVICES_PATH,
+      });
     }
 
     const checkout = await createManagerCheckoutSession({

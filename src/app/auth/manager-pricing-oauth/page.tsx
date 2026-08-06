@@ -105,6 +105,7 @@ function ManagerPricingOauthContent() {
           sessionId?: string;
           clientSecret?: string;
           url?: string;
+          redirectTo?: string;
           error?: string;
         };
 
@@ -121,7 +122,7 @@ function ManagerPricingOauthContent() {
 
         if (body.action === "portal") {
           clearManagerPricingOffer();
-          window.location.replace("/portal/dashboard");
+          window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard");
           return;
         }
 

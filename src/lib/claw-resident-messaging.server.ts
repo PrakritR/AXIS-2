@@ -163,7 +163,7 @@ export function clawMappedManagerEmails(): string[] {
 /**
  * DB-driven shared-line registration: any manager whose profile is stamped
  * with the shared Claw agent number participates automatically — every
- * manager gets that stamp at onboarding (`assignSharedClawLeasingNumberToManager`)
+ * managers were historically stamped with that number during onboarding
  * and it's swept nightly for stragglers (`backfillManagerWorkNumbers`), so
  * "has an account" already implies "registered" with no separate opt-in step.
  * Sandbox/demo accounts (`isPortalSandboxEmail`) are excluded here — this is
@@ -186,7 +186,7 @@ export async function resolveRegisteredClawManagers(): Promise<
   // surface) purely by verifying their own phone.
   // Query only rows stamped with the shared Claw line itself — per-manager
   // Twilio numbers must not consume the row cap and push shared-line managers
-  // out of the roster. Stamps are written as E.164 (`assignSharedClawLeasingNumberToManager`);
+  // out of the roster. Historical stamps were written as E.164;
   // the digit variants cover any legacy formatting, and the
   // isLegacyClawSharedSmsNumber re-check below stays as the authority.
   const sharedLineVariants = [...legacyClawSharedPhoneDigits()].flatMap((d) => {

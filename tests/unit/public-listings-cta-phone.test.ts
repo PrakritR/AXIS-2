@@ -106,12 +106,12 @@ describe("getPublicListings — CTA phone per listing", () => {
     expect(phones.get("Birch House")).toBe(BOB_CELL);
   });
 
-  it("keeps the whole catalog on the Claw leasing line outside production", async () => {
+  it("keeps each listing on its own manager's phone outside production", async () => {
     process.env.VERCEL_ENV = "preview";
     seedCatalog();
     const phones = byBuilding(await getPublicListings());
-    expect(phones.get("Alder Row")).toBe(CLAW_LINE);
-    expect(phones.get("Birch House")).toBe(CLAW_LINE);
+    expect(phones.get("Alder Row")).toBe(ALICE_CELL);
+    expect(phones.get("Birch House")).toBe(BOB_CELL);
   });
 
   it("drops the CTA number for a production manager with no verified phone", async () => {

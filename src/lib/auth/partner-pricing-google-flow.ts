@@ -14,7 +14,7 @@ export type PartnerPricingSession = {
 export type ContinuePartnerPricingResult =
   | { status: "checkout"; clientSecret: string }
   | { status: "finish"; sessionId: string }
-  | { status: "portal" }
+  | { status: "portal"; redirectTo: string }
   | { status: "provisioned" }
   | { status: "error"; message: string };
 
@@ -87,7 +87,7 @@ export async function continuePartnerPricingWithOffer(
 
   if (session.authenticated && !session.needsPricing && offer.tier === "free") {
     clearManagerPricingOffer();
-    return { status: "portal" };
+    return { status: "portal", redirectTo: "/portal/dashboard" };
   }
 
   // Only the FREE tier may be finalized up-front. For a paid signup we must NOT provision a
@@ -119,6 +119,7 @@ export async function continuePartnerPricingWithOffer(
     action?: string;
     sessionId?: string;
     clientSecret?: string;
+    redirectTo?: string;
     error?: string;
   };
 
@@ -133,7 +134,10 @@ export async function continuePartnerPricingWithOffer(
 
   if (body.action === "portal") {
     clearManagerPricingOffer();
-    return { status: "portal" };
+    return {
+      status: "portal",
+      redirectTo: body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard",
+    };
   }
 
   if (body.action === "checkout" && body.clientSecret) {

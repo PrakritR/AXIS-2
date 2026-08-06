@@ -39,10 +39,8 @@ export async function completeManagerSignupTrial(
     }));
   }
 
-  // Best-effort PropLane intro + stamp the shared Claw messaging number.
+  // Best-effort PropLane intro. Messaging uses the manager's own registered number.
   const run = async () => {
-    const { assignSharedClawLeasingNumberToManager } = await import("@/lib/claw-leasing-bot.server");
-    await assignSharedClawLeasingNumberToManager(opts.userId).catch(() => undefined);
     await maybeSendManagerPropLaneAssistantIntro(supabase, opts.userId).catch(() => undefined);
   };
   try {

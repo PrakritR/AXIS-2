@@ -1,11 +1,8 @@
 /**
  * Public "Text to tour" / "Text to apply" CTA routing.
  *
- * Production sends prospects to the property's OWN manager's verified phone
- * (interim measure while the Twilio A2P campaign is in carrier review);
- * localhost / preview / test keep using the shared Claw Messenger leasing line
- * so the leasing-agent flow stays exercisable. See
- * `src/lib/listing-cta-phone.server.ts` and `docs/agents/sms-system.md`.
+ * Every environment sends prospects to the property's OWN manager's verified
+ * phone. The retired shared Claw number is never a fallback.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSmsDeepLink, isClawMessagingPubliclyEnabled, usableCtaSmsPhone } from "@/lib/claw-leasing-links";
@@ -55,7 +52,7 @@ afterEach(() => {
   else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = priorClawFlag;
 });
 
-describe("listing CTA phone — environment split", () => {
+describe("listing CTA phone — manager-owned in every environment", () => {
   it("routes production CTAs to each property's OWN manager", () => {
     setRuntime("production");
     expect(listingCtaSendsToManagerOwnPhone()).toBe(true);
@@ -65,22 +62,20 @@ describe("listing CTA phone — environment split", () => {
     expect(resolveListingCtaSmsPhone(ALICE)).not.toBe(resolveListingCtaSmsPhone(BOB));
   });
 
-  it("keeps localhost, preview and test on the Claw leasing line", () => {
+  it("uses each manager's verified phone on localhost, preview and test", () => {
     for (const env of ["development", "preview"]) {
       setRuntime(env);
-      expect(listingCtaSendsToManagerOwnPhone(), env).toBe(false);
-      // Every manager — and an unresolvable one — reaches the shared agent line,
-      // so the leasing agent stays exercisable locally.
-      expect(resolveListingCtaSmsPhone(ALICE), env).toBe(CLAW_LINE);
-      expect(resolveListingCtaSmsPhone(BOB), env).toBe(CLAW_LINE);
-      expect(resolveListingCtaSmsPhone(null), env).toBe(CLAW_LINE);
+      expect(listingCtaSendsToManagerOwnPhone(), env).toBe(true);
+      expect(resolveListingCtaSmsPhone(ALICE), env).toBe("+14258909021");
+      expect(resolveListingCtaSmsPhone(BOB), env).toBe("+12064710000");
+      expect(resolveListingCtaSmsPhone(null), env).toBeNull();
     }
 
     // No VERCEL_ENV (local `next dev` / vitest) falls back to NODE_ENV.
     delete process.env.VERCEL_ENV;
     process.env.NODE_ENV = "development";
-    expect(listingCtaSendsToManagerOwnPhone()).toBe(false);
-    expect(resolveListingCtaSmsPhone(ALICE)).toBe(CLAW_LINE);
+    expect(listingCtaSendsToManagerOwnPhone()).toBe(true);
+    expect(resolveListingCtaSmsPhone(ALICE)).toBe("+14258909021");
   });
 
   it("falls back to the web links when a production manager has no usable phone", () => {

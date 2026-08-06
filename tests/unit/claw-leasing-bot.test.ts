@@ -94,24 +94,19 @@ describe("claw leasing intent", () => {
       expect(isClawMessagingPubliclyEnabled(null), flag).toBe(false);
       expect(isClawMessagingPubliclyEnabled(""), flag).toBe(false);
       expect(isClawMessagingPubliclyEnabled("not a phone"), flag).toBe(false);
-      // The shared agent line stays a legitimate CTA target — dev/preview route
-      // every listing there.
+      // The retired shared agent line is recognized only so it can be rejected.
       expect(isLegacyClawSharedSmsNumber("+12053690702"), flag).toBe(true);
-      expect(isClawMessagingPubliclyEnabled("+12053690702"), flag).toBe(true);
+      expect(isClawMessagingPubliclyEnabled("+12053690702"), flag).toBe(false);
       if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
       else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
     }
   });
 
-  it("keeps the shared-line transport on the Claw agent number while Claw is primary", () => {
-    // `managerContactSmsPhoneForPublicCta` still backs the PropLane SMS
-    // transport (`proplane-sms-transport.server.ts`) and manager work-number
-    // UI, so it keeps collapsing everything onto the shared line. Public
-    // listing CTAs no longer go through it.
+  it("does not allow an environment flag to reactivate the shared line", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
-    expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBe("+12053690702");
-    expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe("+12053690702");
+    expect(managerContactSmsPhoneForPublicCta("+12053690702")).toBeNull();
+    expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe("+14258909021");
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });
@@ -124,10 +119,10 @@ describe("claw leasing intent", () => {
       expect(
         buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+14258909021" }),
       ).toMatch(/^sms:\+14258909021\?/);
-      // Dev / preview: the shared Claw leasing line.
+      // The retired shared Claw leasing line can never be a target.
       expect(
         buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: "+12053690702" }),
-      ).toMatch(/^sms:\+12053690702\?/);
+      ).toBe("#");
       // No usable number → no sms: link; callers render the web fallback.
       expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test" }), flag).toBe("#");
       expect(buildSmsDeepLink({ intent: "tour", propertyLabel: "Test", toPhone: null }), flag).toBe("#");

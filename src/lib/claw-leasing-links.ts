@@ -2,16 +2,8 @@
  * Client-safe listing SMS helpers (no Node/ws imports).
  * Used by listing CTAs (`sms:` deep links) and server auto-replies.
  *
- * PropLane messaging (the transport that actually sends and receives) runs on
- * ONE shared Claw Messenger agent line — keep
- * `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=1` so work-number UI and
- * `proplane-sms-transport.server.ts` keep using the Claw agent phone.
- *
- * Public listing CTAs are the one exception: in PRODUCTION they point at the
- * property's own manager's phone instead. That split lives entirely in
- * `resolveListingCtaSmsPhone` (`src/lib/listing-cta-phone.server.ts`); here,
- * `listingCtaSmsPhone` / `buildSmsDeepLink` just carry whatever number the
- * server resolved.
+ * The shared Claw line is retired. Legacy number helpers remain only so stale
+ * profile data can be rejected while listings use the manager's verified line.
  */
 
 import { normalizePhoneE164 } from "@/lib/communication-other-recipients";
@@ -44,22 +36,12 @@ export function isFictionalUs555Number(phone: string | null | undefined): boolea
   return national.slice(3, 6) === "555";
 }
 
-/**
- * Claw Messenger is the active PropLane messaging system (single shared agent
- * line). Client-safe — driven by NEXT_PUBLIC_ so listing CTAs work in the browser.
- * Set `NEXT_PUBLIC_CLAW_MESSENGER_ENABLED=0` only when flipping to Twilio later.
- */
+/** The legacy shared Claw line is retired and can no longer be enabled by env. */
 export function isClawSharedLineBridgeEnabled(): boolean {
-  const flag = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED?.trim();
-  // Default ON for the Claw-primary era when unset in client bundles that
-  // still ship the public agent phone — but prefer an explicit "1".
-  if (flag === "0" || flag === "false") return false;
-  if (flag === "1" || flag === "true") return true;
-  // Fallback: if the public agent phone is configured, treat Claw as primary.
-  return Boolean(process.env.NEXT_PUBLIC_CLAW_MESSENGER_AGENT_PHONE?.trim());
+  return false;
 }
 
-/** @deprecated Alias — Claw is primary, not a temporary bridge. */
+/** @deprecated The Claw shared line is retired. */
 export function isClawMessagingPrimary(): boolean {
   return isClawSharedLineBridgeEnabled();
 }
