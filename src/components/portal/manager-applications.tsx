@@ -22,6 +22,7 @@ import {
   RESIDENT_DETAIL_HEADER_ACTION_BTN,
   RESIDENT_DETAIL_HEADER_ACTIONS_ROW,
 } from "@/components/portal/portal-metrics";
+import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
@@ -46,7 +47,7 @@ import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-ap
 import { ManagerApplicationOnBehalfModal } from "@/components/portal/manager-application-on-behalf-modal";
 import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
-import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
+import { ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
@@ -1298,25 +1299,6 @@ export function ManagerApplications({
     </PortalFilterSortSheet>
   );
 
-  const applicationsScreeningButton = (
-    <ManagerScreeningSettingsButton
-      className="w-full shrink-0 md:w-auto"
-      onClick={() => setScreeningModalOpen(true)}
-    />
-  );
-
-  const applicationsPromoButton = (
-    <Button
-      type="button"
-      variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
-      data-attr="application-settings-open"
-      onClick={() => setApplicationSettingsOpen(true)}
-    >
-      Promo
-    </Button>
-  );
-
   const applicationsEditButton = (
     <Button
       type="button"
@@ -1354,18 +1336,76 @@ export function ManagerApplications({
       disabled={propertyOptions.length === 0}
       title={propertyOptions.length === 0 ? "Add a property before starting an application" : undefined}
     >
-      Add application
+      Add
     </Button>
   );
 
   const applicationsHeaderActions = (
-    <>
-      {applicationsAddButton}
-      {applicationsScreeningButton}
-      {applicationsPromoButton}
-      {applicationsEditButton}
-      {applicationsSendButton}
-    </>
+    <PortalAdaptiveHeaderActions
+      className="w-full min-w-0"
+      moreDataAttr="applications-more-actions"
+      moreAriaLabel="More application actions"
+      pinnedMenuItems={[
+        <DropdownMenuItem
+          key="promo"
+          data-attr="application-settings-menu"
+          onSelect={() => setApplicationSettingsOpen(true)}
+        >
+          Promo
+        </DropdownMenuItem>,
+        <DropdownMenuItem
+          key="screening"
+          data-attr="application-screening-menu"
+          onSelect={() => setScreeningModalOpen(true)}
+        >
+          Screening
+        </DropdownMenuItem>,
+      ]}
+      actions={[
+        {
+          id: "edit",
+          keepPriority: 2,
+          node: applicationsEditButton,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="edit-application-menu"
+              disabled={propertyOptions.length === 0}
+              onSelect={() => setEditApplicationOpen(true)}
+            >
+              Edit
+            </DropdownMenuItem>
+          ),
+        },
+        {
+          id: "send",
+          keepPriority: 1,
+          node: applicationsSendButton,
+          menuItem: (
+            <DropdownMenuItem
+              disabled={shareableProperties.length === 0}
+              onSelect={() => setInviteModalOpen(true)}
+            >
+              Send
+            </DropdownMenuItem>
+          ),
+        },
+        {
+          id: "add",
+          alwaysVisible: true,
+          pinEdge: "end",
+          node: applicationsAddButton,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="applications-add-menu"
+              disabled={propertyOptions.length === 0}
+              onSelect={() => setAddApplicationOpen(true)}
+            >
+              Add
+            </DropdownMenuItem>
+          ),
+        },
+      ]}
+    />
   );
 
   const applicationModals = (
@@ -1619,7 +1659,7 @@ export function ManagerApplications({
             }
           />
           <PortalListAddRow
-            label="Add application"
+            label="Add"
             icon={PORTAL_LIST_ADD_ICONS.application}
             hint="Complete an application for a resident and email them to finish"
             onClick={() => setAddApplicationOpen(true)}
@@ -1706,7 +1746,7 @@ export function ManagerApplications({
           })}
           <div className="px-3 py-3 max-md:px-2.5">
             <PortalListAddRow
-              label="Add application"
+              label="Add"
               icon={PORTAL_LIST_ADD_ICONS.application}
               hint="Complete an application for a resident and email them to finish"
               onClick={() => setAddApplicationOpen(true)}

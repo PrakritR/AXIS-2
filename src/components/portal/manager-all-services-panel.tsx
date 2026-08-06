@@ -404,7 +404,7 @@ export function ManagerAllServicesPanel({
     typeFilter === "vendors" ? (
       <Button
         type="button"
-        variant="primary"
+        variant="outline"
         className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         onClick={() => vendorsPanelRef.current?.openSettings()}
         data-attr="manager-vendor-settings-open"
@@ -414,22 +414,22 @@ export function ManagerAllServicesPanel({
     ) : typeFilter === "requests" ? (
       <Button
         type="button"
-        variant="primary"
+        variant="outline"
         className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         data-attr="manager-service-request-add"
         onClick={() => setAddRequestOpen(true)}
       >
-        Add request
+        Add
       </Button>
     ) : (
       <Button
         type="button"
-        variant="primary"
+        variant="outline"
         className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
         data-attr="manager-work-order-add"
         onClick={() => setAddWorkOrderOpen(true)}
       >
-        Add work order
+        Add
       </Button>
     );
 

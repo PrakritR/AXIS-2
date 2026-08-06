@@ -292,7 +292,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
 
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
         <PortalListAddRow
-          label="Add application"
+          label="Add"
           icon={PORTAL_LIST_ADD_ICONS.application}
           onClick={openAdd}
           dataAttr="property-application-add"

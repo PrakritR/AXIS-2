@@ -1194,7 +1194,7 @@ export function ResidentApplicationsPanel({
         {sessionReady && canOpenPropertyPicker ? (
           <div className="px-3 pb-4 pt-1 max-md:px-2.5 lg:pb-5">
             <PortalListAddRow
-              label="Add application"
+              label="Add"
               hint="Apply to another property"
               icon={PORTAL_LIST_ADD_ICONS.application}
               onClick={openPropertyPicker}

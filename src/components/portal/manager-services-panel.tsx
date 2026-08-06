@@ -113,8 +113,8 @@ export function ManagerServicesPanel() {
       <ManagerPortalPageShell
         title="Services catalog"
         titleAside={
-          <Button type="button" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={openCreate}>
-            Add request
+          <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={openCreate}>
+            Add
           </Button>
         }
         filterRow={

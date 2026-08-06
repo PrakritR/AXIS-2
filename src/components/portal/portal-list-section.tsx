@@ -56,7 +56,7 @@ export function PortalSectionPrimaryButton({
   return (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}${className ? ` ${className}` : ""}`}
       {...props}
     >

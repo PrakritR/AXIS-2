@@ -190,7 +190,7 @@ export function ManagerOutgoingPaymentsPanel({
       return (
         <div className={`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} pt-5 sm:pt-6`}>
           <PortalListAddRow
-            label="Add payment"
+            label="Add"
             icon={PORTAL_LIST_ADD_ICONS.payment}
             onClick={onAddPayment}
             dataAttr="payments-list-add"
@@ -236,7 +236,7 @@ export function ManagerOutgoingPaymentsPanel({
       {onAddPayment ? (
         <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
           <PortalListAddRow
-            label="Add payment"
+            label="Add"
             icon={PORTAL_LIST_ADD_ICONS.payment}
             onClick={onAddPayment}
             dataAttr="payments-list-add"

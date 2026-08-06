@@ -580,6 +580,7 @@ export function ResidentDocumentsPanel({
         <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
           <Button
             type="button"
+            variant="outline"
             className={PORTAL_HEADER_ACTION_BTN}
             data-attr="resident-documents-add"
             onClick={openAdd}
@@ -593,6 +594,7 @@ export function ResidentDocumentsPanel({
       <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-documents-mobile-actions">
         <Button
           type="button"
+          variant="outline"
           className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
           data-attr="resident-documents-add"
           onClick={openAdd}

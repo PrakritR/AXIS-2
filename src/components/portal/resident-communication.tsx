@@ -314,7 +314,7 @@ export function ResidentCommunication({
   const newMessageButton = (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="communication-new-message"
       onClick={() => inboxRef.current?.openCompose()}

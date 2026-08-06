@@ -212,7 +212,7 @@ export function ManagerPropertyLeasePanel({
 
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
         <PortalListAddRow
-          label="Add lease"
+          label="Add"
           icon={PORTAL_LIST_ADD_ICONS.lease}
           onClick={openAdd}
           dataAttr="property-lease-add"

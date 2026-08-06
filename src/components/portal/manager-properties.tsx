@@ -230,14 +230,14 @@ export function ManagerProperties({
   const propertiesAddButton = (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       className={`shrink-0 ${PORTAL_HEADER_PRIMARY_ACTION_BTN}`}
       data-attr="manager-properties-create"
       onClick={tryOpenAdd}
       disabled={!skuLoaded}
       aria-busy={!skuLoaded}
     >
-      {!skuLoaded ? "Loading…" : "+ Add property"}
+      {!skuLoaded ? "Loading…" : "Add"}
     </Button>
   );
 
