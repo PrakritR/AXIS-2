@@ -962,14 +962,14 @@ export function ManagerLeasesPipelinePanel({
       <>
         {leaseModals}
         <div className="space-y-3 px-3 py-2">
-          <PortalDataTableEmpty
-            icon="lease"
-            message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
-          />
+          {rows.length > 0 ? (
+            <PortalDataTableEmpty icon="lease" message="No leases in this stage yet." />
+          ) : null}
           {onAddLease ? (
             <PortalListAddRow
               label="Add lease"
               icon={PORTAL_LIST_ADD_ICONS.lease}
+              hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}
               dataAttr="leases-list-add"
             />
@@ -1004,6 +1004,7 @@ export function ManagerLeasesPipelinePanel({
             <PortalListAddRow
               label="Add lease"
               icon={PORTAL_LIST_ADD_ICONS.lease}
+              hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}
               dataAttr="leases-list-add"
             />

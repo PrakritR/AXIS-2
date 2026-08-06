@@ -23,6 +23,7 @@ import {
   leaseNeedsUploadedLeaseReviewAction,
   leaseSendHeldByUploadedLeaseReview,
   leaseSendStillReachable,
+  ensureManagerReviewLeaseForApplication,
   readLeasePipeline,
   seedDemoLeasePipeline,
   sendLeaseToResident,
@@ -463,5 +464,29 @@ describe("the application lookup never manufactures a block from an unrelated ro
 
     expect(leaseApplicationApprovalBlocker(storedRow()!)).toBeNull();
     expect((await sendLeaseToResident(ROW_ID, MANAGER_ID)).ok).toBe(true);
+  });
+});
+
+describe("ensureManagerReviewLeaseForApplication", () => {
+  beforeEach(resetStores);
+
+  it("returns a manager-review lease for an approved manager-added resident", () => {
+    seedDemoManagerApplicationRows([applicationRow({ manuallyAdded: true })], MANAGER_ID);
+    seedDemoLeasePipeline([], MANAGER_ID);
+
+    const result = ensureManagerReviewLeaseForApplication(AXIS_ID, MANAGER_ID);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.row.bucket).toBe("manager");
+    expect(result.row.residentEmail).toBe("diego.morales@example.com");
+    expect(readLeasePipeline(MANAGER_ID).some((row) => row.id === result.row.id)).toBe(true);
+  });
+
+  it("refuses pending residents", () => {
+    seedDemoManagerApplicationRows([applicationRow({ bucket: "pending", stage: "Submitted" })], MANAGER_ID);
+    expect(ensureManagerReviewLeaseForApplication(AXIS_ID, MANAGER_ID)).toEqual({
+      ok: false,
+      error: "Approve this resident before adding a lease.",
+    });
   });
 });

@@ -2140,6 +2140,35 @@ export function ManagerResidents({
     return gate.ok ? undefined : gate.error;
   }
 
+  const uploadLeaseForSelectedResident = useCallback(
+    async (file: File, rowId: string) => {
+      if (!selected || !rowId) return;
+      setUploadingLeaseRowId(rowId);
+      const result = await uploadAndParseLeasePdf(rowId, file, userId);
+      setUploadingLeaseRowId(null);
+      if (!result.ok) {
+        showToast(result.error ?? "Upload failed.");
+        return;
+      }
+      setLeaseTick((n) => n + 1);
+      if (result.saveError) {
+        showToast(`Lease PDF uploaded, but its PropLane reading was not stored: ${result.saveError}`);
+        return;
+      }
+      if (!result.parse) {
+        showToast("Lease PDF uploaded.");
+        return;
+      }
+      setImportReviewLeaseId(rowId);
+      showToast(
+        result.parse.status === "parsed"
+          ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
+          : `Lease PDF uploaded, but PropLane could not read its text. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
+      );
+    },
+    [selected, showToast, userId],
+  );
+
   function runGenerateLease(rowId: string, discardManagerEdits = false) {
     if (generatingLeaseRowId) return;
     setGeneratingLeaseRowId(rowId);
@@ -2410,30 +2439,7 @@ export function ManagerResidents({
         editLeaseDataAttr="resident-lease-edit"
         uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
         onReviewImportedLease={() => setImportReviewLeaseId(residentLease.id)}
-        onUploadPdf={async (file) => {
-          setUploadingLeaseRowId(residentLease.id);
-          const result = await uploadAndParseLeasePdf(residentLease.id, file, userId);
-          setUploadingLeaseRowId(null);
-          if (!result.ok) {
-            showToast(result.error ?? "Upload failed.");
-            return;
-          }
-          setLeaseTick((n) => n + 1);
-          if (result.saveError) {
-            showToast(`Lease PDF uploaded, but its PropLane reading was not stored: ${result.saveError}`);
-            return;
-          }
-          if (!result.parse) {
-            showToast("Lease PDF uploaded.");
-            return;
-          }
-          setImportReviewLeaseId(residentLease.id);
-          showToast(
-            result.parse.status === "parsed"
-              ? `Lease imported into PropLane format (${result.parse.sections.length} sections). ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`
-              : `Lease PDF uploaded, but PropLane could not read its text. ${UPLOADED_LEASE_REVIEW_REQUIRED_MESSAGE}`,
-          );
-        }}
+        onUploadPdf={async (file) => uploadLeaseForSelectedResident(file, residentLease.id)}
         deleteLabel="Delete lease"
         deleteDataAttr="resident-lease-delete"
         onDelete={() => {
@@ -2626,7 +2632,11 @@ export function ManagerResidents({
                                   className="min-h-[calc(100dvh-14rem)] flex-1 max-lg:min-h-[calc(100dvh-17rem-var(--portal-native-bottom-nav-inset,0px))]"
                                 />
                               ) : (
-                                <p className="text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
+                                <p className="text-sm text-muted">
+                                  {selectedApplicationRow?.bucket === "approved"
+                                    ? "Add or upload a lease from the Leases section."
+                                    : "Approve the application first, then add a lease from the Leases section."}
+                                </p>
                               )}
                             </ResidentDetailTabPanel>
                             ) : null}

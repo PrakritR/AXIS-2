@@ -1678,6 +1678,84 @@ export function leasePipelineRowsForManagerResident(
   return rows;
 }
 
+export type EnsureManagerReviewLeaseResult =
+  | { ok: true; row: LeasePipelineRow }
+  | { ok: false; error: string };
+
+/**
+ * Returns the manager-review lease row for an approved resident, creating one when
+ * the pipeline has none (e.g. manager-added resident without an upload at onboarding).
+ */
+export function ensureManagerReviewLeaseForApplication(
+  applicationId: string,
+  managerUserId?: string | null,
+): EnsureManagerReviewLeaseResult {
+  const app = readManagerApplicationRows().find((row) => row.id === applicationId);
+  if (!app?.email?.trim()) {
+    return { ok: false, error: "Resident record not found." };
+  }
+  if (app.bucket !== "approved") {
+    return { ok: false, error: "Approve this resident before adding a lease." };
+  }
+  if (isLeasePipelineSuppressed(app.id, app.email, managerUserId)) {
+    return { ok: false, error: "Lease was removed for this resident." };
+  }
+
+  const email = app.email.trim().toLowerCase();
+  const existing = leasePipelineRowsForManagerResident(managerUserId, email, app.id);
+  if (existing[0]) return { ok: true, row: existing[0] };
+
+  const iso = new Date().toISOString();
+  const propertyId =
+    app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
+  const roomChoice = app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || "";
+  const effectiveManagerUserId = app.managerUserId ?? managerUserId ?? null;
+  const unit = approvedLeasePlacementLabel({
+    propertyId,
+    propertyLabel: app.property,
+    roomChoice,
+    bundleId: bundleIdForApplication(app.application),
+  });
+  const seeded = normalizeLeasePipelineRow({
+    id: `lease_app_${app.id}`,
+    residentName: String(app.name ?? "").trim() || "Resident",
+    residentEmail: email,
+    unit,
+    stageLabel: stageLabelForBucket("manager"),
+    updated: formatUpdatedLabel(iso),
+    bucket: "manager",
+    pdfVersion: 1,
+    notes: app.manuallyAdded
+      ? "Manager-added resident — generate or upload a lease."
+      : "Created from approved application.",
+    updatedAtIso: iso,
+    axisId: app.id,
+    propertyId: propertyId || undefined,
+    managerUserId: effectiveManagerUserId,
+    residentUserId: null,
+    roomChoice: roomChoice || null,
+    signedRentLabel: signedRentLabelForRow(app),
+    application: effectiveApplicationForRow(app),
+    generatedHtml: null,
+    generatedAtIso: null,
+    managerUploadedPdf: null,
+    thread: [],
+    managerSignature: null,
+    residentSignature: null,
+    signatureName: null,
+    signedAtIso: null,
+  });
+
+  const raw = [...materializeLeasePipeline(managerUserId)];
+  raw.push(seeded);
+  write(raw, managerUserId);
+  const row =
+    readLeasePipeline(managerUserId).find((candidate) => candidate.id === seeded.id) ??
+    leasePipelineRowsForManagerResident(managerUserId, email, app.id)[0];
+  if (!row) return { ok: false, error: "Could not create a lease for this resident." };
+  return { ok: true, row };
+}
+
 export type ResidentLeaseAuthContext = {
   email?: string | null;
   residentAxisId?: string | null;

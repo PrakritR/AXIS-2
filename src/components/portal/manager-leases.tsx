@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
+import { ManagerAddLeaseModal } from "@/components/portal/manager-add-lease-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
@@ -28,7 +29,8 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
-import { leaseListHref } from "@/lib/portal-detail-routes";
+import { leaseDetailHref, leaseListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
@@ -48,6 +50,7 @@ export function ManagerLeases({
   leaseId?: string;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const { userId, ready: authReady } = useManagerUserId();
   const [tab, setTab] = useState<ManagerLeaseTab>(tabProp);
   const [prevTabProp, setPrevTabProp] = useState(tabProp);
@@ -63,6 +66,7 @@ export function ManagerLeases({
   const [clientReady, setClientReady] = useState(false);
   const [editLeasesOpen, setEditLeasesOpen] = useState(false);
   const [shareLeasesOpen, setShareLeasesOpen] = useState(false);
+  const [addLeaseOpen, setAddLeaseOpen] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setClientReady(true));
@@ -247,12 +251,29 @@ export function ManagerLeases({
     </Button>
   );
 
+  const leasesAddButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="leases-add"
+      onClick={() => setAddLeaseOpen(true)}
+    >
+      Add lease
+    </Button>
+  );
+
   const leasesHeaderActions = (
     <>
+      {leasesAddButton}
       {leasesShareButton}
       {leasesEditButton}
     </>
   );
+
+  const openLeaseAfterAdd = (leaseId: string) => {
+    navigate(leaseDetailHref(basePath, "manager", leaseId));
+  };
 
   const modals = (
     <>
@@ -270,6 +291,13 @@ export function ManagerLeases({
         kind="listing"
         properties={shareableProperties}
       />
+      <ManagerAddLeaseModal
+        open={addLeaseOpen}
+        onClose={() => setAddLeaseOpen(false)}
+        managerUserId={userId}
+        onSubmitted={() => setTick((n) => n + 1)}
+        onOpenLease={openLeaseAfterAdd}
+      />
     </>
   );
 
@@ -284,6 +312,7 @@ export function ManagerLeases({
           residentAccountEmails={residentAccountEmails}
           leaseId={leaseIdProp}
           listBasePath={basePath}
+          onAddLease={() => setAddLeaseOpen(true)}
           onEmailAccountSetup={(email) => {
             setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
           }}
@@ -349,6 +378,7 @@ export function ManagerLeases({
           residentAccountEmails={residentAccountEmails}
           leaseId={leaseIdProp}
           listBasePath={basePath}
+          onAddLease={() => setAddLeaseOpen(true)}
           onEmailAccountSetup={(email) => {
             setResidentAccountEmails((prev) => new Set([...prev, email.trim().toLowerCase()]));
           }}

@@ -115,7 +115,7 @@ import {
 
 const processedApplicationFeeSessions = new Set<string>();
 
-export type RentalApplicationWizardMode = "public" | "portal";
+export type RentalApplicationWizardMode = "public" | "portal" | "manager";
 
 export type RentalApplicationWizardProps = {
   showToast: (msg: string) => void;
@@ -132,6 +132,9 @@ export type RentalApplicationWizardProps = {
    * wizard is embedded on `/resident/applications/{bucket}/{id}`.
    */
   applyPath?: string;
+  onManagerSendToResident?: (payload: { axisId: string }) => void;
+  onManagerCancel?: () => void;
+  managerActionBusy?: boolean;
 };
 
 function makeNewApplicationId(): string {
@@ -166,6 +169,7 @@ const STEP_META = [
 
 function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?: string): string {
   if (exitPath?.startsWith("/")) return exitPath;
+  if (mode === "manager") return "/portal/applications/incomplete";
   return mode === "portal" ? "/resident/applications" : "/auth/sign-in";
 }
 
@@ -252,6 +256,9 @@ export function RentalApplicationWizard({
   layout = "standalone",
   linkedPropertyId: linkedPropertyIdProp,
   applyPath,
+  onManagerSendToResident,
+  onManagerCancel,
+  managerActionBusy = false,
 }: RentalApplicationWizardProps) {
   return (
     <Suspense
@@ -267,6 +274,9 @@ export function RentalApplicationWizard({
         layout={layout}
         linkedPropertyId={linkedPropertyIdProp}
         applyPath={applyPath}
+        onManagerSendToResident={onManagerSendToResident}
+        onManagerCancel={onManagerCancel}
+        managerActionBusy={managerActionBusy}
       />
     </Suspense>
   );
@@ -280,6 +290,9 @@ function RentalApplicationWizardInner({
   layout = "standalone",
   linkedPropertyId: linkedPropertyIdProp,
   applyPath,
+  onManagerSendToResident,
+  onManagerCancel,
+  managerActionBusy = false,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const requestedTarget = wizardTargetFromParam(searchParams);
@@ -440,12 +453,16 @@ function RentalApplicationWizardInner({
   }, [mode, postSubmit, router, searchParams, step, wizardApplyPath, isOnScreen]);
 
   const exitApplication = useCallback(() => {
+    if (mode === "manager") {
+      onManagerCancel?.();
+      return;
+    }
     if (isDemoModeActive()) {
       window.dispatchEvent(new Event(DEMO_CLOSE_RESIDENT_APPLY_EVENT));
       return;
     }
     router.push(wizardExitPath);
-  }, [router, wizardExitPath]);
+  }, [mode, onManagerCancel, router, wizardExitPath]);
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -612,11 +629,12 @@ function RentalApplicationWizardInner({
       if (linkedPropertyId) return Boolean(linkedProperty);
       return true;
     }
+    if (mode === "manager") return Boolean(linkedPropertyId && linkedProperty);
     return Boolean(linkedPropertyId && linkedProperty);
   }, [linkedProperty, linkedPropertyId, mode]);
 
   useEffect(() => {
-    if (mode !== "portal") return;
+    if (mode !== "portal" && mode !== "manager") return;
     const email = sessionEmail?.trim();
     if (!email?.includes("@")) return;
     queueMicrotask(() => {
@@ -641,7 +659,7 @@ function RentalApplicationWizardInner({
     // or writing anything to the server — otherwise a fresh page load can sync
     // a brand-new row before the async lookup below finds the real match.
     if (mode === "portal" && isReconcilingTarget) return;
-    const email = (mode === "portal" ? sessionEmail ?? form.email : form.email).trim();
+    const email = (mode === "portal" || mode === "manager" ? sessionEmail ?? form.email : form.email).trim();
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
     const axisId = ensureRentalWizardAxisId();
@@ -1396,6 +1414,9 @@ function RentalApplicationWizardInner({
   }, [demoAutofillSubmitPending, finalizeApplicationSubmit, form]);
 
   const primaryButtonLabel = useMemo(() => {
+    if (mode === "manager" && step === 11) {
+      return managerActionBusy ? "Loading preview…" : "Send to resident";
+    }
     if (step !== 12) return "Continue";
     if (!applicationFeeGate.needsFee) return submitting ? "Submitting…" : "Submit application";
     const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
@@ -1413,7 +1434,9 @@ function RentalApplicationWizardInner({
     }
     return submitting ? "Submitting…" : "Submit application";
   }, [
+    mode,
     step,
+    managerActionBusy,
     form,
     applicationFeeGate.paid,
     applicationFeeGate.needsFee,
@@ -1675,6 +1698,19 @@ function RentalApplicationWizardInner({
     }
     if (step === 11) {
       if (!validateAllPrior()) return;
+      if (mode === "manager") {
+        const axisId = ensureRentalWizardAxisId();
+        const email = (sessionEmail ?? form.email).trim();
+        syncInProgressApplicationRow({
+          axisId,
+          form,
+          residentEmail: email,
+          wizardStep: step,
+          wizardMaxStepReached: maxStepReached,
+        });
+        onManagerSendToResident?.({ axisId });
+        return;
+      }
       setStep(12);
       setMaxStepReached((m) => nextWizardMaxReached(m, 12));
       setErrors({});
@@ -1863,7 +1899,7 @@ function RentalApplicationWizardInner({
                 mode={mode}
                 propertyOptions={propertyOptions}
                 propertyLocked={mode !== "portal" && Boolean(linkedPropertyId && linkedProperty)}
-                emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
+                emailLocked={(mode === "portal" || mode === "manager") && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
                 applicationFeeCheckBusy={applicationFeeCheckBusy}
@@ -1932,12 +1968,12 @@ function RentalApplicationWizardInner({
                 className={embedded ? undefined : "w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"}
                 data-attr="rental-wizard-continue"
                 onClick={handleContinue}
-                disabled={submitting}
+                disabled={submitting || (mode === "manager" && managerActionBusy)}
               >
                 {submitting ? "Submitting…" : primaryButtonLabel}
               </Button>
             </div>
-            {step <= 3 ? (
+            {step <= 3 && mode !== "manager" ? (
               <p className="rental-wizard-browse-homes mt-4 text-center text-sm">
                 <Link
                   href={browseHomesHref}
