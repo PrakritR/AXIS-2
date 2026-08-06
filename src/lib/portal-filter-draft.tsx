@@ -197,15 +197,32 @@ export function usePortalFilterDraft<T>(
   const id = useId();
   const ctx = useContext(PortalFilterDeferContext);
   const [, setTick] = useState(0);
+  const appliedRef = useRef(applied);
+  const onApplyRef = useRef(onApply);
+  const resetValueRef = useRef(resetValue);
 
-  if (ctx) {
-    ctx.register(id, applied, onApply as (next: unknown) => void, resetValue);
-  }
+  appliedRef.current = applied;
+  onApplyRef.current = onApply;
+  resetValueRef.current = resetValue;
 
+  const ensureRegistered = useCallback(() => {
+    if (!ctx) return;
+    ctx.register(
+      id,
+      appliedRef.current,
+      (next) => onApplyRef.current(next as T),
+      resetValueRef.current,
+    );
+  }, [ctx, id]);
+
+  /* Register in layout — not during render. A render-time register paired with a layout
+     cleanup on `ctx` change unregisters AFTER the render register and leaves no entry
+     until the next paint (portaled filter picks then no-op). */
   useLayoutEffect(() => {
     if (!ctx) return;
+    ensureRegistered();
     return () => ctx.unregister(id);
-  }, [ctx, id]);
+  }, [ctx, id, ensureRegistered]);
 
   useLayoutEffect(() => {
     ctx?.syncApplied(id, applied);
@@ -216,11 +233,19 @@ export function usePortalFilterDraft<T>(
     return ctx.subscribe(() => setTick((n) => n + 1));
   }, [ctx]);
 
+  const setDraft = useCallback(
+    (next: T) => {
+      if (!ctx) return;
+      ensureRegistered();
+      ctx.setDraft(id, next);
+    },
+    [ctx, id, ensureRegistered],
+  );
+
   if (!ctx) {
     return [applied, onApply];
   }
 
   const draft = ctx.getDraft(id, applied);
-  const setDraft = (next: T) => ctx.setDraft(id, next);
   return [draft, setDraft];
 }

@@ -3,16 +3,19 @@
 import { ChevronDown } from "lucide-react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import {
   deferAfterFieldSelectPick,
+  fieldSelectEventTargetElement,
   handlePortaledFieldSelectOptionPointerDown,
 } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
@@ -176,6 +179,36 @@ export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX =
   FILTER_MENU_CONTENT_PX + PORTAL_FILTER_SHEET_CHROME_PX + 12;
 
 type Option = { value: string; label: string };
+
+/**
+ * Portaled filter menus often render under `document.body`, outside the Next.js root where
+ * React 17+ attaches delegated listeners — synthetic `onClick` / `onPointerDown` on rows
+ * never run in production even though jsdom tests pass. Handle picks on the listbox natively.
+ */
+function useFilterListboxPointerPick(
+  onPick: (value: string, event: PointerEvent) => void,
+) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const element = fieldSelectEventTargetElement(event.target);
+      const row = element?.closest<HTMLElement>('[role="option"][data-filter-option-value]');
+      if (!row || !list.contains(row)) return;
+      const { filterOptionValue } = row.dataset;
+      if (filterOptionValue === undefined) return;
+      onPickRef.current(filterOptionValue, event);
+    };
+    list.addEventListener("pointerdown", onPointerDown);
+    return () => list.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  return listRef;
+}
 
 type FilterFieldsAccordionContextValue = {
   openId: string | null;
@@ -374,7 +407,9 @@ export function FilterCollapsibleSection({
           zIndex: fieldSelectMenuZIndex(portalHost),
           touchAction: "pan-y",
         }}
-        onPointerDown={(event) => event.stopPropagation()}
+        /* Do not stop pointerdown propagation here — React 17+ dispatches from the root,
+           so stopping on this shell prevents option handlers inside the menu from ever
+           running. Outside-dismiss paths already ignore `[data-field-select-menu]`. */
         onTouchMove={(event) => event.stopPropagation()}
       >
         {/* The trigger row already shows {@link FILTER_FIELD_LABEL_CLASS} — repeating the
@@ -451,9 +486,19 @@ export function FilterCheckboxList({
     return options.filter((opt) => fieldSelectMenuMatches(opt.label, query));
   }, [options, query]);
 
-  const toggle = (value: string) => {
-    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
-  };
+  const toggle = useCallback(
+    (value: string) => {
+      onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+    },
+    [onChange, selected],
+  );
+
+  const listRef = useFilterListboxPointerPick((value, event) => {
+    handlePortaledFieldSelectOptionPointerDown(
+      event as unknown as Parameters<typeof handlePortaledFieldSelectOptionPointerDown>[0],
+      () => toggle(value),
+    );
+  });
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -466,6 +511,7 @@ export function FilterCheckboxList({
         />
       ) : null}
       <div
+        ref={listRef}
         role="listbox"
         aria-multiselectable="true"
         data-attr={dataAttr}
@@ -492,14 +538,12 @@ export function FilterCheckboxList({
                 key={opt.value}
                 role="option"
                 aria-selected={checked}
+                data-filter-option-value={opt.value}
                 className={cn(
                   "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm",
                   FIELD_SELECT_MENU_OPTION_CLASS,
                   checked && "bg-primary/5",
                 )}
-                onPointerDown={(event) =>
-                  handlePortaledFieldSelectOptionPointerDown(event, () => toggle(opt.value))
-                }
               >
                 <input
                   type="checkbox"
@@ -548,6 +592,16 @@ export function FilterSingleSelectList({
     return options.filter((opt) => fieldSelectMenuMatches(opt.label, query));
   }, [options, query]);
 
+  const listRef = useFilterListboxPointerPick((pickedValue, event) => {
+    handlePortaledFieldSelectOptionPointerDown(
+      event as unknown as Parameters<typeof handlePortaledFieldSelectOptionPointerDown>[0],
+      () => {
+        onChange(pickedValue);
+        if (onPick) deferAfterFieldSelectPick(onPick);
+      },
+    );
+  });
+
   return (
     <div className="flex min-h-0 flex-col">
       {showSearch ? (
@@ -559,6 +613,7 @@ export function FilterSingleSelectList({
         />
       ) : null}
       <div
+        ref={listRef}
         role="listbox"
         data-attr={dataAttr}
         /* Never `flex-1` here — a zero flex-basis collapses the auto-height shell that
@@ -583,17 +638,12 @@ export function FilterSingleSelectList({
                 type="button"
                 role="option"
                 aria-selected={active}
+                data-filter-option-value={opt.value}
                 className={cn(
                   "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm",
                   FIELD_SELECT_MENU_OPTION_CLASS,
                   active ? "bg-primary/10 text-foreground" : "text-foreground",
                 )}
-                onPointerDown={(event) =>
-                  handlePortaledFieldSelectOptionPointerDown(event, () => {
-                    onChange(opt.value);
-                    if (onPick) deferAfterFieldSelectPick(onPick);
-                  })
-                }
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
                   {active ? "✓" : ""}

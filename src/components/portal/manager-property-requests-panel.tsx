@@ -110,7 +110,7 @@ export function ManagerPropertyRequestsPanel({
                   : requestOfferSubtitle(offer)}
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"

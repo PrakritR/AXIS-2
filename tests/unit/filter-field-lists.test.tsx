@@ -323,6 +323,16 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     expect(rows.length).toBe(2);
   });
 
+  it("toggles options on click", () => {
+    render(<Harness optionCount={8} />);
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const listbox = screen.getByRole("listbox");
+    fireEvent.pointerDown(within(listbox).getByText("Property 1"));
+    expect(
+      within(listbox).getByText("Property 1").closest('[role="option"]')!.getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
   it("opens one field at a time (accordion)", () => {
     render(<Harness optionCount={8} />);
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));

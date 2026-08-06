@@ -209,7 +209,6 @@ export function CheckboxMultiSelect({
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
-        onPointerDown={(event) => event.stopPropagation()}
       >
         {showSearch ? (
           <FieldSelectMenuSearch
@@ -361,7 +360,6 @@ export function FieldSingleSelect({
           backgroundColor: "#ffffff",
           zIndex: fieldSelectMenuZIndex(portalHost),
         }}
-        onPointerDown={(event) => event.stopPropagation()}
       >
         {showSearch ? (
           <FieldSelectMenuSearch

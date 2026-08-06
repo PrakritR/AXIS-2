@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
 /** How long a filter panel ignores an outside-dismiss after a list pick (ghost clicks). */
 const FILTER_SHEET_DISMISS_GUARD_MS = 1000;
@@ -35,6 +35,17 @@ export function fieldSelectEventTargetElement(target: EventTarget | null): Eleme
  */
 export function handlePortaledFieldSelectOptionPointerDown(
   event: ReactPointerEvent,
+  action: () => void,
+): void {
+  event.preventDefault();
+  event.stopPropagation();
+  armFilterSheetDismissGuardFromFieldPick();
+  action();
+}
+
+/** Primary pick handler for portaled filter option rows (label / button). */
+export function handlePortaledFieldSelectOptionClick(
+  event: ReactMouseEvent,
   action: () => void,
 ): void {
   event.preventDefault();
