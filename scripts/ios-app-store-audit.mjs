@@ -16,9 +16,9 @@ import { AscClient } from "./ios-testflight-distribute.mjs";
 
 export const EXPECTED_APPLE_SUBSCRIPTIONS = Object.freeze({
   "space.proplane.app.pro.monthly": { period: "ONE_MONTH", usd: "20.00" },
-  "space.proplane.app.pro.annual": { period: "ONE_YEAR", usd: "192.00" },
+  "space.proplane.app.pro.annual": { period: "ONE_YEAR", usd: "191.99" },
   "space.proplane.app.business.monthly": { period: "ONE_MONTH", usd: "200.00" },
-  "space.proplane.app.business.annual": { period: "ONE_YEAR", usd: "1920.00" },
+  "space.proplane.app.business.annual": { period: "ONE_YEAR", usd: "1919.99" },
 });
 
 function normalizeMoney(value) {

@@ -4,6 +4,7 @@ import {
   ANNUAL_PRODUCT_SPECS,
   buildAnnualSubscriptionCreate,
   buildLocalizationCreate,
+  buildPriceCreate,
   selectPricePoint,
 } from "../../scripts/ios-app-store-provision-annual.mjs";
 
@@ -52,6 +53,21 @@ describe("annual App Store subscription provisioning", () => {
       /found 0.*Nearest Apple price points: \$192\.00, \$20\.00/,
     );
     expect(() => selectPricePoint([points[1], points[1]], "192.00")).toThrow(/found 2/);
+  });
+
+  it("marks an annual price as an up-front yearly charge", () => {
+    expect(buildPriceCreate("annual", "point")).toEqual({
+      data: {
+        type: "subscriptionPrices",
+        attributes: { planType: "UPFRONT" },
+        relationships: {
+          subscription: { data: { type: "subscriptions", id: "annual" } },
+          subscriptionPricePoint: {
+            data: { type: "subscriptionPricePoints", id: "point" },
+          },
+        },
+      },
+    });
   });
 
   it("refuses to clone a non-monthly or unranked source", () => {
