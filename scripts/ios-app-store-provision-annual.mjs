@@ -314,8 +314,8 @@ export async function provisionAnnualSubscriptions(client = new AscClient()) {
 
     await ensureLocalization(client, annual, spec);
     const availability = await sourceAvailability(client, source.id);
-    await ensurePrices(client, annual, spec, availability.territoryIds);
     await ensureAvailability(client, annual, availability);
+    await ensurePrices(client, annual, spec, availability.territoryIds);
   }
 
   console.log("");
