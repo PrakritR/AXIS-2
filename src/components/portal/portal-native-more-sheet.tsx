@@ -137,7 +137,7 @@ export function PortalNativeMoreSheet({
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content
-          className="portal-native-more-sheet fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(85dvh,720px)] flex-col gap-0 rounded-t-[1.35rem] border-t border-border bg-background px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0 outline-none motion-reduce:transition-none"
+          className="portal-native-more-sheet fixed inset-x-0 bottom-0 z-[71] flex !w-screen !max-w-none max-h-[min(85dvh,720px)] flex-col gap-0 rounded-none border-x-0 border-t border-border bg-background px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0 outline-none motion-reduce:transition-none"
           data-slot="vaul-bottom-sheet"
         >
           <Drawer.Handle className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />

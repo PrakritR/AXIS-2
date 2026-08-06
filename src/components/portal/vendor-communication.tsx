@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { VendorInboxPanel, type VendorInboxPanelHandle } from "@/components/portal/vendor-inbox-panel";
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
@@ -65,7 +65,6 @@ function VendorUnifiedInbox({
   routeThreadId,
   searchQuery,
   onThreadOpenChange,
-  onFolderCountsChange,
   commBase,
 }: {
   inboxRef: React.RefObject<VendorInboxPanelHandle | null>;
@@ -74,7 +73,6 @@ function VendorUnifiedInbox({
   routeThreadId?: string;
   searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
-  onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
   commBase: string;
 }) {
   const navigate = usePortalNavigate();
@@ -173,20 +171,6 @@ function VendorUnifiedInbox({
 
   const merged = useMemo(() => mergeUnifiedInboxItems([...emailItems, ...smsItems]), [emailItems, smsItems]);
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
-  const archivedCount = useMemo(() => filteredEmail.filter((t) => t.folder === "trash").length, [filteredEmail]);
-  const unreadCount = useMemo(() => {
-    const emailUnread = filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length;
-    const smsUnread = smsUiEnabled
-      ? smsMessages.some((m) => m.direction === "inbound" && smsMessageBucket(m, smsOpened) === "unopened")
-        ? 1
-        : 0
-      : 0;
-    return emailUnread + smsUnread;
-  }, [filteredEmail, smsMessages, smsOpened, smsUiEnabled]);
-
-  useEffect(() => {
-    onFolderCountsChange?.({ unread: unreadCount, archived: archivedCount });
-  }, [archivedCount, onFolderCountsChange, unreadCount]);
 
   useEffect(() => {
     if (!routeThreadId) return;
@@ -306,15 +290,10 @@ export function VendorCommunication({
   const inboxRef = useRef<VendorInboxPanelHandle>(null);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
-  const [archivedCount, setArchivedCount] = useState(0);
 
   useEffect(() => {
     setThreadOpen(Boolean(threadId));
   }, [threadId]);
-
-  const onFolderCountsChange = useCallback((counts: { unread: number; archived: number }) => {
-    setArchivedCount(counts.archived);
-  }, []);
 
   const newMessageButton = (
     <Button
@@ -336,7 +315,6 @@ export function VendorCommunication({
           id: "archived",
           label: "Archived",
           href: `${commBase}/archived`,
-          count: archivedCount,
           dataAttr: "communication-segment-archived",
         },
       ]}
@@ -367,7 +345,6 @@ export function VendorCommunication({
         routeThreadId={threadId}
         searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
-        onFolderCountsChange={onFolderCountsChange}
         commBase={commBase}
       />
     </PortalCommunicationShell>

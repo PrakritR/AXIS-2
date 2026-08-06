@@ -396,7 +396,7 @@ export function PortalCalendar({
         activeCount={portalFilterActiveCount([activeCalendarPropertyFilters])}
         compactPanel
         className="min-w-0 shrink-0"
-        onReset={() => setCalendarPropertyFilters([])}
+        onReset={() => {}}
         dataAttr="calendar-filter-sheet-open"
       >
         <ApplicationFilterSortFields

@@ -11,6 +11,7 @@ import {
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { ManagerPortalPageShell, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -65,6 +66,58 @@ const SORT_OPTIONS: { value: ScreeningSort; label: string }[] = [
   { value: "oldest", label: "Oldest first" },
   { value: "name", label: "Name (A–Z)" },
 ];
+
+function ScreeningsNativeFilterFields({
+  statusFilter,
+  onStatusFilterChange,
+  sort,
+  onSortChange,
+}: {
+  statusFilter: ScreeningStatusFilter;
+  onStatusFilterChange: (next: ScreeningStatusFilter) => void;
+  sort: ScreeningSort;
+  onSortChange: (next: ScreeningSort) => void;
+}) {
+  const [draftStatusFilter, setDraftStatusFilter] = usePortalFilterDraft(
+    statusFilter,
+    onStatusFilterChange,
+    "all",
+  );
+  const [draftSort, setDraftSort] = usePortalFilterDraft(sort, onSortChange, "newest");
+
+  return (
+    <>
+      <label className="block px-1">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Status</span>
+        <select
+          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
+          value={draftStatusFilter}
+          onChange={(e) => setDraftStatusFilter(e.target.value as ScreeningStatusFilter)}
+        >
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block px-1">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Sort</span>
+        <select
+          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
+          value={draftSort}
+          onChange={(e) => setDraftSort(e.target.value as ScreeningSort)}
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
 
 function screeningStatusLabel(row: DemoApplicantRow): string {
   const bg = row.backgroundCheck;
@@ -235,11 +288,7 @@ export function ManagerScreenings({
       compactPanel
       filterFieldCount={3}
       activeCount={portalFilterActiveCount([propertyFilters, statusFilter !== "all", sort !== "newest"])}
-      onReset={() => {
-        setPropertyFilters([]);
-        setStatusFilter("all");
-        setSort("newest");
-      }}
+      onReset={() => {}}
       dataAttr="screenings-filter-sheet-open"
     >
       <ApplicationFilterSortFields
@@ -248,34 +297,12 @@ export function ManagerScreenings({
         onPropertyFiltersChange={setPropertyFilters}
         dataAttr="screenings-filter-property"
       />
-      <label className="block px-1">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Status</span>
-        <select
-          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as ScreeningStatusFilter)}
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block px-1">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Sort</span>
-        <select
-          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as ScreeningSort)}
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ScreeningsNativeFilterFields
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        sort={sort}
+        onSortChange={setSort}
+      />
     </PortalFilterSortSheet>
   );
 

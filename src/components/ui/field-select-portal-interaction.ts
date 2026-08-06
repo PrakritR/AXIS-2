@@ -1,5 +1,33 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
+/** How long a filter panel ignores an outside-dismiss after a list pick (ghost clicks). */
+const FILTER_SHEET_DISMISS_GUARD_MS = 1000;
+
+let armFilterSheetDismissGuard: (() => void) | null = null;
+
+/**
+ * Filter panels register a short dismiss guard so a synthesized click after a portaled
+ * menu pick cannot close the whole sheet.
+ */
+export function registerFilterSheetDismissGuard(arm: () => void): () => void {
+  armFilterSheetDismissGuard = arm;
+  return () => {
+    if (armFilterSheetDismissGuard === arm) armFilterSheetDismissGuard = null;
+  };
+}
+
+/** Arm the guard before any portaled filter option pick (multi- or single-select). */
+export function armFilterSheetDismissGuardFromFieldPick(): void {
+  armFilterSheetDismissGuard?.();
+}
+
+/** Pointer targets on option labels are often Text nodes — resolve to an Element for `closest`. */
+export function fieldSelectEventTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target;
+  if (target instanceof Text && target.parentElement) return target.parentElement;
+  return null;
+}
+
 /**
  * Portaled field-select menus sit outside Radix/Vaul modal trees. Modal shells call
  * `preventDefault` on outside listbox pointerdown to avoid dismiss — that blocks native
@@ -11,6 +39,7 @@ export function handlePortaledFieldSelectOptionPointerDown(
 ): void {
   event.preventDefault();
   event.stopPropagation();
+  armFilterSheetDismissGuardFromFieldPick();
   action();
 }
 
@@ -21,13 +50,24 @@ export function handlePortaledFieldSelectOptionPointerDown(
  * the whole filter panel.
  */
 export function deferAfterFieldSelectPick(action: () => void): void {
-  queueMicrotask(action);
+  armFilterSheetDismissGuardFromFieldPick();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(action);
+  });
 }
+
+export { FILTER_SHEET_DISMISS_GUARD_MS };
 
 /** Menu roots portaled into open modal shells or `document.body` — modal outside-click handlers must ignore these. */
 export const FIELD_SELECT_MENU_DATA_ATTR = "data-field-select-menu";
 
 export function isPortaledFieldSelectMenuTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return Boolean(target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`) || target.closest('[role="listbox"]'));
+  const element = fieldSelectEventTargetElement(target);
+  if (!element) return false;
+  return Boolean(
+    element.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`) ||
+      element.closest('[role="listbox"]') ||
+      element.closest('[data-slot="portal-filter-dropdown-panel"]') ||
+      element.closest('[data-attr="portal-filter-dropdown-panel"]'),
+  );
 }

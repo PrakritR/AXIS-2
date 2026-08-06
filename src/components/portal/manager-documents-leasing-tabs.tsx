@@ -224,7 +224,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilter])}
         compactPanel
-        onReset={() => setPropertyFilter("")}
+        onReset={() => {}}
         dataAttr="documents-applications-filter-sheet-open"
       >
         <ApplicationFilterSortFields
@@ -369,7 +369,7 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
       <PortalFilterSortSheet
         activeCount={portalFilterActiveCount([propertyFilter])}
         compactPanel
-        onReset={() => setPropertyFilter("")}
+        onReset={() => {}}
         dataAttr="documents-leases-filter-sheet-open"
       >
         <ApplicationFilterSortFields

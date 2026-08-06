@@ -5,6 +5,7 @@ export const PROPERTY_DETAIL_TABS = [
   "application",
   "lease",
   "calendar",
+  "requests",
   "promotion",
 ] as const;
 
@@ -16,6 +17,7 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
   application: "Application",
   lease: "Lease",
   calendar: "Calendar",
+  requests: "Requests",
   promotion: "Promotion",
 };
 
@@ -23,8 +25,6 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
 export const PROPERTY_DETAIL_SECTION_TABS = [
   "preview",
   "house-details",
-  "application",
-  "lease",
 ] as const satisfies readonly PropertyDetailTabId[];
 
 export type PropertyDetailSectionTabId = (typeof PROPERTY_DETAIL_SECTION_TABS)[number];
@@ -32,10 +32,29 @@ export type PropertyDetailSectionTabId = (typeof PROPERTY_DETAIL_SECTION_TABS)[n
 export const PROPERTY_DETAIL_TOP_TAB_LABELS = {
   details: "Details",
   calendar: "Calendar",
+  application: "Application",
+  lease: "Lease",
+  requests: "Requests",
   promotion: "Promotion",
 } as const;
 
 export type PropertyDetailTopTabId = keyof typeof PROPERTY_DETAIL_TOP_TAB_LABELS;
+
+export const PROPERTY_DETAIL_TOP_TAB_SHORT_LABELS: Partial<
+  Record<PropertyDetailTopTabId, string>
+> = {
+  application: "Apply",
+  promotion: "Promo",
+};
+
+export function propertyDetailTopNavId(tab: PropertyDetailTabId): PropertyDetailTopTabId {
+  if (tab === "calendar") return "calendar";
+  if (tab === "application") return "application";
+  if (tab === "lease") return "lease";
+  if (tab === "requests") return "requests";
+  if (tab === "promotion") return "promotion";
+  return "details";
+}
 
 /** Routed detail tabs for manager resident profile (Appendix C2). */
 export const RESIDENT_DETAIL_TABS = ["application", "lease", "payments", "services", "communication"] as const;

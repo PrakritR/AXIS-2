@@ -95,6 +95,7 @@ export function ServiceOfferingEditModal({
   onClose,
   onSaved,
   showToast,
+  entityLabel = "service",
 }: {
   open: boolean;
   offering: ManagerListingServiceOption | null;
@@ -105,6 +106,7 @@ export function ServiceOfferingEditModal({
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
+  entityLabel?: string;
 }) {
   const [draft, setDraft] = useState<ManagerListingServiceOption>(() =>
     offering ? { ...offering } : createManagerListingServiceOption(),
@@ -123,7 +125,7 @@ export function ServiceOfferingEditModal({
   const save = () => {
     const normalized = normalizeOffering(draft);
     if (!normalized.name) {
-      setError("Service name is required.");
+      setError(`${entityLabel.charAt(0).toUpperCase()}${entityLabel.slice(1)} name is required.`);
       return;
     }
 
@@ -134,10 +136,11 @@ export function ServiceOfferingEditModal({
 
     const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: nextOffers };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not save service.");
+      showToast(`Could not save ${entityLabel}.`);
       return;
     }
-    showToast(isNew ? "Service added." : "Service saved.");
+    const label = entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1);
+    showToast(isNew ? `${label} added.` : `${label} saved.`);
     onClose();
     onSaved();
   };
@@ -145,7 +148,11 @@ export function ServiceOfferingEditModal({
   return (
     <Modal
       open={open}
-      title={isNew ? "Add service" : "Edit service"}
+      title={
+        isNew
+          ? `Add ${entityLabel}`
+          : `Edit ${entityLabel}`
+      }
       onClose={onClose}
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"

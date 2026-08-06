@@ -5,12 +5,11 @@ import {
   FilterMultiSelectDropdown,
   FilterSingleSelectDropdown,
 } from "@/components/portal/filter-field-lists";
+import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import {
-  contactsForSelectedRoles,
   type CommunicationFilterRole,
   type CommunicationThreadFilters,
 } from "@/lib/communication-thread-filters";
-import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import type { CommunicationListSort } from "@/lib/unified-inbox-merge";
 
 const SORT_OPTIONS: { value: CommunicationListSort; label: string }[] = [
@@ -18,25 +17,9 @@ const SORT_OPTIONS: { value: CommunicationListSort; label: string }[] = [
   { value: "resident", label: "Resident (A–Z)" },
 ];
 
-function residentOptionsFromContacts(contacts: InboxScopedContact[]) {
-  return contacts
-    .filter((c) => c.role === "resident")
-    .map((c) => {
-      const status = c.tenancyStatus === "applicant" ? "Applicant" : "Resident";
-      const house = c.propertyLabel?.trim();
-      const bits = [c.name, status, house].filter(Boolean);
-      return {
-        value: c.id,
-        label: bits.join(" · "),
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-}
-
 export function CommunicationFilterSortFields({
   propertyOptions,
   roleOptions,
-  filterContacts,
   filters,
   onFiltersChange,
   listSort,
@@ -44,16 +27,17 @@ export function CommunicationFilterSortFields({
 }: {
   propertyOptions: { value: string; label: string }[];
   roleOptions: { value: CommunicationFilterRole; label: string }[];
-  filterContacts: InboxScopedContact[];
   filters: CommunicationThreadFilters;
   onFiltersChange: (next: CommunicationThreadFilters) => void;
   listSort: CommunicationListSort;
   onListSortChange: (next: CommunicationListSort) => void;
 }) {
-  const residentPool = contactsForSelectedRoles(filterContacts, filters.roles).filter(
-    (contact) => contact.role === "resident",
+  const [draftFilters, setDraftFilters] = usePortalFilterDraft(
+    filters,
+    onFiltersChange,
+    { propertyIds: [], roles: [], contactIds: [] },
   );
-  const residentOptions = residentOptionsFromContacts(residentPool);
+  const [draftListSort, setDraftListSort] = usePortalFilterDraft(listSort, onListSortChange, "recent");
 
   return (
     <FilterFieldsAccordion>
@@ -61,8 +45,8 @@ export function CommunicationFilterSortFields({
         sectionId="house"
         label="House"
         options={propertyOptions}
-        selected={filters.propertyIds}
-        onChange={(propertyIds) => onFiltersChange({ ...filters, propertyIds })}
+        selected={draftFilters.propertyIds}
+        onChange={(propertyIds) => setDraftFilters({ ...draftFilters, propertyIds })}
         allLabel="All houses"
         emptyMenuText="No houses"
         dataAttr="communication-filter-house"
@@ -72,10 +56,10 @@ export function CommunicationFilterSortFields({
         sectionId="role"
         label="Role"
         options={roleOptions}
-        selected={filters.roles}
+        selected={draftFilters.roles}
         onChange={(roles) =>
-          onFiltersChange({
-            ...filters,
+          setDraftFilters({
+            ...draftFilters,
             roles: roles as CommunicationFilterRole[],
             contactIds: [],
           })
@@ -85,23 +69,12 @@ export function CommunicationFilterSortFields({
         dataAttr="communication-filter-role"
       />
 
-      <FilterMultiSelectDropdown
-        sectionId="resident"
-        label="Resident"
-        options={residentOptions}
-        selected={filters.contactIds}
-        onChange={(contactIds) => onFiltersChange({ ...filters, contactIds })}
-        allLabel="All residents"
-        emptyMenuText="No residents match the current filters"
-        dataAttr="communication-filter-resident"
-      />
-
       <FilterSingleSelectDropdown
         sectionId="sort"
         label="Sort"
         options={SORT_OPTIONS}
-        value={listSort}
-        onChange={(value) => onListSortChange(value as CommunicationListSort)}
+        value={draftListSort}
+        onChange={(value) => setDraftListSort(value as CommunicationListSort)}
         placeholder="Most recent"
         dataAttr="communication-filter-sort"
       />

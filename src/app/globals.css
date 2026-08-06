@@ -856,6 +856,17 @@ html {
   overflow: visible;
 }
 
+@media (max-width: 1023px) {
+  .portal-filter-dropdown-panel,
+  [data-slot="portal-filter-dropdown-panel"] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-left-width: 0;
+    border-right-width: 0;
+    border-radius: 0;
+  }
+}
+
 [data-theme="dark"] .portal-filter-dropdown-panel,
 [data-theme="dark"] [data-slot="portal-filter-dropdown-panel"] {
   background: #111827 !important;

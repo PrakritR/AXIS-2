@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { useIsClient } from "@/hooks/use-is-client";
-import { FIELD_SELECT_MENU_DATA_ATTR } from "@/components/ui/field-select-portal-interaction";
+import { FIELD_SELECT_MENU_DATA_ATTR, fieldSelectEventTargetElement } from "@/components/ui/field-select-portal-interaction";
 
 /**
  * Shared machinery for the one portaled field-select dropdown pattern used by
@@ -183,17 +183,22 @@ export function fieldSelectMenuListMaxHeightPx(shellMaxHeight: number, searchPx 
 export function computePortalFilterDropdownRect(
   button: HTMLButtonElement,
   panelHeightPx: number,
-  options?: { widthPx?: number },
+  options?: { widthPx?: number; fullBleed?: boolean },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
   const viewportW = window.innerWidth;
-  const viewportPadding = 12;
+  const fullBleed = options?.fullBleed ?? false;
+  const viewportPadding = fullBleed ? 0 : 12;
   const preferredWidth = options?.widthPx ?? 22 * 16;
-  const width = Math.min(preferredWidth, viewportW - viewportPadding * 2);
+  const width = fullBleed
+    ? viewportW
+    : Math.min(preferredWidth, viewportW - viewportPadding * 2);
 
-  let left = rect.right - width;
-  left = Math.min(Math.max(viewportPadding, left), viewportW - width - viewportPadding);
+  let left = fullBleed ? 0 : rect.right - width;
+  if (!fullBleed) {
+    left = Math.min(Math.max(viewportPadding, left), viewportW - width - viewportPadding);
+  }
 
   const gap = 8;
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
@@ -367,6 +372,8 @@ export function useFieldSelectMenu({
   align = "start",
   preferOpenDown = false,
   matchTriggerWidth = false,
+  fullBleed = false,
+  closeOnOutsidePointerDown = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -379,6 +386,13 @@ export function useFieldSelectMenu({
   preferOpenDown?: boolean;
   /** Align menu width/left to the trigger (mobile filter sheet edge-to-edge). */
   matchTriggerWidth?: boolean;
+  /** Mobile filter dropdown spans the viewport with even side insets. */
+  fullBleed?: boolean;
+  /**
+   * When false, outside pointerdown does not call `onOpenChange(false)` — use for the
+   * portal filter shell, which closes only via its scrim / header / toggle.
+   */
+  closeOnOutsidePointerDown?: boolean;
 }) {
   const listId = useId();
   const isClient = useIsClient();
@@ -386,9 +400,13 @@ export function useFieldSelectMenu({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
   const onOpenChangeRef = useRef(onOpenChange);
+  const closeOnOutsidePointerDownRef = useRef(closeOnOutsidePointerDown);
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
   }, [onOpenChange]);
+  useEffect(() => {
+    closeOnOutsidePointerDownRef.current = closeOnOutsidePointerDown;
+  }, [closeOnOutsidePointerDown]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -406,7 +424,10 @@ export function useFieldSelectMenu({
         portalHost !== document.body && portalHost.matches('[data-slot="vaul-bottom-sheet"]');
       setMenuRect(
         align === "end"
-          ? computePortalFilterDropdownRect(button, contentPx, { widthPx: minMenuWidth })
+          ? computePortalFilterDropdownRect(button, contentPx, {
+              widthPx: minMenuWidth,
+              fullBleed,
+            })
           : inFilterPanel || inVaulSheet
             ? computeFieldSelectMenuRectInHost(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,
@@ -438,31 +459,39 @@ export function useFieldSelectMenu({
       window.removeEventListener("resize", updateMenuRect);
       window.removeEventListener("scroll", updateMenuRect, true);
     };
-  }, [align, open, contentPx, minMenuWidth, preferOpenDown, matchTriggerWidth]);
+  }, [align, open, contentPx, minMenuWidth, preferOpenDown, matchTriggerWidth, fullBleed]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDownOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (wrapRef.current?.contains(target)) return;
-      if (target instanceof HTMLElement && target.closest('[data-slot="portal-filter-dropdown-panel"]')) return;
-      // A click inside ANY portaled field-select menu must not close this one.
-      if (target instanceof HTMLElement && target.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
-      if (document.getElementById(listId)?.contains(target)) return;
-      onOpenChangeRef.current(false);
-    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onOpenChangeRef.current(false);
         buttonRef.current?.focus();
       }
     };
-    document.addEventListener("pointerdown", onPointerDownOutside, true);
     document.addEventListener("keydown", onKey);
+
+    const onPointerDownOutside = (event: PointerEvent) => {
+      if (!closeOnOutsidePointerDownRef.current) return;
+      const element = fieldSelectEventTargetElement(event.target);
+      if (!element) return;
+      if (wrapRef.current?.contains(element)) return;
+      if (element.closest('[data-slot="portal-filter-dropdown-panel"]')) return;
+      // A click inside ANY portaled field-select menu must not close this one.
+      if (element.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
+      const list = document.getElementById(listId);
+      if (list?.contains(element)) return;
+      // Defer so a portaled option's pointerdown can arm a parent dismiss guard first
+      // (this listener runs in capture phase, before the option handler).
+      requestAnimationFrame(() => {
+        onOpenChangeRef.current(false);
+      });
+    };
+    document.addEventListener("pointerdown", onPointerDownOutside, true);
+
     return () => {
-      document.removeEventListener("pointerdown", onPointerDownOutside, true);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDownOutside, true);
     };
   }, [listId, open]);
 

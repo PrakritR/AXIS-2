@@ -90,8 +90,22 @@ describe("Modal Radix / Vaul shell", () => {
     );
     const drawer = document.querySelector('[data-slot="modal-vaul-drawer"]');
     expect(drawer).toBeTruthy();
+    expect(drawer?.className).toContain("h-[100dvh]");
+    expect(drawer?.className).toContain("!w-screen");
+    expect(drawer?.className).toContain("!max-w-none");
+  });
+
+  it("honors fullScreenMobile={false} for a partial-height sheet", () => {
+    mockMatchMedia(true);
+    render(
+      <Modal open title="Compact sheet" onClose={() => {}} fullScreenMobile={false}>
+        <p>content</p>
+      </Modal>,
+    );
+    const drawer = document.querySelector('[data-slot="modal-vaul-drawer"]');
     expect(drawer?.className).toContain("max-h-[min(92dvh,56rem)]");
     expect(drawer?.className).not.toContain("h-[100dvh]");
+    expect(drawer?.className).toContain("!w-screen");
   });
 
   it("renders Radix dialog on large portal viewports", () => {

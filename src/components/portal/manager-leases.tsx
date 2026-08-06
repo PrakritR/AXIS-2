@@ -207,7 +207,7 @@ export function ManagerLeases({
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
-      onReset={() => setPropertyFilters([])}
+      onReset={() => {}}
       dataAttr="leases-filter-sheet-open"
     >
       <ApplicationFilterSortFields

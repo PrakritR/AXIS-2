@@ -119,7 +119,7 @@ export const PORTAL_FILTER_BODY_CLASS =
 export const PORTAL_FILTER_ICON_CLASS = "size-3.5 shrink-0";
 
 const FILTER_TRIGGER_CLASS =
-  "flex h-11 max-h-11 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
+  "flex h-11 max-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-border bg-auth-input-bg px-4 py-2.5 text-left text-sm text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/25 focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 max-lg:rounded-xl";
 
 /** Portal filter menus always show the search row (consistent with Resident/House pickers). */
 export const FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH = true;
@@ -404,7 +404,10 @@ export function FilterCollapsibleSection({
       >
         <span
           aria-hidden
-          className={cn("min-w-0 flex-1 truncate", isPlaceholder ? "text-muted/70" : "text-foreground")}
+          className={cn(
+            "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left",
+            isPlaceholder ? "text-muted/70" : "text-foreground",
+          )}
         >
           {summary}
         </span>
@@ -490,7 +493,7 @@ export function FilterCheckboxList({
                 role="option"
                 aria-selected={checked}
                 className={cn(
-                  "flex cursor-pointer items-start gap-2.5 px-3 py-2 text-sm",
+                  "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm",
                   FIELD_SELECT_MENU_OPTION_CLASS,
                   checked && "bg-primary/5",
                 )}
@@ -506,7 +509,7 @@ export function FilterCheckboxList({
                   tabIndex={-1}
                   aria-hidden
                 />
-                <span className="leading-snug text-foreground">{opt.label}</span>
+                <span className="min-w-0 flex-1 truncate leading-snug text-foreground">{opt.label}</span>
               </label>
             );
           })
@@ -595,7 +598,7 @@ export function FilterSingleSelectList({
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center text-primary" aria-hidden>
                   {active ? "✓" : ""}
                 </span>
-                <span className="leading-snug">{opt.label}</span>
+                <span className="min-w-0 flex-1 truncate leading-snug">{opt.label}</span>
               </button>
             );
           })
@@ -663,9 +666,6 @@ export function FilterSingleSelectDropdown({
   dataAttr?: string;
   sectionId?: string;
 }) {
-  const closeDropdown = useFilterAccordionClose();
-  const [open, setOpen] = useState(false);
-
   return (
     <FilterCollapsibleSection
       sectionId={sectionId}
@@ -674,17 +674,11 @@ export function FilterSingleSelectDropdown({
       empty={!value}
       menuOptionCount={options.length}
       dataAttr={dataAttr ? `${dataAttr}-trigger` : undefined}
-      open={sectionId ? undefined : open}
-      onOpenChange={sectionId ? undefined : setOpen}
     >
       <FilterSingleSelectList
         options={options}
         value={value}
         onChange={onChange}
-        onPick={() => {
-          closeDropdown();
-          setOpen(false);
-        }}
         dataAttr={dataAttr}
       />
     </FilterCollapsibleSection>

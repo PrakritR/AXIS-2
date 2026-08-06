@@ -65,6 +65,7 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
+import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
@@ -131,6 +132,8 @@ import {
   leaseGenerationSupportedForRow,
   managerSignLease,
   leaseAllowsManagerDocumentEdits,
+  leaseAllowsManagerGeneratedBodyEdits,
+  leasePipelineRowsForManagerResident,
   LEASE_PIPELINE_EVENT,
   confirmUploadedLeaseParse,
   leaseNeedsUploadedLeaseReviewAction,
@@ -330,6 +333,8 @@ export function ManagerResidents({
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
   const [importReviewLeaseId, setImportReviewLeaseId] = useState<string | null>(null);
+  const [editResidentLeaseId, setEditResidentLeaseId] = useState<string | null>(null);
+  const [activeResidentLeaseId, setActiveResidentLeaseId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -874,49 +879,30 @@ export function ManagerResidents({
     return readLeasePipeline(userId).find((row) => row.id === importReviewLeaseId) ?? null;
   }, [importReviewLeaseId, leaseTick, userId]);
 
-  const residentLease = useMemo<LeasePipelineRow | null>(() => {
+  const residentLeaseRows = useMemo<LeasePipelineRow[]>(() => {
     void leaseTick;
-    if (!selected?.email) return null;
-    const selectedAxisId = normalizeApplicationAxisId(selected.id);
-    const email = selected.email.trim().toLowerCase();
-    const allRows = readLeasePipeline(userId);
-    const rows = allRows.filter((row) => {
-      const rowAxisId = row.axisId?.trim() ? normalizeApplicationAxisId(row.axisId) : "";
-      if (rowAxisId && rowAxisId === selectedAxisId) return true;
-      return row.residentEmail.trim().toLowerCase() === email;
-    });
-    rows.sort((a, b) => {
-      const aAxisMatch = (a.axisId?.trim() ? normalizeApplicationAxisId(a.axisId) : "") === selectedAxisId;
-      const bAxisMatch = (b.axisId?.trim() ? normalizeApplicationAxisId(b.axisId) : "") === selectedAxisId;
-      const axisDelta = Number(bAxisMatch) - Number(aAxisMatch);
-      if (axisDelta !== 0) return axisDelta;
-
-      const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
-      if (visibleDelta !== 0) return visibleDelta;
-      const rank = (row: LeasePipelineRow) => {
-        switch (row.status) {
-          case "Fully Signed":
-            return 5;
-          case "Manager Signature Pending":
-            return 4;
-          case "Resident Signature Pending":
-            return 3;
-          case "Manager Review":
-            return 2;
-          case "Admin Review":
-            return 1;
-          default:
-            return 0;
-        }
-      };
-      const rankDelta = rank(b) - rank(a);
-      if (rankDelta !== 0) return rankDelta;
-      const aTs = Date.parse(a.updatedAtIso || "");
-      const bTs = Date.parse(b.updatedAtIso || "");
-      return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
-    });
-    return rows[0] ?? null;
+    if (!selected?.email) return [];
+    return leasePipelineRowsForManagerResident(userId, selected.email, selected.id);
   }, [leaseTick, selected, userId]);
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setActiveResidentLeaseId(null);
+      return;
+    }
+    setActiveResidentLeaseId((current) => {
+      if (current && residentLeaseRows.some((row) => row.id === current)) return current;
+      return residentLeaseRows[0]?.id ?? null;
+    });
+  }, [residentLeaseRows, selected?.id]);
+
+  const residentLease = useMemo<LeasePipelineRow | null>(() => {
+    if (residentLeaseRows.length === 0) return null;
+    if (activeResidentLeaseId) {
+      return residentLeaseRows.find((row) => row.id === activeResidentLeaseId) ?? residentLeaseRows[0] ?? null;
+    }
+    return residentLeaseRows[0] ?? null;
+  }, [activeResidentLeaseId, residentLeaseRows]);
 
   const residentWorkOrders = useMemo(() => {
     void workOrderTick;
@@ -2407,6 +2393,12 @@ export function ManagerResidents({
         generateLeaseBusy={generatingLeaseRowId === residentLease.id}
         generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
         onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
+        onEditLease={
+          leaseAllowsManagerGeneratedBodyEdits(residentLease)
+            ? () => setEditResidentLeaseId(residentLease.id)
+            : undefined
+        }
+        editLeaseDataAttr="resident-lease-edit"
         uploadPdfBusy={uploadingLeaseRowId === residentLease.id}
         onReviewImportedLease={() => setImportReviewLeaseId(residentLease.id)}
         onUploadPdf={async (file) => {
@@ -2601,6 +2593,21 @@ export function ManagerResidents({
 
                             {showResidentLease && resolvedDetailTab === "lease" ? (
                             <ResidentDetailTabPanel fill>
+                              {residentLeaseRows.length > 1 ? (
+                                <div className="mb-3 -mx-2.5 bg-background sm:-mx-4 lg:mx-0">
+                                  <LocalDestinationNav
+                                    items={residentLeaseRows.map((row) => ({
+                                      id: row.id,
+                                      label: row.status,
+                                      dataAttr: `resident-lease-pick-${row.id}`,
+                                    }))}
+                                    activeId={residentLease?.id ?? residentLeaseRows[0]!.id}
+                                    onChange={setActiveResidentLeaseId}
+                                    ariaLabel="Resident leases"
+                                    className="rounded-none border-0 border-b border-border bg-transparent p-0 md:rounded-2xl md:border md:border-border md:bg-accent/30 md:p-1"
+                                  />
+                                </div>
+                              ) : null}
                               {residentLease ? (
                                 <LeaseDocumentPreview
                                   row={residentLease}
@@ -2821,7 +2828,7 @@ export function ManagerResidents({
         activeCount={portalFilterActiveCount([propertyFilters])}
         compactPanel
         className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
-        onReset={() => setPropertyFilters([])}
+        onReset={() => {}}
         dataAttr="residents-filter-sheet-open"
       >
         <ApplicationFilterSortFields
@@ -2854,6 +2861,16 @@ export function ManagerResidents({
           signerRoleLabel="Manager / authorized agent name"
           onSign={handleManagerModalSign}
           onClose={() => setSigningLease(null)}
+        />
+      ) : null}
+      {editResidentLeaseId && residentLeaseRows.find((row) => row.id === editResidentLeaseId) ? (
+        <ManagerPipelineLeaseEditModal
+          open
+          row={residentLeaseRows.find((row) => row.id === editResidentLeaseId)!}
+          onClose={() => setEditResidentLeaseId(null)}
+          onDone={() => {
+            void syncLeasePipelineFromServer(userId, { force: true }).then(() => setLeaseTick((n) => n + 1));
+          }}
         />
       ) : null}
       {importReviewLease?.uploadedLeaseParse ? (

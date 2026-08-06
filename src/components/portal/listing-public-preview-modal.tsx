@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
-import { ModalShell, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
+import { ModalShell, MODAL_HEADER_CLOSE_CLASS, useModalPresentation } from "@/components/ui/modal";
 import {
   MODAL_FULL_PAGE_CENTER_CLASS,
   MODAL_FULL_PAGE_PANEL_CLASS,
@@ -46,6 +46,7 @@ export function ListingPublicPreviewModal({
 
   const { isNative } = useIsNativeApp();
   const useFullPageModal = isNative === true;
+  const presentation = useModalPresentation();
 
   if (!open || !property) return null;
 
@@ -56,7 +57,7 @@ export function ListingPublicPreviewModal({
     <ModalShell
       open={open}
       onClose={onClose}
-      presentation="dialog"
+      presentation={useFullPageModal ? "dialog" : presentation}
       stackClassName={useFullPageModal ? MODAL_FULL_PAGE_STACK_CLASS : undefined}
       centerClassName={useFullPageModal ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
       panelClassName={cn(

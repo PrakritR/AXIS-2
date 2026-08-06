@@ -278,7 +278,7 @@ export function ManagerCreateServiceRequestModal({
     }
     const name = (preset?.name ?? newOfferName).trim();
     if (!name) {
-      showToast("Enter a name for the add-on service type.");
+      showToast("Enter a name for the request type.");
       return;
     }
     if (!propertySaveTarget || !propertySubmission) {
@@ -304,7 +304,7 @@ export function ManagerCreateServiceRequestModal({
             ? updateExtraListingFromSubmission(propertySaveTarget.saveId, managerUserId, nextSubmission)
             : false;
       if (!ok) {
-        showToast("Could not add the add-on service type.");
+        showToast("Could not add the request type.");
         return;
       }
       showToast(`${offer.name} added to this property's offerings.`);
@@ -337,7 +337,7 @@ export function ManagerCreateServiceRequestModal({
       return;
     }
     if (!offerId) {
-      showToast("Choose an add-on service type.");
+      showToast("Choose a request type.");
       return;
     }
     if (isCustomOffer) {
@@ -346,7 +346,7 @@ export function ManagerCreateServiceRequestModal({
         return;
       }
     } else if (!selectedOffer) {
-      showToast("Choose an add-on service type.");
+      showToast("Choose a request type.");
       return;
     }
     setBusy(true);
@@ -368,10 +368,10 @@ export function ManagerCreateServiceRequestModal({
           notes: notes.trim(),
         });
         if (!mirrored.ok) {
-          showToast(mirrored.error || "Could not save add-on service. Try again.");
+          showToast(mirrored.error || "Could not save request. Try again.");
           return;
         }
-        showToast(`${customTitle.trim()} add-on service created for ${selectedResident.residentName}.`);
+        showToast(`${customTitle.trim()} request created for ${selectedResident.residentName}.`);
       } else {
         const { mirrored } = await createServiceRequest({
           offerId: selectedOffer!.id,
@@ -387,10 +387,10 @@ export function ManagerCreateServiceRequestModal({
           notes: notes.trim(),
         });
         if (!mirrored.ok) {
-          showToast(mirrored.error || "Could not save add-on service. Try again.");
+          showToast(mirrored.error || "Could not save request. Try again.");
           return;
         }
-        showToast(`${selectedOffer!.name} add-on service created for ${selectedResident.residentName}.`);
+        showToast(`${selectedOffer!.name} request created for ${selectedResident.residentName}.`);
       }
       onSubmitted();
       onClose();
@@ -403,7 +403,7 @@ export function ManagerCreateServiceRequestModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Add add-on service"
+      title="Add request"
       footer={
         <ModalFooter>
           <Button
@@ -416,7 +416,7 @@ export function ManagerCreateServiceRequestModal({
               (isCustomOffer ? !customTitle.trim() : !selectedOffer)
             }
           >
-            {busy ? "Saving…" : "Add add-on service"}
+            {busy ? "Saving…" : "Add request"}
           </Button>
         </ModalFooter>
       }
@@ -425,7 +425,7 @@ export function ManagerCreateServiceRequestModal({
         <p className="text-sm text-muted">
           {lockedResident
             ? "Log a service request for this resident. It appears in their portal under Services → Requests."
-            : "Log an add-on service request on behalf of a resident. Only offerings the property makes available appear below."}
+            : "Log a request on behalf of a resident. Only offerings the property makes available appear below."}
         </p>
 
         {lockedResident ? (
@@ -482,7 +482,7 @@ export function ManagerCreateServiceRequestModal({
         )}
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-          Add-on service type *
+          Request type *
           <Select
             value={offerId}
             onChange={(e) => {
@@ -497,7 +497,7 @@ export function ManagerCreateServiceRequestModal({
             <option value="">
               {!propertyId
                 ? "Choose a property first"
-                : "Select an add-on service"}
+                : "Select a request type"}
             </option>
             {offersForProperty.map((o) => (
               <option key={o.id} value={o.id}>
@@ -570,12 +570,12 @@ export function ManagerCreateServiceRequestModal({
                 onClick={() => setAddingOffer(true)}
                 disabled={busy}
               >
-                + Add an add-on service type
+                + Add a request type
               </button>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">
-                  New add-on service type for {selectedProperty?.propertyLabel ?? "this property"}
+                  New request type for {selectedProperty?.propertyLabel ?? "this property"}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {LISTING_SERVICE_QUICK_ADDS.map((preset) => (

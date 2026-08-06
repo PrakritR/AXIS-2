@@ -1,6 +1,19 @@
 "use client";
 
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import {
+  PortalFilterDeferProvider,
+  type PortalFilterDeferController,
+} from "@/lib/portal-filter-draft";
 import { createPortal } from "react-dom";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +38,10 @@ import {
   useFieldSelectMenu,
 } from "@/components/ui/field-select-menu";
 import { useIsClient } from "@/hooks/use-is-client";
+import {
+  FILTER_SHEET_DISMISS_GUARD_MS,
+  registerFilterSheetDismissGuard,
+} from "@/components/ui/field-select-portal-interaction";
 import { cn } from "@/lib/utils";
 
 const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
@@ -126,12 +143,13 @@ function FilterPanelFields({
  * Compact portal toolbar filter pattern (Communication / Payments):
  * `inline` — mobile Vaul bottom sheet + inline controls from `md` up (default).
  * `panel` — Filter button on all breakpoints; sheet on mobile, modal on desktop.
- * `dropdown` — Filter button on all breakpoints; sheet on mobile, anchored popover on desktop.
+ * `dropdown` — Filter button on all breakpoints; anchored popover on every breakpoint
+ *   (mobile matches desktop — no bottom sheet).
  */
 export function PortalFilterSortSheet({
   children,
   activeCount = 0,
-  onReset,
+  onReset = () => {},
   dataAttr = "portal-filter-sheet-open",
   extraModalContent,
   className,
@@ -157,7 +175,7 @@ export function PortalFilterSortSheet({
 }: {
   children: ReactNode;
   activeCount?: number;
-  onReset: () => void;
+  onReset?: () => void;
   dataAttr?: string;
   extraModalContent?: ReactNode;
   className?: string;
@@ -173,10 +191,60 @@ export function PortalFilterSortSheet({
 }) {
   const [open, setOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const dismissGuardUntilRef = useRef(0);
+  const deferControllerRef = useRef<PortalFilterDeferController | null>(null);
   const isMobile = useSmallPortalViewport();
+
+  const armSheetDismissGuard = useCallback(() => {
+    dismissGuardUntilRef.current = Date.now() + FILTER_SHEET_DISMISS_GUARD_MS;
+  }, []);
+
+  useEffect(() => registerFilterSheetDismissGuard(armSheetDismissGuard), [armSheetDismissGuard]);
+
+  const setFilterOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    setOpen((prev) => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      if (!resolved && Date.now() < dismissGuardUntilRef.current) return prev;
+      if (resolved && !prev) {
+        deferControllerRef.current?.snapshotFromApplied();
+      }
+      if (!resolved && prev) {
+        deferControllerRef.current?.commitAll();
+      }
+      return resolved;
+    });
+  }, []);
+
+  const handleSheetOpenChange = useCallback(
+    (next: boolean) => {
+      setFilterOpen(next);
+    },
+    [setFilterOpen],
+  );
   const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
-  const close = () => setOpen(false);
+  const close = useCallback(() => {
+    deferControllerRef.current?.commitAll();
+    setOpen(false);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    deferControllerRef.current?.resetAll();
+  }, []);
+
+  const tryCloseFromBackdrop = useCallback(() => {
+    if (Date.now() < dismissGuardUntilRef.current) return;
+    close();
+  }, [close]);
+
+  const handleBackdropDismiss = useCallback(
+    (event: PointerEvent | MouseEvent) => {
+      event.preventDefault();
+      tryCloseFromBackdrop();
+    },
+    [tryCloseFromBackdrop],
+  );
+  const useMobileBottomSheet = isMobile && desktopPresentation !== "dropdown";
   const panelSizeClass =
     panelSizeClassName ??
     (compactPanel
@@ -184,13 +252,15 @@ export function PortalFilterSortSheet({
       : PORTAL_FILTER_PANEL_SIZE_CLASS);
   const panelHeightPx = portalFilterDropdownHeightPx(panelSizeClass);
   const panelWidthPx = portalFilterDropdownWidthPx(panelSizeClass);
-  const dropdownOpen = !isMobile && desktopPresentation === "dropdown" && open;
+  const dropdownOpen = desktopPresentation === "dropdown" && open;
   const { wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
     open: dropdownOpen,
-    onOpenChange: setOpen,
+    onOpenChange: setFilterOpen,
     contentPx: panelHeightPx,
     minMenuWidth: panelWidthPx,
     align: "end",
+    fullBleed: isMobile,
+    closeOnOutsidePointerDown: false,
   });
   /* Both branches leave the height to the sheet — see PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS. */
   const resolvedMobileSheetClass = mobileSheetClassName ?? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
@@ -200,16 +270,18 @@ export function PortalFilterSortSheet({
      groups (Finances = ReportFilterBar + FinancesRowFilters) would otherwise hold one open
      menu per group and stack them over the panel. */
   const fields = (
-    <FilterFieldsAccordionScope>
-      <FilterPanelFields
-        onReset={onReset}
-        extraModalContent={extraModalContent}
-        compact={compactPanel}
-        scrollLocked={filterMenuOpen}
-      >
-        {children}
-      </FilterPanelFields>
-    </FilterFieldsAccordionScope>
+    <PortalFilterDeferProvider controllerRef={deferControllerRef}>
+      <FilterFieldsAccordionScope>
+        <FilterPanelFields
+          onReset={handleReset}
+          extraModalContent={extraModalContent}
+          compact={compactPanel}
+          scrollLocked={filterMenuOpen}
+        >
+          {children}
+        </FilterPanelFields>
+      </FilterFieldsAccordionScope>
+    </PortalFilterDeferProvider>
   );
 
   const filterDropdownPanel = (
@@ -219,7 +291,9 @@ export function PortalFilterSortSheet({
       data-slot="portal-filter-dropdown-panel"
         className={cn(
         panelSizeClass,
+        isMobile && "max-lg:!w-screen max-lg:!max-w-[100vw] max-lg:border-x-0",
         "portal-filter-dropdown-panel relative z-50 flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+        isMobile && "max-lg:rounded-xl",
       )}
       style={
         menuRect
@@ -235,7 +309,7 @@ export function PortalFilterSortSheet({
       }
       data-attr="portal-filter-dropdown-panel"
     >
-      <FilterDropdownHeader onReset={onReset} onClose={close} />
+      <FilterDropdownHeader onReset={handleReset} onClose={close} />
       <div
         className={cn(
           compactPanel
@@ -270,21 +344,24 @@ export function PortalFilterSortSheet({
               ? cn(
                   PORTAL_HEADER_ACTION_BTN,
                   "inline-flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap max-md:px-2.5 md:px-3",
+                  /* While the mobile dropdown is open, ignore ghost clicks on the trigger
+                     that land after a portaled option pick (they would toggle the panel shut). */
+                  dropdownOpen && isMobile && "pointer-events-none",
                 )
               : "inline-flex h-9 min-w-0 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold whitespace-nowrap",
           )}
           data-attr={dataAttr}
           aria-expanded={compactTrigger ? open : undefined}
           onClick={() => {
-            if (desktopPresentation === "dropdown" && !isMobile) {
-              setOpen((prev) => !prev);
+            if (desktopPresentation === "dropdown") {
+              setFilterOpen((prev) => !prev);
               return;
             }
-            setOpen(true);
+            setFilterOpen(true);
           }}
         >
           <SlidersHorizontal className={PORTAL_FILTER_ICON_CLASS} strokeWidth={2} aria-hidden />
-          <span className="truncate">
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
             Filter{activeCount > 0 ? ` · ${activeCount} active` : ""}
           </span>
         </Button>
@@ -296,7 +373,8 @@ export function PortalFilterSortSheet({
                   className="fixed inset-0 cursor-default"
                   style={{ zIndex: fieldSelectMenuZIndex(portalHost) - 1 }}
                   aria-label="Close filters"
-                  onClick={close}
+                  onPointerDown={handleBackdropDismiss}
+                  onClick={handleBackdropDismiss}
                 />
                 {filterDropdownPanel}
               </>,
@@ -309,10 +387,10 @@ export function PortalFilterSortSheet({
           {children}
         </div>
       ) : null}
-      {isMobile ? (
+      {useMobileBottomSheet ? (
         <VaulBottomSheet
           open={open}
-          onOpenChange={setOpen}
+          onOpenChange={handleSheetOpenChange}
           title="Filter"
           flushBody={mobileFlushBody}
           autoElevate={mobileSheetRaised}
@@ -366,7 +444,7 @@ export function PortalFilterSortSheet({
           footer={
             compactPanel ? (
               <div className="flex w-full justify-end">
-                <FilterResetLink onReset={onReset} />
+                <FilterResetLink onReset={handleReset} />
               </div>
             ) : undefined
           }

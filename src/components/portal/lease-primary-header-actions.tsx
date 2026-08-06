@@ -224,6 +224,9 @@ type LeasePrimaryHeaderActionsProps = {
   uploadPdfBusy?: boolean;
   /** Opens the imported-lease review. Shown whenever the row carries a parse. */
   onReviewImportedLease?: () => void;
+  /** Section editor for this lease packet only — never the property template. */
+  onEditLease?: () => void;
+  editLeaseDataAttr?: string;
   canEditDocument?: boolean;
   downloadDataAttr?: string;
   signManagerDataAttr?: string;
@@ -259,6 +262,8 @@ export function LeasePrimaryHeaderActions({
   onUploadPdf,
   uploadPdfBusy = false,
   onReviewImportedLease,
+  onEditLease,
+  editLeaseDataAttr = "lease-primary-edit",
   canEditDocument = false,
   downloadDataAttr = "lease-primary-download",
   signManagerDataAttr = "lease-primary-sign-manager",
@@ -279,6 +284,12 @@ export function LeasePrimaryHeaderActions({
   const showMoveToReview = row.status === "Resident Signature Pending" && Boolean(onMoveToManagerReview);
   const showGenerate = canEditDocument && Boolean(onGenerateLease);
   const showUpload = canEditDocument && Boolean(onUploadPdf);
+  const showEditLease =
+    canEditDocument &&
+    Boolean(row.generatedHtml) &&
+    !row.managerUploadedPdf?.dataUrl &&
+    !row.templateDocumentUrl &&
+    Boolean(onEditLease);
   // Not gated on `canEditDocument`: once a lease is out for signature the
   // manager can no longer replace the document, but they must still be able to
   // read what PropLane extracted from it.
@@ -442,6 +453,28 @@ export function LeasePrimaryHeaderActions({
       });
     }
 
+    if (showEditLease) {
+      actions.push({
+        id: "edit",
+        button: (
+          <Button
+            type="button"
+            variant="outline"
+            className={compactBtnClass}
+            data-attr={editLeaseDataAttr}
+            onClick={onEditLease}
+          >
+            Edit
+          </Button>
+        ),
+        menuItem: (
+          <DropdownMenuItem data-attr={editLeaseDataAttr} onClick={onEditLease}>
+            Edit
+          </DropdownMenuItem>
+        ),
+      });
+    }
+
     if (showGenerate) {
       actions.push({
         id: "generate",
@@ -548,6 +581,9 @@ export function LeasePrimaryHeaderActions({
     showSigningReminder,
     showGenerate,
     showUpload,
+    showEditLease,
+    editLeaseDataAttr,
+    onEditLease,
     onDelete,
     compactBtnClass,
     deleteBtnClass,

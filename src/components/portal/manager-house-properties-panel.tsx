@@ -22,11 +22,14 @@ import {
   PROPERTY_DETAIL_SECTION_TABS,
   PROPERTY_DETAIL_TAB_LABELS,
   PROPERTY_DETAIL_TOP_TAB_LABELS,
+  PROPERTY_DETAIL_TOP_TAB_SHORT_LABELS,
   propertyDetailHref,
+  propertyDetailTopNavId,
   parsePropertyDetailTab,
   type PropertyDetailTabId,
   type PropertyDetailSectionTabId,
 } from "@/lib/portal-detail-routes";
+import { ManagerPropertyRequestsPanel } from "@/components/portal/manager-property-requests-panel";
 import { PortalPropertyRecordRow } from "@/components/portal/portal-record-row";
 import {
   PortalListAddRow,
@@ -340,6 +343,11 @@ function ManagerPropertyInlineDetails({
     promotionNewHandlerRef.current = handler;
   }, []);
 
+  const requestAddHandlerRef = useRef<(() => void) | null>(null);
+  const registerRequestAddHandler = useCallback((handler: (() => void) | null) => {
+    requestAddHandlerRef.current = handler;
+  }, []);
+
   const applicationAddHandlerRef = useRef<(() => void) | null>(null);
   const registerApplicationAddHandler = useCallback((handler: (() => void) | null) => {
     applicationAddHandlerRef.current = handler;
@@ -419,6 +427,25 @@ function ManagerPropertyInlineDetails({
         </Button>
       ) : null,
     [actionBtnClass, bucket, listingId],
+  );
+
+  const requestsHeaderExtra = useMemo(
+    () =>
+      bucket === 2 && stablePropertyId ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={`${actionBtnClass} ${PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}`}
+          data-attr="manager-service-request-add-header"
+          onClick={(e) => {
+            e.stopPropagation();
+            requestAddHandlerRef.current?.();
+          }}
+        >
+          Add request
+        </Button>
+      ) : null,
+    [actionBtnClass, bucket, stablePropertyId],
   );
 
   const dangerBtnClass = `${sectionHeaderBtn} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`;
@@ -696,7 +723,7 @@ function ManagerPropertyInlineDetails({
     bucket === 3 || bucket === 5
       ? ["preview"]
       : bucket === 2 && listingId
-        ? ["preview", "house-details", "application", "lease", "calendar", "promotion"]
+        ? ["preview", "house-details", "application", "lease", "calendar", "requests", "promotion"]
         : ["preview", "house-details", "application", "lease"];
   const activeDetailTab = availableTabs.includes(detailTab) ? detailTab : availableTabs[0]!;
   const detailSectionTabs = useMemo(
@@ -707,7 +734,27 @@ function ManagerPropertyInlineDetails({
     [availableTabs],
   );
   const topNavItems = useMemo(() => {
-    const items: Array<{ id: string; label: string; href: string; dataAttr: string }> = [];
+    const items: Array<{
+      id: string;
+      label: string;
+      shortLabel?: string;
+      href: string;
+      dataAttr: string;
+    }> = [];
+    const pushTopTab = (
+      id: keyof typeof PROPERTY_DETAIL_TOP_TAB_LABELS,
+      tab: PropertyDetailTabId,
+    ) => {
+      if (!availableTabs.includes(tab)) return;
+      items.push({
+        id,
+        label: PROPERTY_DETAIL_TOP_TAB_LABELS[id],
+        shortLabel: PROPERTY_DETAIL_TOP_TAB_SHORT_LABELS[id],
+        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
+        dataAttr: `property-detail-tab-${id}`,
+      });
+    };
+
     if (detailSectionTabs.length > 0) {
       items.push({
         id: "details",
@@ -716,26 +763,14 @@ function ManagerPropertyInlineDetails({
         dataAttr: "property-detail-tab-details",
       });
     }
-    if (availableTabs.includes("calendar")) {
-      items.push({
-        id: "calendar",
-        label: PROPERTY_DETAIL_TOP_TAB_LABELS.calendar,
-        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "calendar"),
-        dataAttr: "property-detail-tab-calendar",
-      });
-    }
-    if (availableTabs.includes("promotion")) {
-      items.push({
-        id: "promotion",
-        label: PROPERTY_DETAIL_TOP_TAB_LABELS.promotion,
-        href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, "promotion"),
-        dataAttr: "property-detail-tab-promotion",
-      });
-    }
+    pushTopTab("calendar", "calendar");
+    pushTopTab("application", "application");
+    pushTopTab("lease", "lease");
+    pushTopTab("requests", "requests");
+    pushTopTab("promotion", "promotion");
     return items;
   }, [availableTabs, detailSectionTabs, propertiesBase, propertyRouteKey, stage]);
-  const activeTopNavId =
-    activeDetailTab === "calendar" ? "calendar" : activeDetailTab === "promotion" ? "promotion" : "details";
+  const activeTopNavId = propertyDetailTopNavId(activeDetailTab);
   const showDetailSectionNav =
     activeTopNavId === "details" && detailSectionTabs.length > 1;
 
@@ -750,12 +785,14 @@ function ManagerPropertyInlineDetails({
   const leaseHeaderExtraRef = useRef(leaseHeaderExtra);
   const tourHeaderExtraRef = useRef(tourHeaderExtra);
   const promotionHeaderExtraRef = useRef(promotionHeaderExtra);
+  const requestsHeaderExtraRef = useRef(requestsHeaderExtra);
   useEffect(() => {
     previewHeaderActionsRef.current = previewHeaderActions;
     applicationHeaderExtraRef.current = applicationHeaderExtra;
     leaseHeaderExtraRef.current = leaseHeaderExtra;
     tourHeaderExtraRef.current = tourHeaderExtra;
     promotionHeaderExtraRef.current = promotionHeaderExtra;
+    requestsHeaderExtraRef.current = requestsHeaderExtra;
   });
 
   const detailHeaderKey = useMemo(() => {
@@ -773,6 +810,9 @@ function ManagerPropertyInlineDetails({
     }
     if (activeDetailTab === "promotion" && bucket === 2 && listingId) {
       return `promotion:${listingId}`;
+    }
+    if (activeDetailTab === "requests" && bucket === 2 && stablePropertyId) {
+      return `requests:${stablePropertyId}`;
     }
     return "none";
   }, [
@@ -800,7 +840,9 @@ function ManagerPropertyInlineDetails({
               ? tourHeaderExtraRef.current
               : activeDetailTab === "promotion"
                 ? promotionHeaderExtraRef.current
-                : null;
+                : activeDetailTab === "requests"
+                  ? requestsHeaderExtraRef.current
+                  : null;
     onDetailHeaderActions(detailHeaderKey, actions);
   }, [onDetailHeaderActions, detailHeaderKey, activeDetailTab, previewHasToolbar]);
 
@@ -911,6 +953,17 @@ function ManagerPropertyInlineDetails({
           showToast={showToast}
           onUpdated={onUpdated}
           onRegisterNewPromotion={registerPromotionNewHandler}
+        />
+      ) : null}
+
+      {activeDetailTab === "requests" && bucket === 2 && stablePropertyId ? (
+        <ManagerPropertyRequestsPanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+          onRegisterAddRequest={registerRequestAddHandler}
         />
       ) : null}
 

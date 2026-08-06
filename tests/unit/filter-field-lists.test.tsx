@@ -57,12 +57,12 @@ function installMobilePortalViewport() {
   });
 }
 
-function openMobileFilterSheetHarness({ optionCount = 8 }: { optionCount?: number } = {}) {
+function openMobileFilterDropdownHarness({ optionCount = 8 }: { optionCount?: number } = {}) {
   const options = makeOptions(optionCount);
   function MobileFilterSheetHarness() {
     const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
     return (
-      <PortalFilterSortSheet activeCount={propertyFilters.length} onReset={() => setPropertyFilters([])}>
+      <PortalFilterSortSheet activeCount={0} onReset={() => setPropertyFilters([])}>
         <FilterFieldsAccordion>
           <FilterCollapsibleSection
             sectionId="property"
@@ -87,8 +87,8 @@ function openMobileFilterSheetHarness({ optionCount = 8 }: { optionCount?: numbe
   fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
 }
 
-function expectOpenMobileFilterSheet() {
-  expect(document.querySelector('[data-slot="vaul-bottom-sheet"][data-state="open"]')).toBeTruthy();
+function expectOpenMobileFilterDropdown() {
+  expect(document.querySelector('[data-attr="portal-filter-dropdown-panel"]')).toBeTruthy();
 }
 
 afterEach(cleanup);
@@ -403,14 +403,147 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
   });
 });
 
-describe("PortalFilterSortSheet — mobile sheet stays open while filtering", () => {
-  it("stays open after toggling a multi-select option", () => {
-    openMobileFilterSheetHarness();
-    expectOpenMobileFilterSheet();
+describe("PortalFilterSortSheet — deferred apply on close", () => {
+  it("does not apply filter changes until the sheet closes", async () => {
+    const options = makeOptions(4).map((opt) => ({ id: opt.value, label: opt.label }));
+    function DeferredFilterHarness() {
+      const [applied, setApplied] = useState<string[]>([]);
+      return (
+        <>
+          <p data-testid="applied-count">{applied.length}</p>
+          <PortalFilterSortSheet activeCount={applied.length} onReset={() => {}}>
+            <ApplicationFilterSortFields
+              propertyOptions={options}
+              propertyFilters={applied}
+              onPropertyFiltersChange={setApplied}
+              dataAttr="deferred-filter-property"
+            />
+          </PortalFilterSortSheet>
+        </>
+      );
+    }
+    installMobilePortalViewport();
+    render(<DeferredFilterHarness />);
+    expect(screen.getByTestId("applied-count")).toHaveTextContent("0");
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    await waitFor(() => {
+      expect(document.querySelector('[data-attr="portal-filter-dropdown-panel"]')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    fireEvent.pointerDown(within(screen.getByRole("listbox")).getByText("Property 0"));
+    expect(screen.getByTestId("applied-count")).toHaveTextContent("0");
+    const closeButton = document.querySelector('[data-attr="portal-filter-close"]');
+    expect(closeButton).toBeTruthy();
+    fireEvent.click(closeButton!);
+    await waitFor(() => {
+      expect(screen.getByTestId("applied-count")).toHaveTextContent("1");
+    });
+  });
+});
+
+describe("PortalFilterSortSheet — mobile dropdown stays open while filtering", () => {
+  it("stays open after toggling a multi-select option", async () => {
+    const options = makeOptions(8);
+    installMobilePortalViewport();
+    render(
+      <PortalFilterSortSheet activeCount={0} onReset={() => {}}>
+        <FilterFieldsAccordion>
+          <FilterCollapsibleSection
+            sectionId="property"
+            label="Property"
+            summary="All properties"
+            empty
+            menuOptionCount={options.length}
+          >
+            <FilterCheckboxList
+              options={options}
+              selected={[]}
+              onChange={() => {}}
+              dataAttr="mobile-sheet-filter-property"
+            />
+          </FilterCollapsibleSection>
+        </FilterFieldsAccordion>
+      </PortalFilterSortSheet>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    expectOpenMobileFilterDropdown();
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
     const listbox = screen.getByRole("listbox");
     fireEvent.pointerDown(within(listbox).getByText("Property 0"));
-    expectOpenMobileFilterSheet();
+    await waitFor(() => {
+      expectOpenMobileFilterDropdown();
+    });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+  });
+
+  it("stays open when the pick target is a text node inside an option label", async () => {
+    const options = makeOptions(4);
+    installMobilePortalViewport();
+    render(
+      <PortalFilterSortSheet activeCount={0} onReset={() => {}}>
+        <FilterFieldsAccordion>
+          <FilterCollapsibleSection
+            sectionId="property"
+            label="Property"
+            summary="All properties"
+            empty
+            menuOptionCount={options.length}
+          >
+            <FilterCheckboxList
+              options={options}
+              selected={[]}
+              onChange={() => {}}
+              dataAttr="mobile-sheet-filter-property"
+            />
+          </FilterCollapsibleSection>
+        </FilterFieldsAccordion>
+      </PortalFilterSortSheet>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const label = within(screen.getByRole("listbox")).getByText("Property 0");
+    const textNode = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+    expect(textNode).toBeTruthy();
+    fireEvent.pointerDown(textNode!);
+    await waitFor(() => {
+      expectOpenMobileFilterDropdown();
+    });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+  });
+
+  it("stays open when a ghost click hits the Filter trigger right after a multi-select pick", async () => {
+    const options = makeOptions(4);
+    installMobilePortalViewport();
+    render(
+      <PortalFilterSortSheet activeCount={0} onReset={() => {}}>
+        <FilterFieldsAccordion>
+          <FilterCollapsibleSection
+            sectionId="property"
+            label="Property"
+            summary="All properties"
+            empty
+            menuOptionCount={options.length}
+          >
+            <FilterCheckboxList
+              options={options}
+              selected={[]}
+              onChange={() => {}}
+              dataAttr="mobile-sheet-filter-property"
+            />
+          </FilterCollapsibleSection>
+        </FilterFieldsAccordion>
+      </PortalFilterSortSheet>,
+    );
+    const filterTrigger = screen.getByRole("button", { name: /^Filter/ });
+    fireEvent.click(filterTrigger);
+    expectOpenMobileFilterDropdown();
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    const listbox = screen.getByRole("listbox");
+    fireEvent.pointerDown(within(listbox).getByText("Property 0"));
+    fireEvent.click(filterTrigger);
+    await waitFor(() => {
+      expectOpenMobileFilterDropdown();
+    });
     expect(screen.getByRole("listbox")).toBeTruthy();
   });
 
@@ -428,16 +561,16 @@ describe("PortalFilterSortSheet — mobile sheet stays open while filtering", ()
       </PortalFilterSortSheet>,
     );
     fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
-    expectOpenMobileFilterSheet();
+    expectOpenMobileFilterDropdown();
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
     const listbox = screen.getByRole("listbox");
     fireEvent.pointerDown(within(listbox).getByText("Property 0"));
-    const overlay = document.querySelector("[data-vaul-overlay]");
-    if (overlay) fireEvent.click(overlay);
+    const backdrop = document.querySelector('button.fixed.inset-0[aria-label="Close filters"]');
+    if (backdrop) fireEvent.pointerDown(backdrop);
     await waitFor(() => {
-      expectOpenMobileFilterSheet();
+      expectOpenMobileFilterDropdown();
+      expect(screen.queryByRole("listbox")).toBeNull();
     });
-    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 
@@ -1026,6 +1159,32 @@ describe("portal filter dropdown positioning", () => {
     });
     expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(760);
     expect(rect.maxHeight).toBe(contentPx);
+
+    document.body.removeChild(button);
+  });
+
+  it("spans the viewport with even insets on mobile full-bleed", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 80,
+        left: 280,
+        right: 360,
+        bottom: 120,
+        width: 80,
+        height: 40,
+        x: 280,
+        y: 80,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+
+    const rect = computePortalFilterDropdownRect(button, 168, { widthPx: 352, fullBleed: true });
+    expect(rect.left).toBe(0);
+    expect(rect.width).toBe(390);
+    expect(rect.left + rect.width).toBe(390);
 
     document.body.removeChild(button);
   });

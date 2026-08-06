@@ -55,7 +55,6 @@ function communicationFilterTouches(
   let n = 0;
   if (filters.propertyIds.length > 0) n += 1;
   if (filters.roles.length > 0) n += 1;
-  if (filters.contactIds.length > 0) n += 1;
   if (listSort !== "recent") n += 1;
   return n;
 }
@@ -100,7 +99,6 @@ export function ManagerCommunication({
     setThreadOpen(Boolean(threadId));
   }, [threadId]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [archivedCount, setArchivedCount] = useState(0);
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -110,21 +108,6 @@ export function ManagerCommunication({
   const liveContacts = useMemo(() => buildManagerInboxLiveContacts(userId), [userId]);
 
   const propertyOptions = useMemo(() => propertyOptionsFromFilterContacts(filterContacts), [filterContacts]);
-
-  const residentOptions = useMemo(() => {
-    return filterContacts
-      .filter((c) => c.role === "resident")
-      .map((c) => {
-        const status = c.tenancyStatus === "applicant" ? "Applicant" : "Resident";
-        const house = c.propertyLabel?.trim();
-        const bits = [c.name, status, house].filter(Boolean);
-        return {
-          value: c.id,
-          label: bits.join(" · "),
-        };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [filterContacts]);
 
   const loadSmsRecipients = useCallback(async () => {
     // SMS UI hidden until A2P clears — never fetch SMS recipients or expose them
@@ -204,18 +187,6 @@ export function ManagerCommunication({
           })),
       });
     }
-    for (const contactId of filters.contactIds) {
-      const label = residentOptions.find((r) => r.value === contactId)?.label ?? contactId;
-      chips.push({
-        id: `resident-${contactId}`,
-        label: `Resident: ${label}`,
-        onRemove: () =>
-          setFilters((f) => ({
-            ...f,
-            contactIds: f.contactIds.filter((id) => id !== contactId),
-          })),
-      });
-    }
     if (listSort !== "recent") {
       const sortLabel = listSort === "resident" ? "Resident (A–Z)" : listSort;
       chips.push({
@@ -225,13 +196,12 @@ export function ManagerCommunication({
       });
     }
     return chips;
-  }, [filters, listSort, propertyOptions, residentOptions]);
+  }, [filters, listSort, propertyOptions]);
 
   const filterControls = (
     <CommunicationFilterSortFields
       propertyOptions={propertyOptions}
       roleOptions={ROLE_OPTIONS}
-      filterContacts={filterContacts}
       filters={filters}
       onFiltersChange={setFilters}
       listSort={listSort}
@@ -243,14 +213,11 @@ export function ManagerCommunication({
     <PortalFilterSortSheet
       activeCount={filterTouchCount}
       compactPanel
-      filterFieldCount={4}
+      filterFieldCount={3}
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
       mobileFlushBody={true}
-      onReset={() => {
-        setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
-        setListSort("recent");
-      }}
+      onReset={() => {}}
       dataAttr="communication-filter-sheet-open"
     >
       {filterControls}
@@ -284,7 +251,6 @@ export function ManagerCommunication({
           id: "archived",
           label: "Archived",
           href: `${commBase}/archived`,
-          count: archivedCount,
           dataAttr: "communication-segment-archived",
         },
       ]}
@@ -337,7 +303,6 @@ export function ManagerCommunication({
         listChrome="external"
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        onFolderCountsChange={(counts) => setArchivedCount(counts.archived)}
       />
     </PortalCommunicationShell>
   );

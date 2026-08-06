@@ -156,11 +156,11 @@ export function VaulBottomSheet({
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content
           className={cn(
-            "fixed inset-x-0 z-[71] flex flex-col overflow-visible border-t border-border bg-background outline-none motion-reduce:transition-none",
+            "fixed inset-x-0 z-[71] flex !w-screen !max-w-none flex-col overflow-visible border-x-0 border-t border-border bg-background outline-none motion-reduce:transition-none",
             fullScreen
               ? "inset-0 top-0 z-[71] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden rounded-none border-0 pt-[max(0.75rem,var(--native-safe-top,0px))] pb-[max(1rem,var(--native-safe-bottom,0px))]"
               : cn(
-                  "h-auto rounded-t-2xl",
+                  "h-auto rounded-none",
                   elevated
                     ? elevatedPlacement
                     : cn(

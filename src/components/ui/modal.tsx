@@ -13,6 +13,8 @@ import {
   MODAL_FULL_PAGE_STACK_CLASS,
   MODAL_PANEL_CLASS,
   MODAL_OVERLAY_BACKDROP_CLASS,
+  PORTAL_MOBILE_DRAWER_EDGE_CLASS,
+  PORTAL_MOBILE_DRAWER_SHELL_CLASS,
 } from "@/components/ui/modal-styles";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
@@ -28,6 +30,8 @@ export {
   PORTAL_MODAL_FORM_GRID_CLASS,
   PORTAL_MODAL_FORM_FIELD_CLASS,
   PORTAL_MODAL_FORM_FULL_ROW_CLASS,
+  PORTAL_MOBILE_DRAWER_EDGE_CLASS,
+  PORTAL_MOBILE_DRAWER_SHELL_CLASS,
 } from "@/components/ui/modal-styles";
 
 /** Top-right dismiss control — Carbon / Primer / Watson pattern (icon, 44px target). */
@@ -57,7 +61,7 @@ function getSmallPortalViewportPresentation(): "drawer" | "dialog" {
 }
 
 /** Desktop dialog vs mobile Vaul drawer — matches portal `lg` breakpoint. */
-function useModalPresentation(): "drawer" | "dialog" {
+export function useModalPresentation(): "drawer" | "dialog" {
   return useSyncExternalStore(
     subscribeSmallPortalViewport,
     getSmallPortalViewportPresentation,
@@ -161,11 +165,11 @@ export function ModalShell({
               )}
             />
           ) : null}
-          <Drawer.Content
-            ref={contentRef}
-            data-slot="modal-vaul-drawer"
-            style={panelStyle}
-            className={panelClassName}
+        <Drawer.Content
+          ref={contentRef}
+          data-slot="modal-vaul-drawer"
+          style={panelStyle}
+          className={cn(PORTAL_MOBILE_DRAWER_SHELL_CLASS, panelClassName, PORTAL_MOBILE_DRAWER_EDGE_CLASS)}
             onPointerDownOutside={allowPortaledFieldSelectInteraction}
             onInteractOutside={allowPortaledFieldSelectInteraction}
             {...contentA11y}
@@ -371,7 +375,7 @@ export function Modal({
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
   /** Drawer fills the viewport below portal `lg` (no partial sheet). */
-  fullScreenMobile = false,
+  fullScreenMobile = true,
   /** Fill the viewport on every breakpoint (not only mobile drawer). */
   fullPage = false,
   /** When false, modal body does not scroll — children own internal overflow. */
@@ -447,9 +451,13 @@ export function Modal({
         panelClassName={cn(
           useFullViewport
             ? cn(dense ? "px-4" : "px-5", panelClassName, MODAL_FULL_PAGE_PANEL_CLASS)
-            : "modal-panel fixed inset-x-0 bottom-0 z-[71] flex max-h-[min(92dvh,56rem)] flex-col overflow-hidden rounded-t-2xl border-t border-border shadow-[var(--shadow-card)] outline-none pb-[max(1rem,var(--native-safe-bottom,0px))] pt-3 motion-reduce:transition-none",
-          !useFullViewport && (dense ? "px-4" : "px-5"),
-          !useFullViewport && panelClassName,
+            : cn(
+                PORTAL_MOBILE_DRAWER_SHELL_CLASS,
+                "max-h-[min(92dvh,56rem)] pt-3",
+                dense ? "px-4" : "px-5",
+                panelClassName,
+              ),
+          PORTAL_MOBILE_DRAWER_EDGE_CLASS,
         )}
       >
         <ModalPanelInner

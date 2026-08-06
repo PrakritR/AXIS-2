@@ -14,7 +14,10 @@ import {
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
+import {
+  persistManagerListingSubmission,
+  resolveManagerListingSubmissionForPropertyId,
+} from "@/lib/manager-property-save-target";
 import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
 import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
 import {
@@ -61,6 +64,7 @@ export function ManagerPropertyLeasePanel({
   sub,
   saveTarget,
   managerUserId,
+  propertyIds,
   onUpdated,
   showToast,
   propertyHint,
@@ -73,6 +77,8 @@ export function ManagerPropertyLeasePanel({
   sub: ManagerListingSubmissionV1;
   saveTarget: LeaseSaveTarget;
   managerUserId: string | null;
+  /** When set, template changes apply to every listed property (bulk edit). */
+  propertyIds?: string[];
   onUpdated: () => void;
   showToast: (m: string) => void;
   propertyHint?: PropertyLeasePreviewHint;
@@ -90,8 +96,38 @@ export function ManagerPropertyLeasePanel({
   const syncedSub = useMemo(() => syncPropertyLeaseTemplatesFromListing(sub), [sub]);
   const templates = useMemo(() => readPropertyLeaseTemplates(syncedSub), [syncedSub]);
 
+  const bulkPropertyIds = propertyIds?.filter((id) => id.trim()) ?? [];
+
   const persistTemplates = (nextTemplates: PropertyLeaseTemplate[]) => {
-    if (!saveTarget || !managerUserId) return false;
+    if (!managerUserId) return false;
+
+    if (bulkPropertyIds.length > 0) {
+      let saved = 0;
+      let failed = 0;
+      for (const bulkPropertyId of bulkPropertyIds) {
+        const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, bulkPropertyId);
+        if (!hit) {
+          failed += 1;
+          continue;
+        }
+        const base = syncPropertyLeaseTemplatesFromListing(hit.sub);
+        const next = syncLegacyLeaseFieldsFromTemplates(base, nextTemplates);
+        if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
+        else failed += 1;
+      }
+      if (saved === 0) {
+        showToast("Could not save lease settings.");
+        return false;
+      }
+      if (failed > 0) {
+        showToast(`Updated lease for ${saved} properties (${failed} could not be saved).`);
+      } else if (saved > 1) {
+        showToast(`Updated lease for ${saved} properties.`);
+      }
+      return true;
+    }
+
+    if (!saveTarget) return false;
     const next = syncLegacyLeaseFieldsFromTemplates(syncedSub, nextTemplates);
     return persistManagerListingSubmission(saveTarget, managerUserId, next);
   };
@@ -128,7 +164,7 @@ export function ManagerPropertyLeasePanel({
     showToast("Lease removed.");
   };
 
-  if (!saveTarget || !managerUserId) return null;
+  if (!managerUserId || (!saveTarget && bulkPropertyIds.length === 0)) return null;
 
   const editingTemplate = templates.find((t) => t.id === editingTemplateId) ?? null;
 

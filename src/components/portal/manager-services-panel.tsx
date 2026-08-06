@@ -123,7 +123,7 @@ export function ManagerServicesPanel() {
               <PortalFilterSortSheet
                 activeCount={portalFilterActiveCount([resolvedPropertyId])}
                 compactPanel
-                onReset={() => setSelectedPropertyId("")}
+                onReset={() => {}}
                 dataAttr="services-catalog-filter-sheet-open"
               >
                 <ApplicationFilterSortFields

@@ -82,12 +82,12 @@ npm run test:cleanup -- <testRunId>
 
 ### Canonical demo portal accounts (`@test.proplane.local`)
 
-`npm run test:seed` provisions the sandbox accounts below **and** writes the dev/test catalog it needs: the five canonical demo houses (`mgr-demo-ballard`, `-cascade`, `-emerald`, `-lakeview`, `-pioneer`) on `manager@`, plus the browse catalog on `manager2@`. The **shared** portfolio seed (`src/lib/demo/canonical-demo-portfolio-db.ts`, the one production provisioning runs) is what adds **no portfolio rows** — it sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose, since there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch, and `AGENTS.md` → "Property ownership" for why those five ids are reclaimed to `manager@` before any other seed cleanup step.
+`npm run test:seed` provisions the sandbox accounts below **and** writes the dev/test catalog it needs: **20 live listings** on `manager@` (five canonical demo homes plus fifteen `mgr-scale-*` portfolio rows) and the browse catalog on `manager2@`. The primary manager is seeded as **Business** tier (`manager_purchases.tier = business`, 20-property cap). The **shared** portfolio seed (`src/lib/demo/canonical-demo-portfolio-db.ts`, the one production provisioning runs) is what adds **no portfolio rows** — it sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose, since there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch, and `AGENTS.md` → "Property ownership" for why those five ids are reclaimed to `manager@` before any other seed cleanup step.
 
 | Role | Email | Password (default) |
 |------|-------|---------------------|
 | Admin | `admin@test.proplane.local` | `TestAdmin123!` |
-| Manager (demo portfolio) | `manager@test.proplane.local` | `TestManager123!` |
+| Manager (demo portfolio, Business, 20 listings) | `manager@test.proplane.local` | `TestManager123!` |
 | Manager (browse catalog) | `manager2@test.proplane.local` | `TestManager123!` |
 | Resident | `resident@test.proplane.local` | `TestResident123!` |
 | Vendor | `vendor@test.proplane.local` | `TestVendor123!` |

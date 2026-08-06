@@ -798,7 +798,7 @@ export function ManagerPromotion({
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
       className="min-w-0 shrink-0"
-      onReset={() => setPropertyFilters([])}
+      onReset={() => {}}
       dataAttr="promotion-filter-sheet-open"
     >
       <ApplicationFilterSortFields

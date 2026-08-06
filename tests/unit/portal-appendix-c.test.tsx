@@ -42,9 +42,11 @@ describe("portal-detail-routes", () => {
     expect(parsePropertyDetailTab(undefined)).toBe("preview");
   });
 
-  it("includes promotion in PROPERTY_DETAIL_TABS", () => {
+  it("includes requests and promotion in PROPERTY_DETAIL_TABS", () => {
     expect(PROPERTY_DETAIL_TABS).toContain("promotion");
+    expect(PROPERTY_DETAIL_TABS).toContain("requests");
     expect(PROPERTY_DETAIL_TAB_LABELS.promotion).toBe("Promotion");
+    expect(PROPERTY_DETAIL_TAB_LABELS.requests).toBe("Requests");
   });
 
   it("parses resident detail tabs with application fallback", () => {

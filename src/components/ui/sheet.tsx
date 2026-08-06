@@ -163,7 +163,7 @@ const BottomSheetContent = React.forwardRef<
       data-slot="bottom-sheet-content"
       className={cn(
         "fixed z-50 gap-4 bg-background shadow-lg transition ease-in-out",
-        "inset-x-0 bottom-0 max-h-[var(--sheet-max-height)] rounded-t-2xl border-t border-border",
+        "inset-x-0 bottom-0 w-screen max-w-none max-h-[var(--sheet-max-height)] rounded-none border-x-0 border-t border-border",
         "pb-[max(1rem,var(--native-safe-bottom))] pt-3",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
         "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",

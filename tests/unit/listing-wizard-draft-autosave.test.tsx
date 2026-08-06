@@ -146,11 +146,9 @@ function clickClose() {
   fireEvent.click(btn);
 }
 
-/** Backdrop click on the wizard overlay — same `closeWizard` path as the header. */
-function clickBackdropClose() {
-  const overlay = document.querySelector(".modal-overlay");
-  if (!overlay) throw new Error("no wizard overlay");
-  fireEvent.click(overlay);
+/** Dismiss without using header × — same `closeWizard` path as backdrop (Escape in jsdom). */
+function dismissWizardWithoutTouching() {
+  fireEvent.keyDown(document.body, { key: "Escape", code: "Escape" });
 }
 
 /**
@@ -207,7 +205,7 @@ describe("closing the add-listing wizard saves the work in progress", () => {
   it("creates no draft when the wizard was never touched", async () => {
     const { onClose } = renderWizard();
 
-    clickBackdropClose();
+    dismissWizardWithoutTouching();
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(readAdminPropertyRows(5, MANAGER_ID)).toHaveLength(0);

@@ -1164,7 +1164,7 @@ export function ManagerApplications({
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
-      onReset={() => setPropertyFilters([])}
+      onReset={() => {}}
       dataAttr="applications-filter-sheet-open"
       className="min-w-0 shrink-0"
     >

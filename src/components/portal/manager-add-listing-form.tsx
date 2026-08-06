@@ -2,7 +2,6 @@
 
 import type { DragEvent, ReactNode } from "react";
 import { Children, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
-import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -12,6 +11,8 @@ import {
   DEMO_LISTING_SUBMITTED_EVENT,
 } from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
+import { ModalShell, useModalPresentation } from "@/components/ui/modal";
+import { MODAL_FULL_PAGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { ModalAssistantStrip } from "@/components/portal/modal-assistant-strip";
 import { cn } from "@/lib/utils";
 import { buildListingModalAssistantContext } from "@/lib/listing-assistant-context";
@@ -3295,21 +3296,40 @@ export function ManagerAddListingForm({
     bundlesFeeSection,
   ].filter((s): s is FeeExpandableSection => s !== null);
 
-  return createPortal(
-    <div
-      className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
-      onClick={(e) => { if (e.target === e.currentTarget) closeWizard(); }}
+  const presentation = useModalPresentation();
+  const isDrawer = presentation === "drawer";
+
+  const requestWizardClose = () => {
+    if (busy || closingDraft) return;
+    closeWizard();
+  };
+
+  if (!mounted) return null;
+
+  return (
+    <ModalShell
+      open
+      onClose={requestWizardClose}
+      presentation={presentation}
+      portalContainer={portalContainer}
+      showDrawerHandle={isDrawer}
+      lockScroll
+      panelClassName={cn(
+        "@container flex w-full flex-col overflow-hidden",
+        isDrawer
+          ? cn(
+              MODAL_FULL_PAGE_PANEL_CLASS,
+              "border-border bg-[#111827] [html[data-theme=light]_&]:bg-white",
+            )
+          : "modal-panel relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white",
+      )}
     >
       {/* A plain container, not a <form>: the PropLane Assistant embedded in the
           body has its own <form> for the chat composer, and a form-in-form is
           invalid HTML that throws a hydration error whenever the assistant is
           open (now the default on desktop). Continue / Submit are onClick buttons,
           so nothing here relied on form submission. */}
-      <div
-        id="manager-add-listing-form"
-        onClick={(e) => e.stopPropagation()}
-        className="modal-panel @container relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#111827] shadow-2xl sm:max-h-[calc(100svh-1.5rem)] lg:max-h-[calc(100svh-2rem)] [html[data-theme=light]_&]:border-border [html[data-theme=light]_&]:bg-white"
-      >
+      <div id="manager-add-listing-form" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ── Header ── */}
         <div className="modal-panel shrink-0 border-b border-border px-5 pt-5 pb-6 sm:px-6">
           <div className="flex w-full min-w-0 items-center justify-between gap-3">
@@ -4902,8 +4922,6 @@ export function ManagerAddListingForm({
           </div>
         </div>
       </div>
-
-    </div>,
-    portalContainer ?? document.body,
+    </ModalShell>
   );
 }

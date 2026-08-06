@@ -64,7 +64,7 @@ export function DestinationNav({
               itemLayout === "equal" ? "min-w-0" : destinationNavItemWidthClass(compactItems),
               "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
               itemLayout === "equal"
-                ? "min-h-10 min-w-0 px-0.5 py-1.5 text-center text-[10px] leading-tight sm:px-1 lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
+                ? "min-h-10 min-w-0 px-0.5 py-1.5 text-center leading-tight lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
                 : size === "toolbar"
                   ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
                   : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
@@ -79,14 +79,14 @@ export function DestinationNav({
             <span
               className={
                 itemLayout === "equal"
-                  ? "block w-full max-w-full whitespace-nowrap max-lg:text-[10px] max-lg:leading-tight lg:truncate"
+                  ? "block w-full min-w-0 max-w-full whitespace-nowrap text-[length:clamp(9px,2.35vw,0.875rem)] leading-tight lg:truncate"
                   : undefined
               }
             >
               {item.shortLabel ? (
                 <>
-                  <span className="lg:hidden">{item.shortLabel}</span>
-                  <span className="hidden lg:inline">{item.label}</span>
+                  <span className={itemLayout === "equal" ? "lg:hidden" : "lg:hidden"}>{item.shortLabel}</span>
+                  <span className={itemLayout === "equal" ? "hidden lg:inline" : "hidden lg:inline"}>{item.label}</span>
                 </>
               ) : (
                 item.label

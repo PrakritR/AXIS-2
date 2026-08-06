@@ -132,7 +132,6 @@ export function ManagerUnifiedInbox({
   searchQuery: searchQueryProp,
   onSearchQueryChange,
   listChrome = "internal",
-  onFolderCountsChange,
 }: {
   tabId: string;
   commBase: string;
@@ -154,7 +153,6 @@ export function ManagerUnifiedInbox({
   onSearchQueryChange?: (value: string) => void;
   /** `external` — segment tabs + search live in {@link PortalListControlStack}. */
   listChrome?: "internal" | "external";
-  onFolderCountsChange?: (counts: { unread: number; archived: number }) => void;
 }) {
   const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() =>
@@ -367,21 +365,6 @@ export function ManagerUnifiedInbox({
     [emailListItems, smsListItems, listSort],
   );
 
-  const archivedCount = useMemo(
-    () => filteredEmail.filter((t) => t.folder === "trash").length,
-    [filteredEmail],
-  );
-
-  const unreadCount = useMemo(() => {
-    const emailUnread = filteredEmail.filter((t) => t.folder === "inbox" && t.unread).length;
-    const smsUnread = allSmsItems.filter(({ item }) => item.unread).length;
-    return emailUnread + smsUnread;
-  }, [filteredEmail, allSmsItems]);
-
-  useEffect(() => {
-    onFolderCountsChange?.({ unread: unreadCount, archived: archivedCount });
-  }, [archivedCount, onFolderCountsChange, unreadCount]);
-
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
   useEffect(() => {
@@ -440,7 +423,6 @@ export function ManagerUnifiedInbox({
                 id: "archived",
                 label: "Archived",
                 href: `${commBase}/archived`,
-                count: archivedCount,
                 dataAttr: "communication-segment-archived",
               },
             ]}

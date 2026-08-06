@@ -1638,6 +1638,46 @@ export function residentCanViewLeaseRow(row: LeasePipelineRow | null | undefined
   );
 }
 
+/** PropLane-generated lease body only — not uploaded PDFs or static template URLs. */
+export function leaseAllowsManagerGeneratedBodyEdits(row: LeasePipelineRow): boolean {
+  return (
+    leaseAllowsManagerDocumentEdits(row) &&
+    Boolean(row.generatedHtml) &&
+    !row.managerUploadedPdf?.dataUrl &&
+    !row.templateDocumentUrl
+  );
+}
+
+/** All lease pipeline rows for a manager resident profile, best match first. */
+export function leasePipelineRowsForManagerResident(
+  managerUserId: string | null | undefined,
+  residentEmail: string,
+  residentRecordId: string,
+): LeasePipelineRow[] {
+  const selectedAxisId = normalizeApplicationAxisId(residentRecordId);
+  const email = residentEmail.trim().toLowerCase();
+  const rows = readLeasePipeline(managerUserId).filter((row) => {
+    const rowAxisId = row.axisId?.trim() ? normalizeApplicationAxisId(row.axisId) : "";
+    if (rowAxisId && rowAxisId === selectedAxisId) return true;
+    return row.residentEmail.trim().toLowerCase() === email;
+  });
+  rows.sort((a, b) => {
+    const aAxisMatch = (a.axisId?.trim() ? normalizeApplicationAxisId(a.axisId) : "") === selectedAxisId;
+    const bAxisMatch = (b.axisId?.trim() ? normalizeApplicationAxisId(b.axisId) : "") === selectedAxisId;
+    const axisDelta = Number(bAxisMatch) - Number(aAxisMatch);
+    if (axisDelta !== 0) return axisDelta;
+
+    const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
+    if (visibleDelta !== 0) return visibleDelta;
+    const priorityDelta = residentLeasePriority(b) - residentLeasePriority(a);
+    if (priorityDelta !== 0) return priorityDelta;
+    const aTs = Date.parse(a.updatedAtIso || "");
+    const bTs = Date.parse(b.updatedAtIso || "");
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+  });
+  return rows;
+}
+
 export type ResidentLeaseAuthContext = {
   email?: string | null;
   residentAxisId?: string | null;

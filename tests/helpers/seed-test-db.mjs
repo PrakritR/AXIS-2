@@ -420,28 +420,42 @@ try {
   });
 
   // Paid-tier purchase (FREE100 waiver = authorized paid access without Stripe; see
-  // manager-tier-sync.ts) so tier-gated manager tabs (Financials/Documents/Services/
-  // Promotion) and resident tabs gated on the manager's tier are never paywalled.
-  const { data: purchases } = await supabase
+  // manager-tier-sync.ts). Primary test manager is Business (20 listing cap) so
+  // portfolio-scale UI and plan gates match production Business accounts.
+  const { data: managerPurchaseByUser } = await supabase
     .from("manager_purchases")
-    .select("id, tier")
-    .eq("user_id", managerUserId);
-  const hasPaidTier = (purchases ?? []).some((p) => {
-    const t = String(p.tier ?? "").toLowerCase();
-    return t === "pro" || t === "business";
-  });
-  if (!hasPaidTier) {
+    .select("id, stripe_checkout_session_id")
+    .eq("user_id", managerUserId)
+    .maybeSingle();
+  const { data: managerPurchaseByEmail } = managerPurchaseByUser
+    ? { data: null }
+    : await supabase
+        .from("manager_purchases")
+        .select("id, stripe_checkout_session_id")
+        .ilike("email", managerEmail)
+        .maybeSingle();
+  const managerPurchase = managerPurchaseByUser ?? managerPurchaseByEmail ?? null;
+  const managerPurchasePatch = {
+    tier: "business",
+    billing: "portal",
+    promo_code: "FREE100",
+    paid_at: NOW.toISOString(),
+    email: managerEmail,
+    manager_id: managerId,
+    user_id: managerUserId,
+  };
+  if (managerPurchase?.id) {
+    await must(
+      supabase.from("manager_purchases").update(managerPurchasePatch).eq("id", managerPurchase.id),
+      "manager_purchases(update business)",
+    );
+  } else {
+    const checkoutSessionId = `seed_e2e_${managerId.replace(/[^A-Za-z0-9]+/g, "_")}`;
     await must(
       supabase.from("manager_purchases").upsert(
         {
-          stripe_checkout_session_id: "seed_e2e",
-          email: managerEmail,
-          manager_id: managerId,
-          tier: "pro",
-          billing: "portal",
-          user_id: managerUserId,
-          promo_code: "FREE100",
-          paid_at: NOW.toISOString(),
+          ...managerPurchasePatch,
+          stripe_checkout_session_id: checkoutSessionId,
         },
         { onConflict: "manager_id" },
       ),
@@ -822,6 +836,60 @@ try {
     furnishing: extras.furnishing ?? "Fully furnished",
     roomAmenitiesText: extras.roomAmenitiesText ?? "Closet\nHeating\nAC",
   });
+
+  function buildManagerScalePortfolioProperty(index, ownerUserId) {
+    const n = String(index).padStart(2, "0");
+    const streets = [
+      "Pine",
+      "Maple",
+      "Oak",
+      "Elm",
+      "Cedar",
+      "Ash",
+      "Birch",
+      "Spruce",
+      "Willow",
+      "Cherry",
+      "Hazel",
+      "Juniper",
+      "Laurel",
+      "Rowan",
+      "Aspen",
+    ];
+    const hoods = [
+      "Capitol Hill",
+      "Ballard",
+      "Fremont",
+      "Queen Anne",
+      "West Seattle",
+      "University District",
+      "Green Lake",
+      "Wallingford",
+      "Ravenna",
+      "Columbia City",
+    ];
+    const street = streets[(index - 1) % streets.length];
+    const hood = hoods[(index - 1) % hoods.length];
+    const rent = 950 + index * 35;
+    return {
+      id: `mgr-scale-${n}`,
+      name: `${street} Flats ${index}`,
+      address: `${100 + index * 7} ${street} St, Seattle, WA 981${index % 10}${index % 10}`,
+      zip: `981${index % 10}${index % 10}`,
+      neighborhood: hood,
+      tagline: `Shared rooms on ${street} St.`,
+      overview: `A furnished shared home in ${hood} with fast Wi-Fi and in-unit laundry.`,
+      structureNote: "2-story house",
+      petFriendly: index % 3 !== 0,
+      deposit: rent,
+      ownerUserId,
+      rooms: [
+        room(1, "2nd floor", rent, `Bright room ${index}A.`, { name: `Room ${index}A` }),
+        room(2, "2nd floor", rent + 50, `Corner room ${index}B.`, { name: `Room ${index}B` }),
+      ],
+    };
+  }
+
   const catalog = [
     // manager@test workflow portfolio (Cascade Lofts, Emerald Court, …)
     {
@@ -1089,6 +1157,13 @@ try {
       ],
     },
   ];
+
+  // Business-tier test manager (`manager@test`) carries 20 live listings: the five
+  // workflow demo homes plus fifteen scale portfolio rows (manager2 keeps its own
+  // browse catalog so E2E browse flows stay isolated).
+  for (let i = 1; i <= 15; i += 1) {
+    catalog.push(buildManagerScalePortfolioProperty(i, managerUserId));
+  }
 
   const propertyRows = catalog.map((p) => {
     const submission = buildListingSubmission(p);

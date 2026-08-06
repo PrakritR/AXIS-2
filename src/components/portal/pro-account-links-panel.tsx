@@ -1424,7 +1424,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       activeCount={portalFilterActiveCount([teamPropertyFilters])}
       compactPanel
       className="min-w-0 shrink-0"
-      onReset={() => setTeamPropertyFilters([])}
+      onReset={() => {}}
       dataAttr="team-links-filter-sheet-open"
     >
       <ApplicationFilterSortFields

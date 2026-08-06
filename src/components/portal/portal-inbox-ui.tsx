@@ -837,15 +837,13 @@ export type InboxListSegment = "active" | "archived";
 export function InboxListSegmentTabs({
   value,
   onChange,
-  archivedTotal = 0,
 }: {
   value: InboxListSegment;
   onChange: (segment: InboxListSegment) => void;
-  archivedTotal?: number;
 }) {
-  const tabs: { id: InboxListSegment; label: string; count?: number }[] = [
+  const tabs: { id: InboxListSegment; label: string }[] = [
     { id: "active", label: "Active" },
-    { id: "archived", label: "Archived", count: archivedTotal },
+    { id: "archived", label: "Archived" },
   ];
   return (
     <div
@@ -872,9 +870,6 @@ export function InboxListSegmentTabs({
             }`}
           >
             {tab.label}
-            {tab.count != null && tab.count > 0 ? (
-              <span className="ml-1 tabular-nums text-[10px] font-bold text-primary">({tab.count})</span>
-            ) : null}
           </button>
         );
       })}

@@ -20,6 +20,7 @@ import {
   FilterFieldsAccordion,
   filterMultiSelectSummary,
 } from "@/components/portal/filter-field-lists";
+import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -69,6 +70,29 @@ type RequestBucket = ManagerServiceRequestBucket;
 
 const SERVICES_TAB_IDS = ["requests", "work-orders", "vendors"] as const;
 
+function ServicesPropertyFilterList({
+  options,
+  selected,
+  onChange,
+  dataAttr,
+}: {
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  dataAttr?: string;
+}) {
+  const [draftSelected, setDraftSelected] = usePortalFilterDraft(selected, onChange, []);
+  return (
+    <FilterCheckboxList
+      options={options}
+      selected={draftSelected}
+      onChange={setDraftSelected}
+      emptyMenuText="No properties"
+      dataAttr={dataAttr}
+    />
+  );
+}
+
 export function ManagerAllServicesPanel({
   tabId: serverTabId,
   basePath,
@@ -93,7 +117,6 @@ export function ManagerAllServicesPanel({
   const [dataTick, setDataTick] = useState(0);
   const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [residentFilters, setResidentFilters] = useState<string[]>([]);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>(workOrderBucketProp);
   const [prevWoBucketProp, setPrevWoBucketProp] = useState(workOrderBucketProp);
   if (workOrderBucketProp !== prevWoBucketProp) {
@@ -173,45 +196,9 @@ export function ManagerAllServicesPanel({
     return opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
   }, [propertyOptions, workOrders, serviceRequests]);
 
-  const residentOptions = useMemo(() => {
-    if (typeFilter === "vendors") return [];
-    const seen = new Map<string, string>();
-    const consider = (name: string | undefined) => {
-      const trimmed = name?.trim();
-      if (!trimmed || seen.has(trimmed)) return;
-      seen.set(trimmed, trimmed);
-    };
-    if (typeFilter === "requests") {
-      for (const row of serviceRequests) {
-        if (propertyFilters.length > 0 && !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) && row.propertyId?.trim()) continue;
-        consider(row.residentName);
-      }
-    } else if (typeFilter === "work-orders") {
-      for (const row of workOrders) {
-        if (
-          propertyFilters.length > 0 &&
-          !propertyFilters.some((id) => samePropertyId(row.propertyId, id)) &&
-          !propertyFilters.some((id) => samePropertyId(row.assignedPropertyId, id))
-        ) {
-          continue;
-        }
-        consider(row.residentName);
-      }
-    }
-    return [...seen.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [typeFilter, serviceRequests, workOrders, propertyFilters]);
-
-  const activeResidentFilters = useMemo(
-    () => residentFilters.filter((name) => residentOptions.some((option) => option.id === name)),
-    [residentFilters, residentOptions],
-  );
-
   const filteredWorkOrders = useMemo(() => {
     let rows = workOrders;
     if (propertyFilters.length > 0) rows = rows.filter((r) => propertyFilters.some((id) => r.propertyId === id || r.assignedPropertyId === id));
-    if (activeResidentFilters.length > 0) rows = rows.filter((r) => activeResidentFilters.includes(r.residentName ?? ""));
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
@@ -221,7 +208,7 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [workOrders, propertyFilters, activeResidentFilters, searchQuery]);
+  }, [workOrders, propertyFilters, searchQuery]);
 
   const filteredRequests = useMemo(() => {
     let rows = serviceRequests;
@@ -230,7 +217,6 @@ export function ManagerAllServicesPanel({
         (r) => propertyFilters.some((id) => samePropertyId(r.propertyId, id)) || !r.propertyId?.trim(),
       );
     }
-    if (activeResidentFilters.length > 0) rows = rows.filter((r) => activeResidentFilters.includes(r.residentName));
     const q = searchQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) =>
@@ -240,7 +226,7 @@ export function ManagerAllServicesPanel({
         .toLowerCase()
         .includes(q),
     );
-  }, [serviceRequests, propertyFilters, activeResidentFilters, searchQuery]);
+  }, [serviceRequests, propertyFilters, searchQuery]);
 
   const residentUnitByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -320,26 +306,19 @@ export function ManagerAllServicesPanel({
     return `${propertyFilters.length} properties`;
   }, [propertyFilters, filterPropertyOptions]);
 
-  const resetServicesFilters = () => {
-    setPropertyFilters([]);
-    setResidentFilters([]);
-  };
+  const resetServicesFilters = () => {};
 
   const servicePropertyListOptions = useMemo(
     () => filterPropertyOptions.map((option) => ({ value: option.id, label: option.label })),
     [filterPropertyOptions],
   );
-  const residentListOptions = useMemo(
-    () => residentOptions.map((option) => ({ value: option.id, label: option.label })),
-    [residentOptions],
-  );
 
   const servicesFilterSheet =
     typeFilter !== "vendors" ? (
       <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([propertyFilters, activeResidentFilters])}
+        activeCount={portalFilterActiveCount([propertyFilters])}
         compactPanel
-        filterFieldCount={residentOptions.length > 0 ? 2 : 1}
+        filterFieldCount={1}
         className="min-w-0 shrink-0"
         onReset={resetServicesFilters}
         dataAttr="services-filter-sheet-open"
@@ -353,35 +332,13 @@ export function ManagerAllServicesPanel({
             menuOptionCount={servicePropertyListOptions.length}
             dataAttr="services-filter-property-trigger"
           >
-            <FilterCheckboxList
+            <ServicesPropertyFilterList
               options={servicePropertyListOptions}
               selected={propertyFilters}
-              onChange={(nextProperties) => {
-                setPropertyFilters(nextProperties);
-                setResidentFilters([]);
-              }}
-              emptyMenuText="No properties"
+              onChange={setPropertyFilters}
               dataAttr="services-filter-property"
             />
           </FilterCollapsibleSection>
-          {residentOptions.length > 0 ? (
-            <FilterCollapsibleSection
-              sectionId="resident"
-              label="Resident"
-              summary={filterMultiSelectSummary(activeResidentFilters, residentListOptions, "All residents")}
-              empty={activeResidentFilters.length === 0}
-              menuOptionCount={residentListOptions.length}
-              dataAttr="services-filter-resident-trigger"
-            >
-              <FilterCheckboxList
-                options={residentListOptions}
-                selected={activeResidentFilters}
-                onChange={setResidentFilters}
-                emptyMenuText="No residents match the current filters"
-                dataAttr="services-filter-resident"
-              />
-            </FilterCollapsibleSection>
-          ) : null}
         </FilterFieldsAccordion>
       </PortalFilterSortSheet>
     ) : null;
@@ -395,19 +352,11 @@ export function ManagerAllServicesPanel({
         label: `Property: ${propertyFilterLabel}`,
         onRemove: () => {
           setPropertyFilters([]);
-          setResidentFilters([]);
         },
       });
     }
-    if (activeResidentFilters.length > 0) {
-      chips.push({
-        id: "resident",
-        label: `Resident: ${activeResidentFilters.join(", ")}`,
-        onRemove: () => setResidentFilters([]),
-      });
-    }
     return chips;
-  }, [typeFilter, propertyFilters, propertyFilterLabel, activeResidentFilters]);
+  }, [typeFilter, propertyFilters, propertyFilterLabel]);
 
   const servicesTypeNav = (
     <DestinationNav
