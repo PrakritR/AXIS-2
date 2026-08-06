@@ -419,7 +419,7 @@ export function ManagerDocumentsPanel({
     <Button
       type="button"
       variant="primary"
-      className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+      className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
       onClick={() => libraryRef.current?.openUpload()}
       disabled={isDemoModeActive()}
       data-attr="document-upload-open"
@@ -433,7 +433,7 @@ export function ManagerDocumentsPanel({
       <Button
         type="button"
         variant="primary"
-        className={`w-full shrink-0 md:w-auto ${PORTAL_HEADER_ACTION_BTN}`}
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         onClick={() => setGenerateModalOpen(true)}
         disabled={loading}
         data-attr="documents-generate-report"
@@ -444,35 +444,27 @@ export function ManagerDocumentsPanel({
 
   const documentsPrimaryButton = documentsUploadButton ?? documentsGenerateButton;
 
-  const documentsDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
-      {documentsFilterSheet}
-      {hasExportActions ? exportActions : null}
-      {documentsPrimaryButton}
-    </PortalSectionActionRow>
-  );
-
-  const documentsMobileActionsRow =
-    isLibraryTab || documentsPrimaryButton ? (
-      <div className="mb-3 grid grid-cols-2 gap-2 md:hidden [&_button]:min-w-0" data-slot="documents-mobile-actions">
-        {isLibraryTab ? <div className="min-w-0">{documentsFilterSheet}</div> : null}
-        <div className={isLibraryTab ? "min-w-0" : "col-span-2 min-w-0"}>
-          {hasExportActions ? exportActions : null}
-          {documentsPrimaryButton}
-        </div>
-      </div>
+  const documentsHeaderActions =
+    hasExportActions || documentsPrimaryButton ? (
+      <PortalSectionActionRow
+        variant="header"
+        className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
+      >
+        {hasExportActions ? exportActions : null}
+        {documentsPrimaryButton}
+      </PortalSectionActionRow>
     ) : null;
 
   return (
     <ManagerPortalPageShell
       title="Documents"
-      titleAside={documentsDesktopHeaderActions}
+      titleInlineFilter={isLibraryTab ? documentsFilterSheet : undefined}
+      titleAside={documentsHeaderActions}
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {documentsMobileActionsRow}
       <PortalListControlStack
-        className="mb-3"
+        className="mb-2 max-lg:mb-1.5"
         destinations={documentTabItems}
         activeDestinationId={tabId}
         destinationAriaLabel="Document views"

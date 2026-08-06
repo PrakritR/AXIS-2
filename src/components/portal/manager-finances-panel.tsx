@@ -11,7 +11,7 @@ import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/componen
 import { FilterFieldsAccordion, FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalPageHeaderMobileActionsRow, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -935,7 +935,7 @@ export function ManagerFinancesPanel({
   const financesAddIncomeButton =
     tabId === "income" ? (
       <PortalSectionPrimaryButton
-        className="w-full shrink-0 md:w-auto"
+        className="shrink-0"
         onClick={openAddIncome}
         data-attr="finances-add-income"
       >
@@ -946,7 +946,7 @@ export function ManagerFinancesPanel({
   const financesAddExpenseButton =
     tabId === "expenses" ? (
       <PortalSectionPrimaryButton
-        className="w-full shrink-0 md:w-auto"
+        className="shrink-0"
         onClick={openAddExpense}
         data-attr="finances-add-expense"
       >
@@ -969,41 +969,28 @@ export function ManagerFinancesPanel({
       </div>
     ) : null;
 
-  const financesDesktopHeaderActions = (
-    <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
-      {financesFilterSheet}
-      {financesFormalPdfLink}
-      {financesExportButtons}
-      {financesPrimaryButton}
-    </PortalSectionActionRow>
-  );
-
-  const financesMobileActionsRow =
+  const financesHeaderActions =
     showScopedReportFilters || financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
-      <PortalPageHeaderMobileActionsRow
-        filter={showScopedReportFilters ? financesFilterSheet : undefined}
-        actions={
-          financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
-            <PortalSectionActionRow variant="header" className="gap-2">
-              {financesFormalPdfLink}
-              {financesExportButtons}
-              {financesPrimaryButton}
-            </PortalSectionActionRow>
-          ) : undefined
-        }
-      />
+      <PortalSectionActionRow
+        variant="header"
+        className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
+      >
+        {financesFormalPdfLink}
+        {financesExportButtons}
+        {financesPrimaryButton}
+      </PortalSectionActionRow>
     ) : null;
 
   return (
     <ManagerPortalPageShell
       title="Finances"
-      titleAside={financesDesktopHeaderActions}
+      titleInlineFilter={showScopedReportFilters ? financesFilterSheet : null}
+      titleAside={financesHeaderActions}
       hideTitleOnMobileNav
       compactFilterRow
     >
-      {financesMobileActionsRow}
       <PortalListControlStack
-        className="mb-3"
+        className="mb-2 max-lg:mb-1.5"
         destinationRow={<FinanceDestinationNav tabId={tabId} tabItems={financeTabItems} basePath={basePath} />}
         search={
           showTransactionSearch
@@ -1030,7 +1017,7 @@ export function ManagerFinancesPanel({
       ) : tabId === "owner-distributions" ? (
         <ManagerOwnerDistributionsPanel />
       ) : (
-      <div className="space-y-5">
+      <div className="space-y-4 max-lg:space-y-3">
         {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}
         {tabId === "cash-flow-statement" ? (
           <MonthlyProfitChart points={monthlyProfitPoints} />

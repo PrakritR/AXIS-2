@@ -67,9 +67,8 @@ So a section's header controls can reach a phone exactly one of two ways:
 - **Band-only** — an ungated `titleAside` and **no** `PortalPageHeaderMobileActionsRow`.
   This is the default for new sections (Applications, Residents, Properties, Tour).
 - **Split** — a `hidden md:flex` `titleAside` (invisible on phones) paired with an
-  `md:hidden` mobile actions row: `PortalPageHeaderMobileActionsRow` (Finances) or a
-  hand-rolled `data-slot="…mobile-actions"` block (the documents, lease and
-  resident-payments panels). Those five are the only sections still on this shape.
+  `md:hidden` mobile actions row. The resident Documents, Lease, and Payments panels
+  are the three sections still on this shape.
 
 Mixing them draws every control twice on a phone; deleting the mobile row from a split
 section leaves zero. Passing a `filterRow` sidesteps the choice — the shell desktop-gates
