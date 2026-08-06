@@ -2607,7 +2607,7 @@ export function ManagerResidents({
                                   <LocalDestinationNav
                                     items={residentLeaseRows.map((row) => ({
                                       id: row.id,
-                                      label: row.status,
+                                      label: row.status ?? row.stageLabel ?? "Lease",
                                       dataAttr: `resident-lease-pick-${row.id}`,
                                     }))}
                                     activeId={residentLease?.id ?? residentLeaseRows[0]!.id}
