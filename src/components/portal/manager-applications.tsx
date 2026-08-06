@@ -40,6 +40,8 @@ import { DestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationReviewLauncherRow, type ApplicationReviewView } from "@/components/portal/application-review-launcher-row";
 import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
+import { ManagerApplicationOnBehalfModal } from "@/components/portal/manager-application-on-behalf-modal";
+import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
@@ -420,6 +422,7 @@ export function ManagerApplications({
     { row: DemoApplicantRow; to: string; subject: string; text: string } | null
   >(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [addApplicationOpen, setAddApplicationOpen] = useState(false);
   const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
@@ -1224,8 +1227,23 @@ export function ManagerApplications({
     </Button>
   );
 
+  const applicationsAddButton = (
+    <Button
+      type="button"
+      variant="outline"
+      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
+      data-attr="applications-add"
+      onClick={() => setAddApplicationOpen(true)}
+      disabled={propertyOptions.length === 0}
+      title={propertyOptions.length === 0 ? "Add a property before starting an application" : undefined}
+    >
+      Add application
+    </Button>
+  );
+
   const applicationsHeaderActions = (
     <>
+      {applicationsAddButton}
       {applicationsScreeningButton}
       {applicationsPromoButton}
       {applicationsEditButton}
@@ -1301,6 +1319,19 @@ export function ManagerApplications({
         onSaved={() => setPortfolioTick((n) => n + 1)}
         showToast={showToast}
       />
+      {addApplicationOpen ? (
+        <ManagerApplicationOnBehalfModal
+          open={addApplicationOpen}
+          onClose={() => setAddApplicationOpen(false)}
+          managerUserId={userId}
+          basePath={basePath}
+          onSubmitted={() => {
+            void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() =>
+              setRows(readManagerApplicationRows()),
+            );
+          }}
+        />
+      ) : null}
       <CheckrScreeningModal
         key={checkrScreeningRowId ?? "none"}
         row={
@@ -1447,6 +1478,14 @@ export function ManagerApplications({
                         : "No applications in this tab yet."
             }
           />
+          <PortalListAddRow
+            label="Add application"
+            icon={PORTAL_LIST_ADD_ICONS.application}
+            hint="Complete an application for a resident and email them to finish"
+            onClick={() => setAddApplicationOpen(true)}
+            disabled={propertyOptions.length === 0}
+            dataAttr="applications-list-add"
+          />
         </div>
       ) : (
         <div
@@ -1492,6 +1531,16 @@ export function ManagerApplications({
               />
             );
           })}
+          <div className="px-3 py-3 max-md:px-2.5">
+            <PortalListAddRow
+              label="Add application"
+              icon={PORTAL_LIST_ADD_ICONS.application}
+              hint="Complete an application for a resident and email them to finish"
+              onClick={() => setAddApplicationOpen(true)}
+              disabled={propertyOptions.length === 0}
+              dataAttr="applications-list-add"
+            />
+          </div>
         </div>
       )}
       </div>
