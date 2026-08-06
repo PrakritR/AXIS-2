@@ -726,6 +726,66 @@ describe("the raised filter sheet is placed statically, never measured", () => {
 });
 
 describe("portal filter dropdown positioning", () => {
+  it("automatically keeps every portal filter inside the page content boundary", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => true,
+      })),
+    });
+
+    const { container } = render(
+      <div data-slot="portal-page-shell">
+        <PortalFilterSortSheet activeCount={0} onReset={() => {}}>
+          <p>Filter fields</p>
+        </PortalFilterSortSheet>
+      </div>,
+    );
+    const pageShell = container.querySelector('[data-slot="portal-page-shell"]') as HTMLElement;
+    pageShell.getBoundingClientRect = () =>
+      ({
+        top: 40,
+        left: 389,
+        right: 1259,
+        bottom: 136,
+        width: 870,
+        height: 96,
+        x: 389,
+        y: 40,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const trigger = screen.getByRole("button", { name: /^Filter/ }) as HTMLButtonElement;
+    trigger.getBoundingClientRect = () =>
+      ({
+        top: 80,
+        left: 510,
+        right: 593,
+        bottom: 120,
+        width: 83,
+        height: 40,
+        x: 510,
+        y: 80,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(document.querySelector('[data-slot="portal-filter-dropdown-panel"]')).toBeTruthy();
+    });
+    const panel = document.querySelector('[data-slot="portal-filter-dropdown-panel"]') as HTMLElement;
+    const left = Number.parseFloat(panel.style.left);
+    const width = Number.parseFloat(panel.style.width);
+    expect(left).toBeGreaterThanOrEqual(389);
+    expect(left + width).toBeLessThanOrEqual(1259);
+  });
+
   it("right-aligns the panel to the trigger and stays inside the viewport", () => {
     const button = document.createElement("button");
     document.body.appendChild(button);

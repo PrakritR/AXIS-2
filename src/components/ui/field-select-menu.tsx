@@ -445,7 +445,9 @@ export function useFieldSelectMenu({
               widthPx: minMenuWidth,
               fullBleed,
               horizontalBoundary: constrainToTitleBand
-                ? (button.closest('[data-slot="portal-page-title-band"]')?.getBoundingClientRect() ?? undefined)
+                ? (button
+                    .closest('[data-slot="portal-page-title-band"], [data-slot="portal-page-shell"]')
+                    ?.getBoundingClientRect() ?? undefined)
                 : undefined,
             })
           : inFilterPanel || inVaulSheet

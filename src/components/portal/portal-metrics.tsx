@@ -663,6 +663,7 @@ export function ManagerPortalPageShell({
   const bodyChildren = pinChrome ? renderPortalStickyBody(children) : children;
   return (
     <div
+      data-slot="portal-page-shell"
       className={cn(
         surfaceCard ? PORTAL_SECTION_SURFACE : PORTAL_PAGE_SHELL_BARE,
         surfaceCard && "relative z-0 min-w-0 w-full shrink-0",

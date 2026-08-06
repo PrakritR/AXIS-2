@@ -220,6 +220,13 @@ or resize the panel.
   toolbar. Its height comes from `portalFilterPanelSizeClass(filterFieldCount)`
   — pass `filterFieldCount` (the number of filter rows you render, default 1) or
   a multi-field panel opens at single-field height.
+- **Every portal filter stays inside the page canvas automatically.**
+  `PortalFilterSortSheet` constrains its desktop dropdown to the nearest
+  `data-slot="portal-page-title-band"`, then the enclosing
+  `data-slot="portal-page-shell"`, by default. A wide panel therefore opens inward
+  instead of painting over the portal sidebar or assistant rail, including filters
+  rendered in a shell's separate filter row. A filter outside a portal page falls
+  back to normal viewport bounds; callers do not opt in tab by tab.
 - **Filter fields:** `src/components/portal/filter-field-lists.tsx`
   (`FilterCollapsibleSection` + `FilterCheckboxList` multi / `FilterSingleSelectList`
   single, inside a `FilterFieldsAccordion` for one-open-at-a-time). `CheckboxMultiSelect`
