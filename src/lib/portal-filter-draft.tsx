@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -12,6 +13,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+function filterDraftValuesEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => Object.is(value, b[index]));
+  }
+  return Object.is(a, b);
+}
 
 type DraftEntry = {
   applied: unknown;
@@ -103,23 +112,33 @@ export function PortalFilterDeferProvider({
 
   const commitAll = useCallback(() => {
     for (const entry of entriesRef.current.values()) {
-      entry.onApply(entry.draft);
-      entry.applied = entry.draft;
+      if (filterDraftValuesEqual(entry.draft, entry.applied)) continue;
+      const next = entry.draft;
+      entry.applied = next;
+      startTransition(() => {
+        entry.onApply(next);
+      });
     }
   }, []);
 
   const resetAll = useCallback(() => {
+    let changed = false;
     for (const entry of entriesRef.current.values()) {
+      if (filterDraftValuesEqual(entry.draft, entry.resetValue)) continue;
       entry.draft = entry.resetValue;
+      changed = true;
     }
-    notify();
+    if (changed) notify();
   }, [notify]);
 
   const snapshotFromApplied = useCallback(() => {
+    let changed = false;
     for (const entry of entriesRef.current.values()) {
+      if (filterDraftValuesEqual(entry.draft, entry.applied)) continue;
       entry.draft = entry.applied;
+      changed = true;
     }
-    notify();
+    if (changed) notify();
   }, [notify]);
 
   const controller: PortalFilterDeferController = {

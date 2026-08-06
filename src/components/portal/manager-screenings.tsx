@@ -46,6 +46,7 @@ import {
 import {
   appendPortalPropertyFilterQuery,
   parsePortalPropertyFilterQuery,
+  portalPropertyFilterIdsEqual,
   sanitizePortalPropertyFilterIds,
 } from "@/lib/portal-property-list-filters";
 import { applicationScreeningDetailHref } from "@/lib/portal-detail-routes";
@@ -201,9 +202,10 @@ export function ManagerScreenings({
   const setPropertyFilters = useCallback(
     (ids: string[]) => {
       const sanitized = sanitizePortalPropertyFilterIds(ids, propertyOptions.map((o) => o.id));
+      if (portalPropertyFilterIdsEqual(sanitized, propertyFilters)) return;
       router.replace(appendPortalPropertyFilterQuery(pathname, sanitized), { scroll: false });
     },
-    [pathname, propertyOptions, router],
+    [pathname, propertyFilters, propertyOptions, router],
   );
 
   useEffect(() => {

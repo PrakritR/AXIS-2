@@ -127,6 +127,7 @@ import {
 import {
   appendPortalPropertyFilterQuery,
   parsePortalPropertyFilterQuery,
+  portalPropertyFilterIdsEqual,
   sanitizePortalPropertyFilterIds,
 } from "@/lib/portal-property-list-filters";
 
@@ -555,6 +556,7 @@ export function ManagerApplications({
         resolved,
         propertyOptions.map((o) => o.id),
       );
+      if (portalPropertyFilterIdsEqual(sanitized, propertyFilters)) return;
       router.replace(appendPortalPropertyFilterQuery(applicationListHref(basePath, bucket), sanitized), {
         scroll: false,
       });
