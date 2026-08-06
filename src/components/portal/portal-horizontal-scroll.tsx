@@ -18,10 +18,8 @@ function installPortalHorizontalWheelScroll(root: HTMLElement) {
     let el = event.target as HTMLElement | null;
     while (el && el !== root) {
       if (el.hasAttribute(HORIZONTAL_SCROLL_ATTR)) {
-        applyHorizontalWheelScroll(el, event);
-        return;
-      }
-      if (el.hasAttribute(HORIZONTAL_SCROLL_CAPTURE_ATTR)) {
+        if (applyHorizontalWheelScroll(el, event)) return;
+      } else if (el.hasAttribute(HORIZONTAL_SCROLL_CAPTURE_ATTR)) {
         const scrollEl = findHorizontalScrollTarget(el);
         if (scrollEl && applyHorizontalWheelScroll(scrollEl, event)) return;
       }

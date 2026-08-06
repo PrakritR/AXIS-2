@@ -501,7 +501,7 @@ export function PortalCalendar({
           </label>
         ) : null}
         {portal === "manager" ? (
-          <div className="mt-1 flex min-h-0 flex-1 flex-col">
+          <div className="portal-calendar-page-body mt-1 flex min-h-0 flex-1 flex-col">
             {calendarView !== "services" ? (
               <div className="mb-4 shrink-0">
                 <TourProposalsPanel />

@@ -2424,16 +2424,38 @@ html[data-theme="dark"][data-portal-sticky-chrome] .portal-calendar-toolbar {
   background-color: var(--portal-surface-dark);
 }
 
+html[data-portal-sticky-chrome] .portal-list-page-scroll:has(.portal-calendar-page-body) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+html[data-portal-sticky-chrome] .portal-calendar-page-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
 html[data-portal-sticky-chrome] .portal-calendar-compact {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1 1 0%;
 }
 
 html[data-portal-sticky-chrome] .portal-calendar-compact-body {
   min-height: 0;
+  flex: 1 1 0%;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* Slot cells are <button>s; without pan-y, touch drags on the grid do not scroll. */
+  touch-action: pan-y;
+}
+
+html[data-portal-sticky-chrome] .portal-calendar-grid-slot {
+  touch-action: pan-y;
 }
 
 html[data-communication-surface] .portal-communication-inbox {

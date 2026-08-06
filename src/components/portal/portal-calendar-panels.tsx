@@ -1673,7 +1673,7 @@ export function PortalCalendarPanels({
   if (compactAvailability) {
     const vendorMode = Boolean(vendorDayFlexibility);
     const compactShellClass = cn(
-      "portal-calendar-compact flex min-h-0 flex-col",
+      "portal-calendar-compact flex min-h-0 flex-1 flex-col",
       !bareSurface && "overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
     );
     const compactToolbarClass = cn(
@@ -1882,7 +1882,7 @@ export function PortalCalendarPanels({
                     }
                     openSlotDetails(ds, slotIdx, e.currentTarget, meeting);
                   }}
-                  className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
+                  className={`portal-calendar-grid-slot min-h-9 px-2 text-center text-[11px] font-semibold transition ${
                     meeting
                       ? `${meeting.color} ring-1 ring-inset`
                       : selected
