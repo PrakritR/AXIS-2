@@ -62,10 +62,10 @@ describe("DestinationNav", () => {
 });
 
 describe("PageHeader", () => {
-  it("renders title and count", () => {
+  it("renders title without tab counts", () => {
     render(<PageHeader title="Payments" count={12} />);
     expect(screen.getByRole("heading", { name: /Payments/ })).toBeTruthy();
-    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.queryByText("12")).toBeNull();
   });
 
   it("shows title on mobile by default", () => {

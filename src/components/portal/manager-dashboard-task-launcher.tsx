@@ -60,11 +60,6 @@ function TaskLauncherRow({
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <span className="truncate">{item.label}</span>
-          {item.count != null && item.count > 0 ? (
-            <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary">
-              {item.count}
-            </span>
-          ) : null}
         </span>
         {item.description ? (
           <span className="mt-0.5 block truncate text-xs text-muted">{item.description}</span>

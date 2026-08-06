@@ -64,9 +64,6 @@ export function PortalFilterChipRow({
             )}
           >
             {opt.label}
-            {opt.count != null ? (
-              <span className="ml-1 tabular-nums text-xs font-bold opacity-70">({opt.count})</span>
-            ) : null}
           </button>
         );
       })}

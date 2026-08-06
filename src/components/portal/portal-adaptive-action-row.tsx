@@ -18,8 +18,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const DEFAULT_GAP_PX = 8;
-/** Absorbs subpixel rounding and padding the hidden measure row can miss. */
-const WIDTH_FUDGE_PX = 8;
+/** Absorbs subpixel rounding, filter chip, and padding the measure row can miss. */
+const WIDTH_FUDGE_PX = 16;
 const rowAlignClass = (align: "start" | "end") =>
   align === "end" ? "justify-end" : "justify-start";
 const DEFAULT_ROW_CLASS = "flex min-w-0 flex-1 basis-0 flex-nowrap items-center gap-0.5 overflow-hidden";
@@ -104,7 +104,6 @@ export function PortalAdaptiveActionRow({
         moreWidth,
         Math.max(0, containerWidth - WIDTH_FUDGE_PX),
         gapPx,
-        { reserveMore: pinnedCount > 0 },
       );
       setOptionalFitCount(count);
     };
@@ -123,24 +122,25 @@ export function PortalAdaptiveActionRow({
       ro?.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [actions, gapPx, optional.length, pinnedCount]);
+  }, [actions, gapPx, optional.length]);
 
   useLayoutEffect(() => {
     const row = containerRef.current;
     if (!row) return;
-    if (row.scrollWidth > row.clientWidth + 1 && optionalFitCount > 0) {
+    if (row.scrollWidth <= row.clientWidth + 1) return;
+    if (optionalFitCount > 0) {
       setOptionalFitCount((count) => Math.max(0, count - 1));
       return;
     }
-    if (row.scrollWidth > row.clientWidth + 1 && optional.length > 0) {
-      setOptionalFitCount(0);
+    if (optional.length > 0 && optionalFitCount >= optional.length) {
+      setOptionalFitCount((count) => Math.max(0, count - 1));
     }
   }, [optionalFitCount, optional.length, actions]);
 
   if (actions.length === 0 && pinnedCount === 0) return null;
 
   const { visible, overflow } = pickAdaptiveActions(actions, optionalFitCount);
-  const showMoreMenu = overflow.length > 0 || pinnedCount > 0;
+  const showMoreMenu = overflow.length > 0;
   const { leading: visibleLeading, optional: visibleMiddle, trailing: visibleTrailing } =
     splitAdaptiveActions(visible);
 

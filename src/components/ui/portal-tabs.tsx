@@ -100,9 +100,6 @@ export function PortalTabs({
               )}
             >
               {item.label}
-              {item.count != null ? (
-                <span className="ml-1 tabular-nums text-xs font-bold opacity-70">({item.count})</span>
-              ) : null}
             </button>
           );
         })}
@@ -136,9 +133,6 @@ export function PortalTabs({
               )}
             >
               {item.label}
-              {item.count != null ? (
-                <span className="ml-1.5 tabular-nums text-xs font-bold text-muted">({item.count})</span>
-              ) : null}
             </button>
           );
         })}

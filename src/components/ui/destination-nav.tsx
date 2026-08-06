@@ -17,8 +17,8 @@ export type DestinationNavItem = {
 };
 
 /**
- * Routed view switcher — every item is a real URL with a visible label and
- * optional live count. Mobile: horizontal scroll-snap row; desktop: segmented row.
+ * Routed view switcher — every item is a real URL with a visible label.
+ * Mobile: horizontal scroll-snap row; desktop: segmented row.
  */
 export function DestinationNav({
   items,
@@ -92,16 +92,6 @@ export function DestinationNav({
                 item.label
               )}
             </span>
-            {item.count != null ? (
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                  active ? "bg-primary/12 text-foreground" : "bg-accent/80 text-muted",
-                )}
-              >
-                {item.count}
-              </span>
-            ) : null}
           </Link>
         );
       })}
@@ -162,17 +152,6 @@ function destinationNavItemClassName({
   );
 }
 
-function destinationNavCountClassName(active: boolean, tone: "default" | "monochrome" = "default") {
-  return cn(
-    "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-    tone === "monochrome"
-      ? "bg-transparent text-muted"
-      : active
-        ? "bg-primary/12 text-foreground"
-        : "bg-accent/80 text-muted",
-  );
-}
-
 /** Local-state destination tabs — same chrome as {@link DestinationNav} without routed hrefs. */
 export function LocalDestinationNav({
   items,
@@ -215,9 +194,6 @@ export function LocalDestinationNav({
             onClick={() => onChange(item.id)}
           >
             <span>{item.label}</span>
-            {item.count != null ? (
-              <span className={destinationNavCountClassName(active, tone)}>{item.count}</span>
-            ) : null}
           </button>
         );
       })}

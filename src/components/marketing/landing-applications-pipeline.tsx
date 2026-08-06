@@ -299,7 +299,7 @@ export function ApplicationsPipelinePanel() {
                     onClick={() => selectTab(tab.id)}
                     onKeyDown={(event) => onTabKeyDown(event, index)}
                   >
-                    {tab.label} <span className="lp-pipe-count">{counts[tab.id]}</span>
+                    {tab.label}
                   </button>
                 );
               })}

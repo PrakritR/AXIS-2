@@ -105,9 +105,9 @@ export const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] =
   { id: "denied", label: "Denied" },
 ];
 
-/** Bucket a pill label with its count, e.g. "Open · 3" — omits the count when zero. */
-export function pillLabelWithCount(label: string, count: number): string {
-  return count > 0 ? `${label} ${count}` : label;
+/** @deprecated Counts are no longer shown on status pills — returns the label only. */
+export function pillLabelWithCount(label: string, _count: number): string {
+  return label;
 }
 
 export type UnifiedItem =
