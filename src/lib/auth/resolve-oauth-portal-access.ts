@@ -22,6 +22,7 @@ import {
 import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
+import { resolveManagerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding.server";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import { loadResidentPortalAccessState, residentPortalHomePath } from "@/lib/resident-portal-access";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
@@ -43,18 +44,26 @@ function isBypassOAuthGatePath(path: string): boolean {
     path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
     path.startsWith("/auth/callback/") ||
-    path === "/auth/manager-register-oauth"
+    path === "/auth/manager-register-oauth" ||
+    path.startsWith("/auth/connect-google-services")
   );
 }
 
-function managerPortalDestination(safeIntended: string): string {
+async function managerPortalDestination(
+  supabase: SupabaseClient,
+  userId: string,
+  safeIntended: string,
+): Promise<string> {
   if (
     safeIntended.startsWith("/auth/continue") ||
     safeIntended.startsWith("/resident/") ||
     safeIntended === "/partner/pricing" ||
     safeIntended.startsWith("/partner/pricing")
   ) {
-    return portalDashboardPath("manager");
+    return resolveManagerPortalEntryPath(supabase, userId);
+  }
+  if (safeIntended === portalDashboardPath("manager") || safeIntended.startsWith("/portal/dashboard")) {
+    return resolveManagerPortalEntryPath(supabase, userId);
   }
   return safeIntended;
 }
@@ -128,7 +137,7 @@ export async function resolveOAuthPortalRedirect(
     if (await managerNeedsPricingSelection(supabase, user.id, email)) {
       return finish(MANAGER_PRICING_ENTRY_PATH);
     }
-    return finish(managerPortalDestination(safeIntended));
+    return finish(await managerPortalDestination(supabase, user.id, safeIntended));
   }
 
   if (isPrimaryAdminEmail(email)) {
@@ -154,7 +163,7 @@ export async function resolveOAuthPortalRedirect(
     );
     await ensureProfileRoleRow(supabase, user.id, "manager");
     if (safeIntended.startsWith("/auth/continue")) {
-      return finish("/portal/dashboard");
+      return finish(await resolveManagerPortalEntryPath(supabase, user.id));
     }
     return finish(safeIntended);
   }

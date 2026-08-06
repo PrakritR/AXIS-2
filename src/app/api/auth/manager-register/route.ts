@@ -9,6 +9,7 @@ import {
 import { completeManagerSignupTrial, isManagerSignupTrialTier } from "@/lib/auth/manager-signup-trial";
 import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
+import { resolveManagerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding.server";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -111,7 +112,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         managerId: existingPurchase.manager_id,
-        redirectTo: "/portal/dashboard",
+        redirectTo: await resolveManagerPortalEntryPath(supabase, userId),
         existingAccount: true,
       });
     }
@@ -126,7 +127,11 @@ export async function POST(req: Request) {
 
     if (isManagerSignupTrialTier(tierRaw)) {
       await completeManagerSignupTrial(supabase, { userId, email, fullName, tier: tierRaw });
-      return NextResponse.json({ ok: true, managerId, redirectTo: "/portal/dashboard" });
+      return NextResponse.json({
+        ok: true,
+        managerId,
+        redirectTo: await resolveManagerPortalEntryPath(supabase, userId),
+      });
     }
 
     return NextResponse.json({ ok: true, managerId, redirectTo: MANAGER_PRICING_ENTRY_PATH });

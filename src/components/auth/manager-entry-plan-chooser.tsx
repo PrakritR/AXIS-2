@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics/track-client";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -97,17 +98,17 @@ export function ManagerEntryPlanChooser() {
         if (!res.ok) {
           // Can't tell — let them into the portal rather than stranding them on
           // a chooser whose actions would also fail.
-          window.location.replace("/portal/dashboard");
+          window.location.replace(managerPortalEntryPath());
           return;
         }
         if (managerEntryPlanAlreadySettled(body)) {
-          window.location.replace("/portal/dashboard");
+          window.location.replace(managerPortalEntryPath());
           return;
         }
         setSub(body);
         setGuarding(false);
       } catch {
-        window.location.replace("/portal/dashboard");
+        window.location.replace(managerPortalEntryPath());
       }
     })();
   }, []);
@@ -124,7 +125,7 @@ export function ManagerEntryPlanChooser() {
       showToast(body.error ?? "Could not set your plan. You can also choose later in Settings.");
       return;
     }
-    window.location.replace("/portal/dashboard");
+    window.location.replace(managerPortalEntryPath());
   };
 
   const choosePaid = async (tier: "pro" | "business") => {
@@ -147,7 +148,7 @@ export function ManagerEntryPlanChooser() {
       return;
     }
     if (body.action === "portal") {
-      window.location.replace("/portal/dashboard");
+      window.location.replace(managerPortalEntryPath());
       return;
     }
     if (body.action === "checkout" && body.clientSecret) {
@@ -263,7 +264,7 @@ export function ManagerEntryPlanChooser() {
             className="text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
             data-attr="manager-entry-plan-skip"
             disabled={busy}
-            onClick={() => window.location.replace("/portal/dashboard")}
+            onClick={() => window.location.replace(managerPortalEntryPath())}
           >
             Skip for now — decide later in Settings
           </button>

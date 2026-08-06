@@ -8,6 +8,7 @@ import {
   resolveGoogleCalendarOAuthConfig,
 } from "@/lib/google-calendar/settings";
 import { resolveGoogleCalendarRedirectOrigin } from "@/lib/google-calendar/api.server";
+import { sanitizeOAuthReturnPath } from "@/lib/auth/oauth-return-path";
 
 import { GMAIL_PAYMENTS_OAUTH_SCOPES } from "./scopes";
 import type { GmailPaymentTrackRole } from "./portal-role";
@@ -51,16 +52,23 @@ export function gmailPaymentsOAuthRedirectUri(browserOrigin: string, role: Gmail
 export type GmailPaymentsOAuthState = {
   userId: string;
   returnOrigin: string;
+  returnPath: string;
   role: GmailPaymentTrackRole;
 };
 
-function signOAuthState(userId: string, returnOrigin: string, role: GmailPaymentTrackRole): string {
+function signOAuthState(
+  userId: string,
+  returnOrigin: string,
+  role: GmailPaymentTrackRole,
+  returnPath?: string,
+): string {
   const payload = JSON.stringify({
     uid: userId,
     t: Date.now(),
     returnOrigin,
     kind: "gmail-payments",
     role,
+    ...(returnPath ? { returnPath } : {}),
   });
   const sig = createHmac("sha256", stateSecret()).update(payload).digest("base64url");
   return Buffer.from(`${payload}|${sig}`).toString("base64url");
@@ -81,6 +89,7 @@ export function verifyGmailPaymentsOAuthState(state: string): GmailPaymentsOAuth
       uid?: string;
       t?: number;
       returnOrigin?: string;
+      returnPath?: string;
       kind?: string;
       role?: GmailPaymentTrackRole;
     };
@@ -92,7 +101,13 @@ export function verifyGmailPaymentsOAuthState(state: string): GmailPaymentsOAuth
         : null;
     if (!returnOrigin) return null;
     const role = parsed.role === "vendor" ? "vendor" : "manager";
-    return { userId: parsed.uid, returnOrigin, role };
+    const defaultReturn = role === "vendor" ? "/vendor/payments" : "/portal/payments";
+    return {
+      userId: parsed.uid,
+      returnOrigin,
+      returnPath: sanitizeOAuthReturnPath(parsed.returnPath, defaultReturn),
+      role,
+    };
   } catch {
     return null;
   }
@@ -102,10 +117,11 @@ export function buildGmailPaymentsOAuthUrl(
   browserOrigin: string,
   userId: string,
   role: GmailPaymentTrackRole = "manager",
+  returnPath?: string,
 ): string {
   const returnOrigin = browserOrigin.replace(/\/$/, "");
   const redirectUri = gmailPaymentsOAuthRedirectUri(browserOrigin, role);
-  const state = signOAuthState(userId, returnOrigin, role);
+  const state = signOAuthState(userId, returnOrigin, role, returnPath);
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri,

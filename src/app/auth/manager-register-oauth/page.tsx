@@ -3,6 +3,7 @@
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
@@ -28,14 +29,9 @@ function FinishContent() {
           error?: string;
           redirectTo?: string;
           existingAccount?: boolean;
-          calendarConnectPath?: string | null;
         };
         if (!res.ok) {
           router.replace(`/auth/create-account?role=manager&message=${encodeURIComponent(body.error ?? "Could not create manager account.")}`);
-          return;
-        }
-        if (body.calendarConnectPath?.startsWith("/")) {
-          window.location.replace(body.calendarConnectPath);
           return;
         }
         router.replace(
@@ -43,7 +39,7 @@ function FinishContent() {
             body.redirectTo?.startsWith("/")
               ? body.redirectTo
               : body.existingAccount
-                ? "/portal/dashboard"
+                ? managerPortalEntryPath()
                 : MANAGER_PRICING_ENTRY_PATH,
           ),
         );

@@ -13,6 +13,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { managerSignupFinishPhrase } from "@/lib/manager-access";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import {
   BANNER_INFO_CLASS,
   BANNER_NEUTRAL_CLASS,
@@ -300,7 +301,7 @@ export default function CreateAccountClient() {
         }
         posthog.identify(signInData.user.id);
         showToast(`Account ready. Account ID ${body.managerId ?? effectiveCheckoutPreview.managerId}.`);
-        window.location.replace("/portal/dashboard");
+        window.location.replace(managerPortalEntryPath());
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
         showToast(msg);
@@ -358,8 +359,8 @@ export default function CreateAccountClient() {
         if (signInData?.user) {
           posthog.identify(signInData.user.id);
         }
-        if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
-          window.location.replace("/portal/dashboard");
+        if (body.existingAccount || body.redirectTo?.startsWith("/")) {
+          window.location.replace(body.redirectTo ?? managerPortalEntryPath());
           return;
         }
         showToast("Account created. Choose your plan next.");

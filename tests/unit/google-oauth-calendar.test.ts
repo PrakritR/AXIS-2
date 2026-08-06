@@ -6,14 +6,11 @@ import {
 } from "@/lib/auth/google-oauth-calendar";
 
 describe("google oauth calendar scopes", () => {
-  it("requests calendar scopes and account chooser for manager intent", () => {
-    expect(shouldRequestGoogleCalendarOnSignIn("manager", "/auth/continue")).toBe(true);
+  it("does not request calendar scopes on manager sign-in (progressive consent)", () => {
+    expect(shouldRequestGoogleCalendarOnSignIn("manager", "/auth/continue")).toBe(false);
     const options = googleSignInOAuthOptions("manager", "/auth/continue");
-    expect(options.scopes).toContain("calendar.events");
-    expect(options.queryParams).toEqual({
-      access_type: "offline",
-      prompt: "select_account consent",
-    });
+    expect(options.scopes).toBeUndefined();
+    expect(options.queryParams).toEqual({ prompt: "select_account" });
   });
 
   it("prompts account selection without calendar scopes for residents", () => {
@@ -23,11 +20,10 @@ describe("google oauth calendar scopes", () => {
     });
   });
 
-  it("requests calendar scopes for manager portal destinations without explicit intent", () => {
-    expect(shouldRequestGoogleCalendarOnSignIn(null, "/portal/dashboard")).toBe(true);
-    expect(googleSignInOAuthOptions(null, "/portal/dashboard").queryParams).toEqual({
-      access_type: "offline",
-      prompt: "select_account consent",
+  it("does not bundle calendar scopes for manager portal destinations", () => {
+    expect(shouldRequestGoogleCalendarOnSignIn(null, "/portal/dashboard")).toBe(false);
+    expect(googleSignInOAuthOptions(null, "/portal/dashboard")).toEqual({
+      queryParams: { prompt: "select_account" },
     });
   });
 });

@@ -18,6 +18,7 @@ import {
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
@@ -99,7 +100,7 @@ export function ManagerSignupPanel({
         return;
       }
       if (result.status === "portal") {
-        window.location.replace("/portal/dashboard");
+        window.location.replace(managerPortalEntryPath());
         return;
       }
       if (result.status === "error") {
@@ -165,8 +166,8 @@ export function ManagerSignupPanel({
         router.push("/auth/sign-in?role=manager");
         return;
       }
-      if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
-        window.location.replace("/portal/dashboard");
+      if (body.existingAccount || body.redirectTo?.startsWith("/")) {
+        window.location.replace(body.redirectTo ?? managerPortalEntryPath());
         return;
       }
       const offer = buildPricingOffer({ tier, billing, promo: trimmedPromo, returnSurface });

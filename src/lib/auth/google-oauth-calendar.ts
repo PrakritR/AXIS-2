@@ -1,5 +1,4 @@
 import type { OAuthSignInIntent } from "@/lib/auth/post-oauth-routing";
-import { GOOGLE_CALENDAR_OAUTH_SCOPES } from "@/lib/google-calendar/scopes";
 
 export function isManagerOAuthPath(intent: OAuthSignInIntent | null | undefined, nextPath: string): boolean {
   if (intent === "manager") return true;
@@ -15,12 +14,16 @@ export function isManagerOAuthPath(intent: OAuthSignInIntent | null | undefined,
   );
 }
 
-/** Manager Google sign-in/sign-up requests calendar access in the same OAuth step. */
+/**
+ * Google sign-in/sign-up does NOT request Calendar or Gmail scopes — managers
+ * connect those progressively on /auth/connect-google-services after account
+ * creation so consent is explicit and scoped.
+ */
 export function shouldRequestGoogleCalendarOnSignIn(
-  intent: OAuthSignInIntent | null | undefined,
-  nextPath: string,
+  _intent: OAuthSignInIntent | null | undefined,
+  _nextPath: string,
 ): boolean {
-  return isManagerOAuthPath(intent, nextPath);
+  return false;
 }
 
 export type GoogleSignInOAuthOptions = {
@@ -29,14 +32,8 @@ export type GoogleSignInOAuthOptions = {
 };
 
 export function googleSignInOAuthOptions(
-  intent: OAuthSignInIntent | null | undefined,
-  nextPath: string,
+  _intent: OAuthSignInIntent | null | undefined,
+  _nextPath: string,
 ): GoogleSignInOAuthOptions {
-  if (!shouldRequestGoogleCalendarOnSignIn(intent, nextPath)) {
-    return { queryParams: { prompt: "select_account" } };
-  }
-  return {
-    scopes: GOOGLE_CALENDAR_OAUTH_SCOPES,
-    queryParams: { access_type: "offline", prompt: "select_account consent" },
-  };
+  return { queryParams: { prompt: "select_account" } };
 }

@@ -9,10 +9,7 @@ vi.mock("@/lib/demo/demo-session", () => ({
 }));
 
 vi.mock("@/lib/household-charges", () => ({
-  hydrateHouseholdStateFromSession: vi.fn(),
-  readAll: vi.fn(() => []),
-  writeAll: vi.fn(),
-  emit: vi.fn(),
+  applyHouseholdChargePatches: vi.fn(),
 }));
 
 import {

@@ -91,7 +91,7 @@ describe("resolveOAuthPortalRedirect", () => {
     expect(path).toBe("/auth/get-started");
   });
 
-  it("routes a legacy profiles.role manager to the manager portal", async () => {
+  it("routes a legacy profiles.role manager to Google services onboarding before the portal", async () => {
     const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
 
     const user = { id: "user-1", email: "manager@test.com" } as User;
@@ -130,12 +130,21 @@ describe("resolveOAuthPortalRedirect", () => {
             }),
           };
         }
+        if (table === "manager_automation_settings") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: () => Promise.resolve({ data: null, error: null }),
+              }),
+            }),
+          };
+        }
         throw new Error(`unexpected table ${table}`);
       },
     };
 
     const path = await resolveOAuthPortalRedirect(supabase as never, user, "/auth/continue");
-    expect(path).toBe("/portal/dashboard");
+    expect(path).toBe("/auth/connect-google-services");
   });
 
   it("routes failed approved resident signup to create-account with error", async () => {

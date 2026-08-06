@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { MODAL_LARGE_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_INLINE_STATUS_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_CLASS, PORTAL_INLINE_UNLOCK_NOTICE_STACKED_CLASS, formatCompactChargeLine } from "@/components/portal/portal-metrics";
@@ -596,11 +597,25 @@ export function ResidentPaymentsPanel({
   const openPayConfirm = useCallback((chargeIds: string[], method: ResidentPayMethod) => {
     const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
     if (ids.length === 0) return;
+    setCheckout(null);
     setPayConfirm({ chargeIds: ids, method });
   }, []);
 
+  const selectPayModalMethod = useCallback((method: ResidentPayMethod) => {
+    setPaymentMethod(method);
+    setCheckout(null);
+    setPayConfirm((prev) => (prev ? { ...prev, method } : null));
+  }, []);
+
+  const closePayModal = useCallback(() => {
+    if (reportingManualPayment) return;
+    setPayConfirm(null);
+    setCheckout(null);
+  }, [reportingManualPayment]);
+
   const handleManualPaymentPaid = useCallback(() => {
     setPayConfirm(null);
+    setCheckout(null);
     setSelectedIds(new Set());
     setExpandedId(null);
     refresh();
@@ -609,10 +624,7 @@ export function ResidentPaymentsPanel({
 
   const confirmStripePayment = useCallback(async () => {
     if (!payConfirm || !isStripeResidentPayMethod(payConfirm.method)) return;
-    const ids = payConfirm.chargeIds;
-    setPayConfirm(null);
-    setExpandedId(null);
-    await loadCheckout(ids, payConfirm.method);
+    await loadCheckout(payConfirm.chargeIds, payConfirm.method);
   }, [loadCheckout, payConfirm]);
 
   const reportManualPaymentForCharges = useCallback(
@@ -676,13 +688,23 @@ export function ResidentPaymentsPanel({
   };
 
   const showCheckoutInExpandedRow = Boolean(
-    checkout && expandedId && checkout.chargeIds.includes(expandedId),
+    payConfirm === null && checkout && expandedId && checkout.chargeIds.includes(expandedId),
   );
   const showBulkCheckoutBar = Boolean(
-    checkout && checkout.chargeIds.length > 1 && !showCheckoutInExpandedRow,
+    payConfirm === null && checkout && checkout.chargeIds.length > 1 && !showCheckoutInExpandedRow,
   );
 
-  const renderPaymentMethodPicker = (scopeCharges: HouseholdCharge[] = unpaidPayableCharges) => {
+  const renderPaymentMethodPicker = (
+    scopeCharges: HouseholdCharge[] = unpaidPayableCharges,
+    pickerOptions?: { selected?: ResidentPayMethod; onSelect?: (method: ResidentPayMethod) => void },
+  ) => {
+    const selectedMethod = pickerOptions?.selected ?? paymentMethod;
+    const onSelectMethod =
+      pickerOptions?.onSelect ??
+      ((method: ResidentPayMethod) => {
+        setPaymentMethod(method);
+        setCheckout(null);
+      });
     const manualOptions = MANUAL_METHOD_OPTIONS.filter((option) =>
       availableManualChannelsForCharges(scopeCharges).includes(option.id),
     );
@@ -693,7 +715,7 @@ export function ResidentPaymentsPanel({
     return (
       <div className={`grid gap-2 ${options.length > 2 ? "sm:grid-cols-3" : "grid-cols-2"}`}>
         {options.map((option) => {
-          const selected = paymentMethod === option.id;
+          const selected = selectedMethod === option.id;
           // Apple Pay / Google Pay ride on the card method-class in Stripe Checkout.
           const walletHint = option.id === "card";
           return (
@@ -702,8 +724,7 @@ export function ResidentPaymentsPanel({
               type="button"
               data-attr={`resident-payments-method-${option.id}`}
               onClick={() => {
-                setPaymentMethod(option.id);
-                setCheckout(null);
+                onSelectMethod(option.id);
               }}
               className={`flex min-h-[64px] flex-col justify-center rounded-xl border px-3 py-3 text-left transition active:scale-[0.99] ${
                 selected
@@ -1011,6 +1032,15 @@ export function ResidentPaymentsPanel({
   );
 
   const confirmTotalLabel = useMemo(() => formatUsd(confirmSubtotalCents), [confirmSubtotalCents]);
+
+  const payModalCheckoutReady = Boolean(
+    payConfirm &&
+      checkout &&
+      checkout.chargeIds.length === payConfirm.chargeIds.length &&
+      payConfirm.chargeIds.every((id) => checkout.chargeIds.includes(id)) &&
+      checkout.paymentMethod === payConfirm.method &&
+      checkout.clientSecret,
+  );
 
   const paymentsHeaderActions = !paymentsUnlocked ? (
     <>
@@ -1332,49 +1362,62 @@ export function ResidentPaymentsPanel({
 
     <Modal
       open={payConfirm !== null}
-      onClose={() => {
-        if (reportingManualPayment) return;
-        setPayConfirm(null);
-      }}
-      title={
-        payConfirm && isStripeResidentPayMethod(payConfirm.method)
-          ? "Continue to Stripe?"
-          : payConfirm && isManualResidentPayMethod(payConfirm.method)
-            ? `Pay with ${residentManualPaymentMethodLabel(payConfirm.method)}`
-            : "Confirm payment"
-      }
-      panelClassName="max-w-lg"
+      onClose={closePayModal}
+      title="Pay charges"
+      scrollableContent
+      panelClassName={payModalCheckoutReady ? MODAL_LARGE_PANEL_CLASS : "max-w-lg"}
     >
       {payConfirm ? (
         <div className="space-y-4">
+          <p className="text-sm text-foreground">
+            {confirmCharges.length === 1 ? "Amount" : `${confirmCharges.length} charges`}:{" "}
+            <span className="font-semibold tabular-nums">{confirmTotalLabel}</span>
+          </p>
+
           {isStripeResidentPayMethod(payConfirm.method) ? (
-            <>
-              <p className="text-sm leading-relaxed text-muted">
-                You&apos;ll complete payment securely with Stripe using{" "}
-                <span className="font-semibold text-foreground">
-                  {residentPaymentMethodLabel(payConfirm.method)}
-                </span>
-                .
-              </p>
-              <p className="text-sm text-foreground">
-                {confirmCharges.length === 1 ? "Amount" : `${confirmCharges.length} charges`}:{" "}
-                <span className="font-semibold tabular-nums">{confirmTotalLabel}</span>
-              </p>
-              {/* Face value, every method: PropLane covers payment processing,
-                  so the amount above is exactly what Stripe collects. */}
-              <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                <p className="flex items-center justify-between gap-3 text-muted">
-                  <span>Added fees</span>
-                  <span className="tabular-nums">$0.00</span>
-                </p>
-                <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
-                  <span>Total due</span>
-                  <span className="tabular-nums">{confirmTotalLabel}</span>
-                </p>
-                <p className="mt-1.5 text-xs text-muted">PropLane covers payment processing.</p>
-              </div>
-            </>
-          ) : payConfirm && isManualResidentPayMethod(payConfirm.method) ? (
+            <div className="space-y-3">
+              {checkout?.loading ? (
+                <p className="text-sm text-muted">Loading secure checkout…</p>
+              ) : checkout?.error ? (
+                <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{checkout.error}</p>
+              ) : payModalCheckoutReady && checkout?.clientSecret ? (
+                <div className="min-h-[min(50vh,28rem)] overflow-hidden rounded-2xl border border-border bg-card">
+                  <StripeEmbeddedCheckout clientSecret={checkout.clientSecret} />
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm leading-relaxed text-muted">
+                    Pay securely with{" "}
+                    <span className="font-semibold text-foreground">
+                      {residentPaymentMethodLabel(payConfirm.method)}
+                    </span>
+                    . Apple Pay and Google Pay are available in checkout when your device supports them.
+                  </p>
+                  <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+                    <p className="flex items-center justify-between gap-3 text-muted">
+                      <span>Added fees</span>
+                      <span className="tabular-nums">$0.00</span>
+                    </p>
+                    <p className="mt-1.5 flex items-center justify-between gap-3 font-semibold text-foreground">
+                      <span>Total due</span>
+                      <span className="tabular-nums">{confirmTotalLabel}</span>
+                    </p>
+                    <p className="mt-1.5 text-xs text-muted">PropLane covers payment processing.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    className="w-full rounded-full sm:w-auto"
+                    disabled={checkout?.loading}
+                    data-attr="resident-payments-confirm-stripe"
+                    onClick={() => void confirmStripePayment()}
+                  >
+                    Continue to Stripe
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : isManualResidentPayMethod(payConfirm.method) ? (
             <ResidentManualPaymentPanel
               chargeIds={payConfirm.chargeIds}
               charges={confirmCharges}
@@ -1385,28 +1428,10 @@ export function ResidentPaymentsPanel({
               reporting={reportingManualPayment}
             />
           ) : null}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              disabled={reportingManualPayment}
-              onClick={() => setPayConfirm(null)}
-            >
-              {isStripeResidentPayMethod(payConfirm.method) ? "Cancel" : "Close"}
-            </Button>
-            {isStripeResidentPayMethod(payConfirm.method) ? (
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-full"
-                disabled={reportingManualPayment}
-                data-attr="resident-payments-confirm-stripe"
-                onClick={() => void confirmStripePayment()}
-              >
-                Continue to Stripe
-              </Button>
-            ) : null}
+
+          <div className="border-t border-border pt-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Payment method</p>
+            <div className="mt-2">{renderPaymentMethodPicker(confirmCharges, { selected: payConfirm.method, onSelect: selectPayModalMethod })}</div>
           </div>
         </div>
       ) : null}

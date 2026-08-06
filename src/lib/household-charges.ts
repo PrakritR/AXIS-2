@@ -2395,6 +2395,16 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
   return true;
 }
 
+/** Merge server-returned charge rows into the browser session store after a resident payment action. */
+export function applyHouseholdChargePatches(updates: HouseholdCharge[]): void {
+  if (!isBrowser() || updates.length === 0) return;
+  hydrateHouseholdStateFromSession();
+  const byId = new Map(updates.map((c) => [c.id, c]));
+  const next = readAll().map((c) => byId.get(c.id) ?? c);
+  writeAll(next);
+  emit();
+}
+
 /** Resident confirms they sent Zelle/Venmo for pending charges; charge stays pending until manager marks paid. */
 export async function reportResidentManualPayment(
   chargeIds: string[],
@@ -2418,12 +2428,8 @@ export async function reportResidentManualPayment(
   }
 
   const updates = Array.isArray(payload.charges) ? payload.charges : [];
-  if (updates.length > 0 && isBrowser()) {
-    hydrateHouseholdStateFromSession();
-    const byId = new Map(updates.map((c) => [c.id, c]));
-    const next = readAll().map((c) => byId.get(c.id) ?? c);
-    writeAll(next);
-    emit();
+  if (updates.length > 0) {
+    applyHouseholdChargePatches(updates);
   }
   return { ok: true, charges: updates };
 }

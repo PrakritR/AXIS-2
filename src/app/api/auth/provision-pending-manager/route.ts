@@ -1,6 +1,7 @@
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { resolveRequestOrigin } from "@/lib/app-url";
 import { finalizeManagerGoogleCalendarLink } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { resolveManagerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -47,9 +48,8 @@ export async function POST(request: Request) {
       ok: true,
       managerId: result.managerId,
       provisioned: result.provisioned,
-      redirectTo: "/portal/dashboard",
+      redirectTo: await resolveManagerPortalEntryPath(service, user.id),
       calendarConnected: calendar.connected,
-      calendarConnectPath: calendar.connectPath,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create manager account.";

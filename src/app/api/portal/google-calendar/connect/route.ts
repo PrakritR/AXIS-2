@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { buildGoogleCalendarOAuthUrl, googleCalendarOAuthRedirectUri } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { isGoogleCalendarOAuthConfigured, warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
+import { sanitizeOAuthReturnPath } from "@/lib/auth/oauth-return-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -31,7 +32,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const originParam = url.searchParams.get("origin")?.trim();
   const origin = originParam || url.origin;
-  const returnTo = `${origin.replace(/\/$/, "")}/portal/calendar`;
+  const returnPath = sanitizeOAuthReturnPath(url.searchParams.get("returnTo"), "/portal/calendar");
+  const returnTo = `${origin.replace(/\/$/, "")}${returnPath}`;
 
   try {
     await warmGoogleCalendarOAuthConfig();
@@ -60,7 +62,7 @@ export async function GET(req: Request) {
       browserOrigin: origin,
       redirectUri,
     });
-    const oauthUrl = buildGoogleCalendarOAuthUrl(origin, ctx.userId);
+    const oauthUrl = buildGoogleCalendarOAuthUrl(origin, ctx.userId, returnPath);
     return NextResponse.redirect(oauthUrl);
   } catch (e) {
     debugGoogleCalendarLog("connect/route.ts:GET", "calendar oauth failed", {

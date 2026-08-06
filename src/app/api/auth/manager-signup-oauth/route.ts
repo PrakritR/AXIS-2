@@ -2,6 +2,7 @@ import { track } from "@/lib/analytics/posthog";
 import { completeManagerSignupFromOAuth } from "@/lib/auth/complete-manager-signup";
 import { resolveRequestOrigin } from "@/lib/app-url";
 import { finalizeManagerGoogleCalendarLink } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { resolveManagerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
       ok: true,
       managerId: result.managerId,
       calendarConnected: calendar.connected,
-      calendarConnectPath: calendar.connectPath,
+      redirectTo: await resolveManagerPortalEntryPath(service, user.id),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Signup failed";

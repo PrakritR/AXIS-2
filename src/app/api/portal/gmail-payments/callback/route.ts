@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${callbackOrigin}/portal/payments?gmail-pay=error&reason=${reason}`);
   }
 
-  const returnTo = `${oauthState.returnOrigin}/portal/payments`;
+  const returnTo = `${oauthState.returnOrigin}${oauthState.returnPath}`;
 
   try {
     const db = createSupabaseServiceRoleClient();

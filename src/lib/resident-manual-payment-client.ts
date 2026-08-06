@@ -1,11 +1,5 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import {
-  hydrateHouseholdStateFromSession,
-  readAll,
-  writeAll,
-  emit,
-  type HouseholdCharge,
-} from "@/lib/household-charges";
+import { applyHouseholdChargePatches, type HouseholdCharge } from "@/lib/household-charges";
 
 /** Poll while a resident is waiting on Zelle/Venmo confirmation. */
 export const RESIDENT_MANUAL_PAYMENT_AUTO_CHECK_MS = 30_000;
@@ -59,12 +53,8 @@ export async function checkResidentManualPayment(
   }
 
   const updates = Array.isArray(payload.charges) ? payload.charges : [];
-  if (updates.length > 0 && isBrowser()) {
-    hydrateHouseholdStateFromSession();
-    const byId = new Map(updates.map((c) => [c.id, c]));
-    const next = readAll().map((c) => byId.get(c.id) ?? c);
-    writeAll(next);
-    emit();
+  if (updates.length > 0) {
+    applyHouseholdChargePatches(updates);
   }
   return { ok: true, paid: true, charges: updates };
 }

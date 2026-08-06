@@ -9,6 +9,7 @@ import {
   saveGoogleCalendarConnection,
 } from "@/lib/google-calendar/settings";
 import { GOOGLE_CALENDAR_OAUTH_SCOPES } from "@/lib/google-calendar/scopes";
+import { sanitizeOAuthReturnPath } from "@/lib/auth/oauth-return-path";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -58,12 +59,17 @@ export function googleCalendarOAuthRedirectUri(browserOrigin: string): string {
 export type GoogleCalendarOAuthState = {
   userId: string;
   returnOrigin: string;
+  returnPath: string;
 };
 
-export function buildGoogleCalendarOAuthUrl(browserOrigin: string, managerUserId: string): string {
+export function buildGoogleCalendarOAuthUrl(
+  browserOrigin: string,
+  managerUserId: string,
+  returnPath?: string,
+): string {
   const returnOrigin = browserOrigin.replace(/\/$/, "");
   const redirectUri = googleCalendarOAuthRedirectUri(browserOrigin);
-  const state = signOAuthState(managerUserId, returnOrigin);
+  const state = signOAuthState(managerUserId, returnOrigin, returnPath);
   const params = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri,
@@ -76,8 +82,13 @@ export function buildGoogleCalendarOAuthUrl(browserOrigin: string, managerUserId
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 
-function signOAuthState(managerUserId: string, returnOrigin: string): string {
-  const payload = JSON.stringify({ uid: managerUserId, t: Date.now(), returnOrigin });
+function signOAuthState(managerUserId: string, returnOrigin: string, returnPath?: string): string {
+  const payload = JSON.stringify({
+    uid: managerUserId,
+    t: Date.now(),
+    returnOrigin,
+    ...(returnPath ? { returnPath } : {}),
+  });
   const sig = createHmac("sha256", stateSecret()).update(payload).digest("base64url");
   return Buffer.from(`${payload}|${sig}`).toString("base64url");
 }
@@ -105,7 +116,12 @@ export function verifyOAuthState(state: string): GoogleCalendarOAuthState | null
       });
       return null;
     }
-    const parsed = JSON.parse(payload) as { uid?: string; t?: number; returnOrigin?: string };
+    const parsed = JSON.parse(payload) as {
+      uid?: string;
+      t?: number;
+      returnOrigin?: string;
+      returnPath?: string;
+    };
     if (!parsed.uid || typeof parsed.t !== "number") {
       debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
         hypothesisId: "H17",
@@ -131,7 +147,11 @@ export function verifyOAuthState(state: string): GoogleCalendarOAuthState | null
       });
       return null;
     }
-    return { userId: parsed.uid, returnOrigin };
+    return {
+      userId: parsed.uid,
+      returnOrigin,
+      returnPath: sanitizeOAuthReturnPath(parsed.returnPath, "/portal/calendar"),
+    };
   } catch (error) {
     debugGoogleCalendarLog("api.server.ts:verifyOAuthState", "state verify failed", {
       hypothesisId: "H17",

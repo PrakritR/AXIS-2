@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${callbackOrigin}/portal/calendar?gcal=error&reason=${reason}`);
   }
 
-  const returnTo = `${oauthState.returnOrigin}/portal/calendar`;
+  const returnTo = `${oauthState.returnOrigin}${oauthState.returnPath}`;
 
   try {
     const db = createSupabaseServiceRoleClient();

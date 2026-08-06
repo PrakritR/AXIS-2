@@ -4,7 +4,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
-import { useRouter } from "next/navigation";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import { useEffect } from "react";
 
 /**
@@ -14,7 +14,6 @@ import { useEffect } from "react";
  * creation. NEVER to the in-portal plan/billing purchase screen.
  */
 export function NativeManagerPlanRedirect() {
-  const router = useRouter();
   const { isNative } = useIsNativeApp();
 
   useEffect(() => {
@@ -25,9 +24,9 @@ export function NativeManagerPlanRedirect() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      router.replace(session ? "/portal/dashboard" : "/auth/create-account");
+      window.location.replace(session ? managerPortalEntryPath() : "/auth/create-account");
     })();
-  }, [isNative, router]);
+  }, [isNative]);
 
   return (
     <AuthCard>

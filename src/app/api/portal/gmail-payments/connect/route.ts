@@ -6,6 +6,7 @@ import {
   isGmailPaymentsOAuthConfigured,
 } from "@/lib/gmail-payments/api.server";
 import { requireManager } from "@/lib/gmail-payments/require-manager.server";
+import { sanitizeOAuthReturnPath } from "@/lib/auth/oauth-return-path";
 import { warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
 
 export const runtime = "nodejs";
@@ -14,7 +15,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const originParam = url.searchParams.get("origin")?.trim();
   const origin = originParam || url.origin;
-  const returnTo = `${origin.replace(/\/$/, "")}/portal/payments`;
+  const returnPath = sanitizeOAuthReturnPath(url.searchParams.get("returnTo"), "/portal/payments");
+  const returnTo = `${origin.replace(/\/$/, "")}${returnPath}`;
 
   try {
     await warmGoogleCalendarOAuthConfig();
@@ -28,7 +30,7 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${returnTo}?gmail-pay=error&reason=${reason}`);
     }
     void gmailPaymentsOAuthRedirectUri(origin);
-    const oauthUrl = buildGmailPaymentsOAuthUrl(origin, ctx.userId, "manager");
+    const oauthUrl = buildGmailPaymentsOAuthUrl(origin, ctx.userId, "manager", returnPath);
     return NextResponse.redirect(oauthUrl);
   } catch (e) {
     const reason = encodeURIComponent(e instanceof Error ? e.message : "Failed to start Gmail connect.");

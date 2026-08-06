@@ -4,6 +4,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import {
   clearManagerPricingOffer,
@@ -51,7 +52,7 @@ function ManagerPricingOauthContent() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      window.location.replace(session ? "/portal/dashboard" : "/auth/create-account");
+      window.location.replace(session ? managerPortalEntryPath() : "/auth/create-account");
     })();
   }, [isNative]);
 
@@ -111,7 +112,7 @@ function ManagerPricingOauthContent() {
           if (res.status === 409) {
             // Account already complete — send directly to portal
             clearManagerPricingOffer();
-            window.location.replace("/portal/dashboard");
+            window.location.replace(managerPortalEntryPath());
             return;
           }
           setErrorText(body.error ?? "Could not continue signup.");

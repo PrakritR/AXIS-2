@@ -27,6 +27,7 @@ import { normalizeE164 } from "@/lib/phone-e164";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
+import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
 
 function trialSignupSubtitle(tier: PlanTierId): string {
   if (tier === "free") return "Free plan · no card required";
@@ -224,7 +225,7 @@ export function ManagerTrialSignupForm({
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
-      const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : "/portal/dashboard";
+      const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : managerPortalEntryPath();
       await navigateAfterRoleSignup(fallback);
     } catch {
       showToast("Network error.");
@@ -259,7 +260,7 @@ export function ManagerTrialSignupForm({
             type="button"
             data-attr="manager-trial-signup-go-to-portal"
             className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-            onClick={() => navigateAfterRoleSignup("/portal/dashboard")}
+            onClick={() => navigateAfterRoleSignup(managerPortalEntryPath())}
           >
             Go to your portal
           </Button>

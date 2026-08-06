@@ -8,10 +8,9 @@ import {
   OAUTH_NOT_COMPLETED_MESSAGE,
 } from "@/lib/auth/oauth-failure-messages";
 import { PASSWORD_RESET_NEXT_PATH } from "@/lib/auth/password-reset-url";
-import { maybeLinkGoogleCalendarFromOAuthSession, shouldRedirectToGoogleCalendarConnect, signedInWithGoogle } from "@/lib/google-calendar/link-from-auth.server";
-import { buildGoogleCalendarConnectPath } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { maybeLinkGoogleCalendarFromOAuthSession } from "@/lib/google-calendar/link-from-auth.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
-import { isGoogleCalendarOAuthConfigured, warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
+import { warmGoogleCalendarOAuthConfig } from "@/lib/google-calendar/settings";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -157,19 +156,7 @@ export async function handleOAuthCallback(
         linked: linkResult.linked,
         resolvedPath,
       });
-      const calendarOAuthConfigured = isGoogleCalendarOAuthConfigured();
-      if (
-        shouldRedirectToGoogleCalendarConnect({
-          linkResult,
-          resolvedPath,
-          intent: oauthIntent,
-          nextPath: oauthNextPath,
-          googleAuthUser: signedInWithGoogle(user),
-          calendarOAuthConfigured,
-        })
-      ) {
-        applyRedirect(new URL(buildGoogleCalendarConnectPath(requestOrigin), requestOrigin));
-      } else if (resolvedPath !== safePath) {
+      if (resolvedPath !== safePath) {
         applyRedirect(new URL(resolvedPath, requestOrigin));
       }
     }
