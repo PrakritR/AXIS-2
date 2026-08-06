@@ -4,6 +4,7 @@ import {
   defaultPromotionFlyerEntryId,
   defaultPromotionTextEntryId,
   ensureDefaultPromotionAssets,
+  isSystemOwnedPromotionEntryId,
 } from "@/lib/promotion-default-sync";
 import { readFlyerEntries } from "@/lib/promotion-flyer";
 import { readPromotionTextEntries } from "@/lib/promotion-text";
@@ -119,5 +120,11 @@ describe("promotion-default-sync", () => {
     });
     expect(second).not.toBeNull();
     expect(readFlyerEntries(second!)[0]?.inputs.images).toEqual([updatedUrl]);
+  });
+
+  it("flags system-owned seed entry ids", () => {
+    expect(isSystemOwnedPromotionEntryId(defaultPromotionFlyerEntryId(PROPERTY_ID))).toBe(true);
+    expect(isSystemOwnedPromotionEntryId(defaultPromotionTextEntryId(PROPERTY_ID))).toBe(true);
+    expect(isSystemOwnedPromotionEntryId("custom-flyer-entry")).toBe(false);
   });
 });

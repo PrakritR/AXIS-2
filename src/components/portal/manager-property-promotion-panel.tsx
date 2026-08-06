@@ -9,10 +9,10 @@ import {
   PortalListAddRow,
 } from "@/components/portal/portal-list-add-row";
 import {
-  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
-  PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS,
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
+import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
+import { PromotionAssetViewModal } from "@/components/portal/promotion-asset-view-modal";
 import {
   EMPTY_DRAFT,
   PromotionForm,
@@ -40,11 +40,8 @@ import {
 import {
   flattenPromotionAssets,
   nextPromotionAssetDefaultTitle,
-  promotionAssetBoxTitle,
-  promotionAssetKindIndices,
   sortPromotionAssets,
   type PromotionAsset,
-  type PromotionAssetKind,
 } from "@/lib/promotion-assets";
 import {
   FLYER_IMAGE_LIMIT,
@@ -72,12 +69,19 @@ import {
   makePromotionUploadId,
   type PromotionUploadEntry,
 } from "@/lib/promotion-upload";
-import { ensureDefaultPromotionAssets } from "@/lib/promotion-default-sync";
+import { ensureDefaultPromotionAssets, isSystemOwnedPromotionEntryId } from "@/lib/promotion-default-sync";
 
-function promotionKindLabel(kind: PromotionAssetKind): string {
-  if (kind === "flyer") return "Flyer";
-  if (kind === "text") return "Text";
-  return "Upload";
+function promotionEntryId(asset: PromotionAsset): string | null {
+  if (asset.kind === "flyer") return asset.flyerEntry?.id ?? null;
+  if (asset.kind === "text") return asset.textEntry?.id ?? null;
+  if (asset.kind === "upload") return asset.uploadEntry?.id ?? null;
+  return null;
+}
+
+function canDeletePromotionAsset(asset: PromotionAsset): boolean {
+  const entryId = promotionEntryId(asset);
+  if (!entryId) return false;
+  return !isSystemOwnedPromotionEntryId(entryId);
 }
 
 function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingId: string): PromotionDraft {
@@ -132,6 +136,8 @@ export function ManagerPropertyPromotionPanel({
   const [generating, setGenerating] = useState(false);
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -171,8 +177,6 @@ export function ManagerPropertyPromotionPanel({
     const rows = readManagerPromotionRows().filter((row) => row.propertyId === propertyId);
     return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
   }, [propertyId, tick]);
-
-  const assetKindIndices = useMemo(() => promotionAssetKindIndices(assets), [assets]);
 
   // Seed a default flyer + listing blurb from listing facts when this property
   // has none yet (same idea as auto-seeded lease templates on the Lease tab).
@@ -242,6 +246,16 @@ export function ManagerPropertyPromotionPanel({
     },
     [openEditFlyer],
   );
+
+  const openViewAsset = useCallback((asset: PromotionAsset) => {
+    setPreviewAssetId(asset.id);
+    setPreviewOpen(true);
+  }, []);
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPreviewAssetId(null);
+  }, []);
 
   // Closes every promotion compose surface — the unified new modal, the
   // edit-flyer modal and the standalone text modal — so no caller can leave one
@@ -472,12 +486,41 @@ export function ManagerPropertyPromotionPanel({
     showToast("Promotion deleted.");
   }
 
+  function handleDeleteAsset(asset: PromotionAsset) {
+    if (!canDeletePromotionAsset(asset)) {
+      showToast("Default flyer and listing blurb cannot be removed.");
+      return;
+    }
+    const title = asset.flyerEntry?.title ?? asset.textEntry?.title ?? asset.uploadEntry?.title ?? "Promotion";
+    if (!window.confirm(`Remove "${title}"? This cannot be undone.`)) return;
+    if (previewAssetId === asset.id) closePreview();
+    if (textModalAssetId === asset.id) closeForm();
+    if (editingEntryId && promotionEntryId(asset) === editingEntryId) closeForm();
+    deleteAsset(asset);
+  }
+
+  function handleDeleteFromFlyerModal() {
+    if (!editingRowId || !editingEntryId) return;
+    const asset = assets.find(
+      (a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId,
+    );
+    if (!asset) return;
+    handleDeleteAsset(asset);
+  }
+
   if (!propertyId) return null;
 
   // The standalone text modal is edit-only now — creating lives in PromotionNewModal.
   const textModalAsset = textModalAssetId
     ? assets.find((a) => a.id === textModalAssetId) ?? null
     : null;
+
+  const previewAsset = previewAssetId ? assets.find((a) => a.id === previewAssetId) ?? null : null;
+
+  const editingFlyerAsset =
+    editingRowId && editingEntryId
+      ? assets.find((a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId) ?? null
+      : null;
 
   async function uploadPromotion(file: File) {
     if (!userId || !propertyId) return;
@@ -531,45 +574,14 @@ export function ManagerPropertyPromotionPanel({
     <>
       <PortalPropertyDetailSection contentClassName="space-y-0">
         {headerActionsExtra ? <div className="mb-3">{headerActionsExtra}</div> : null}
-        {assets.map((asset) => {
-          const indexWithinKind = assetKindIndices.get(asset.id) ?? 0;
-          const title = promotionAssetBoxTitle(asset, indexWithinKind);
-          const canEdit = asset.kind === "flyer" || asset.kind === "text";
-          return (
-            <div key={asset.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">{title}</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {promotionKindLabel(asset.kind)} · {asset.subtitle}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                {canEdit ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                    data-attr="promotion-row-edit"
-                    onClick={() => openEditAsset(asset)}
-                  >
-                    Edit
-                  </Button>
-                ) : null}
-                {assets.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                    data-attr="promotion-row-remove"
-                    onClick={() => deleteAsset(asset)}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
+        <PromotionAssetStack
+          assets={assets}
+          variant="plain"
+          showPropertyLabel={false}
+          emptyMessage="No promotions yet for this property."
+          onView={openViewAsset}
+          onEdit={openEditAsset}
+        />
       </PortalPropertyDetailSection>
 
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
@@ -601,12 +613,21 @@ export function ManagerPropertyPromotionPanel({
       <PromotionTextGenerateModal
         open={textModalAssetId !== null}
         onClose={closeForm}
+        title="Edit promotion text"
+        submitLabel="Regenerate text"
         initialFormat={textModalAsset?.textEntry?.copy.format}
         initialTone={textModalAsset?.row.inputs.tone}
         initialImages={textModalAsset?.row.inputs.images}
+        canDelete={textModalAsset ? canDeletePromotionAsset(textModalAsset) : false}
+        onDelete={
+          textModalAsset
+            ? () => handleDeleteAsset(textModalAsset)
+            : undefined
+        }
         onGenerate={(opts) => {
           void createOrRegenerateText(opts, textModalAsset);
         }}
+        busy={generatingTextId === textModalAsset?.textEntry?.id}
       />
 
       {/* Edit an existing flyer (create-new lives in PromotionNewModal above). */}
@@ -616,8 +637,26 @@ export function ManagerPropertyPromotionPanel({
         onClose={closeForm}
         panelClassName="max-w-2xl"
         footer={
-          <ModalFooter>
-            <Button type="button" variant="primary" onClick={() => generate()} disabled={generating} data-attr="promotion-generate">
+          <ModalFooter className="w-full">
+            {editingFlyerAsset && canDeletePromotionAsset(editingFlyerAsset) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+                onClick={handleDeleteFromFlyerModal}
+                data-attr="promotion-flyer-delete"
+              >
+                Delete
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="primary"
+              className="ml-auto"
+              onClick={() => generate()}
+              disabled={generating}
+              data-attr="promotion-generate"
+            >
               {generating ? "Updating…" : "Update flyer"}
             </Button>
           </ModalFooter>
@@ -631,6 +670,14 @@ export function ManagerPropertyPromotionPanel({
           hidePropertyPicker
         />
       </Modal>
+
+      <PromotionAssetViewModal
+        asset={previewAsset}
+        open={previewOpen}
+        onClose={closePreview}
+        allAssets={assets}
+        dataAttr="property-promotion-preview"
+      />
     </>
   );
 }

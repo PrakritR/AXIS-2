@@ -34,12 +34,10 @@ import {
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
-  PromotionFlyerHeaderActions,
   PromotionTextAssetDetail,
-  PromotionTextHeaderActions,
   PromotionUploadAssetDetail,
-  PromotionUploadHeaderActions,
 } from "@/components/portal/promotion-asset-detail";
+import { PromotionAssetViewModal } from "@/components/portal/promotion-asset-view-modal";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
 import { buildPromotionNewModalAssistantContext } from "@/lib/promotion-assistant-context";
@@ -77,8 +75,6 @@ import {
 import {
   buildFlyerEntryFromDraft,
   buildTextEntryFromCopy,
-  removeFlyerEntryFromRow,
-  removeTextEntryFromRow,
   appendUploadEntryToRow,
   syncPromotionRowLegacy,
   updateFlyerEntryOnRow,
@@ -92,7 +88,6 @@ import {
   readManagerPromotionRows,
   syncManagerPromotionsFromServer,
   upsertManagerPromotion,
-  deleteManagerPromotionRow,
 } from "@/lib/manager-promotions-storage";
 import { promotionDetailHref, promotionListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
@@ -167,6 +162,8 @@ export function ManagerPromotion({
   const [generating, setGenerating] = useState(false);
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
@@ -307,8 +304,9 @@ export function ManagerPromotion({
         cur.length === 0 || cur.some((id) => samePropertyId(id, pid)) ? cur : [pid],
       );
     }
-    navigate(promotionDetailHref(basePath, assetId));
-  }, [basePath, navigate]);
+    setPreviewAssetId(assetId);
+    setPreviewOpen(true);
+  }, []);
 
   const openEditFlyer = useCallback(
     (row: ManagerPromotionRow, entryId: string) => {
@@ -320,6 +318,30 @@ export function ManagerPromotion({
       setShowForm(true);
     },
     [listings],
+  );
+
+  const openViewAsset = useCallback((asset: PromotionAsset) => {
+    setPreviewAssetId(asset.id);
+    setPreviewOpen(true);
+  }, []);
+
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    setPreviewAssetId(null);
+  }, []);
+
+  const openEditAsset = useCallback(
+    (asset: PromotionAsset) => {
+      closePreview();
+      if (asset.kind === "flyer" && asset.flyerEntry) {
+        openEditFlyer(asset.row, asset.flyerEntry.id);
+        return;
+      }
+      if (asset.kind === "text" && asset.textEntry) {
+        setTextModalAssetId(asset.id);
+      }
+    },
+    [closePreview, openEditFlyer],
   );
 
   function onSelectProperty(key: string) {
@@ -585,21 +607,6 @@ export function ManagerPromotion({
     upsertManagerPromotion(updateTextEntryOnRow(row, entry.id, entry));
   }
 
-  function deleteAsset(asset: PromotionAsset) {
-    if (asset.kind === "flyer" && asset.flyerEntry) {
-      const next = removeFlyerEntryFromRow(asset.row, asset.flyerEntry.id);
-      if (next) upsertManagerPromotion(next);
-      else deleteManagerPromotionRow(asset.row.id);
-    } else if (asset.kind === "text" && asset.textEntry) {
-      const next = removeTextEntryFromRow(asset.row, asset.textEntry.id);
-      if (next) upsertManagerPromotion(next);
-      else deleteManagerPromotionRow(asset.row.id);
-    }
-    if (assetIdProp === asset.id) navigate(promotionListHref(basePath));
-    if (editingRowId === asset.row.id) closeForm();
-    showToast("Promotion deleted.");
-  }
-
   useEffect(() => {
     if (!demoPromotionGeneratePending || !isDemoModeActive()) return;
     setDemoPromotionGeneratePending(false);
@@ -611,54 +618,7 @@ export function ManagerPromotion({
     ? assets.find((a) => a.id === textModalAssetId) ?? null
     : null;
 
-  const renderHeaderActions = (asset: PromotionAsset, _indexWithinKind: number) => {
-    if (asset.kind === "flyer") {
-      return (
-        <PromotionFlyerHeaderActions
-          asset={asset}
-          onEdit={openEditFlyer}
-          onDelete={(_row, entryId) => {
-            const flyerAsset = assets.find(
-              (a) => a.row.id === asset.row.id && a.flyerEntry?.id === entryId,
-            );
-            if (flyerAsset) deleteAsset(flyerAsset);
-          }}
-          canDelete
-        />
-      );
-    }
-
-    if (asset.kind === "upload") {
-      return (
-        <PromotionUploadHeaderActions
-          asset={asset}
-          onDelete={(row, entryId) => {
-            const uploadAsset = assets.find(
-              (a) => a.row.id === row.id && a.uploadEntry?.id === entryId,
-            );
-            if (uploadAsset) deleteAsset(uploadAsset);
-          }}
-        />
-      );
-    }
-
-    return (
-      <PromotionTextHeaderActions
-        asset={asset}
-        onEdit={(row, entryId) => setTextModalAssetId(makePromotionAssetId(row.id, "text", entryId))}
-        onDelete={(row, entryId) => {
-          const textAsset = assets.find(
-            (a) => a.row.id === row.id && a.textEntry?.id === entryId,
-          );
-          if (textAsset) deleteAsset(textAsset);
-        }}
-        editing={generatingTextId === asset.textEntry?.id}
-        showToast={showToast}
-      />
-    );
-  };
-
-
+  const previewAsset = previewAssetId ? assets.find((a) => a.id === previewAssetId) ?? null : null;
 
   const detailAsset = useMemo(() => {
     if (!assetIdProp) return null;
@@ -731,6 +691,14 @@ export function ManagerPromotion({
           void regenerateText(textModalAsset.row, textModalAsset.textEntry.id, opts);
         }}
       />
+
+      <PromotionAssetViewModal
+        asset={previewAsset}
+        open={previewOpen}
+        onClose={closePreview}
+        allAssets={assets}
+        dataAttr="promotion-preview"
+      />
     </>
   );
 
@@ -759,9 +727,6 @@ export function ManagerPromotion({
       );
     }
 
-    const detailKindIndices = promotionAssetKindIndices(assets);
-    const detailIndexWithinKind = detailKindIndices.get(detailAsset.id) ?? 0;
-
     return (
       <>
         {promotionModals}
@@ -773,7 +738,19 @@ export function ManagerPromotion({
           hideBackText
           bareHeader
           dataAttrBack="promotion-detail-back"
-          actions={renderHeaderActions(detailAsset, detailIndexWithinKind)}
+          actions={
+            detailAsset.kind === "flyer" || detailAsset.kind === "text" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
+                data-attr="promotion-detail-edit"
+                onClick={() => openEditAsset(detailAsset)}
+              >
+                Edit
+              </Button>
+            ) : null
+          }
         >
           <div className="px-3 py-4 sm:px-4">
             {detailAsset.kind === "flyer" ? (
@@ -851,8 +828,8 @@ export function ManagerPromotion({
           <div className={PORTAL_LIST_PAGE_BODY}>
             <PromotionAssetStack
               assets={propertyScopedAssets}
-              onOpen={(asset) => navigate(promotionDetailHref(basePath, asset.id))}
-              renderHeaderActions={renderHeaderActions}
+              onView={openViewAsset}
+              onEdit={openEditAsset}
             />
             <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>{promotionListAddRow}</div>
           </div>

@@ -211,6 +211,10 @@ export function PromotionTextGenerateModal({
   initialFormat,
   initialTone,
   initialImages,
+  title = "Generate promotion text",
+  submitLabel = "Generate promotion text",
+  canDelete = false,
+  onDelete,
 }: {
   open: boolean;
   onClose: () => void;
@@ -219,27 +223,49 @@ export function PromotionTextGenerateModal({
   initialFormat?: PromotionTextFormat;
   initialTone?: string;
   initialImages?: string[];
+  title?: string;
+  submitLabel?: string;
+  canDelete?: boolean;
+  onDelete?: () => void;
 }) {
   const textComposerRef = useRef<PromotionTextComposerHandle>(null);
+
+  const handleDelete = () => {
+    if (!canDelete || !onDelete) return;
+    if (!window.confirm("Delete this promotion text? This cannot be undone.")) return;
+    onDelete();
+  };
 
   return (
     <Modal
       open={open}
-      title="Generate promotion text"
+      title={title}
       onClose={onClose}
       panelClassName="max-w-lg"
       dense
       assistantContext="Generate promotion text — channel, tone, notes, and property photos for listing copy"
       assistantStorageScopeKey="Generate promotion text"
       footer={
-        <ModalFooter>
+        <ModalFooter className="w-full">
+          {canDelete && onDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+              onClick={handleDelete}
+              data-attr="promotion-text-delete"
+            >
+              Delete
+            </Button>
+          ) : null}
           <Button
             type="button"
+            className="ml-auto"
             disabled={busy}
             data-attr="promotion-text-generate-submit"
             onClick={() => textComposerRef.current?.generate()}
           >
-            {busy ? "Generating…" : "Generate promotion text"}
+            {busy ? "Generating…" : submitLabel}
           </Button>
         </ModalFooter>
       }
