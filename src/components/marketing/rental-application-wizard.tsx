@@ -248,6 +248,32 @@ export function initialWizardStepFromRequest(
   return parsed;
 }
 
+const activeRentalWizardsByDocument = new WeakMap<Document, number>();
+
+/**
+ * Suppress the floating assistant while a portal application wizard owns the
+ * bottom action area. The resident list mounts separate mobile and desktop
+ * wizard copies, so this is reference-counted rather than a blind set/remove.
+ */
+export function markRentalWizardActive(doc: Document): () => void {
+  const root = doc.documentElement;
+  const nextCount = (activeRentalWizardsByDocument.get(doc) ?? 0) + 1;
+  activeRentalWizardsByDocument.set(doc, nextCount);
+  root.setAttribute("data-rental-wizard-active", "");
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = Math.max(0, (activeRentalWizardsByDocument.get(doc) ?? 1) - 1);
+    if (remaining > 0) {
+      activeRentalWizardsByDocument.set(doc, remaining);
+      return;
+    }
+    activeRentalWizardsByDocument.delete(doc);
+    root.removeAttribute("data-rental-wizard-active");
+  };
+}
+
 export function RentalApplicationWizard({
   showToast,
   mode = "public",
@@ -434,6 +460,11 @@ function RentalApplicationWizardInner({
    */
   const rootRef = useRef<HTMLDivElement>(null);
   const isOnScreen = useCallback(() => isElementOnScreen(rootRef.current), []);
+
+  useEffect(() => {
+    if (mode !== "portal" && mode !== "manager") return;
+    return markRentalWizardActive(document);
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "portal" || postSubmit || isDemoModeActive() || !isOnScreen()) return;
