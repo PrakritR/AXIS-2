@@ -737,7 +737,7 @@ function ManagerPropertyInlineDetails({
           data-attr="manager-property-new-promotion-footer"
           onClick={() => promotionNewHandlerRef.current?.()}
         >
-          Add promotion
+          Add
         </Button>
       );
     }

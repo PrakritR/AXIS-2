@@ -492,7 +492,7 @@ export function ManagerPropertyPromotionPanel({
       return;
     }
     const title = asset.flyerEntry?.title ?? asset.textEntry?.title ?? asset.uploadEntry?.title ?? "Promotion";
-    if (!window.confirm(`Remove "${title}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     if (previewAssetId === asset.id) closePreview();
     if (textModalAssetId === asset.id) closeForm();
     if (editingEntryId && promotionEntryId(asset) === editingEntryId) closeForm();
@@ -516,11 +516,6 @@ export function ManagerPropertyPromotionPanel({
     : null;
 
   const previewAsset = previewAssetId ? assets.find((a) => a.id === previewAssetId) ?? null : null;
-
-  const editingFlyerAsset =
-    editingRowId && editingEntryId
-      ? assets.find((a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId) ?? null
-      : null;
 
   async function uploadPromotion(file: File) {
     if (!userId || !propertyId) return;
@@ -578,7 +573,7 @@ export function ManagerPropertyPromotionPanel({
           assets={assets}
           variant="plain"
           showPropertyLabel={false}
-          emptyMessage="No promotions yet for this property."
+          emptyMessage=""
           onView={openViewAsset}
           onEdit={openEditAsset}
         />
@@ -586,7 +581,7 @@ export function ManagerPropertyPromotionPanel({
 
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
         <PortalListAddRow
-          label="Add promotion"
+          label="Add"
           icon={PORTAL_LIST_ADD_ICONS.promotion}
           onClick={openNewPromotion}
           dataAttr="manager-property-new-promotion"
@@ -614,16 +609,13 @@ export function ManagerPropertyPromotionPanel({
         open={textModalAssetId !== null}
         onClose={closeForm}
         title="Edit promotion text"
-        submitLabel="Regenerate text"
+        submitLabel="Save"
+        submitBusyLabel="Saving…"
         initialFormat={textModalAsset?.textEntry?.copy.format}
         initialTone={textModalAsset?.row.inputs.tone}
         initialImages={textModalAsset?.row.inputs.images}
-        canDelete={textModalAsset ? canDeletePromotionAsset(textModalAsset) : false}
-        onDelete={
-          textModalAsset
-            ? () => handleDeleteAsset(textModalAsset)
-            : undefined
-        }
+        canDelete={Boolean(textModalAsset)}
+        onDelete={textModalAsset ? () => handleDeleteAsset(textModalAsset) : undefined}
         onGenerate={(opts) => {
           void createOrRegenerateText(opts, textModalAsset);
         }}
@@ -638,7 +630,7 @@ export function ManagerPropertyPromotionPanel({
         panelClassName="max-w-2xl"
         footer={
           <ModalFooter className="w-full">
-            {editingFlyerAsset && canDeletePromotionAsset(editingFlyerAsset) ? (
+            {showForm && editingRowId && editingEntryId ? (
               <Button
                 type="button"
                 variant="outline"
@@ -652,12 +644,12 @@ export function ManagerPropertyPromotionPanel({
             <Button
               type="button"
               variant="primary"
-              className="ml-auto"
+              className="ml-auto rounded-full"
               onClick={() => generate()}
               disabled={generating}
               data-attr="promotion-generate"
             >
-              {generating ? "Updating…" : "Update flyer"}
+              {generating ? "Saving…" : "Save"}
             </Button>
           </ModalFooter>
         }

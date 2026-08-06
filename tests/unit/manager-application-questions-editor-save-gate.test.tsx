@@ -59,6 +59,62 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("property application template editor — delete footer", () => {
+  it("shows Delete on the left in edit mode when canDelete is true", () => {
+    const onDelete = vi.fn();
+    render(
+      <ManagerApplicationQuestionsEditorModal
+        open
+        title="Edit application"
+        sub={createDefaultListingSubmission()}
+        managerUserId="mgr-1"
+        templateEditorMode="edit"
+        applicationTemplate={{
+          id: "app-custom",
+          kind: "long-term",
+          label: "Summer intern application",
+          formVariant: "standard",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }}
+        templates={[
+          {
+            id: "app-default",
+            kind: "long-term",
+            label: "Long-term application",
+            formVariant: "standard",
+            listingSeedKey: "long-term",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "app-custom",
+            kind: "long-term",
+            label: "Summer intern application",
+            formVariant: "standard",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ]}
+        canDelete
+        onDelete={onDelete}
+        onClose={() => {}}
+        onSaved={() => {}}
+        showToast={() => {}}
+        onPersistSubmission={() => true}
+      />,
+    );
+
+    const deleteBtn = document.querySelector('[data-attr="application-questions-delete"]') as HTMLButtonElement | null;
+    expect(deleteBtn).not.toBeNull();
+    expect(deleteBtn?.textContent).toBe("Delete");
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(deleteBtn!);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("bulk application editor — save gate (round 31)", () => {
   it("does not persist on edit; Save is disabled until something changes", () => {
     renderEditor();
