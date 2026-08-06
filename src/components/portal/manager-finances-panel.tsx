@@ -23,6 +23,11 @@ import { ManagerOwnerDistributionsPanel } from "@/components/portal/manager-owne
 import { ManagerSecurityDepositsPanel } from "@/components/portal/manager-security-deposits-panel";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
+import {
   ReportExportButtons,
   ReportFilterBar,
   type ReportFilterState,
@@ -93,7 +98,12 @@ function parseMoneyAmount(raw: unknown): number {
   return dollarsToCents(typeof raw === "string" || typeof raw === "number" ? raw : null);
 }
 
-function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: RowFilterState): ReportResult {
+function filterFinanceReport(
+  report: ReportResult,
+  tabId: string,
+  rowFilters: RowFilterState,
+  searchQuery = "",
+): ReportResult {
   if (LEDGER_TAB_IDS.has(tabId)) return report;
   let rows = report.rows;
   if (tabId === "income") {
@@ -102,6 +112,16 @@ function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: Ro
   } else {
     if (rowFilters.category) rows = rows.filter((row) => String(row.category ?? "") === rowFilters.category);
     if (rowFilters.vendor) rows = rows.filter((row) => String(row.vendor ?? "") === rowFilters.vendor);
+  }
+
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  if (normalizedSearch) {
+    rows = rows.filter((row) =>
+      Object.entries(row).some(
+        ([key, value]) =>
+          !HIDDEN_FINANCE_COLS.has(key) && String(value ?? "").toLocaleLowerCase().includes(normalizedSearch),
+      ),
+    );
   }
 
   if (!report.totals) return { ...report, rows };
@@ -202,7 +222,7 @@ function FinancesDataTable({
                 <div key={col.key} className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
                   <div
-                    className={`truncate text-sm ${
+                    className={`break-words text-sm ${
                       col.key === "amount" || col.key === "property" || col.key === "resident"
                         ? "font-medium text-foreground"
                         : "text-foreground/80"
@@ -221,7 +241,7 @@ function FinancesDataTable({
               {visibleCols.map((col) => (
                 <div key={col.key} className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
-                  <p className="truncate text-sm font-semibold text-foreground">
+                  <p className="break-words text-sm font-semibold text-foreground">
                     {formatCellValue(col, report.totals![col.key])}
                   </p>
                 </div>
@@ -238,15 +258,22 @@ function FinancesDataTable({
               {visibleCols.map((col) => (
                 <th
                   key={col.key}
-                  className={`${MANAGER_TABLE_TH} ${cellAlign(col)} cursor-pointer select-none hover:bg-accent/30 transition`}
-                  onClick={() => onHeaderSort(col.key)}
+                  className={`${MANAGER_TABLE_TH} ${cellAlign(col)} p-0 transition hover:bg-accent/30`}
+                  aria-sort={sortKey === col.key ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {col.label}
-                    <span className="text-[10px] text-muted/60">
+                  <button
+                    type="button"
+                    className={`flex w-full items-center gap-1 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] ${
+                      col.align === "right" ? "justify-end text-right" : "justify-start text-left"
+                    }`}
+                    onClick={() => onHeaderSort(col.key)}
+                    data-attr={`finances-sort-${col.key}`}
+                  >
+                    <span>{col.label}</span>
+                    <span className="text-[10px] text-muted/60" aria-hidden>
                       {sortKey === col.key ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
                     </span>
-                  </span>
+                  </button>
                 </th>
               ))}
             </tr>
@@ -475,6 +502,7 @@ export function ManagerFinancesPanel({
   const [report, setReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [rowFilters, setRowFilters] = useState(emptyRowFilters);
+  const [searchQuery, setSearchQuery] = useState("");
   const [expenseModal, setExpenseModal] = useState(false);
   const [incomeModal, setIncomeModal] = useState(false);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft>({
@@ -501,8 +529,8 @@ export function ManagerFinancesPanel({
   const [sortDir, setSortDir] = useState<"asc" | "desc">(DEFAULT_SORT[tabId]?.dir ?? "desc");
 
   const filteredReport = useMemo(
-    () => (report ? filterFinanceReport(report, tabId, rowFilters) : null),
-    [report, tabId, rowFilters],
+    () => (report ? filterFinanceReport(report, tabId, rowFilters, searchQuery) : null),
+    [report, tabId, rowFilters, searchQuery],
   );
 
   const monthlyProfitPoints = useMemo(() => {
@@ -600,6 +628,7 @@ export function ManagerFinancesPanel({
       setSortKey(defaults.key);
       setSortDir(defaults.dir);
       setRowFilters(emptyRowFilters());
+      setSearchQuery("");
     });
   }, [tabId]);
 
@@ -716,6 +745,15 @@ export function ManagerFinancesPanel({
 
   const specialFinancePanels = new Set(["bills", "bank-reconciliation", "security-deposits", "owner-distributions"]);
   const showScopedReportFilters = !specialFinancePanels.has(tabId);
+  const showTransactionSearch = tabId === "income" || tabId === "expenses";
+  const activeDefaultSort = DEFAULT_SORT[tabId] ?? { key: "date", dir: "desc" as const };
+  const financeSortOptions = (report?.columns ?? [])
+    .filter((column) => !HIDDEN_FINANCE_COLS.has(column.key))
+    .map((column) => ({ value: column.key, label: column.label }));
+  const defaultFinanceFilters = defaultFilters();
+  const dateRangeChanged =
+    filters.from !== defaultFinanceFilters.from || filters.to !== defaultFinanceFilters.to;
+  const sortChanged = sortKey !== activeDefaultSort.key || sortDir !== activeDefaultSort.dir;
 
   const financeFilterControls = (
     <>
@@ -742,12 +780,39 @@ export function ManagerFinancesPanel({
           )
         }
       />
+      {financeSortOptions.length > 0 ? (
+        <FilterFieldsAccordion>
+          <FilterSingleSelectDropdown
+            sectionId="finance-sort-key"
+            label="Sort by"
+            options={financeSortOptions}
+            value={sortKey}
+            onChange={setSortKey}
+            placeholder="Sort by"
+            dataAttr="finances-sort-key"
+          />
+          <FilterSingleSelectDropdown
+            sectionId="finance-sort-direction"
+            label="Direction"
+            options={[
+              { value: "asc", label: "Ascending" },
+              { value: "desc", label: "Descending" },
+            ]}
+            value={sortDir}
+            onChange={(value) => setSortDir(value as "asc" | "desc")}
+            placeholder="Direction"
+            dataAttr="finances-sort-direction"
+          />
+        </FilterFieldsAccordion>
+      ) : null}
     </>
   );
 
   const resetFinanceFilters = () => {
     setFilters(defaultFilters());
     setRowFilters(emptyRowFilters());
+    setSortKey(activeDefaultSort.key);
+    setSortDir(activeDefaultSort.dir);
   };
 
   const financesFilterSheet = showScopedReportFilters ? (
@@ -758,8 +823,11 @@ export function ManagerFinancesPanel({
         rowFilters.type,
         rowFilters.category,
         rowFilters.vendor,
+        dateRangeChanged,
+        sortChanged,
       ])}
       compactPanel={false}
+      filterFieldCount={5}
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={resetFinanceFilters}
       dataAttr="finances-filter-sheet-open"
@@ -783,6 +851,17 @@ export function ManagerFinancesPanel({
         onRemove: () => setFilters((f) => ({ ...f, from: defaults.from, to: defaults.to })),
       });
     }
+    if (sortChanged) {
+      const sortLabel = financeSortOptions.find((option) => option.value === sortKey)?.label ?? sortKey;
+      chips.push({
+        id: "sort",
+        label: `Sort: ${sortLabel} · ${sortDir === "asc" ? "Ascending" : "Descending"}`,
+        onRemove: () => {
+          setSortKey(activeDefaultSort.key);
+          setSortDir(activeDefaultSort.dir);
+        },
+      });
+    }
     if (tabId === "income") {
       if (rowFilters.resident) chips.push({ id: "resident", label: `Resident: ${rowFilters.resident}`, onRemove: () => setRowFilters((f) => ({ ...f, resident: "" })) });
       if (rowFilters.type) chips.push({ id: "type", label: `Type: ${rowFilters.type}`, onRemove: () => setRowFilters((f) => ({ ...f, type: "" })) });
@@ -791,7 +870,19 @@ export function ManagerFinancesPanel({
       if (rowFilters.vendor) chips.push({ id: "vendor", label: `Vendor: ${rowFilters.vendor}`, onRemove: () => setRowFilters((f) => ({ ...f, vendor: "" })) });
     }
     return chips;
-  }, [showScopedReportFilters, filters, rowFilters, tabId, propertyOptions]);
+  }, [
+    showScopedReportFilters,
+    filters,
+    rowFilters,
+    tabId,
+    propertyOptions,
+    sortChanged,
+    financeSortOptions,
+    sortKey,
+    sortDir,
+    activeDefaultSort.key,
+    activeDefaultSort.dir,
+  ]);
 
   function openAddIncome() {
     setIncomeDraft({
@@ -848,7 +939,7 @@ export function ManagerFinancesPanel({
         onClick={openAddIncome}
         data-attr="finances-add-income"
       >
-        Add income
+        + Add
       </PortalSectionPrimaryButton>
     ) : null;
 
@@ -859,11 +950,24 @@ export function ManagerFinancesPanel({
         onClick={openAddExpense}
         data-attr="finances-add-expense"
       >
-        Add expense
+        + Add
       </PortalSectionPrimaryButton>
     ) : null;
 
   const financesPrimaryButton = financesAddIncomeButton ?? financesAddExpenseButton;
+
+  const financesListAddRow =
+    tabId === "income" || tabId === "expenses" ? (
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label={tabId === "income" ? "Add income" : "Add expense"}
+          hint={tabId === "income" ? "Record money received" : "Record a business expense"}
+          icon={PORTAL_LIST_ADD_ICONS.payment}
+          onClick={tabId === "income" ? openAddIncome : openAddExpense}
+          dataAttr={tabId === "income" ? "finances-list-add-income" : "finances-list-add-expense"}
+        />
+      </div>
+    ) : null;
 
   const financesDesktopHeaderActions = (
     <PortalSectionActionRow variant="header" className="ml-auto hidden gap-3 md:flex">
@@ -901,6 +1005,16 @@ export function ManagerFinancesPanel({
       <PortalListControlStack
         className="mb-3"
         destinationRow={<FinanceDestinationNav tabId={tabId} tabItems={financeTabItems} basePath={basePath} />}
+        search={
+          showTransactionSearch
+            ? {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: `Search ${tabId}`,
+                dataAttr: "finances-search",
+              }
+            : undefined
+        }
         activeFilterChips={
           activeFinanceFilterChips.length > 0 ? (
             <PortalActiveFilterChips chips={activeFinanceFilterChips} />
@@ -927,19 +1041,29 @@ export function ManagerFinancesPanel({
             <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading entries…</div>
           </div>
         ) : filteredReport ? (
-          filteredReport.rows.length === 0 && report && report.rows.length > 0 ? (
-            <PortalDataTableEmpty message="No finance entries match these filters yet." icon="finance" />
-          ) : (
-            <FinancesDataTable
-              report={filteredReport}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onHeaderSort={onHeaderSort}
-              onTaxStatusChange={tabId === "expenses" ? (id, d) => void updateExpenseTaxStatus(id, d) : undefined}
-            />
-          )
+          <div className="space-y-3">
+            {filteredReport.rows.length === 0 ? (
+              report && report.rows.length > 0 ? (
+                <PortalDataTableEmpty message="No finance entries match your search or filters." icon="finance" />
+              ) : financesListAddRow ? null : (
+                <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
+              )
+            ) : (
+              <FinancesDataTable
+                report={filteredReport}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onHeaderSort={onHeaderSort}
+                onTaxStatusChange={tabId === "expenses" ? (id, d) => void updateExpenseTaxStatus(id, d) : undefined}
+              />
+            )}
+            {financesListAddRow}
+          </div>
         ) : (
-          <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
+          <div className="space-y-3">
+            <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
+            {financesListAddRow}
+          </div>
         )}
       </div>
       )}

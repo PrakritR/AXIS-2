@@ -100,6 +100,28 @@ afterEach(() => {
 const dashboardRead = () => loadDocumentExpirationSummary({ userId: MANAGER });
 
 describe("document write → dashboard expiry counts", () => {
+  it("reports live expiry counts and keeps an add-document row after the library", async () => {
+    const onExpiryPillsChange = vi.fn();
+    const { container } = render(
+      <ManagerDocumentLibrary
+        userId={MANAGER}
+        onExpiryPillsChange={onExpiryPillsChange}
+      />,
+    );
+
+    await screen.findAllByText(/Boiler inspection certificate/);
+    await waitFor(() => {
+      expect(onExpiryPillsChange).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ id: "", label: "All", count: 1 })]),
+      );
+    });
+
+    const addDocument = container.querySelector<HTMLButtonElement>('[data-attr="documents-list-add"]');
+    expect(addDocument).not.toBeNull();
+    fireEvent.click(addDocument!);
+    expect(await screen.findByText("Upload document")).toBeTruthy();
+  });
+
   it("forces a refresh so the dashboard's next read is newer than the delete", async () => {
     // The dashboard has already painted once, so the TTL cache is warm.
     expect(await dashboardRead()).toMatchObject({ expiringSoon: 3, expired: 1 });

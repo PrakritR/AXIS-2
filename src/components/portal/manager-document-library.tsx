@@ -57,6 +57,11 @@ import {
 import { loadDocumentExpirationSummary } from "@/lib/manager-document-expiry-client";
 import { useSearchParams } from "next/navigation";
 import { MANAGER_VENDORS_EVENT, syncManagerVendorsFromServer, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import { FileUp } from "lucide-react";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 
 const SCOPE_FILTERS: { id: string; label: string }[] = [
   { id: "", label: "All scopes" },
@@ -95,8 +100,8 @@ function isImageMime(mime: string): boolean {
 }
 
 export type DocumentLibraryFilterFieldsProps = {
-  search: string;
-  onSearchChange: (value: string) => void;
+  search?: string;
+  onSearchChange?: (value: string) => void;
   categoryFilter: string;
   onCategoryFilterChange: (value: string) => void;
   scopeFilter: string;
@@ -138,15 +143,17 @@ export function DocumentLibraryFilterFields({
         activeTone="primary"
         compact
       />
-      <Input
-        type="search"
-        value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search by name…"
-        className="h-10 w-full text-sm"
-        aria-label="Search documents"
-        data-attr="document-search"
-      />
+      {onSearchChange ? (
+        <Input
+          type="search"
+          value={search ?? ""}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search by name…"
+          className="h-10 w-full text-sm"
+          aria-label="Search documents"
+          data-attr="document-search"
+        />
+      ) : null}
       {/* Category / Scope / Property are the one portal filter dropdown pattern: closed by
           default, opening portals an overlay so the fields below never shift. They stay
           SINGLE-select because each maps to one server query param on
@@ -218,6 +225,7 @@ type ManagerDocumentLibraryProps = {
   onPropertyFilterChange?: (value: string) => void;
   expiryFilter?: string;
   onExpiryFilterChange?: (value: string) => void;
+  onExpiryPillsChange?: (pills: DocumentLibraryFilterFieldsProps["expiryPills"]) => void;
 };
 
 export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, ManagerDocumentLibraryProps>(
@@ -235,6 +243,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
       onPropertyFilterChange,
       expiryFilter: expiryFilterProp,
       onExpiryFilterChange,
+      onExpiryPillsChange,
     },
     ref,
   ) {
@@ -324,6 +333,10 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
       { id: "expiring90", label: "Expiring ≤90d", count: expiring90 },
     ];
   }, [documents, expirySummary.expired]);
+
+  useEffect(() => {
+    onExpiryPillsChange?.(expiryPills);
+  }, [expiryPills, onExpiryPillsChange]);
 
   useEffect(() => {
     if (demo) return;
@@ -580,6 +593,19 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
   );
 
   const empty = !loading && filteredDocuments.length === 0;
+  const hasLibraryQuery = Boolean(search.trim() || categoryFilter || scopeFilter || propertyFilter || expiryFilter);
+
+  const addDocumentRow = demo ? null : (
+    <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+      <PortalListAddRow
+        label="Add document"
+        hint="Upload a file to your library"
+        icon={FileUp}
+        onClick={() => setUploadOpen(true)}
+        dataAttr="documents-list-add"
+      />
+    </div>
+  );
 
   const complianceBanner =
     !demo && (expirySummary.expired > 0 || expirySummary.within30 > 0) ? (
@@ -631,15 +657,20 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
           message="The document library needs a signed-in manager account. Sign in to upload and manage files."
           icon="document"
         />
+      ) : loading && documents.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP} role="status" aria-live="polite">
+          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading documents…</div>
+        </div>
       ) : empty ? (
-        <PortalDataTableEmpty
-          message={
-            documents.length > 0
-              ? "No documents match this expiration filter."
-              : "No documents yet. Upload a file to start your library."
-          }
-          icon="document"
-        />
+        <div className="space-y-3">
+          {hasLibraryQuery ? (
+            <PortalDataTableEmpty
+              message="No documents match your search or filters."
+              icon="document"
+            />
+          ) : null}
+          {addDocumentRow}
+        </div>
       ) : (
         <>
           {/* Mobile cards */}
@@ -743,6 +774,7 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
               </table>
             </div>
           </div>
+          {addDocumentRow}
         </>
       )}
 

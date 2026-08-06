@@ -132,6 +132,12 @@ export function ManagerDocumentsPanel({
   const [libraryScopeFilter, setLibraryScopeFilter] = useState("");
   const [libraryPropertyFilter, setLibraryPropertyFilter] = useState("");
   const [libraryExpiryFilter, setLibraryExpiryFilter] = useState("");
+  const [libraryExpiryPills, setLibraryExpiryPills] = useState([
+    { id: "", label: "All", count: 0 },
+    { id: "expired", label: "Expired", count: 0 },
+    { id: "expiring30", label: "Expiring ≤30d", count: 0 },
+    { id: "expiring90", label: "Expiring ≤90d", count: 0 },
+  ]);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -298,7 +304,6 @@ export function ManagerDocumentsPanel({
   );
 
   const resetLibraryFilters = useCallback(() => {
-    setLibrarySearch("");
     setLibraryCategoryFilter("");
     setLibraryScopeFilter("");
     setLibraryPropertyFilter("");
@@ -308,11 +313,9 @@ export function ManagerDocumentsPanel({
   const libraryFilterActiveChips = useMemo((): PortalActiveFilterChip[] => {
     if (!isLibraryTab) return [];
     const chips: PortalActiveFilterChip[] = [];
-    if (librarySearch.trim()) {
-      chips.push({ id: "search", label: `Search: ${librarySearch.trim()}`, onRemove: () => setLibrarySearch("") });
-    }
     if (libraryCategoryFilter) {
-      chips.push({ id: "category", label: `Category: ${libraryCategoryFilter}`, onRemove: () => setLibraryCategoryFilter("") });
+      const categoryLabel = libraryCategoryOptions.find((category) => category.id === libraryCategoryFilter)?.label ?? libraryCategoryFilter;
+      chips.push({ id: "category", label: `Category: ${categoryLabel}`, onRemove: () => setLibraryCategoryFilter("") });
     }
     if (libraryScopeFilter) {
       const scopeLabel = libraryScopeOptions.find((s) => s.id === libraryScopeFilter)?.label ?? libraryScopeFilter;
@@ -323,18 +326,20 @@ export function ManagerDocumentsPanel({
       chips.push({ id: "property", label: `Property: ${propLabel}`, onRemove: () => setLibraryPropertyFilter("") });
     }
     if (libraryExpiryFilter) {
-      chips.push({ id: "expiry", label: `Expiry: ${libraryExpiryFilter}`, onRemove: () => setLibraryExpiryFilter("") });
+      const expiryLabel = libraryExpiryPills.find((pill) => pill.id === libraryExpiryFilter)?.label ?? libraryExpiryFilter;
+      chips.push({ id: "expiry", label: `Expiry: ${expiryLabel}`, onRemove: () => setLibraryExpiryFilter("") });
     }
     return chips;
   }, [
     isLibraryTab,
-    librarySearch,
     libraryCategoryFilter,
     libraryScopeFilter,
     libraryPropertyFilter,
     libraryExpiryFilter,
     libraryScopeOptions,
     libraryPropertyOptions,
+    libraryCategoryOptions,
+    libraryExpiryPills,
   ]);
 
   const handleGenerateReport = useCallback(() => {
@@ -381,20 +386,18 @@ export function ManagerDocumentsPanel({
   const documentsFilterSheet = isLibraryTab ? (
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([
-        librarySearch,
         libraryCategoryFilter,
         libraryScopeFilter,
         libraryPropertyFilter,
         libraryExpiryFilter,
       ])}
       compactPanel={false}
+      filterFieldCount={3}
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
       onReset={resetLibraryFilters}
       dataAttr="documents-filter-sheet-open"
     >
       <DocumentLibraryFilterFields
-        search={librarySearch}
-        onSearchChange={setLibrarySearch}
         categoryFilter={libraryCategoryFilter}
         onCategoryFilterChange={setLibraryCategoryFilter}
         scopeFilter={libraryScopeFilter}
@@ -403,12 +406,7 @@ export function ManagerDocumentsPanel({
         onPropertyFilterChange={setLibraryPropertyFilter}
         expiryFilter={libraryExpiryFilter}
         onExpiryFilterChange={setLibraryExpiryFilter}
-        expiryPills={[
-          { id: "", label: "All", count: 0 },
-          { id: "expired", label: "Expired", count: 0 },
-          { id: "expiring30", label: "Expiring ≤30d", count: 0 },
-          { id: "expiring90", label: "Expiring ≤90d", count: 0 },
-        ]}
+        expiryPills={libraryExpiryPills}
         categoryFilterOptions={libraryCategoryOptions}
         scopeFilterOptions={libraryScopeOptions}
         propertyFilterOptions={libraryPropertyOptions}
@@ -426,7 +424,7 @@ export function ManagerDocumentsPanel({
       disabled={isDemoModeActive()}
       data-attr="document-upload-open"
     >
-      Upload
+      + Add
     </Button>
   ) : null;
 
@@ -478,6 +476,16 @@ export function ManagerDocumentsPanel({
         destinations={documentTabItems}
         activeDestinationId={tabId}
         destinationAriaLabel="Document views"
+        search={
+          isLibraryTab
+            ? {
+                value: librarySearch,
+                onChange: setLibrarySearch,
+                placeholder: "Search documents",
+                dataAttr: "document-search",
+              }
+            : undefined
+        }
         activeFilterChips={
           libraryFilterActiveChips.length > 0 ? (
             <PortalActiveFilterChips chips={libraryFilterActiveChips} />
@@ -500,6 +508,7 @@ export function ManagerDocumentsPanel({
             onPropertyFilterChange={setLibraryPropertyFilter}
             expiryFilter={libraryExpiryFilter}
             onExpiryFilterChange={setLibraryExpiryFilter}
+            onExpiryPillsChange={setLibraryExpiryPills}
           />
         ) : tabId === "templates" ? (
           <ManagerDocumentTemplatesPanel />
