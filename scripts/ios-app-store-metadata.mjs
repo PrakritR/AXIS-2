@@ -78,7 +78,7 @@ export function selectEditableIosVersion(versions) {
   );
 }
 
-async function resolveCanonicalApp(client) {
+export async function resolveCanonicalApp(client) {
   const bundleId = process.env.TESTFLIGHT_BUNDLE_ID || DEFAULT_BUNDLE_ID;
   const expectedAppId = (process.env.TESTFLIGHT_APP_ID || DEFAULT_APP_ID).trim();
   const response = await client.get(`apps?filter[bundleId]=${encodeURIComponent(bundleId)}&limit=2`);

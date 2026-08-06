@@ -22,6 +22,7 @@ on:
         options:
           - testflight
           - metadata
+          - audit
 
 concurrency:
   # Serialize uploads so two pushes can't race for the same build number.
@@ -59,6 +60,31 @@ jobs:
 
       - name: Append and verify App Store legal links
         run: node scripts/ios-app-store-metadata.mjs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+
+  app-store-audit:
+    needs: check-secrets
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'audit' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require App Store Connect credentials
+        if: ${{ needs.check-secrets.outputs.configured != 'true' }}
+        run: |
+          echo "App Store audit cannot run because ASC_KEY_ID is not configured." >&2
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Audit App Store submission and subscription catalog
+        run: node scripts/ios-app-store-audit.mjs
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
