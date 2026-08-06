@@ -55,10 +55,17 @@ import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 import { paymentReminderRecipientLabel } from "@/lib/payment-reminder-ui";
 import { buildManualPaymentInstructionLines, buildPaymentReminderBody } from "@/lib/manual-payment-instructions";
+import {
+  PortalAdaptiveActionRow,
+  type PortalAdaptiveAction,
+} from "@/components/portal/portal-adaptive-action-row";
+import { cn } from "@/lib/utils";
 
 /** Compact outline buttons for the fixed bulk-selection bar (single row on mobile). */
 const PAYMENTS_BULK_BAR_BTN =
   "h-8 min-h-0 shrink-0 whitespace-nowrap rounded-full border-border px-2.5 text-[10px] font-semibold sm:px-3 sm:text-[11px] !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
+
+const PAYMENTS_BULK_MORE_BTN = cn(PAYMENTS_BULK_BAR_BTN, "min-w-9 px-0");
 
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
@@ -987,10 +994,16 @@ export function ManagerPaymentsLedgerPanel({
     selectedRows,
   ]);
 
-  const bulkSelectionActions =
-    selectedIds.size > 0 ? (
-      <>
-        {selectedRows.some(isMarkableAsPaid) ? (
+  const bulkSelectionActions = useMemo(() => {
+    if (selectedIds.size === 0) return null;
+
+    const actions: PortalAdaptiveAction[] = [];
+
+    if (selectedRows.some(isMarkableAsPaid)) {
+      actions.push({
+        id: "mark-paid",
+        keepPriority: 5,
+        node: (
           <Button
             type="button"
             variant="outline"
@@ -1000,8 +1013,27 @@ export function ManagerPaymentsLedgerPanel({
           >
             Mark as paid
           </Button>
-        ) : null}
-        {selectedRows.some((row) => !isPaidRow(row)) ? (
+        ),
+        menuItem: (
+          <DropdownMenuItem data-attr="payments-mark-selected-paid" onSelect={markSelectedAsPaid}>
+            Mark as paid
+          </DropdownMenuItem>
+        ),
+      });
+    }
+
+    if (selectedRows.some((row) => !isPaidRow(row))) {
+      const sendReminder = () => {
+        if (remindableSelectedRows.length === 1) {
+          openReminderPreview(remindableSelectedRows[0]!);
+          return;
+        }
+        openBulkReminderPreview();
+      };
+      actions.push({
+        id: "send-reminder",
+        keepPriority: 4,
+        node: (
           <Button
             type="button"
             variant="outline"
@@ -1013,56 +1045,147 @@ export function ManagerPaymentsLedgerPanel({
                 ? "Select at least one unpaid charge."
                 : undefined
             }
-            onClick={() => {
-              if (remindableSelectedRows.length === 1) {
-                openReminderPreview(remindableSelectedRows[0]!);
-                return;
-              }
-              openBulkReminderPreview();
-            }}
+            onClick={sendReminder}
           >
             {sendingReminderId ? "Sending…" : "Send reminder"}
           </Button>
-        ) : null}
-        {activeBucket === "paid" && selectedRows.length > 0 ? (
-          <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={moveSelectedToPending}>
+        ),
+        menuItem: (
+          <DropdownMenuItem
+            data-attr="payments-send-reminder"
+            disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
+            onSelect={sendReminder}
+          >
+            {sendingReminderId ? "Sending…" : "Send reminder"}
+          </DropdownMenuItem>
+        ),
+      });
+    }
+
+    if (activeBucket === "paid" && selectedRows.length > 0) {
+      actions.push({
+        id: "move-pending",
+        keepPriority: 3,
+        node: (
+          <Button
+            type="button"
+            variant="outline"
+            className={PAYMENTS_BULK_BAR_BTN}
+            onClick={moveSelectedToPending}
+          >
             Move to pending
           </Button>
-        ) : null}
-        {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
-          editingRowId === singleSelectedRow.id ? (
-            <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={saveBulkEditAmount}>
+        ),
+        menuItem: (
+          <DropdownMenuItem onSelect={moveSelectedToPending}>Move to pending</DropdownMenuItem>
+        ),
+      });
+    }
+
+    if (singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow)) {
+      if (editingRowId === singleSelectedRow.id) {
+        actions.push({
+          id: "save-edit",
+          keepPriority: 3,
+          node: (
+            <Button
+              type="button"
+              variant="outline"
+              className={PAYMENTS_BULK_BAR_BTN}
+              onClick={saveBulkEditAmount}
+            >
               Save
             </Button>
-          ) : (
-            <>
+          ),
+          menuItem: (
+            <DropdownMenuItem onSelect={saveBulkEditAmount}>Save</DropdownMenuItem>
+          ),
+        });
+      } else {
+        const openEdit = () => {
+          startEdit(singleSelectedRow);
+          openPaymentDetail(singleSelectedRow);
+        };
+        const openSchedule = () => setChargeRemindersRow(singleSelectedRow);
+        actions.push(
+          {
+            id: "edit",
+            keepPriority: 2,
+            node: (
               <Button
                 type="button"
                 variant="outline"
                 className={PAYMENTS_BULK_BAR_BTN}
-                onClick={() => {
-                  startEdit(singleSelectedRow);
-                  openPaymentDetail(singleSelectedRow);
-                }}
+                onClick={openEdit}
               >
                 Edit
               </Button>
+            ),
+            menuItem: <DropdownMenuItem onSelect={openEdit}>Edit</DropdownMenuItem>,
+          },
+          {
+            id: "schedule-reminders",
+            keepPriority: 2,
+            node: (
               <Button
                 type="button"
                 variant="outline"
                 className={PAYMENTS_BULK_BAR_BTN}
-                onClick={() => setChargeRemindersRow(singleSelectedRow)}
+                onClick={openSchedule}
               >
                 Schedule reminders
               </Button>
-            </>
-          )
-        ) : null}
-        <Button type="button" variant="outline" className={PAYMENTS_BULK_BAR_BTN} onClick={deleteSelected}>
+            ),
+            menuItem: (
+              <DropdownMenuItem onSelect={openSchedule}>Schedule reminders</DropdownMenuItem>
+            ),
+          },
+        );
+      }
+    }
+
+    actions.push({
+      id: "delete",
+      keepPriority: 0,
+      node: (
+        <Button
+          type="button"
+          variant="outline"
+          className={PAYMENTS_BULK_BAR_BTN}
+          onClick={deleteSelected}
+        >
           Delete
         </Button>
-      </>
-    ) : null;
+      ),
+      menuItem: <DropdownMenuItem onSelect={deleteSelected}>Delete</DropdownMenuItem>,
+    });
+
+    return (
+      <PortalAdaptiveActionRow
+        actions={actions}
+        moreAriaLabel="More bulk actions"
+        moreDataAttr="payments-bulk-more-actions"
+        moreButtonClassName={PAYMENTS_BULK_MORE_BTN}
+        gapPx={4}
+      />
+    );
+  }, [
+    activeBucket,
+    deleteSelected,
+    editingRowId,
+    markSelectedAsPaid,
+    moveSelectedToPending,
+    openBulkReminderPreview,
+    openPaymentDetail,
+    openReminderPreview,
+    remindableSelectedRows,
+    saveBulkEditAmount,
+    selectedIds.size,
+    selectedRows,
+    sendingReminderId,
+    singleSelectedRow,
+    startEdit,
+  ]);
 
   // Assigned in a LAYOUT effect, not during render: a render-phase ref write is unsafe under
   // concurrent rendering. It has to be `useLayoutEffect` rather than `useEffect` because the

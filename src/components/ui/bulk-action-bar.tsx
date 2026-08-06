@@ -26,17 +26,6 @@ export function BulkActionBar({
 
   if (count <= 0) return null;
 
-  const actionButtons = (
-    <div
-      className={cn(
-        "flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto",
-        "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-      )}
-    >
-      {children}
-    </div>
-  );
-
   return (
     <div
       className={cn(
@@ -52,17 +41,15 @@ export function BulkActionBar({
       aria-label={count === 1 ? "Bulk actions, 1 item selected" : `Bulk actions, ${count} items selected`}
     >
       {variant === "payments" ? (
-        <div className="flex w-full min-w-0 items-center gap-2 px-2.5 max-md:px-0 sm:px-4 lg:px-5">
-          {actionButtons}
+        <div className="flex w-full min-w-0 items-center overflow-hidden px-2.5 max-md:px-0 sm:px-4 lg:px-5" data-portal-action-slot="">
+          <div className="relative min-w-0 w-full flex-1 overflow-hidden">{children}</div>
         </div>
       ) : (
-        <div className="mx-auto flex max-w-5xl flex-nowrap items-center gap-5 sm:gap-6">
+        <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-nowrap items-center gap-5 sm:gap-6">
           <p className="shrink-0 text-[10px] font-semibold tabular-nums text-foreground sm:text-[11px]">
             {count} selected
           </p>
-          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {children}
-          </div>
+          <div className="relative min-w-0 flex-1">{children}</div>
         </div>
       )}
     </div>

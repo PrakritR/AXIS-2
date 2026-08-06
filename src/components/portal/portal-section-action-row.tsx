@@ -54,7 +54,13 @@ export function PortalPageTitleBand({
         </PortalSectionActionRow>
       </div>
     ) : (
-      <PortalSectionActionRow variant="header" className="shrink-0 gap-2 sm:gap-2">
+      <PortalSectionActionRow
+        variant="header"
+        className={cn(
+          "min-w-0 w-full shrink justify-start gap-0.5 sm:gap-0.5",
+          hideTitleOnMobileNav && "max-lg:flex-1 lg:min-w-0 lg:flex-1",
+        )}
+      >
         {filter}
         {actions}
       </PortalSectionActionRow>
@@ -65,7 +71,7 @@ export function PortalPageTitleBand({
     <div
       className={cn(
         "flex w-full min-w-0 items-center gap-1.5 sm:gap-2",
-        hideTitleOnMobileNav ? "max-lg:min-w-0" : "flex-nowrap justify-between",
+        hideTitleOnMobileNav ? "max-lg:min-w-0 lg:justify-between" : "flex-nowrap justify-between",
         className,
       )}
       data-slot="portal-page-title-band"
@@ -92,15 +98,11 @@ export function PortalPageTitleBand({
       {headerActions ? (
         <div
           className={cn(
-            "flex min-w-0 shrink-0 items-center",
-            hideTitleOnMobileNav &&
-              cn(
-                "max-lg:min-w-0 max-lg:flex-1 max-lg:justify-end",
-                PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-                "max-lg:scroll-px-2.5 max-lg:overscroll-x-contain",
-              ),
+            "flex min-w-0 items-center overflow-hidden",
+            hideTitleOnMobileNav && "max-lg:min-w-0 max-lg:flex-1 max-lg:justify-start lg:min-w-0 lg:flex-1 lg:justify-start",
+            !hideTitleOnMobileNav && "shrink-0",
           )}
-          {...(hideTitleOnMobileNav ? { [HORIZONTAL_SCROLL_ATTR]: "" } : {})}
+          data-portal-action-slot=""
         >
           {headerActions}
         </div>
@@ -228,7 +230,7 @@ export function PortalSectionActionRow({
     return (
       <div
         className={cn(
-          "flex shrink-0 flex-nowrap items-center gap-2 sm:gap-3",
+          "flex min-w-0 flex-nowrap items-center gap-2 sm:gap-3",
           "md:[&_button]:box-border md:[&_button]:h-10 md:[&_button]:min-h-0",
           "[&_button]:w-auto [&_button]:max-w-none [&_button]:shrink-0 [&_a]:w-auto",
           "max-lg:[&_button]:!w-auto",

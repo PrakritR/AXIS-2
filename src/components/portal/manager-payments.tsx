@@ -14,7 +14,8 @@ import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
@@ -182,7 +183,7 @@ function PaymentsFilterSheet({
       activeCount={activeCount}
       compactPanel
       filterFieldCount={2}
-      className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
+      className="min-w-0 w-auto shrink-0 max-md:[&_button]:px-2.5 md:!w-auto md:!max-w-none"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
       open={open}
@@ -582,7 +583,7 @@ export function ManagerPayments({
     <Button
       type="button"
       variant="primary"
-      className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+      className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
       onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
       data-attr="payments-add"
     >
@@ -590,43 +591,16 @@ export function ManagerPayments({
     </Button>
   );
 
-  const paymentsPinnedMenuItems = [
-    direction === "incoming" ? (
-      <DropdownMenuItem
-        key="reminders"
-        data-attr="payments-reminder-settings-menu"
-        onSelect={() => setReminderSettingsOpen(true)}
-      >
-        Reminders
-      </DropdownMenuItem>
-    ) : null,
-    direction === "incoming" ? (
-      <DropdownMenuItem
-        key="check"
-        data-attr="manager-check-manual-payments-menu"
-        disabled={checkingManualPayments}
-        onSelect={runCheckManualPayments}
-      >
-        {checkingManualPayments ? "Checking payments…" : "Check payments"}
-      </DropdownMenuItem>
-    ) : null,
-    <DropdownMenuItem
-      key="setup"
-      data-attr="payments-setup-menu"
-      onSelect={() => setPaymentSetupOpen(true)}
-    >
-      Payment setup
-    </DropdownMenuItem>,
-  ].filter(Boolean);
-
   const paymentsHeaderActions = (
     <PortalAdaptiveHeaderActions
+      className="w-full min-w-0"
       moreDataAttr="payments-more-actions"
       moreAriaLabel="More payment actions"
       actions={[
         {
           id: "filter",
-          keepPriority: 1,
+          alwaysVisible: true,
+          pinEdge: "start",
           node: paymentsFilterControl,
           menuItem: (
             <DropdownMenuItem
@@ -637,9 +611,85 @@ export function ManagerPayments({
             </DropdownMenuItem>
           ),
         },
+        ...(direction === "incoming"
+          ? [
+              {
+                id: "reminders",
+                keepPriority: 3,
+                node: (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_HEADER_ACTION_BTN}
+                    data-attr="payments-reminder-settings"
+                    onClick={() => setReminderSettingsOpen(true)}
+                  >
+                    Reminders
+                  </Button>
+                ),
+                menuItem: (
+                  <DropdownMenuItem
+                    data-attr="payments-reminder-settings-menu"
+                    onSelect={() => setReminderSettingsOpen(true)}
+                  >
+                    Reminders
+                  </DropdownMenuItem>
+                ),
+              },
+              {
+                id: "check",
+                keepPriority: 2,
+                node: (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_HEADER_ACTION_BTN}
+                    data-attr="manager-check-manual-payments"
+                    disabled={checkingManualPayments}
+                    onClick={runCheckManualPayments}
+                  >
+                    {checkingManualPayments ? "Checking…" : "Check payments"}
+                  </Button>
+                ),
+                menuItem: (
+                  <DropdownMenuItem
+                    data-attr="manager-check-manual-payments-menu"
+                    disabled={checkingManualPayments}
+                    onSelect={runCheckManualPayments}
+                  >
+                    {checkingManualPayments ? "Checking payments…" : "Check payments"}
+                  </DropdownMenuItem>
+                ),
+              },
+            ]
+          : []),
+        {
+          id: "setup",
+          keepPriority: 1,
+          node: (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_HEADER_ACTION_BTN}
+              data-attr="payments-setup"
+              onClick={() => setPaymentSetupOpen(true)}
+            >
+              Payment setup
+            </Button>
+          ),
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="payments-setup-menu"
+              onSelect={() => setPaymentSetupOpen(true)}
+            >
+              Payment setup
+            </DropdownMenuItem>
+          ),
+        },
         {
           id: "add",
-          keepPriority: 2,
+          alwaysVisible: true,
+          pinEdge: "end",
           node: paymentsAddButton,
           menuItem: (
             <DropdownMenuItem
@@ -651,7 +701,6 @@ export function ManagerPayments({
           ),
         },
       ]}
-      pinnedMenuItems={paymentsPinnedMenuItems}
     />
   );
 
