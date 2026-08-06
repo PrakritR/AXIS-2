@@ -1,0 +1,146 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
+import { describeGroupBadge, type ApplicationGroup } from "@/lib/rental-application/application-groups";
+
+export function ApplicationHouseholdCluster({
+  header,
+  children,
+}: {
+  header?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="overflow-hidden rounded-2xl border border-border/80 bg-accent/10"
+      data-attr="application-household-cluster"
+    >
+      {header ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">{header}</div>
+      ) : null}
+      <div className="divide-y divide-border/50">{children}</div>
+    </div>
+  );
+}
+
+export function ApplicationNestedListRow({
+  children,
+  nested = true,
+}: {
+  children: ReactNode;
+  nested?: boolean;
+}) {
+  return (
+    <div className={nested ? "border-l-2 border-primary/25 bg-background/60 pl-1" : undefined} data-attr="application-nested-list-row">
+      {children}
+    </div>
+  );
+}
+
+export function ApplicationCosignerListRow({
+  name,
+  subtitle,
+  preview,
+  onOpen,
+}: {
+  name: string;
+  subtitle?: string;
+  preview?: string;
+  onOpen: () => void;
+}) {
+  return (
+    <ApplicationNestedListRow>
+      <button
+        type="button"
+        onClick={onOpen}
+        data-attr="application-cosigner-list-row"
+        className="portal-inbox-row flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-foreground/[0.03] max-md:px-2.5"
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+            <Badge tone="info">Co-signer</Badge>
+          </div>
+          {subtitle ? <span className="truncate text-xs text-muted">{subtitle}</span> : null}
+          {preview ? <span className="truncate text-xs text-muted">{preview}</span> : null}
+        </div>
+        <span className="shrink-0 text-muted" aria-hidden>
+          ›
+        </span>
+      </button>
+    </ApplicationNestedListRow>
+  );
+}
+
+export function householdClusterHeader(group: ApplicationGroup | null) {
+  if (!group) return null;
+  const badge = describeGroupBadge(group);
+  return (
+    <>
+      <span className="text-xs font-medium text-muted">Household application</span>
+      <Badge tone={badge.tone} title={badge.title}>
+        {badge.label}
+      </Badge>
+    </>
+  );
+}
+
+export function ApplicationCosignerSection({
+  submissions,
+  primaryApplicationAxisId,
+  onOpenCosigner,
+}: {
+  submissions: CosignerSubmission[];
+  primaryApplicationAxisId: string;
+  onOpenCosigner?: (index: number) => void;
+}) {
+  if (submissions.length === 0) return null;
+
+  return (
+    <PortalCollapsibleSection
+      title="Co-signer application"
+      defaultExpanded
+      surfaceMuted={false}
+      className="mt-4"
+      contentClassName="p-4 pt-0"
+      toggleDataAttr="application-cosigner-toggle"
+      headerActions={<Badge tone="info">{submissions.length === 1 ? "1 co-signer" : `${submissions.length} co-signers`}</Badge>}
+    >
+      <ul className="divide-y divide-[var(--border)] rounded-2xl border border-border">
+        {submissions.map((sub, index) => (
+          <li key={`${sub.email}-${sub.submittedAt}-${index}`}>
+            {onOpenCosigner ? (
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-foreground/[0.03]"
+                data-attr="application-cosigner-roster-row"
+                onClick={() => onOpenCosigner(index)}
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[13px] font-medium text-foreground">{sub.fullName || "Co-signer"}</span>
+                  {sub.email ? <span className="truncate text-[11px] text-muted">{sub.email}</span> : null}
+                </span>
+                <Badge tone="confirmed">Submitted</Badge>
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[13px] font-medium text-foreground">{sub.fullName || "Co-signer"}</span>
+                  {sub.email ? <span className="truncate text-[11px] text-muted">{sub.email}</span> : null}
+                </span>
+                <Badge tone="confirmed">Submitted</Badge>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[11px] text-muted">
+        Linked to primary application{" "}
+        <span className="font-mono text-foreground">{primaryApplicationAxisId.trim()}</span>
+      </p>
+    </PortalCollapsibleSection>
+  );
+}

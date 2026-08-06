@@ -77,28 +77,32 @@ export function ManagerCosignerReadonlyReview({
         <Row k="Email" v={displayOrDash(sub.email)} />
         <Row k="Phone" v={displayOrDash(sub.phone)} />
         <Row k="Date of birth" v={displayOrDash(sub.dob)} />
-        <Row k="ID number" v={displayOrDash(sub.dlNumber)} />
+        {sub.dlNumber.trim() ? <Row k="ID number" v={displayOrDash(sub.dlNumber)} /> : null}
         <Row k="SSN" v={maskSsn(sub.ssn)} />
       </ReviewSection>
 
-      <ReviewSection title="Address">
-        <Row
-          k="Current address"
-          v={displayOrDash([sub.address, [sub.city, sub.state, sub.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "))}
-        />
-      </ReviewSection>
+      {[sub.address, sub.city, sub.state, sub.zip].some((v) => (v ?? "").trim()) ? (
+        <ReviewSection title="Address">
+          <Row
+            k="Current address"
+            v={displayOrDash([sub.address, [sub.city, sub.state, sub.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "))}
+          />
+        </ReviewSection>
+      ) : null}
 
       <ReviewSection title="Employment">
         <Row k="Not employed" v={sub.notEmployed ? "Yes" : "No"} />
         {!sub.notEmployed ? (
           <>
-            <Row k="Employer" v={displayOrDash(sub.employerName)} />
-            <Row k="Employer address" v={displayOrDash(sub.employerAddress)} />
-            <Row k="Supervisor" v={displayOrDash([sub.supervisorName, sub.supervisorPhone].filter(Boolean).join(" · "))} />
-            <Row k="Job title" v={displayOrDash(sub.jobTitle)} />
-            <Row k="Employment start" v={displayOrDash(sub.employmentStart)} />
-            <Row k="Monthly income" v={displayOrDash(sub.monthlyIncome)} />
-            <Row k="Annual income" v={displayOrDash(sub.annualIncome)} />
+            {sub.employerName.trim() ? <Row k="Employer" v={sub.employerName} /> : null}
+            {sub.jobTitle.trim() ? <Row k="Job title" v={sub.jobTitle} /> : null}
+            {sub.employerAddress.trim() ? <Row k="Employer address" v={sub.employerAddress} /> : null}
+            {[sub.supervisorName, sub.supervisorPhone].some((v) => v.trim()) ? (
+              <Row k="Supervisor" v={displayOrDash([sub.supervisorName, sub.supervisorPhone].filter(Boolean).join(" · "))} />
+            ) : null}
+            {sub.employmentStart.trim() ? <Row k="Employment start" v={sub.employmentStart} /> : null}
+            {sub.monthlyIncome.trim() ? <Row k="Monthly income" v={sub.monthlyIncome} /> : null}
+            {sub.annualIncome.trim() ? <Row k="Annual income" v={sub.annualIncome} /> : null}
           </>
         ) : null}
         {sub.otherIncome.trim() ? <Row k="Other income" v={sub.otherIncome} /> : null}

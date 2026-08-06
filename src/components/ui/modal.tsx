@@ -107,6 +107,8 @@ export type ModalShellProps = {
   ariaDescribedBy?: string;
   ariaBusy?: boolean;
   dataAttr?: string;
+  /** When true, outside click / Escape / programmatic dismiss are ignored (nested child modal open). */
+  dismissBlocked?: boolean;
 };
 
 /** Radix Dialog (desktop) + Vaul drawer (mobile) shell for custom modal layouts. */
@@ -130,6 +132,7 @@ export function ModalShell({
   ariaDescribedBy,
   ariaBusy,
   dataAttr,
+  dismissBlocked = false,
 }: ModalShellProps) {
   const isClient = useIsClient();
   const autoPresentation = useModalPresentation();
@@ -145,7 +148,16 @@ export function ModalShell({
   if (!open || !isClient) return null;
 
   const handleOpenChange = (next: boolean) => {
+    if (!next && dismissBlocked) return;
     if (!next) onClose();
+  };
+
+  const blockDismissInteraction = (event: Event) => {
+    if (dismissBlocked) {
+      event.preventDefault();
+      return;
+    }
+    allowPortaledFieldSelectInteraction(event);
   };
 
   const stackClass = stackClassName ?? DEFAULT_STACK_CLASS;
@@ -177,8 +189,9 @@ export function ModalShell({
           data-slot="modal-vaul-drawer"
           style={panelStyle}
           className={cn(PORTAL_MOBILE_DRAWER_SHELL_CLASS, panelClassName, PORTAL_MOBILE_DRAWER_EDGE_CLASS)}
-            onPointerDownOutside={allowPortaledFieldSelectInteraction}
-            onInteractOutside={allowPortaledFieldSelectInteraction}
+            onPointerDownOutside={blockDismissInteraction}
+            onInteractOutside={blockDismissInteraction}
+            onEscapeKeyDown={dismissBlocked ? (event) => event.preventDefault() : undefined}
             {...contentA11y}
           >
             {showDrawerHandle ? (
@@ -209,8 +222,9 @@ export function ModalShell({
               data-slot="modal-radix-dialog"
               style={panelStyle}
               className={panelClassName}
-              onPointerDownOutside={allowPortaledFieldSelectInteraction}
-              onInteractOutside={allowPortaledFieldSelectInteraction}
+              onPointerDownOutside={blockDismissInteraction}
+              onInteractOutside={blockDismissInteraction}
+              onEscapeKeyDown={dismissBlocked ? (event) => event.preventDefault() : undefined}
               {...contentA11y}
             >
               {children}
@@ -393,7 +407,10 @@ export function Modal({
   fullPage = false,
   /** When false, modal body does not scroll — children own internal overflow. */
   scrollableContent = true,
+  /** Force Radix dialog or Vaul drawer instead of the viewport breakpoint default. */
+  presentation: presentationProp = "auto",
   dataAttr,
+  dismissBlocked = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -415,9 +432,13 @@ export function Modal({
   fullScreenMobile?: boolean;
   fullPage?: boolean;
   scrollableContent?: boolean;
+  presentation?: "auto" | "drawer" | "dialog";
   dataAttr?: string;
+  /** When true, outside click / Escape / programmatic dismiss are ignored (nested child modal open). */
+  dismissBlocked?: boolean;
 }) {
-  const presentation = useModalPresentation();
+  const autoPresentation = useModalPresentation();
+  const presentation = presentationProp === "auto" ? autoPresentation : presentationProp;
   const portalAssistant = usePortalAssistantConfig();
   const showAssistantStrip = assistantStrip !== false && portalAssistant != null;
   const assistantHint =
@@ -464,6 +485,7 @@ export function Modal({
         open={open}
         onClose={onClose}
         presentation="drawer"
+        dismissBlocked={dismissBlocked}
         showDrawerHandle={!useFullViewport}
         ariaDescribedBy={description ? "modal-description" : undefined}
         dataAttr={dataAttr}
@@ -494,6 +516,7 @@ export function Modal({
       open={open}
       onClose={onClose}
       presentation="dialog"
+      dismissBlocked={dismissBlocked}
       stackClassName={fullPage ? MODAL_FULL_PAGE_STACK_CLASS : stackClassName}
       centerClassName={fullPage ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
       ariaDescribedBy={description ? "modal-description" : undefined}

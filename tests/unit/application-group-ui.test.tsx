@@ -248,8 +248,10 @@ describe("group application — manager reconciliation", () => {
     ];
 
     const { container, rerender: rerenderEdge } = render(<ManagerApplications />);
-    expect((await screen.findAllByText("Group 2 · organizer not shown")).length).toBe(2);
-    expect(screen.getAllByText("Group 3 · 2 declared").length).toBe(3);
+    expect(await screen.findByText("Group 2 · organizer not shown")).toBeTruthy();
+    expect(screen.getByText("Casey Lin")).toBeTruthy();
+    expect(screen.getByText("Devon Marsh")).toBeTruthy();
+    expect(screen.getAllByText("Group 3 · 2 declared").length).toBe(1);
     dumpHtml("manager-edge-rows", container.innerHTML);
 
     rerenderEdge(<ManagerApplications bucket="pending" applicationId="AXIS-300" />);

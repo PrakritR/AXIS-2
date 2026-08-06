@@ -4,7 +4,7 @@
 // local until an explicit Save; Cancel discards them; closing with pending changes prompts.
 // These tests drive the real modal and assert the persist path is only ever hit on Save.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 
@@ -37,7 +37,14 @@ function renderEditor() {
   return { onSaved, onClose };
 }
 
+function expandFirstQuestionSection() {
+  const toggle = document.querySelector('[data-attr^="application-section-toggle-"]') as HTMLElement | null;
+  expect(toggle).not.toBeNull();
+  fireEvent.click(toggle!);
+}
+
 function removeFirstQuestion() {
+  expandFirstQuestionSection();
   const removeBtn = document.querySelector('[data-attr="application-question-remove"]') as HTMLElement | null;
   expect(removeBtn).not.toBeNull();
   fireEvent.click(removeBtn!);
@@ -58,9 +65,6 @@ describe("bulk application editor — save gate (round 31)", () => {
     const save = document.querySelector('[data-attr="application-questions-save"]') as HTMLButtonElement;
     expect(save.disabled).toBe(true);
 
-    // Expand a section so its per-question Remove controls are in the DOM, then remove one.
-    const sectionToggle = document.querySelector('[data-attr^="application-section-toggle-"]') as HTMLElement;
-    fireEvent.click(sectionToggle);
     removeFirstQuestion();
 
     // The edit changed nothing on disk.
@@ -74,7 +78,6 @@ describe("bulk application editor — save gate (round 31)", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { onSaved, onClose } = renderEditor();
 
-    fireEvent.click(document.querySelector('[data-attr^="application-section-toggle-"]') as HTMLElement);
     removeFirstQuestion();
     expect(persistBulk).not.toHaveBeenCalled();
 
@@ -90,7 +93,6 @@ describe("bulk application editor — save gate (round 31)", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { onSaved, onClose } = renderEditor();
 
-    fireEvent.click(document.querySelector('[data-attr^="application-section-toggle-"]') as HTMLElement);
     removeFirstQuestion();
 
     // Footer Cancel was removed — dismiss via the header × (same save gate).
@@ -103,5 +105,22 @@ describe("bulk application editor — save gate (round 31)", () => {
     expect(onSaved).not.toHaveBeenCalled();
     // Radix/Vaul Close + the button onClick both route through requestClose.
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closing Add question only dismisses the child modal, not the application editor", () => {
+    const { onClose } = renderEditor();
+
+    const addBtn = document.querySelector('[data-attr="application-questions-add"]') as HTMLElement | null;
+    expect(addBtn).not.toBeNull();
+    fireEvent.click(addBtn!);
+
+    expect(screen.getByRole("heading", { name: "Add question" })).toBeTruthy();
+
+    const closeButtons = Array.from(document.querySelectorAll('button[aria-label="Close"]'));
+    expect(closeButtons.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(closeButtons[closeButtons.length - 1]!);
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-attr="application-questions-save"]')).toBeTruthy();
   });
 });

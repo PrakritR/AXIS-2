@@ -152,8 +152,8 @@ const CATALOG_BY_KEY = new Map(
   STANDARD_APPLICATION_FIELD_CATALOG.map((def) => [def.standardKey, def] as const),
 );
 
-/** The two application products. Mirrors `RentalWizardFormState["rentalType"]`. */
-export type ApplicationFormVariant = "standard" | "short_term";
+/** The application products. Mirrors stay-type plus the standalone co-signer form. */
+export type ApplicationFormVariant = "standard" | "short_term" | "cosigner";
 
 /**
  * Sections and individual built-in questions PropLane omits from the SHORT-TERM
@@ -186,6 +186,29 @@ export const SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
       SHORT_TERM_OMITTED_STANDARD_LABELS.has(`${def.section}:${def.label}`),
   ).map((def) => def.standardKey);
 
+const COSIGNER_OMITTED_SECTIONS = new Set<RentalApplicationSectionId>([
+  "property",
+  "current_address",
+  "previous_address",
+  "references",
+]);
+const COSIGNER_OMITTED_STANDARD_LABELS = new Set<string>([
+  "personal:Driver's license / ID",
+  "personal:Driver's license / ID — front photo",
+  "personal:Driver's license / ID — back photo",
+  "additional:Number of occupants",
+  "additional:Pets",
+  "additional:Eviction history",
+]);
+
+/** Built-in question keys disabled by default in an unconfigured co-signer application. */
+export const COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
+  STANDARD_APPLICATION_FIELD_CATALOG.filter(
+    (def) =>
+      COSIGNER_OMITTED_SECTIONS.has(def.section) ||
+      COSIGNER_OMITTED_STANDARD_LABELS.has(`${def.section}:${def.label}`),
+  ).map((def) => def.standardKey);
+
 /** The application-config triplet the catalog + validator functions read, for one form variant. */
 export type ApplicationConfigSlice = {
   disabledStandardApplicationKeys: string[];
@@ -200,6 +223,9 @@ type VariantConfigSource = {
   shortTermDisabledStandardApplicationKeys?: unknown;
   shortTermCustomApplicationFields?: unknown;
   shortTermApplicationConfigMode?: unknown;
+  cosignerDisabledStandardApplicationKeys?: unknown;
+  cosignerCustomApplicationFields?: unknown;
+  cosignerApplicationConfigMode?: unknown;
 };
 
 function asStringArray(value: unknown): string[] {
@@ -229,6 +255,20 @@ export function applicationConfigForVariant(
   sub: VariantConfigSource | null | undefined,
   variant: ApplicationFormVariant,
 ): ApplicationConfigSlice {
+  if (variant === "cosigner") {
+    if (sub?.cosignerApplicationConfigMode === "custom") {
+      return {
+        disabledStandardApplicationKeys: asStringArray(sub.cosignerDisabledStandardApplicationKeys),
+        customApplicationFields: asCustomFields(sub.cosignerCustomApplicationFields),
+        applicationConfigMode: "custom",
+      };
+    }
+    return {
+      disabledStandardApplicationKeys: [...COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS],
+      customApplicationFields: asCustomFields(sub?.cosignerCustomApplicationFields),
+      applicationConfigMode: "standard",
+    };
+  }
   if (variant !== "short_term") {
     return {
       disabledStandardApplicationKeys: asStringArray(sub?.disabledStandardApplicationKeys),
@@ -265,7 +305,17 @@ export function mergeApplicationConfigForVariant(
   shortTermDisabledStandardApplicationKeys?: string[];
   shortTermCustomApplicationFields?: ManagerCustomApplicationField[];
   shortTermApplicationConfigMode?: "standard" | "custom";
+  cosignerDisabledStandardApplicationKeys?: string[];
+  cosignerCustomApplicationFields?: ManagerCustomApplicationField[];
+  cosignerApplicationConfigMode?: "standard" | "custom";
 } {
+  if (variant === "cosigner") {
+    return {
+      cosignerDisabledStandardApplicationKeys: slice.disabledStandardApplicationKeys,
+      cosignerCustomApplicationFields: slice.customApplicationFields,
+      cosignerApplicationConfigMode: slice.applicationConfigMode,
+    };
+  }
   if (variant !== "short_term") {
     return {
       disabledStandardApplicationKeys: slice.disabledStandardApplicationKeys,
@@ -385,6 +435,17 @@ export function restoreDefaultApplicationConfig(): {
     applicationConfigMode: "standard",
   };
 }
+
+/** Custom application — all built-in questions on, no extra custom rows yet. */
+export function customApplicationConfigWithAllStandardQuestions(): ApplicationConfigSlice {
+  return {
+    disabledStandardApplicationKeys: [],
+    customApplicationFields: [],
+    applicationConfigMode: "custom",
+  };
+}
+
+export const STANDARD_APPLICATION_FIELD_COUNT = STANDARD_APPLICATION_FIELD_CATALOG.length;
 
 export function applicationFieldCatalogDef(standardKey: string): StandardApplicationFieldDef | undefined {
   return CATALOG_BY_KEY.get(standardKey);
