@@ -6,6 +6,7 @@ import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/aut
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { track } from "@/lib/analytics/track-client";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
@@ -71,6 +72,8 @@ export function ManagerEntryPlanChooser() {
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("pro");
   const [planTiers, setPlanTiers] = useState(MANAGER_PLAN_TIERS);
   const [busy, setBusy] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const guardRanRef = useRef(false);
 
@@ -129,7 +132,32 @@ export function ManagerEntryPlanChooser() {
   };
 
   const choosePaid = async (tier: "pro" | "business") => {
-    track("subscription_checkout_started", { tier, billing, entry: "portal_entry_chooser" });
+    const promo = promoCode.trim();
+    track("subscription_checkout_started", {
+      tier,
+      billing,
+      entry: "portal_entry_chooser",
+      ...(promo ? { waiver_attempt: true } : {}),
+    });
+    if (promo) {
+      const promoRes = await fetch("/api/stripe/subscription/update-tier", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, billing, promo }),
+      });
+      const promoBody = (await promoRes.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      if (!promoRes.ok) {
+        setPromoError(promoBody.error ?? "Could not apply that promo code.");
+        return;
+      }
+      showToast(promoBody.message ?? "Promo code applied. No payment is required.");
+      window.location.replace(managerPortalEntryPath());
+      return;
+    }
     const res = await fetch("/api/manager/pricing-oauth-continue", {
       method: "POST",
       credentials: "include",
@@ -246,6 +274,37 @@ export function ManagerEntryPlanChooser() {
             : `${selected.label} · card required · first charge after your ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial · the dedicated phone number & texting start with your paid subscription, not during the trial`}
         </p>
 
+        {selectedTierId !== "free" ? (
+          <div className="auth-plan-form-block mt-4">
+            <label htmlFor="manager-entry-promo-code" className="text-sm font-semibold text-foreground">
+              Promo code <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <Input
+              id="manager-entry-promo-code"
+              value={promoCode}
+              onChange={(event) => {
+                setPromoCode(event.target.value);
+                if (promoError) setPromoError(null);
+              }}
+              placeholder="Enter code"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy}
+              className="mt-2 uppercase placeholder:normal-case"
+              data-attr="manager-entry-promo-code"
+            />
+            {promoError ? (
+              <p className="mt-2 text-xs font-medium text-[var(--status-overdue-fg)]" role="alert">
+                {promoError}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs leading-5 text-muted">
+                Valid 100% discount codes activate the plan without a card.
+              </p>
+            )}
+          </div>
+        ) : null}
+
         <div className="auth-plan-form-block mt-5 sm:mt-6">
           <Button
             type="button"
@@ -254,7 +313,13 @@ export function ManagerEntryPlanChooser() {
             disabled={busy || sub == null}
             onClick={() => continueWithSelection()}
           >
-            {busy ? "One moment…" : `Continue with ${selected.label}`}
+            {busy
+              ? "One moment…"
+              : selectedTierId === "free"
+                ? "Continue with Free"
+                : promoCode.trim()
+                  ? "Apply code and continue"
+                  : `Start ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial`}
           </Button>
         </div>
 

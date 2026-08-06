@@ -72,6 +72,36 @@ export function tourAvailabilityReadErrorMessage(status: number): string {
   return "We couldn't load this property's tour windows just now. Check your connection and try again.";
 }
 
+type TourLinkFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Pick<Response, "ok">>;
+
+/** Link newly-booked inquiries immediately when the prospect already has an account. */
+export async function linkBookedToursToSignedInResident(
+  inquiryIds: string[],
+  request: TourLinkFetch = fetch,
+): Promise<boolean> {
+  const ids = [...new Set(inquiryIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return true;
+  const results = await Promise.all(
+    ids.map(async (tourInquiryId) => {
+      try {
+        const response = await request("/api/auth/link-tour-inquiry", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tourInquiryId }),
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return results.every(Boolean);
+}
+
 /** Sentinel when the prospect wants a property tour but has not picked a room yet. */
 export const TOUR_ROOM_UNDECIDED_KEY = "__tour-room-undecided__";
 export const TOUR_ROOM_UNDECIDED_LABEL = "Not sure which room yet";
@@ -524,8 +554,17 @@ export function TourScheduleFlow({
                 void loadAvailability();
                 return;
               }
+              const inquiryIds = results
+                .map((item) => item.row?.id?.trim() ?? "")
+                .filter(Boolean);
+              if (signedInUserId && inquiryIds.length > 0) {
+                const linked = await linkBookedToursToSignedInResident(inquiryIds);
+                if (!linked) {
+                  showToast("Your tour was booked, but it could not be added to Tours yet. Refresh the portal to retry.");
+                }
+              }
               setSubmitted(true);
-              const firstInquiryId = results.find((item) => item.row?.id)?.row?.id ?? "";
+              const firstInquiryId = inquiryIds[0] ?? "";
               setSubmittedContact({
                 name: name.trim(),
                 email: email.trim(),

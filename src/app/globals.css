@@ -2358,11 +2358,13 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
 }
 
 html[data-hide-assistant-fab] .axis-assistant-fab,
+html:has(.rental-wizard) .axis-assistant-fab,
 html[data-communication-surface] .axis-assistant-fab {
   display: none !important;
 }
 
 html[data-hide-assistant-fab],
+html:has(.rental-wizard),
 html[data-communication-surface] {
   --portal-assistant-fab-clearance: 0px;
   --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);

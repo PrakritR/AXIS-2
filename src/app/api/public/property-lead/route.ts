@@ -34,7 +34,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property not found." }, { status: 404 });
     }
 
-    const property = asProperty(data.property_data);
+    const storedProperty = asProperty(data.property_data);
+    // `manager_property_records.status` is the canonical publish state. Older
+    // rows can be live while their JSON predates `adminPublishLive`; the public
+    // catalog already normalizes those rows, and the single-listing endpoint
+    // must make the same decision or a generated share URL returns 404 while
+    // that exact home is visible in Browse.
+    const property = storedProperty
+      ? { ...storedProperty, adminPublishLive: true }
+      : null;
     if (!property || !isPropertyActiveForLeads(property)) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }

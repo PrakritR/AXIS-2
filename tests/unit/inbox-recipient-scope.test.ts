@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
+import { filterRecipientsBySenderScope, listEligibleInboxContacts } from "@/lib/inbox-recipient-scope";
 import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 
 /**
@@ -164,5 +164,30 @@ describe("filterRecipientsBySenderScope", () => {
     ]);
     expect(res.allowed.map((r) => r.email)).toEqual([ADMIN]);
     expect(res.blocked.map((r) => r.email)).toEqual(["someone@example.com"]);
+  });
+
+  it("lets a resident message the manager connected by their booked tour", async () => {
+    const db = makeDb({
+      manager_application_records: [],
+      portal_household_charge_records: [],
+      portal_lease_pipeline_records: [],
+      resident_tour_links: [{ resident_user_id: "res_1", manager_user_id: "mgr_tour" }],
+      profiles: [{ id: "mgr_tour", email: "tour-manager@example.com", full_name: "Tour Manager" }],
+      portal_pro_relationship_records: [],
+      account_link_invites: [],
+    });
+    const sender = { id: "res_1", email: "prospect@example.com", role: "resident", isAdmin: false };
+
+    const scoped = await filterRecipientsBySenderScope(db, sender, [
+      { email: "tour-manager@example.com", userId: "mgr_tour" },
+      { email: "unrelated@example.com", userId: "mgr_other" },
+    ]);
+    expect(scoped.allowed.map((row) => row.email)).toEqual(["tour-manager@example.com"]);
+    expect(scoped.blocked.map((row) => row.email)).toEqual(["unrelated@example.com"]);
+
+    const contacts = await listEligibleInboxContacts(db, sender);
+    expect(contacts).toEqual([
+      expect.objectContaining({ email: "tour-manager@example.com", role: "manager" }),
+    ]);
   });
 });

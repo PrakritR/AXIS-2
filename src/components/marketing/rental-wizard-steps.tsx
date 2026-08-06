@@ -149,12 +149,10 @@ export type WizardStepsProps = {
   form: RentalWizardFormState;
   errors: RentalWizardErrors;
   /**
-   * `public` and `portal` are the two live APPLY surfaces (guest apply page /
-   * resident portal apply) — both collect the fee inline. `editor` is the
-   * portal's read-back editor for an already-submitted application, where no
-   * payment may ever render.
+   * `public` and `portal` are the two live applicant surfaces; `manager` is the
+   * manager-on-behalf flow. `editor` is read-only for payment purposes.
    */
-  mode?: "public" | "portal" | "editor";
+  mode?: "public" | "portal" | "manager" | "editor";
   propertyOptions: { value: string; label: string }[];
   propertyLocked?: boolean;
   emailLocked?: boolean;

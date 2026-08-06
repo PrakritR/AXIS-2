@@ -57,6 +57,13 @@ vi.mock("@/lib/resident-public-nav", () => ({
 }));
 vi.mock("@/components/portal/manager-applications", () => ({
   applicationPdfHref: () => "/api/manager-applications/test/pdf?disposition=inline",
+  ApplicationDocumentPreview: () => (
+    <iframe
+      title="Application document"
+      data-testid="resident-application-pdf"
+      src="/api/manager-applications/test/pdf?disposition=inline"
+    />
+  ),
 }));
 vi.mock("@/components/portal/resident-application-editor", () => ({ ResidentApplicationEditor: () => null }));
 vi.mock("@/components/marketing/rental-application-finish-panel", () => ({ GroupShareCallout: () => null }));

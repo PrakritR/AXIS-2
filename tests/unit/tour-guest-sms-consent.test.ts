@@ -73,6 +73,28 @@ describe("tour guest SMS consent gate", () => {
       expect(text).toContain("STOP to opt out");
     });
 
+    it("never emits the legacy Axis host in a tour link", async () => {
+      const previousCanonical = process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+      const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+      process.env.NEXT_PUBLIC_CANONICAL_APP_URL = "https://axis-seattle-housing.com";
+      process.env.NEXT_PUBLIC_APP_URL = "https://www.axis-seattle-housing.com";
+      try {
+        await notifyTenantTourRequestReceived(
+          makeDb(),
+          new Request("https://axis-seattle-housing.com/api/public/partner-inquiries"),
+          { ...baseInquiry, smsConsent: true },
+        );
+        const { text } = sendResidentOutboundSms.mock.calls[0]![0] as { text: string };
+        expect(text).toContain("https://prop-lane.space/rent/listings/maple-house");
+        expect(text).not.toContain("axis-seattle-housing.com");
+      } finally {
+        if (previousCanonical === undefined) delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+        else process.env.NEXT_PUBLIC_CANONICAL_APP_URL = previousCanonical;
+        if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+        else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+      }
+    });
+
     it("does NOT text the prospect when smsConsent is false", async () => {
       const res = await notifyTenantTourRequestReceived(makeDb(), req, {
         ...baseInquiry,
