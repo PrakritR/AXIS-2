@@ -295,7 +295,7 @@ export function PropertyLeaseFormModal({
             onClick={save}
             data-attr={mode === "add" ? "property-lease-add-save" : "property-lease-edit-save"}
           >
-            {templateUploading ? "Uploading…" : parsingLease ? "Parsing lease…" : "Save lease"}
+            {templateUploading ? "Uploading…" : parsingLease ? "Parsing lease…" : mode === "add" ? "Add lease" : "Save lease"}
           </Button>
         </ModalFooter>
       }

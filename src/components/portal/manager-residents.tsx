@@ -2298,6 +2298,15 @@ export function ManagerResidents({
       </>
     ) : (
       <>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="resident-application-edit"
+          onClick={() => setApplicationEditOpen(true)}
+        >
+          Edit application
+        </Button>
         {selectedApplicationRow.bucket === "pending" ? (
           <>
             {shouldOfferApplicationCompletionReminder(selectedApplicationRow) ? (
