@@ -243,7 +243,8 @@ export function PortalFilterSortSheet({
 
   const handleReset = useCallback(() => {
     deferControllerRef.current?.resetAll();
-  }, []);
+    onReset();
+  }, [onReset]);
 
   const tryCloseFromBackdrop = useCallback(() => {
     if (Date.now() < dismissGuardUntilRef.current) return;
