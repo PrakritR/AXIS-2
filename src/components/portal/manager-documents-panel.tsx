@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Button } from "@/components/ui/button";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
@@ -132,6 +133,7 @@ export function ManagerDocumentsPanel({
   const [libraryScopeFilter, setLibraryScopeFilter] = useState("");
   const [libraryPropertyFilter, setLibraryPropertyFilter] = useState("");
   const [libraryExpiryFilter, setLibraryExpiryFilter] = useState("");
+  const [leasingPropertyFilter, setLeasingPropertyFilter] = useState("");
   const [libraryExpiryPills, setLibraryExpiryPills] = useState([
     { id: "", label: "All", count: 0 },
     { id: "expired", label: "Expired", count: 0 },
@@ -342,6 +344,19 @@ export function ManagerDocumentsPanel({
     libraryExpiryPills,
   ]);
 
+  const leasingFilterActiveChips = useMemo((): PortalActiveFilterChip[] => {
+    if (!isLeasingDocumentsTab || !leasingPropertyFilter) return [];
+    const propertyLabel =
+      propertyOptions.find((property) => property.id === leasingPropertyFilter)?.label ?? leasingPropertyFilter;
+    return [
+      {
+        id: "property",
+        label: `Property: ${propertyLabel}`,
+        onRemove: () => setLeasingPropertyFilter(""),
+      },
+    ];
+  }, [isLeasingDocumentsTab, leasingPropertyFilter, propertyOptions]);
+
   const handleGenerateReport = useCallback(() => {
     setGenerateModalOpen(false);
     void runReport();
@@ -393,6 +408,7 @@ export function ManagerDocumentsPanel({
       ])}
       compactPanel={false}
       filterFieldCount={3}
+      constrainDropdownToTitleBand
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
       onReset={resetLibraryFilters}
       dataAttr="documents-filter-sheet-open"
@@ -411,6 +427,24 @@ export function ManagerDocumentsPanel({
         scopeFilterOptions={libraryScopeOptions}
         propertyFilterOptions={libraryPropertyOptions}
         propertyOptions={libraryPropertyOptions}
+      />
+    </PortalFilterSortSheet>
+  ) : null;
+
+  const leasingDocumentsFilterSheet = isLeasingDocumentsTab ? (
+    <PortalFilterSortSheet
+      activeCount={portalFilterActiveCount([leasingPropertyFilter])}
+      compactPanel
+      constrainDropdownToTitleBand
+      onReset={() => setLeasingPropertyFilter("")}
+      dataAttr={`documents-${tabId}-filter-sheet-open`}
+    >
+      <ApplicationFilterSortFields
+        propertyOptions={propertyOptions}
+        propertyFilters={leasingPropertyFilter ? [leasingPropertyFilter] : []}
+        onPropertyFiltersChange={(ids) => setLeasingPropertyFilter(ids[0] ?? "")}
+        selectionMode="single"
+        dataAttr={`documents-${tabId}-filter-property`}
       />
     </PortalFilterSortSheet>
   ) : null;
@@ -445,11 +479,12 @@ export function ManagerDocumentsPanel({
   const documentsPrimaryButton = documentsUploadButton ?? documentsGenerateButton;
 
   const documentsHeaderActions =
-    hasExportActions || documentsPrimaryButton ? (
+    hasExportActions || documentsPrimaryButton || leasingDocumentsFilterSheet ? (
       <PortalSectionActionRow
         variant="header"
         className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
       >
+        {leasingDocumentsFilterSheet}
         {hasExportActions ? exportActions : null}
         {documentsPrimaryButton}
       </PortalSectionActionRow>
@@ -479,8 +514,10 @@ export function ManagerDocumentsPanel({
             : undefined
         }
         activeFilterChips={
-          libraryFilterActiveChips.length > 0 ? (
-            <PortalActiveFilterChips chips={libraryFilterActiveChips} />
+          libraryFilterActiveChips.length > 0 || leasingFilterActiveChips.length > 0 ? (
+            <PortalActiveFilterChips
+              chips={libraryFilterActiveChips.length > 0 ? libraryFilterActiveChips : leasingFilterActiveChips}
+            />
           ) : null
         }
       />
@@ -505,9 +542,15 @@ export function ManagerDocumentsPanel({
         ) : tabId === "templates" ? (
           <ManagerDocumentTemplatesPanel />
         ) : tabId === "applications" ? (
-          <ManagerApplicationDocumentsTab userId={userId ?? null} />
+          <ManagerApplicationDocumentsTab
+            userId={userId ?? null}
+            propertyFilter={leasingPropertyFilter}
+          />
         ) : tabId === "leases" ? (
-          <ManagerLeaseDocumentsTab userId={userId ?? null} />
+          <ManagerLeaseDocumentsTab
+            userId={userId ?? null}
+            propertyFilter={leasingPropertyFilter}
+          />
         ) : tabId === "income-documents" ? (
           <div>
             {loading ? (

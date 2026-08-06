@@ -752,6 +752,35 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(button);
   });
 
+  it("opens inward when right alignment would cover the title band's adjacent rail", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({
+        top: 80,
+        left: 510,
+        right: 593,
+        bottom: 120,
+        width: 83,
+        height: 40,
+        x: 510,
+        y: 80,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
+
+    const rect = computePortalFilterDropdownRect(button, 168, {
+      widthPx: 352,
+      horizontalBoundary: { left: 389, right: 1259 },
+    });
+    expect(rect.left).toBe(510);
+    expect(rect.left).toBeGreaterThanOrEqual(389);
+    expect(rect.left + rect.width).toBeLessThanOrEqual(1259);
+
+    document.body.removeChild(button);
+  });
+
   it("keeps field menus inside an open filter dropdown host", () => {
     const host = document.createElement("div");
     host.setAttribute("data-slot", "portal-filter-dropdown-panel");

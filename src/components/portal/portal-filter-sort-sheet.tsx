@@ -172,6 +172,8 @@ export function PortalFilterSortSheet({
   mobileSheetFillsViewport = true,
   /** Legacy raised placement — leaves a gap above the tab bar; prefer the default fill. */
   mobileSheetRaised = false,
+  /** Keep the desktop popover inside the page title band instead of covering an adjacent rail. */
+  constrainDropdownToTitleBand = false,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -188,6 +190,7 @@ export function PortalFilterSortSheet({
   mobileFooter?: ReactNode | ((close: () => void) => ReactNode);
   mobileSheetFillsViewport?: boolean;
   mobileSheetRaised?: boolean;
+  constrainDropdownToTitleBand?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
@@ -269,6 +272,7 @@ export function PortalFilterSortSheet({
     minMenuWidth: panelWidthPx,
     align: "end",
     fullBleed: isMobile,
+    constrainToTitleBand: constrainDropdownToTitleBand,
     closeOnOutsidePointerDown: false,
   });
   /* Both branches leave the height to the sheet — see PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS. */

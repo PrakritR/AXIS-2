@@ -13,8 +13,6 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PortalMobileSummaryCard,
   PortalTableInlineExpand,
   createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
-import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
-import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { applicantDisplayName, applicantSecondaryEmail } from "@/lib/rental-application/applicant-name";
@@ -26,7 +24,6 @@ import {
 import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
   applicationVisibleToPortalUser,
-  buildManagerPropertyFilterOptions,
   leaseVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -109,10 +106,14 @@ function leaseHasDownloadableDocument(row: LeasePipelineRow): boolean {
   return Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
 }
 
-export function ManagerApplicationDocumentsTab({ userId }: { userId: string | null }) {
+export function ManagerApplicationDocumentsTab({
+  userId,
+  propertyFilter,
+}: {
+  userId: string | null;
+  propertyFilter: string;
+}) {
   const [tick, setTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [propertyTick, setPropertyTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
   const [previewCosignerSubmissions, setPreviewCosignerSubmissions] = useState<CosignerSubmission[]>([]);
   const demoMode = isDemoModeActive();
@@ -121,7 +122,7 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
   useEffect(() => {
     const refresh = () => setTick((t) => t + 1);
     void syncManagerApplicationsFromServer().then(refresh);
-    void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
+    void syncPropertyPipelineFromServer();
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, refresh);
     for (const event of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
       window.addEventListener(event, refresh);
@@ -149,11 +150,6 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
       cancelled = true;
     };
   }, [preview, demoMode]);
-
-  const propertyOptions = useMemo(() => {
-    void propertyTick;
-    return buildManagerPropertyFilterOptions(userId);
-  }, [userId, propertyTick]);
 
   const rows = useMemo(() => {
     void tick;
@@ -221,21 +217,6 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
 
   return (
     <div className="space-y-4">
-      <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([propertyFilter])}
-        compactPanel
-        onReset={() => {}}
-        dataAttr="documents-applications-filter-sheet-open"
-      >
-        <ApplicationFilterSortFields
-          propertyOptions={propertyOptions}
-          propertyFilters={propertyFilter ? [propertyFilter] : []}
-          onPropertyFiltersChange={(ids) => setPropertyFilter(ids[0] ?? "")}
-          selectionMode="single"
-          dataAttr="documents-applications-filter-property"
-        />
-      </PortalFilterSortSheet>
-
       {rows.length === 0 ? (
         <PortalDataTableEmpty icon="application" message="No application documents yet." />
       ) : (
@@ -301,17 +282,21 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
   );
 }
 
-export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) {
+export function ManagerLeaseDocumentsTab({
+  userId,
+  propertyFilter,
+}: {
+  userId: string | null;
+  propertyFilter: string;
+}) {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
-  const [propertyFilter, setPropertyFilter] = useState("");
-  const [propertyTick, setPropertyTick] = useState(0);
   const [preview, setPreview] = useState<LeasePipelineRow | null>(null);
 
   useEffect(() => {
     const refresh = () => setTick((t) => t + 1);
     void syncLeasePipelineFromServer(userId ?? undefined).then(refresh);
-    void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
+    void syncPropertyPipelineFromServer();
     window.addEventListener(LEASE_PIPELINE_EVENT, refresh);
     for (const event of MANAGER_PORTFOLIO_REFRESH_EVENTS) {
       window.addEventListener(event, refresh);
@@ -323,11 +308,6 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
       }
     };
   }, [userId]);
-
-  const propertyOptions = useMemo(() => {
-    void propertyTick;
-    return buildManagerPropertyFilterOptions(userId);
-  }, [userId, propertyTick]);
 
   const rows = useMemo(() => {
     void tick;
@@ -366,21 +346,6 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
 
   return (
     <div className="space-y-4">
-      <PortalFilterSortSheet
-        activeCount={portalFilterActiveCount([propertyFilter])}
-        compactPanel
-        onReset={() => {}}
-        dataAttr="documents-leases-filter-sheet-open"
-      >
-        <ApplicationFilterSortFields
-          propertyOptions={propertyOptions}
-          propertyFilters={propertyFilter ? [propertyFilter] : []}
-          onPropertyFiltersChange={(ids) => setPropertyFilter(ids[0] ?? "")}
-          selectionMode="single"
-          dataAttr="documents-leases-filter-property"
-        />
-      </PortalFilterSortSheet>
-
       {rows.length === 0 ? (
         <PortalDataTableEmpty icon="lease" message="No lease documents yet." />
       ) : (

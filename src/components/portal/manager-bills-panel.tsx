@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -15,8 +15,6 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { centsToUsd } from "@/lib/reports/money";
 import { managerBillBadgeTone, type ManagerBill } from "@/lib/manager-bills";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +35,18 @@ function emptyDraft(): BillDraft {
   };
 }
 
-export function ManagerBillsPanel() {
+export type ManagerBillsPanelHandle = {
+  openAddBill: () => void;
+};
+
+export const ManagerBillsPanel = forwardRef<ManagerBillsPanelHandle>(function ManagerBillsPanel(_props, ref) {
   const { showToast } = useAppUi();
   const [bills, setBills] = useState<ManagerBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<BillDraft>(emptyDraft);
+
+  useImperativeHandle(ref, () => ({ openAddBill: () => setModalOpen(true) }), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,11 +110,6 @@ export function ManagerBillsPanel() {
 
   return (
     <div className="space-y-4">
-      <PortalSectionActionRow>
-        <PortalSectionPrimaryButton onClick={() => setModalOpen(true)} data-attr="finances-add-bill">
-          Add bill
-        </PortalSectionPrimaryButton>
-      </PortalSectionActionRow>
       {loading ? (
         <PortalDataTableEmpty message="Loading bills…" icon="finance" />
       ) : bills.length === 0 ? (
@@ -194,4 +193,4 @@ export function ManagerBillsPanel() {
       </Modal>
     </div>
   );
-}
+});

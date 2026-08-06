@@ -183,7 +183,11 @@ export function fieldSelectMenuListMaxHeightPx(shellMaxHeight: number, searchPx 
 export function computePortalFilterDropdownRect(
   button: HTMLButtonElement,
   panelHeightPx: number,
-  options?: { widthPx?: number; fullBleed?: boolean },
+  options?: {
+    widthPx?: number;
+    fullBleed?: boolean;
+    horizontalBoundary?: Pick<DOMRect, "left" | "right">;
+  },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
   const viewportH = window.innerHeight;
@@ -191,13 +195,23 @@ export function computePortalFilterDropdownRect(
   const fullBleed = options?.fullBleed ?? false;
   const viewportPadding = fullBleed ? 0 : 12;
   const preferredWidth = options?.widthPx ?? 22 * 16;
-  const width = fullBleed
+  const boundaryLeft = fullBleed
+    ? 0
+    : Math.max(viewportPadding, options?.horizontalBoundary?.left ?? viewportPadding);
+  const boundaryRight = fullBleed
     ? viewportW
-    : Math.min(preferredWidth, viewportW - viewportPadding * 2);
+    : Math.min(viewportW - viewportPadding, options?.horizontalBoundary?.right ?? viewportW - viewportPadding);
+  const availableWidth = Math.max(0, boundaryRight - boundaryLeft);
+  const width = fullBleed ? viewportW : Math.min(preferredWidth, availableWidth);
 
   let left = fullBleed ? 0 : rect.right - width;
   if (!fullBleed) {
-    left = Math.min(Math.max(viewportPadding, left), viewportW - width - viewportPadding);
+    const startAlignedLeft = rect.left;
+    if (left < boundaryLeft && startAlignedLeft + width <= boundaryRight) {
+      left = startAlignedLeft;
+    } else {
+      left = Math.min(Math.max(boundaryLeft, left), boundaryRight - width);
+    }
   }
 
   const gap = 8;
@@ -373,6 +387,7 @@ export function useFieldSelectMenu({
   preferOpenDown = false,
   matchTriggerWidth = false,
   fullBleed = false,
+  constrainToTitleBand = false,
   closeOnOutsidePointerDown = true,
 }: {
   open: boolean;
@@ -388,6 +403,8 @@ export function useFieldSelectMenu({
   matchTriggerWidth?: boolean;
   /** Mobile filter dropdown spans the viewport with even side insets. */
   fullBleed?: boolean;
+  /** Keep a title-row dropdown inside that title band's horizontal content bounds. */
+  constrainToTitleBand?: boolean;
   /**
    * When false, outside pointerdown does not call `onOpenChange(false)` — use for the
    * portal filter shell, which closes only via its scrim / header / toggle.
@@ -427,6 +444,9 @@ export function useFieldSelectMenu({
           ? computePortalFilterDropdownRect(button, contentPx, {
               widthPx: minMenuWidth,
               fullBleed,
+              horizontalBoundary: constrainToTitleBand
+                ? (button.closest('[data-slot="portal-page-title-band"]')?.getBoundingClientRect() ?? undefined)
+                : undefined,
             })
           : inFilterPanel || inVaulSheet
             ? computeFieldSelectMenuRectInHost(button, contentPx, portalHost, {
@@ -459,7 +479,16 @@ export function useFieldSelectMenu({
       window.removeEventListener("resize", updateMenuRect);
       window.removeEventListener("scroll", updateMenuRect, true);
     };
-  }, [align, open, contentPx, minMenuWidth, preferOpenDown, matchTriggerWidth, fullBleed]);
+  }, [
+    align,
+    open,
+    contentPx,
+    minMenuWidth,
+    preferOpenDown,
+    matchTriggerWidth,
+    fullBleed,
+    constrainToTitleBand,
+  ]);
 
   useEffect(() => {
     if (!open) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -16,10 +16,16 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
-import { ManagerBankReconciliationPanel } from "@/components/portal/manager-bank-reconciliation-panel";
-import { ManagerBillsPanel } from "@/components/portal/manager-bills-panel";
+import {
+  ManagerBankReconciliationPanel,
+  type ManagerBankReconciliationPanelHandle,
+} from "@/components/portal/manager-bank-reconciliation-panel";
+import { ManagerBillsPanel, type ManagerBillsPanelHandle } from "@/components/portal/manager-bills-panel";
 import { ManagerBudgetsPanel } from "@/components/portal/manager-budgets-panel";
-import { ManagerOwnerDistributionsPanel } from "@/components/portal/manager-owner-distributions-panel";
+import {
+  ManagerOwnerDistributionsPanel,
+  type ManagerOwnerDistributionsPanelHandle,
+} from "@/components/portal/manager-owner-distributions-panel";
 import { ManagerSecurityDepositsPanel } from "@/components/portal/manager-security-deposits-panel";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
@@ -505,6 +511,10 @@ export function ManagerFinancesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [expenseModal, setExpenseModal] = useState(false);
   const [incomeModal, setIncomeModal] = useState(false);
+  const billsRef = useRef<ManagerBillsPanelHandle>(null);
+  const bankReconciliationRef = useRef<ManagerBankReconciliationPanelHandle>(null);
+  const ownerDistributionsRef = useRef<ManagerOwnerDistributionsPanelHandle>(null);
+  const [canAddBankStatement, setCanAddBankStatement] = useState(false);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft>({
     categoryCode: "maintenance",
     amount: "",
@@ -828,6 +838,7 @@ export function ManagerFinancesPanel({
       ])}
       compactPanel={false}
       filterFieldCount={5}
+      constrainDropdownToTitleBand
       className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={resetFinanceFilters}
       dataAttr="finances-filter-sheet-open"
@@ -956,6 +967,45 @@ export function ManagerFinancesPanel({
 
   const financesPrimaryButton = financesAddIncomeButton ?? financesAddExpenseButton;
 
+  const financesSpecialTabActions =
+    tabId === "bills" ? (
+      <PortalSectionPrimaryButton
+        className="shrink-0"
+        onClick={() => billsRef.current?.openAddBill()}
+        data-attr="finances-add-bill"
+      >
+        Add bill
+      </PortalSectionPrimaryButton>
+    ) : tabId === "bank-reconciliation" ? (
+      <>
+        <Button
+          type="button"
+          variant="secondary"
+          className="shrink-0"
+          disabled={!canAddBankStatement}
+          onClick={() => bankReconciliationRef.current?.openAddStatement()}
+          data-attr="bank-add-statement"
+        >
+          Add statement
+        </Button>
+        <PortalSectionPrimaryButton
+          className="shrink-0"
+          onClick={() => bankReconciliationRef.current?.openAddAccount()}
+          data-attr="bank-add-account"
+        >
+          Add account
+        </PortalSectionPrimaryButton>
+      </>
+    ) : tabId === "owner-distributions" ? (
+      <PortalSectionPrimaryButton
+        className="shrink-0"
+        onClick={() => ownerDistributionsRef.current?.openNewDistribution()}
+        data-attr="finances-add-distribution"
+      >
+        New distribution
+      </PortalSectionPrimaryButton>
+    ) : null;
+
   const financesListAddRow =
     tabId === "income" || tabId === "expenses" ? (
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
@@ -970,7 +1020,11 @@ export function ManagerFinancesPanel({
     ) : null;
 
   const financesHeaderActions =
-    showScopedReportFilters || financesFormalPdfLink || financesExportButtons || financesPrimaryButton ? (
+    showScopedReportFilters ||
+    financesFormalPdfLink ||
+    financesExportButtons ||
+    financesPrimaryButton ||
+    financesSpecialTabActions ? (
       <PortalSectionActionRow
         variant="header"
         className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
@@ -978,6 +1032,7 @@ export function ManagerFinancesPanel({
         {financesFormalPdfLink}
         {financesExportButtons}
         {financesPrimaryButton}
+        {financesSpecialTabActions}
       </PortalSectionActionRow>
     ) : null;
 
@@ -1009,13 +1064,16 @@ export function ManagerFinancesPanel({
         }
       />
       {tabId === "bills" ? (
-        <ManagerBillsPanel />
+        <ManagerBillsPanel ref={billsRef} />
       ) : tabId === "bank-reconciliation" ? (
-        <ManagerBankReconciliationPanel />
+        <ManagerBankReconciliationPanel
+          ref={bankReconciliationRef}
+          onCanAddStatementChange={setCanAddBankStatement}
+        />
       ) : tabId === "security-deposits" ? (
         <ManagerSecurityDepositsPanel />
       ) : tabId === "owner-distributions" ? (
-        <ManagerOwnerDistributionsPanel />
+        <ManagerOwnerDistributionsPanel ref={ownerDistributionsRef} />
       ) : (
       <div className="space-y-4 max-lg:space-y-3">
         {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {Input, Select} from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -16,7 +16,6 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import {
   BANK_ACCOUNT_TYPES,
@@ -55,7 +54,15 @@ const ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
   trust_security_deposit: "Trust · security deposits",
 };
 
-export function ManagerBankReconciliationPanel() {
+export type ManagerBankReconciliationPanelHandle = {
+  openAddAccount: () => void;
+  openAddStatement: () => void;
+};
+
+export const ManagerBankReconciliationPanel = forwardRef<
+  ManagerBankReconciliationPanelHandle,
+  { onCanAddStatementChange?: (canAdd: boolean) => void }
+>(function ManagerBankReconciliationPanel({ onCanAddStatementChange }, ref) {
   const { showToast } = useAppUi();
   const [accounts, setAccounts] = useState<ManagerBankAccount[]>([]);
   const [statements, setStatements] = useState<ManagerBankStatement[]>([]);
@@ -66,6 +73,21 @@ export function ManagerBankReconciliationPanel() {
   const [statementModal, setStatementModal] = useState(false);
   const [accountDraft, setAccountDraft] = useState<AccountDraft>(emptyAccountDraft);
   const [statementDraft, setStatementDraft] = useState<StatementDraft>(emptyStatementDraft);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openAddAccount: () => setAccountModal(true),
+      openAddStatement: () => {
+        if (selectedAccountId) setStatementModal(true);
+      },
+    }),
+    [selectedAccountId],
+  );
+
+  useEffect(() => {
+    onCanAddStatementChange?.(Boolean(selectedAccountId));
+  }, [onCanAddStatementChange, selectedAccountId]);
 
   const loadAccounts = useCallback(async () => {
     setLoading(true);
@@ -210,11 +232,10 @@ export function ManagerBankReconciliationPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-end gap-3">
-          <div>
-            <label className="text-xs font-semibold text-muted">Bank account</label>
-            <Select
+      <div className="flex min-w-0 flex-wrap items-end gap-3">
+        <div>
+          <label className="text-xs font-semibold text-muted">Bank account</label>
+          <Select
              
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -227,12 +248,12 @@ export function ManagerBankReconciliationPanel() {
                   {account.lastFour ? ` ···${account.lastFour}` : ""}
                 </option>
               ))}
-            </Select>
-          </div>
-          {selectedAccountId ? (
-            <div>
-              <label className="text-xs font-semibold text-muted">Statement</label>
-              <Select
+          </Select>
+        </div>
+        {selectedAccountId ? (
+          <div>
+            <label className="text-xs font-semibold text-muted">Statement</label>
+            <Select
                
                 value={selectedStatementId}
                 onChange={(e) => setSelectedStatementId(e.target.value)}
@@ -245,23 +266,9 @@ export function ManagerBankReconciliationPanel() {
                     {statement.reconciledAt ? " (reconciled)" : ""}
                   </option>
                 ))}
-              </Select>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <PortalSectionPrimaryButton onClick={() => setAccountModal(true)} data-attr="bank-add-account">
-            Add account
-          </PortalSectionPrimaryButton>
-          <Button
-            variant="secondary"
-            disabled={!selectedAccountId}
-            onClick={() => setStatementModal(true)}
-            data-attr="bank-add-statement"
-          >
-            Add statement
-          </Button>
-        </div>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       {loading ? (
@@ -465,4 +472,4 @@ export function ManagerBankReconciliationPanel() {
       </Modal>
     </div>
   );
-}
+});

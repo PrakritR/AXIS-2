@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -16,8 +16,6 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { centsToUsd } from "@/lib/reports/money";
 import {
   computeDistributionCents,
@@ -48,12 +46,18 @@ function toCents(value: string): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
-export function ManagerOwnerDistributionsPanel() {
+export type ManagerOwnerDistributionsPanelHandle = {
+  openNewDistribution: () => void;
+};
+
+export const ManagerOwnerDistributionsPanel = forwardRef<ManagerOwnerDistributionsPanelHandle>(function ManagerOwnerDistributionsPanel(_props, ref) {
   const { showToast } = useAppUi();
   const [distributions, setDistributions] = useState<OwnerDistribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<DistributionDraft>(emptyDraft);
+
+  useImperativeHandle(ref, () => ({ openNewDistribution: () => setModalOpen(true) }), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,11 +135,6 @@ export function ManagerOwnerDistributionsPanel() {
 
   return (
     <div className="space-y-4">
-      <PortalSectionActionRow>
-        <PortalSectionPrimaryButton onClick={() => setModalOpen(true)} data-attr="finances-add-distribution">
-          New distribution
-        </PortalSectionPrimaryButton>
-      </PortalSectionActionRow>
       {loading ? (
         <PortalDataTableEmpty message="Loading distributions…" icon="finance" />
       ) : distributions.length === 0 ? (
@@ -244,4 +243,4 @@ export function ManagerOwnerDistributionsPanel() {
       </Modal>
     </div>
   );
-}
+});
