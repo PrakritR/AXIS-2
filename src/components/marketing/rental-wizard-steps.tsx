@@ -371,6 +371,51 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 1) {
     return (
       <div className="rental-wizard-step space-y-6">
+        <div className="space-y-2" data-wizard-field="applicantRole">
+          <Label required>Are you the primary applicant or a co-signer?</Label>
+          <p className="text-sm leading-relaxed text-muted">
+            Choose <span className="font-medium text-foreground">Primary applicant</span> if you are applying for the
+            lease. Choose <span className="font-medium text-foreground">Co-signer</span> if someone else applied first
+            and asked you to complete the co-signer form.
+          </p>
+          <div
+            className={`${groupRoleStack} ${errors.applicantRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
+            role="group"
+            aria-label="Applicant role"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                patch({
+                  applicantRole: "signer",
+                })
+              }
+              className={form.applicantRole === "signer" ? choiceActive : choiceIdle}
+            >
+              Primary applicant
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                patch({
+                  applicantRole: "cosigner",
+                  applyingAsGroup: null,
+                  groupRole: null,
+                  groupSize: "",
+                  groupId: "",
+                })
+              }
+              className={form.applicantRole === "cosigner" ? choiceActive : choiceIdle}
+            >
+              Co-signer
+            </button>
+          </div>
+          <FieldError msg={errors.applicantRole} />
+        </div>
+
+        {form.applicantRole === "signer" ? (
+          <>
+        <h3 className="text-base font-bold tracking-tight text-foreground">Group application</h3>
         <StepIntro>
           Applying with roommates? One person submits first and shares a Group ID so everyone&apos;s applications stay
           linked.
@@ -470,6 +515,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             ) : null}
           </div>
         ) : null}
+          </>
+        ) : null}
       </div>
     );
   }
@@ -554,13 +601,19 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <Label htmlFor="propertyId" required>
             Property name
           </Label>
-          {propertyLocked && selectedProperty ? (
+          {propertyLocked ? (
+            selectedProperty ? (
             <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
               <p className="font-semibold text-foreground">{selectedProperty.title}</p>
               {selectedProperty.address ? (
                 <p className="mt-1 text-muted">{selectedProperty.address}</p>
               ) : null}
             </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
+                Loading property…
+              </div>
+            )
           ) : (
           <div className={errors.propertyId ? "rounded-xl ring-2 ring-red-100" : ""}>
           <PropertySearchPicker

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
@@ -351,7 +351,7 @@ export function ManagerApplicationOnBehalfModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-0.5 sm:col-span-2">
             <span className={MODAL_FIELD_LABEL_CLASS}>Property</span>
-            <Select
+            <NativeSelect
               className={compactField}
               value={propertyId}
               onChange={(e) => {
@@ -368,11 +368,11 @@ export function ManagerApplicationOnBehalfModal({
                   {option.propertyLabel}
                 </option>
               ))}
-            </Select>
+            </NativeSelect>
           </label>
           <label className="flex flex-col gap-0.5 sm:col-span-2">
             <span className={MODAL_FIELD_LABEL_CLASS}>Resident</span>
-            <Select
+            <NativeSelect
               className={compactField}
               value={residentId}
               onChange={(e) => setResidentId(e.target.value)}
@@ -391,7 +391,7 @@ export function ManagerApplicationOnBehalfModal({
                   {row.hint ? ` · ${row.hint}` : ""}
                 </option>
               ))}
-            </Select>
+            </NativeSelect>
           </label>
           {residentId === NEW_RESIDENT_ID ? (
             <label className="flex flex-col gap-0.5 sm:col-span-2">

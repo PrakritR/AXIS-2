@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState, type MouseEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type PortalCollapsibleSectionProps = {
@@ -82,6 +82,12 @@ export function PortalCollapsibleSection({
         ? "flex min-w-0 items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-muted"
         : "flex min-w-0 items-center gap-1.5 text-sm font-semibold text-foreground";
 
+  const onHeaderMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    if (!canCollapse) return;
+    if ((e.target as HTMLElement).closest("[data-portal-row-ignore]")) return;
+    e.preventDefault();
+  };
+
   return (
     <div
       className={cn(
@@ -106,6 +112,7 @@ export function PortalCollapsibleSection({
         aria-expanded={canCollapse ? expanded : undefined}
         data-attr={canCollapse ? toggleDataAttr : undefined}
         onClick={toggle}
+        onMouseDown={onHeaderMouseDown}
         onKeyDown={(e) => {
           if (!canCollapse) return;
           if (e.key === "Enter" || e.key === " ") {

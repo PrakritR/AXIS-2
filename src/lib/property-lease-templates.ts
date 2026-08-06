@@ -26,7 +26,9 @@ export type PropertyLeaseListingSeedKey =
   | "month-to-month"
   | "short-term"
   | "custom-term"
-  | "primary";
+  | "primary"
+  | "cosigner"
+  | "cosigner-short-term";
 
 export type PropertyLeaseTemplate = {
   id: string;

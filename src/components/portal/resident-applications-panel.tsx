@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -27,7 +27,29 @@ import {
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
 } from "@/components/portal/portal-data-table";
+import { Badge } from "@/components/ui/badge";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import {
+  ApplicationCosignerListRow,
+  ApplicationCosignerSection,
+  ApplicationHouseholdCluster,
+  ApplicationNestedListRow,
+  householdClusterHeader,
+} from "@/components/portal/application-household-list";
+import {
+  ApplicationGroupSection,
+  groupIdForRow,
+  groupRowInputForRow,
+} from "@/components/portal/application-group-section";
+import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
+import { useCosignerSubmissionsMap } from "@/hooks/use-cosigner-submissions-map";
+import { buildApplicationGroups, describeGroupBadge, groupForRow } from "@/lib/rental-application/application-groups";
+import {
+  applicationListSortBucket,
+  buildApplicationListClusters,
+  orderApplicationRowsWithHouseholds,
+  signerAppIdsForCosignerLookup,
+} from "@/lib/rental-application/application-list-grouping";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { PropertySearchPicker, type PropertySearchOption } from "@/components/marketing/property-search-picker";
 import {
@@ -404,6 +426,13 @@ export function ResidentApplicationsPanel({
     });
   }, [rowsForBucket, searchQuery]);
 
+  const applicationGroups = useMemo(
+    () => buildApplicationGroups(rows.map(groupRowInputForRow)),
+    [rows],
+  );
+
+  const listSortBucket = applicationListSortBucket(bucket);
+
   const detailRow = applicationIdProp
     ? rows.find(
         (row) =>
@@ -456,6 +485,38 @@ export function ResidentApplicationsPanel({
       router.replace(residentApplicationDetailHref(basePath, actualBucket as ResidentApplicationBucketId, detailRow.id));
     }
   }, [applicationIdProp, basePath, bucket, detailRow, router]);
+
+  const cosignerSignerIds = useMemo(() => {
+    const ids = signerAppIdsForCosignerLookup(rowsForBucket);
+    if (detailRow?.application?.hasCosigner === "yes" && !ids.includes(detailRow.id)) {
+      return [...ids, detailRow.id];
+    }
+    return ids;
+  }, [rowsForBucket, detailRow]);
+  const cosignerSubmissionsBySigner = useCosignerSubmissionsMap(cosignerSignerIds);
+
+  const cosignerIndexParam = searchParams.get("cosigner");
+  const activeCosignerIndex =
+    cosignerIndexParam != null && /^\d+$/.test(cosignerIndexParam) ? parseInt(cosignerIndexParam, 10) : null;
+  const detailCosignerSubmissions = useMemo(() => {
+    if (!detailRow) return [];
+    const key = normalizeApplicationAxisId(detailRow.id).toUpperCase();
+    return cosignerSubmissionsBySigner.get(key) ?? [];
+  }, [detailRow, cosignerSubmissionsBySigner]);
+  const activeCosignerSubmission =
+    activeCosignerIndex != null && activeCosignerIndex >= 0 && activeCosignerIndex < detailCosignerSubmissions.length
+      ? detailCosignerSubmissions[activeCosignerIndex]!
+      : null;
+
+  const listClustersForRows = useCallback(
+    (listRows: DemoApplicantRow[]) =>
+      buildApplicationListClusters(
+        orderApplicationRowsWithHouseholds(listRows, listSortBucket),
+        applicationGroups,
+        listSortBucket,
+      ),
+    [applicationGroups, listSortBucket],
+  );
 
   // Active public listings the resident can apply for — the same catalog the
   // wizard's own property picker reads, surfaced up here so property choice can
@@ -834,7 +895,26 @@ export function ResidentApplicationsPanel({
         </div>
       );
     }
-    return <ResidentApplicationPdfFrame row={row} />;
+    const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+    const signerKey = normalizeApplicationAxisId(row.id).toUpperCase();
+    const cosignerSubmissions = cosignerSubmissionsBySigner.get(signerKey) ?? [];
+    return (
+      <div className="space-y-4">
+        {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
+        {cosignerSubmissions.length > 0 ? (
+          <ApplicationCosignerSection
+            submissions={cosignerSubmissions}
+            primaryApplicationAxisId={row.id}
+            onOpenCosigner={(index) => {
+              portalNavigate(
+                `${residentApplicationDetailHref(basePath, row.bucket as ResidentApplicationBucketId, row.id)}?cosigner=${index}`,
+              );
+            }}
+          />
+        ) : null}
+        <ResidentApplicationPdfFrame row={row} />
+      </div>
+    );
   };
 
   const filterRow = (
@@ -879,7 +959,9 @@ export function ResidentApplicationsPanel({
   const renderRoutedList = () => (
     <DataList
       hideColumnHeaders
-      rows={filteredRowsForBucket.map((row) => {
+      rows={listClustersForRows(filteredRowsForBucket)
+        .flatMap((cluster) => (cluster.kind === "household" ? cluster.rows : [cluster.row]))
+        .map((row) => {
         const room = displayRoomForRow(row);
         // Every row used to read "<Property> Applicant" and nothing else, so a
         // resident holding several applications for the same property+room had
@@ -1040,31 +1122,70 @@ export function ResidentApplicationsPanel({
             <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
           </div>
         ) : listRows.length > 0 ? (
-          <div className="w-full min-w-0">
-            {listRows.map((row) => {
-              const room = displayRoomForRow(row);
-              const address = [
-                room !== "—" ? `Room ${room}` : null,
-                realApplicantName(row.name) || "Your application",
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              // Every row used to read "<Property> · Applicant" and nothing
-              // more, so twelve applications for the same property and room were
-              // genuinely indistinguishable (resident audit F7). Status, when it
-              // was started or submitted, and the id identify each one.
-              const summary = [applicationStageDisplayLabel(row), applicationStartedLabel(row), row.id]
-                .filter(Boolean)
-                .join(" · ");
+          <div className="w-full min-w-0 space-y-2">
+            {listClustersForRows(listRows).map((cluster) => {
+              const renderRow = (row: DemoApplicantRow, nestedInHousehold: boolean) => {
+                const room = displayRoomForRow(row);
+                const address = [
+                  room !== "—" ? `Room ${room}` : null,
+                  realApplicantName(row.name) || "Your application",
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                const summary = [applicationStageDisplayLabel(row), applicationStartedLabel(row), row.id]
+                  .filter(Boolean)
+                  .join(" · ");
+                const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
+                const groupBadgeDescriptor = !nestedInHousehold && group ? describeGroupBadge(group) : null;
+                const signerKey = normalizeApplicationAxisId(row.id).toUpperCase();
+                const cosignerRows = cosignerSubmissionsBySigner.get(signerKey) ?? [];
+
+                return (
+                  <Fragment key={row.id}>
+                    <ApplicationNestedListRow nested={nestedInHousehold}>
+                      <PortalPropertyRecordRow
+                        title={stripPropertyRoomCountSuffix(row.property || "Property")}
+                        address={address}
+                        summary={summary}
+                        badge={
+                          groupBadgeDescriptor ? (
+                            <Badge tone={groupBadgeDescriptor.tone} title={groupBadgeDescriptor.title}>
+                              {groupBadgeDescriptor.label}
+                            </Badge>
+                          ) : undefined
+                        }
+                        onOpen={() => openApplicationRow(row)}
+                        dataAttr="resident-application-list-row"
+                      />
+                    </ApplicationNestedListRow>
+                    {cosignerRows.map((sub, index) => (
+                      <ApplicationCosignerListRow
+                        key={`${row.id}-cosigner-${index}`}
+                        name={sub.fullName || "Co-signer"}
+                        subtitle={`Co-signer for ${applicantDisplayName(row)}`}
+                        preview={sub.email || undefined}
+                        onOpen={() =>
+                          portalNavigate(
+                            `${residentApplicationDetailHref(basePath, row.bucket as ResidentApplicationBucketId, row.id)}?cosigner=${index}`,
+                          )
+                        }
+                      />
+                    ))}
+                  </Fragment>
+                );
+              };
+
+              if (cluster.kind === "single") {
+                return renderRow(cluster.row, false);
+              }
+
               return (
-                <PortalPropertyRecordRow
-                  key={row.id}
-                  title={stripPropertyRoomCountSuffix(row.property || "Property")}
-                  address={address}
-                  summary={summary}
-                  onOpen={() => openApplicationRow(row)}
-                  dataAttr="resident-application-list-row"
-                />
+                <ApplicationHouseholdCluster
+                  key={cluster.groupId}
+                  header={householdClusterHeader(cluster.group)}
+                >
+                  {cluster.rows.map((row) => renderRow(row, true))}
+                </ApplicationHouseholdCluster>
               );
             })}
           </div>
@@ -1172,16 +1293,39 @@ export function ResidentApplicationsPanel({
         {propertyPickerModal}
         <PortalRecordDetailPage
           pageTitle="Applications"
-          title={stripPropertyRoomCountSuffix(detailRow.property || detailRow.name || "Application")}
-          subtitle={detailRow.email || undefined}
-          backHref={residentApplicationListHref(basePath, detailRow.bucket as ResidentApplicationBucketId)}
+          title={
+            activeCosignerSubmission
+              ? activeCosignerSubmission.fullName || "Co-signer application"
+              : stripPropertyRoomCountSuffix(detailRow.property || detailRow.name || "Application")
+          }
+          subtitle={
+            activeCosignerSubmission
+              ? activeCosignerSubmission.email || `Co-signer for ${applicantDisplayName(detailRow)}`
+              : detailRow.email || undefined
+          }
+          backHref={
+            activeCosignerSubmission
+              ? residentApplicationDetailHref(
+                  basePath,
+                  detailRow.bucket as ResidentApplicationBucketId,
+                  detailRow.id,
+                )
+              : residentApplicationListHref(basePath, detailRow.bucket as ResidentApplicationBucketId)
+          }
           hideBackText
           bareHeader
           dataAttrBack="resident-application-detail-back"
-          inlineActions
-          actions={renderDetailActions(detailRow)}
+          inlineActions={!activeCosignerSubmission}
+          actions={activeCosignerSubmission ? undefined : renderDetailActions(detailRow)}
         >
-          {renderApplicationDetailBody(detailRow)}
+          {activeCosignerSubmission ? (
+            <ManagerCosignerReadonlyReview
+              sub={activeCosignerSubmission}
+              primaryApplicationAxisId={detailRow.id}
+            />
+          ) : (
+            renderApplicationDetailBody(detailRow)
+          )}
         </PortalRecordDetailPage>
       </>
     );

@@ -4,6 +4,8 @@ export const RENTAL_WIZARD_STEP_COUNT = 12;
 
 export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
+/** Primary lease applicant vs. co-signer on someone else's application. */
+export type ApplicantRole = "signer" | "cosigner" | null;
 
 /**
  * A photo/document an applicant attaches to their application — an image of a
@@ -44,6 +46,7 @@ export type RentalCustomFieldAnswer = {
 };
 
 export type RentalWizardFormState = {
+  applicantRole: ApplicantRole;
   applyingAsGroup: YesNo;
   groupRole: GroupRole;
   groupSize: string;

@@ -201,6 +201,9 @@ import {
 } from "@/lib/existing-resident-welcome-email";
 import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import { ApplicationGroupSection, groupIdForRow, groupRowInputForRow } from "@/components/portal/application-group-section";
+import { ApplicationCosignerSection } from "@/components/portal/application-household-list";
+import { useCosignerSubmissionsMap } from "@/hooks/use-cosigner-submissions-map";
+import { signerAppIdsForCosignerLookup } from "@/lib/rental-application/application-list-grouping";
 import {
   ApplicationReviewLauncherRow,
   type ApplicationReviewView,
@@ -970,6 +973,17 @@ export function ManagerResidents({
     if (!selectedApplicationRow) return null;
     return groupForRow(applicationGroups, { groupId: groupIdForRow(selectedApplicationRow) });
   }, [applicationGroups, selectedApplicationRow]);
+
+  const residentCosignerSignerIds = useMemo(
+    () => (selectedApplicationRow ? signerAppIdsForCosignerLookup([selectedApplicationRow]) : []),
+    [selectedApplicationRow],
+  );
+  const residentCosignerSubmissionsBySigner = useCosignerSubmissionsMap(residentCosignerSignerIds);
+  const selectedApplicationCosigners = useMemo(() => {
+    if (!selectedApplicationRow) return [];
+    const key = normalizeApplicationAxisId(selectedApplicationRow.id).toUpperCase();
+    return residentCosignerSubmissionsBySigner.get(key) ?? [];
+  }, [selectedApplicationRow, residentCosignerSubmissionsBySigner]);
 
   useEffect(() => {
     if (!paymentIdProp || activeDetailTab !== "payments") {
@@ -2585,6 +2599,12 @@ export function ManagerResidents({
                                     <ApplicationGroupSection
                                       group={selectedApplicationGroup}
                                       currentRowId={selectedApplicationRow.id}
+                                    />
+                                  ) : null}
+                                  {selectedApplicationCosigners.length > 0 ? (
+                                    <ApplicationCosignerSection
+                                      submissions={selectedApplicationCosigners}
+                                      primaryApplicationAxisId={selectedApplicationRow.id}
                                     />
                                   ) : null}
                                   <ApplicationReviewLauncherRow

@@ -33,6 +33,8 @@ export function PropertyApplicationFormModal({
   templates,
   onClose,
   onSave,
+  onDelete,
+  canDelete = false,
 }: {
   open: boolean;
   mode: "add" | "edit";
@@ -40,6 +42,8 @@ export function PropertyApplicationFormModal({
   templates: PropertyApplicationTemplate[];
   onClose: () => void;
   onSave: (nextTemplates: PropertyApplicationTemplate[]) => boolean;
+  onDelete?: () => void;
+  canDelete?: boolean;
 }) {
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<PropertyLeaseTemplateKind>("long-term");
@@ -93,11 +97,22 @@ export function PropertyApplicationFormModal({
       open={open}
       title={mode === "edit" ? "Edit application" : "Add application"}
       onClose={onClose}
-      panelClassName="max-w-md"
+      panelClassName="max-w-lg"
       footer={
-        <ModalFooter>
+        <ModalFooter className={mode === "edit" && canDelete && onDelete ? "w-full justify-between" : undefined}>
+          {mode === "edit" && canDelete && onDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-200 text-rose-800 portal-danger-outline"
+              data-attr="property-application-delete"
+              onClick={onDelete}
+            >
+              Delete application
+            </Button>
+          ) : null}
           <Button type="button" variant="primary" onClick={submit} data-attr="property-application-save">
-            {mode === "edit" ? "Save" : "Add application"}
+            {mode === "edit" ? "Save changes" : "Add application"}
           </Button>
         </ModalFooter>
       }

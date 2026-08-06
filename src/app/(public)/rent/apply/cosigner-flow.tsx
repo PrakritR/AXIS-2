@@ -16,24 +16,28 @@ import {
   validatePhone10,
   validateRequired,
   validateSsn,
-  validateStateAbbrev,
-  validateZip,
 } from "./apply-validation";
 import { ApplyFieldRow } from "./apply-field-row";
 import { submitCosignerToServerAwait } from "@/lib/cosigner-submissions-storage";
-import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import { nextWizardMaxReached, activeWizardProgressPct } from "@/lib/wizard-step-nav";
 import {
   COSIGNER_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
 
-const COSIGNER_STEPS = 5;
+const COSIGNER_ACTIVE_STEPS = [1, 2, 3, 4, 5] as const;
+
+export type CosignerApplicationKind = "long-term" | "short-term";
+
+export function cosignerApplicationEyebrow(kind: CosignerApplicationKind): string {
+  return kind === "short-term" ? "Short-term co-signer application" : "Long-term co-signer application";
+}
 
 const COSIGNER_STEP_META = [
-  { n: 1, title: "Link to Signer" },
-  { n: 2, title: "Co-Signer Information" },
-  { n: 3, title: "Employment & Income" },
-  { n: 4, title: "Financial Background & Legal" },
+  { n: 1, title: "Link to signer" },
+  { n: 2, title: "Personal information" },
+  { n: 3, title: "Employment" },
+  { n: 4, title: "Background & consent" },
   { n: 5, title: "Signature" },
 ] as const;
 
@@ -108,14 +112,24 @@ const errRing = "border-red-500 ring-2 ring-red-100";
 export function CosignerApplyFlow({
   onBack,
   onDone,
+  previewMode = false,
+  embedded = false,
+  showToast,
+  applicationKind = "long-term",
 }: {
   onBack: () => void;
   /** Called from the success screen when the user finishes (e.g. navigate back to the main application). */
   onDone?: () => void;
+  /** Manager template preview — no draft persistence or server submit. */
+  previewMode?: boolean;
+  embedded?: boolean;
+  showToast?: (message: string) => void;
+  applicationKind?: CosignerApplicationKind;
 }) {
   const [step, setStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState(1);
   const [f, setF] = useState<CosignerFields>(() => {
+    if (previewMode) return emptyCosigner();
     const draft = loadCosignerDraft<CosignerFields>();
     return draft ? { ...emptyCosigner(), ...draft } : emptyCosigner();
   });
@@ -130,9 +144,9 @@ export function CosignerApplyFlow({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || previewMode) return;
     saveCosignerDraft(f);
-  }, [draftReady, f]);
+  }, [draftReady, f, previewMode]);
 
   const clearError = (key: string) => {
     setFieldErrors((prev) => {
@@ -143,16 +157,14 @@ export function CosignerApplyFlow({
     });
   };
 
-  const progress = useMemo(() => Math.round((step / COSIGNER_STEPS) * 100), [step]);
+  const progress = useMemo(
+    () => activeWizardProgressPct(COSIGNER_ACTIVE_STEPS, step),
+    [step],
+  );
 
   const stepTitle = COSIGNER_STEP_META[step - 1]?.title ?? "Co-signer form";
-
-  const goToStep = (n: number) => {
-    if (!canNavigateToWizardStep(n, maxStepReached)) return;
-    setFieldErrors({});
-    setStep(n);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const eyebrow = cosignerApplicationEyebrow(applicationKind);
+  const isShortTermCosigner = applicationKind === "short-term";
 
   const validateStep1 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
@@ -183,18 +195,8 @@ export function CosignerApplyFlow({
     if (!ph.ok) errs.phone = ph.message;
     const dob = validateDateRequired(f.dob, "Date of birth");
     if (!dob.ok) errs.dob = dob.message;
-    const dl = validateRequired(f.dlNumber, "Driver's license / ID number");
-    if (!dl.ok) errs.dlNumber = dl.message;
     const ssn = validateSsn(f.ssn);
     if (!ssn.ok) errs.ssn = ssn.message;
-    const ad = validateRequired(f.address, "Current address");
-    if (!ad.ok) errs.address = ad.message;
-    const ci = validateRequired(f.city, "City");
-    if (!ci.ok) errs.city = ci.message;
-    const st = validateStateAbbrev(f.state);
-    if (!st.ok) errs.state = st.message;
-    const z = validateZip(f.zip);
-    if (!z.ok) errs.zip = z.message;
     setFieldErrors(errs);
     return errs;
   };
@@ -207,24 +209,18 @@ export function CosignerApplyFlow({
       setFieldErrors(errs);
       return errs;
     }
+    if (isShortTermCosigner) {
+      const mi = validateMoney(f.monthlyIncome, "Monthly income");
+      if (!mi.ok) errs.monthlyIncome = mi.message;
+      setFieldErrors(errs);
+      return errs;
+    }
     const en = validateRequired(f.employerName, "Employer name");
     if (!en.ok) errs.employerName = en.message;
-    const ea = validateRequired(f.employerAddress, "Employer address");
-    if (!ea.ok) errs.employerAddress = ea.message;
-    const sn = validateRequired(f.supervisorName, "Supervisor name");
-    if (!sn.ok) errs.supervisorName = sn.message;
     const jt = validateRequired(f.jobTitle, "Job title");
     if (!jt.ok) errs.jobTitle = jt.message;
     const mi = validateMoney(f.monthlyIncome, "Monthly income");
     if (!mi.ok) errs.monthlyIncome = mi.message;
-    const ai = validateMoney(f.annualIncome, "Annual income");
-    if (!ai.ok) errs.annualIncome = ai.message;
-    const es = validateDateRequired(f.employmentStart, "Employment start date");
-    if (!es.ok) errs.employmentStart = es.message;
-    if (f.supervisorPhone.trim()) {
-      const sp = validatePhone10(f.supervisorPhone);
-      if (!sp.ok) errs.supervisorPhone = sp.message;
-    }
     setFieldErrors(errs);
     return errs;
   };
@@ -288,6 +284,10 @@ export function CosignerApplyFlow({
       const linkedAxisId = f.signerAppId.trim();
       const linkedSignerName = f.signerFullName.trim();
       const cosignerName = f.fullName.trim();
+      if (previewMode) {
+        showToast?.("Preview only — co-signers submit from the shared apply link.");
+        return;
+      }
       if (submitting) return;
       setSubmitting(true);
       const submission = { ...f, signerAppId: linkedAxisId, submittedAt: new Date().toISOString() };
@@ -394,48 +394,34 @@ export function CosignerApplyFlow({
 
   return (
     <div
-      className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-      style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+      className={
+        embedded
+          ? "rental-wizard-cosigner"
+          : "mt-8 rounded-3xl border border-border bg-card p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+      }
+      style={
+        embedded
+          ? undefined
+          : { boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }
+      }
     >
-      <div className="border-b border-border pb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
-          Step {step} of {COSIGNER_STEPS} · Co-signer form
+      <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
+        <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
+          {eyebrow}
         </p>
-        <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{stepTitle}</p>
-        <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
-          <div className="flex min-w-max gap-1 px-1">
-            {COSIGNER_STEP_META.map((s) => {
-              const reachable = canNavigateToWizardStep(s.n, maxStepReached);
-              const completed = s.n < step;
-              return (
-                <button
-                  key={s.n}
-                  type="button"
-                  disabled={!reachable}
-                  title={s.title}
-                  onClick={() => goToStep(s.n)}
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition ${
-                    s.n === step
-                      ? "bg-primary text-white"
-                      : completed
-                        ? "bg-primary/15 text-primary"
-                        : reachable
-                          ? "bg-accent/30 text-muted hover:bg-accent/40"
-                          : "cursor-not-allowed bg-accent/30 text-foreground/30"
-                  }`}
-                >
-                  {completed ? "✓" : s.n}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
-          <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
+        <p className="rental-wizard-step-title mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+          {stepTitle}
+        </p>
+        <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2 [html[data-theme=dark]_&]:bg-white/10">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+            style={{ width: `${progress}%` }}
+            aria-hidden="true"
+          />
         </div>
       </div>
 
-      <div className="pt-8">
+      <div className="rental-wizard-step-content pt-5 sm:pt-8">
         {step === 1 ? (
           <>
             <div className="divide-y divide-slate-100">
@@ -512,17 +498,6 @@ export function CosignerApplyFlow({
                   className={err("dob")}
                 />
               </Field>
-              <Field fieldKey="dlNumber" label="Driver's License / ID #" hint="Enter your license or ID number." error={fieldErrors.dlNumber}>
-                <Input
-                  value={f.dlNumber}
-                  onChange={(e) => {
-                    patchField(setF, "dlNumber", e.target.value);
-                    clearError("dlNumber");
-                  }}
-                  placeholder="License or ID number"
-                  className={err("dlNumber")}
-                />
-              </Field>
               <Field fieldKey="ssn" label="Social Security #" hint="9 digits: ###-##-####" error={fieldErrors.ssn}>
                 <Input
                   value={f.ssn}
@@ -532,51 +507,6 @@ export function CosignerApplyFlow({
                   }}
                   placeholder="123-45-6789"
                   className={err("ssn")}
-                />
-              </Field>
-              <Field fieldKey="address" label="Current address" className="sm:col-span-2" error={fieldErrors.address}>
-                <Input
-                  value={f.address}
-                  onChange={(e) => {
-                    patchField(setF, "address", e.target.value);
-                    clearError("address");
-                  }}
-                  placeholder="123 Main St"
-                  className={err("address")}
-                />
-              </Field>
-              <Field fieldKey="city" label="City" error={fieldErrors.city}>
-                <Input
-                  value={f.city}
-                  onChange={(e) => {
-                    patchField(setF, "city", e.target.value);
-                    clearError("city");
-                  }}
-                  placeholder="Your city"
-                  className={err("city")}
-                />
-              </Field>
-              <Field fieldKey="state" label="State" hint="Two letters, e.g. WA, CA" error={fieldErrors.state}>
-                <Input
-                  value={f.state}
-                  onChange={(e) => {
-                    patchField(setF, "state", e.target.value.toUpperCase());
-                    clearError("state");
-                  }}
-                  placeholder="WA"
-                  maxLength={2}
-                  className={err("state")}
-                />
-              </Field>
-              <Field fieldKey="zip" label="ZIP" error={fieldErrors.zip}>
-                <Input
-                  value={f.zip}
-                  onChange={(e) => {
-                    patchField(setF, "zip", e.target.value);
-                    clearError("zip");
-                  }}
-                  placeholder="98105"
-                  className={err("zip")}
                 />
               </Field>
             </div>
@@ -604,8 +534,8 @@ export function CosignerApplyFlow({
             {f.notEmployed ? (
                 <Field
                   fieldKey="otherIncome"
-                  label="Other / Non-Employment Income ($)"
-                  hint="e.g. rental income, investments, child support, disability"
+                  label="Other / non-employment income ($)"
+                  hint="e.g. rental income, investments, disability"
                   error={fieldErrors.otherIncome}
                 >
                   <Input
@@ -618,6 +548,30 @@ export function CosignerApplyFlow({
                     className={err("otherIncome")}
                   />
                 </Field>
+            ) : isShortTermCosigner ? (
+              <>
+                <Field fieldKey="employerName" label="Employer name" optional error={fieldErrors.employerName}>
+                  <Input
+                    value={f.employerName}
+                    onChange={(e) => {
+                      patchField(setF, "employerName", e.target.value);
+                      clearError("employerName");
+                    }}
+                    className={err("employerName")}
+                  />
+                </Field>
+                <Field fieldKey="monthlyIncome" label="Monthly income ($)" error={fieldErrors.monthlyIncome}>
+                  <Input
+                    value={f.monthlyIncome}
+                    onChange={(e) => {
+                      patchField(setF, "monthlyIncome", e.target.value);
+                      clearError("monthlyIncome");
+                    }}
+                    placeholder="0"
+                    className={err("monthlyIncome")}
+                  />
+                </Field>
+              </>
             ) : (
               <>
                 <Field fieldKey="employerName" label="Employer name" error={fieldErrors.employerName}>
@@ -628,37 +582,6 @@ export function CosignerApplyFlow({
                         clearError("employerName");
                       }}
                       className={err("employerName")}
-                    />
-                  </Field>
-                  <Field fieldKey="employerAddress" label="Employer address" error={fieldErrors.employerAddress}>
-                    <Input
-                      value={f.employerAddress}
-                      onChange={(e) => {
-                        patchField(setF, "employerAddress", e.target.value);
-                        clearError("employerAddress");
-                      }}
-                      className={err("employerAddress")}
-                    />
-                  </Field>
-                  <Field fieldKey="supervisorName" label="Supervisor name" error={fieldErrors.supervisorName}>
-                    <Input
-                      value={f.supervisorName}
-                      onChange={(e) => {
-                        patchField(setF, "supervisorName", e.target.value);
-                        clearError("supervisorName");
-                      }}
-                      className={err("supervisorName")}
-                    />
-                  </Field>
-                  <Field fieldKey="supervisorPhone" label="Supervisor phone" optional error={fieldErrors.supervisorPhone}>
-                    <Input
-                      value={f.supervisorPhone}
-                      onChange={(e) => {
-                        patchField(setF, "supervisorPhone", e.target.value);
-                        clearError("supervisorPhone");
-                      }}
-                      placeholder="(206) 555-0100"
-                      className={err("supervisorPhone")}
                     />
                   </Field>
                   <Field fieldKey="jobTitle" label="Job title" error={fieldErrors.jobTitle}>
@@ -682,35 +605,6 @@ export function CosignerApplyFlow({
                       className={err("monthlyIncome")}
                     />
                   </Field>
-                  <Field fieldKey="annualIncome" label="Annual income ($)" error={fieldErrors.annualIncome}>
-                    <Input
-                      value={f.annualIncome}
-                      onChange={(e) => {
-                        patchField(setF, "annualIncome", e.target.value);
-                        clearError("annualIncome");
-                      }}
-                      placeholder="0"
-                      className={err("annualIncome")}
-                    />
-                  </Field>
-                <Field fieldKey="employmentStart" label="Employment start date" error={fieldErrors.employmentStart}>
-                  <Input
-                    type="date"
-                    value={f.employmentStart}
-                    onChange={(e) => {
-                      patchField(setF, "employmentStart", e.target.value);
-                      clearError("employmentStart");
-                    }}
-                    className={err("employmentStart")}
-                  />
-                </Field>
-                <Field label="Other / Non-Employment Income ($)" optional hint="Optional, e.g. rental income, investments">
-                  <Input
-                    value={f.otherIncome}
-                    onChange={(e) => patchField(setF, "otherIncome", e.target.value)}
-                    placeholder="0"
-                  />
-                </Field>
               </>
             )}
             </div>
