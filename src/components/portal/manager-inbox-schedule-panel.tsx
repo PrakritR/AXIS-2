@@ -15,19 +15,21 @@ import {
   PORTAL_TABLE_TD,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
+import { PortalInboxEmptyState, InboxScheduledCard } from "@/components/portal/portal-inbox-ui";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import {
   sendAutomationScheduledMessageNow,
   sendManualScheduledMessageNow,
   useInboxRowSelection,
 } from "@/components/portal/portal-inbox-selection";
-import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
 import {
-  ScheduledMessageEditForm,
   patchScheduledMessage,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
+import {
+  threadScheduledItemFromAutomationMessage,
+  threadScheduledItemFromManualMessage,
+} from "@/lib/inbox-scheduled-thread";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
@@ -88,6 +90,7 @@ export function ManagerInboxSchedulePanel({
   const [manualLoading, setManualLoading] = useState(true);
   const [contactTick, setContactTick] = useState(0);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const reloadManual = useCallback(async () => {
@@ -246,44 +249,100 @@ export function ManagerInboxSchedulePanel({
     }
   };
 
-  const renderRowEditPanel = (row: ScheduleRow) =>
-    row.kind === "manual" ? (
-      <ScheduleInboxComposeForm
-        contacts={liveContacts}
-        editMessage={row.message}
-        onSaved={reloadAll}
-        onClose={() => setEditingRowId(null)}
-        showHeading={false}
-        onToggleCancelled={async (cancelled) => {
-          try {
-            await toggleManualCancelled(row.message, cancelled);
-            showToast(cancelled ? "Send cancelled." : "Send restored.");
-            setEditingRowId(null);
-            reloadAll();
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "Could not update.");
+  const renderRowEditPanel = (row: ScheduleRow) => {
+    const scheduled =
+      row.kind === "manual"
+        ? threadScheduledItemFromManualMessage(row.message)
+        : threadScheduledItemFromAutomationMessage(row.message);
+    const isScheduled = row.message.status === "scheduled";
+
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          className="text-xs font-semibold text-primary hover:underline"
+          onClick={() => setEditingRowId(null)}
+          data-attr="schedule-panel-back"
+        >
+          ← All scheduled messages
+        </button>
+        <InboxScheduledCard
+          key={scheduled.id}
+          sendLabel={scheduled.sendLabel}
+          subject={scheduled.subject}
+          body={scheduled.body}
+          meta={scheduled.meta}
+          channel={scheduled.channel}
+          source={scheduled.source}
+          editable={scheduled.editable && isScheduled}
+          busy={editBusy}
+          expanded
+          onToggleExpand={() => setEditingRowId(null)}
+          onCancel={() => {
+            if (!isScheduled) return;
+            setEditBusy(true);
+            void (async () => {
+              try {
+                if (row.kind === "manual") {
+                  await toggleManualCancelled(row.message, true);
+                } else {
+                  await patchScheduledMessage(row.message.id, { cancelled: true });
+                }
+                showToast("Send cancelled.");
+                setEditingRowId(null);
+                reloadAll();
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Could not cancel send.");
+              } finally {
+                setEditBusy(false);
+              }
+            })();
+          }}
+          onSendNow={() => {
+            if (!isScheduled) return;
+            setEditBusy(true);
+            void sendRowNow(row)
+              .then(() => {
+                showToast(row.kind === "manual" ? "Message sent." : "Reminder sent.");
+                setEditingRowId(null);
+                reloadAll();
+              })
+              .catch((e) => {
+                showToast(e instanceof Error ? e.message : "Could not send message.");
+              })
+              .finally(() => setEditBusy(false));
+          }}
+          onSaveEdit={
+            scheduled.editable && isScheduled
+              ? async (next) => {
+                  if (row.kind === "manual") {
+                    const res = await fetch(
+                      `/api/portal/scheduled-inbox-messages/${encodeURIComponent(row.message.id)}`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ subject: next.subject, body: next.body }),
+                      },
+                    );
+                    if (!res.ok) {
+                      throw new Error(await readPortalApiError(res, "Could not save."));
+                    }
+                  } else {
+                    await patchScheduledMessage(row.message.id, {
+                      customSubject: next.subject,
+                      customBody: next.body,
+                    });
+                  }
+                  showToast("Scheduled message updated.");
+                  reloadAll();
+                }
+              : undefined
           }
-        }}
-        onSendNow={async () => {
-          await sendRowNow(row);
-          showToast("Message sent.");
-          setEditingRowId(null);
-          reloadAll();
-        }}
-      />
-    ) : (
-      <ScheduledMessageEditForm
-        message={row.message}
-        onSaved={reloadAll}
-        onClose={() => setEditingRowId(null)}
-        onSendNow={async () => {
-          await sendRowNow(row);
-          showToast("Reminder sent.");
-          setEditingRowId(null);
-          reloadAll();
-        }}
-      />
+        />
+      </div>
     );
+  };
 
   return (
     <div className="space-y-4">
@@ -482,8 +541,8 @@ export function ManagerInboxSchedulePanel({
       <Modal
         open={Boolean(editingRowId)}
         onClose={() => setEditingRowId(null)}
-        title="Edit scheduled message"
-        description="Update the delivery time and message without expanding the schedule list."
+        title="Scheduled message"
+        description="View and manage this scheduled send."
         panelClassName="max-w-lg"
         assistantStrip={false}
       >

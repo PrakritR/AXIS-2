@@ -1716,7 +1716,7 @@ export function InboxScheduledThreadList({
   defaultCollapsed?: boolean;
   children: ReactNode;
 }) {
-  const [listOpen, setListOpen] = useState(!defaultCollapsed);
+  const [modalOpen, setModalOpen] = useState(!defaultCollapsed);
   const wrap = (inner: ReactNode) => <div className="space-y-1 pt-1">{inner}</div>;
 
   if (count <= 2) return wrap(children);
@@ -1728,33 +1728,38 @@ export function InboxScheduledThreadList({
   const when = nextSendLabel ? ` · next sends ${nextSendLabel}` : "";
 
   return (
-    <div className="pt-1" data-attr="inbox-scheduled-thread-list">
-      <button
-        type="button"
-        onClick={() => setListOpen((v) => !v)}
-        className="mb-1 flex w-full items-center gap-2 rounded-xl border border-dashed border-primary/25 bg-primary/[0.04] px-3 py-1.5 text-left"
-        aria-expanded={listOpen}
-        data-attr="inbox-scheduled-list-toggle"
-      >
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <Clock className="h-3 w-3 text-primary" strokeWidth={2.25} />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
-          <span className="font-semibold text-primary">{summary}</span>
-          <span className="text-muted">{when}</span>
-        </span>
-        {listOpen ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
-        ) : (
+    <>
+      <div className="pt-1" data-attr="inbox-scheduled-thread-list">
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="mb-1 flex w-full items-center gap-2 rounded-xl border border-dashed border-primary/25 bg-primary/[0.04] px-3 py-1.5 text-left"
+          aria-haspopup="dialog"
+          data-attr="inbox-scheduled-list-toggle"
+        >
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Clock className="h-3 w-3 text-primary" strokeWidth={2.25} />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+            <span className="font-semibold text-primary">{summary}</span>
+            <span className="text-muted">{when}</span>
+          </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} />
-        )}
-      </button>
-      {listOpen ? (
-        <div className="max-h-44 space-y-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+        </button>
+      </div>
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Scheduled messages"
+        dense
+        assistantStrip={false}
+        panelClassName="max-w-lg p-3 sm:p-4"
+      >
+        <div className="max-h-[min(70vh,28rem)] space-y-2 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
           {children}
         </div>
-      ) : null}
-    </div>
+      </Modal>
+    </>
   );
 }
 

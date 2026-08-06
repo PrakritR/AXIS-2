@@ -6,10 +6,11 @@ const portalSource = (filename: string) =>
   readFileSync(join(process.cwd(), "src/components/portal", filename), "utf8");
 
 describe("scheduled message modal layout", () => {
-  it("opens manager scheduled-message editors in a dialog instead of an expanded row", () => {
+  it("opens manager scheduled-message detail in a dialog with the inline scheduled card", () => {
     const source = portalSource("manager-inbox-schedule-panel.tsx");
 
-    expect(source).toContain('title="Edit scheduled message"');
+    expect(source).toContain('title="Scheduled message"');
+    expect(source).toContain("InboxScheduledCard");
     expect(source).toContain('aria-haspopup="dialog"');
     expect(source).not.toContain("PORTAL_TABLE_DETAIL_ROW");
     expect(source).not.toContain("PortalTableExpandChevron");

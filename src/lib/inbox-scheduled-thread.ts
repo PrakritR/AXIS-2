@@ -43,6 +43,39 @@ function normalizeEmail(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+/** Map one manual scheduled-inbox row to the inline thread card shape. */
+export function threadScheduledItemFromManualMessage(
+  message: ScheduledInboxMessageRecord,
+): ThreadScheduledItem {
+  return {
+    id: message.id,
+    source: "manual",
+    sendAt: message.sendAt,
+    sendLabel: formatScheduledSendAt(message.sendAt),
+    subject: message.subject,
+    body: message.body,
+    editable: !isResidentOriginatedScheduledMessage(message),
+    channel: message.deliverViaSms && !message.deliverViaEmail ? "sms" : "email",
+  };
+}
+
+/** Map one automated payment-reminder row to the inline thread card shape. */
+export function threadScheduledItemFromAutomationMessage(
+  message: ScheduledPaymentMessage,
+): ThreadScheduledItem {
+  return {
+    id: message.id,
+    source: "automation",
+    sendAt: message.sendAt,
+    sendLabel: formatScheduledSendAt(message.sendAt),
+    subject: message.subject,
+    body: message.body,
+    meta: [message.chargeTitle, message.propertyLabel].filter(Boolean).join(" · ") || undefined,
+    editable: true,
+    channel: "email",
+  };
+}
+
 /**
  * Upcoming, still-scheduled messages addressed to `recipientEmail`, newest send
  * last, ready to render as inline "Scheduled" cards in that person's thread.
@@ -63,33 +96,14 @@ export function scheduledItemsForRecipient(
     if (message.status !== "scheduled") continue;
     if (!isUpcomingScheduledInboxMessage(message.sendAt, message.status)) continue;
     if (normalizeEmail(message.recipientEmail) !== target) continue;
-    items.push({
-      id: message.id,
-      source: "manual",
-      sendAt: message.sendAt,
-      sendLabel: formatScheduledSendAt(message.sendAt),
-      subject: message.subject,
-      body: message.body,
-      editable: !isResidentOriginatedScheduledMessage(message),
-      channel: message.deliverViaSms && !message.deliverViaEmail ? "sms" : "email",
-    });
+    items.push(threadScheduledItemFromManualMessage(message));
   }
 
   for (const message of automation) {
     if (message.status !== "scheduled") continue;
     if (!isUpcomingScheduledInboxMessage(message.sendAt, message.status)) continue;
     if (normalizeEmail(message.residentEmail) !== target) continue;
-    items.push({
-      id: message.id,
-      source: "automation",
-      sendAt: message.sendAt,
-      sendLabel: formatScheduledSendAt(message.sendAt),
-      subject: message.subject,
-      body: message.body,
-      meta: [message.chargeTitle, message.propertyLabel].filter(Boolean).join(" · ") || undefined,
-      editable: true,
-      channel: "email",
-    });
+    items.push(threadScheduledItemFromAutomationMessage(message));
   }
 
   return items.sort((a, b) => a.sendAt.localeCompare(b.sendAt));
