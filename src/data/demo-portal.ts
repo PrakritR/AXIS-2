@@ -3,6 +3,7 @@
  */
 
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import type { ResidentChargeMessage } from "@/lib/household-charges";
 import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import type { ApplicationScreeningReport } from "@/lib/screening/types";
@@ -171,6 +172,7 @@ export type DemoManagerPaymentLedgerRow = {
   paymentReference?: string;
   zelleContactSnapshot?: string;
   venmoContactSnapshot?: string;
+  residentChargeMessages?: ResidentChargeMessage[];
 };
 
 export type DemoManagerOutgoingPaymentRow = {

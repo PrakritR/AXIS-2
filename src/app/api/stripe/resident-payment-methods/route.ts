@@ -4,6 +4,7 @@ import { getStripe } from "@/lib/stripe";
 import {
   ensureResidentStripeCustomerId,
   listResidentSavedPaymentMethods,
+  setResidentDefaultPaymentMethod,
 } from "@/lib/stripe-resident-customer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -107,6 +108,48 @@ export async function POST(req: Request) {
     return NextResponse.json({ clientSecret: session.client_secret, kind });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not start payment method setup.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    if (isDemoModeActive()) {
+      return NextResponse.json({ error: "Payment methods are unavailable in demo mode." }, { status: 400 });
+    }
+
+    const auth = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await auth.auth.getUser();
+    if (!user?.email) {
+      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    }
+
+    const body = (await req.json()) as { paymentMethodId?: string };
+    const paymentMethodId = String(body.paymentMethodId ?? "").trim();
+    if (!paymentMethodId) {
+      return NextResponse.json({ error: "paymentMethodId is required." }, { status: 400 });
+    }
+
+    const db = createSupabaseServiceRoleClient();
+    const { data: profile } = await db
+      .from("profiles")
+      .select("stripe_customer_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const customerId = profile?.stripe_customer_id?.trim();
+    if (!customerId) {
+      return NextResponse.json({ error: "No saved payment methods yet." }, { status: 404 });
+    }
+
+    const stripe = getStripe();
+    await setResidentDefaultPaymentMethod(stripe, customerId, paymentMethodId);
+    const methods = await listResidentSavedPaymentMethods(stripe, customerId);
+    return NextResponse.json({ methods });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not set default payment method.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

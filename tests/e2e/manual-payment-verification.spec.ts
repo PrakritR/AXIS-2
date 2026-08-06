@@ -32,13 +32,17 @@ test.describe("Manual payment verification UI", () => {
     await page.goto("/resident/payments");
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
 
-    const zelleMethod = page.locator('[data-attr="resident-payments-method-zelle"]');
-    if (await zelleMethod.isVisible().catch(() => false)) {
-      await zelleMethod.click();
-      const payButton = page.getByRole("button", { name: /^pay /i }).first();
-      if (await payButton.isVisible().catch(() => false)) {
-        await payButton.click();
-        await expect(page.getByRole("button", { name: /check payment/i })).toBeVisible();
+    const payButton = page.getByRole("button", { name: /^pay /i }).first();
+    if (await payButton.isVisible().catch(() => false)) {
+      await payButton.click();
+      const methodSelect = page.locator('[data-attr="resident-payments-pay-method-select"]');
+      if (await methodSelect.isVisible().catch(() => false)) {
+        const zelleOption = methodSelect.locator('option[value="zelle"]');
+        if (await zelleOption.count()) {
+          await methodSelect.selectOption("zelle");
+          await page.locator('[data-attr="resident-payments-confirm-manual"]').click();
+          await expect(page.getByRole("button", { name: /check payment/i })).toBeVisible();
+        }
       }
     }
   });

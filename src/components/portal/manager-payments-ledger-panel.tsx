@@ -25,6 +25,7 @@ import {
 } from "@/components/portal/portal-list-add-row";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import { paymentDetailHref, paymentListHref } from "@/lib/portal-detail-routes";
+import { formatPacificDateTime } from "@/lib/pacific-time";
 import { RESIDENT_DETAIL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
@@ -727,6 +728,19 @@ export function ManagerPaymentsLedgerPanel({
           <div>
             <p className="text-xs font-medium text-muted">Details</p>
             <p className="leading-relaxed text-foreground/90">{row.notes}</p>
+          </div>
+        ) : null}
+        {(row.residentChargeMessages?.length ?? 0) > 0 ? (
+          <div className="rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 dark:bg-amber-950/20">
+            <p className="text-xs font-semibold text-foreground">Resident message</p>
+            <ul className="mt-2 space-y-3">
+              {row.residentChargeMessages!.map((entry) => (
+                <li key={entry.id}>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{entry.body}</p>
+                  <p className="mt-1 text-xs text-muted">{formatPacificDateTime(entry.sentAt)}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
       </div>

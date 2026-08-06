@@ -81,3 +81,19 @@ export async function listResidentSavedPaymentMethods(
   }
   return out;
 }
+
+/** Pin a saved Stripe payment method as the customer's default. */
+export async function setResidentDefaultPaymentMethod(
+  stripe: Stripe,
+  customerId: string,
+  paymentMethodId: string,
+): Promise<void> {
+  const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+  const pmCustomer = typeof pm.customer === "string" ? pm.customer : pm.customer?.id ?? null;
+  if (pmCustomer !== customerId) {
+    throw new Error("Payment method not found.");
+  }
+  await stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+}

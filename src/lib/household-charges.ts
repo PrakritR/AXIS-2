@@ -116,6 +116,13 @@ export type HouseholdChargeKind =
   /** Not created anywhere yet (Phase 2/6 of the financials buildout) — added now so the category mapping exists ahead of that work. */
   | "nsf_fee";
 
+export type ResidentChargeMessage = {
+  id: string;
+  body: string;
+  sentAt: string;
+  residentUserId: string;
+};
+
 export type HouseholdCharge = {
   id: string;
   createdAt: string;
@@ -144,6 +151,8 @@ export type HouseholdCharge = {
   manualPaymentReportedAt?: string;
   /** Short memo code residents include in Zelle/Venmo payments for manager matching. */
   paymentReference?: string;
+  /** Resident questions or issues about this charge, newest last. */
+  residentChargeMessages?: ResidentChargeMessage[];
   /** Gmail API message id when auto-marked from linked Gmail sync. */
   paidViaGmailMessageId?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
@@ -3823,6 +3832,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     paymentReference: c.paymentReference ?? generatePaymentReference(c.id),
     zelleContactSnapshot: c.zelleContactSnapshot,
     venmoContactSnapshot: c.venmoContactSnapshot,
+    residentChargeMessages: c.residentChargeMessages,
     notes:
       c.kind === "rent"
         ? `Recurring tenant rent. Current cycle: ${c.rentMonth ?? currentRentMonth()}. Due ${formatRecurringRentDueLabel(c.rentMonth ?? currentRentMonth(), c.dueDay ?? 1, c.dueDayMode)}.`
