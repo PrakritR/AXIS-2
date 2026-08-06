@@ -99,9 +99,9 @@ export function portalFilterPanelSizeClass(fieldCount: number): string {
           : PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS;
   return `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${heightClass}`;
 }
-/** Communication filter — four fields (house, role, resident, sort). */
+/** Communication filter — three fields (house, role, sort), tightly fit when closed. */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
-  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex ${PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS} flex-col overflow-hidden`;
+  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[18rem] flex-col overflow-hidden`;
 /**
  * Default compact mobile sheet when callers do not override height. Fills the bottom sheet
  * with white down to the tab bar; filter fields stay at the top and scroll when needed.

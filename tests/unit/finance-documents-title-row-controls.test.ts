@@ -47,4 +47,12 @@ describe("Finance and Documents title-row controls", () => {
     expect(documents.match(/constrainDropdownToTitleBand/g)).toHaveLength(2);
     expect(finances).toContain("constrainDropdownToTitleBand");
   });
+
+  it("keeps the Communication reference filter inside its title row without excess closed height", () => {
+    const communication = portalSource("manager-communication.tsx");
+    const filterFields = portalSource("filter-field-lists.tsx");
+
+    expect(communication).toContain("constrainDropdownToTitleBand");
+    expect(filterFields).toContain('flex h-[18rem] flex-col overflow-hidden`');
+  });
 });

@@ -592,7 +592,7 @@ describe("portalFilterPanelSizeClass", () => {
     // Four 76px field rows plus header/padding need 23rem; at 19rem the fourth field
     // rendered BELOW the panel and was only reachable by scrolling.
     expect(portalFilterPanelSizeClass(4)).toContain("23rem");
-    expect(PORTAL_FILTER_COMMUNICATION_PANEL_CLASS).toContain("23rem");
+    expect(PORTAL_FILTER_COMMUNICATION_PANEL_CLASS).toContain("18rem");
   });
 });
 

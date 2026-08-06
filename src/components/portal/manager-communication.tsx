@@ -214,6 +214,7 @@ export function ManagerCommunication({
       activeCount={filterTouchCount}
       compactPanel
       filterFieldCount={3}
+      constrainDropdownToTitleBand
       className="min-w-0 shrink-0"
       panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
       mobileFlushBody={true}
