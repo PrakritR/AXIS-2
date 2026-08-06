@@ -1,9 +1,6 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
-  hydrateHouseholdStateFromSession,
-  readAll,
-  writeAll,
-  emit,
+  applyHouseholdChargeServerUpdates,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 
@@ -60,11 +57,7 @@ export async function checkResidentManualPayment(
 
   const updates = Array.isArray(payload.charges) ? payload.charges : [];
   if (updates.length > 0 && isBrowser()) {
-    hydrateHouseholdStateFromSession();
-    const byId = new Map(updates.map((c) => [c.id, c]));
-    const next = readAll().map((c) => byId.get(c.id) ?? c);
-    writeAll(next);
-    emit();
+    applyHouseholdChargeServerUpdates(updates);
   }
   return { ok: true, paid: true, charges: updates };
 }

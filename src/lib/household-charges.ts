@@ -430,6 +430,14 @@ export function readHouseholdCharges(): HouseholdCharge[] {
   return readAll();
 }
 
+/** Apply server-confirmed charge rows without exposing the store's private writers. */
+export function applyHouseholdChargeServerUpdates(updates: HouseholdCharge[]): void {
+  if (!isBrowser() || updates.length === 0) return;
+  hydrateHouseholdStateFromSession();
+  const byId = new Map(updates.map((charge) => [charge.id, charge]));
+  writeAll(readAll().map((charge) => byId.get(charge.id) ?? charge));
+}
+
 function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
   const normalized = dedupeCharges(rows);
