@@ -95,7 +95,7 @@ export function buildLocalizationCreate(spec, subscriptionId) {
   };
 }
 
-export function buildPriceCreate(subscriptionId, pricePointId) {
+export function buildPriceCreate(subscriptionId, pricePointId, territoryId) {
   return {
     data: {
       type: "subscriptionPrices",
@@ -105,6 +105,7 @@ export function buildPriceCreate(subscriptionId, pricePointId) {
         subscriptionPricePoint: {
           data: { type: "subscriptionPricePoints", id: pricePointId },
         },
+        territory: { data: { type: "territories", id: territoryId } },
       },
     },
   };
@@ -233,7 +234,10 @@ async function ensurePrices(client, subscription, spec, territoryIds) {
         `${spec.productId} already has a different price in ${territoryId}; refusing to overwrite it.`,
       );
     }
-    await client.post("subscriptionPrices", buildPriceCreate(subscription.id, desiredPointId));
+    await client.post(
+      "subscriptionPrices",
+      buildPriceCreate(subscription.id, desiredPointId, territoryId),
+    );
   }
   console.log(`  ✓ ${spec.productId}: configured ${territoryIds.length} equalized territory prices`);
 }

@@ -56,7 +56,7 @@ describe("annual App Store subscription provisioning", () => {
   });
 
   it("marks an annual price as an up-front yearly charge", () => {
-    expect(buildPriceCreate("annual", "point")).toEqual({
+    expect(buildPriceCreate("annual", "point", "USA")).toEqual({
       data: {
         type: "subscriptionPrices",
         attributes: { planType: "UPFRONT" },
@@ -65,6 +65,7 @@ describe("annual App Store subscription provisioning", () => {
           subscriptionPricePoint: {
             data: { type: "subscriptionPricePoints", id: "point" },
           },
+          territory: { data: { type: "territories", id: "USA" } },
         },
       },
     });
