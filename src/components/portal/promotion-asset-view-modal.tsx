@@ -7,17 +7,10 @@ import {
 } from "@/components/portal/promotion-asset-detail";
 import { PromotionTextPreview } from "@/components/portal/promotion-text-preview";
 import {
-  promotionAssetBoxTitle,
   promotionAssetKindIndices,
   promotionAssetListTitle,
   type PromotionAsset,
 } from "@/lib/promotion-assets";
-
-function promotionKindLabel(kind: PromotionAsset["kind"]): string {
-  if (kind === "flyer") return "Flyer";
-  if (kind === "text") return "Text";
-  return "Upload";
-}
 
 function viewTitle(asset: PromotionAsset, indexWithinKind: number): string {
   const stored =
@@ -60,14 +53,11 @@ export function PromotionAssetViewModal({
       dataAttr={dataAttr}
     >
       {open && asset ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <p className="mb-3 text-xs text-muted">
-            {asset.propertyLabel} · {promotionKindLabel(asset.kind)} · {asset.subtitle}
-          </p>
+        <div className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto">
           {asset.kind === "flyer" ? (
             <PromotionFlyerAssetDetail asset={asset} />
           ) : asset.kind === "text" && asset.textEntry ? (
-            <PromotionTextPreview copy={asset.textEntry.copy} />
+            <PromotionTextPreview copy={asset.textEntry.copy} variant="plain" />
           ) : asset.kind === "upload" ? (
             <PromotionUploadAssetDetail asset={asset} />
           ) : null}
@@ -75,9 +65,4 @@ export function PromotionAssetViewModal({
       ) : null}
     </Modal>
   );
-}
-
-/** Title for property-scoped lists (uses promotionAssetBoxTitle). */
-export function promotionPropertyViewTitle(asset: PromotionAsset, indexWithinKind: number): string {
-  return `View · ${promotionAssetBoxTitle(asset, indexWithinKind)}`;
 }

@@ -34,7 +34,7 @@ export function PromotionAssetStack({
   onEdit,
   emptyMessage = "No promotions yet.",
   showPropertyLabel = true,
-  variant = "card",
+  variant = "plain",
 }: {
   assets: PromotionAsset[];
   onView: (asset: PromotionAsset) => void;
@@ -65,7 +65,7 @@ export function PromotionAssetStack({
             <div className="min-w-0 flex-1">
               <button
                 type="button"
-                className="text-left text-sm font-semibold text-foreground hover:underline"
+                className="min-w-0 text-left text-sm font-semibold text-foreground hover:underline"
                 data-attr="promotion-row"
                 onClick={() => onView(asset)}
               >

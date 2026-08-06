@@ -14,10 +14,26 @@ import {
   type PromotionTextEntry,
 } from "@/lib/promotion-text";
 
-export function PromotionTextPreview({ copy }: { copy: PromotionTextCopy }) {
+export function PromotionTextPreview({
+  copy,
+  variant = "plain",
+}: {
+  copy: PromotionTextCopy;
+  /** `plain` = read-only prose (view modals). `boxed` = bordered preview block. */
+  variant?: "plain" | "boxed";
+}) {
   const formatLabel =
     PROMOTION_TEXT_FORMAT_OPTIONS.find((o) => o.id === copy.format)?.label ?? "Promotion text";
   const plain = formatPromotionTextPlain(copy);
+
+  if (variant === "plain") {
+    return (
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{formatLabel}</p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{plain}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pb-4">

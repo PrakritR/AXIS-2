@@ -34,9 +34,9 @@ import {
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
-  PromotionTextAssetDetail,
   PromotionUploadAssetDetail,
 } from "@/components/portal/promotion-asset-detail";
+import { PromotionTextPreview } from "@/components/portal/promotion-text-preview";
 import { PromotionAssetViewModal } from "@/components/portal/promotion-asset-view-modal";
 import { PromotionNewModal } from "@/components/portal/promotion-new-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
@@ -603,10 +603,6 @@ export function ManagerPromotion({
     }
   }
 
-  function saveTextEntry(row: ManagerPromotionRow, entry: PromotionTextEntry) {
-    upsertManagerPromotion(updateTextEntryOnRow(row, entry.id, entry));
-  }
-
   useEffect(() => {
     if (!demoPromotionGeneratePending || !isDemoModeActive()) return;
     setDemoPromotionGeneratePending(false);
@@ -757,13 +753,9 @@ export function ManagerPromotion({
               <PromotionFlyerAssetDetail asset={detailAsset} />
             ) : detailAsset.kind === "upload" ? (
               <PromotionUploadAssetDetail asset={detailAsset} />
-            ) : (
-              <PromotionTextAssetDetail
-                asset={detailAsset}
-                onSave={(row, entry) => saveTextEntry(row, entry)}
-                showToast={showToast}
-              />
-            )}
+            ) : detailAsset.textEntry ? (
+              <PromotionTextPreview copy={detailAsset.textEntry.copy} variant="plain" />
+            ) : null}
           </div>
         </PortalRecordDetailPage>
       </>
