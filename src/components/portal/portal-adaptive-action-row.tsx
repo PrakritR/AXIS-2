@@ -17,7 +17,7 @@ import {
 } from "@/lib/portal-adaptive-actions";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_GAP_PX = 2;
+const DEFAULT_GAP_PX = 8;
 /** Absorbs subpixel rounding and padding the hidden measure row can miss. */
 const WIDTH_FUDGE_PX = 8;
 const rowAlignClass = (align: "start" | "end") =>
@@ -104,6 +104,7 @@ export function PortalAdaptiveActionRow({
         moreWidth,
         Math.max(0, containerWidth - WIDTH_FUDGE_PX),
         gapPx,
+        { reserveMore: pinnedCount > 0 },
       );
       setOptionalFitCount(count);
     };
@@ -122,7 +123,7 @@ export function PortalAdaptiveActionRow({
       ro?.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [actions, gapPx, optional.length]);
+  }, [actions, gapPx, optional.length, pinnedCount]);
 
   useLayoutEffect(() => {
     const row = containerRef.current;
@@ -139,7 +140,7 @@ export function PortalAdaptiveActionRow({
   if (actions.length === 0 && pinnedCount === 0) return null;
 
   const { visible, overflow } = pickAdaptiveActions(actions, optionalFitCount);
-  const showMoreMenu = overflow.length > 0;
+  const showMoreMenu = overflow.length > 0 || pinnedCount > 0;
   const { leading: visibleLeading, optional: visibleMiddle, trailing: visibleTrailing } =
     splitAdaptiveActions(visible);
 
@@ -202,12 +203,12 @@ export function PortalAdaptiveActionRow({
             {action.node}
           </div>
         ))}
-        {moreMenu ? <div className="shrink-0">{moreMenu}</div> : null}
         {visibleTrailing.map((action) => (
           <div key={action.id} className="shrink-0">
             {action.node}
           </div>
         ))}
+        {moreMenu ? <div className="shrink-0">{moreMenu}</div> : null}
       </div>
     </div>
   );

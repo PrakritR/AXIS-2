@@ -80,7 +80,7 @@ describe("resolveAdaptiveOptionalFitCount", () => {
   });
 
   it("measures the rendered row using the same visible set as the UI", () => {
-    expect(renderedAdaptiveRowWidth(actions, 1, widthFor, 40, 2)).toBe(80 + 2 + 90 + 2 + 40 + 2 + 100);
+    expect(renderedAdaptiveRowWidth(actions, 1, widthFor, 40, 2)).toBe(80 + 2 + 90 + 2 + 100 + 2 + 40);
   });
 });
 

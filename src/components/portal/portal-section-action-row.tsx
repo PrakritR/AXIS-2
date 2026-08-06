@@ -47,9 +47,9 @@ export function PortalPageTitleBand({
 }) {
   const headerActions = filter || actions ? (
     filter && actions ? (
-      <div className="flex shrink-0 flex-nowrap items-center gap-2 sm:gap-2.5">
+      <div className="flex shrink-0 flex-nowrap items-center gap-3 sm:gap-4">
         <div className="shrink-0">{filter}</div>
-        <PortalSectionActionRow variant="header" className="gap-2 sm:gap-2">
+        <PortalSectionActionRow variant="header" className="min-w-0 flex-1 gap-2 sm:gap-3">
           {actions}
         </PortalSectionActionRow>
       </div>
@@ -70,7 +70,7 @@ export function PortalPageTitleBand({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 items-center gap-1.5 sm:gap-2",
+        "flex w-full min-w-0 items-center gap-3 sm:gap-4",
         hideTitleOnMobileNav ? "max-lg:min-w-0 lg:justify-between" : "flex-nowrap justify-between",
         className,
       )}

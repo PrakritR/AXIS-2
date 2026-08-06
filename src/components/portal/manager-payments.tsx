@@ -603,12 +603,12 @@ export function ManagerPayments({
   const paymentsAddButton = (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
       onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
       data-attr="payments-add"
     >
-      {direction === "incoming" ? "Add charge" : "Add payment"}
+      Add
     </Button>
   );
 
@@ -717,7 +717,7 @@ export function ManagerPayments({
               data-attr="payments-add-menu"
               onSelect={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
             >
-              {direction === "incoming" ? "Add charge" : "Add payment"}
+              Add
             </DropdownMenuItem>
           ),
         },

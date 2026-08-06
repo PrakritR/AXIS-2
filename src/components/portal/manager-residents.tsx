@@ -2853,11 +2853,11 @@ export function ManagerResidents({
   const residentsAddButton = (
     <Button
       type="button"
-      variant="primary"
+      variant="outline"
       className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
       onClick={() => setAddResidentOpen(true)}
     >
-      + Add
+      Add
     </Button>
   );
 
@@ -2998,7 +2998,7 @@ export function ManagerResidents({
             />
           ) : null}
           <PortalListAddRow
-            label="Add resident"
+            label="Add"
             icon={PORTAL_LIST_ADD_ICONS.resident}
             onClick={() => setAddResidentOpen(true)}
             dataAttr="residents-list-add"
@@ -3026,7 +3026,7 @@ export function ManagerResidents({
           })}
           <div className="px-3 py-3 max-md:px-2.5">
             <PortalListAddRow
-              label="Add resident"
+              label="Add"
               icon={PORTAL_LIST_ADD_ICONS.resident}
               onClick={() => setAddResidentOpen(true)}
               dataAttr="residents-list-add"

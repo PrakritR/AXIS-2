@@ -86,14 +86,15 @@ export function renderedAdaptiveRowWidth(
   widthFor: (action: PortalAdaptiveAction) => number,
   moreWidth: number,
   gap: number,
+  options?: { reserveMore?: boolean },
 ): number {
   const { visible, overflow } = pickAdaptiveActions(actions, optionalFitCount);
   const { leading, optional: middle, trailing } = splitAdaptiveActions(visible);
   const widths: number[] = [];
   for (const action of leading) widths.push(widthFor(action));
   for (const action of middle) widths.push(widthFor(action));
-  if (overflow.length > 0) widths.push(moreWidth);
   for (const action of trailing) widths.push(widthFor(action));
+  if (overflow.length > 0 || options?.reserveMore) widths.push(moreWidth);
   return segmentWidth(widths, gap);
 }
 
@@ -104,13 +105,16 @@ export function resolveAdaptiveOptionalFitCount(
   moreWidth: number,
   containerWidth: number,
   gap: number,
+  options?: { reserveMore?: boolean },
 ): number {
   const { optional } = splitAdaptiveActions(actions);
   if (optional.length === 0) return 0;
   if (containerWidth <= 0) return optional.length;
 
   for (let count = optional.length; count >= 0; count--) {
-    if (renderedAdaptiveRowWidth(actions, count, widthFor, moreWidth, gap) <= containerWidth) {
+    if (
+      renderedAdaptiveRowWidth(actions, count, widthFor, moreWidth, gap, options) <= containerWidth
+    ) {
       return count;
     }
   }

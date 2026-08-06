@@ -680,12 +680,12 @@ function ManagerPropertyInlineDetails({
       return (
         <Button
           type="button"
-          variant="primary"
+          variant="outline"
           className={PORTAL_DETAIL_BTN}
           data-attr="property-application-add-footer"
           onClick={() => applicationAddHandlerRef.current?.()}
         >
-          Add application
+          Add
         </Button>
       );
     }
@@ -693,12 +693,12 @@ function ManagerPropertyInlineDetails({
       return (
         <Button
           type="button"
-          variant="primary"
+          variant="outline"
           className={PORTAL_DETAIL_BTN}
           data-attr="property-lease-add-footer"
           onClick={() => leaseAddHandlerRef.current?.()}
         >
-          Add lease
+          Add
         </Button>
       );
     }
@@ -1107,7 +1107,7 @@ export function ManagerHousePropertiesPanel({
         onAddProperty ? (
           <div className={`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} pt-5 sm:pt-6`}>
             <PortalListAddRow
-              label="Add property"
+              label="Add"
               icon={PORTAL_LIST_ADD_ICONS.property}
               onClick={onAddProperty}
               disabled={addPropertyDisabled}
@@ -1146,7 +1146,7 @@ export function ManagerHousePropertiesPanel({
           {onAddProperty ? (
             <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
               <PortalListAddRow
-                label="Add property"
+                label="Add"
                 icon={PORTAL_LIST_ADD_ICONS.property}
                 onClick={onAddProperty}
                 disabled={addPropertyDisabled}

@@ -967,7 +967,7 @@ export function ManagerLeasesPipelinePanel({
           ) : null}
           {onAddLease ? (
             <PortalListAddRow
-              label="Add lease"
+              label="Add"
               icon={PORTAL_LIST_ADD_ICONS.lease}
               hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}
@@ -1002,7 +1002,7 @@ export function ManagerLeasesPipelinePanel({
         {onAddLease ? (
           <div className="px-3 py-3 max-md:px-2.5">
             <PortalListAddRow
-              label="Add lease"
+              label="Add"
               icon={PORTAL_LIST_ADD_ICONS.lease}
               hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}

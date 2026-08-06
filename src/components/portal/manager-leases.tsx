@@ -259,7 +259,7 @@ export function ManagerLeases({
       data-attr="leases-add"
       onClick={() => setAddLeaseOpen(true)}
     >
-      Add lease
+      Add
     </Button>
   );
 

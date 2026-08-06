@@ -630,11 +630,7 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
-  const addPaymentLabel = embeddedInResident
-    ? "Add payment"
-    : direction === "incoming"
-      ? "Add charge"
-      : "Add payment";
+  const addPaymentLabel = "Add";
   const renderAddPaymentRow = (className?: string) =>
     onAddPayment ? (
       <div className={className ?? PORTAL_LIST_ADD_ROW_WRAP_CLASS}>

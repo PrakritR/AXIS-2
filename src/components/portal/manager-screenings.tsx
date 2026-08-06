@@ -378,7 +378,7 @@ export function ManagerScreenings({
   ) : (
     <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-2xl border border-border bg-card px-6 text-center">
       <p className="text-sm text-muted">You haven&apos;t started a screening yet.</p>
-      <Button type="button" className={cn("mt-4", PORTAL_HEADER_PRIMARY_ACTION_BTN)} onClick={() => setPickerOpen(true)}>
+      <Button type="button" variant="outline" className={cn("mt-4", PORTAL_HEADER_PRIMARY_ACTION_BTN)} onClick={() => setPickerOpen(true)}>
         Start a new screening
       </Button>
     </div>
@@ -414,7 +414,7 @@ export function ManagerScreenings({
       {embedded ? (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           {filterSheet}
-          <Button type="button" className={PORTAL_HEADER_PRIMARY_ACTION_BTN} onClick={() => setPickerOpen(true)}>
+          <Button type="button" variant="outline" className={PORTAL_HEADER_PRIMARY_ACTION_BTN} onClick={() => setPickerOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />
             New screening
           </Button>
@@ -484,7 +484,7 @@ export function ManagerScreenings({
                   data-attr="screenings-search"
                 />
               </label>
-              <Button type="button" className={PORTAL_HEADER_PRIMARY_ACTION_BTN} onClick={() => setPickerOpen(true)}>
+              <Button type="button" variant="outline" className={PORTAL_HEADER_PRIMARY_ACTION_BTN} onClick={() => setPickerOpen(true)}>
                 <Plus className="mr-1 h-4 w-4" />
                 New screening
               </Button>
