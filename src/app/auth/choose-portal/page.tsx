@@ -9,7 +9,7 @@ import { getStartedAddPortalPath } from "@/lib/auth/get-started-path";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 const ROLE_META: Record<
   AuthRole,
@@ -86,30 +86,39 @@ function ChoosePortalForm() {
     [roles],
   );
 
-  const choose = async (role: AuthRole) => {
-    setBusy(role);
-    setError(null);
-    try {
-      const res = await fetch("/api/auth/set-active-portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ role }),
-      });
-      const body = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setError(body.error ?? "Could not continue.");
+  const choose = useCallback(
+    async (role: AuthRole) => {
+      setBusy(role);
+      setError(null);
+      try {
+        const res = await fetch("/api/auth/set-active-portal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ role }),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setError(body.error ?? "Could not continue.");
+          setBusy(null);
+          return;
+        }
+        const dest = safeNext || portalDashboardPath(role);
+        // Hard navigation — router.push + refresh left multi-role users stuck on
+        // "Opening…" while Turbopack compiled the portal shell (Next "Rendering…").
+        window.location.assign(dest);
+      } catch {
+        setError("Network error.");
         setBusy(null);
-        return;
       }
-      const dest = safeNext || portalDashboardPath(role);
-      router.push(dest);
-      router.refresh();
-    } catch {
-      setError("Network error.");
-      setBusy(null);
-    }
-  };
+    },
+    [safeNext],
+  );
+
+  useEffect(() => {
+    if (roles?.length !== 1 || busy !== null) return;
+    void choose(roles[0]!);
+  }, [roles, busy, choose]);
 
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
