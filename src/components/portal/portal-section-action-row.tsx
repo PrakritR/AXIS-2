@@ -248,7 +248,7 @@ export function PortalSectionActionRow({
     return (
       <div
         className={cn(
-          "grid w-full grid-cols-2 gap-2",
+          "grid w-full grid-cols-2 gap-x-2 gap-y-3",
           "md:flex md:flex-wrap md:items-center md:justify-end md:gap-2",
           "[&_button]:w-full md:[&_button]:w-auto",
           className,
@@ -275,19 +275,19 @@ export function PortalSectionActionRow({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2",
+        "flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2",
         "max-sm:[&_button]:w-full max-sm:[&_a]:w-full",
         className,
       )}
       data-slot="portal-section-action-row"
     >
-      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:[&_button]:w-auto sm:[&_a]:w-auto">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 sm:[&_button]:w-auto sm:[&_a]:w-auto">
         {children}
       </div>
       {destructive ? (
         <div
           className={cn(
-            "flex w-full min-w-0 flex-col gap-2 border-t border-border pt-2 sm:ml-auto sm:w-auto sm:flex-row sm:border-0 sm:border-l sm:pl-3 sm:pt-0",
+            "flex w-full min-w-0 flex-col gap-3 border-t border-border pt-3 sm:ml-auto sm:w-auto sm:flex-row sm:border-0 sm:border-l sm:pl-3 sm:pt-0",
             "max-sm:[&_button]:w-full sm:[&_button]:w-auto",
           )}
           data-slot="portal-section-action-row-destructive"

@@ -78,7 +78,7 @@ export function PortalListControlStack({
   if (!showDestinations && !showFindRow && !activeFilterChips) return null;
 
   return (
-    <div className={cn("shrink-0 space-y-2 max-lg:space-y-1.5", className)} data-slot="portal-list-control-stack">
+    <div className={cn("shrink-0 space-y-2 max-lg:space-y-2.5", className)} data-slot="portal-list-control-stack">
       {showDestinations ? (
         <HorizontalScrollCapture
           className={cn(
@@ -96,7 +96,7 @@ export function PortalListControlStack({
                 ariaLabel={destinationAriaLabel}
                 className={cn(
                   "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent",
-                  destinationInset ? "max-lg:gap-1.5 max-lg:p-1" : "max-lg:gap-1.5 max-lg:px-2.5 max-lg:py-0 sm:max-lg:px-4",
+                  destinationInset ? "max-lg:gap-2.5 max-lg:p-1" : "max-lg:gap-2.5 max-lg:px-2.5 max-lg:py-0 sm:max-lg:px-4",
                 )}
               />
             )}
@@ -104,7 +104,7 @@ export function PortalListControlStack({
         </HorizontalScrollCapture>
       ) : null}
       {showFindRow ? (
-        <div className="flex w-full min-w-0 items-stretch gap-2 max-md:flex-col md:items-center">
+        <div className="flex w-full min-w-0 items-stretch gap-x-2 gap-y-3 max-md:flex-col md:items-center">
           {filterRow ? <div className="min-w-0 flex-1">{filterRow}</div> : null}
           {search ? (
             <div

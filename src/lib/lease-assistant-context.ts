@@ -2,6 +2,7 @@ import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import type { PropertyLeaseSource } from "@/lib/property-lease-source";
 import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
 import { readLeaseSectionsForEdit } from "@/lib/lease-section-edit.client";
+import type { PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
 
 /** Rich context for the property Lease editor modal assistant strip. */
 export function buildLeaseModalAssistantContext(opts: {
@@ -9,6 +10,7 @@ export function buildLeaseModalAssistantContext(opts: {
   propertyIds?: string[];
   propertyLabel?: string | null;
   currentSource: PropertyLeaseSource;
+  templateKind?: PropertyLeaseTemplateKind;
 }): string {
   const ids =
     opts.propertyIds?.filter((id) => id.trim()).length
@@ -21,14 +23,18 @@ export function buildLeaseModalAssistantContext(opts: {
     parts.push(`propertyId=${ids[0]}`);
   } else if (ids.length > 1) {
     parts.push(`propertyIds=${ids.join(",")}`);
-    parts.push("(bulk edit — propose update_property_lease_config only for a single property at a time)");
+    parts.push("(bulk edit — section edits apply to one property at a time)");
   } else {
     parts.push("propertyId=(unknown — ask the manager which property)");
   }
   if (opts.propertyLabel?.trim()) parts.push(`property=${opts.propertyLabel.trim()}`);
+  if (opts.templateKind) parts.push(`templateKind=${opts.templateKind}`);
   parts.push(`currentLeaseSource=${propertyLeaseSourceLabel(opts.currentSource)}`);
   parts.push(
-    "Propose update_property_lease_config with propertyId above: axis_default (PropLane standard), custom_comments (+ customLeaseTerms), or custom_format (+ leaseTemplateDocUrl from an uploaded PDF).",
+    "When the manager asks to change lease wording, call list_property_lease_template_sections with propertyId and templateKind (short-term or long-term), then propose_property_lease_template_section_edit with plain-text section body — never HTML. Edits apply to the open Lease format editor after they confirm.",
+  );
+  parts.push(
+    "For document source changes only (PropLane default vs upload), propose update_property_lease_config with propertyId.",
   );
   return parts.join(" · ");
 }

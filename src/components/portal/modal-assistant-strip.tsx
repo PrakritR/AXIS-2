@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 
 export type ModalAssistantStripProps = {
   contextHint?: string | null;
+  /** Shown beside the assistant label — e.g. "Type in chat to edit lease". */
+  editHint?: string | null;
   /**
    * Stable scope key for this modal surface (e.g. "New promotion"), without step
    * labels. Defaults to contextHint.
@@ -60,6 +62,7 @@ export type ModalAssistantStripProps = {
  */
 export function ModalAssistantStrip({
   contextHint,
+  editHint,
   storageScopeKey,
   conversationInstance = 0,
   className,
@@ -113,23 +116,28 @@ export function ModalAssistantStrip({
               side === "left" ? "@2xl:pr-4" : "@2xl:pl-4",
             )}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-primary">
-                <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
-                PropLane Assistant
-              </p>
-              {alwaysExpanded ? null : (
-                <button
-                  type="button"
-                  onClick={() => toggle(false)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
-                  data-attr="modal-assistant-collapse"
-                  aria-expanded
-                >
-                  Hide
-                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              )}
+            <div className="mb-2 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-primary">
+                  <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
+                  PropLane Assistant
+                </p>
+                {alwaysExpanded ? null : (
+                  <button
+                    type="button"
+                    onClick={() => toggle(false)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition hover:bg-foreground/5 hover:text-foreground"
+                    data-attr="modal-assistant-collapse"
+                    aria-expanded
+                  >
+                    Hide
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                )}
+              </div>
+              {editHint?.trim() ? (
+                <p className="text-xs text-muted">{editHint.trim()}</p>
+              ) : null}
             </div>
             <AssistantDockPanel
               managerName={config.managerName}
@@ -147,15 +155,18 @@ export function ModalAssistantStrip({
           <button
             type="button"
             onClick={() => toggle(true)}
-            className="flex w-full items-center justify-between gap-2 py-3 text-left text-sm transition hover:bg-foreground/[0.02]"
+            className="flex w-full flex-col gap-1.5 py-3 text-left text-sm transition hover:bg-foreground/[0.02]"
             data-attr="modal-assistant-expand"
             aria-expanded={false}
           >
-            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-primary">
-              <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
-              Ask PropLane Assistant
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-1.5 font-semibold text-primary">
+                <AxisAssistantSparkleIcon className="h-4 w-4 shrink-0" />
+                Ask PropLane Assistant
+              </span>
+              <ChevronUp className="h-4 w-4 shrink-0 text-muted" aria-hidden />
             </span>
-            <ChevronUp className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+            {editHint?.trim() ? <span className="text-xs font-normal text-muted">{editHint.trim()}</span> : null}
           </button>
         )}
       </div>

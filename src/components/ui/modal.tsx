@@ -38,12 +38,16 @@ export {
 export const MODAL_HEADER_CLOSE_CLASS =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-10 sm:w-10";
 
+/** Sticky footer action row: primary and secondary *actions* only (Save, Delete, Send). */
+export const MODAL_FOOTER_ROW_CLASS =
+  "flex flex-wrap items-center justify-end gap-x-2 gap-y-3";
+
 /**
  * Sticky footer action row: primary and secondary *actions* only (Save, Delete, Send).
  * Dismiss via the header × — do not add Cancel / Close buttons in footers.
  */
 export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-wrap items-center justify-end gap-2", className)}>{children}</div>;
+  return <div className={cn(MODAL_FOOTER_ROW_CLASS, className)}>{children}</div>;
 }
 
 const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
@@ -251,6 +255,7 @@ function ModalPanelInner({
   assistantExpanded,
   onAssistantExpandedChange,
   assistantDefaultExpanded = false,
+  assistantEditHint,
   scrollableContent = true,
   TitlePrimitive,
   DescriptionPrimitive,
@@ -269,6 +274,7 @@ function ModalPanelInner({
   assistantExpanded: boolean;
   onAssistantExpandedChange: (expanded: boolean) => void;
   assistantDefaultExpanded?: boolean;
+  assistantEditHint?: string;
   scrollableContent?: boolean;
   TitlePrimitive: ComponentType<ModalTitlePrimitiveProps>;
   DescriptionPrimitive: ComponentType<ModalDescriptionPrimitiveProps>;
@@ -341,6 +347,7 @@ function ModalPanelInner({
         {showAssistantStrip ? (
           <ModalAssistantStrip
             contextHint={assistantHint}
+            editHint={assistantEditHint}
             storageScopeKey={assistantStorageScopeKey?.trim() || assistantHint}
             conversationInstance={assistantConversationInstance}
             onExpandedChange={onAssistantExpandedChange}
@@ -379,6 +386,7 @@ export function Modal({
   assistantContext,
   assistantStorageScopeKey,
   assistantDefaultExpanded = false,
+  assistantEditHint,
   /** Drawer fills the viewport below portal `lg` (no partial sheet). */
   fullScreenMobile = true,
   /** Fill the viewport on every breakpoint (not only mobile drawer). */
@@ -402,6 +410,8 @@ export function Modal({
   assistantStorageScopeKey?: string;
   /** Open the assistant strip expanded when the modal opens. */
   assistantDefaultExpanded?: boolean;
+  /** Short hint beside the assistant affordance (e.g. chat-to-edit copy). */
+  assistantEditHint?: string;
   fullScreenMobile?: boolean;
   fullPage?: boolean;
   scrollableContent?: boolean;
@@ -440,6 +450,7 @@ export function Modal({
     assistantExpanded,
     onAssistantExpandedChange: setAssistantExpanded,
     assistantDefaultExpanded,
+    assistantEditHint,
     scrollableContent,
   };
 

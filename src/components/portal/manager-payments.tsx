@@ -764,7 +764,7 @@ export function ManagerPayments({
   );
 
   const paymentsListDestinations = (
-    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-1.5">
+    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-2.5">
       {directionNav}
       <DestinationNav
         items={tabs.map((t) => ({

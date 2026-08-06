@@ -19,6 +19,7 @@ import {
 } from "@/lib/lease-utilities";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
+import { PROPERTY_LEASE_TEMPLATE_PLACEHOLDER } from "@/lib/property-lease-preview";
 import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
 import { resolveJurisdiction } from "@/lib/lease-jurisdiction";
@@ -84,6 +85,7 @@ function escapeHtml(s: string): string {
 function leaseDate(value: string | undefined | null): string {
   const raw = (value ?? "").trim();
   if (!raw) return "—";
+  if (raw === PROPERTY_LEASE_TEMPLATE_PLACEHOLDER) return escapeHtml(PROPERTY_LEASE_TEMPLATE_PLACEHOLDER);
   return escapeHtml(formatLeaseDateLabel(raw) || raw);
 }
 
@@ -96,7 +98,12 @@ function dash(s: string | undefined | null): string {
  * Manager-authored lease clauses (Lease step of the create-listing wizard),
  * rendered as an addendum. Plain text: paragraphs split on blank lines.
  */
-function customTermsAddendumHtml(sub: ManagerListingSubmissionV1 | undefined, heading: string): string {
+function customTermsAddendumHtml(
+  sub: ManagerListingSubmissionV1 | undefined,
+  heading: string,
+  skip = false,
+): string {
+  if (skip) return "";
   const terms = activeCustomLeaseTerms(sub);
   if (!terms) return "";
   const paragraphs = terms
@@ -378,13 +385,18 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const signedRentLabel = (a as LeaseApplicationWithRentSnapshot).__signedRentLabel?.trim();
 
   // ── Identity ──────────────────────────────────────────────────────────────
-  const tenantRaw = (a.fullLegalName ?? "").trim() || "Resident";
+  const propertyTemplatePreview = Boolean(ctx.propertyTemplatePreview);
+  const tenantRaw = (a.fullLegalName ?? "").trim() || (propertyTemplatePreview ? "" : "Resident");
   const jointTenants =
     ctx.leaseKind === "joint_bundle" && ctx.jointLeaseMembers?.length
       ? ctx.jointLeaseMembers.map((m) => m.residentName).filter(Boolean)
       : [];
   const tenantName =
-    jointTenants.length > 0 ? escapeHtml(jointTenants.join(", ")) : escapeHtml(tenantRaw);
+    jointTenants.length > 0
+      ? escapeHtml(jointTenants.join(", "))
+      : propertyTemplatePreview && !tenantRaw
+        ? "—"
+        : escapeHtml(tenantRaw);
   const jointPartiesNote =
     jointTenants.length > 0 && ctx.jointLeaseMembers
       ? jointLeasePartiesParagraph(ctx.jointLeaseMembers)
@@ -399,10 +411,20 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const pets = dash(a.pets);
 
   // ── Landlord ─────────────────────────────────────────────────────────────
-  const landlordEntity = escapeHtml(sub?.buildingName?.trim() || list?.buildingName?.trim() || room?.buildingName?.trim() || "[LANDLORD ENTITY NAME]");
-  const address = escapeHtml(room?.address ?? list?.address ?? sub?.address ?? "");
-  const cityZip = [room?.neighborhood ?? list?.neighborhood ?? sub?.neighborhood, room?.zip ?? list?.zip ?? sub?.zip].filter(Boolean).join(", ");
-  const landlordMailing = address + (cityZip ? `, ${escapeHtml(cityZip)}` : "");
+  const landlordEntity = escapeHtml(
+    propertyTemplatePreview
+      ? PROPERTY_LEASE_TEMPLATE_PLACEHOLDER
+      : sub?.buildingName?.trim() || list?.buildingName?.trim() || room?.buildingName?.trim() || "[LANDLORD ENTITY NAME]",
+  );
+  const address = propertyTemplatePreview
+    ? "—"
+    : escapeHtml(room?.address ?? list?.address ?? sub?.address ?? "");
+  const cityZip = propertyTemplatePreview
+    ? "—"
+    : [room?.neighborhood ?? list?.neighborhood ?? sub?.neighborhood, room?.zip ?? list?.zip ?? sub?.zip]
+        .filter(Boolean)
+        .join(", ");
+  const landlordMailing = propertyTemplatePreview ? "—" : address + (cityZip ? `, ${escapeHtml(cityZip)}` : "");
 
   // ── Room / premises ───────────────────────────────────────────────────────
   const subNorm = sub ? normalizeManagerListingSubmissionV1(sub) : undefined;
@@ -442,19 +464,23 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     (isEntireHomeListing(subNorm!) || (!specificRoom && !subNorm!.rooms.some((r) => r.name.trim())));
 
   const roomLabel = escapeHtml(
-    bundlePremisesLabel ||
-    (wholeHome ? "Entire home" : "") ||
-    specificRoom?.name?.trim() ||
-    room?.unitLabel?.trim() ||
-    "[ROOM NUMBER]"
+    propertyTemplatePreview
+      ? PROPERTY_LEASE_TEMPLATE_PLACEHOLDER
+      : bundlePremisesLabel ||
+          (wholeHome ? "Entire home" : "") ||
+          specificRoom?.name?.trim() ||
+          room?.unitLabel?.trim() ||
+          "[ROOM NUMBER]",
   );
   const fullPremises = escapeHtml(
-    [
-      sub?.buildingName ?? list?.buildingName ?? room?.buildingName,
-      bundlePremisesLabel || (wholeHome ? "entire home" : "") || specificRoom?.name || room?.unitLabel,
-    ]
-      .filter(Boolean)
-      .join(" — ") || "the Premises described herein"
+    propertyTemplatePreview
+      ? PROPERTY_LEASE_TEMPLATE_PLACEHOLDER
+      : [
+          sub?.buildingName ?? list?.buildingName ?? room?.buildingName,
+          bundlePremisesLabel || (wholeHome ? "entire home" : "") || specificRoom?.name || room?.unitLabel,
+        ]
+          .filter(Boolean)
+          .join(" — ") || "the Premises described herein",
   );
 
   // ── Stay pricing ──────────────────────────────────────────────────────────
@@ -481,19 +507,17 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   // ── Rent & financials ─────────────────────────────────────────────────────
   const bundleRentLabel = leasedBundle?.price.trim() || "";
   const entireHomeRent = wholeHome && subNorm ? entireHomeMonthlyRentAmount(subNorm) : 0;
-  const monthlyRentBaseStr =
-    // A daily basis outranks every monthly label below it: the resolver already applied the
-    // override / signed-rent precedence, so reaching here on "daily" means the day rate IS
-    // the active rate and the ledger bills days × this figure.
-    (isDailyBasis ? `${fmtUsd(dailyBasisRate!)} / day` : "") ||
-    overrideFeeLabel(a.managerRentOverride, "") ||
-    signedRentLabel ||
-    bundleRentLabel ||
-    (entireHomeRent > 0 ? `$${entireHomeRent.toFixed(2)} / month` : "") ||
-    submissionRoomRentLabel(specificRoom) ||
-    room?.rentLabel ||
-    list?.rentLabel ||
-    "As set forth in the Rent Schedule";
+  const monthlyRentBaseStr = propertyTemplatePreview
+    ? "—"
+    : (isDailyBasis ? `${fmtUsd(dailyBasisRate!)} / day` : "") ||
+      overrideFeeLabel(a.managerRentOverride, "") ||
+      signedRentLabel ||
+      bundleRentLabel ||
+      (entireHomeRent > 0 ? `$${entireHomeRent.toFixed(2)} / month` : "") ||
+      submissionRoomRentLabel(specificRoom) ||
+      room?.rentLabel ||
+      list?.rentLabel ||
+      "As set forth in the Rent Schedule";
   // A per-day figure never sits under a "Monthly" label.
   const rentRowLabel = isDailyBasis ? "Daily base rent" : "Monthly base rent";
   const monthlyRentStr = monthlyRentBaseStr;
@@ -504,7 +528,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     formatUtilitiesListingLine(utilitiesModel, specificRoom?.utilitiesEstimate?.trim()) ||
     (sub ? utilitiesListingEstimateLabel(sub) : "") ||
     "—";
-  const utilitiesStr = escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase));
+  const utilitiesStr = propertyTemplatePreview
+    ? "—"
+    : escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase));
   const utilitiesNum =
     utilitiesModel === "manager_billed" && !a.managerUtilitiesOverride?.trim()
       ? parseAmount(specificRoom?.utilitiesEstimate?.trim() || utilitiesBase)
@@ -526,14 +552,16 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   // picked the field the ledger will charge (override, then shortTermDeposit or
   // securityDeposit keyed on rentalType). Recomputing it here let the document and the ledger
   // drift the moment either rule changed.
-  const secDep = escapeHtml(stay.deposit !== undefined ? fmtUsd(stay.deposit) : "—");
+  const secDep = escapeHtml(propertyTemplatePreview ? "—" : stay.deposit !== undefined ? fmtUsd(stay.deposit) : "—");
   // Room-first, then the listing, matching the ledger. A room carrying its own move-in fee
   // is charged that fee, so a lease quoting the listing's figure understates what is owed.
   const moveInFee = escapeHtml(
-    overrideFeeLabel(
-      a.managerMoveInFeeOverride,
-      specificRoom?.moveInFee?.trim() || sub?.moveInFee || "—",
-    ),
+    propertyTemplatePreview
+      ? "—"
+      : overrideFeeLabel(
+          a.managerMoveInFeeOverride,
+          specificRoom?.moveInFee?.trim() || sub?.moveInFee || "—",
+        ),
   );
   const rawOtherCostLabel = a.managerOtherCostLabel?.trim() || "Other costs";
   const otherCostIsMonthToMonth = isMonthToMonthOtherCost(rawOtherCostLabel);
@@ -547,7 +575,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   // total due at signing — a lease that omits a billed charge is a legal problem. Only
   // genuinely-custom rows are listed here (preset-backed rows render through their own lines);
   // monthly custom fees are intentionally NOT listed because they do not yet bill.
-  const billableOneTimeCustomFees = (sub?.customFees ?? []).filter((fee) => {
+  const billableOneTimeCustomFees = propertyTemplatePreview
+    ? []
+    : (sub?.customFees ?? []).filter((fee) => {
     const presetId = (fee as { presetId?: string }).presetId;
     if (presetId && presetId !== "custom") return false;
     if (fee.frequency !== "one-time") return false;
@@ -560,7 +590,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     .join("\n");
   // Monthly custom fees now bill (recurring, alongside rent), so they too must appear in the
   // lease — as Monthly line items in Exhibit A (not in the due-at-signing total).
-  const billableMonthlyCustomFees = (sub?.customFees ?? []).filter((fee) => {
+  const billableMonthlyCustomFees = propertyTemplatePreview
+    ? []
+    : (sub?.customFees ?? []).filter((fee) => {
     const presetId = (fee as { presetId?: string }).presetId;
     if (presetId && presetId !== "custom") return false;
     if (fee.frequency === "one-time") return false;
@@ -581,7 +613,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const paySigningNum =
     paySigningFromCharges ??
     (parseAmount(secDep) ?? 0) + (parseAmount(moveInFee) ?? 0) + (otherCostNum ?? 0) + customFeesTotalNum;
-  const paySigning = escapeHtml(paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase);
+  const paySigning = escapeHtml(
+    propertyTemplatePreview ? "—" : paySigningNum > 0 ? fmtUsd(paySigningNum) : paySigningBase,
+  );
 
   // The catalog receives only facts available to lease generation. Fields that the product
   // does not collect stay undefined so the evaluator can report them as unknown rather than
@@ -607,7 +641,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     : null;
   const disclosureCanCompleteLease =
     disclosureEvaluation?.canCompleteLease === true && unplacedDisclosureRules(disclosureEvaluation).length === 0;
-  const disclosureReviewNotice = disclosureReviewNoticeHtml(disclosureEvaluation, disclosureCanCompleteLease);
+  const disclosureReviewNotice = propertyTemplatePreview
+    ? ""
+    : disclosureReviewNoticeHtml(disclosureEvaluation, disclosureCanCompleteLease);
   const disclosureHtml = (templateSection: string) =>
     disclosureEvaluation ? disclosureVerbatimHtmlForSection(disclosureEvaluation, templateSection) : "";
   const premisesDisclosureHtml = disclosureHtml("Premises / Municipal compliance");
@@ -646,11 +682,17 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const leaseStart = leaseDate(a.leaseStart);
   const leaseEnd =
     a.leaseTerm === "Month-to-Month" ? leaseDate(a.leaseEnd || "N/A (month-to-month)") : leaseDate(a.leaseEnd);
-  const generatedDate = escapeHtml(new Date(generatedAtIso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }));
+  const generatedDate = propertyTemplatePreview
+    ? "PropLane default template"
+    : escapeHtml(new Date(generatedAtIso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }));
 
   // ── Content blocks ────────────────────────────────────────────────────────
-  const leaseTermsBody = escapeHtml(sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.");
-  const sharedSpacesText = sharedSpacesLeaseParagraph(sub);
+  const leaseTermsBody = escapeHtml(
+    propertyTemplatePreview
+      ? "Lease term options are filled when a resident is placed at this property."
+      : sub?.leaseTermsBody?.trim() || "Standard lease lengths and renewal as posted on the listing.",
+  );
+  const sharedSpacesText = propertyTemplatePreview ? "" : sharedSpacesLeaseParagraph(sub);
   const leaseUtilityLines = normalizeLeaseUtilities(subNorm?.leaseUtilities);
   const utilitiesBreakdown = utilitiesResponsibilityHtml(leaseUtilityLines);
   const utilitiesEstimateSentence = !utilitiesBreakdown
@@ -658,9 +700,15 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     : hasResidentPaidLeaseUtility(leaseUtilityLines ?? [])
       ? "This estimate reflects the utilities the Resident is responsible for above."
       : "All utilities and services listed above are included in the monthly rent or paid by Landlord, up to any allowance shown.";
-  const amenities = escapeHtml(sub?.amenitiesText?.trim() || "See listing amenities.");
-  const houseRules = escapeHtml(sub?.houseRulesText?.trim() || "");
-  const bathroomArrangement = bathroomArrangementLeaseParagraph(subNorm, specificRoom?.id);
+  const amenities = escapeHtml(
+    propertyTemplatePreview
+      ? PROPERTY_LEASE_TEMPLATE_PLACEHOLDER
+      : sub?.amenitiesText?.trim() || "See listing amenities.",
+  );
+  const houseRules = escapeHtml(propertyTemplatePreview ? "" : sub?.houseRulesText?.trim() || "");
+  const bathroomArrangement = propertyTemplatePreview
+    ? ""
+    : bathroomArrangementLeaseParagraph(subNorm, specificRoom?.id);
   const longTermBreakLeaseFee = parseAmount(subNorm?.longTermBreakLeaseFee);
   const longTermLeaseUpFeePercent = subNorm?.longTermLeaseUpFeePercent;
   const longTermHoldoverDailyRate = parseAmount(subNorm?.longTermHoldoverDailyRate);
@@ -668,16 +716,20 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const longTermDepositLaborRate = parseAmount(subNorm?.longTermDepositLaborRate);
   const longTermDepositReissueFee = parseAmount(subNorm?.longTermDepositReissueFee);
   const longTermTrashViolationFee = parseAmount(subNorm?.longTermTrashViolationFee);
-  const longTermQuietHours = escapeHtml(subNorm?.longTermQuietHours ?? "");
-  const longTermGuestCap = subNorm?.longTermGuestCap;
-  const longTermDisputeVenue = escapeHtml(subNorm?.longTermDisputeVenue ?? "");
-  const longTermProfessionalCleaningRequired = subNorm?.longTermProfessionalCleaningRequired === true;
+  const longTermQuietHours = escapeHtml(propertyTemplatePreview ? "" : subNorm?.longTermQuietHours ?? "");
+  const longTermGuestCap = propertyTemplatePreview ? undefined : subNorm?.longTermGuestCap;
+  const longTermDisputeVenue = escapeHtml(propertyTemplatePreview ? "" : subNorm?.longTermDisputeVenue ?? "");
+  const longTermProfessionalCleaningRequired = propertyTemplatePreview
+    ? false
+    : subNorm?.longTermProfessionalCleaningRequired === true;
   const hasConfiguredHoldover = !isMonthToMonthLease(a) && longTermHoldoverDailyRate != null && longTermHoldoverDailyRate > 0;
   const hasConfiguredEarlyTerminationTerm =
     (longTermBreakLeaseFee != null && longTermBreakLeaseFee > 0) || longTermLeaseUpFeePercent != null;
-  const petPolicy = (room?.petFriendly ?? list?.petFriendly)
-    ? "Pets may be permitted subject to prior written approval from Landlord, a separate pet deposit (amount specified in writing), and compliance with all house rules."
-    : "No pets or animals of any kind are permitted on the Premises without prior written consent of Landlord.";
+  const petPolicy = propertyTemplatePreview
+    ? "Pet policy is specified when a resident is placed at this property."
+    : (room?.petFriendly ?? list?.petFriendly)
+      ? "Pets may be permitted subject to prior written approval from Landlord, a separate pet deposit (amount specified in writing), and compliance with all house rules."
+      : "No pets or animals of any kind are permitted on the Premises without prior written consent of Landlord.";
   const manualPaymentMethods = [
     sub?.zellePaymentsEnabled && sub.zelleContact?.trim()
       ? `Zelle to <strong>${escapeHtml(sub.zelleContact.trim())}</strong>`
@@ -686,15 +738,15 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
       ? `Venmo to <strong>${escapeHtml(sub.venmoContact.trim())}</strong>`
       : "",
   ].filter(Boolean);
-  const paymentMethod =
-    manualPaymentMethods.length > 0
+  const paymentMethod = propertyTemplatePreview
+    ? "Payment shall be made via the PropLane portal or by a method agreed in writing with Landlord."
+    : manualPaymentMethods.length > 0
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
       : "Payment shall be made via the PropLane portal or by a method agreed in writing with Landlord.";
 
-  // A daily basis suppresses only the RENT half: rent already bills each month by its real day
-  // count. Utilities stay a monthly estimate that the ledger prorates for a partial first month
-  // (or across the whole term for an intra-month lease), so that half must still be disclosed.
-  const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", a.leaseEnd ?? "", {
+  const proratedSection = propertyTemplatePreview
+    ? ""
+    : proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", a.leaseEnd ?? "", {
     method: specificRoom?.prorateMethod,
     dailyRentRate: specificRoom?.dailyRentRate,
     dailyUtilitiesRate: specificRoom?.dailyUtilitiesRate,
@@ -711,28 +763,31 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     // stay_total over checkout-exclusive nights. A daily-basis room on a standard application
     // bills first-month rent over intraMonthStaySpan's INCLUSIVE billable days. Using one
     // count for both put the agreement a night off from the charges.
-    const stayNights =
-      a.rentalType === "short_term"
+    const stayNights = propertyTemplatePreview
+      ? 0
+      : a.rentalType === "short_term"
         ? shortTermStayNightCount(a.leaseStart, a.leaseEnd)
         : (intraMonthStaySpan(a.leaseStart, a.leaseEnd)?.billableDays ??
           shortTermStayNightCount(a.leaseStart, a.leaseEnd));
     const stayUnitNoun = a.rentalType === "short_term" ? "Night" : "Day";
-    const dailyCostRaw = dailyCost !== undefined ? fmtUsd(dailyCost) : "—";
-    const depositAmount = stay.deposit;
-    const shortDepositRaw = depositAmount !== undefined ? fmtUsd(depositAmount) : "—";
+    const dailyCostRaw = propertyTemplatePreview ? "—" : dailyCost !== undefined ? fmtUsd(dailyCost) : "—";
+    const depositAmount = propertyTemplatePreview ? undefined : stay.deposit;
+    const shortDepositRaw = propertyTemplatePreview ? "—" : depositAmount !== undefined ? fmtUsd(depositAmount) : "—";
     const totalRent =
-      dailyCost && stayNights ? fmtUsd(shortTermStayTotalAmount(dailyCost, stayNights)) : "—";
+      propertyTemplatePreview ? "—" : dailyCost && stayNights ? fmtUsd(shortTermStayTotalAmount(dailyCost, stayNights)) : "—";
     // The ledger bills more than rent + deposit on a stay, so the document has to list the
     // rest or its "Total due" understates what the guest owes. Which move-in field applies
     // follows rentalType, exactly as the ledger's two branches do.
     // Room-first, then the listing, matching the ledger. A room carrying its own short-term
     // move-in fee is charged that fee, so the agreement has to quote the same one.
-    const stayMoveInLabel = overrideFeeLabel(
-      a.managerMoveInFeeOverride,
-      (a.rentalType === "short_term"
-        ? (specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee)
-        : (specificRoom?.moveInFee?.trim() || subNorm?.moveInFee)) ?? "",
-    );
+    const stayMoveInLabel = propertyTemplatePreview
+      ? ""
+      : overrideFeeLabel(
+          a.managerMoveInFeeOverride,
+          (a.rentalType === "short_term"
+            ? (specificRoom?.shortTermMoveInFee?.trim() || subNorm?.shortTermMoveInFee)
+            : (specificRoom?.moveInFee?.trim() || subNorm?.moveInFee)) ?? "",
+        );
     const stayMoveInNum = parseAmount(stayMoveInLabel) ?? 0;
     const stayOtherNum = showOtherSigningCost ? (otherCostNum ?? 0) : 0;
     // Utilities are billed alongside a standard-application stay but never on an explicit
@@ -772,7 +827,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     // `amount`, never `shortTermAmount`. Reading the wrong one understates the total.
     const stayFeeAmount = (fee: { amount?: string; shortTermAmount?: string }) =>
       a.rentalType === "short_term" ? fee.shortTermAmount : fee.amount;
-    const stCustomFees = (subNorm?.customFees ?? []).filter((fee) => {
+    const stCustomFees = propertyTemplatePreview
+      ? []
+      : (subNorm?.customFees ?? []).filter((fee) => {
       const presetId = (fee as { presetId?: string }).presetId;
       if (presetId && presetId !== "custom") return false;
       const n = parseAmount(stayFeeAmount(fee));
@@ -785,8 +842,9 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
           `  <tr><th>${escapeHtml(f.label?.trim() || "Custom fee")}</th><td>${escapeHtml(fmtUsd(parseAmount(stayFeeAmount(f)) ?? 0))}</td></tr>`,
       )
       .join("\n");
-    const totalDue =
-      dailyCost && stayNights
+    const totalDue = propertyTemplatePreview
+      ? "—"
+      : dailyCost && stayNights
         ? fmtUsd(
             shortTermStayTotalAmount(dailyCost, stayNights) +
               (depositAmount ?? 0) +
@@ -797,11 +855,17 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
           )
         : "—";
     const requirements = escapeHtml(
-      subNorm?.shortTermRequirements?.trim() ||
-        "Guest must follow all reasonable house rules provided by the Owner/Host. Guest may not receive mail, declare residency, or claim tenancy.",
+      propertyTemplatePreview
+        ? "House rules and short-term requirements are filled when a guest is placed at this property."
+        : subNorm?.shortTermRequirements?.trim() ||
+            "Guest must follow all reasonable house rules provided by the Owner/Host. Guest may not receive mail, declare residency, or claim tenancy.",
     );
-    const checkInTime = dash(a.shortTermCheckInTime || "10:00 PM");
-    const checkOutTime = dash(a.shortTermCheckOutTime || "11:00 AM");
+    const checkInTimeRaw = (a.shortTermCheckInTime ?? "").trim();
+    const checkOutTimeRaw = (a.shortTermCheckOutTime ?? "").trim();
+    const checkInDateTime = checkInTimeRaw ? `${leaseStart} @ ${escapeHtml(checkInTimeRaw)}` : leaseStart;
+    const checkOutDateTime = checkOutTimeRaw
+      ? `${leaseDate(a.leaseEnd)} @ ${escapeHtml(checkOutTimeRaw)}`
+      : leaseDate(a.leaseEnd);
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
 ${
@@ -827,8 +891,8 @@ ${
 
 <h2>3. Length of Stay</h2>
 <table>
-  <tr><th width="35%">Check-in date &amp; time</th><td>${leaseStart} @ ${checkInTime}</td></tr>
-  <tr><th>Check-out date &amp; time</th><td>${leaseDate(a.leaseEnd)} @ ${checkOutTime}</td></tr>
+  <tr><th width="35%">Check-in date &amp; time</th><td>${checkInDateTime}</td></tr>
+  <tr><th>Check-out date &amp; time</th><td>${checkOutDateTime}</td></tr>
   <tr><th>Total duration</th><td>${stayNights ? `${stayNights} ${stayUnitNoun.toLowerCase()}${stayNights === 1 ? "" : "s"}` : "—"}</td></tr>
 </table>
 
@@ -874,12 +938,15 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 
 <h2>13. Electronic Signature</h2>
 <p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
-${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
+${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host", propertyTemplatePreview)}
 </body></html>`;
   }
 
-  const lateFeeUsd =
-    sub?.lateFeeEnabled === false ? null : (parseAmount(sub?.lateFeeAmount) ?? config.defaultLateFeeUsd);
+  const lateFeeUsd = propertyTemplatePreview
+    ? null
+    : sub?.lateFeeEnabled === false
+      ? null
+      : (parseAmount(sub?.lateFeeAmount) ?? config.defaultLateFeeUsd);
   const billing = ctx.leaseBilling;
   const summaryMonthlyRent = billing ? fmtUsd(billing.monthlyRent) : escapeHtml(monthlyRentBaseStr);
   const summaryMonthlyUtilities = billing ? fmtUsd(billing.monthlyUtilities) : utilitiesStr;
@@ -1211,7 +1278,7 @@ ${longTermGuestCap ? `<p><strong>Guest violations:</strong> Gatherings beyond th
 <p><strong>Dispute resolution:</strong> Residents are encouraged to resolve disputes between themselves first. If unresolved, bring concerns to Landlord in writing. Landlord's reasonable determination of house-rule disputes shall be final subject to applicable law.</p>
 <p><strong>Three-strike policy:</strong> Three documented written warnings in any 12-month period for the same or similar violations may constitute grounds for lease termination with appropriate statutory notice.</p>
 </div>
-${customTermsAddendumHtml(subNorm, "Addendum F — Additional Provisions from Property Manager")}
+${customTermsAddendumHtml(subNorm, "Addendum F — Additional Provisions from Property Manager", propertyTemplatePreview)}
 `;
 
   // Cross-references are resolved LAST, because a section can be referenced by text that is

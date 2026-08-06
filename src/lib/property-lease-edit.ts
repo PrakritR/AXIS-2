@@ -98,6 +98,7 @@ export function resolvePropertyLeaseEditHtml(args: {
     | "leaseTemplateHtmlOverride"
   >;
   source: PropertyLeaseSource;
+  templateKind?: PropertyLeaseTemplate["kind"];
   hint?: PropertyLeasePreviewHint;
   demo?: boolean;
 }): string {
@@ -117,7 +118,11 @@ export function resolvePropertyLeaseEditHtml(args: {
   }
 
   const previewSub = submissionFromTemplate(args.sub, args.draft);
-  const preview = buildPropertyLeasePreview(previewSub, { hint: args.hint, demo: args.demo });
+  const preview = buildPropertyLeasePreview(previewSub, {
+    hint: args.hint,
+    demo: args.demo,
+    templateKind: args.templateKind ?? "long-term",
+  });
   let html = preview.html?.trim() ?? "";
   if (!html) return "";
 

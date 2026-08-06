@@ -6,8 +6,10 @@ import { LEASE_TEMPLATE_MAX_BYTES, uploadLeaseTemplateFile } from "@/lib/lease-t
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   PROPERTY_LEASE_SOURCE_OPTIONS,
+  PROPERTY_LEASE_DOCUMENT_MODE_OPTIONS,
   draftFieldsFromLeaseSource,
   leaseSourceFromDraft,
+  type PropertyLeaseDocumentMode,
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
 import {
@@ -115,7 +117,41 @@ type LeaseConfigFormProps = {
 
 const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted";
 
-/** Lease document source (left) and agreement type (right) shared by lease modals. */
+/** Single lease document dropdown — PropLane long/short term or uploaded PDF. */
+export function LeaseDocumentModeField({
+  mode,
+  onModeChange,
+  dataAttrPrefix = "property",
+}: {
+  mode: PropertyLeaseDocumentMode;
+  onModeChange: (mode: PropertyLeaseDocumentMode) => void;
+  dataAttrPrefix?: "listing" | "property";
+}) {
+  const modeMeta = PROPERTY_LEASE_DOCUMENT_MODE_OPTIONS.find((o) => o.id === mode);
+
+  return (
+    <div>
+      <label className={fieldLabelClass} htmlFor={`${dataAttrPrefix}-lease-document`}>
+        Lease document
+      </label>
+      <NativeSelect
+        id={`${dataAttrPrefix}-lease-document`}
+        value={mode}
+        onChange={(e) => onModeChange(e.target.value as PropertyLeaseDocumentMode)}
+        data-attr={`${dataAttrPrefix}-lease-document`}
+      >
+        {PROPERTY_LEASE_DOCUMENT_MODE_OPTIONS.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </NativeSelect>
+      {modeMeta ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{modeMeta.detail}</p> : null}
+    </div>
+  );
+}
+
+/** @deprecated Use LeaseDocumentModeField for property lease modals. */
 export function LeaseDocumentAndTypeFields({
   source,
   onSourceChange,

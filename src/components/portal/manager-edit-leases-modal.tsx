@@ -169,8 +169,8 @@ export function ManagerEditLeasesModal({
           title={editorTitle}
           description={
             isBulkEdit
-              ? "These settings apply to all selected properties. Add a lease or edit an existing template. Open a lease to set document source, clauses, PDF upload, and the visual editor."
-              : "Add a lease or edit an existing template. Open a lease to set document source, clauses, PDF upload, and the visual editor."
+              ? "These settings apply to all selected properties. Add a lease or edit an existing template."
+              : "Add a lease or edit an existing template. Choose PropLane default (long or short term) or upload a PDF."
           }
           onClose={onEditorClose}
           panelClassName="max-w-4xl"

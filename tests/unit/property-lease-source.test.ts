@@ -7,7 +7,10 @@ import {
   truncateLeasePreviewText,
 } from "@/lib/property-lease-preview";
 import {
+  applyPropertyLeaseDocumentMode,
+  documentModeFromLease,
   draftFieldsFromLeaseSource,
+  propertyLeaseDocumentModeLabel,
   propertyLeaseSourceLabel,
   resolvePropertyLeaseSource,
 } from "@/lib/property-lease-source";
@@ -79,6 +82,17 @@ describe("property lease source", () => {
     expect(propertyLeaseSourceLabel("custom_comments")).toBe("Custom clauses");
     expect(propertyLeaseSourceLabel("custom_format")).toBe("Your PDF");
   });
+
+  it("maps document modes to stored fields", () => {
+    expect(documentModeFromLease("axis_default", "long-term")).toBe("proplane_long_term");
+    expect(documentModeFromLease("axis_default", "short-term")).toBe("proplane_short_term");
+    expect(documentModeFromLease("custom_format", "long-term")).toBe("upload");
+    expect(applyPropertyLeaseDocumentMode("proplane_short_term")).toMatchObject({
+      source: "axis_default",
+      kind: "short-term",
+    });
+    expect(propertyLeaseDocumentModeLabel("proplane_long_term")).toContain("long term");
+  });
 });
 
 describe("formatLeaseAddressForDisplay", () => {
@@ -94,25 +108,50 @@ describe("formatLeaseAddressForDisplay", () => {
 });
 
 describe("property lease preview", () => {
-  it("uses full generated lease with listing data for axis default in Seattle", () => {
+  it("uses generic PropLane default draft without listing-specific details", () => {
     const preview = buildPropertyLeasePreview(seattleRoomSub(), { demo: true });
     expect(preview.source).toBe("axis_default");
     expect(preview.html).toContain("RESIDENTIAL LEASE AGREEMENT");
-    expect(preview.html).toContain("The Pioneer");
-    expect(preview.html).toContain("[Resident name]");
-    expect(preview.html).toContain("$2400.00 / month");
-    expect(preview.html).toContain("$500.00");
-    expect(preview.html).toContain("Quiet hours 10pm");
+    expect(preview.html).not.toContain("The Pioneer");
+    expect(preview.html).not.toContain("[Resident name]");
+    expect(preview.html).toContain("Filled at placement");
+    expect(preview.html).not.toContain("$2400.00 / month");
+    expect(preview.html).not.toContain("$500.00");
+    expect(preview.html).not.toContain("Quiet hours 10pm");
+    expect(preview.html).not.toContain("12 Pike St");
     expect(preview.html).toContain("Electronic Signature");
-    expect(preview.html).not.toMatch(/Seattle, WA.*Seattle, WA/);
     expect(preview.jurisdictionLabel).toBe("Seattle, WA");
+  });
+
+  it("generates a distinct short-term stay agreement for short-term template kind", () => {
+    const sub = seattleRoomSub();
+    const longPreview = buildPropertyLeasePreview(sub, { templateKind: "long-term" });
+    const shortPreview = buildPropertyLeasePreview(
+      {
+        ...sub,
+        shortTermDailyCost: "$95",
+        shortTermDeposit: "$200",
+      },
+      { templateKind: "short-term" },
+    );
+    expect(longPreview.html).toContain("RESIDENTIAL LEASE AGREEMENT");
+    expect(shortPreview.html).toContain("SHORT-TERM ROOM STAY AGREEMENT");
+    expect(shortPreview.html).not.toContain("RESIDENTIAL LEASE AGREEMENT");
+    expect(shortPreview.html).toContain("Guest");
+    expect(shortPreview.html).not.toContain("[Resident name]");
+    expect(shortPreview.html).not.toContain("The Pioneer");
+    expect(shortPreview.html).not.toContain("$95");
+    expect(shortPreview.html).not.toContain("$200");
+    expect(shortPreview.html).not.toContain("10:00 PM");
+    expect(shortPreview.html).not.toContain("11:00 AM");
   });
 
   it("does not embed listing marketing copy in section 2 Premises", () => {
     const preview = buildPropertyLeasePreview(seattleRoomSub(), { demo: true });
     expect(preview.html).toContain("<h2>2. Premises</h2>");
-    expect(preview.html).toContain("The Pioneer");
-    expect(preview.html).toContain("$2400.00 / month");
+    expect(preview.html).toContain("Filled at placement");
+    expect(preview.html).not.toContain("The Pioneer");
+    expect(preview.html).not.toContain("$2400.00 / month");
     expect(preview.html).not.toContain("Light-filled Pioneer Square home");
     expect(preview.html).not.toContain("Please message with a short bio");
     expect(preview.html).not.toContain("preferred move in date");

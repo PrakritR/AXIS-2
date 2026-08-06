@@ -523,7 +523,7 @@ export function ManagerAllServicesPanel({
     typeFilter === "work-orders" ? woBucket : typeFilter === "requests" ? reqBucket : undefined;
 
   const servicesListDestinations = (
-    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-1.5">
+    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-2.5">
       {servicesTypeNav}
       {bucketDestinations ? (
         <DestinationNav

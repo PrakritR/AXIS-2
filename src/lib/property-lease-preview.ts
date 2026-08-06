@@ -4,15 +4,17 @@ import { isLeaseGenerationSupported, jurisdictionLabel, resolveLeaseJurisdiction
 import {
   activeCustomLeaseTerms,
   activeLeaseTemplateDoc,
-  entireHomeMonthlyRentAmount,
-  isEntireHomeListing,
+  createDefaultListingSubmission,
   normalizeManagerListingSubmissionV1,
-  resolveAllowedLeaseTerms,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
-import { roomDailyRentPrice } from "@/lib/room-pricing";
+import { stripDisclosureReviewFromLeaseHtml } from "@/lib/property-lease-document-display";
+import type { PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import { resolvePropertyLeaseSource, type PropertyLeaseSource } from "@/lib/property-lease-source";
+
+/** Generic label for property-level default lease drafts (no listing or resident data). */
+export const PROPERTY_LEASE_TEMPLATE_PLACEHOLDER = "Filled at placement";
 
 export type PropertyLeasePreviewHint = {
   buildingName?: string;
@@ -81,69 +83,63 @@ function formatCustomLeaseClausesHtml(terms: string): string {
   return `<p>${escapeHtml(trimmed).replace(/\n/g, "<br/>")}</p>`;
 }
 
+/** Keep only location signals needed for jurisdiction; omit listing-specific lease fields. */
+function jurisdictionStubFromSubmission(sub: ManagerListingSubmissionV1): ManagerListingSubmissionV1 {
+  const source = normalizeManagerListingSubmissionV1(sub);
+  return normalizeManagerListingSubmissionV1({
+    ...createDefaultListingSubmission(),
+    zip: source.zip,
+  });
+}
+
 /** Synthetic placement context for property-level lease previews (no resident yet). */
 export function leasePreviewContextFromSubmission(
   sub: ManagerListingSubmissionV1,
-  hint?: PropertyLeasePreviewHint,
+  _hint?: PropertyLeasePreviewHint,
+  templateKind: PropertyLeaseTemplateKind = "long-term",
+  opts?: { templatePreview?: boolean },
 ): LeaseGenerationContext {
-  const normalized = normalizeManagerListingSubmissionV1(sub);
-  const firstRoom = normalized.rooms.find((r) => r.name.trim() || r.monthlyRent > 0);
-  const unitLabel = hint?.unitLabel?.trim() || firstRoom?.name?.trim() || "Room 1";
-
-  let rentFromListing: string | null = null;
-  const firstRoomDaily = roomDailyRentPrice(firstRoom);
-  if (firstRoomDaily !== undefined) {
-    rentFromListing = `$${firstRoomDaily.toFixed(2)} / day`;
-  } else if (firstRoom && firstRoom.monthlyRent > 0) {
-    rentFromListing = `$${firstRoom.monthlyRent.toFixed(2)} / month`;
-  } else if (isEntireHomeListing(normalized)) {
-    const entireRent = entireHomeMonthlyRentAmount(normalized);
-    if (entireRent > 0) rentFromListing = `$${entireRent.toFixed(2)} / month`;
-  }
-
-  const allowedTerms = resolveAllowedLeaseTerms(normalized);
-  const leaseTerm = allowedTerms[0] ?? "12-Month";
-  const buildingName = hint?.buildingName?.trim() || normalized.buildingName.trim() || "Property";
-  const rentLabel = rentFromListing || hint?.rentLabel?.trim() || "—";
-  const addressLines = formatLeaseAddressForDisplay(normalized);
-
-  const previewId = `preview-${buildingName.replace(/\s+/g, "-").slice(0, 48) || "property"}`;
-  const roomChoice1 =
-    firstRoom?.id ? `${previewId}${LISTING_ROOM_CHOICE_SEP}${firstRoom.id}` : undefined;
+  const isShortTerm = templateKind === "short-term";
+  const templatePreview = opts?.templatePreview ?? true;
+  const blankSubmission = templatePreview ? jurisdictionStubFromSubmission(sub) : normalizeManagerListingSubmissionV1(sub);
+  const leaseTerm = isShortTerm ? SHORT_TERM_LEASE_TERM : "12-Month";
 
   const listingProperty: MockProperty = {
-    id: previewId,
-    title: buildingName,
-    tagline: normalized.tagline?.trim() || "",
-    address: addressLines.street,
-    zip: normalized.zip,
-    neighborhood: normalized.neighborhood,
+    id: "property-lease-template-draft",
+    title: "",
+    tagline: "",
+    address: "",
+    zip: blankSubmission.zip,
+    neighborhood: blankSubmission.neighborhood,
     beds: 0,
     baths: 0,
-    rentLabel,
+    rentLabel: "—",
     available: "—",
-    petFriendly: normalized.petFriendly,
-    buildingId: `${previewId}-building`,
-    buildingName,
-    unitLabel,
-    listingSubmission: normalized,
+    petFriendly: false,
+    buildingId: "property-lease-template-draft",
+    buildingName: "",
+    unitLabel: "",
+    listingSubmission: blankSubmission,
     adminPublishLive: true,
   };
 
   return {
     application: {
-      fullLegalName: "[Resident name]",
-      email: "[Resident email]",
-      phone: "[Resident phone]",
+      fullLegalName: "",
+      email: "",
+      phone: "",
+      rentalType: isShortTerm ? "short_term" : undefined,
       leaseTerm,
-      leaseStart: "[Placement start date]",
-      leaseEnd: leaseTerm === "Month-to-Month" ? "N/A (month-to-month)" : "[Placement end date]",
-      roomChoice1,
+      leaseStart: PROPERTY_LEASE_TEMPLATE_PLACEHOLDER,
+      leaseEnd: PROPERTY_LEASE_TEMPLATE_PLACEHOLDER,
+      shortTermCheckInTime: "",
+      shortTermCheckOutTime: "",
     },
     leasedRoom: listingProperty,
     listingProperty,
-    submission: normalized,
+    submission: blankSubmission,
     generatedAtIso: new Date().toISOString(),
+    propertyTemplatePreview: templatePreview,
   };
 }
 
@@ -205,11 +201,12 @@ export type PropertyLeasePreviewResult = {
 
 export function buildPropertyLeasePreview(
   sub: ManagerListingSubmissionV1,
-  opts?: { hint?: PropertyLeasePreviewHint; demo?: boolean },
+  opts?: { hint?: PropertyLeasePreviewHint; demo?: boolean; templateKind?: PropertyLeaseTemplateKind },
 ): PropertyLeasePreviewResult {
   void opts?.demo;
   const normalized = normalizeManagerListingSubmissionV1(sub);
   const source = resolvePropertyLeaseSource(normalized);
+  const templateKind = opts?.templateKind ?? "long-term";
 
   if (source === "custom_format") {
     const doc = activeLeaseTemplateDoc(normalized);
@@ -232,7 +229,9 @@ export function buildPropertyLeasePreview(
     };
   }
 
-  const ctx = leasePreviewContextFromSubmission(normalized, opts?.hint);
+  const ctx = leasePreviewContextFromSubmission(normalized, opts?.hint, templateKind, {
+    templatePreview: source === "axis_default",
+  });
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   const jLabel = jurisdictionLabel(jurisdiction);
   const supported = isLeaseGenerationSupported(jurisdiction);
@@ -241,7 +240,7 @@ export function buildPropertyLeasePreview(
   if (built) {
     return {
       source,
-      html: built.html,
+      html: stripDisclosureReviewFromLeaseHtml(built.html),
       plainText: built.plainText,
       unsupportedJurisdiction: false,
       jurisdictionLabel: built.jurisdictionLabel,

@@ -279,7 +279,7 @@ export function FilterFieldsAccordionScope({ children }: { children: ReactNode }
  */
 export function FilterFieldsAccordion({ children }: { children: ReactNode }) {
   const enclosingScope = useContext(FilterFieldsAccordionContext);
-  const grid = <div className="grid gap-3 max-lg:gap-2">{children}</div>;
+  const grid = <div className="grid gap-3 max-lg:gap-2.5">{children}</div>;
   return enclosingScope ? grid : <FilterFieldsAccordionScope>{grid}</FilterFieldsAccordionScope>;
 }
 

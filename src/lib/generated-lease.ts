@@ -86,6 +86,8 @@ export type LeaseGenerationContext = {
   leaseKind?: "individual" | "joint_bundle";
   /** Amounts aligned with placement + pending household charges when generating from the manager portal. */
   leaseBilling?: LeaseBillingSnapshot;
+  /** Property-level template preview — no resident yet; omit disclosure blocks and bracket placeholders. */
+  propertyTemplatePreview?: boolean;
 };
 
 export function leaseContextFromApplication(

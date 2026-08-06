@@ -130,7 +130,7 @@ function FilterPanelFields({
           scrollLocked ? "overflow-y-hidden" : "overflow-y-auto",
         )}
       >
-        <div className="flex min-w-0 max-w-full flex-col gap-3 max-lg:gap-2">
+        <div className="flex min-w-0 max-w-full flex-col gap-3 max-lg:gap-2.5">
           {children}
           {extraModalContent}
         </div>

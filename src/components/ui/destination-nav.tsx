@@ -120,7 +120,7 @@ export type LocalDestinationNavItem = {
 function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
   return cn(
     itemLayout === "equal"
-      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:gap-0 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
+      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:gap-1.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
       : cn(
           "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
           PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,

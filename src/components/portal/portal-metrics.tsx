@@ -270,7 +270,7 @@ export function ManagerPortalStatusPills({
       className={
         compact
           ? "inline-flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-accent/30 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          : "inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full"
+          : "inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-2.5 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full"
       }
     >
       {tabs.map((tab) => {
@@ -829,7 +829,7 @@ export const PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE =
 
 /** Full-width header tool row (Filter | Reminders | … | primary) — edge-to-edge in the content column. */
 export const PORTAL_HEADER_FULL_WIDTH_ACTION_GRID =
-  "mb-2 grid w-full gap-1.5 sm:gap-2 [&>div]:min-w-0 [&_button]:w-full [&_button]:min-w-0";
+  "mb-2 grid w-full gap-2.5 sm:gap-2 [&>div]:min-w-0 [&_button]:w-full [&_button]:min-w-0";
 
 /** Compact toolbar buttons (resident profile sections on mobile). */
 export const RESIDENT_DETAIL_HEADER_ACTION_BTN =

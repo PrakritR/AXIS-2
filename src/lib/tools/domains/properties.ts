@@ -24,6 +24,20 @@ import {
   resolvePropertyLeaseSource,
   type PropertyLeaseSource,
 } from "@/lib/property-lease-source";
+import {
+  readPropertyLeaseTemplates,
+  syncLegacyLeaseFieldsFromTemplates,
+  updatePropertyLeaseTemplate,
+  type PropertyLeaseTemplateKind,
+} from "@/lib/property-lease-templates";
+import {
+  applyPropertyLeaseTemplateSectionEdit,
+  findPropertyLeaseTemplate,
+  propertyLeaseTemplateSectionIsEditable,
+  readPropertyLeaseTemplateSections,
+  resolvePropertyLeaseTemplateHtml,
+} from "@/lib/property-lease-template-html";
+import { sectionSourceFromHtml } from "@/lib/lease-section-text";
 
 /**
  * Property records vary in shape by lifecycle status: `property_data` holds the
@@ -969,6 +983,145 @@ export const updatePropertyLeaseConfigTool = defineWriteTool({
     return {
       reply: `Saved lease settings for ${title} (${leaseSourceInputLabel(input.leaseSource)}). Residents signing after this change use the updated lease document.`,
       resultSummary: { propertyId: rec.id, leaseSource: input.leaseSource },
+    };
+  },
+});
+
+const PROPERTY_LEASE_TEMPLATE_KIND = z.enum(["short-term", "long-term"]);
+
+async function loadPropertyLeaseTemplateForKind(
+  ctx: AgentContext,
+  propertyId: string,
+  templateKind: PropertyLeaseTemplateKind,
+): Promise<{ rec: RawPropertyRecord; sub: ManagerListingSubmissionV1; template: NonNullable<ReturnType<typeof findPropertyLeaseTemplate>> }> {
+  const rec = await loadOwnedPropertyRecord(ctx, propertyId);
+  if (!rec) throw new Error("No property with that id belongs to this landlord. Use list_properties to get valid ids.");
+  const sub = listingSubmissionFromRecord(rec);
+  if (!sub) throw new Error("This property has no listing submission to update — open it in Properties first.");
+  const normalized = normalizeManagerListingSubmissionV1(sub);
+  const template = findPropertyLeaseTemplate(normalized, templateKind);
+  if (!template) {
+    throw new Error(
+      `No ${templateKind} lease template exists on this property. Add it in Properties → Lease first.`,
+    );
+  }
+  return { rec, sub: normalized, template };
+}
+
+export const listPropertyLeaseTemplateSectionsTool = defineTool({
+  name: "list_property_lease_template_sections",
+  description:
+    "List editable sections of a property's lease template (long-term or short-term) while the manager is in the Lease modal. Use before propose_property_lease_template_section_edit.",
+  inputSchema: z
+    .object({
+      propertyId: z.string().min(1),
+      templateKind: PROPERTY_LEASE_TEMPLATE_KIND,
+    })
+    .strict(),
+  handler: async (ctx, input) => {
+    const { template, sub } = await loadPropertyLeaseTemplateForKind(ctx, input.propertyId, input.templateKind);
+    const html = resolvePropertyLeaseTemplateHtml({ sub, template });
+    const sections = readPropertyLeaseTemplateSections(html).map((section) => ({
+      id: section.id,
+      title: section.title,
+      editable: propertyLeaseTemplateSectionIsEditable(section),
+    }));
+    return {
+      reply:
+        sections.length === 0
+          ? "No sections found on this lease template."
+          : `Lease sections (${input.templateKind}): ${sections.map((s) => `${s.id} (${s.title}${s.editable ? "" : ", locked"})`).join("; ")}`,
+      resultSummary: { propertyId: input.propertyId, templateKind: input.templateKind, sections },
+    };
+  },
+});
+
+export const proposePropertyLeaseTemplateSectionEditTool = defineWriteTool({
+  name: "propose_property_lease_template_section_edit",
+  description:
+    "Propose a text edit to one section of a property lease template (PropLane default long-term or short-term). Use list_property_lease_template_sections first. Applies immediately after the manager confirms and updates the open Lease modal.",
+  inputSchema: z
+    .object({
+      propertyId: z.string().min(1),
+      templateKind: PROPERTY_LEASE_TEMPLATE_KIND,
+      sectionId: z.string().min(1),
+      value: z.string().max(20_000).describe("Replacement section body as plain text paragraphs, not HTML."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const { rec, template, sub } = await loadPropertyLeaseTemplateForKind(ctx, input.propertyId, input.templateKind);
+    const html = resolvePropertyLeaseTemplateHtml({ sub, template });
+    const section = readPropertyLeaseTemplateSections(html).find((candidate) => candidate.id === input.sectionId);
+    if (!section) throw new Error("That section does not exist. Use list_property_lease_template_sections first.");
+    if (!propertyLeaseTemplateSectionIsEditable(section)) {
+      throw new Error("That section is required or derived and cannot be edited.");
+    }
+    const before = sectionSourceFromHtml(section.bodyHtml);
+    const src = asObject(rec.property_data) ?? asObject(rec.row_data);
+    const title = str(src, "title") ?? str(src, "buildingName") ?? input.propertyId;
+    return {
+      kind: "property_lease_template_section_edit",
+      title: `Edit ${section.title}`,
+      summary: `Update the ${input.templateKind} lease template for ${title}.`,
+      fields: [
+        { label: "Template", value: input.templateKind },
+        { label: "Section", value: section.title },
+        { label: "Before", value: before || "(empty)" },
+        { label: "After", value: input.value || "(empty)" },
+      ],
+      confirmLabel: "Apply to lease",
+      confirmedInput: input,
+    };
+  },
+  handler: async (ctx, input) => {
+    const { rec, sub, template } = await loadPropertyLeaseTemplateForKind(ctx, input.propertyId, input.templateKind);
+    const html = resolvePropertyLeaseTemplateHtml({ sub, template });
+    const section = readPropertyLeaseTemplateSections(html).find((candidate) => candidate.id === input.sectionId);
+    if (!section || !propertyLeaseTemplateSectionIsEditable(section)) {
+      throw new Error("That section is not editable.");
+    }
+    const escaped = input.value
+      .trim()
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p>${p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
+      .join("\n");
+    const nextHtml = applyPropertyLeaseTemplateSectionEdit(html, section.id, escaped || "");
+    const templates = readPropertyLeaseTemplates(sub);
+    const nextTemplates = updatePropertyLeaseTemplate(templates, template.id, {
+      leaseTemplateHtmlOverride: nextHtml,
+    });
+    const merged = syncLegacyLeaseFieldsFromTemplates(sub, nextTemplates);
+    const dedupeKey = `property_lease_template_section_edit:${ctx.landlordId}:${rec.id}:${template.id}:${input.sectionId}:${auditDayBucket()}`;
+    const audit = await writeAuditLog(ctx, {
+      action: "propose_property_lease_template_section_edit",
+      toolName: "propose_property_lease_template_section_edit",
+      inputSummary: { propertyId: rec.id, templateKind: input.templateKind, sectionId: input.sectionId },
+      dedupeKey,
+    });
+    if (!audit.recorded) {
+      if (audit.duplicate) return { reply: "That lease section edit was already saved today." };
+      throw new Error("Could not record the action; the lease was not updated.");
+    }
+    const payloads = writeSubmissionToRecordPayloads(rec, merged);
+    const { error } = await ctx.db
+      .from("manager_property_records")
+      .update({
+        row_data: payloads.row_data,
+        property_data: payloads.property_data,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", rec.id)
+      .eq("manager_user_id", ctx.landlordId);
+    if (error) {
+      await updateAuditResult(ctx, dedupeKey, { saved: false }, { clearDedupeKey: true });
+      throw new Error(error.message);
+    }
+    await updateAuditResult(ctx, dedupeKey, { saved: true, propertyId: rec.id, sectionId: input.sectionId });
+    return {
+      reply: `Updated "${section.title}" on the ${input.templateKind} lease template. The Lease modal preview refreshes automatically.`,
+      resultSummary: { propertyId: rec.id, templateKind: input.templateKind, sectionId: input.sectionId },
     };
   },
 });

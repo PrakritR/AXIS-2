@@ -1,4 +1,35 @@
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import type { PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
+
+/** Simplified property lease document picker (replaces separate source + agreement type). */
+export type PropertyLeaseDocumentMode =
+  | "proplane_long_term"
+  | "proplane_short_term"
+  | "upload";
+
+export const PROPERTY_LEASE_DOCUMENT_MODE_OPTIONS: readonly {
+  id: PropertyLeaseDocumentMode;
+  label: string;
+  detail: string;
+}[] = [
+  {
+    id: "proplane_long_term",
+    label: "PropLane default — long term",
+    detail:
+      "PropLane generates a fixed-term or month-to-month lease from the approved application and listing.",
+  },
+  {
+    id: "proplane_short_term",
+    label: "PropLane default — short term",
+    detail: "PropLane generates a short-stay agreement with check-in/out dates and stay-total rent.",
+  },
+  {
+    id: "upload",
+    label: "Upload your lease",
+    detail:
+      "Upload a PDF — PropLane parses it into editable PropPlane sections, then adds placement details and e-signatures.",
+  },
+] as const;
 
 /** How the lease document is produced for a property (UI-facing source id). */
 export type PropertyLeaseSource =
@@ -68,4 +99,44 @@ export function leaseSourceFromDraft(
   draft: Pick<ManagerListingSubmissionV1, "leaseConfigMode" | "leaseCustomKind">,
 ): PropertyLeaseSource {
   return resolvePropertyLeaseSource(draft);
+}
+
+export function propertyLeaseDocumentModeLabel(mode: PropertyLeaseDocumentMode): string {
+  return PROPERTY_LEASE_DOCUMENT_MODE_OPTIONS.find((o) => o.id === mode)?.label ?? "PropLane default — long term";
+}
+
+/** Map stored lease fields to the simplified document mode (legacy builder/clauses → PropLane long term). */
+export function documentModeFromLease(
+  source: PropertyLeaseSource,
+  kind: PropertyLeaseTemplateKind,
+): PropertyLeaseDocumentMode {
+  if (source === "custom_format") return "upload";
+  if (kind === "short-term") return "proplane_short_term";
+  return "proplane_long_term";
+}
+
+export function applyPropertyLeaseDocumentMode(mode: PropertyLeaseDocumentMode): {
+  source: PropertyLeaseSource;
+  kind: PropertyLeaseTemplateKind;
+  draftFields: Pick<ManagerListingSubmissionV1, "leaseConfigMode" | "leaseCustomKind">;
+} {
+  if (mode === "upload") {
+    return {
+      source: "custom_format",
+      kind: "long-term",
+      draftFields: draftFieldsFromLeaseSource("custom_format"),
+    };
+  }
+  if (mode === "proplane_short_term") {
+    return {
+      source: "axis_default",
+      kind: "short-term",
+      draftFields: draftFieldsFromLeaseSource("axis_default"),
+    };
+  }
+  return {
+    source: "axis_default",
+    kind: "long-term",
+    draftFields: draftFieldsFromLeaseSource("axis_default"),
+  };
 }

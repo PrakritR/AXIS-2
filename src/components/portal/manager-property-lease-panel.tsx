@@ -18,8 +18,9 @@ import {
   persistManagerListingSubmission,
   resolveManagerListingSubmissionForPropertyId,
 } from "@/lib/manager-property-save-target";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import type { PropertyLeasePreviewHint } from "@/lib/property-lease-preview";
-import { propertyLeaseSourceLabel } from "@/lib/property-lease-source";
+import { formatApplicationLeaseTermsLabel, syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
 import {
   propertyLeaseSourceFromTemplate,
   propertyLeaseTypeLabel,
@@ -28,7 +29,10 @@ import {
   syncLegacyLeaseFieldsFromTemplates,
   type PropertyLeaseTemplate,
 } from "@/lib/property-lease-templates";
-import { formatApplicationLeaseTermsLabel, syncPropertyLeaseTemplatesFromListing } from "@/lib/property-lease-template-sync";
+import {
+  documentModeFromLease,
+  propertyLeaseDocumentModeLabel,
+} from "@/lib/property-lease-source";
 
 type LeaseSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -40,25 +44,14 @@ function leaseDocumentSummary(template: PropertyLeaseTemplate): string {
   const source = propertyLeaseSourceFromTemplate(template);
   if (source === "custom_format") {
     return template.leaseTemplateDocName?.trim()
-      ? `Parsed PDF · ${template.leaseTemplateDocName}`
+      ? `Uploaded · ${template.leaseTemplateDocName}`
       : "Uploaded PDF · not parsed yet";
   }
-  if (source === "custom_builder") {
-    return template.leaseTemplateHtmlOverride?.trim()
-      ? "Custom builder · edited"
-      : "Custom builder · blank shell";
-  }
-  if (source === "custom_comments") {
-    const preview = template.customLeaseTerms?.trim();
-    if (!preview) return "Custom clauses · not added yet";
-    const short = preview.length > 72 ? `${preview.slice(0, 72)}…` : preview;
-    return `Custom clauses · ${short}`;
-  }
-  return propertyLeaseSourceLabel(source);
+  return propertyLeaseDocumentModeLabel(documentModeFromLease(source, template.kind));
 }
 
 /**
- * Per-property lease templates — agreement type plus PropLane default, custom clauses, or uploaded PDF.
+ * Per-property lease templates — PropLane default (long/short), upload, and inline format editor.
  */
 export function ManagerPropertyLeasePanel({
   sub,
@@ -149,19 +142,18 @@ export function ManagerPropertyLeasePanel({
     setFormOpen(true);
   };
 
-  const handleRemove = (templateId: string) => {
+  const handleDelete = (templateId: string) => {
     if (templates.length <= 1) {
       showToast("Keep at least one lease on this property.");
       return;
     }
-    if (!window.confirm("Remove this lease?")) return;
     const next = removePropertyLeaseTemplate(templates, templateId);
     if (!persistTemplates(next)) {
-      showToast("Could not remove lease.");
+      showToast("Could not delete lease.");
       return;
     }
     onUpdated();
-    showToast("Lease removed.");
+    showToast("Lease deleted.");
   };
 
   if (!managerUserId || (!saveTarget && bulkPropertyIds.length === 0)) return null;
@@ -176,9 +168,7 @@ export function ManagerPropertyLeasePanel({
             <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{template.label}</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {propertyLeaseTypeLabel(template.kind)} · {leaseDocumentSummary(template)}
-                </p>
+                <p className="mt-0.5 text-xs text-muted">{leaseDocumentSummary(template)}</p>
                 {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
                   <p className="mt-0.5 text-xs text-muted">
                     Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
@@ -195,16 +185,6 @@ export function ManagerPropertyLeasePanel({
                 >
                   Edit
                 </Button>
-                {templates.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                    onClick={() => handleRemove(template.id)}
-                  >
-                    Remove
-                  </Button>
-                ) : null}
               </div>
             </div>
           ))}
@@ -226,11 +206,21 @@ export function ManagerPropertyLeasePanel({
         template={editingTemplate}
         templates={templates}
         propertyHint={propertyHint}
+        propertyId={propertyId ?? bulkPropertyIds[0] ?? null}
         demoMode={demoMode}
+        canDelete={formMode === "edit" && templates.length > 1}
         onClose={() => {
           setFormOpen(false);
           setEditingTemplateId(null);
         }}
+        onAssistantRefresh={() => {
+          void syncPropertyPipelineFromServer({ force: true }).then(() => onUpdated());
+        }}
+        onDelete={
+          editingTemplateId
+            ? () => handleDelete(editingTemplateId)
+            : undefined
+        }
         onSave={(nextTemplates) => {
           if (!persistTemplates(nextTemplates)) {
             showToast("Could not save lease.");

@@ -12,6 +12,16 @@ npm run test:e2e           # Playwright browser tests (needs .env.test + running
 npm run test:all           # All Vitest + Playwright
 ```
 
+## Cursor + Chrome DevTools MCP (agent browser walks)
+
+For ship-gate **manual feature testing**, agents can attach to live Chrome via the
+**Chrome DevTools MCP** (screenshots, console, network) instead of only running
+Playwright headless. Setup, macOS permissions, and example prompts:
+[`docs/cursor-chrome-devtools-mcp.md`](../docs/cursor-chrome-devtools-mcp.md).
+
+The server is declared in [`.cursor/mcp.json`](../.cursor/mcp.json) as
+`chrome-devtools`. Enable it under **Cursor Settings → MCP** after pull.
+
 ## Environment
 
 Use a **dedicated Supabase test project** — never production credentials. See [`.env.test.example`](../.env.test.example).
