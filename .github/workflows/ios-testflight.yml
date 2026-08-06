@@ -26,8 +26,10 @@ on:
           - subscriptions
 
 concurrency:
-  # Serialize uploads so two pushes can't race for the same build number.
-  group: ios-testflight
+  # Serialize binary uploads so two pushes cannot race for one build number,
+  # while allowing metadata/catalog maintenance to proceed during Apple's
+  # independent build-processing wait.
+  group: ios-${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'testflight' && 'app-store-maintenance' || 'testflight' }}
   cancel-in-progress: false
 
 jobs:

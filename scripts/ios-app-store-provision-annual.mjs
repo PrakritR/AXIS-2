@@ -17,7 +17,9 @@ export const ANNUAL_PRODUCT_SPECS = Object.freeze([
     referenceName: "PropLane Pro Annual",
     displayName: "PropLane Pro Annual",
     description: "Pro plan access, billed once per year.",
-    usd: "192.00",
+    // Apple has no exact $192.00 subscription price point. StoreKit displays
+    // this nearest permitted tier instead of the rounded web marketing price.
+    usd: "191.99",
   },
   {
     productId: "space.proplane.app.business.annual",
@@ -25,7 +27,7 @@ export const ANNUAL_PRODUCT_SPECS = Object.freeze([
     referenceName: "PropLane Business Annual",
     displayName: "PropLane Business Annual",
     description: "Business plan access, billed once per year.",
-    usd: "1920.00",
+    usd: "1919.99",
   },
 ]);
 
@@ -93,10 +95,11 @@ export function buildLocalizationCreate(spec, subscriptionId) {
   };
 }
 
-function buildPriceCreate(subscriptionId, pricePointId) {
+export function buildPriceCreate(subscriptionId, pricePointId) {
   return {
     data: {
       type: "subscriptionPrices",
+      attributes: { planType: "UPFRONT" },
       relationships: {
         subscription: { data: { type: "subscriptions", id: subscriptionId } },
         subscriptionPricePoint: {

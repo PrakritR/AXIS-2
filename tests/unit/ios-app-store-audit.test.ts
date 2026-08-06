@@ -65,10 +65,10 @@ describe("App Store release audit", () => {
         ],
         included: [
           { type: "subscriptionPricePoints", id: "old", attributes: { customerPrice: "9.99" } },
-          { type: "subscriptionPricePoints", id: "current", attributes: { customerPrice: "192" } },
+          { type: "subscriptionPricePoints", id: "current", attributes: { customerPrice: "191.99" } },
           { type: "subscriptionPricePoints", id: "future", attributes: { customerPrice: "999" } },
         ],
       }),
-    ).toBe("192.00");
+    ).toBe("191.99");
   });
 });
