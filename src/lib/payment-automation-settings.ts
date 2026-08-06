@@ -85,11 +85,11 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   tourReminderDeliverViaSms: false,
   templates: {
     preDue: {
-      subject: "Payment due in {daysUntilDue}: {chargeTitle}",
+      subject: "Payment due {daysUntilDuePhrase}: {chargeTitle}",
       body: [
         "Hi {residentName},",
         "",
-        "This is a reminder that your {chargeTitle} payment is due in {daysUntilDue} ({dueDate}).",
+        "This is a reminder that your {chargeTitle} payment is due {daysUntilDuePhrase} ({dueDate}).",
         "",
         "Amount due: {balanceDue}",
         "{propertyLine}",

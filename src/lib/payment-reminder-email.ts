@@ -27,20 +27,32 @@ export type ReminderTemplateParams = {
   residentEmail?: string;
 };
 
+/** Short count for bare placeholders — "today", "1 day", "3 days". */
+export function formatDaysUntilDueShort(daysUntilDue: number): string {
+  if (daysUntilDue === 0) return "today";
+  if (daysUntilDue === 1) return "1 day";
+  if (daysUntilDue < 0) return `${Math.abs(daysUntilDue)} day(s) ago`;
+  return `${daysUntilDue} days`;
+}
+
+/**
+ * Phrase for "due {…}" / "Payment due {…}" copy — never yields "in today".
+ * Examples: "today", "in 1 day", "in 3 days".
+ */
+export function formatDaysUntilDuePhrase(daysUntilDue: number): string {
+  if (daysUntilDue === 0) return "today";
+  if (daysUntilDue === 1) return "in 1 day";
+  if (daysUntilDue < 0) return `${Math.abs(daysUntilDue)} day(s) ago`;
+  return `in ${daysUntilDue} days`;
+}
+
 export function applyReminderTemplate(template: string, params: ReminderTemplateParams): string {
   const propertyLabel = (params.propertyLabel ?? "").trim();
   const propertyLine = propertyLabel ? `Property: ${propertyLabel}` : "";
-  const daysLabel =
-    params.daysUntilDue === 0
-      ? "today"
-      : params.daysUntilDue === 1
-        ? "1 day"
-        : params.daysUntilDue < 0
-          ? `${Math.abs(params.daysUntilDue)} day(s) ago`
-          : `${params.daysUntilDue} days`;
+  const daysLabel = formatDaysUntilDueShort(params.daysUntilDue);
+  const daysPhrase = formatDaysUntilDuePhrase(params.daysUntilDue);
 
-  return expandResidentPortalLoginTemplatePlaceholder(
-    template
+  const withPlaceholders = template
     .replaceAll("{residentName}", params.residentName)
     .replaceAll("{chargeTitle}", params.chargeTitle)
     .replaceAll("{balanceDue}", params.balanceDue)
@@ -48,11 +60,16 @@ export function applyReminderTemplate(template: string, params: ReminderTemplate
     .replaceAll("{propertyLine}", propertyLine)
     .replaceAll("{managerName}", params.managerName)
     .replaceAll("{dueDate}", params.dueDateLabel)
-    .replaceAll("{daysUntilDue}", daysLabel)
+    .replaceAll("{daysUntilDuePhrase}", daysPhrase)
     .replaceAll("{lateFeeAmount}", params.lateFeeAmount ?? "")
     .replaceAll("{graceDays}", String(params.graceDays ?? ""))
-    .replace(/\n{3,}/g, "\n\n")
-    .trim(),
+    // Legacy templates use "in {daysUntilDue}" — rewrite before the bare token
+    // so "due in today" never ships (same-day reminders).
+    .replace(/\bin \{daysUntilDue\}/gi, daysPhrase)
+    .replaceAll("{daysUntilDue}", daysLabel);
+
+  return expandResidentPortalLoginTemplatePlaceholder(
+    withPlaceholders.replace(/\n{3,}/g, "\n\n").trim(),
     { residentEmail: params.residentEmail, afterLoginHint: "payments" },
   );
 }
