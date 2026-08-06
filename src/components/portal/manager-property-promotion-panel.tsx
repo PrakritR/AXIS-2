@@ -72,6 +72,7 @@ import {
   makePromotionUploadId,
   type PromotionUploadEntry,
 } from "@/lib/promotion-upload";
+import { ensureDefaultPromotionAssets } from "@/lib/promotion-default-sync";
 
 function promotionKindLabel(kind: PromotionAssetKind): string {
   if (kind === "flyer") return "Flyer";
@@ -154,7 +155,13 @@ export function ManagerPropertyPromotionPanel({
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
 
-  const autofillOpts = useMemo(() => ({ managerContact: managerEmail ?? "" }), [managerEmail]);
+  const autofillOpts = useMemo(
+    () => ({
+      managerContact: managerEmail ?? "",
+      appOrigin: typeof window !== "undefined" ? window.location.origin : "",
+    }),
+    [managerEmail],
+  );
 
   const propertyId = listingId.trim();
 
@@ -166,6 +173,36 @@ export function ManagerPropertyPromotionPanel({
   }, [propertyId, tick]);
 
   const assetKindIndices = useMemo(() => promotionAssetKindIndices(assets), [assets]);
+
+  // Seed a default flyer + listing blurb from listing facts when this property
+  // has none yet (same idea as auto-seeded lease templates on the Lease tab).
+  useEffect(() => {
+    if (!authReady || !userId || !propertyId) return;
+    const listing = listings.find((l) => l.id === propertyId);
+    if (!listing?.property) return;
+
+    let cancelled = false;
+    void syncManagerPromotionsFromServer({ force: true }).then(() => {
+      if (cancelled) return;
+      const existingRow = readManagerPromotionRows().find((row) => row.propertyId === propertyId) ?? null;
+      const seeded = ensureDefaultPromotionAssets({
+        propertyId,
+        property: listing.property,
+        managerUserId: userId,
+        managerContact: autofillOpts.managerContact,
+        appOrigin: autofillOpts.appOrigin,
+        existingRow,
+      });
+      if (!seeded) return;
+      upsertManagerPromotion(seeded);
+      setTick((n) => n + 1);
+      onUpdated?.();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, userId, propertyId, listings, autofillOpts, onUpdated, propertyTick]);
 
   // Open the unified "New promotion" modal (type dropdown + inline form, no
   // separate "Continue" step) seeded to this property.

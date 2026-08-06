@@ -293,17 +293,25 @@ export function normalizePromotionTemplate(value: unknown): PromotionTemplate {
     : PROMOTION_TEMPLATE_DEFAULT;
 }
 
+/** Public `listing-photos` objects managers upload for listings — safe to embed in flyer HTML. */
+const LISTING_PHOTO_PUBLIC_MARKER = "/storage/v1/object/public/listing-photos/";
+
+/** Base64 uploads from the promotion form, or durable listing gallery URLs. */
+export function isEmbeddableFlyerImageUrl(src: string): boolean {
+  if (/^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(src)) return true;
+  const trimmed = src.trim();
+  return trimmed.startsWith("https://") && trimmed.includes(LISTING_PHOTO_PUBLIC_MARKER);
+}
+
 /**
- * Keep only safe, embeddable uploaded images: base64 `data:image/*` URLs (no
- * remote URLs, no SVG — they can carry script), capped at {@link FLYER_IMAGE_LIMIT}.
+ * Keep only safe, embeddable images: base64 `data:image/*` URLs and public
+ * `listing-photos` gallery URLs (the property's main listing photos). No other
+ * remote URLs and no SVG — they can carry script. Capped at {@link FLYER_IMAGE_LIMIT}.
  */
 export function sanitizeFlyerImages(images: unknown): string[] {
   if (!Array.isArray(images)) return [];
   return images
-    .filter(
-      (src): src is string =>
-        typeof src === "string" && /^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(src),
-    )
+    .filter((src): src is string => typeof src === "string" && isEmbeddableFlyerImageUrl(src))
     .slice(0, FLYER_IMAGE_LIMIT);
 }
 
