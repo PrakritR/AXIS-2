@@ -28,7 +28,11 @@ import {
   inboxThreadSortMs,
   loadPersistedInbox,
 } from "@/lib/portal-inbox-storage";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { useCommunicationThreadId } from "@/hooks/use-communication-thread-id";
+import {
+  clearCommunicationThreadUrl,
+  selectCommunicationThreadUrl,
+} from "@/lib/portal-communication-nav";
 import {
   normalizeRoleSmsPayload,
   smsMessageBucket,
@@ -63,6 +67,7 @@ function VendorUnifiedInbox({
   smsUiEnabled,
   listSegment,
   routeThreadId,
+  onRouteThreadChange,
   searchQuery,
   onThreadOpenChange,
   commBase,
@@ -71,11 +76,11 @@ function VendorUnifiedInbox({
   smsUiEnabled: boolean;
   listSegment: InboxListSegment;
   routeThreadId?: string;
+  onRouteThreadChange?: (threadId: string | undefined) => void;
   searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
   commBase: string;
 }) {
-  const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(VENDOR_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
   const [smsOpened] = useState<Set<string>>(() => loadOpenedIds());
@@ -216,7 +221,11 @@ function VendorUnifiedInbox({
               channelBadge={row.channel === "email" ? "Email" : "SMS"}
               onOpen={() => {
                 setSelectedKey(row.key);
-                navigate(`${commBase}/${listSegment}/${row.threadId}`);
+                onRouteThreadChange?.(row.threadId);
+                const href = `${commBase}/${listSegment}/${encodeURIComponent(row.threadId)}`;
+                if (routeThreadId !== row.threadId) {
+                  selectCommunicationThreadUrl(href, { replaceExisting: Boolean(routeThreadId) });
+                }
               }}
             />
           ))
@@ -245,11 +254,16 @@ function VendorUnifiedInbox({
           onControlledExpandedIdChange={(id) => {
             if (!id) {
               setSelectedKey(null);
-              navigate(`${commBase}/${listSegment}`);
+              onRouteThreadChange?.(undefined);
+              clearCommunicationThreadUrl(`${commBase}/${listSegment}`);
               return;
             }
             setSelectedKey(unifiedInboxKey("email", id));
-            navigate(`${commBase}/${listSegment}/${id}`);
+            onRouteThreadChange?.(id);
+            const href = `${commBase}/${listSegment}/${encodeURIComponent(id)}`;
+            if (routeThreadId !== id) {
+              selectCommunicationThreadUrl(href, { replaceExisting: Boolean(routeThreadId) });
+            }
           }}
         />
       </div>
@@ -288,12 +302,13 @@ export function VendorCommunication({
 }) {
   const commBase = "/vendor/communication";
   const inboxRef = useRef<VendorInboxPanelHandle>(null);
+  const { activeThreadId, setActiveThreadId } = useCommunicationThreadId(commBase, threadId);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    setThreadOpen(Boolean(threadId));
-  }, [threadId]);
+    setThreadOpen(Boolean(activeThreadId));
+  }, [activeThreadId]);
 
   const newMessageButton = (
     <Button
@@ -342,7 +357,8 @@ export function VendorCommunication({
         inboxRef={inboxRef}
         smsUiEnabled={smsUiEnabled}
         listSegment={listSegment}
-        routeThreadId={threadId}
+        routeThreadId={activeThreadId}
+        onRouteThreadChange={setActiveThreadId}
         searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
         commBase={commBase}

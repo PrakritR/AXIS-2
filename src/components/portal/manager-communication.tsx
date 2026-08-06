@@ -31,9 +31,10 @@ import {
   normalizeManagerSmsConversationsPayload,
   type ManagerSmsResidentConversation,
 } from "@/lib/manager-sms-messages";
+import { useCommunicationThreadId } from "@/hooks/use-communication-thread-id";
+import { selectCommunicationThreadUrl } from "@/lib/portal-communication-nav";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 export type ManagerInboxTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 /** @deprecated Legacy SMS routes redirect to unified inbox. */
@@ -84,8 +85,8 @@ export function ManagerCommunication({
 }) {
   const portalBase = usePaidPortalBasePath();
   const commBase = `${portalBase}/communication`;
-  const navigate = usePortalNavigate();
   const { userId } = useManagerUserId();
+  const { activeThreadId, setActiveThreadId } = useCommunicationThreadId(commBase, threadId);
   const inboxRef = useRef<ManagerInboxHandle>(null);
   const smsRef = useRef<ManagerSmsPanelHandle>(null);
   const [filters, setFilters] = useState<CommunicationThreadFilters>(EMPTY_COMMUNICATION_THREAD_FILTERS);
@@ -96,8 +97,8 @@ export function ManagerCommunication({
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
 
   useEffect(() => {
-    setThreadOpen(Boolean(threadId));
-  }, [threadId]);
+    setThreadOpen(Boolean(activeThreadId));
+  }, [activeThreadId]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const filterContacts = useMemo(() => {
@@ -144,7 +145,8 @@ export function ManagerCommunication({
           await inboxRef.current?.reloadInboxAsync?.();
           const threadId = inboxRef.current?.findThreadForRecipient?.(result.primaryRecipientEmail);
           if (threadId) {
-            navigate(`${commBase}/active/${threadId}`);
+            setActiveThreadId(threadId);
+            selectCommunicationThreadUrl(`${commBase}/active/${encodeURIComponent(threadId)}`);
           }
         } else {
           inboxRef.current?.reloadInbox?.();
@@ -155,7 +157,7 @@ export function ManagerCommunication({
         void loadSmsRecipients();
       }
     },
-    [commBase, loadSmsRecipients, navigate],
+    [commBase, loadSmsRecipients, setActiveThreadId],
   );
 
   const filterTouchCount = communicationFilterTouches(filters, listSort);
@@ -293,7 +295,8 @@ export function ManagerCommunication({
         tabId={inboxTabId}
         commBase={commBase}
         listSegment={listSegment}
-        routeThreadId={threadId}
+        routeThreadId={activeThreadId}
+        onRouteThreadChange={setActiveThreadId}
         threadFilters={filters}
         filterContacts={filterContacts}
         listSort={listSort}
