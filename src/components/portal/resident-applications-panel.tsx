@@ -1149,9 +1149,9 @@ export function ResidentApplicationsPanel({
                         summary={summary}
                         badge={
                           groupBadgeDescriptor ? (
-                            <Badge tone={groupBadgeDescriptor.tone} title={groupBadgeDescriptor.title}>
-                              {groupBadgeDescriptor.label}
-                            </Badge>
+                            <span title={groupBadgeDescriptor.title}>
+                              <Badge tone={groupBadgeDescriptor.tone}>{groupBadgeDescriptor.label}</Badge>
+                            </span>
                           ) : undefined
                         }
                         onOpen={() => openApplicationRow(row)}

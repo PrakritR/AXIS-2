@@ -81,9 +81,9 @@ export function householdClusterHeader(group: ApplicationGroup | null) {
   return (
     <>
       <span className="text-xs font-medium text-muted">Household application</span>
-      <Badge tone={badge.tone} title={badge.title}>
-        {badge.label}
-      </Badge>
+      <span title={badge.title}>
+        <Badge tone={badge.tone}>{badge.label}</Badge>
+      </span>
     </>
   );
 }

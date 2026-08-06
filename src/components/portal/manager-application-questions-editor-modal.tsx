@@ -142,7 +142,7 @@ export function ManagerApplicationQuestionsEditorModal({
   templateEditorMode,
   applicationTemplate = null,
   templates,
-  onPersistTemplates,
+  onPersistSubmission,
   onClose,
   onSaved,
   showToast,

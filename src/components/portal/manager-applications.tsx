@@ -1709,9 +1709,9 @@ export function ManagerApplications({
               const group = groupForRow(applicationGroups, { groupId: groupIdForRow(row) });
               const groupBadgeDescriptor = !nestedInHousehold && group ? describeGroupBadge(group) : null;
               const groupBadge = groupBadgeDescriptor ? (
-                <Badge tone={groupBadgeDescriptor.tone} title={groupBadgeDescriptor.title}>
-                  {groupBadgeDescriptor.label}
-                </Badge>
+                <span title={groupBadgeDescriptor.title}>
+                  <Badge tone={groupBadgeDescriptor.tone}>{groupBadgeDescriptor.label}</Badge>
+                </span>
               ) : undefined;
               const signerKey = normalizeApplicationAxisId(row.id).toUpperCase();
               const cosignerRows = cosignerSubmissionsBySigner.get(signerKey) ?? [];

@@ -22,9 +22,6 @@ export function resolvePropertyLeaseTemplateHtml(args: {
   const source: PropertyLeaseSource = leaseSourceFromDraft({
     leaseConfigMode: args.template.leaseConfigMode,
     leaseCustomKind: args.template.leaseCustomKind,
-    customLeaseTerms: args.template.customLeaseTerms,
-    leaseTemplateDocUrl: args.template.leaseTemplateDocUrl,
-    leaseTemplateDocName: args.template.leaseTemplateDocName,
   });
   return resolvePropertyLeaseEditHtml({
     sub: args.sub,
