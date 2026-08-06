@@ -109,6 +109,20 @@ describe("promotion-listing-context", () => {
     expect(source.contact).toBe("leasing@example.com");
   });
 
+  it("includes public listing gallery photos for flyer embed", () => {
+    const photo =
+      "https://project.supabase.co/storage/v1/object/public/listing-photos/mgr/u/front.jpg";
+    const withPhoto: MockProperty = {
+      ...listing,
+      listingSubmission: {
+        ...listing.listingSubmission!,
+        housePhotoDataUrls: [photo],
+      },
+    };
+    const source = buildPromotionDraftAutofill(withPhoto);
+    expect(source.images).toEqual([photo]);
+  });
+
   it("enrichPromotionDraftFromListing only fills empty draft fields", () => {
     const enriched = enrichPromotionDraftFromListing(
       {
