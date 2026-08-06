@@ -3077,56 +3077,66 @@ export function ManagerResidents({
             </p>
           ) : (
             <div className="space-y-3">
-              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-                <label className="flex cursor-pointer items-center gap-3">
+              <div className="flex w-full items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 shrink-0 rounded border-border"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
                     checked={pmZelleEnabled}
                     onChange={(e) => setPmZelleEnabled(e.target.checked)}
                     data-attr="resident-payment-zelle-toggle"
                   />
-                  <span className="text-sm font-medium text-foreground">Zelle</span>
+                  <span>
+                    <span className="text-sm font-semibold text-foreground">Zelle</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                      Residents send to your Zelle contact, then tap Check payment to confirm receipt.
+                    </span>
+                  </span>
                 </label>
-                {pmZelleEnabled ? (
-                  <div className="pl-7">
-                    <label className="text-xs font-semibold text-muted">Zelle phone or email</label>
-                    <Input
-                      className="mt-1"
-                      value={pmZelleContact}
-                      onChange={(e) => setPmZelleContact(sanitizePaymentContactInput(e.target.value))}
-                      placeholder="+1 555 010 8899 or name@email.com"
-                      data-attr="resident-payment-zelle-contact-input"
-                    />
-                  </div>
-                ) : null}
               </div>
-              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-                <label className="flex cursor-pointer items-center gap-3">
+              {pmZelleEnabled ? (
+                <div className="rounded-xl border border-border bg-accent/20 px-4 py-3">
+                  <label className="text-xs font-semibold text-muted">Zelle phone or email</label>
+                  <Input
+                    className="mt-1"
+                    value={pmZelleContact}
+                    onChange={(e) => setPmZelleContact(sanitizePaymentContactInput(e.target.value))}
+                    placeholder="+1 555 010 8899 or name@email.com"
+                    data-attr="resident-payment-zelle-contact-input"
+                  />
+                </div>
+              ) : null}
+              <div className="flex w-full items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 shrink-0 rounded border-border"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
                     checked={pmVenmoEnabled}
                     onChange={(e) => setPmVenmoEnabled(e.target.checked)}
                     data-attr="resident-payment-venmo-toggle"
                   />
-                  <span className="text-sm font-medium text-foreground">Venmo</span>
+                  <span>
+                    <span className="text-sm font-semibold text-foreground">Venmo</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                      Residents send to your Venmo contact, then tap Check payment to confirm receipt.
+                    </span>
+                  </span>
                 </label>
-                {pmVenmoEnabled ? (
-                  <div className="pl-7">
-                    <label className="text-xs font-semibold text-muted">Venmo username, phone, or email</label>
-                    <Input
-                      className="mt-1"
-                      value={pmVenmoContact}
-                      onChange={(e) => setPmVenmoContact(sanitizePaymentContactInput(e.target.value))}
-                      placeholder="@username, +1 555 010 8899, or name@email.com"
-                      data-attr="resident-payment-venmo-contact-input"
-                    />
-                  </div>
-                ) : null}
               </div>
-              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-                <label className="flex cursor-pointer items-start gap-3">
+              {pmVenmoEnabled ? (
+                <div className="rounded-xl border border-border bg-accent/20 px-4 py-3">
+                  <label className="text-xs font-semibold text-muted">Venmo username, phone, or email</label>
+                  <Input
+                    className="mt-1"
+                    value={pmVenmoContact}
+                    onChange={(e) => setPmVenmoContact(sanitizePaymentContactInput(e.target.value))}
+                    placeholder="@username, +1 555 010 8899, or name@email.com"
+                    data-attr="resident-payment-venmo-contact-input"
+                  />
+                </div>
+              ) : null}
+              <div className="flex w-full items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
@@ -3134,33 +3144,38 @@ export function ManagerResidents({
                     onChange={(e) => setPmAxisPaymentsEnabled(e.target.checked)}
                     data-attr="resident-payment-axis-ach-toggle"
                   />
-                  <span className="text-sm font-medium text-foreground">
-                    Bank transfer & card: you receive the full amount
+                  <span>
+                    <span className="text-sm font-semibold text-foreground">
+                      Bank transfer & card: you receive the full amount
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                      Stripe Checkout with bank (ACH), card, or Link — PropLane covers processing.
+                    </span>
                   </span>
                 </label>
-                {pmAxisPaymentsEnabled ? (
-                  <p className="pl-7 text-xs leading-relaxed text-muted">
-                    Residents pay through Stripe Checkout with bank (ACH), card, or Link and are charged exactly the
-                    charge amount. PropLane covers payment processing, so the full charge amount transfers to your
-                    connected payout account after checkout.
-                    {pmConnectReady === false ? (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          className="font-medium text-primary underline disabled:opacity-60"
-                          onClick={goToPayoutSetup}
-                          disabled={pmPayoutSetupBusy}
-                          data-attr="resident-payment-payout-setup"
-                        >
-                          {pmPayoutSetupBusy ? "Opening Stripe…" : "Complete payout setup"}
-                        </button>{" "}
-                        before residents can pay by bank.
-                      </>
-                    ) : null}
-                  </p>
-                ) : null}
               </div>
+              {pmAxisPaymentsEnabled ? (
+                <div className="rounded-xl border border-border bg-accent/20 px-4 py-3 text-xs leading-relaxed text-muted">
+                  Residents pay through Stripe Checkout with bank (ACH), card, or Link and are charged exactly the
+                  charge amount. PropLane covers payment processing, so the full charge amount transfers to your
+                  connected payout account after checkout.
+                  {pmConnectReady === false ? (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="font-medium text-primary underline disabled:opacity-60"
+                        onClick={goToPayoutSetup}
+                        disabled={pmPayoutSetupBusy}
+                        data-attr="resident-payment-payout-setup"
+                      >
+                        {pmPayoutSetupBusy ? "Opening Stripe…" : "Complete payout setup"}
+                      </button>{" "}
+                      before residents can pay by bank.
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="space-y-2 rounded-xl border border-border bg-card p-4">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input

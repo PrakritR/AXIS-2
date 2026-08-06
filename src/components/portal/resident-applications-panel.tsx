@@ -27,7 +27,7 @@ import {
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
 } from "@/components/portal/portal-data-table";
-import { applicationPdfHref } from "@/components/portal/manager-applications";
+import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { PropertySearchPicker, type PropertySearchOption } from "@/components/marketing/property-search-picker";
 import {
@@ -112,15 +112,13 @@ function rowStatusLabel(row: DemoApplicantRow): string {
 
 /** Inline server PDF for submitted, approved, and rejected applications. */
 function ResidentApplicationPdfFrame({ row }: { row: DemoApplicantRow }) {
-  if (!row.application) {
-    return <p className="text-sm text-muted">Application details are not available for this record.</p>;
-  }
   return (
-    <iframe
-      title={`Application ${row.id}`}
-      src={applicationPdfHref(row, { inline: true })}
-      className="h-[min(80vh,1200px)] w-full rounded-2xl border border-border bg-card"
-      data-testid="resident-application-pdf"
+    <ApplicationDocumentPreview
+      row={row}
+      collapsible={false}
+      showDownload
+      variant="pdf"
+      downloadPlacement="bottom"
     />
   );
 }

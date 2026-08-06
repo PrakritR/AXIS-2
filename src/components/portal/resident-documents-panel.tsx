@@ -141,7 +141,13 @@ function ApplicationDocumentsTable() {
             />
           ),
           detail: isOpen ? (
-            <ApplicationDocumentPreview row={row} collapsible={false} showDownload />
+            <ApplicationDocumentPreview
+              row={row}
+              collapsible={false}
+              showDownload
+              variant="pdf"
+              downloadPlacement="bottom"
+            />
           ) : null,
         };
       })}
