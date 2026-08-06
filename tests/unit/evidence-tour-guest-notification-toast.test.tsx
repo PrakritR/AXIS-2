@@ -34,6 +34,9 @@ const toasts: string[] = [];
 vi.mock("@/components/providers/app-ui-provider", () => ({
   useAppUi: () => ({ showToast: (message: string) => void toasts.push(message) }),
 }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}));
 vi.mock("@/lib/tour-planned-change.client", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -125,6 +128,9 @@ async function rescheduleAndReadToast(result: ChangeResult): Promise<string> {
   fireEvent.click(document.querySelector('[data-attr="tour-reschedule-open"]')!);
   fireEvent.change(document.querySelector('[data-attr="tour-reschedule-time"]')!, {
     target: { value: "14:30" },
+  });
+  fireEvent.change(document.querySelector('[data-attr="tour-reschedule-end-time"]')!, {
+    target: { value: "15:00" },
   });
   fireEvent.click(document.querySelector('[data-attr="tour-reschedule-save"]')!);
   return await waitFor(() => {

@@ -29,6 +29,9 @@ const syncScheduleRecords = vi.fn(async () => undefined);
 vi.mock("@/components/providers/app-ui-provider", () => ({
   useAppUi: () => ({ showToast: vi.fn() }),
 }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}));
 vi.mock("@/lib/tour-planned-change.client", () => ({
   cancelPlannedTourFromServer: (...args: unknown[]) => cancelFromServer(...(args as [])),
   reschedulePlannedTourFromServer: (...args: unknown[]) => rescheduleFromServer(...(args as [])),
@@ -200,10 +203,12 @@ describe("the detail modal for a CONFIRMED tour", () => {
     fireEvent.click(document.querySelector('[data-attr="tour-reschedule-open"]')!);
     const dateInput = document.querySelector('[data-attr="tour-reschedule-date"]') as HTMLInputElement;
     const timeInput = document.querySelector('[data-attr="tour-reschedule-time"]') as HTMLInputElement;
+    const endTimeInput = document.querySelector('[data-attr="tour-reschedule-end-time"]') as HTMLInputElement;
     expect(dateInput.value).not.toBe("");
     expect(timeInput.value).toBe("10:00"); // seeded from the tour's current time
 
     fireEvent.change(timeInput, { target: { value: "14:30" } });
+    fireEvent.change(endTimeInput, { target: { value: "15:00" } });
     fireEvent.click(document.querySelector('[data-attr="tour-reschedule-save"]')!);
 
     await waitFor(() => expect(rescheduleFromServer).toHaveBeenCalledTimes(1));
@@ -530,6 +535,9 @@ describe("counts stay honest after a tour changes state", () => {
     fireEvent.click(document.querySelector('[data-attr="tour-reschedule-open"]')!);
     fireEvent.change(document.querySelector('[data-attr="tour-reschedule-time"]') as HTMLInputElement, {
       target: { value: "14:30" },
+    });
+    fireEvent.change(document.querySelector('[data-attr="tour-reschedule-end-time"]') as HTMLInputElement, {
+      target: { value: "15:00" },
     });
     fireEvent.click(document.querySelector('[data-attr="tour-reschedule-save"]')!);
 

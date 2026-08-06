@@ -425,6 +425,21 @@ export function inboxThreadCounterpartyEmail(
   return email;
 }
 
+/** Resolve a collapsed person-thread id for deep-linking Communication from another surface. */
+export function findCollapsedInboxThreadIdForEmail(
+  storageKey: string,
+  email: string,
+  opts?: { mergeFolders?: boolean },
+): string | null {
+  const norm = email.trim().toLowerCase();
+  if (!norm.includes("@")) return null;
+  const rows = loadPersistedInbox(storageKey, []);
+  const collapsed = collapsePersonInboxThreads(rows, {
+    mergeFolders: opts?.mergeFolders ?? true,
+  });
+  return collapsed.find((thread) => inboxThreadCounterpartyEmail(thread) === norm)?.id ?? null;
+}
+
 export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMessage[] {
   const root: InboxThreadMessage = {
     id: `${thread.id}-root`,

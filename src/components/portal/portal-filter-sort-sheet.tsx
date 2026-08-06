@@ -279,18 +279,16 @@ export function PortalFilterSortSheet({
      groups (Finances = ReportFilterBar + FinancesRowFilters) would otherwise hold one open
      menu per group and stack them over the panel. */
   const fields = (
-    <PortalFilterDeferProvider controllerRef={deferControllerRef}>
-      <FilterFieldsAccordionScope>
-        <FilterPanelFields
-          onReset={handleReset}
-          extraModalContent={extraModalContent}
-          compact={compactPanel}
-          scrollLocked={filterMenuOpen}
-        >
-          {children}
-        </FilterPanelFields>
-      </FilterFieldsAccordionScope>
-    </PortalFilterDeferProvider>
+    <FilterFieldsAccordionScope>
+      <FilterPanelFields
+        onReset={handleReset}
+        extraModalContent={extraModalContent}
+        compact={compactPanel}
+        scrollLocked={filterMenuOpen}
+      >
+        {children}
+      </FilterPanelFields>
+    </FilterFieldsAccordionScope>
   );
 
   const filterDropdownPanel = (
@@ -333,7 +331,8 @@ export function PortalFilterSortSheet({
   );
 
   return (
-    <>
+    <PortalFilterDeferProvider controllerRef={deferControllerRef}>
+      <>
       <div
         ref={wrapRef}
         className={cn(
@@ -462,6 +461,7 @@ export function PortalFilterSortSheet({
         </Modal>
       ) : null}
     </>
+    </PortalFilterDeferProvider>
   );
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, NativeSelect, Select } from "@/components/ui/input";
@@ -57,6 +58,10 @@ import {
   reschedulePlannedTourFromServer,
   tourGuestNotificationFailed,
 } from "@/lib/tour-planned-change.client";
+import {
+  findCollapsedInboxThreadIdForEmail,
+  MANAGER_INBOX_STORAGE_KEY,
+} from "@/lib/portal-inbox-storage";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -364,6 +369,7 @@ export function PortalCalendarPanels({
   };
 }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const writeStorageKeys = useMemo(() => {
     if (availabilityStorageKeys?.length) return availabilityStorageKeys;
     return storageKey ? [storageKey] : [];
@@ -424,7 +430,7 @@ export function PortalCalendarPanels({
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
-  const [rescheduleMinutes, setRescheduleMinutes] = useState(DEFAULT_EVENT_DURATION_MINUTES);
+  const [rescheduleEndTime, setRescheduleEndTime] = useState("");
   const [meetingRefresh, setMeetingRefresh] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -1157,31 +1163,65 @@ export function PortalCalendarPanels({
       ? "Keep event"
       : "Keep request";
 
+  const openGuestMessageThread = useCallback(
+    (email?: string | null) => {
+      const trimmed = email?.trim() ?? "";
+      if (!trimmed.includes("@")) {
+        showToast("No guest email on this event.");
+        return;
+      }
+      const threadId = findCollapsedInboxThreadIdForEmail(MANAGER_INBOX_STORAGE_KEY, trimmed);
+      router.push(
+        threadId
+          ? `/portal/communication/active/${encodeURIComponent(threadId)}`
+          : "/portal/communication/active",
+      );
+    },
+    [router, showToast],
+  );
+
   // Seed the reschedule fields from the tour's current window each time it opens.
   const openReschedule = useCallback(() => {
     if (selectedBlock?.kind !== "meeting") return;
     const start = new Date(selectedBlock.meeting.startIso);
     if (Number.isNaN(start.getTime())) return;
+    const end = new Date(selectedBlock.meeting.endIso);
     const pad = (n: number) => String(n).padStart(2, "0");
     setRescheduleDate(`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`);
     setRescheduleTime(`${pad(start.getHours())}:${pad(start.getMinutes())}`);
-    setRescheduleMinutes(
-      durationMinutesBetweenIso(selectedBlock.meeting.startIso, selectedBlock.meeting.endIso),
+    setRescheduleEndTime(
+      Number.isNaN(end.getTime())
+        ? `${pad(start.getHours())}:${pad(start.getMinutes() + DEFAULT_EVENT_DURATION_MINUTES)}`
+        : `${pad(end.getHours())}:${pad(end.getMinutes())}`,
     );
     setPendingTourAction(null);
     setRescheduleOpen(true);
   }, [selectedBlock]);
 
   const submitReschedule = useCallback(async () => {
-    if (selectedBlock?.kind !== "meeting" || !rescheduleDate || !rescheduleTime) return;
+    if (selectedBlock?.kind !== "meeting" || !rescheduleDate || !rescheduleTime || !rescheduleEndTime) return;
     const [year, month, day] = rescheduleDate.split("-").map(Number);
     const [hour, minute] = rescheduleTime.split(":").map(Number);
-    if (!year || !month || !day || !Number.isFinite(hour) || !Number.isFinite(minute)) {
-      showToast("Pick a valid new date and time.");
+    const [endHour, endMinute] = rescheduleEndTime.split(":").map(Number);
+    if (
+      !year ||
+      !month ||
+      !day ||
+      !Number.isFinite(hour) ||
+      !Number.isFinite(minute) ||
+      !Number.isFinite(endHour) ||
+      !Number.isFinite(endMinute)
+    ) {
+      showToast("Pick a valid new date and time window.");
       return;
     }
     const start = new Date(year, month - 1, day, hour, minute, 0, 0);
-    const minutes = clampEventDurationMinutes(rescheduleMinutes);
+    const end = new Date(year, month - 1, day, endHour, endMinute, 0, 0);
+    if (end.getTime() <= start.getTime()) {
+      showToast("End time must be after the start time.");
+      return;
+    }
+    const minutes = clampEventDurationMinutes(Math.round((end.getTime() - start.getTime()) / 60_000));
     setTourActionBusy(true);
     try {
       const result = await reschedulePlannedTourFromServer({
@@ -1212,7 +1252,7 @@ export function PortalCalendarPanels({
     } finally {
       setTourActionBusy(false);
     }
-  }, [closeSelectedBlock, onMeetingsChanged, reloadAvailability, rescheduleDate, rescheduleMinutes, rescheduleTime, selectedBlock, showToast]);
+  }, [closeSelectedBlock, onMeetingsChanged, reloadAvailability, rescheduleDate, rescheduleEndTime, rescheduleTime, selectedBlock, showToast]);
 
   const cancelSelectedTour = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting") return;
@@ -1426,8 +1466,23 @@ export function PortalCalendarPanels({
 
           {rescheduleOpen ? (
             <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm" data-attr="tour-reschedule-form">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Move this tour</p>
-              <p className="mt-1 text-xs text-muted">The guest is emailed the new time as soon as you save.</p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Move this tour</p>
+                  <p className="mt-1 text-xs text-muted">The guest is emailed the new time as soon as you save.</p>
+                </div>
+                {selectedBlock.meeting.email?.trim() ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 shrink-0 rounded-full px-3 text-xs"
+                    data-attr="tour-open-message-thread"
+                    onClick={() => openGuestMessageThread(selectedBlock.meeting.email)}
+                  >
+                    Message
+                  </Button>
+                ) : null}
+              </div>
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
                   New date
@@ -1440,7 +1495,7 @@ export function PortalCalendarPanels({
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-                  Start
+                  Start time
                   <Input
                     type="time"
                     step={300}
@@ -1451,16 +1506,14 @@ export function PortalCalendarPanels({
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-                  Minutes
+                  End time
                   <Input
-                    type="number"
-                    min={MIN_EVENT_DURATION_MINUTES}
-                    max={MAX_EVENT_DURATION_MINUTES}
-                    step={5}
-                    value={rescheduleMinutes}
-                    onChange={(e) => setRescheduleMinutes(Number.parseInt(e.target.value, 10) || 0)}
-                    className="h-9 w-24 rounded-xl"
-                    data-attr="tour-reschedule-minutes"
+                    type="time"
+                    step={300}
+                    value={rescheduleEndTime}
+                    onChange={(e) => setRescheduleEndTime(e.target.value)}
+                    className="h-9 rounded-xl"
+                    data-attr="tour-reschedule-end-time"
                   />
                 </label>
               </div>
@@ -1501,7 +1554,7 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-t border-border pt-4">
             {calendarMeetingSupportsDelete(selectedBlock.meeting) ? (
               <>
             {rescheduleOpen ? (
@@ -1550,6 +1603,17 @@ export function PortalCalendarPanels({
               </>
             ) : (
               <>
+            {selectedBlock.meeting.email?.trim() && !rescheduleOpen && !pendingTourAction ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                data-attr="tour-open-message-thread"
+                onClick={() => openGuestMessageThread(selectedBlock.meeting.email)}
+              >
+                Message
+              </Button>
+            ) : null}
             {selectedIsConfirmedTour ? (
               <>
                 <Button
@@ -1678,7 +1742,7 @@ export function PortalCalendarPanels({
     );
     const compactToolbarClass = cn(
       "portal-calendar-toolbar shrink-0",
-      "flex flex-col gap-2.5 px-2 py-2.5 sm:px-3 sm:py-3",
+      "px-2 py-2.5 sm:px-3 sm:py-3",
       bareSurface
         ? "border-b border-border/50"
         : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
@@ -1691,44 +1755,40 @@ export function PortalCalendarPanels({
       <>
         <div className={compactShellClass}>
           <div className={compactToolbarClass}>
-            <div className="flex w-full min-w-0 items-center justify-center">
-              <div className="flex min-w-0 items-center justify-center gap-0.5 sm:gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 w-7 shrink-0 rounded-full p-0 text-base leading-none text-muted hover:bg-accent/60 hover:text-foreground"
-                  onClick={() => shiftAvailabilityWeek(-1)}
-                  aria-label="Previous week"
-                >
-                  ←
-                </Button>
-                <p className="whitespace-nowrap px-0.5 text-center text-xs font-semibold text-foreground sm:text-sm">
-                  {formatWeekRangeMonSun(weekMonday)}
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 w-7 shrink-0 rounded-full p-0 text-base leading-none text-muted hover:bg-accent/60 hover:text-foreground"
-                  onClick={() => shiftAvailabilityWeek(1)}
-                  aria-label="Next week"
-                >
-                  →
-                </Button>
-                {!vendorMode ? (
-                  <div className="shrink-0 pl-1 sm:pl-1.5">{renderTimeWindowControl(true)}</div>
-                ) : null}
-              </div>
-            </div>
-
             <div
               className={cn(
-                "flex min-w-0 max-w-full flex-nowrap items-center justify-center gap-1.5 sm:gap-2",
+                "flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-1.5 sm:justify-center sm:gap-2",
                 PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
               )}
               {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
             >
-              {saveStatus === "saving" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-              {saveStatus === "error" ? <span className={`px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 w-7 shrink-0 rounded-full p-0 text-base leading-none text-muted hover:bg-accent/60 hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(-1)}
+                aria-label="Previous week"
+              >
+                ←
+              </Button>
+              <p className="shrink-0 whitespace-nowrap px-0.5 text-center text-xs font-semibold text-foreground sm:text-sm">
+                {formatWeekRangeMonSun(weekMonday)}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 w-7 shrink-0 rounded-full p-0 text-base leading-none text-muted hover:bg-accent/60 hover:text-foreground"
+                onClick={() => shiftAvailabilityWeek(1)}
+                aria-label="Next week"
+              >
+                →
+              </Button>
+              {!vendorMode ? (
+                <div className="shrink-0 pl-0.5 sm:pl-1">{renderTimeWindowControl(true)}</div>
+              ) : null}
+              <div className="mx-0.5 hidden h-7 w-px shrink-0 bg-border/80 sm:block" aria-hidden />
+              {saveStatus === "saving" ? <span className={`shrink-0 px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "error" ? <span className={`shrink-0 px-2 py-0.5 text-[11px] font-semibold ${CALENDAR_BADGE_ERROR}`}>Failed</span> : null}
               {vendorMode ? (
                 <Button
                   type="button"
@@ -2444,14 +2504,17 @@ export function PortalCalendarPanels({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+      <div
+        className={cn(
+          "mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto",
+          PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
+        )}
+        {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
+      >
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={openBlockModal}>
           Create block
         </Button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={copyPreviousWeek}>
           Copy previous week
         </Button>
       </div>
