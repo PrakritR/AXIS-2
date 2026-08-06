@@ -153,13 +153,15 @@ All three are documented in `.env.example` (Optional section).
 - **Paid Applications Agreement** Active (banking → "Clear" + tax + DSA trader
   status) — hard prerequisite; nothing sandbox-testable until signed.
 - **App Store Connect products** (immutable ids): `space.proplane.app.pro.monthly`
-  ($20/mo, matches web Pro), `space.proplane.app.business.monthly` ($200/mo, matches
-  web Business), in one auto-renewable subscription group, prices at web parity,
-  Small Business Program enrolled, 14-day intro offer, billing grace enabled,
+  ($20/mo), `space.proplane.app.pro.annual` ($192/yr),
+  `space.proplane.app.business.monthly` ($200/mo), and
+  `space.proplane.app.business.annual` ($1,920/yr), in one auto-renewable
+  subscription group, prices at web parity, Small Business Program enrolled,
+  14-day intro offer, billing grace enabled,
   review screenshot of the native purchase screen. The ids track the CURRENT bundle
   id `space.proplane.app` (renamed from `com.axisseattlehousing.app`); they are the
   single source of truth in `src/lib/manager-apple-purchase.ts`
-  (`APPLE_IAP_PRODUCT_TIERS` / `APPLE_IAP_LAUNCH_PRODUCT_IDS`).
+  (`APPLE_IAP_PRODUCT_TIERS` / `APPLE_IAP_OFFERED_PRODUCT_IDS`).
 - **RevenueCat**: a project + iOS app registered under bundle id `space.proplane.app`
   (a NEW RevenueCat app — the old `com.axisseattlehousing.app` app cannot be reused,
   its App-Specific Shared Secret is per-bundle), entitlements/products mapped to the

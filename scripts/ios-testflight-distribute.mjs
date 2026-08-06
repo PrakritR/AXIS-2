@@ -361,6 +361,10 @@ export class AscClient {
   post(path, body) {
     return this.request("POST", path, body);
   }
+
+  patch(path, body) {
+    return this.request("PATCH", path, body);
+  }
 }
 
 function safeJsonParse(text) {

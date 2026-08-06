@@ -17,6 +17,7 @@ import {
   type ManagerOffering,
 } from "@/lib/native/revenuecat-client";
 import type { ManagerSkuTier } from "@/lib/manager-access";
+import type { StripeBilling } from "@/lib/stripe-price-ids";
 
 /**
  * Native (iOS) In-App Purchase surface — replaces the old "managed outside the
@@ -43,8 +44,9 @@ export const NATIVE_PLAN_TERMS_URL = `${PRODUCTION_APP_ORIGIN}/tos`;
 export const NATIVE_PLAN_PRIVACY_URL = `${PRODUCTION_APP_ORIGIN}/privacy`;
 
 /** Feature copy comes from the shared tier catalog — never hand-written here. */
-function tierBlurb(tier: ManagerSkuTier): string {
-  return MANAGER_PLAN_TIERS.find((t) => t.id === tier)?.monthly.sub ?? "";
+function tierBlurb(tier: ManagerSkuTier, billing: StripeBilling = "monthly"): string {
+  const plan = MANAGER_PLAN_TIERS.find((candidate) => candidate.id === tier);
+  return (billing === "annual" ? plan?.annual.sub : plan?.monthly.sub) ?? "";
 }
 
 function CurrentPlanChip({ trial }: { trial?: boolean }) {
@@ -63,9 +65,9 @@ function NativePlanLegalFooter() {
   return (
     <div className="space-y-2 px-1 text-center">
       <p className="text-xs leading-relaxed text-muted">
-        Subscriptions renew automatically each month at the price shown until canceled. You can cancel anytime in your
-        App Store account settings; cancel at least 24 hours before the current period ends to avoid the next charge.
-        Payment is charged to your Apple Account.
+        Subscriptions renew automatically at the selected monthly or annual period and price until canceled. You can
+        cancel anytime in your App Store account settings; cancel at least 24 hours before the current period ends to
+        avoid the next charge. Payment is charged to your Apple Account.
       </p>
       <p className="text-xs text-muted">
         <button
@@ -126,6 +128,7 @@ export function ManagerPlanNative({
   const { showToast } = useAppUi();
 
   const [offerings, setOfferings] = useState<ManagerOffering[]>([]);
+  const [billingCadence, setBillingCadence] = useState<StripeBilling>("annual");
   const [loadingOfferings, setLoadingOfferings] = useState(false);
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -145,6 +148,7 @@ export function ManagerPlanNative({
       const list = await getManagerOfferings();
       if (!cancelled) {
         setOfferings(list);
+        if (!list.some((offering) => offering.billing === "annual")) setBillingCadence("monthly");
         setLoadingOfferings(false);
       }
     })();
@@ -169,7 +173,11 @@ export function ManagerPlanNative({
   const onSubscribe = useCallback(
     async (offering: ManagerOffering) => {
       if (purchasingProductId || restoring || switchingToFree) return;
-      track("subscription_checkout_started", { tier: offering.tier, billing: "monthly", platform: "ios" });
+      track("subscription_checkout_started", {
+        tier: offering.tier,
+        billing: offering.billing,
+        platform: "ios",
+      });
       setPurchasingProductId(offering.productId);
       try {
         const outcome = await purchaseManagerPackage(offering.pkg);
@@ -321,7 +329,10 @@ export function ManagerPlanNative({
   }
 
   // Purchase surface (Free / trial / no active paid subscription).
-  const proAndBusiness = offerings.filter((o) => o.tier === "pro" || o.tier === "business");
+  const paidOfferings = offerings.filter((offering) => offering.tier === "pro" || offering.tier === "business");
+  const hasMonthly = paidOfferings.some((offering) => offering.billing === "monthly");
+  const hasAnnual = paidOfferings.some((offering) => offering.billing === "annual");
+  const visibleOfferings = paidOfferings.filter((offering) => offering.billing === billingCadence);
 
   return (
     <div className="native-only mx-auto max-w-lg space-y-4">
@@ -373,18 +384,40 @@ export function ManagerPlanNative({
         ) : null}
       </div>
 
+      {!loadingOfferings && hasMonthly && hasAnnual ? (
+        <div className="grid grid-cols-2 rounded-full border border-border bg-accent/30 p-1" aria-label="Billing period">
+          {(["monthly", "annual"] as const).map((cadence) => (
+            <button
+              key={cadence}
+              type="button"
+              className={`rounded-full px-3 py-2 text-sm font-semibold transition ${
+                billingCadence === cadence ? "bg-card text-foreground shadow-sm" : "text-muted"
+              }`}
+              aria-pressed={billingCadence === cadence}
+              data-attr={`ios-billing-${cadence}`}
+              onClick={() => setBillingCadence(cadence)}
+            >
+              {cadence === "monthly" ? "Monthly" : "Annual · save 20%"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {loadingOfferings ? (
         <p className="text-center text-sm text-muted">Loading plans…</p>
-      ) : proAndBusiness.length === 0 ? (
+      ) : visibleOfferings.length === 0 ? (
         <div className="rounded-2xl border border-border surface-panel p-6 text-center">
           <p className="text-sm leading-relaxed text-muted">
-            Plans aren&apos;t available to purchase right now. If you subscribed on another device, restore it below.
+            {billingCadence === "annual" && hasMonthly
+              ? "Annual plans aren't available right now. Choose Monthly or restore an existing purchase below."
+              : "Plans aren't available to purchase right now. If you subscribed on another device, restore it below."}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {proAndBusiness.map((offering) => {
+          {visibleOfferings.map((offering) => {
             const isCurrent = offering.tier === currentTier;
+            const annual = offering.billing === "annual";
             return (
               <div
                 key={offering.productId}
@@ -395,23 +428,29 @@ export function ManagerPlanNative({
                   <p className="text-base font-semibold text-foreground">PropLane {TIER_LABEL[offering.tier]}</p>
                   <p className="text-base font-semibold text-foreground">
                     {offering.priceString}
-                    <span className="text-xs font-normal text-muted">/month</span>
+                    <span className="text-xs font-normal text-muted">/{annual ? "year" : "month"}</span>
                   </p>
                 </div>
-                {/* 3.1.2: subscription length — a 1-month subscription that auto-renews. */}
-                <p className="mt-0.5 text-xs font-medium text-muted">1-month subscription · renews monthly until canceled</p>
+                {/* 3.1.2: subscription length and renewal cadence. */}
+                <p className="mt-0.5 text-xs font-medium text-muted">
+                  {annual
+                    ? "1-year subscription · renews annually until canceled"
+                    : "1-month subscription · renews monthly until canceled"}
+                </p>
                 {isCurrent ? (
                   <div className="mt-2">
                     <CurrentPlanChip trial={trialActive} />
                   </div>
                 ) : null}
-                <p className="mt-2 text-sm leading-relaxed text-muted">{tierBlurb(offering.tier)}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  {tierBlurb(offering.tier, offering.billing)}
+                </p>
                 <Button
                   type="button"
                   variant="primary"
                   className="mt-4 w-full rounded-full"
                   disabled={busy}
-                  data-attr={`ios-subscribe-${offering.tier}`}
+                  data-attr={`ios-subscribe-${offering.tier}-${offering.billing}`}
                   onClick={() => onSubscribe(offering)}
                 >
                   {purchasingProductId === offering.productId

@@ -3,7 +3,7 @@
 // App Store Guideline 3.1.2: the native purchase screen itself must carry
 //
 //   1. the subscription title,
-//   2. the subscription length (a 1-month subscription that renews monthly),
+//   2. the subscription length and monthly/annual renewal cadence,
 //   3. the price per period,
 //   4. a plain auto-renew statement,
 //   5. a working Terms of Use (EULA) link, and
@@ -42,13 +42,37 @@ const businessPkg = { __pkg: "business" };
 vi.mock("@/lib/native/revenuecat-client", () => ({
   configureRevenueCat: vi.fn(async () => true),
   getManagerOfferings: vi.fn(async () => [
-    { productId: "space.proplane.app.pro.monthly", tier: "pro", priceString: "$20.00", title: "Pro", pkg: proPkg },
+    {
+      productId: "space.proplane.app.pro.monthly",
+      tier: "pro",
+      billing: "monthly",
+      priceString: "$20.00",
+      title: "Pro",
+      pkg: proPkg,
+    },
+    {
+      productId: "space.proplane.app.pro.annual",
+      tier: "pro",
+      billing: "annual",
+      priceString: "$192.00",
+      title: "Pro Annual",
+      pkg: { __pkg: "pro-annual" },
+    },
     {
       productId: "space.proplane.app.business.monthly",
       tier: "business",
+      billing: "monthly",
       priceString: "$200.00",
       title: "Business",
       pkg: businessPkg,
+    },
+    {
+      productId: "space.proplane.app.business.annual",
+      tier: "business",
+      billing: "annual",
+      priceString: "$1,920.00",
+      title: "Business Annual",
+      pkg: { __pkg: "business-annual" },
     },
   ]),
   purchaseManagerPackage: vi.fn(async () => ({ status: "cancelled" as const })),
@@ -81,20 +105,23 @@ function renderPurchaseSurface(overrides: Partial<Parameters<typeof ManagerPlanN
 }
 
 describe("native purchase screen — Guideline 3.1.2 required elements", () => {
-  it("shows title, length, price per period, and an auto-renew statement for each paid tier", async () => {
+  it("shows annual pricing by default and keeps monthly pricing selectable", async () => {
     renderPurchaseSurface();
 
-    // Title + price per period (localized store price), for both paid tiers.
+    // Annual is the value-forward default, using localized App Store prices.
     expect(await screen.findByText("PropLane Pro")).toBeTruthy();
     expect(screen.getByText("PropLane Business")).toBeTruthy();
+    expect(screen.getByText("$192.00")).toBeTruthy();
+    expect(screen.getByText("$1,920.00")).toBeTruthy();
+    expect(screen.getAllByText(/1-year subscription · renews annually until canceled/i).length).toBe(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Monthly" }));
     expect(screen.getByText("$20.00")).toBeTruthy();
     expect(screen.getByText("$200.00")).toBeTruthy();
-
-    // Length: a 1-month subscription that renews monthly.
     expect(screen.getAllByText(/1-month subscription · renews monthly until canceled/i).length).toBe(2);
 
     // Plain auto-renew statement.
-    expect(screen.getByText(/renew automatically each month/i)).toBeTruthy();
+    expect(screen.getByText(/selected monthly or annual period/i)).toBeTruthy();
     expect(screen.getByText(/cancel anytime in your App Store account settings/i)).toBeTruthy();
   });
 

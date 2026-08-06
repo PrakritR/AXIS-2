@@ -50,8 +50,8 @@ export function isAppleBilledManagerPurchase(
 /**
  * App Store product ids → the plan tier + cadence they unlock. Product ids are
  * immutable once created in App Store Connect (see report §4.1). Pro + Business
- * monthly ship at launch; the annual ids are mapped ahead of time so adding them
- * later is a console-only change, not a code change.
+ * monthly and annual are offered together. App Store Connect and RevenueCat must
+ * use these exact ids so every package maps to one tier and one billing cadence.
  *
  * These are keyed on the CURRENT bundle id `space.proplane.app` (the iOS rebrand
  * from `com.axisseattlehousing.app`). App Store Connect product ids don't have to
@@ -66,10 +66,12 @@ export const APPLE_IAP_PRODUCT_TIERS: Record<string, { tier: PaidTier; billing: 
   "space.proplane.app.business.annual": { tier: "business", billing: "annual" },
 };
 
-/** Product ids offered on iOS at launch (Pro + Business, monthly only). */
-export const APPLE_IAP_LAUNCH_PRODUCT_IDS = [
+/** Product ids offered on iOS (Pro + Business, monthly + annual). */
+export const APPLE_IAP_OFFERED_PRODUCT_IDS = [
   "space.proplane.app.pro.monthly",
+  "space.proplane.app.pro.annual",
   "space.proplane.app.business.monthly",
+  "space.proplane.app.business.annual",
 ] as const;
 
 /** Map an App Store product id to its plan tier + cadence, or null if not ours. */

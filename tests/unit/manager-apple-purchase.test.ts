@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  APPLE_IAP_LAUNCH_PRODUCT_IDS,
+  APPLE_IAP_OFFERED_PRODUCT_IDS,
   appleManagerPurchaseSessionId,
   isAppleBilledManagerPurchase,
   isAppleManagedManagerPurchase,
@@ -43,7 +43,7 @@ describe("manager-apple-purchase helpers", () => {
   });
 
   describe("tierForAppleProductId", () => {
-    it("maps launch product ids to tier + cadence", () => {
+    it("maps offered product ids to tier + cadence", () => {
       expect(tierForAppleProductId("space.proplane.app.pro.monthly")).toEqual({
         tier: "pro",
         billing: "monthly",
@@ -51,6 +51,14 @@ describe("manager-apple-purchase helpers", () => {
       expect(tierForAppleProductId("space.proplane.app.business.monthly")).toEqual({
         tier: "business",
         billing: "monthly",
+      });
+      expect(tierForAppleProductId("space.proplane.app.pro.annual")).toEqual({
+        tier: "pro",
+        billing: "annual",
+      });
+      expect(tierForAppleProductId("space.proplane.app.business.annual")).toEqual({
+        tier: "business",
+        billing: "annual",
       });
     });
 
@@ -60,16 +68,18 @@ describe("manager-apple-purchase helpers", () => {
       expect(tierForAppleProductId("")).toBeNull();
     });
 
-    it("launch set is Pro + Business monthly only (annual is a fast-follow)", () => {
-      expect([...APPLE_IAP_LAUNCH_PRODUCT_IDS].sort()).toEqual(
+    it("offers Pro + Business in monthly and annual cadences", () => {
+      expect([...APPLE_IAP_OFFERED_PRODUCT_IDS].sort()).toEqual(
         [
+          "space.proplane.app.business.annual",
           "space.proplane.app.business.monthly",
+          "space.proplane.app.pro.annual",
           "space.proplane.app.pro.monthly",
         ].sort(),
       );
-      for (const id of APPLE_IAP_LAUNCH_PRODUCT_IDS) {
-        expect(tierForAppleProductId(id)?.billing).toBe("monthly");
-      }
+      expect(new Set(APPLE_IAP_OFFERED_PRODUCT_IDS.map((id) => tierForAppleProductId(id)?.billing))).toEqual(
+        new Set(["monthly", "annual"]),
+      );
     });
   });
 });

@@ -13,6 +13,15 @@ on:
   push:
     branches: [production]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Action to run
+        required: true
+        default: testflight
+        type: choice
+        options:
+          - testflight
+          - metadata
 
 concurrency:
   # Serialize uploads so two pushes can't race for the same build number.
@@ -30,9 +39,34 @@ jobs:
       - id: check
         run: echo "configured=${{ secrets.ASC_KEY_ID != '' }}" >> "$GITHUB_OUTPUT"
 
+  app-store-metadata:
+    needs: check-secrets
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'metadata' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require App Store Connect credentials
+        if: ${{ needs.check-secrets.outputs.configured != 'true' }}
+        run: |
+          echo "App Store metadata cannot be updated because ASC_KEY_ID is not configured." >&2
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Append and verify App Store legal links
+        run: node scripts/ios-app-store-metadata.mjs
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+
   testflight:
     needs: check-secrets
-    if: ${{ needs.check-secrets.outputs.configured == 'true' }}
+    if: ${{ needs.check-secrets.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'testflight') }}
     # macos-26 → Xcode 26 / iOS 26 SDK, which Apple now requires for uploads.
     # Public repo → free macOS minutes.
     runs-on: macos-26

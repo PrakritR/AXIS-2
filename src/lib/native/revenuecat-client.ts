@@ -2,10 +2,10 @@
 
 import { getNativeInfo } from "@/lib/native/push-client";
 import {
-  APPLE_IAP_LAUNCH_PRODUCT_IDS,
+  APPLE_IAP_OFFERED_PRODUCT_IDS,
   tierForAppleProductId,
 } from "@/lib/manager-apple-purchase";
-import type { PaidTier } from "@/lib/stripe-price-ids";
+import type { PaidTier, StripeBilling } from "@/lib/stripe-price-ids";
 import type { PurchasesPackage } from "@revenuecat/purchases-capacitor";
 
 /**
@@ -79,6 +79,7 @@ export type ManagerOffering = {
   /** App Store product id. */
   productId: string;
   tier: PaidTier;
+  billing: StripeBilling;
   /** Localized price incl. currency sign, from the store (e.g. "$20.00"). */
   priceString: string;
   title: string;
@@ -88,13 +89,13 @@ export type ManagerOffering = {
 
 /**
  * The Pro/Business subscription packages available on this storefront, mapped to
- * our tiers with the store's localized price. Only our launch product ids are
+ * our tiers with the store's localized price. Only our offered product ids are
  * returned (unknown/foreign packages are skipped). Empty off-iOS or when
  * offerings aren't configured yet.
  */
 export async function getManagerOfferings(): Promise<ManagerOffering[]> {
   if (!(await isIosNative())) return [];
-  const launch = new Set<string>(APPLE_IAP_LAUNCH_PRODUCT_IDS);
+  const offered = new Set<string>(APPLE_IAP_OFFERED_PRODUCT_IDS);
   try {
     const { Purchases } = await import("@revenuecat/purchases-capacitor");
     const offerings = await Purchases.getOfferings();
@@ -103,17 +104,22 @@ export async function getManagerOfferings(): Promise<ManagerOffering[]> {
     for (const pkg of packages) {
       const productId = pkg.product.identifier;
       const map = tierForAppleProductId(productId);
-      if (!map || !launch.has(productId)) continue;
+      if (!map || !offered.has(productId)) continue;
       mapped.push({
         productId,
         tier: map.tier,
+        billing: map.billing,
         priceString: pkg.product.priceString,
         title: pkg.product.title,
         pkg,
       });
     }
-    // Pro before Business for a stable card order.
-    mapped.sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "pro" ? -1 : 1));
+    // Pro before Business; monthly before annual within each tier.
+    mapped.sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier === "pro" ? -1 : 1;
+      if (a.billing === b.billing) return 0;
+      return a.billing === "monthly" ? -1 : 1;
+    });
     return mapped;
   } catch (err) {
     console.error("[revenuecat] getOfferings failed", err);

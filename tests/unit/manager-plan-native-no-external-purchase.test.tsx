@@ -34,8 +34,8 @@ const proPkg = { __pkg: "pro" };
 const businessPkg = { __pkg: "business" };
 const configureRevenueCat = vi.fn(async () => true);
 const getManagerOfferings = vi.fn(async () => [
-  { productId: "space.proplane.app.pro.monthly", tier: "pro", priceString: "$20.00", title: "Pro", pkg: proPkg },
-  { productId: "space.proplane.app.business.monthly", tier: "business", priceString: "$200.00", title: "Business", pkg: businessPkg },
+  { productId: "space.proplane.app.pro.monthly", tier: "pro", billing: "monthly", priceString: "$20.00", title: "Pro", pkg: proPkg },
+  { productId: "space.proplane.app.business.monthly", tier: "business", billing: "monthly", priceString: "$200.00", title: "Business", pkg: businessPkg },
 ]);
 const purchaseManagerPackage = vi.fn(async () => ({ status: "purchased" as const }));
 const restoreManagerPurchases = vi.fn(async () => ({ ok: true, hasActiveEntitlement: true }));
