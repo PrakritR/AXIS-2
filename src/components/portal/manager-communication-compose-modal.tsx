@@ -22,6 +22,12 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
+  composeDirectoryCategories,
+  isAdminOnlyDirectorySelection,
+  mergeAdminComposePersonKey,
+  type InboxComposeDirectoryCategory,
+} from "@/lib/inbox-compose-recipients";
+import {
   broadcastStubForCategory,
   categoryForContactRole,
   contactsForPortal,
@@ -43,8 +49,8 @@ import {
 
 export type CommunicationComposeChannel = "email" | "sms";
 
-type ComposeCategory = "resident" | "management" | "admin" | "vendor" | "other";
-type DirectoryComposeCategory = Exclude<ComposeCategory, "other">;
+type ComposeCategory = InboxComposeDirectoryCategory | "other";
+type DirectoryComposeCategory = InboxComposeDirectoryCategory;
 type PersonKey = "admin" | "broadcast:management" | "broadcast:resident" | `id:${string}`;
 
 async function postScheduledInboxMessage(payload: Record<string, unknown>): Promise<boolean> {
@@ -144,10 +150,9 @@ export function ManagerCommunicationComposeModal({
   const localContacts = useMemo(() => contactsForPortal("manager", liveContacts), [liveContacts]);
   const contacts = directoryContacts.length > 0 ? directoryContacts : localContacts;
   /** Other sits last, under Vendor. */
-  const categoryOptions = useMemo(
-    (): ComposeCategory[] => ["resident", "management", "admin", "vendor", "other"],
-    [],
-  );
+  const categoryOptions = useMemo((): ComposeCategory[] => {
+    return [...composeDirectoryCategories("manager", contacts), "other"];
+  }, [contacts]);
 
   const [selectedCategories, setSelectedCategories] = useState<ComposeCategory[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<PersonKey[]>([]);
@@ -179,6 +184,7 @@ export function ManagerCommunicationComposeModal({
 
   const personGroups = useMemo((): CheckboxMultiSelectGroup[] => {
     return directoryCategories
+      .filter((category) => category !== "admin")
       .map((category) => ({
         label: categoryLabel(category),
         options: peopleForCategory(category, contacts).map((p) => ({
@@ -191,6 +197,7 @@ export function ManagerCommunicationComposeModal({
 
   const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
   const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+  const adminOnlyDirectory = isAdminOnlyDirectorySelection(directoryCategories);
 
   useEffect(() => {
     if (!open) return;
@@ -240,6 +247,14 @@ export function ManagerCommunicationComposeModal({
       setSending(false);
     });
   }, [open, initialChannel, smsUiEnabled]);
+
+  useEffect(() => {
+    setSelectedCategories((prev) => prev.filter((c) => categoryOptions.includes(c)));
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    setSelectedKeys((prev) => mergeAdminComposePersonKey(directoryCategories, prev));
+  }, [directoryCategories]);
 
   useEffect(() => {
     setSelectedKeys((prev) => prev.filter((key) => validPersonKeys.has(key)));
@@ -664,14 +679,16 @@ export function ManagerCommunicationComposeModal({
             groups={personGroups}
             selected={selectedKeys}
             onChange={(next) => setSelectedKeys(next as PersonKey[])}
-            disabled={directoryCategories.length === 0}
+            disabled={directoryCategories.length === 0 || adminOnlyDirectory}
             searchPlaceholder="Search people…"
             emptyMenuText={
               selectedCategories.length === 0
                 ? "Pick a section first"
-                : directoryCategories.length === 0
-                  ? "Other uses the field below"
-                  : "No contacts in selected sections"
+                : adminOnlyDirectory
+                  ? "PropLane admin is the recipient"
+                  : directoryCategories.length === 0
+                    ? "Other uses the field below"
+                    : "No contacts in selected sections"
             }
             dataAttr="communication-compose-person"
           />
