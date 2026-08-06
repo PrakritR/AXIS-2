@@ -26,6 +26,7 @@ import {
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
 import { resolveEditGroupId } from "@/lib/rental-application/application-groups";
+import { rentalWizardStepTitle, RENTAL_WIZARD_STEP_TITLES } from "@/lib/rental-application/wizard-step-titles";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import { countValidationErrors, validateRentalWizardStep } from "@/lib/rental-application/validate";
@@ -41,19 +42,10 @@ import {
   prevActiveWizardStep,
 } from "@/lib/wizard-step-nav";
 
-const EDIT_STEP_META = [
-  { n: 1, title: "Group Application" },
-  { n: 2, title: "Co-Signer" },
-  { n: 3, title: "Property Information" },
-  { n: 4, title: "Signer Information" },
-  { n: 5, title: "Current Address" },
-  { n: 6, title: "Previous Address" },
-  { n: 7, title: "Employment and Income" },
-  { n: 8, title: "References" },
-  { n: 9, title: "Additional Details" },
-  { n: 10, title: "Consent and Signature" },
-  { n: 11, title: "Review" },
-] as const;
+const EDIT_STEP_META = RENTAL_WIZARD_STEP_TITLES.slice(0, 11).map((title, index) => ({
+  n: index + 1,
+  title,
+}));
 
 const EDIT_STEP_COUNT = EDIT_STEP_META.length;
 
@@ -287,7 +279,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
           {form.rentalType === "short_term" ? "Short-term stay application" : "Rental application"}
         </p>
-        <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{meta.title}</p>
+        <p className="mt-1 text-lg font-bold tracking-tight text-foreground">{rentalWizardStepTitle(step, form)}</p>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 [html[data-theme=dark]_&]:bg-white/10">
           <div
             className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"

@@ -169,6 +169,9 @@ export function ManagerEditApplicationModal({
               : "Add an application or edit questions for each stay type."
           }
           onClose={onEditorClose}
+          fullPage
+          dense
+          assistantStrip={false}
           panelClassName="max-w-4xl"
         >
           <ManagerPropertyApplicationQuestionsPanel

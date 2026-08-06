@@ -59,6 +59,9 @@ export type ApplicationConfigFields = Pick<
   | "shortTermDisabledStandardApplicationKeys"
   | "shortTermCustomApplicationFields"
   | "shortTermApplicationConfigMode"
+  | "cosignerDisabledStandardApplicationKeys"
+  | "cosignerCustomApplicationFields"
+  | "cosignerApplicationConfigMode"
 >;
 
 export function applicationConfigFieldsFromSubmission(sub: ManagerListingSubmissionV1): ApplicationConfigFields {
@@ -71,6 +74,9 @@ export function applicationConfigFieldsFromSubmission(sub: ManagerListingSubmiss
     shortTermDisabledStandardApplicationKeys: sub.shortTermDisabledStandardApplicationKeys ?? [],
     shortTermCustomApplicationFields: sub.shortTermCustomApplicationFields ?? [],
     shortTermApplicationConfigMode: sub.shortTermApplicationConfigMode ?? "standard",
+    cosignerDisabledStandardApplicationKeys: sub.cosignerDisabledStandardApplicationKeys ?? [],
+    cosignerCustomApplicationFields: sub.cosignerCustomApplicationFields ?? [],
+    cosignerApplicationConfigMode: sub.cosignerApplicationConfigMode ?? "standard",
   };
 }
 

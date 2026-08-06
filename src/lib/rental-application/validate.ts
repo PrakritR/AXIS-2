@@ -133,6 +133,11 @@ export function validateStandardWizardStep(
   const e: RentalWizardErrors = {};
 
   if (step === 1) {
+    if (f.applicantRole === null) {
+      e.applicantRole = "Please choose whether you are the primary applicant or a co-signer.";
+      return e;
+    }
+    if (f.applicantRole === "cosigner") return e;
     if (f.applyingAsGroup === null) {
       e.applyingAsGroup = "Please choose whether you are applying as part of a group.";
       return e;

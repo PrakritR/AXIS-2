@@ -11,12 +11,12 @@
         "@playwright/mcp@latest",
         "--browser=chromium",
         "--caps=devtools",
-        "--allowed-origins=http://localhost:3000;http://localhost:3010;http://127.0.0.1:3000;http://127.0.0.1:3010;https://prop-lane.space"
+        "--allowed-origins=http://localhost:3000;http://localhost:3010;http://localhost:3011;http://127.0.0.1:3000;http://127.0.0.1:3010;http://127.0.0.1:3011;https://prop-lane.space"
       ]
     },
     "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "args": ["-y", "chrome-devtools-mcp@latest", "--autoConnect"]
     },
     "browser-use": {
       "command": "/opt/homebrew/bin/uvx",

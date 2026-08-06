@@ -7,6 +7,7 @@ import {
   mergeApplicationConfigForVariant,
   reenableListingApplicationField,
   resolveListingApplicationFields,
+  COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS,
   SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS,
   STANDARD_APPLICATION_FIELD_CATALOG,
 } from "@/lib/rental-application/application-field-catalog";
@@ -23,6 +24,31 @@ describe("application form variants — short-term vs long-term are configured i
     const slice = applicationConfigForVariant(sub, "standard");
     expect(slice.disabledStandardApplicationKeys).toEqual(["personal-phone"]);
     expect(slice.applicationConfigMode).toBe("custom");
+  });
+
+  it("an unconfigured co-signer form resolves to the curated co-signer question set", () => {
+    const slice = applicationConfigForVariant({}, "cosigner");
+    expect(slice.applicationConfigMode).toBe("standard");
+    expect([...slice.disabledStandardApplicationKeys].sort()).toEqual(
+      [...COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS].sort(),
+    );
+    expect(isWizardFormFieldEnabled(slice, "fullLegalName")).toBe(true);
+    expect(isWizardFormFieldEnabled(slice, "employer")).toBe(true);
+    expect(isWizardFormFieldEnabled(slice, "propertyId")).toBe(false);
+    expect(isWizardFormFieldEnabled(slice, "ref1Name")).toBe(false);
+    expect(isWizardFormFieldEnabled(slice, "pets")).toBe(false);
+    expect(isWizardFormFieldEnabled(slice, "bankruptcyHistory")).toBe(true);
+  });
+
+  it("a configured (custom) co-signer form reads its own stored slice", () => {
+    const sub = {
+      cosignerApplicationConfigMode: "custom" as const,
+      cosignerDisabledStandardApplicationKeys: ["personal-email"],
+      cosignerCustomApplicationFields: [],
+    };
+    const slice = applicationConfigForVariant(sub, "cosigner");
+    expect(slice.disabledStandardApplicationKeys).toEqual(["personal-email"]);
+    expect(isWizardFormFieldEnabled(slice, "email")).toBe(false);
   });
 
   it("an unconfigured short-term form resolves to the curated default question set", () => {

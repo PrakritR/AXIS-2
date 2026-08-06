@@ -2,11 +2,11 @@
 
 import { track } from "@/lib/analytics/track-client";
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { CosignerApplyFlow } from "@/app/(public)/rent/apply/cosigner-flow";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
-import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
   loadPublicExtraListingsFromServer,
   loadPublicPropertyLeadFromServer,
@@ -67,6 +67,7 @@ import {
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { GroupRole, RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveSubmitGroupId } from "@/lib/rental-application/application-groups";
+import { rentalWizardStepTitle } from "@/lib/rental-application/wizard-step-titles";
 import {
   computeLeaseEndDate,
   normalizeIsoDateInput,
@@ -135,6 +136,13 @@ export type RentalApplicationWizardProps = {
   onManagerSendToResident?: (payload: { axisId: string }) => void;
   onManagerCancel?: () => void;
   managerActionBusy?: boolean;
+  /**
+   * Manager property preview — walk through the applicant wizard without saving
+   * drafts, syncing rows, or submitting.
+   */
+  templatePreview?: boolean;
+  /** Pre-select long-term vs short-term when `linkedPropertyId` is set without URL params. */
+  linkedRentalType?: "standard" | "short_term";
 };
 
 function makeNewApplicationId(): string {
@@ -151,21 +159,6 @@ function ensureRentalWizardAxisId(): string {
   saveRentalWizardDraftAxisId(id);
   return id;
 }
-
-const STEP_META = [
-  { n: 1, title: "Group Application" },
-  { n: 2, title: "Co-Signer" },
-  { n: 3, title: "Property Information" },
-  { n: 4, title: "Signer Information" },
-  { n: 5, title: "Current Address" },
-  { n: 6, title: "Previous Address" },
-  { n: 7, title: "Employment and Income" },
-  { n: 8, title: "References" },
-  { n: 9, title: "Additional Details" },
-  { n: 10, title: "Consent and Signature" },
-  { n: 11, title: "Review" },
-  { n: 12, title: "Application fee" },
-] as const;
 
 function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?: string): string {
   if (exitPath?.startsWith("/")) return exitPath;
@@ -285,6 +278,8 @@ export function RentalApplicationWizard({
   onManagerSendToResident,
   onManagerCancel,
   managerActionBusy = false,
+  templatePreview = false,
+  linkedRentalType,
 }: RentalApplicationWizardProps) {
   return (
     <Suspense
@@ -303,6 +298,8 @@ export function RentalApplicationWizard({
         onManagerSendToResident={onManagerSendToResident}
         onManagerCancel={onManagerCancel}
         managerActionBusy={managerActionBusy}
+        templatePreview={templatePreview}
+        linkedRentalType={linkedRentalType}
       />
     </Suspense>
   );
@@ -319,11 +316,12 @@ function RentalApplicationWizardInner({
   onManagerSendToResident,
   onManagerCancel,
   managerActionBusy = false,
+  templatePreview = false,
+  linkedRentalType,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const requestedTarget = wizardTargetFromParam(searchParams);
   const requestedTargetSignature = wizardTargetSignature(requestedTarget);
-  const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(() => initialWizardStepFromRequest(mode, requestedTarget, searchParams));
   const [maxStepReached, setMaxStepReached] = useState(() => initialWizardStepFromRequest(mode, requestedTarget, searchParams));
   // Frozen at mount, from the URL as it arrived — NOT re-read later. The
@@ -336,6 +334,20 @@ function RentalApplicationWizardInner({
   // step in exactly the full-reload case this exists to fix.
   const initialWizardStepParamRef = useRef(searchParams.get("wizardStep"));
   const [form, setForm] = useState<RentalWizardFormState>(() => {
+    if (templatePreview) {
+      const pid = linkedPropertyIdProp?.trim() ?? "";
+      const shortTerm = linkedRentalType === "short_term";
+      return {
+        ...createInitialRentalWizardState(),
+        ...(pid
+          ? {
+              propertyId: pid,
+              rentalType: shortTerm ? ("short_term" as const) : ("standard" as const),
+              leaseTerm: shortTerm ? SHORT_TERM_LEASE_TERM : "",
+            }
+          : {}),
+      };
+    }
     const draft = loadRentalWizardDraft();
     if (!draft) return createInitialRentalWizardState();
     // A draft still loaded (same tab, no reload) for a DIFFERENT property/room
@@ -461,12 +473,20 @@ function RentalApplicationWizardInner({
   const rootRef = useRef<HTMLDivElement>(null);
   const isOnScreen = useCallback(() => isElementOnScreen(rootRef.current), []);
 
+  useLayoutEffect(() => {
+    if (!templatePreview) return;
+    const scrollParent = rootRef.current?.closest(".overflow-y-auto");
+    scrollParent?.scrollTo({ top: 0 });
+    rootRef.current?.querySelector(".rental-wizard-step-content")?.scrollTo?.({ top: 0 });
+  }, [templatePreview, step, form.applicantRole]);
+
   useEffect(() => {
     if (mode !== "portal" && mode !== "manager") return;
     return markRentalWizardActive(document);
   }, [mode]);
 
   useEffect(() => {
+    if (templatePreview) return;
     if (mode !== "portal" || postSubmit || isDemoModeActive() || !isOnScreen()) return;
     const params = new URLSearchParams(searchParams.toString());
     const prev = params.get("wizardStep");
@@ -481,9 +501,13 @@ function RentalApplicationWizardInner({
     }
     const qs = params.toString();
     router.replace(qs ? `${wizardApplyPath}?${qs}` : wizardApplyPath, { scroll: false });
-  }, [mode, postSubmit, router, searchParams, step, wizardApplyPath, isOnScreen]);
+  }, [mode, postSubmit, router, searchParams, step, templatePreview, wizardApplyPath, isOnScreen]);
 
   const exitApplication = useCallback(() => {
+    if (templatePreview) {
+      onManagerCancel?.();
+      return;
+    }
     if (mode === "manager") {
       onManagerCancel?.();
       return;
@@ -493,20 +517,20 @@ function RentalApplicationWizardInner({
       return;
     }
     router.push(wizardExitPath);
-  }, [mode, onManagerCancel, router, wizardExitPath]);
+  }, [mode, onManagerCancel, router, templatePreview, wizardExitPath]);
 
   const listingPrefillKey = useMemo(() => {
     return [
-      searchParams.get("propertyId") ?? "",
+      searchParams.get("propertyId") ?? linkedPropertyIdProp?.trim() ?? "",
       searchParams.get("roomName") ?? "",
       searchParams.get("floor") ?? "",
       searchParams.get("roomPrice") ?? "",
       searchParams.get("listingRoomId") ?? "",
       searchParams.get("bundle") ?? "",
       searchParams.get("phone") ?? "",
-      searchParams.get("rentalType") ?? "",
+      searchParams.get("rentalType") ?? linkedRentalType ?? "",
     ].join("|");
-  }, [searchParams]);
+  }, [linkedPropertyIdProp, linkedRentalType, searchParams]);
 
   const linkedPropertyId =
     linkedPropertyIdProp?.trim() || searchParams.get("propertyId")?.trim() || "";
@@ -665,15 +689,17 @@ function RentalApplicationWizardInner({
   }, [linkedProperty, linkedPropertyId, mode]);
 
   useEffect(() => {
+    if (templatePreview) return;
     if (mode !== "portal" && mode !== "manager") return;
     const email = sessionEmail?.trim();
     if (!email?.includes("@")) return;
     queueMicrotask(() => {
       setForm((prev) => (prev.email.trim() ? prev : { ...prev, email }));
     });
-  }, [mode, sessionEmail]);
+  }, [mode, sessionEmail, templatePreview]);
 
   useEffect(() => {
+    if (templatePreview) return;
     // The off-screen duplicate mount (see the `isOnScreen` doc comment above)
     // must never write the shared, module-level draft: its `form` only holds
     // whatever it last reconciled and never receives the resident's actual
@@ -682,9 +708,10 @@ function RentalApplicationWizardInner({
     // draft — the "room never lands on the application row" half of the bug.
     if (!draftReady || !isOnScreen()) return;
     saveRentalWizardDraft(form);
-  }, [draftReady, form, isOnScreen]);
+  }, [draftReady, form, templatePreview, isOnScreen]);
 
   useEffect(() => {
+    if (templatePreview) return;
     if (!draftReady || !isOnScreen()) return;
     // Wait for reconciliation to confirm this target before minting an axis id
     // or writing anything to the server — otherwise a fresh page load can sync
@@ -737,9 +764,10 @@ function RentalApplicationWizardInner({
     }, 2000);
 
     return () => window.clearTimeout(timer);
-  }, [draftReady, form, mode, sessionEmail, isReconcilingTarget, isOnScreen, step, maxStepReached]);
+  }, [draftReady, form, mode, sessionEmail, templatePreview, isReconcilingTarget, isOnScreen, step, maxStepReached]);
 
   useEffect(() => {
+    if (templatePreview) return;
     if (!draftReady || mode !== "portal") return;
     const email = (sessionEmail ?? form.email).trim().toLowerCase();
     if (!email.includes("@")) return; // resolved once email is known — effect reruns.
@@ -820,16 +848,11 @@ function RentalApplicationWizardInner({
     return () => {
       cancelled = true;
     };
-  }, [draftReady, form.email, mode, searchParams, sessionEmail]);
+  }, [draftReady, form.email, mode, searchParams, sessionEmail, templatePreview]);
 
   // PUBLIC apply: restore an in-progress application after a real page reload
-  // (or a return from an external redirect like Stripe checkout), which wipes
-  // the in-memory draft. Two reads, each scoped to the applicant's OWN
-  // application: a guest presents the axis id + freshest resident-setup token
-  // kept in sessionStorage (capability read — only the id and token ever touch
-  // disk, never answers/PII); a signed-in user of any role reads their own
-  // applicant rows by their authenticated email (`?scope=self`).
   useEffect(() => {
+    if (templatePreview) return;
     if (!draftReady || mode !== "public" || isDemoModeActive()) return;
     if (loadRentalWizardDraftAxisId()?.trim()) return; // live draft present — nothing was lost
     const target = wizardTargetFromParam(searchParams);
@@ -894,7 +917,7 @@ function RentalApplicationWizardInner({
 
   useEffect(() => {
     if (!draftReady) return;
-    const pid = searchParams.get("propertyId")?.trim();
+    const pid = (searchParams.get("propertyId") ?? "").trim() || linkedPropertyIdProp?.trim() || "";
     if (!pid) return;
     if (listingPrefillAppliedRef.current === listingPrefillKey) return;
     // Public listings load async on a cold browser — hold the prefill until the
@@ -907,7 +930,7 @@ function RentalApplicationWizardInner({
     const listingRoomId = searchParams.get("listingRoomId") ?? "";
     const bundleParam = (searchParams.get("bundle") ?? "").trim();
     const phoneParam = (searchParams.get("phone") ?? "").trim();
-    const rentalTypeParam = (searchParams.get("rentalType") ?? "").trim();
+    const rentalTypeParam = (searchParams.get("rentalType") ?? linkedRentalType ?? "").trim();
     const shortTermFromLink = rentalTypeParam === "short_term";
 
     queueMicrotask(() => {
@@ -978,7 +1001,7 @@ function RentalApplicationWizardInner({
         };
       });
     });
-  }, [draftReady, extrasTick, listingPrefillKey, searchParams, sessionEmail]);
+  }, [draftReady, extrasTick, linkedPropertyIdProp, linkedRentalType, listingPrefillKey, searchParams, sessionEmail]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
@@ -1577,6 +1600,18 @@ function RentalApplicationWizardInner({
   }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, form.applicationFeeWaived, feeStepUserId, router, showToast, finalizeApplicationSubmit, wizardApplyPath]);
 
   const handleContinue = () => {
+    if (templatePreview) {
+      if (!validateAllPrior()) return;
+      const next = nextActiveStep(step);
+      if (next > step) {
+        setStep(next);
+        setErrors({});
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      showToast("Preview only — applicants submit from this screen.");
+      return;
+    }
     if (step === 12) {
       if (!validateAllPrior()) return;
       void (async () => {
@@ -1748,6 +1783,7 @@ function RentalApplicationWizardInner({
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+    if (step === 1 && form.applicantRole === "cosigner") return;
     const e = validateRentalWizardStep(step, form);
     setErrors(e);
     if (countValidationErrors(e) > 0) {
@@ -1811,13 +1847,6 @@ function RentalApplicationWizardInner({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const meta = STEP_META[step - 1];
-  // Progress reflects position within the ACTIVE step list for this form, not a
-  // fixed /12 — so it stays honest for the shorter short-term form and never
-  // implies a total step count (see the "do not show how long the application
-  // is" requirement). The numeric "Step N of M" label and numbered pills are
-  // deliberately gone; the bar plus the section title carry the sense of
-  // forward motion instead.
   const progressPct = activeWizardProgressPct(activeSteps, step);
   const embedded = layout === "embedded";
 
@@ -1836,37 +1865,28 @@ function RentalApplicationWizardInner({
         </div>
       ) : null}
 
-      {!linkedPropertyId && mode !== "portal" ? (
-      <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:mt-6 sm:rounded-3xl sm:p-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
-        <div className="mt-3 sm:mt-4">
-          <SegmentedTwo
-            value={applicationPath}
-            onChange={setApplicationPath}
-            left={{ id: "signer", label: "Signer form" }}
-            right={{ id: "cosigner", label: "Co-signer form" }}
-            className="max-w-md"
+      {form.applicantRole === "cosigner" ? (
+        <div
+          className={
+            embedded
+              ? "rental-wizard-shell rental-wizard-shell--cosigner"
+              : "rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
+          }
+        >
+          <CosignerApplyFlow
+            embedded={embedded}
+            previewMode={templatePreview}
+            showToast={showToast}
+            applicationKind={form.rentalType === "short_term" ? "short-term" : "long-term"}
+            onBack={() => {
+              patchForm({ applicantRole: null });
+              setStep(1);
+              setErrors({});
+            }}
+            onDone={onManagerCancel ?? exitApplication}
           />
         </div>
-        <p className="rental-wizard-form-hint mt-3 text-sm leading-relaxed text-muted sm:mt-4">
-          {applicationPath === "signer"
-            ? "Use the signer form if you are the main applicant for the lease."
-            : "Filing as a co-signer on someone else's application? Open the co-signer form."}
-        </p>
-        {applicationPath === "cosigner" ? (
-          <div className="mt-4 sm:mt-5">
-            <Link href="/rent/apply/cosigner" className="inline-flex">
-              <Button type="button" className="min-h-[44px] px-5 sm:min-h-[48px] sm:px-6">
-                Open co-signer form
-              </Button>
-            </Link>
-          </div>
-        ) : null}
-      </div>
-      ) : null}
-
-      {applicationPath === "signer" ? (
-        !canRenderWizard ? (
+      ) : !canRenderWizard ? (
           <div className="mt-8">
             <ManagerLinkGate
               title="Open your manager’s apply link"
@@ -1911,7 +1931,7 @@ function RentalApplicationWizardInner({
                 {form.rentalType === "short_term" ? "Short-term stay application" : "Rental application"}
               </p>
               <p className="rental-wizard-step-title mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
-                {meta.title}
+                {rentalWizardStepTitle(step, form)}
               </p>
               <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2 [html[data-theme=dark]_&]:bg-white/10">
                 <div
@@ -1929,7 +1949,11 @@ function RentalApplicationWizardInner({
                 errors={errors}
                 mode={mode}
                 propertyOptions={propertyOptions}
-                propertyLocked={mode !== "portal" && Boolean(linkedPropertyId && linkedProperty)}
+                propertyLocked={
+                  templatePreview
+                    ? Boolean(linkedPropertyId?.trim())
+                    : mode !== "portal" && Boolean(linkedPropertyId && linkedProperty)
+                }
                 emailLocked={(mode === "portal" || mode === "manager") && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
@@ -2016,8 +2040,7 @@ function RentalApplicationWizardInner({
               </p>
             ) : null}
           </div>
-        )
-      ) : null}
+        )}
     </div>
   );
 }

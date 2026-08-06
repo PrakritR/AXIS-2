@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
-import { Modal, ModalFooter } from "@/components/ui/modal";
-import { PortalCollapsibleEditRow } from "@/components/portal/portal-collapsible-edit-row";
+import { Modal, ModalFooter, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
+import {
+  PortalCollapsibleEditRow,
+  PORTAL_EDIT_ROW_ICON_BUTTON_CLASS,
+} from "@/components/portal/portal-collapsible-edit-row";
 import { PortalEditRow } from "@/components/portal/portal-edit-row";
 import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
@@ -20,20 +25,29 @@ import {
 } from "@/lib/manager-property-save-target";
 import {
   applicationConfigForVariant,
+  customApplicationConfigWithAllStandardQuestions,
   mergeApplicationConfigForVariant,
   reenableListingApplicationField,
   removeListingApplicationField,
   resolveDisabledStandardApplicationFields,
   resolveListingApplicationFields,
   restoreDefaultApplicationConfig,
+  STANDARD_APPLICATION_FIELD_COUNT,
   type ApplicationConfigSlice,
   type ApplicationFormVariant,
   type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
+import {
+  createPropertyApplicationTemplate,
+  syncLegacyApplicationFieldsFromTemplates,
+  updatePropertyApplicationTemplate,
+  type PropertyApplicationTemplate,
+} from "@/lib/property-application-templates";
 
-function allApplicationSectionIds(): Set<string> {
-  return new Set(RENTAL_APPLICATION_SECTIONS.map((section) => section.id));
+/** Question sections start collapsed; managers expand the ones they need. */
+function collapsedApplicationSections(): Set<string> {
+  return new Set();
 }
 
 const APPLICATION_FORM_VARIANTS: ReadonlyArray<{ id: ApplicationFormVariant; label: string; hint: string }> = [
@@ -43,6 +57,11 @@ const APPLICATION_FORM_VARIANTS: ReadonlyArray<{ id: ApplicationFormVariant; lab
     label: "Short-term stay",
     hint: "A shorter guest application for short-term stays — configured separately.",
   },
+  {
+    id: "cosigner",
+    label: "Co-signer",
+    hint: "The co-signer form linked to a primary applicant — configured separately.",
+  },
 ];
 
 function typeLabel(type: ManagerCustomApplicationFieldType): string {
@@ -50,13 +69,6 @@ function typeLabel(type: ManagerCustomApplicationFieldType): string {
 }
 
 export { typeLabel as applicationQuestionTypeLabel };
-
-function applyFieldRemovals(
-  slice: ApplicationConfigSlice,
-  fields: ResolvedApplicationField[],
-): ApplicationConfigSlice {
-  return fields.reduce((acc, field) => removeListingApplicationField(acc, field), slice);
-}
 
 function questionSubtitle(field: ResolvedApplicationField): string {
   return `${field.isStandard ? "Built-in" : "Custom"} · ${typeLabel(field.type)}${field.required ? " · Required" : " · Optional"}`;
@@ -110,7 +122,14 @@ function persistApplicationConfig({
   return true;
 }
 
-/** Shared application-question editor — same modal used on property details and Applications. */
+function submissionForNewCustomApplication(sub: ManagerListingSubmissionV1): ManagerListingSubmissionV1 {
+  return {
+    ...sub,
+    ...mergeApplicationConfigForVariant("standard", customApplicationConfigWithAllStandardQuestions()),
+  };
+}
+
+/** Shared application-question editor — property templates and bulk Applications edit. */
 export function ManagerApplicationQuestionsEditorModal({
   open,
   title = "Application",
@@ -120,6 +139,10 @@ export function ManagerApplicationQuestionsEditorModal({
   managerUserId,
   initialVariant = "standard",
   lockVariant = false,
+  templateEditorMode,
+  applicationTemplate = null,
+  templates,
+  onPersistTemplates,
   onClose,
   onSaved,
   showToast,
@@ -135,14 +158,26 @@ export function ManagerApplicationQuestionsEditorModal({
   initialVariant?: ApplicationFormVariant;
   /** Property detail row edit — one stay type only; hide the long-term / short-term switcher. */
   lockVariant?: boolean;
+  /** Property tab — add or edit a named application on one page with questions below the name. */
+  templateEditorMode?: "add" | "edit";
+  applicationTemplate?: PropertyApplicationTemplate | null;
+  templates?: PropertyApplicationTemplate[];
+  onPersistSubmission?: (
+    merged: ManagerListingSubmissionV1,
+    opts: { message: string },
+  ) => boolean;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
+  const isTemplateEditor = templateEditorMode === "add" || templateEditorMode === "edit";
   const [localSub, setLocalSub] = useState(sub);
   const [variant, setVariant] = useState<ApplicationFormVariant>("standard");
-  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(() => allApplicationSectionIds());
+  const [templateLabel, setTemplateLabel] = useState("");
+  const [templateLabelError, setTemplateLabelError] = useState<string | null>(null);
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(() => new Set());
   const [editOpen, setEditOpen] = useState(false);
+  const childClosingRef = useRef(false);
   const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
   const [isNewField, setIsNewField] = useState(false);
   const [newFieldSectionId, setNewFieldSectionId] = useState("additional");
@@ -153,15 +188,18 @@ export function ManagerApplicationQuestionsEditorModal({
 
   useEffect(() => {
     if (!open) return;
-    setLocalSub(sub);
-    setVariant(initialVariant);
-    setExpandedSectionIds(allApplicationSectionIds());
+    const baseSub = templateEditorMode === "add" ? submissionForNewCustomApplication(sub) : sub;
+    setLocalSub(baseSub);
+    setVariant(templateEditorMode === "add" ? "standard" : initialVariant);
+    setTemplateLabel(applicationTemplate?.label ?? "");
+    setTemplateLabelError(null);
+    setExpandedSectionIds(collapsedApplicationSections());
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
-    setDirty(false);
+    setDirty(templateEditorMode === "add");
     setSaving(false);
-  }, [open, sub, initialVariant]);
+  }, [open, sub, initialVariant, templateEditorMode, applicationTemplate]);
 
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
@@ -192,18 +230,63 @@ export function ManagerApplicationQuestionsEditorModal({
   // "custom" on edits; only "Restore PropLane defaults" (plain `applySlice`
   // with a fresh default) intentionally returns short-term to the curated set.
   const applyEditedSlice = (nextSlice: ApplicationConfigSlice): void =>
-    applySlice(variant === "short_term" ? { ...nextSlice, applicationConfigMode: "custom" } : nextSlice);
+    applySlice(
+      variant === "short_term" || templateEditorMode === "add" || templateEditorMode === "edit"
+        ? { ...nextSlice, applicationConfigMode: "custom" }
+        : nextSlice,
+    );
 
   const commitSave = () => {
+    if (isTemplateEditor) {
+      const trimmed = templateLabel.trim();
+      if (!trimmed) {
+        setTemplateLabelError("Enter a name for this application.");
+        return;
+      }
+      setTemplateLabelError(null);
+      if (!templates || !onPersistSubmission) {
+        showToast("Could not save application.");
+        return;
+      }
+    }
+
     if (isBulkSave) {
-      // Overwriting every selected property is destructive — name the count at the moment
-      // of saving (round 31), not only in a subtitle above.
       const ok = window.confirm(
         `Apply these application settings to ${bulkIds.length} properties? Existing per-property differences will be replaced.`,
       );
       if (!ok) return;
     }
     setSaving(true);
+
+    if (isTemplateEditor && templates && onPersistSubmission) {
+      const trimmed = templateLabel.trim();
+      let nextTemplates: PropertyApplicationTemplate[];
+      if (templateEditorMode === "add") {
+        nextTemplates = [
+          ...templates,
+          createPropertyApplicationTemplate({ kind: "long-term", label: trimmed }),
+        ];
+      } else {
+        nextTemplates = updatePropertyApplicationTemplate(templates, applicationTemplate!.id, {
+          label: trimmed,
+        });
+      }
+      const merged = syncLegacyApplicationFieldsFromTemplates(localSub, nextTemplates);
+      if (
+        !onPersistSubmission(merged, {
+          message: templateEditorMode === "add" ? "Application added." : "Application saved.",
+        })
+      ) {
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      setDirty(false);
+      onSaved();
+      onClose();
+      return;
+    }
+
     const okSaved = persistApplicationConfig({
       next: localSub,
       saveTarget,
@@ -239,9 +322,22 @@ export function ManagerApplicationQuestionsEditorModal({
   };
 
   const closeEdit = () => {
+    childClosingRef.current = true;
     setEditOpen(false);
     setEditingField(null);
     setIsNewField(false);
+    queueMicrotask(() => {
+      childClosingRef.current = false;
+    });
+  };
+
+  const handleParentClose = () => {
+    if (childClosingRef.current) return;
+    if (editOpen) {
+      closeEdit();
+      return;
+    }
+    requestClose();
   };
 
   const removeField = (field: ResolvedApplicationField) => {
@@ -253,20 +349,30 @@ export function ManagerApplicationQuestionsEditorModal({
     applyEditedSlice(reenableListingApplicationField(configSlice, field.standardKey));
   };
 
-  const removeSection = (sectionId: string) => {
-    const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
-    if (sectionQuestions.length === 0) return;
-    applyEditedSlice(applyFieldRemovals(configSlice, sectionQuestions));
-    setExpandedSectionIds((prev) => {
-      const next = new Set(prev);
-      next.delete(sectionId);
-      return next;
-    });
-  };
-
   const restoreDefaults = () => {
+    if (isTemplateEditor) {
+      const isCustomTemplate =
+        templateEditorMode === "add" || (applicationTemplate != null && !applicationTemplate.listingSeedKey);
+      if (isCustomTemplate) {
+        applySlice(customApplicationConfigWithAllStandardQuestions());
+      } else if (variant === "short_term") {
+        applySlice({
+          ...applicationConfigForVariant({} as ManagerListingSubmissionV1, "short_term"),
+          applicationConfigMode: "standard",
+        });
+      } else if (variant === "cosigner") {
+        applySlice({
+          ...applicationConfigForVariant({} as ManagerListingSubmissionV1, "cosigner"),
+          applicationConfigMode: "standard",
+        });
+      } else {
+        applySlice(restoreDefaultApplicationConfig());
+      }
+      setExpandedSectionIds(collapsedApplicationSections());
+      return;
+    }
     applySlice(restoreDefaultApplicationConfig());
-    setExpandedSectionIds(allApplicationSectionIds());
+    setExpandedSectionIds(collapsedApplicationSections());
   };
 
   const onQuestionSaved = (next: ManagerListingSubmissionV1) => {
@@ -274,24 +380,45 @@ export function ManagerApplicationQuestionsEditorModal({
     setDirty(true);
   };
 
+  const sectionAddButton = (sectionId: string) => (
+    <button
+      type="button"
+      className={PORTAL_EDIT_ROW_ICON_BUTTON_CLASS}
+      title="Add question"
+      aria-label="Add question"
+      data-attr="application-questions-add"
+      onClick={() => openAdd(sectionId)}
+    >
+      <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+    </button>
+  );
+
   return (
-    <>
-      <Modal
-        open={open}
-        title={title}
-        onClose={requestClose}
-        panelClassName="max-w-2xl"
+    <Modal
+      open={open}
+      title={title}
+      onClose={handleParentClose}
+      dismissBlocked={editOpen}
+      description={
+          isTemplateEditor
+            ? "Name your application, then adjust questions below. Every custom application includes all standard questions."
+            : "Expand a section to see its questions. Tap a question to edit; use × to remove."
+        }
+        presentation="dialog"
+        dense
+        assistantStrip={false}
+        panelClassName="flex max-h-[min(90vh,56rem)] w-full max-w-4xl flex-col"
         footer={
-          <ModalFooter>
+          <ModalFooter className="w-full justify-end">
             <Button
               type="button"
               variant="primary"
               className="rounded-full"
               data-attr="application-questions-save"
-              disabled={!dirty || saving}
+              disabled={saving || (isTemplateEditor ? !templateLabel.trim() : !dirty)}
               onClick={commitSave}
             >
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving…" : templateEditorMode === "add" ? "Add application" : "Save changes"}
             </Button>
           </ModalFooter>
         }
@@ -303,12 +430,26 @@ export function ManagerApplicationQuestionsEditorModal({
           </p>
         ) : null}
         <div className="space-y-3">
-          {/*
-            Two separate applications, edited independently. The tabs pick which
-            one these controls configure; turning a question off in one never
-            affects the other (they persist to different submission fields).
-          */}
-          {lockVariant ? null : (
+          {isTemplateEditor ? (
+            <div>
+              <label className={MODAL_FIELD_LABEL_CLASS} htmlFor="application-template-name">
+                Application name
+              </label>
+              <Input
+                id="application-template-name"
+                value={templateLabel}
+                onChange={(e) => {
+                  setTemplateLabel(e.target.value);
+                  setTemplateLabelError(null);
+                  setDirty(true);
+                }}
+                placeholder="e.g. Summer intern application"
+                data-attr="property-application-name"
+              />
+              {templateLabelError ? <p className="mt-1.5 text-sm text-rose-600">{templateLabelError}</p> : null}
+            </div>
+          ) : null}
+          {lockVariant || isTemplateEditor ? null : (
           <div
             className="flex gap-1 rounded-full border border-border bg-accent/30 p-1"
             role="tablist"
@@ -326,7 +467,7 @@ export function ManagerApplicationQuestionsEditorModal({
                   data-attr={`application-variant-tab-${v.id}`}
                   onClick={() => {
                     setVariant(v.id);
-                    setExpandedSectionIds(allApplicationSectionIds());
+                    setExpandedSectionIds(collapsedApplicationSections());
                   }}
                   className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     active
@@ -341,20 +482,35 @@ export function ManagerApplicationQuestionsEditorModal({
           </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <p className="text-sm text-muted">
-              {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on the{" "}
-              {variant === "short_term" ? "short-term" : "long-term"} application
+              {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"}
+              {isTemplateEditor &&
+              (templateEditorMode === "add" ||
+                (applicationTemplate != null && !applicationTemplate.listingSeedKey))
+                ? ` · includes all ${STANDARD_APPLICATION_FIELD_COUNT} standard questions`
+                : !isTemplateEditor
+                  ? ` on the ${variant === "short_term" ? "short-term" : "long-term"} application`
+                  : ""}
             </p>
-            <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
-              Restore PropLane defaults
-            </Button>
+            <button
+              type="button"
+              className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+              onClick={restoreDefaults}
+            >
+              {isTemplateEditor &&
+              (templateEditorMode === "add" ||
+                (applicationTemplate != null && !applicationTemplate.listingSeedKey))
+                ? "Reset all standard questions"
+                : "Restore PropLane defaults"}
+            </button>
           </div>
 
           {RENTAL_APPLICATION_SECTIONS.map((section) => {
             const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
             const sectionDisabled = disabledFields.filter((f) => (f.section ?? "additional") === section.id);
             const sectionExpanded = expandedSectionIds.has(section.id);
+            const sectionHasContent = sectionQuestions.length > 0 || sectionDisabled.length > 0;
             return (
               <PortalCollapsibleEditRow
                 key={section.id}
@@ -370,6 +526,7 @@ export function ManagerApplicationQuestionsEditorModal({
                       }`
                 }
                 expanded={sectionExpanded}
+                collapsible={sectionHasContent}
                 onExpandedChange={(next) => {
                   setExpandedSectionIds((prev) => {
                     const ids = new Set(prev);
@@ -379,20 +536,8 @@ export function ManagerApplicationQuestionsEditorModal({
                   });
                 }}
                 toggleDataAttr={`application-section-toggle-${section.id}`}
-                onRemove={sectionQuestions.length > 0 ? () => removeSection(section.id) : undefined}
-                removeTitle={`Remove all questions in ${section.title}`}
-                removeDataAttr="application-section-remove"
-                headerActions={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 rounded-full px-2.5 text-xs"
-                    data-attr="application-questions-add"
-                    onClick={() => openAdd(section.id)}
-                  >
-                    + Add question
-                  </Button>
-                }
+                contentClassName="space-y-2 pt-1"
+                headerActions={sectionAddButton(section.id)}
               >
                 {sectionQuestions.length === 0 && sectionDisabled.length === 0 ? (
                   <p className="text-sm text-muted">No questions in this section yet.</p>
@@ -403,9 +548,12 @@ export function ManagerApplicationQuestionsEditorModal({
                         key={field.id}
                         title={field.label.trim() || "Untitled question"}
                         subtitle={questionSubtitle(field)}
+                        titleVariant="semibold"
+                        className="border-0 bg-accent/15 shadow-none"
                         clickDataAttr={`application-question-edit-${field.id}`}
                         onClick={() => openEdit(field)}
                         onRemove={() => removeField(field)}
+                        removeIconOnly
                         removeTitle="Remove question"
                         removeDataAttr="application-question-remove"
                       />
@@ -413,23 +561,24 @@ export function ManagerApplicationQuestionsEditorModal({
                     {sectionDisabled.map((field) => (
                       <div
                         key={field.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-accent/20 px-3 py-2.5"
+                        className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-border bg-accent/20 px-3 py-2.5"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="truncate text-sm text-muted line-through">
                             {field.label.trim() || "Untitled question"}
                           </p>
                           <p className="text-xs text-muted/80">Off · not asked on this application</p>
                         </div>
-                        <Button
+                        <button
                           type="button"
-                          variant="outline"
-                          className="h-7 shrink-0 rounded-full px-2.5 text-xs"
+                          className={PORTAL_EDIT_ROW_ICON_BUTTON_CLASS}
+                          title="Add question back"
+                          aria-label="Add question back"
                           data-attr="application-question-reenable"
                           onClick={() => reenableField(field)}
                         >
-                          Add back
-                        </Button>
+                          <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -438,7 +587,6 @@ export function ManagerApplicationQuestionsEditorModal({
             );
           })}
         </div>
-      </Modal>
 
       <ApplicationQuestionEditModal
         open={editOpen}
@@ -455,6 +603,6 @@ export function ManagerApplicationQuestionsEditorModal({
         showToast={showToast}
         deferPersist
       />
-    </>
+    </Modal>
   );
 }

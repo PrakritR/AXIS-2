@@ -23,6 +23,20 @@ export function applicationFormVariantForKind(kind: PropertyLeaseTemplateKind | 
   return normalizeLeaseTemplateKind(kind) === "short-term" ? "short_term" : "standard";
 }
 
+export function applicationFormVariantForTemplate(
+  template: Pick<PropertyApplicationTemplate, "kind" | "listingSeedKey" | "formVariant">,
+): ApplicationFormVariant {
+  if (
+    template.listingSeedKey === "cosigner" ||
+    template.listingSeedKey === "cosigner-short-term" ||
+    template.formVariant === "cosigner"
+  ) {
+    return "cosigner";
+  }
+  if (template.formVariant === "short_term") return "short_term";
+  return applicationFormVariantForKind(template.kind);
+}
+
 export function propertyApplicationTypeLabel(kind: PropertyLeaseTemplateKind | string): string {
   return propertyLeaseTypeLabel(kind);
 }
@@ -40,6 +54,7 @@ export function createPropertyApplicationTemplate(args: {
   label?: string;
   applicationLeaseTerms?: string[];
   listingSeedKey?: PropertyLeaseListingSeedKey;
+  formVariant?: ApplicationFormVariant;
 }): PropertyApplicationTemplate {
   const kind = normalizeLeaseTemplateKind(args.kind);
   const kindMeta = PROPERTY_LEASE_TYPE_OPTIONS.find((o) => o.id === kind);
@@ -48,7 +63,7 @@ export function createPropertyApplicationTemplate(args: {
     id: makePropertyApplicationTemplateId(),
     kind,
     label: args.label?.trim() || kindMeta?.defaultLabel.replace(/ lease$/i, " application") || "Application",
-    formVariant: applicationFormVariantForKind(kind),
+    formVariant: args.formVariant ?? applicationFormVariantForKind(kind),
     applicationLeaseTerms: args.applicationLeaseTerms?.length ? [...args.applicationLeaseTerms] : undefined,
     listingSeedKey: args.listingSeedKey,
     createdAt: stamp,
@@ -69,7 +84,7 @@ function normalizeApplicationTemplate(
   return {
     ...row,
     kind,
-    formVariant: applicationFormVariantForKind(kind),
+    formVariant: applicationFormVariantForTemplate({ ...row, kind }),
   };
 }
 
@@ -103,7 +118,11 @@ export function updatePropertyApplicationTemplate(
           ...row,
           ...patch,
           kind: patch.kind ? normalizeLeaseTemplateKind(patch.kind) : row.kind,
-          formVariant: applicationFormVariantForKind(patch.kind ?? row.kind),
+          formVariant: applicationFormVariantForTemplate({
+            ...row,
+            ...patch,
+            kind: patch.kind ? normalizeLeaseTemplateKind(patch.kind) : row.kind,
+          }),
           updatedAt: nowIso(),
         }
       : row,

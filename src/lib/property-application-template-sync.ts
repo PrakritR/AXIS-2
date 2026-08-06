@@ -1,26 +1,81 @@
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import type { ApplicationFormVariant } from "@/lib/rental-application/application-field-catalog";
 import {
   createPropertyApplicationTemplate,
   readPropertyApplicationTemplates,
   syncLegacyApplicationFieldsFromTemplates,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
-import type { PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
+import type { PropertyLeaseListingSeedKey, PropertyLeaseTemplateKind } from "@/lib/property-lease-templates";
 import { buildLeaseTemplateSeeds } from "@/lib/property-lease-template-sync";
+
+const COSIGNER_LONG_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "cosigner";
+const COSIGNER_SHORT_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "cosigner-short-term";
+
+type ApplicationTemplateSeed = {
+  seedKey: PropertyLeaseListingSeedKey;
+  kind: PropertyLeaseTemplateKind;
+  label: string;
+  formVariant: ApplicationFormVariant;
+  applicationLeaseTerms: string[];
+};
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-function defaultLabelForSeed(seed: { label: string; kind: PropertyLeaseTemplateKind }): string {
+function defaultLabelForSeed(seed: ApplicationTemplateSeed): string {
+  if (seed.seedKey === COSIGNER_LONG_TERM_SEED_KEY) return "Long-term co-signer application";
+  if (seed.seedKey === COSIGNER_SHORT_TERM_SEED_KEY) return "Short-term co-signer application";
   if (seed.kind === "short-term") return "Short-term application";
   return "Long-term application";
 }
 
+function cosignerApplicationSeeds(
+  leaseSeeds: ReturnType<typeof buildLeaseTemplateSeeds>,
+): ApplicationTemplateSeed[] {
+  return leaseSeeds.map((leaseSeed) => ({
+    seedKey: leaseSeed.kind === "short-term" ? COSIGNER_SHORT_TERM_SEED_KEY : COSIGNER_LONG_TERM_SEED_KEY,
+    kind: leaseSeed.kind,
+    label: defaultLabelForSeed({
+      seedKey: leaseSeed.kind === "short-term" ? COSIGNER_SHORT_TERM_SEED_KEY : COSIGNER_LONG_TERM_SEED_KEY,
+      kind: leaseSeed.kind,
+      label: leaseSeed.label,
+      formVariant: "cosigner",
+      applicationLeaseTerms: leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
+    }),
+    formVariant: "cosigner" as ApplicationFormVariant,
+    applicationLeaseTerms: leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
+  }));
+}
+
+/** Every property keeps four auto-seeded applications: long-term, short-term, and matching co-signer forms. */
+export function buildApplicationTemplateSeeds(
+  sub: Parameters<typeof buildLeaseTemplateSeeds>[0],
+): ApplicationTemplateSeed[] {
+  const leaseSeeds = buildLeaseTemplateSeeds(sub);
+  return [
+    ...leaseSeeds.map((seed) => ({
+      seedKey: seed.seedKey,
+      kind: seed.kind,
+      label: defaultLabelForSeed({
+        seedKey: seed.seedKey,
+        kind: seed.kind,
+        label: seed.label,
+        formVariant: seed.kind === "short-term" ? "short_term" : "standard",
+        applicationLeaseTerms: seed.applicationLeaseTerms,
+      }),
+      formVariant: (seed.kind === "short-term" ? "short_term" : "standard") as ApplicationFormVariant,
+      applicationLeaseTerms: seed.applicationLeaseTerms,
+    })),
+    ...cosignerApplicationSeeds(leaseSeeds),
+  ];
+}
+
 function adoptLegacyDefaultTemplate(
   existing: PropertyApplicationTemplate[],
-  seed: ReturnType<typeof buildLeaseTemplateSeeds>[number],
+  seed: ApplicationTemplateSeed,
 ): PropertyApplicationTemplate | null {
   if (existing.length !== 1) return null;
   const only = existing[0]!;
@@ -30,7 +85,7 @@ function adoptLegacyDefaultTemplate(
     ...only,
     listingSeedKey: seed.seedKey,
     kind: seed.kind,
-    formVariant: seed.kind === "short-term" ? "short_term" : "standard",
+    formVariant: seed.formVariant,
     applicationLeaseTerms: seed.applicationLeaseTerms,
     label: only.label.trim() === "Primary application" ? defaultLabelForSeed(seed) : only.label,
     updatedAt: nowIso(),
@@ -41,7 +96,7 @@ function adoptLegacyDefaultTemplate(
 export function syncPropertyApplicationTemplatesFromListing(
   sub: ManagerListingSubmissionV1,
 ): ManagerListingSubmissionV1 {
-  const seeds = buildLeaseTemplateSeeds(sub);
+  const seeds = buildApplicationTemplateSeeds(sub);
   const existing = readPropertyApplicationTemplates(sub);
   const adoptedLegacyIds = new Set<string>();
   const seededExisting = existing.filter((t) => Boolean(t.listingSeedKey));
@@ -61,7 +116,7 @@ export function syncPropertyApplicationTemplatesFromListing(
       nextSeeded.push({
         ...prev,
         kind: seed.kind,
-        formVariant: seed.kind === "short-term" ? "short_term" : "standard",
+        formVariant: seed.formVariant,
         listingSeedKey: seed.seedKey,
         applicationLeaseTerms: seed.applicationLeaseTerms,
         label: prev.label.trim() && prev.label !== defaultLabel ? prev.label : defaultLabel,
@@ -73,6 +128,7 @@ export function syncPropertyApplicationTemplatesFromListing(
         label: defaultLabelForSeed(seed),
         listingSeedKey: seed.seedKey,
         applicationLeaseTerms: seed.applicationLeaseTerms,
+        formVariant: seed.formVariant,
       });
       nextSeeded.push(created);
     }

@@ -131,15 +131,26 @@ describe("property lease template sync", () => {
     expect(again.leaseConfigMode).toBe("custom");
   });
 
-  it("mirrors the two defaults for application templates", () => {
+  it("mirrors the four defaults for application templates", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month", "Custom"];
     sub.shortTermRentalsAllowed = true;
     const synced = syncPropertyApplicationTemplatesFromListing(sub);
     const templates = readPropertyApplicationTemplates(synced);
-    expect(templates).toHaveLength(2);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["primary", "short-term"]);
+    expect(templates).toHaveLength(4);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual([
+      "cosigner",
+      "cosigner-short-term",
+      "primary",
+      "short-term",
+    ]);
     expect(templates.find((t) => t.listingSeedKey === "primary")?.label).toBe("Long-term application");
     expect(templates.find((t) => t.listingSeedKey === "short-term")?.label).toBe("Short-term application");
+    expect(templates.find((t) => t.listingSeedKey === "cosigner")?.label).toBe("Long-term co-signer application");
+    expect(templates.find((t) => t.listingSeedKey === "cosigner-short-term")?.label).toBe(
+      "Short-term co-signer application",
+    );
+    expect(templates.find((t) => t.listingSeedKey === "cosigner")?.formVariant).toBe("cosigner");
+    expect(templates.find((t) => t.listingSeedKey === "cosigner-short-term")?.formVariant).toBe("cosigner");
   });
 });

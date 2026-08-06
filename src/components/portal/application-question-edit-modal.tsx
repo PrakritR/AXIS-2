@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
@@ -68,7 +68,7 @@ export function ApplicationQuestionFields({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <p className="text-sm font-medium text-foreground">Answer type</p>
-          <Select
+          <NativeSelect
             value={field.type}
             onChange={(e) => onPatch({ type: e.target.value as ManagerCustomApplicationFieldType })}
             className="mt-1"
@@ -78,7 +78,7 @@ export function ApplicationQuestionFields({
                 {o.label}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
         </div>
         <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
           <input
@@ -276,7 +276,10 @@ export function ApplicationQuestionEditModal({
       open={open}
       title={isNew ? "Add question" : "Edit question"}
       onClose={onClose}
-      panelClassName="max-w-lg"
+      presentation="dialog"
+      dense
+      assistantStrip={false}
+      panelClassName="max-w-xl"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
       footer={
         <ModalFooter>
@@ -287,7 +290,7 @@ export function ApplicationQuestionEditModal({
             data-attr="application-question-save"
             onClick={save}
           >
-            Save
+            Save changes
           </Button>
         </ModalFooter>
       }

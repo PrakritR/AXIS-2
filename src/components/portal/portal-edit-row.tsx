@@ -1,10 +1,11 @@
 "use client";
 
 import { type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isPortalRowClickIgnored } from "@/components/portal/portal-data-table";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
+  PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS,
   PORTAL_EDIT_ROW_REMOVE_BUTTON_CLASS,
 } from "@/components/portal/portal-collapsible-edit-row";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,8 @@ export type PortalEditRowProps = {
   removeLabel?: string;
   removeTitle?: string;
   removeDataAttr?: string;
+  /** Icon-only × instead of a labeled Remove button (better on narrow screens). */
+  removeIconOnly?: boolean;
   headerActions?: ReactNode;
   className?: string;
   clickDataAttr?: string;
@@ -36,6 +39,7 @@ export function PortalEditRow({
   removeLabel = "Remove",
   removeTitle,
   removeDataAttr,
+  removeIconOnly = false,
   headerActions,
   className,
   clickDataAttr,
@@ -80,11 +84,27 @@ export function PortalEditRow({
           <div className={titleClass}>{title}</div>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
         </div>
-        {(headerActions || onRemove) ? (
-          <PortalSectionActionRow
-            className="shrink-0 sm:w-auto"
-            destructive={
-              onRemove ? (
+        {headerActions || onRemove ? (
+          <div
+            className="flex shrink-0 items-start gap-1 pt-0.5"
+            data-portal-row-ignore
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {headerActions}
+            {onRemove ? (
+              removeIconOnly ? (
+                <button
+                  type="button"
+                  className={PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS}
+                  title={removeTitle ?? removeLabel}
+                  aria-label={removeTitle ?? removeLabel}
+                  data-attr={removeDataAttr}
+                  onClick={onRemove}
+                >
+                  <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                </button>
+              ) : (
                 <Button
                   type="button"
                   variant="outline"
@@ -95,18 +115,9 @@ export function PortalEditRow({
                 >
                   {removeLabel}
                 </Button>
-              ) : undefined
-            }
-          >
-            <div
-              data-portal-row-ignore
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              className="contents"
-            >
-              {headerActions}
-            </div>
-          </PortalSectionActionRow>
+              )
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>

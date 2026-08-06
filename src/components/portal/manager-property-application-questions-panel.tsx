@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
+import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
+import { CosignerApplyFlow } from "@/app/(public)/rent/apply/cosigner-flow";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
-import { PropertyApplicationFormModal } from "@/components/portal/property-application-form-modal";
+import {
+  PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS,
+} from "@/components/portal/portal-collapsible-edit-row";
 import {
   PORTAL_LIST_ADD_ICONS,
   PORTAL_LIST_ADD_ROW_WRAP_CLASS,
@@ -19,11 +25,11 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import {
+  applicationConfigFieldsFromSubmission,
   persistManagerListingSubmission,
   resolveManagerListingSubmissionForPropertyId,
 } from "@/lib/manager-property-save-target";
 import {
-  propertyApplicationTypeLabel,
   readPropertyApplicationTemplates,
   removePropertyApplicationTemplate,
   syncLegacyApplicationFieldsFromTemplates,
@@ -31,11 +37,9 @@ import {
 } from "@/lib/property-application-templates";
 import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
 import { formatApplicationLeaseTermsLabel } from "@/lib/property-lease-template-sync";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
   applicationConfigForVariant,
   resolveListingApplicationFields,
-  type ApplicationFormVariant,
 } from "@/lib/rental-application/application-field-catalog";
 
 type QuestionsSaveTarget =
@@ -44,21 +48,17 @@ type QuestionsSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
+function isManagerOwnedApplicationTemplate(template: PropertyApplicationTemplate): boolean {
+  return !template.listingSeedKey;
+}
+
 function applicationQuestionsSummary(
   sub: ManagerListingSubmissionV1,
   template: PropertyApplicationTemplate,
 ): string {
   const slice = applicationConfigForVariant(sub, template.formVariant);
-  const mode = slice.applicationConfigMode === "custom" ? "Custom questions" : "PropLane default";
   const count = resolveListingApplicationFields(slice, normalizeCustomApplicationFields).length;
-  return `${count} question${count === 1 ? "" : "s"} · ${mode}`;
-}
-
-function propertyApplicationPreviewHref(listingId: string, template: PropertyApplicationTemplate): string {
-  return buildRentalApplyHref({
-    propertyId: listingId,
-    rentalType: template.kind === "short-term" ? "short_term" : "standard",
-  });
+  return `${count} question${count === 1 ? "" : "s"}`;
 }
 
 /**
@@ -79,56 +79,67 @@ export function ManagerPropertyApplicationQuestionsPanel({
   managerUserId: string | null;
   /** When set, template changes apply to every listed property (bulk edit). */
   propertyIds?: string[];
-  /** Live listing id — used for the public application preview link. */
+  /** Live listing id — used for the in-portal application preview. */
   listingId?: string | null;
   onUpdated: () => void;
   showToast: (m: string) => void;
   onRegisterAddApplication?: (openAdd: (() => void) | null) => void;
 }) {
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMode, setFormMode] = useState<"add" | "edit">("add");
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [questionsModalOpen, setQuestionsModalOpen] = useState(false);
-  const [questionsVariant, setQuestionsVariant] = useState<ApplicationFormVariant>("standard");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"add" | "edit">("edit");
+  const [editingTemplate, setEditingTemplate] = useState<PropertyApplicationTemplate | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<PropertyApplicationTemplate | null>(null);
 
   const syncedSub = useMemo(() => syncPropertyApplicationTemplatesFromListing(sub), [sub]);
   const templates = useMemo(() => readPropertyApplicationTemplates(syncedSub), [syncedSub]);
 
   const bulkPropertyIds = propertyIds?.filter((id) => id.trim()) ?? [];
 
-  const persistTemplates = (nextTemplates: PropertyApplicationTemplate[]) => {
-    if (!managerUserId) return false;
+  const persistSubmission = useCallback(
+    (merged: ManagerListingSubmissionV1, opts: { message: string }) => {
+      if (!managerUserId) return false;
 
-    if (bulkPropertyIds.length > 0) {
-      let saved = 0;
-      let failed = 0;
-      for (const propertyId of bulkPropertyIds) {
-        const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
-        if (!hit) {
-          failed += 1;
-          continue;
+      if (bulkPropertyIds.length > 0) {
+        const configFields = applicationConfigFieldsFromSubmission(merged);
+        const nextTemplates = readPropertyApplicationTemplates(merged);
+        let saved = 0;
+        let failed = 0;
+        for (const propertyId of bulkPropertyIds) {
+          const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+          if (!hit) {
+            failed += 1;
+            continue;
+          }
+          const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
+          const next = syncLegacyApplicationFieldsFromTemplates({ ...base, ...configFields }, nextTemplates);
+          if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
+          else failed += 1;
         }
-        const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
-        const next = syncLegacyApplicationFieldsFromTemplates(base, nextTemplates);
-        if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
-        else failed += 1;
+        if (saved === 0) {
+          showToast("Could not save application settings.");
+          return false;
+        }
+        if (failed > 0) {
+          showToast(`Updated application for ${saved} properties (${failed} could not be saved).`);
+        } else if (saved > 1) {
+          showToast(`Updated application for ${saved} properties.`);
+        } else {
+          showToast(opts.message);
+        }
+        return true;
       }
-      if (saved === 0) {
+
+      if (!saveTarget) return false;
+      if (!persistManagerListingSubmission(saveTarget, managerUserId, merged)) {
         showToast("Could not save application settings.");
         return false;
       }
-      if (failed > 0) {
-        showToast(`Updated application for ${saved} properties (${failed} could not be saved).`);
-      } else if (saved > 1) {
-        showToast(`Updated application for ${saved} properties.`);
-      }
+      showToast(opts.message);
       return true;
-    }
-
-    if (!saveTarget) return false;
-    const next = syncLegacyApplicationFieldsFromTemplates(syncedSub, nextTemplates);
-    return persistManagerListingSubmission(saveTarget, managerUserId, next);
-  };
+    },
+    [bulkPropertyIds, managerUserId, saveTarget, showToast],
+  );
 
   const persistRemoval = (nextTemplates: PropertyApplicationTemplate[]) => {
     if (!managerUserId) return false;
@@ -163,9 +174,9 @@ export function ManagerPropertyApplicationQuestionsPanel({
   };
 
   const openAdd = useCallback(() => {
-    setFormMode("add");
-    setEditingTemplateId(null);
-    setFormOpen(true);
+    setEditorMode("add");
+    setEditingTemplate(null);
+    setEditorOpen(true);
   }, []);
 
   useEffect(() => {
@@ -173,64 +184,52 @@ export function ManagerPropertyApplicationQuestionsPanel({
     return () => onRegisterAddApplication?.(null);
   }, [onRegisterAddApplication, openAdd]);
 
-  const openEditQuestions = (template: PropertyApplicationTemplate) => {
-    setQuestionsVariant(template.formVariant);
-    setQuestionsModalOpen(true);
-  };
-
-  const openEditMetadata = (templateId: string) => {
-    setFormMode("edit");
-    setEditingTemplateId(templateId);
-    setFormOpen(true);
-  };
-
   const openApplicationPreview = (template: PropertyApplicationTemplate) => {
     const pid = listingId?.trim();
     if (!pid) {
       showToast("Publish this listing before previewing the application.");
       return;
     }
-    const href = propertyApplicationPreviewHref(pid, template);
-    window.open(href, "_blank", "noopener,noreferrer");
+    setPreviewTemplate(template);
+    setPreviewOpen(true);
   };
 
-  const handleFormSave = (nextTemplates: PropertyApplicationTemplate[]) => {
-    if (!persistTemplates(nextTemplates)) {
-      showToast("Could not save application.");
-      return false;
-    }
-    onUpdated();
-    if (formMode === "add") {
-      const added = nextTemplates[nextTemplates.length - 1];
-      if (added) {
-        setFormOpen(false);
-        setEditingTemplateId(null);
-        setQuestionsVariant(added.formVariant);
-        setQuestionsModalOpen(true);
-      }
-    }
-    return true;
+  const openEditApplication = (template: PropertyApplicationTemplate) => {
+    setEditorMode("edit");
+    setEditingTemplate(template);
+    setEditorOpen(true);
   };
 
-  const handleRemove = (templateId: string) => {
-    if (templates.length <= 1) {
-      showToast("Keep at least one application on this property.");
+  const handleDeleteTemplate = (templateId: string, label: string) => {
+    const target = templates.find((t) => t.id === templateId);
+    if (target && !isManagerOwnedApplicationTemplate(target)) {
+      showToast("Long-term and short-term defaults cannot be removed.");
       return;
     }
-    if (!window.confirm("Remove this application?")) return;
+    if (!window.confirm(`Remove "${label}"? This cannot be undone.`)) return;
     const next = removePropertyApplicationTemplate(templates, templateId);
     const persisted = persistRemoval(next);
     if (!persisted) {
       showToast("Could not remove application.");
       return;
     }
+    setEditorOpen(false);
+    setPreviewOpen(false);
+    setEditingTemplate(null);
+    setPreviewTemplate(null);
     onUpdated();
     showToast("Application removed.");
   };
 
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setEditingTemplate(null);
+  };
+
   if (!managerUserId || (!saveTarget && bulkPropertyIds.length === 0)) return null;
 
-  const editingTemplate = templates.find((t) => t.id === editingTemplateId) ?? null;
+  const previewListingId = listingId?.trim() ?? "";
+  const editorTitle = editorMode === "add" ? "Add application" : "Edit application";
 
   return (
     <>
@@ -238,24 +237,36 @@ export function ManagerPropertyApplicationQuestionsPanel({
         {templates.map((template) => (
           <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
             <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                className="text-left text-sm font-semibold text-foreground hover:underline"
-                data-attr={`application-rename-${template.id}`}
-                onClick={() => openEditMetadata(template.id)}
-              >
-                {template.label}
-              </button>
-              <p className="mt-0.5 text-xs text-muted">
-                {propertyApplicationTypeLabel(template.kind)} · {applicationQuestionsSummary(syncedSub, template)}
-              </p>
+              <div className="flex items-start gap-2">
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left text-sm font-semibold text-foreground hover:underline"
+                  data-attr={`application-rename-${template.id}`}
+                  onClick={() => openEditApplication(template)}
+                >
+                  {template.label}
+                </button>
+                {isManagerOwnedApplicationTemplate(template) ? (
+                  <button
+                    type="button"
+                    className={PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS}
+                    title={`Remove ${template.label}`}
+                    aria-label={`Remove ${template.label}`}
+                    data-attr={`application-remove-${template.id}`}
+                    onClick={() => handleDeleteTemplate(template.id, template.label)}
+                  >
+                    <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-0.5 text-xs text-muted">{applicationQuestionsSummary(syncedSub, template)}</p>
               {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
                 <p className="mt-0.5 text-xs text-muted">
                   Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
                 </p>
               ) : null}
             </div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <div className="flex shrink-0 flex-nowrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -263,28 +274,17 @@ export function ManagerPropertyApplicationQuestionsPanel({
                 data-attr={`application-view-${template.id}`}
                 onClick={() => openApplicationPreview(template)}
               >
-                View application
+                View
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                data-attr={`application-stay-open-${template.formVariant}`}
-                onClick={() => openEditQuestions(template)}
+                data-attr={`application-edit-${template.id}`}
+                onClick={() => openEditApplication(template)}
               >
                 Edit
               </Button>
-              {templates.length > 1 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                  data-attr={`application-remove-${template.id}`}
-                  onClick={() => handleRemove(template.id)}
-                >
-                  Remove
-                </Button>
-              ) : null}
             </div>
           </div>
         ))}
@@ -299,31 +299,75 @@ export function ManagerPropertyApplicationQuestionsPanel({
         />
       </div>
 
-      <PropertyApplicationFormModal
-        open={formOpen}
-        mode={formMode}
-        template={editingTemplate}
-        templates={templates}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingTemplateId(null);
-        }}
-        onSave={handleFormSave}
-      />
+      {editorOpen ? (
+        <ManagerApplicationQuestionsEditorModal
+          open
+          title={editorTitle}
+          sub={syncedSub}
+          saveTarget={saveTarget ?? undefined}
+          propertyIds={bulkPropertyIds.length > 0 ? bulkPropertyIds : undefined}
+          managerUserId={managerUserId}
+          initialVariant={editingTemplate?.formVariant ?? "standard"}
+          lockVariant={Boolean(editingTemplate)}
+          templateEditorMode={editorMode}
+          applicationTemplate={editingTemplate}
+          templates={templates}
+          onPersistSubmission={persistSubmission}
+          onClose={closeEditor}
+          onSaved={onUpdated}
+          showToast={showToast}
+        />
+      ) : null}
 
-      <ManagerApplicationQuestionsEditorModal
-        open={questionsModalOpen}
-        initialVariant={questionsVariant}
-        lockVariant
-        title="Edit application questions"
-        sub={syncedSub}
-        saveTarget={saveTarget ?? undefined}
-        propertyIds={bulkPropertyIds.length > 0 ? bulkPropertyIds : undefined}
-        managerUserId={managerUserId}
-        onClose={() => setQuestionsModalOpen(false)}
-        onSaved={onUpdated}
-        showToast={showToast}
-      />
+      <Modal
+        open={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewTemplate(null);
+        }}
+        title={previewTemplate ? `View · ${previewTemplate.label}` : "View"}
+        presentation="dialog"
+        dense
+        assistantStrip={false}
+        panelClassName="flex max-h-[min(90vh,56rem)] w-full max-w-5xl flex-col"
+        dataAttr="property-application-preview"
+      >
+        {previewOpen && previewTemplate ? (
+          <div className="mx-auto w-full max-w-5xl">
+            {previewTemplate.formVariant === "cosigner" ? (
+              <CosignerApplyFlow
+                key={previewTemplate.id}
+                embedded
+                previewMode
+                showToast={showToast}
+                applicationKind={previewTemplate.kind === "short-term" ? "short-term" : "long-term"}
+                onBack={() => {
+                  setPreviewOpen(false);
+                  setPreviewTemplate(null);
+                }}
+                onDone={() => {
+                  setPreviewOpen(false);
+                  setPreviewTemplate(null);
+                }}
+              />
+            ) : previewListingId ? (
+              <RentalApplicationWizard
+                key={`${previewListingId}-${previewTemplate.id}`}
+                showToast={showToast}
+                mode="manager"
+                layout="embedded"
+                linkedPropertyId={previewListingId}
+                linkedRentalType={previewTemplate.kind === "short-term" ? "short_term" : "standard"}
+                templatePreview
+                onManagerCancel={() => {
+                  setPreviewOpen(false);
+                  setPreviewTemplate(null);
+                }}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </>
   );
 }

@@ -481,6 +481,15 @@ export type ManagerListingSubmissionV1 = {
    * so the stored `shortTerm*` values apply verbatim.
    */
   shortTermApplicationConfigMode?: "standard" | "custom";
+  /** Manager-defined CO-SIGNER application questions (independent of signer forms). */
+  cosignerCustomApplicationFields?: ManagerCustomApplicationField[];
+  /** Built-in questions the manager removed from the CO-SIGNER application. */
+  cosignerDisabledStandardApplicationKeys?: string[];
+  /**
+   * How the CO-SIGNER application is configured. Absent / "standard" = PropLane's
+   * curated co-signer question set; "custom" = stored `cosigner*` values apply.
+   */
+  cosignerApplicationConfigMode?: "standard" | "custom";
   /**
    * How the lease document is produced for this property.
    * "standard"/absent = Axis generated lease (current behavior);

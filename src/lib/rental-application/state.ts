@@ -6,6 +6,7 @@ export function todayISO(): string {
 
 export function createInitialRentalWizardState(): RentalWizardFormState {
   return {
+    applicantRole: null,
     applyingAsGroup: null,
     groupRole: null,
     groupSize: "",

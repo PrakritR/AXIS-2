@@ -66,6 +66,10 @@ Automated tests: <commands + result>
 
 Do **not** use `/demo` as the only proof for production-like flows.
 
+For interactive debugging in Cursor (screenshots, console logs, live DOM), connect
+**Chrome DevTools MCP** — see
+[`docs/agents/cursor-chrome-devtools-mcp.md`](agents/cursor-chrome-devtools-mcp.md).
+
 ## Run e2e locally before you promote
 
 The `e2e` job in `.github/workflows/test.yml` is gated on
