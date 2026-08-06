@@ -27,6 +27,7 @@ import { readPortalApiError } from "@/lib/portal-api-error";
 import { InboxScheduledCard } from "@/components/portal/portal-inbox-ui";
 import { sendAutomationScheduledMessageNow } from "@/components/portal/portal-inbox-selection";
 import { threadScheduledItemFromAutomationMessage } from "@/lib/inbox-scheduled-thread";
+import { applyReminderTemplate, type ReminderTemplateParams } from "@/lib/payment-reminder-email";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
   applyReminderPreset,
@@ -273,70 +274,20 @@ export function ChargeRemindersModal({
     }
   };
 
+  const editingScheduled = editingMessage
+    ? threadScheduledItemFromAutomationMessage(editingMessage)
+    : null;
+
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
-      title={editingMessage ? "Scheduled message" : "Edit reminder"}
+      title="Edit reminder"
       dense
       assistantContext={`Edit reminder for ${chargeTitle}`}
       panelClassName="max-w-lg p-3 sm:p-4"
     >
-      {editingMessage ? (
-        (() => {
-          const scheduled = threadScheduledItemFromAutomationMessage(editingMessage);
-          return (
-        <div className="space-y-3">
-          <button
-            type="button"
-            className="text-xs font-semibold text-primary hover:underline"
-            onClick={() => setEditingMessage(null)}
-            data-attr="charge-reminders-back"
-          >
-            ← All scheduled messages
-          </button>
-          <InboxScheduledCard
-            key={editingMessage.id}
-            sendLabel={scheduled.sendLabel}
-            subject={editingMessage.subject}
-            body={editingMessage.body}
-            meta={scheduled.meta}
-            source="automation"
-            editable={editingMessage.status === "scheduled"}
-            busy={detailBusy}
-            expanded
-            onToggleExpand={() => setEditingMessage(null)}
-            onCancel={() => void toggleCancelled(editingMessage, true).then(() => setEditingMessage(null))}
-            onSendNow={() => {
-              if (editingMessage.status !== "scheduled") return;
-              setDetailBusy(true);
-              void sendAutomationScheduledMessageNow(editingMessage.id)
-                .then(() => {
-                  showToast("Reminder sent.");
-                  onMessageSaved?.();
-                  setEditingMessage(null);
-                })
-                .catch((e) => {
-                  showToast(e instanceof Error ? e.message : "Could not send reminder.");
-                })
-                .finally(() => setDetailBusy(false));
-            }}
-            onSaveEdit={
-              editingMessage.status === "scheduled"
-                ? async (next) => {
-                    await patchScheduledMessage(editingMessage.id, {
-                      customSubject: next.subject,
-                      customBody: next.body,
-                    });
-                    onMessageSaved?.();
-                  }
-                : undefined
-            }
-          />
-        </div>
-          );
-        })()
-      ) : (
       <div className="space-y-4">
         <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
           <p className="text-sm font-semibold text-foreground">{chargeTitle}</p>
@@ -382,7 +333,7 @@ export function ChargeRemindersModal({
                         </span>
                       </div>
                       <span className="mt-1 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
-                      <span className="mt-0.5 block text-[11px] font-medium text-primary">Tap to view message</span>
+                      <span className="mt-0.5 block text-[11px] font-medium text-primary">Update message</span>
                     </button>
                     <Button
                       type="button"
@@ -415,8 +366,57 @@ export function ChargeRemindersModal({
           </button>
         ) : null}
       </div>
-      )}
     </Modal>
+    <Modal
+      open={open && Boolean(editingMessage)}
+      onClose={() => setEditingMessage(null)}
+      title="Scheduled message"
+      dense
+      assistantStrip={false}
+      panelClassName="max-w-lg p-3 sm:p-4"
+    >
+      {editingMessage && editingScheduled ? (
+        <InboxScheduledCard
+          key={editingMessage.id}
+          sendLabel={editingScheduled.sendLabel}
+          subject={editingMessage.subject}
+          body={editingMessage.body}
+          meta={editingScheduled.meta}
+          source="automation"
+          editable={editingMessage.status === "scheduled"}
+          busy={detailBusy}
+          expanded
+          onToggleExpand={() => setEditingMessage(null)}
+          onCancel={() => void toggleCancelled(editingMessage, true).then(() => setEditingMessage(null))}
+          onSendNow={() => {
+            if (editingMessage.status !== "scheduled") return;
+            setDetailBusy(true);
+            void sendAutomationScheduledMessageNow(editingMessage.id)
+              .then(() => {
+                showToast("Reminder sent.");
+                onMessageSaved?.();
+                setEditingMessage(null);
+              })
+              .catch((e) => {
+                showToast(e instanceof Error ? e.message : "Could not send reminder.");
+              })
+              .finally(() => setDetailBusy(false));
+          }}
+          onSaveEdit={
+            editingMessage.status === "scheduled"
+              ? async (next) => {
+                  await patchScheduledMessage(editingMessage.id, {
+                    customSubject: next.subject,
+                    customBody: next.body,
+                  });
+                  onMessageSaved?.();
+                }
+              : undefined
+          }
+        />
+      ) : null}
+    </Modal>
+    </>
   );
 }
 
@@ -624,6 +624,16 @@ export type PaymentAutomationSettingsHandle = {
 };
 
 const PORTAL_FIELD_LABEL_CLASS = "text-xs font-semibold text-muted";
+
+const REMINDER_TEMPLATE_PREVIEW_PARAMS: ReminderTemplateParams = {
+  residentName: "Alex Resident",
+  chargeTitle: "April rent",
+  balanceDue: "$1,200.00",
+  propertyLabel: "Sample property",
+  managerName: "Your team",
+  dueDateLabel: "Apr 15, 2026",
+  daysUntilDue: 3,
+};
 
 const REMINDER_PRESET_OPTIONS = [
   ...PAYMENT_REMINDER_PRESETS.map((preset) => ({
@@ -834,6 +844,7 @@ function PaymentAutomationSettingsForm({
   const [visibilityDaysInput, setVisibilityDaysInput] = useState(String(initialSettings.scheduleVisibilityDays));
   const [applyToExisting, setApplyToExisting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
 
   useEffect(() => {
     setDraft(initialSettings);
@@ -946,7 +957,35 @@ function PaymentAutomationSettingsForm({
     </div>
   );
 
+  const templatePreviewSubject = applyReminderTemplate(
+    draft.templates.preDue.subject,
+    REMINDER_TEMPLATE_PREVIEW_PARAMS,
+  );
+  const templatePreviewBody = applyReminderTemplate(
+    draft.templates.preDue.body,
+    REMINDER_TEMPLATE_PREVIEW_PARAMS,
+  );
+
+  const paymentsMessageBlock = compact && variant === "payments" ? (
+    <div className="rounded-xl border border-border bg-card px-3 py-2.5">
+      <p className={PORTAL_FIELD_LABEL_CLASS}>Message</p>
+      <p className="mt-1 truncate text-sm font-medium text-foreground">
+        {templatePreviewSubject || "Payment reminder"}
+      </p>
+      <p className="mt-0.5 line-clamp-2 text-xs text-muted">{templatePreviewBody}</p>
+      <button
+        type="button"
+        className="mt-2 text-xs font-semibold text-primary hover:underline"
+        onClick={() => setMessageModalOpen(true)}
+        data-attr="payment-reminder-update-message"
+      >
+        Update message
+      </button>
+    </div>
+  ) : null;
+
   return (
+    <>
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
       {layout === "card" ? (
         <div>
@@ -956,7 +995,10 @@ function PaymentAutomationSettingsForm({
       ) : null}
 
       {compact ? (
-        paymentsScheduleBlock
+        <>
+          {paymentsScheduleBlock}
+          {paymentsMessageBlock}
+        </>
       ) : (
         <>
           <ReminderPresetDropdown activePreset={activePreset} busy={busy} onSelect={selectPreset} />
@@ -1086,6 +1128,45 @@ function PaymentAutomationSettingsForm({
         </>
       ) : null}
     </div>
+    {compact && variant === "payments" ? (
+      <Modal
+        open={messageModalOpen}
+        onClose={() => setMessageModalOpen(false)}
+        title="Update message"
+        dense
+        assistantStrip={false}
+        panelClassName="max-w-lg p-3 sm:p-4"
+      >
+        <div className="space-y-3">
+          <InboxScheduledCard
+            sendLabel="Preview"
+            subject={draft.templates.preDue.subject}
+            body={draft.templates.preDue.body}
+            meta="Placeholders like {residentName} and {dueDate} are filled when the reminder sends."
+            source="automation"
+            editable
+            expanded
+            showSendActions={false}
+            onToggleExpand={() => setMessageModalOpen(false)}
+            onCancel={() => setMessageModalOpen(false)}
+            onSendNow={() => {}}
+            onSaveEdit={async (next) => {
+              setDraft({
+                ...draft,
+                templates: {
+                  ...draft.templates,
+                  preDue: { subject: next.subject, body: next.body },
+                },
+              });
+            }}
+          />
+          <p className="text-[11px] text-muted">
+            Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{daysUntilDuePhrase}"}, {"{propertyLine}"}, {"{managerName}"}, {"{residentPortalLogin}"}
+          </p>
+        </div>
+      </Modal>
+    ) : null}
+    </>
   );
 }
 

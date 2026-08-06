@@ -1,8 +1,12 @@
 "use client";
 
 import {
+  Children,
   Fragment,
+  cloneElement,
+  isValidElement,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -1525,6 +1529,7 @@ export function InboxScheduledCard({
   onCancel,
   onSendNow,
   onSaveEdit,
+  showSendActions = true,
 }: {
   sendLabel: string;
   subject: string;
@@ -1540,6 +1545,8 @@ export function InboxScheduledCard({
   onSendNow: () => void;
   /** Inline save of edited subject/body. Present only when `editable`. */
   onSaveEdit?: (next: { subject: string; body: string }) => void | Promise<void>;
+  /** When false, hides Send now / Cancel send (template editors). */
+  showSendActions?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftSubject, setDraftSubject] = useState(subject);
@@ -1659,26 +1666,30 @@ export function InboxScheduledCard({
               </p>
               {meta ? <p className="mt-1 text-[11px] text-muted">{meta}</p> : null}
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 min-h-0 px-3 text-[12px]"
-                  onClick={onSendNow}
-                  disabled={busy}
-                  data-attr="inbox-scheduled-send-now"
-                >
-                  Send now
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 min-h-0 px-3 text-[12px] text-muted hover:text-danger"
-                  onClick={onCancel}
-                  disabled={busy}
-                  data-attr="inbox-scheduled-cancel"
-                >
-                  Cancel send
-                </Button>
+                {showSendActions ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 min-h-0 px-3 text-[12px]"
+                      onClick={onSendNow}
+                      disabled={busy}
+                      data-attr="inbox-scheduled-send-now"
+                    >
+                      Send now
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 min-h-0 px-3 text-[12px] text-muted hover:text-danger"
+                      onClick={onCancel}
+                      disabled={busy}
+                      data-attr="inbox-scheduled-cancel"
+                    >
+                      Cancel send
+                    </Button>
+                  </>
+                ) : null}
                 {editable && onSaveEdit ? (
                   <Button
                     type="button"
@@ -1717,7 +1728,27 @@ export function InboxScheduledThreadList({
   children: ReactNode;
 }) {
   const [modalOpen, setModalOpen] = useState(!defaultCollapsed);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
   const wrap = (inner: ReactNode) => <div className="space-y-1 pt-1">{inner}</div>;
+
+  const childArray = useMemo(() => Children.toArray(children), [children]);
+
+  const listChildren = useMemo(() => {
+    if (count <= 2) return children;
+    return childArray.map((child) => {
+      if (!isValidElement(child)) return child;
+      const key = String(child.key ?? "");
+      return cloneElement(child as React.ReactElement<React.ComponentProps<typeof InboxScheduledCard>>, {
+        expanded: false,
+        onToggleExpand: () => setDetailKey(key),
+      });
+    });
+  }, [childArray, children, count]);
+
+  const detailChild = useMemo(() => {
+    if (!detailKey) return null;
+    return childArray.find((child) => isValidElement(child) && String(child.key) === detailKey) ?? null;
+  }, [childArray, detailKey]);
 
   if (count <= 2) return wrap(children);
 
@@ -1749,15 +1780,33 @@ export function InboxScheduledThreadList({
       </div>
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setDetailKey(null);
+        }}
         title="Scheduled messages"
         dense
         assistantStrip={false}
         panelClassName="max-w-lg p-3 sm:p-4"
       >
         <div className="max-h-[min(70vh,28rem)] space-y-2 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
-          {children}
+          {listChildren}
         </div>
+      </Modal>
+      <Modal
+        open={Boolean(detailChild)}
+        onClose={() => setDetailKey(null)}
+        title="Scheduled message"
+        dense
+        assistantStrip={false}
+        panelClassName="max-w-lg p-3 sm:p-4"
+      >
+        {isValidElement(detailChild)
+          ? cloneElement(detailChild as React.ReactElement<React.ComponentProps<typeof InboxScheduledCard>>, {
+              expanded: true,
+              onToggleExpand: () => setDetailKey(null),
+            })
+          : null}
       </Modal>
     </>
   );

@@ -8,12 +8,15 @@ const portalSource = (filename: string) =>
 describe("scheduled message modal layout", () => {
   it("opens manager scheduled-message detail in a dialog with the inline scheduled card", () => {
     const source = portalSource("manager-inbox-schedule-panel.tsx");
+    const threadList = portalSource("portal-inbox-ui.tsx");
 
     expect(source).toContain('title="Scheduled message"');
     expect(source).toContain("InboxScheduledCard");
     expect(source).toContain('aria-haspopup="dialog"');
     expect(source).not.toContain("PORTAL_TABLE_DETAIL_ROW");
     expect(source).not.toContain("PortalTableExpandChevron");
+    expect(threadList).toContain("InboxScheduledThreadList");
+    expect(threadList).toContain('title="Scheduled messages"');
   });
 
   it("uses the responsive modal for admin schedule creation and editing", () => {
