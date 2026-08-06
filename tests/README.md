@@ -92,7 +92,7 @@ npm run test:cleanup -- <testRunId>
 
 ### Canonical demo portal accounts (`@test.proplane.local`)
 
-`npm run test:seed` provisions the sandbox accounts below **and** writes the dev/test catalog it needs: **20 live listings** on `manager@` (five canonical demo homes plus fifteen `mgr-scale-*` portfolio rows) and the browse catalog on `manager2@`. The primary manager is seeded as **Business** tier (`manager_purchases.tier = business`, 20-property cap). The **shared** portfolio seed (`src/lib/demo/canonical-demo-portfolio-db.ts`, the one production provisioning runs) is what adds **no portfolio rows** — it sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose, since there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch, and `AGENTS.md` → "Property ownership" for why those five ids are reclaimed to `manager@` before any other seed cleanup step.
+`npm run test:seed` provisions the sandbox accounts below **and** writes the dev/test catalog it needs: **20 live listings** on `manager@` (five canonical demo homes plus fifteen `mgr-scale-*` portfolio rows) and the browse catalog on `manager2@`. Every approved catalog applicant gets a **lease pipeline row**, **household charges**, and (when fully signed) a **recurring rent profile**. The primary E2E resident (`resident@`) is seeded as an approved applicant on **Lakeview Studio** with a **signed lease** and payable charges. Default **promotion flyer + listing blurb** rows are seeded for each live `manager@` property. The primary manager is seeded as **Business** tier (`manager_purchases.tier = business`, 20-property cap). The **shared** portfolio seed (`src/lib/demo/canonical-demo-portfolio-db.ts`, the one production provisioning runs) is what adds **no portfolio rows** — it sources `buildDemoIdleSnapshot()` (`src/lib/demo/demo-guided-data.ts`), which ships empty on purpose, since there is no static fictional dataset any more (`src/lib/demo/demo-data.ts` was deleted). See [`docs/agents/demo-sandbox.md`](../docs/agents/demo-sandbox.md) for the two-source model and the mirror switch, and `AGENTS.md` → "Property ownership" for why those five ids are reclaimed to `manager@` before any other seed cleanup step.
 
 | Role | Email | Password (default) |
 |------|-------|---------------------|
@@ -102,6 +102,20 @@ npm run test:cleanup -- <testRunId>
 | Resident | `resident@test.proplane.local` | `TestResident123!` |
 | Vendor | `vendor@test.proplane.local` | `TestVendor123!` |
 | All portals | `testeverything@test.proplane.local` | `TestEverything123!` |
+
+**Workflow applicant residents** (manager@test portfolio — applications, leases, charges at varied pipeline stages):
+
+| Pattern | Password | Example |
+|---------|----------|---------|
+| `{first}.{last}.workflow@test.proplane.local` | `123Password$` | `marcus.chen.workflow@test.proplane.local` |
+
+**Browse-catalog applicant residents** (manager2@test properties):
+
+| Pattern | Password | Example |
+|---------|----------|---------|
+| `{first}.{last}.e2e@test.proplane.local` | `123Password$` | `maya.chen.e2e@test.proplane.local` |
+
+- **`resident@test`** — primary E2E account: approved application on **Lakeview Studio**, **signed lease**, move-in charges (deposit/first month paid), current **rent** charge pending.
 
 - **Signed-in portal** (`/portal`, `/resident`, `/vendor`) reads and writes these rows in the test Supabase project.
 - **`/demo`** loads the same data read-only via `/api/demo/portal-snapshot` (changes in demo stay in the browser; a refresh re-seeds from the mirror; portal edits persist to the DB and show up in demo — never the reverse). That mirror is currently switched OFF at `DEMO_PORTAL_MIRROR_ENABLED` (`src/lib/demo/demo-mirror-flag.ts`), so `/demo` renders empty states regardless of what these accounts hold.

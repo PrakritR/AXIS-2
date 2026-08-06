@@ -50,6 +50,12 @@ export function defaultPromotionTextEntryId(propertyId: string): string {
   return `${propertyId.trim()}${DEFAULT_PROMOTION_TEXT_SEED_SUFFIX}`;
 }
 
+/** System-seeded flyer / listing blurb — auto-refreshes from listing facts; not user-deletable. */
+export function isSystemOwnedPromotionEntryId(entryId: string): boolean {
+  const id = entryId.trim();
+  return id.endsWith(DEFAULT_PROMOTION_FLYER_SEED_SUFFIX) || id.endsWith(DEFAULT_PROMOTION_TEXT_SEED_SUFFIX);
+}
+
 function defaultPromotionContact(managerContact?: string): string {
   const email = managerContact?.trim() || PUBLIC_LEASING_EMAIL;
   return `${email} · ${PUBLIC_SUPPORT_PHONE_DISPLAY}`;

@@ -12,6 +12,10 @@
  * test.proplane.local), carries a full listingSubmission (v:1), and has at least one
  * application (manager_application_records) and one lease
  * (portal_lease_pipeline_records) in its pipeline — no orphaned properties.
+ * Approved applicants also receive household charges and signed leases get
+ * recurring rent profiles. The primary E2E resident (resident@test) is one of
+ * those applicants. Default promotion flyer + text rows are seeded per live
+ * manager@test property.
  * Superseded rows from older seeds (seedwf_ / mgr- prefixes, ANY status) owned
  * by the test managers are deleted — a non-live row like a `review` loft still
  * reaches the Calendar property picker (propertyRowsToSnapshot puts review rows
@@ -39,6 +43,12 @@ import {
 } from "./reclaim-canonical-property-owners.mjs";
 import { ensureManagerStripeCustomer, getSeedStripeClient } from "./ensure-stripe-test-customer.mjs";
 import { buildSeedLeaseHtml } from "./build-seed-lease-html.mjs";
+import {
+  buildSeedChargesForPerson,
+  buildSeedRentProfileForPerson,
+  householdChargeDbRow,
+  rentProfileDbRow,
+} from "./build-seed-catalog-charges.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1213,6 +1223,20 @@ try {
   });
   await must(supabase.from("manager_property_records").upsert(propertyRows, { onConflict: "id" }), "manager_property_records(catalog)");
 
+  const promotionScript = path.join(__dirname, "seed-manager-promotion-defaults.ts");
+  const promotionResult = spawnSync("npx", ["--yes", "tsx", promotionScript], {
+    cwd: projectRoot,
+    env: {
+      ...process.env,
+      SEED_MANAGER_USER_ID: managerUserId,
+      SEED_MANAGER_EMAIL: managerEmail,
+    },
+    stdio: "inherit",
+  });
+  if (promotionResult.status !== 0) {
+    throw new Error(`seed-manager-promotion-defaults failed (exit ${promotionResult.status ?? "unknown"})`);
+  }
+
   // Tour calendar: open availability slots, confirmed tours, and pending requests
   // for manager2's browse catalog and manager@test's demo portfolio.
   const manager2TourProperties = catalog
@@ -1248,6 +1272,18 @@ try {
   // mix of passed vs needs-manual-review and the manual screening flow is
   // demonstrable. Everyone else gets a clear (passed) report.
   const people = [
+    // Primary E2E resident (resident@test) — full approved application, signed lease, charges.
+    {
+      axisId: residentAxisId,
+      first: "Test",
+      last: "Resident",
+      propId: "mgr-demo-lakeview",
+      roomId: "room-1",
+      bucket: "approved",
+      leaseStage: "signed",
+      income: 102000,
+      primaryE2e: true,
+    },
     // manager@test workflow residents — full applications + leases across pipeline stages
     { axisId: "AXIS-DEMMARCUSC", first: "Marcus", last: "Chen", propId: "mgr-demo-emerald", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 115000 },
     { axisId: "AXIS-DEMPRIYAS", first: "Priya", last: "Sharma", propId: "mgr-demo-cascade", roomId: "room-3", bucket: "approved", leaseStage: "manager", income: 108000 },
@@ -1281,7 +1317,9 @@ try {
       ...p,
       index: i,
       name: `${p.first} ${p.last}`,
-      email: `${p.first}.${p.last}.${suffix}@test.proplane.local`.toLowerCase(),
+      email: p.primaryE2e
+        ? residentEmail
+        : `${p.first}.${p.last}.${suffix}@test.proplane.local`.toLowerCase(),
       prop,
       room: roomDef,
       rent: roomDef.rent,
@@ -1430,6 +1468,24 @@ try {
 
   // Resident accounts for every seeded applicant (approved + pending + rejected).
   for (const p of people) {
+    if (p.primaryE2e) {
+      p.residentUserId = residentUserId;
+      await must(
+        supabase.from("profiles").upsert(
+          {
+            id: residentUserId,
+            email: residentEmail,
+            role: "resident",
+            manager_id: residentAxisId,
+            full_name: PRIMARY_RESIDENT_NAME,
+            application_approved: true,
+          },
+          { onConflict: "id" },
+        ),
+        `profiles(${residentEmail})`,
+      );
+      continue;
+    }
     await provisionSeedResidentAccount(p);
   }
 
@@ -1610,6 +1666,29 @@ try {
     supabase.from("portal_lease_pipeline_records").upsert(leaseRows, { onConflict: "id" }),
     "portal_lease_pipeline_records(catalog)",
   );
+
+  const leaseEndIso = isoDate(daysFromNow(375));
+  const moveInDueLabel = isoDate(daysFromNow(10));
+  const chargeRows = [];
+  const rentProfileRows = [];
+  for (const p of approvedPeople) {
+    const charges = buildSeedChargesForPerson(p, { now: NOW, moveInDueLabel });
+    chargeRows.push(...charges.map(householdChargeDbRow));
+    const profile = buildSeedRentProfileForPerson(p, { now: NOW, leaseEndIso });
+    if (profile) rentProfileRows.push(rentProfileDbRow(profile));
+  }
+  if (chargeRows.length) {
+    await must(
+      supabase.from("portal_household_charge_records").upsert(chargeRows, { onConflict: "id" }),
+      "portal_household_charge_records(catalog)",
+    );
+  }
+  if (rentProfileRows.length) {
+    await must(
+      supabase.from("portal_recurring_rent_profile_records").upsert(rentProfileRows, { onConflict: "id" }),
+      "portal_recurring_rent_profile_records(catalog)",
+    );
+  }
 
   // Canonical auth inboxes must never be auto-provisioned as residents — a stray
   // application row keyed by a manager business id (e.g. PROPLANE-…) can list
@@ -2091,6 +2170,8 @@ try {
       catalogProperties: catalog.map((p) => p.id),
       catalogApplications: people.length,
       catalogLeases: leaseRows.length,
+      catalogCharges: chargeRows.length,
+      catalogRentProfiles: rentProfileRows.length,
       cleanedStaleProperties: staleIds,
       cleanedDanglingCalendarEvents: danglingEventIds,
       prunedAccounts,

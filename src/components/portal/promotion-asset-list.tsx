@@ -1,28 +1,48 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
-import { type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import {
-  PORTAL_MOBILE_CARD_CLASS,
-  PortalDataTableEmpty,
-} from "@/components/portal/portal-data-table";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+  PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS,
+  PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS,
+} from "@/components/portal/portal-property-detail-section";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import {
   promotionAssetKindIndices,
   promotionAssetListTitle,
   type PromotionAsset,
 } from "@/lib/promotion-assets";
 
+function promotionKindLabel(kind: PromotionAsset["kind"]): string {
+  if (kind === "flyer") return "Flyer";
+  if (kind === "text") return "Text";
+  return "Upload";
+}
+
+function rowTitle(asset: PromotionAsset, indexWithinKind: number): string {
+  const stored =
+    asset.kind === "flyer"
+      ? (asset.flyerEntry?.title ?? "")
+      : asset.kind === "upload"
+        ? (asset.uploadEntry?.title ?? "")
+        : (asset.textEntry?.title ?? "");
+  return stored.trim() || promotionAssetListTitle(asset, indexWithinKind);
+}
+
 export function PromotionAssetStack({
   assets,
-  onOpen,
-  renderHeaderActions,
+  onView,
+  onEdit,
   emptyMessage = "No promotions yet.",
+  showPropertyLabel = true,
+  variant = "card",
 }: {
   assets: PromotionAsset[];
-  onOpen: (asset: PromotionAsset) => void;
-  renderHeaderActions?: (asset: PromotionAsset, indexWithinKind: number) => ReactNode;
+  onView: (asset: PromotionAsset) => void;
+  onEdit?: (asset: PromotionAsset) => void;
   emptyMessage?: string;
+  /** When false (property Promotion tab), the property name is omitted from the subtitle. */
+  showPropertyLabel?: boolean;
+  variant?: "card" | "plain";
 }) {
   if (assets.length === 0) {
     return <PortalDataTableEmpty message={emptyMessage} icon="data" />;
@@ -30,48 +50,58 @@ export function PromotionAssetStack({
 
   const kindIndices = promotionAssetKindIndices(assets);
 
-  return (
-    <div className="space-y-2">
-      {assets.map((asset) => {
+  const rows = assets.map((asset) => {
         const indexWithinKind = kindIndices.get(asset.id) ?? 0;
-        const fallbackTitle = promotionAssetListTitle(asset, indexWithinKind);
-        const storedTitle =
-          asset.kind === "flyer"
-            ? (asset.flyerEntry?.title ?? "")
-            : asset.kind === "upload"
-              ? (asset.uploadEntry?.title ?? "")
-              : (asset.textEntry?.title ?? "");
-        const displayTitle = storedTitle.trim() || fallbackTitle;
+        const title = rowTitle(asset, indexWithinKind);
+        const canEdit = Boolean(onEdit) && (asset.kind === "flyer" || asset.kind === "text");
+        const subtitleParts = [
+          showPropertyLabel ? asset.propertyLabel : null,
+          promotionKindLabel(asset.kind),
+          asset.subtitle,
+        ].filter(Boolean);
 
         return (
-          <div key={asset.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <div className="flex items-center gap-2">
+          <div key={asset.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
+            <div className="min-w-0 flex-1">
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                onClick={() => onOpen(asset)}
+                className="text-left text-sm font-semibold text-foreground hover:underline"
                 data-attr="promotion-row"
+                onClick={() => onView(asset)}
               >
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                  {displayTitle}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.25} aria-hidden />
+                {title}
               </button>
-              {renderHeaderActions ? (
-                <div
-                  data-portal-row-ignore
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
+              <p className="mt-0.5 text-xs text-muted">{subtitleParts.join(" · ")}</p>
+            </div>
+            <div className="flex shrink-0 flex-nowrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                data-attr={`promotion-row-view-${asset.id}`}
+                onClick={() => onView(asset)}
+              >
+                View
+              </Button>
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
+                  data-attr={`promotion-row-edit-${asset.id}`}
+                  onClick={() => onEdit?.(asset)}
                 >
-                  <PortalSectionActionRow className="shrink-0 sm:w-auto">
-                    {renderHeaderActions(asset, indexWithinKind)}
-                  </PortalSectionActionRow>
-                </div>
+                  Edit
+                </Button>
               ) : null}
             </div>
           </div>
         );
-      })}
-    </div>
-  );
+      });
+
+  if (variant === "plain") {
+    return <>{rows}</>;
+  }
+
+  return <div className="divide-y divide-border rounded-xl border border-border bg-card">{rows}</div>;
 }
