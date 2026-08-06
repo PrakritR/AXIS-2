@@ -176,7 +176,7 @@ export function ManagerEntryPlanChooser() {
 
   if (guarding) {
     return (
-      <AuthCard wide>
+      <AuthCard wide variant="blend">
         <p className="py-8 text-center text-sm text-muted">Loading your account…</p>
       </AuthCard>
     );
@@ -184,7 +184,7 @@ export function ManagerEntryPlanChooser() {
 
   if (checkoutClientSecret) {
     return (
-      <AuthCard wide>
+      <AuthCard wide variant="blend">
         <div className="auth-plan-picker auth-plan-picker-wide">
           <AuthPageHeader
             eyebrow="Manager"
@@ -216,7 +216,7 @@ export function ManagerEntryPlanChooser() {
   }
 
   return (
-    <AuthCard wide>
+    <AuthCard wide variant="blend">
       <div className="auth-plan-picker auth-plan-picker-wide">
         <AuthPageHeader
           eyebrow="Manager"
