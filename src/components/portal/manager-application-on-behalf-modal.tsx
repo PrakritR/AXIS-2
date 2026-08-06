@@ -126,7 +126,7 @@ function initManagerApplicationDraft(input: {
   const inProgress = readManagerApplicationRows().filter(
     (row) =>
       isInProgressApplicationRow(row) &&
-      (row.email?.trim().toLowerCase() === email || row.residentEmail?.trim().toLowerCase() === email),
+      row.email?.trim().toLowerCase() === email,
   );
   const existing = findInProgressRowForTarget(inProgress, { propertyId: input.propertyId });
 

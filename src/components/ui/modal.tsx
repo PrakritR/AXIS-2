@@ -102,6 +102,7 @@ export type ModalShellProps = {
   ariaLabelledBy?: string;
   ariaDescribedBy?: string;
   ariaBusy?: boolean;
+  dataAttr?: string;
 };
 
 /** Radix Dialog (desktop) + Vaul drawer (mobile) shell for custom modal layouts. */
@@ -124,6 +125,7 @@ export function ModalShell({
   ariaLabelledBy,
   ariaDescribedBy,
   ariaBusy,
+  dataAttr,
 }: ModalShellProps) {
   const isClient = useIsClient();
   const autoPresentation = useModalPresentation();
@@ -151,6 +153,7 @@ export function ModalShell({
     "aria-labelledby": ariaLabelledBy,
     "aria-describedby": ariaDescribedBy,
     "aria-busy": ariaBusy,
+    "data-attr": dataAttr,
   };
 
   if (resolvedPresentation === "drawer") {
@@ -382,6 +385,7 @@ export function Modal({
   fullPage = false,
   /** When false, modal body does not scroll — children own internal overflow. */
   scrollableContent = true,
+  dataAttr,
 }: {
   open: boolean;
   title: ReactNode;
@@ -401,6 +405,7 @@ export function Modal({
   fullScreenMobile?: boolean;
   fullPage?: boolean;
   scrollableContent?: boolean;
+  dataAttr?: string;
 }) {
   const presentation = useModalPresentation();
   const portalAssistant = usePortalAssistantConfig();
@@ -450,6 +455,7 @@ export function Modal({
         presentation="drawer"
         showDrawerHandle={!useFullViewport}
         ariaDescribedBy={description ? "modal-description" : undefined}
+        dataAttr={dataAttr}
         panelClassName={cn(
           useFullViewport
             ? cn(dense ? "px-4" : "px-5", panelClassName, MODAL_FULL_PAGE_PANEL_CLASS)
@@ -480,6 +486,7 @@ export function Modal({
       stackClassName={fullPage ? MODAL_FULL_PAGE_STACK_CLASS : stackClassName}
       centerClassName={fullPage ? MODAL_FULL_PAGE_CENTER_CLASS : undefined}
       ariaDescribedBy={description ? "modal-description" : undefined}
+      dataAttr={dataAttr}
       panelClassName={cn(
         fullPage
           ? cn(dense ? "px-4" : "px-5", panelClassName, MODAL_FULL_PAGE_PANEL_CLASS)

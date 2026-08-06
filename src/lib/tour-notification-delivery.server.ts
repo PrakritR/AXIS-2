@@ -2,7 +2,7 @@
  * Server-side tour notification delivery (Resend email + Axis inbox records).
  */
 
-import { resolveAppOrigin } from "@/lib/app-url";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
@@ -203,7 +203,10 @@ export async function notifyManagerTourRequest(
   const tourEndIso = window?.end || textField(inquiry as Record<string, unknown>, "proposedEnd");
   const propertyId = textField(inquiry as Record<string, unknown>, "propertyId");
   const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
-  const origin = resolveAppOrigin(req);
+  // Notification links must always use PropLane's canonical host. Building
+  // them from the incoming request leaked the legacy Axis domain whenever a
+  // prospect booked through that still-supported production alias.
+  const origin = resolveEmailLinkBaseUrl();
   const ctx = buildTourNotificationContext({
     origin,
     guestName: textField(inquiry as Record<string, unknown>, "name") || "Guest",
@@ -300,7 +303,7 @@ export async function notifyTenantTourRequestReceived(
   const tourEndIso = window?.end || textField(inquiry as Record<string, unknown>, "proposedEnd");
   const propertyId = textField(inquiry as Record<string, unknown>, "propertyId");
   const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
-  const origin = resolveAppOrigin(req);
+  const origin = resolveEmailLinkBaseUrl();
   const ctx = buildTourNotificationContext({
     origin,
     guestName: textField(inquiry as Record<string, unknown>, "name") || "Guest",
@@ -370,7 +373,7 @@ async function notifyTenantTourChanged(
 
   const propertyId = textField(row, "propertyId");
   const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
-  const origin = resolveAppOrigin(req);
+  const origin = resolveEmailLinkBaseUrl();
   const ctx = buildTourNotificationContext({
     origin,
     guestName: textField(row, "name") || "Guest",
@@ -476,7 +479,7 @@ export async function notifyTenantTourConfirmed(
 
   const propertyId = textField(inquiry as Record<string, unknown>, "propertyId");
   const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
-  const origin = resolveAppOrigin(req);
+  const origin = resolveEmailLinkBaseUrl();
   const ctx = buildTourNotificationContext({
     origin,
     guestName: textField(inquiry as Record<string, unknown>, "name") || "Guest",

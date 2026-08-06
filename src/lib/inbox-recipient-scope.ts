@@ -166,6 +166,43 @@ function isVendorRole(role: string | null): boolean {
   return String(role ?? "").trim().toLowerCase() === "vendor";
 }
 
+/**
+ * Managers connected to a resident through a booked tour. A signed-in prospect
+ * can be legitimately connected before they have an approved application or
+ * lease, so excluding this record made the manager disappear from Compose.
+ */
+async function managerIdsFromResidentTours(db: SupabaseClient, residentUserId: string): Promise<string[]> {
+  if (!residentUserId.trim()) return [];
+  try {
+    const { data } = await db
+      .from("resident_tour_links")
+      .select("manager_user_id")
+      .eq("resident_user_id", residentUserId);
+    return [
+      ...new Set(
+        (data ?? [])
+          .map((row) => String(row.manager_user_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+  } catch {
+    // The link table was introduced after the inbox. Keep existing residency
+    // messaging available during a partially applied migration.
+    return [];
+  }
+}
+
+async function managerIdsConnectedToResident(
+  db: SupabaseClient,
+  sender: { id: string; email: string },
+): Promise<string[]> {
+  const [residentManagerIds, tourManagerIds] = await Promise.all([
+    managerIdsOwningResident(db, sender.email),
+    managerIdsFromResidentTours(db, sender.id),
+  ]);
+  return [...new Set([...residentManagerIds, ...tourManagerIds])];
+}
+
 function partition<T>(items: T[], keep: boolean[]): { allowed: T[]; blocked: T[] } {
   const allowed: T[] = [];
   const blocked: T[] = [];
@@ -249,7 +286,7 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
   }
 
   // Resident (and any other non-staff) sender.
-  const managerIds = await managerIdsOwningResident(db, senderEmail);
+  const managerIds = await managerIdsConnectedToResident(db, { id: sender.id, email: senderEmail });
   const managerIdSet = new Set(managerIds);
   const allowedEmails = await coManagerEmailsForManagers(db, managerIds);
   // Same authoritative co-manager source as the manager/vendor branches.
@@ -363,7 +400,7 @@ export async function listEligibleInboxContacts(
   }
 
   // Resident sender → their own manager(s) plus those managers' co-managers.
-  const managerIds = await managerIdsOwningResident(db, senderEmail);
+  const managerIds = await managerIdsConnectedToResident(db, { id: sender.id, email: senderEmail });
   if (managerIds.length > 0) {
     const { data: managers } = await db
       .from("profiles")

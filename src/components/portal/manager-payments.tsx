@@ -34,6 +34,7 @@ import {
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import { ManagerPaymentSetupModal } from "@/components/portal/manager-payment-setup-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
@@ -586,7 +587,9 @@ export function ManagerPayments({
 
   const hasIncomingManualCandidates = direction === "incoming" && counts.pending + counts.overdue > 0;
   const checkingManualPaymentsRef = useRef(checkingManualPayments);
-  checkingManualPaymentsRef.current = checkingManualPayments;
+  useEffect(() => {
+    checkingManualPaymentsRef.current = checkingManualPayments;
+  }, [checkingManualPayments]);
 
   useEffect(() => {
     if (!hasIncomingManualCandidates || isDemoModeActive()) return;
