@@ -1004,7 +1004,7 @@ function PaymentAutomationSettingsForm({
           disabled={busy}
         />
         <p className="mt-1 text-[11px] text-muted">
-          Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{propertyLine}"}, {"{managerName}"}, {"{residentPortalLogin}"}
+          Placeholders: {"{residentName}"}, {"{chargeTitle}"}, {"{balanceDue}"}, {"{dueDate}"}, {"{daysUntilDue}"}, {"{daysUntilDuePhrase}"}, {"{propertyLine}"}, {"{managerName}"}, {"{residentPortalLogin}"}
         </p>
       </div>
       ) : null}
