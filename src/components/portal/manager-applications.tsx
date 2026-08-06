@@ -32,8 +32,11 @@ import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DETAIL_BTN,
   PortalDataTableEmpty,
+  PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
+import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { DestinationNav } from "@/components/ui/destination-nav";
@@ -213,7 +216,7 @@ export function runApplicationPdfDownload(
 function ApplicationPdfDownloadButton({
   row,
   label = "Download PDF",
-  className = "h-8 rounded-full px-4 text-xs",
+  className = PORTAL_DETAIL_BTN,
 }: {
   row: DemoApplicantRow;
   label?: string;
@@ -234,39 +237,50 @@ function ApplicationPdfDownloadButton({
 }
 
 /**
- * Inline application preview — rendered from the application answers already on
- * the row (same HTML as the Documents tab). Download PDF still uses the API route.
+ * Inline application preview — HTML from saved answers, or the official PDF via
+ * the manager applications route (Documents tab + resident detail).
  */
 export function ApplicationDocumentPreview({
   row,
   collapsible = true,
   showDownload = true,
   bareCanvas = false,
+  variant = "html",
+  downloadPlacement = "bottom",
 }: {
   row: DemoApplicantRow;
   collapsible?: boolean;
   showDownload?: boolean;
   /** Flat on the portal page canvas — no white document card chrome. */
   bareCanvas?: boolean;
+  /** `pdf` renders the server-built application PDF; `html` uses saved answers. */
+  variant?: "html" | "pdf";
+  /** Where the download action sits relative to the preview frame. */
+  downloadPlacement?: "top" | "bottom";
 }) {
   const demo = isDemoModeActive();
   const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
+  const [demoPdfUrl, setDemoPdfUrl] = useState<string | null>(null);
+  const [demoPdfLoading, setDemoPdfLoading] = useState(false);
   const previewKey = [
     row.id,
     row.bucket,
     applicationRoomLabel(row),
     row.application?.hasCosigner === "yes" ? "cosigner" : "",
     row.application?.rentalType ?? "",
+    variant,
   ].join("|");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when the row changes
     setCosignerSubmissions([]);
-    if (row.application?.hasCosigner !== "yes") return;
+    if (variant === "html" && row.application?.hasCosigner !== "yes") return;
+    if (variant === "pdf" && row.application?.hasCosigner !== "yes" && !demo) return;
     if (demo) {
       setCosignerSubmissions(readCosignerSubmissionsForSignerAppId(row.id));
       return;
     }
+    if (row.application?.hasCosigner !== "yes") return;
     let cancelled = false;
     void fetchCosignerSubmissionsForSignerAppId(row.id)
       .catch(() => readCosignerSubmissionsForSignerAppId(row.id))
@@ -276,22 +290,58 @@ export function ApplicationDocumentPreview({
     return () => {
       cancelled = true;
     };
-  }, [previewKey, demo, row.application?.hasCosigner, row.id]);
+  }, [previewKey, demo, row.application?.hasCosigner, row.id, variant]);
+
+  useEffect(() => {
+    if (variant !== "pdf" || !demo || !row.application) {
+      setDemoPdfUrl(null);
+      setDemoPdfLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDemoPdfLoading(true);
+    setDemoPdfUrl(null);
+    void (async () => {
+      const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+      const url = await buildDemoApplicationPdfDataUrl(
+        row,
+        applicationRoomLabel(row) || undefined,
+        cosignerSubmissions,
+      );
+      if (!cancelled) {
+        setDemoPdfUrl(url);
+        setDemoPdfLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cosignerSubmissions, demo, previewKey, row, variant]);
 
   const previewHtml = useMemo(
     () =>
-      buildApplicationHtml(row, {
-        roomLabel: applicationRoomLabel(row) || undefined,
-        cosignerSubmissions,
-      }),
-    [row, cosignerSubmissions, previewKey],
+      variant === "html"
+        ? buildApplicationHtml(row, {
+            roomLabel: applicationRoomLabel(row) || undefined,
+            cosignerSubmissions,
+          })
+        : null,
+    [row, cosignerSubmissions, previewKey, variant],
   );
 
   const downloadButton = showDownload ? (
     <ApplicationPdfDownloadButton row={row} />
   ) : null;
 
+  const downloadActions =
+    downloadButton == null ? null : downloadPlacement === "bottom" ? (
+      <PortalTableDetailActions placement="bottom">{downloadButton}</PortalTableDetailActions>
+    ) : (
+      <div className="flex flex-nowrap items-center justify-start gap-2">{downloadButton}</div>
+    );
+
   const iframeHtml = useMemo(() => {
+    if (!previewHtml) return null;
     if (!bareCanvas) return previewHtml;
     return previewHtml.replace(
       "html, body { background: #fff; }",
@@ -299,30 +349,65 @@ export function ApplicationDocumentPreview({
     );
   }, [bareCanvas, previewHtml]);
 
-  const previewBody = (
-    <div className={bareCanvas ? "w-full" : "overflow-hidden border-t border-border bg-white"}>
-      <iframe
-        key={previewKey}
-        srcDoc={iframeHtml}
-        title="Application document"
-        sandbox="allow-same-origin"
-        loading="lazy"
+  const pdfSrc = variant === "pdf" && !demo ? applicationPdfHref(row, { inline: true }) : demoPdfUrl;
+
+  const previewBody =
+    variant === "pdf" ? (
+      <div
         className={
           bareCanvas
-            ? "h-[min(70vh,720px)] w-full border-0 bg-transparent"
-            : "h-[min(52vh,420px)] w-full border-0 bg-white"
+            ? "w-full overflow-hidden rounded-2xl border border-border bg-card"
+            : "overflow-hidden rounded-2xl border border-border bg-card"
         }
-      />
-    </div>
-  );
+        data-testid="application-pdf-preview"
+      >
+        {!row.application ? (
+          <p className="px-4 py-8 text-center text-sm text-muted">Application details are not available for this record.</p>
+        ) : demo && demoPdfLoading ? (
+          <p className="px-4 py-8 text-center text-sm text-muted">Loading application PDF…</p>
+        ) : pdfSrc ? (
+          pdfSrc.startsWith("data:") ? (
+            <UploadedLeasePdfPreview
+              dataUrl={pdfSrc}
+              title={`Application ${row.id}`}
+              fileName={applicationPdfFilename(row)}
+            />
+          ) : (
+            <iframe
+              key={previewKey}
+              title={`Application ${row.id}`}
+              src={pdfSrc}
+              className="h-[min(80vh,1200px)] w-full border-0 bg-card"
+              data-testid="manager-application-pdf"
+            />
+          )
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-muted">Could not load the application PDF.</p>
+        )}
+      </div>
+    ) : (
+      <div className={bareCanvas ? "w-full" : "overflow-hidden border-t border-border bg-white"}>
+        <iframe
+          key={previewKey}
+          srcDoc={iframeHtml ?? undefined}
+          title="Application document"
+          sandbox="allow-same-origin"
+          loading="lazy"
+          className={
+            bareCanvas
+              ? "h-[min(70vh,720px)] w-full border-0 bg-transparent"
+              : "h-[min(52vh,420px)] w-full border-0 bg-white"
+          }
+        />
+      </div>
+    );
 
   if (!collapsible) {
     return (
       <div className={bareCanvas ? "space-y-3" : "mt-4 space-y-3"}>
-        {downloadButton ? (
-          <div className="flex flex-nowrap items-center justify-start gap-2">{downloadButton}</div>
-        ) : null}
+        {downloadPlacement === "top" ? downloadActions : null}
         {previewBody}
+        {downloadPlacement === "bottom" ? downloadActions : null}
       </div>
     );
   }

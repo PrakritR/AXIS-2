@@ -52,7 +52,6 @@ import {
   filterChargesForPayMethod,
   isPayableHouseholdCharge,
   isStripeResidentPayMethod,
-  manualContactForCharges,
   residentManualPaymentMethodLabel,
   residentPaymentMethodsForSurface,
   type ResidentManualPaymentChannel,
@@ -70,6 +69,7 @@ import {
   residentChargeDetailHref,
   residentChargesListHref,
 } from "@/lib/portal-detail-routes";
+import { ResidentManualPaymentPanel } from "@/components/portal/resident-manual-payment-panel";
 
 
 type PayConfirmState = {
@@ -118,6 +118,10 @@ function centsFromLabel(label: string): number {
 
 function checkoutKey(chargeIds: string[], paymentMethod: ResidentAxisPaymentMethod): string {
   return `${[...chargeIds].sort().join(",")}:${paymentMethod}`;
+}
+
+function isManualResidentPayMethod(method: ResidentPayMethod): method is ResidentManualPaymentChannel {
+  return method === "zelle" || method === "venmo";
 }
 
 function formatUsd(cents: number): string {
@@ -181,7 +185,6 @@ export function ResidentPaymentsPanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
   const [payConfirm, setPayConfirm] = useState<PayConfirmState | null>(null);
-  const [manualSentConfirmed, setManualSentConfirmed] = useState(false);
   const [reportingManualPayment, setReportingManualPayment] = useState(false);
   const [tick, setTick] = useState(0);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
@@ -593,9 +596,16 @@ export function ResidentPaymentsPanel({
   const openPayConfirm = useCallback((chargeIds: string[], method: ResidentPayMethod) => {
     const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
     if (ids.length === 0) return;
-    setManualSentConfirmed(false);
     setPayConfirm({ chargeIds: ids, method });
   }, []);
+
+  const handleManualPaymentPaid = useCallback(() => {
+    setPayConfirm(null);
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    refresh();
+    showToast("Payment received.");
+  }, [refresh, showToast]);
 
   const confirmStripePayment = useCallback(async () => {
     if (!payConfirm || !isStripeResidentPayMethod(payConfirm.method)) return;
@@ -605,28 +615,28 @@ export function ResidentPaymentsPanel({
     await loadCheckout(ids, payConfirm.method);
   }, [loadCheckout, payConfirm]);
 
-  const confirmManualPayment = useCallback(async () => {
-    if (!payConfirm || isStripeResidentPayMethod(payConfirm.method)) return;
-    if (!manualSentConfirmed) {
-      showToast("Confirm that you sent the payment.");
-      return;
-    }
-    setReportingManualPayment(true);
-    try {
-      const result = await reportResidentManualPayment(payConfirm.chargeIds, payConfirm.method);
-      if (!result.ok) {
-        showToast(result.error);
-        return;
+  const reportManualPaymentForCharges = useCallback(
+    async (chargeIds: string[], channel: ResidentManualPaymentChannel) => {
+      setReportingManualPayment(true);
+      try {
+        const result = await reportResidentManualPayment(chargeIds, channel);
+        if (!result.ok) {
+          showToast(result.error);
+          return;
+        }
+        refresh();
+        showToast("Thanks. We'll keep checking for your payment and your manager can verify it too.");
+      } finally {
+        setReportingManualPayment(false);
       }
-      setPayConfirm(null);
-      setSelectedIds(new Set());
-      setExpandedId(null);
-      refresh();
-      showToast("Thanks. Your manager will verify and mark this paid when they receive it.");
-    } finally {
-      setReportingManualPayment(false);
-    }
-  }, [manualSentConfirmed, payConfirm, refresh, showToast]);
+    },
+    [refresh, showToast],
+  );
+
+  const reportManualPaymentSent = useCallback(async () => {
+    if (!payConfirm || isStripeResidentPayMethod(payConfirm.method)) return;
+    await reportManualPaymentForCharges(payConfirm.chargeIds, payConfirm.method);
+  }, [payConfirm, reportManualPaymentForCharges]);
 
   const toggleSelected = (chargeId: string) => {
     setSelectedIds((prev) => {
@@ -717,6 +727,27 @@ export function ResidentPaymentsPanel({
 
   const renderCheckoutBlock = (label: string) => {
     if (!checkout) return null;
+    const scopeCharges = checkout.chargeIds
+      .map((id) => charges.find((c) => c.id === id))
+      .filter((c): c is HouseholdCharge => Boolean(c));
+    const manualTotalCents = scopeCharges.reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0);
+    if (isManualResidentPayMethod(paymentMethod)) {
+      return (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-foreground">{label}</p>
+          {renderPaymentMethodPicker(scopeCharges)}
+          <ResidentManualPaymentPanel
+            chargeIds={checkout.chargeIds}
+            charges={scopeCharges}
+            channel={paymentMethod}
+            totalLabel={formatUsd(manualTotalCents)}
+            onPaid={handleManualPaymentPaid}
+            onReportSent={() => void reportManualPaymentForCharges(checkout.chargeIds, paymentMethod)}
+            reporting={reportingManualPayment}
+          />
+        </div>
+      );
+    }
     return (
       <div className="space-y-3">
         <p className="text-sm font-semibold text-foreground">{label}</p>
@@ -779,17 +810,30 @@ export function ResidentPaymentsPanel({
             </p>
           </div>
         ) : null}
-        {row.manualPaymentReportedAt && row.manualPaymentChannel ? (
-          <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]`}>
-            <p className="text-xs font-semibold">
-              {residentManualPaymentMethodLabel(row.manualPaymentChannel)} payment reported
-            </p>
-            <p className="mt-1 text-sm leading-relaxed">
-              You reported sending this via {residentManualPaymentMethodLabel(row.manualPaymentChannel)} on{" "}
-              {safeFormatDateTime(row.manualPaymentReportedAt)}. Your manager will verify and mark it paid when they
-              receive it.
-            </p>
-          </div>
+        {row.manualPaymentReportedAt && row.manualPaymentChannel && row.status === "pending" ? (
+          <>
+            <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} bg-[var(--status-pending-bg)] text-[var(--status-pending-fg)]`}>
+              <p className="text-xs font-semibold">
+                {residentManualPaymentMethodLabel(row.manualPaymentChannel)} payment reported
+              </p>
+              <p className="mt-1 text-sm leading-relaxed">
+                You reported sending this on {safeFormatDateTime(row.manualPaymentReportedAt)}. We&apos;ll keep checking
+                for your payment.
+              </p>
+            </div>
+            <div className="mb-4">
+              <ResidentManualPaymentPanel
+                chargeIds={[row.id]}
+                charges={[row]}
+                channel={row.manualPaymentChannel}
+                totalLabel={row.balanceLabel}
+                onPaid={handleManualPaymentPaid}
+                onReportSent={() => void reportManualPaymentForCharges([row.id], row.manualPaymentChannel!)}
+                reporting={reportingManualPayment}
+                showReportSent={false}
+              />
+            </div>
+          </>
         ) : null}
         {row.paymentReference && (row.zelleContactSnapshot || row.venmoContactSnapshot) ? (
           <div className={`${PORTAL_INLINE_STATUS_NOTICE_CLASS} border-primary/20 bg-primary/5`}>
@@ -845,19 +889,39 @@ export function ResidentPaymentsPanel({
           </div>
         ) : null}
         {payable && rowPayIds.length > 0 ? (
-          <div className="mb-4">
-            {achPayable && checkout && checkout.chargeIds.includes(row.id) ? (
+          <div className="mb-4 space-y-4">
+            {achPayable && checkout && checkout.chargeIds.includes(row.id) && isStripeResidentPayMethod(paymentMethod) ? (
               renderCheckoutBlock(
                 checkout.chargeIds.length > 1
                   ? `Pay ${checkout.chargeIds.length} selected charges`
                   : `Pay online (${residentPaymentMethodLabel(checkout.paymentMethod)})`,
               )
             ) : (
-              renderPaymentMethodPicker(
-                rowPayIds
-                  .map((id) => charges.find((c) => c.id === id))
-                  .filter((c): c is HouseholdCharge => Boolean(c)),
-              )
+              <>
+                {renderPaymentMethodPicker(
+                  rowPayIds
+                    .map((id) => charges.find((c) => c.id === id))
+                    .filter((c): c is HouseholdCharge => Boolean(c)),
+                )}
+                {isManualResidentPayMethod(paymentMethod) && !row.manualPaymentReportedAt ? (
+                  <ResidentManualPaymentPanel
+                    chargeIds={rowPayIds}
+                    charges={rowPayIds
+                      .map((id) => charges.find((c) => c.id === id))
+                      .filter((c): c is HouseholdCharge => Boolean(c))}
+                    channel={paymentMethod}
+                    totalLabel={formatUsd(
+                      rowPayIds.reduce((sum, id) => {
+                        const charge = charges.find((c) => c.id === id);
+                        return sum + (charge ? centsFromLabel(charge.balanceLabel) : 0);
+                      }, 0),
+                    )}
+                    onPaid={handleManualPaymentPaid}
+                    onReportSent={() => void reportManualPaymentForCharges(rowPayIds, paymentMethod)}
+                    reporting={reportingManualPayment}
+                  />
+                ) : null}
+              </>
             )}
           </div>
         ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot && !achPayable ? (
@@ -1193,12 +1257,41 @@ export function ResidentPaymentsPanel({
           {checkoutMethodOptions.length > 0 ? (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">Use at checkout</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2 space-y-2">
                 {checkoutMethodOptions.map((option) => {
                   const selected = paymentMethod === option.id;
-                  const feeLabel = option.id === "zelle" || option.id === "venmo"
-                    ? "No added fees"
+                  const isManual = option.id === "zelle" || option.id === "venmo";
+                  const feeLabel = isManual
+                    ? "No added fees · send then tap Check payment"
                     : residentProcessingFeeDisplayLabel(option.id as ResidentAxisPaymentMethod);
+                  if (isManual) {
+                    return (
+                      <label
+                        key={option.id}
+                        className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition ${
+                          selected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                            : "border-border bg-card hover:border-primary/30"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="resident-checkout-method"
+                          className="mt-1 h-4 w-4 shrink-0 border-border text-primary"
+                          checked={selected}
+                          data-attr={`resident-payments-checkout-method-${option.id}`}
+                          onChange={() => {
+                            setPaymentMethod(option.id);
+                            setCheckout(null);
+                          }}
+                        />
+                        <span>
+                          <span className="text-sm font-semibold text-foreground">{option.title}</span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-muted">{feeLabel}</span>
+                        </span>
+                      </label>
+                    );
+                  }
                   return (
                     <button
                       key={option.id}
@@ -1208,7 +1301,7 @@ export function ResidentPaymentsPanel({
                         setPaymentMethod(option.id);
                         setCheckout(null);
                       }}
-                      className={`rounded-xl border px-3 py-3 text-left transition ${
+                      className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                         selected
                           ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                           : "border-border bg-card hover:border-primary/30"
@@ -1242,12 +1335,13 @@ export function ResidentPaymentsPanel({
       onClose={() => {
         if (reportingManualPayment) return;
         setPayConfirm(null);
-        setManualSentConfirmed(false);
       }}
       title={
         payConfirm && isStripeResidentPayMethod(payConfirm.method)
           ? "Continue to Stripe?"
-          : "Confirm payment sent"
+          : payConfirm && isManualResidentPayMethod(payConfirm.method)
+            ? `Pay with ${residentManualPaymentMethodLabel(payConfirm.method)}`
+            : "Confirm payment"
       }
       panelClassName="max-w-lg"
     >
@@ -1280,72 +1374,39 @@ export function ResidentPaymentsPanel({
                 <p className="mt-1.5 text-xs text-muted">PropLane covers payment processing.</p>
               </div>
             </>
-          ) : (
-            <>
-              <p className="text-sm leading-relaxed text-muted">
-                Please send <span className="font-semibold text-foreground">{confirmTotalLabel}</span> via{" "}
-                {residentManualPaymentMethodLabel(payConfirm.method)}. Your manager will verify the payment and mark
-                {confirmCharges.length === 1 ? " this charge" : " these charges"} paid when they receive it. The charge
-                {confirmCharges.length === 1 ? " stays" : "s stay"} pending until then.
-              </p>
-              {manualContactForCharges(confirmCharges, payConfirm.method) ? (
-                <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Send to</p>
-                  <p className="mt-1 font-mono font-semibold text-foreground">
-                    {manualContactForCharges(confirmCharges, payConfirm.method)}
-                  </p>
-                </div>
-              ) : null}
-              <label className="flex cursor-pointer gap-3 rounded-2xl border border-border bg-card p-4">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 shrink-0 rounded border-border"
-                  checked={manualSentConfirmed}
-                  onChange={(e) => setManualSentConfirmed(e.target.checked)}
-                />
-                <span className="text-sm leading-relaxed text-foreground">
-                  I confirm I already sent payment via {residentManualPaymentMethodLabel(payConfirm.method)}.
-                </span>
-              </label>
-            </>
-          )}
+          ) : payConfirm && isManualResidentPayMethod(payConfirm.method) ? (
+            <ResidentManualPaymentPanel
+              chargeIds={payConfirm.chargeIds}
+              charges={confirmCharges}
+              channel={payConfirm.method}
+              totalLabel={confirmTotalLabel}
+              onPaid={handleManualPaymentPaid}
+              onReportSent={() => void reportManualPaymentSent()}
+              reporting={reportingManualPayment}
+            />
+          ) : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               className="rounded-full"
               disabled={reportingManualPayment}
-              onClick={() => {
-                setPayConfirm(null);
-                setManualSentConfirmed(false);
-              }}
+              onClick={() => setPayConfirm(null)}
             >
-              Cancel
+              {isStripeResidentPayMethod(payConfirm.method) ? "Cancel" : "Close"}
             </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={reportingManualPayment || (!isStripeResidentPayMethod(payConfirm.method) && !manualSentConfirmed)}
-              data-attr={
-                isStripeResidentPayMethod(payConfirm.method)
-                  ? "resident-payments-confirm-stripe"
-                  : "resident-payments-confirm-manual"
-              }
-              onClick={() => {
-                if (isStripeResidentPayMethod(payConfirm.method)) {
-                  void confirmStripePayment();
-                } else {
-                  void confirmManualPayment();
-                }
-              }}
-            >
-              {reportingManualPayment
-                ? "Saving…"
-                : isStripeResidentPayMethod(payConfirm.method)
-                  ? "Continue to Stripe"
-                  : "I sent payment"}
-            </Button>
+            {isStripeResidentPayMethod(payConfirm.method) ? (
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                disabled={reportingManualPayment}
+                data-attr="resident-payments-confirm-stripe"
+                onClick={() => void confirmStripePayment()}
+              >
+                Continue to Stripe
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}

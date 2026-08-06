@@ -63,7 +63,7 @@ export function ApplicationReviewLauncherRow({
 
       {showApplication ? (
         <section>
-          <ApplicationDocumentPreview row={row} collapsible={false} showDownload={showDownload} bareCanvas={bareCanvas} />
+          <ApplicationDocumentPreview row={row} collapsible={false} showDownload={showDownload} variant="pdf" downloadPlacement="bottom" bareCanvas={bareCanvas} />
           <ApplicationVerificationPhotos row={row} />
         </section>
       ) : (

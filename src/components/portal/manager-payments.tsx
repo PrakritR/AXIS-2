@@ -1,7 +1,7 @@
 "use client";
 
-import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { useEffect, useMemo, useState } from "react";
+import { MANAGER_MANUAL_PAYMENT_AUTO_CHECK_MS } from "@/lib/resident-manual-payment-client";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenuItem,
@@ -550,7 +550,7 @@ export function ManagerPayments({
     />
   );
 
-  const runCheckManualPayments = () => {
+  const runCheckManualPayments = useCallback((options?: { silent?: boolean }) => {
     void (async () => {
       setCheckingManualPayments(true);
       try {
@@ -560,24 +560,42 @@ export function ManagerPayments({
           error?: string;
         };
         if (!response.ok) {
-          showToast(body.error ?? "Could not check payments. Link Gmail in Payment setup first.");
+          if (!options?.silent) {
+            showToast(body.error ?? "Could not check payments. Link Gmail in Payment setup first.");
+          }
           return;
         }
         const result = body.result;
-        showToast(
-          result
-            ? `Checked ${result.scanned ?? 0} receipt${result.scanned === 1 ? "" : "s"}; ${result.markedPaid ?? 0} confirmed.${result.ambiguous ? ` ${result.ambiguous} ambiguous — left pending.` : ""}`
-            : "Payment check complete.",
-        );
+        const markedPaid = result?.markedPaid ?? 0;
+        if (!options?.silent || markedPaid > 0) {
+          showToast(
+            result
+              ? `Checked ${result.scanned ?? 0} receipt${result.scanned === 1 ? "" : "s"}; ${markedPaid} confirmed.${result.ambiguous ? ` ${result.ambiguous} ambiguous — left pending.` : ""}`
+              : "Payment check complete.",
+          );
+        }
         await syncHouseholdChargesFromServer(true);
         setHcTick((n) => n + 1);
       } catch {
-        showToast("Could not check payments.");
+        if (!options?.silent) showToast("Could not check payments.");
       } finally {
         setCheckingManualPayments(false);
       }
     })();
-  };
+  }, [showToast]);
+
+  const hasIncomingManualCandidates = direction === "incoming" && counts.pending + counts.overdue > 0;
+  const checkingManualPaymentsRef = useRef(checkingManualPayments);
+  checkingManualPaymentsRef.current = checkingManualPayments;
+
+  useEffect(() => {
+    if (!hasIncomingManualCandidates || isDemoModeActive()) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || checkingManualPaymentsRef.current) return;
+      runCheckManualPayments({ silent: true });
+    }, MANAGER_MANUAL_PAYMENT_AUTO_CHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [hasIncomingManualCandidates, runCheckManualPayments]);
 
   const paymentsAddButton = (
     <Button
@@ -646,7 +664,7 @@ export function ManagerPayments({
                     className={PORTAL_HEADER_ACTION_BTN}
                     data-attr="manager-check-manual-payments"
                     disabled={checkingManualPayments}
-                    onClick={runCheckManualPayments}
+                    onClick={() => runCheckManualPayments()}
                   >
                     {checkingManualPayments ? "Checking…" : "Check payments"}
                   </Button>
@@ -655,7 +673,7 @@ export function ManagerPayments({
                   <DropdownMenuItem
                     data-attr="manager-check-manual-payments-menu"
                     disabled={checkingManualPayments}
-                    onSelect={runCheckManualPayments}
+                    onSelect={() => runCheckManualPayments()}
                   >
                     {checkingManualPayments ? "Checking payments…" : "Check payments"}
                   </DropdownMenuItem>

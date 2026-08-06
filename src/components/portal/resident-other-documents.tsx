@@ -16,7 +16,8 @@ import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
   PortalTableDetailActions,
-  PortalTableInlineExpand,} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  PORTAL_DETAIL_BTN,} from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -68,6 +69,7 @@ export function DocumentInlineViewer({
   downloadAttr = "resident-document-download",
   /** When true, omits outer margin and uses the portal table detail action strip. */
   embedded = false,
+  actionsPlacement = "top",
 }: {
   /** Used for iframe/img accessibility only — not shown in the UI. */
   title: string;
@@ -85,6 +87,8 @@ export function DocumentInlineViewer({
   /** data-attr override for the download button. */
   downloadAttr?: string;
   embedded?: boolean;
+  /** Toolbar above (`top`) or download strip below (`bottom`) the preview. */
+  actionsPlacement?: "top" | "bottom";
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -92,28 +96,43 @@ export function DocumentInlineViewer({
   }, [title, src, srcDoc]);
 
   const downloadButton = (
-    <Button type="button" className={embedded ? undefined : "rounded-full"} data-attr={downloadAttr} onClick={onDownload}>
+    <Button
+      type="button"
+      variant="outline"
+      className={embedded ? PORTAL_DETAIL_BTN : "rounded-full"}
+      data-attr={downloadAttr}
+      onClick={onDownload}
+    >
       {downloadLabel}
     </Button>
   );
 
-  return (
-    <section ref={sectionRef} className={embedded ? undefined : "mt-6"}>
-      {embedded ? (
-        <PortalTableDetailActions placement="top">
+  const actionStrip =
+    downloadButton || extraActions ? (
+      embedded ? (
+        <PortalTableDetailActions placement={actionsPlacement}>
           {downloadButton}
           {extraActions}
         </PortalTableDetailActions>
       ) : (
         <div
           data-portal-detail-actions=""
-          className="mb-6 flex flex-wrap items-center gap-3 border-b border-border py-6 sm:gap-4"
+          className={
+            actionsPlacement === "bottom"
+              ? "mt-6 flex flex-wrap items-center gap-3 border-t border-border py-6 sm:gap-4"
+              : "mb-6 flex flex-wrap items-center gap-3 border-b border-border py-6 sm:gap-4"
+          }
         >
           {downloadButton}
           {extraActions}
         </div>
-      )}
-      <div className={`overflow-hidden rounded-2xl border border-border bg-white shadow-sm${embedded ? " mt-4" : ""}`}>
+      )
+    ) : null;
+
+  return (
+    <section ref={sectionRef} className={embedded ? undefined : "mt-6"}>
+      {actionsPlacement === "top" ? actionStrip : null}
+      <div className={`overflow-hidden rounded-2xl border border-border bg-white shadow-sm${embedded && actionsPlacement === "top" ? " mt-4" : ""}`}>
         {children ? (
           children
         ) : src && isPdfDocumentSrc(src) ? (
@@ -135,6 +154,7 @@ export function DocumentInlineViewer({
           </div>
         )}
       </div>
+      {actionsPlacement === "bottom" ? actionStrip : null}
     </section>
   );
 }

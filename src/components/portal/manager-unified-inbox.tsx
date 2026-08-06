@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  clearCommunicationThreadUrl,
+  selectCommunicationThreadUrl,
+} from "@/lib/portal-communication-nav";
 import { ManagerInbox, type ManagerInboxHandle } from "@/components/portal/manager-inbox";
 import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal/manager-sms-panel";
 import { DestinationNav } from "@/components/ui/destination-nav";
@@ -121,6 +124,7 @@ export function ManagerUnifiedInbox({
   commBase,
   listSegment: listSegmentProp = "active",
   routeThreadId,
+  onRouteThreadChange,
   threadFilters,
   filterContacts,
   listSort = "recent",
@@ -138,6 +142,7 @@ export function ManagerUnifiedInbox({
   listSegment?: InboxListSegment;
   /** Deep-linked thread id from `/communication/{segment}/{threadId}`. */
   routeThreadId?: string;
+  onRouteThreadChange?: (threadId: string | undefined) => void;
   threadFilters?: CommunicationThreadFilters;
   filterContacts?: InboxScopedContact[];
   /** Conversation list order — default is most recent activity. */
@@ -154,7 +159,6 @@ export function ManagerUnifiedInbox({
   /** `external` — segment tabs + search live in {@link PortalListControlStack}. */
   listChrome?: "internal" | "external";
 }) {
-  const navigate = usePortalNavigate();
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
   );
@@ -185,7 +189,7 @@ export function ManagerUnifiedInbox({
   }, []);
 
   useEffect(() => {
-    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY).then((rows) => {
       setEmailThreads(rows);
     });
   }, []);
@@ -480,7 +484,11 @@ export function ManagerUnifiedInbox({
               onOpen={() => {
                 setSelectedKey(row.key);
                 setMobileThreadOpen(true);
-                navigate(threadDetailHref(row.threadId));
+                onRouteThreadChange?.(row.threadId);
+                const href = threadDetailHref(row.threadId);
+                if (routeThreadId !== row.threadId) {
+                  selectCommunicationThreadUrl(href, { replaceExisting: Boolean(routeThreadId) });
+                }
               }}
             />
           ))
@@ -508,7 +516,9 @@ export function ManagerUnifiedInbox({
           if (!id) {
             setSelectedKey(null);
             setMobileThreadOpen(false);
-            navigate(threadListHref());
+            onRouteThreadChange?.(undefined);
+            clearCommunicationThreadUrl(threadListHref());
+            return;
           }
         }}
       />
@@ -524,7 +534,8 @@ export function ManagerUnifiedInbox({
           if (!id) {
             setSelectedKey(null);
             setMobileThreadOpen(false);
-            navigate(threadListHref());
+            onRouteThreadChange?.(undefined);
+            clearCommunicationThreadUrl(threadListHref());
           }
         }}
         onUnreadCountChange={onSmsUnreadCountChange}
