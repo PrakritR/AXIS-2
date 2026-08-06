@@ -2,7 +2,6 @@
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
-import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
@@ -27,24 +26,17 @@ function FinishContent() {
         const body = (await res.json()) as {
           error?: string;
           redirectTo?: string;
-          existingAccount?: boolean;
-          calendarConnectPath?: string | null;
+          provisioned?: boolean;
         };
         if (!res.ok) {
           router.replace(`/auth/create-account?role=manager&message=${encodeURIComponent(body.error ?? "Could not create manager account.")}`);
-          return;
-        }
-        if (body.calendarConnectPath?.startsWith("/")) {
-          window.location.replace(body.calendarConnectPath);
           return;
         }
         router.replace(
           nativeAwarePath(
             body.redirectTo?.startsWith("/")
               ? body.redirectTo
-              : body.existingAccount
-                ? "/portal/dashboard"
-                : MANAGER_PRICING_ENTRY_PATH,
+              : "/portal/dashboard",
           ),
         );
       } catch {

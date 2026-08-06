@@ -1,7 +1,6 @@
 import { track } from "@/lib/analytics/posthog";
 import { completeManagerSignupFromOAuth } from "@/lib/auth/complete-manager-signup";
-import { resolveRequestOrigin } from "@/lib/app-url";
-import { finalizeManagerGoogleCalendarLink } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -17,10 +16,6 @@ export async function POST(req: Request) {
     const {
       data: { user },
     } = await supabaseAuth.auth.getUser();
-    const {
-      data: { session },
-    } = await supabaseAuth.auth.getSession();
-
     if (!user?.id || !user.email) {
       return NextResponse.json({ error: "Sign in with Google first." }, { status: 401 });
     }
@@ -32,20 +27,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    const calendar = await finalizeManagerGoogleCalendarLink(
-      service,
-      user,
-      session,
-      resolveRequestOrigin(req),
-      { intent: "manager" },
-    );
-
     track("manager_signup_oauth_completed", user.id, { manager_id: result.managerId ?? "" });
     return NextResponse.json({
       ok: true,
       managerId: result.managerId,
-      calendarConnected: calendar.connected,
-      calendarConnectPath: calendar.connectPath,
+      redirectTo: MANAGER_GOOGLE_SERVICES_PATH,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Signup failed";

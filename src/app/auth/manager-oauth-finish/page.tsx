@@ -2,7 +2,7 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -46,8 +46,7 @@ function ManagerOauthFinishContent() {
         let body: {
           error?: string;
           managerId?: string;
-          calendarConnected?: boolean;
-          calendarConnectPath?: string | null;
+          redirectTo?: string;
         } = {};
         for (let attempt = 0; attempt < 2; attempt++) {
           res = await fetch("/api/auth/manager-signup-oauth", {
@@ -64,12 +63,9 @@ function ManagerOauthFinishContent() {
           return;
         }
 
-        if (body.calendarConnectPath?.startsWith("/")) {
-          window.location.replace(body.calendarConnectPath);
-          return;
-        }
-
-        window.location.replace(portalDashboardPath("manager"));
+        window.location.replace(
+          body.redirectTo?.startsWith("/") ? body.redirectTo : MANAGER_GOOGLE_SERVICES_PATH,
+        );
       } catch {
         setErrorText("Could not finish account setup. Try again.");
       }

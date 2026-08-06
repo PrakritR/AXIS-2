@@ -501,3 +501,12 @@ campaign rejected on resubmit:
 - Privacy (`/privacy`) and Terms (`/tos`) must name **PropLane** at
   **prop-lane.space** (they do) — the consent page and the campaign both link to
   them; a brand/domain mismatch invites a second rejection.
+# Shared Claw line retired (August 6, 2026)
+
+The shared Claw phone and transport are disabled. Environment flags cannot
+reactivate them, new managers are never stamped with the shared number, and the
+cleanup migration removes the legacy number from existing profiles. Public
+listing SMS uses the listing manager's verified phone; managed messaging uses
+the manager's own registered Twilio number. The Claw sections below are retained
+only as historical implementation notes while the old modules and tables are
+removed incrementally.

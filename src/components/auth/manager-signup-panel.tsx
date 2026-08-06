@@ -99,7 +99,7 @@ export function ManagerSignupPanel({
         return;
       }
       if (result.status === "portal") {
-        window.location.replace("/portal/dashboard");
+        window.location.replace(result.redirectTo);
         return;
       }
       if (result.status === "error") {

@@ -100,19 +100,19 @@ const FREEFORM_CASES: Array<{ text: string; intent: ReturnType<typeof classifyLe
   { text: "Name: Sam\nEmail: sam@example.com\nSaturday 2pm", intent: "tour_details", cta: true },
 ];
 
-describe("Claw-primary single-number messaging", () => {
-  it("keeps the shared agent line as the PropLane transport number when Claw is enabled", () => {
+describe("retired Claw shared-number safeguards", () => {
+  it("cannot reactivate the shared agent line through environment flags", () => {
     const prev = process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = "1";
-    expect(isClawSharedLineBridgeEnabled()).toBe(true);
-    expect(managerContactSmsPhoneForPublicCta(null)).toBe(AGENT);
-    expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe(AGENT);
-    expect(managerContactSmsPhoneForPublicCta("+12065550199")).toBe(AGENT);
+    expect(isClawSharedLineBridgeEnabled()).toBe(false);
+    expect(managerContactSmsPhoneForPublicCta(null)).toBeNull();
+    expect(managerContactSmsPhoneForPublicCta("+14258909021")).toBe("+14258909021");
+    expect(managerContactSmsPhoneForPublicCta("+12065550199")).toBeNull();
     expect(clawLeasingAgentPhoneE164()).toBe(AGENT);
     // A public CTA, by contrast, needs a number resolved for that listing —
     // the browser never falls back to the shared line on its own.
     expect(isClawMessagingPubliclyEnabled()).toBe(false);
-    expect(isClawMessagingPubliclyEnabled(AGENT)).toBe(true);
+    expect(isClawMessagingPubliclyEnabled(AGENT)).toBe(false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED;
     else process.env.NEXT_PUBLIC_CLAW_MESSENGER_ENABLED = prev;
   });

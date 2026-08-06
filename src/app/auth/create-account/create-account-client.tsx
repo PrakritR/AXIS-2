@@ -6,6 +6,7 @@ import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -71,10 +72,6 @@ export default function CreateAccountClient() {
   );
   const phoneFromUrl = useMemo(
     () => searchParams.get("phone")?.trim() || "",
-    [searchParams],
-  );
-  const nextFromUrl = useMemo(
-    () => searchParams.get("next")?.trim() || "",
     [searchParams],
   );
   const urlDerivedRole: CreateAccountRole = axisIdFromUrl
@@ -300,7 +297,7 @@ export default function CreateAccountClient() {
         }
         posthog.identify(signInData.user.id);
         showToast(`Account ready. Account ID ${body.managerId ?? effectiveCheckoutPreview.managerId}.`);
-        window.location.replace("/portal/dashboard");
+        window.location.replace(MANAGER_GOOGLE_SERVICES_PATH);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
         showToast(msg);

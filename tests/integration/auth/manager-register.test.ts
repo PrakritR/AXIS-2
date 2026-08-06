@@ -125,7 +125,7 @@ describe("POST /api/auth/manager-register", () => {
     expect(data.redirectTo).toBe("/portal/dashboard");
   });
 
-  it("grants trial tier and redirects to portal when tier is provided", async () => {
+  it("grants trial tier and redirects new managers to optional Google setup", async () => {
     vi.mocked(findManagerPurchaseForAccount).mockResolvedValue(null);
     vi.mocked(isManagerOnboardingComplete).mockReturnValue(false);
     vi.mocked(provisionPendingManagerAccount).mockResolvedValue({ managerId: "MGR-PENDING-01" });
@@ -169,7 +169,7 @@ describe("POST /api/auth/manager-register", () => {
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
     expect(data.managerId).toBe("MGR-PENDING-01");
-    expect(data.redirectTo).toBe("/portal/dashboard");
+    expect(data.redirectTo).toBe("/auth/manager/connect-google");
     expect(completeManagerSignupTrial).toHaveBeenCalledWith(expect.anything(), {
       userId: "user-new",
       email: "trial@example.com",

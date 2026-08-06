@@ -73,6 +73,7 @@ export function ManagerTrialSignupForm({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
   const [accountReady, setAccountReady] = useState(false);
+  const [accountReadyDestination, setAccountReadyDestination] = useState("/portal/dashboard");
   const [creatingAnother, setCreatingAnother] = useState(false);
   const { roles: portalRoles, loading: rolesLoading } = useSignedInPortalRoles();
   // A signed-in account that already manages property gets the shared "go to
@@ -105,6 +106,7 @@ export function ManagerTrialSignupForm({
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
       if (result.status === "portal") {
+        setAccountReadyDestination(result.redirectTo);
         setAccountReady(true);
         return;
       }
@@ -259,7 +261,7 @@ export function ManagerTrialSignupForm({
             type="button"
             data-attr="manager-trial-signup-go-to-portal"
             className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-            onClick={() => navigateAfterRoleSignup("/portal/dashboard")}
+            onClick={() => window.location.replace(accountReadyDestination)}
           >
             Go to your portal
           </Button>

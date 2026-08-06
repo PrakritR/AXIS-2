@@ -1,7 +1,6 @@
 /**
- * PropLane SMS transport — Claw Messenger is the production source of truth
- * (one shared agent line). Twilio is a future per-manager endeavour and is
- * only used when Claw is explicitly disabled.
+ * PropLane SMS transport. The legacy shared Claw line is permanently disabled;
+ * active sends use each manager's provisioned Twilio work number.
  */
 
 import { after } from "next/server";

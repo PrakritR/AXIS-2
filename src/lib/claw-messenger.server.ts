@@ -1,9 +1,6 @@
 /**
- * Claw Messenger client (iMessage / RCS / SMS via Emotion Machine relay).
- *
- * PRODUCTION PropLane messaging transport (single shared agent line).
- * Enable with CLAW_MESSENGER_ENABLED=1 + CLAW_MESSENGER_API_KEY.
- * Twilio per-manager numbers are a future endeavour.
+ * Retired Claw Messenger client retained only for legacy parsing and cleanup.
+ * Runtime configuration can no longer activate the shared agent line.
  *
  * Outbound: pooled WebSocket send via sendClawMessengerText.
  * Inbound: persistent gateway (`scripts/claw-messenger-gateway.mjs`) keeps a
@@ -35,14 +32,9 @@ export function clawLeasingAgentPhoneE164(): string {
   return normalizeE164Us(raw) ?? CLAW_DEFAULT_AGENT_PHONE;
 }
 
-/**
- * True when Claw is enabled AND an API key is present.
- * Production PropLane messaging requires both.
- */
+/** The shared Claw transport is retired; environment flags cannot reactivate it. */
 export function isClawMessengerConfigured(): boolean {
-  const flag = process.env.CLAW_MESSENGER_ENABLED?.trim();
-  if (flag !== "1" && flag !== "true") return false;
-  return Boolean(clawMessengerApiKey());
+  return false;
 }
 
 export function normalizeE164Us(raw: string): string | null {

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { exchangeGoogleCalendarCode, verifyOAuthState } from "@/lib/google-calendar/api.server";
 import { debugGoogleCalendarLog } from "@/lib/google-calendar/debug-log.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { googleServiceResultPath } from "@/lib/auth/manager-google-services";
+import { resolveRequestOrigin } from "@/lib/app-url";
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,10 @@ export async function GET(req: Request) {
   const oauthErrorDescription = url.searchParams.get("error_description");
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const callbackOrigin = url.origin;
+  const callbackOrigin = resolveRequestOrigin(req);
+  const oauthState = state ? verifyOAuthState(state) : null;
+  const returnOrigin = oauthState?.returnOrigin ?? callbackOrigin;
+  const returnPath = oauthState?.returnPath ?? "/portal/calendar";
 
   if (oauthError) {
     debugGoogleCalendarLog("callback/route.ts:GET", "google oauth error redirect", {
@@ -20,25 +25,20 @@ export async function GET(req: Request) {
       error: oauthError,
       description: oauthErrorDescription?.slice(0, 200) ?? null,
     });
-    const reason = encodeURIComponent(oauthErrorDescription ?? oauthError);
-    return NextResponse.redirect(`${callbackOrigin}/portal/calendar?gcal=error&reason=${reason}`);
+    const reason = oauthErrorDescription ?? oauthError;
+    return NextResponse.redirect(`${returnOrigin}${googleServiceResultPath(returnPath, "calendar", "error", reason)}`);
   }
 
   if (!code || !state) {
-    const reason = encodeURIComponent("Google did not return an authorization code. Try Connect again.");
-    return NextResponse.redirect(`${callbackOrigin}/portal/calendar?gcal=error&reason=${reason}`);
+    const reason = "Google did not return an authorization code. Try Connect again.";
+    return NextResponse.redirect(`${returnOrigin}${googleServiceResultPath(returnPath, "calendar", "error", reason)}`);
   }
 
-  const oauthState = verifyOAuthState(state);
   if (!oauthState) {
     debugGoogleCalendarLog("callback/route.ts:GET", "invalid oauth state", { hypothesisId: "H17" });
-    const reason = encodeURIComponent(
-      "Calendar connect session expired or was invalid. Click Connect again (once) and approve in Google.",
-    );
-    return NextResponse.redirect(`${callbackOrigin}/portal/calendar?gcal=error&reason=${reason}`);
+    const reason = "Calendar connect session expired or was invalid. Click Connect again and approve in Google.";
+    return NextResponse.redirect(`${callbackOrigin}${googleServiceResultPath("/portal/calendar", "calendar", "error", reason)}`);
   }
-
-  const returnTo = `${oauthState.returnOrigin}/portal/calendar`;
 
   try {
     const db = createSupabaseServiceRoleClient();
@@ -50,14 +50,13 @@ export async function GET(req: Request) {
       returnOrigin: oauthState.returnOrigin,
       callbackOrigin,
     });
-    return NextResponse.redirect(`${returnTo}?gcal=connected`);
+    return NextResponse.redirect(`${oauthState.returnOrigin}${googleServiceResultPath(oauthState.returnPath, "calendar", "connected")}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
     debugGoogleCalendarLog("callback/route.ts:GET", "calendar connect failed", {
       managerSuffix: oauthState.userId.slice(-6),
       message,
     });
-    const reason = encodeURIComponent(message);
-    return NextResponse.redirect(`${returnTo}?gcal=error&reason=${reason}`);
+    return NextResponse.redirect(`${oauthState.returnOrigin}${googleServiceResultPath(oauthState.returnPath, "calendar", "error", message)}`);
   }
 }

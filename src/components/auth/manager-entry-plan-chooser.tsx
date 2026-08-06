@@ -10,6 +10,7 @@ import { track } from "@/lib/analytics/track-client";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
@@ -124,7 +125,7 @@ export function ManagerEntryPlanChooser() {
       showToast(body.error ?? "Could not set your plan. You can also choose later in Settings.");
       return;
     }
-    window.location.replace("/portal/dashboard");
+    window.location.replace(MANAGER_GOOGLE_SERVICES_PATH);
   };
 
   const choosePaid = async (tier: "pro" | "business") => {
@@ -147,7 +148,7 @@ export function ManagerEntryPlanChooser() {
       return;
     }
     if (body.action === "portal") {
-      window.location.replace("/portal/dashboard");
+      window.location.replace(MANAGER_GOOGLE_SERVICES_PATH);
       return;
     }
     if (body.action === "checkout" && body.clientSecret) {
@@ -263,7 +264,7 @@ export function ManagerEntryPlanChooser() {
             className="text-sm font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
             data-attr="manager-entry-plan-skip"
             disabled={busy}
-            onClick={() => window.location.replace("/portal/dashboard")}
+            onClick={() => window.location.replace(MANAGER_GOOGLE_SERVICES_PATH)}
           >
             Skip for now — decide later in Settings
           </button>

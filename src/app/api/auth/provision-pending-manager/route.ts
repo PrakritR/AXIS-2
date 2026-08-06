@@ -1,6 +1,5 @@
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
-import { resolveRequestOrigin } from "@/lib/app-url";
-import { finalizeManagerGoogleCalendarLink } from "@/lib/google-calendar/link-after-manager-provision.server";
+import { MANAGER_GOOGLE_SERVICES_PATH } from "@/lib/auth/manager-google-services";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -14,10 +13,6 @@ export async function POST(request: Request) {
     const {
       data: { user },
     } = await supabaseAuth.auth.getUser();
-    const {
-      data: { session },
-    } = await supabaseAuth.auth.getSession();
-
     if (!user?.id || !user.email) {
       return NextResponse.json({ error: "Sign in with Google first." }, { status: 401 });
     }
@@ -35,21 +30,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, skipped: true, reason: result.reason }, { status: 409 });
     }
 
-    const calendar = await finalizeManagerGoogleCalendarLink(
-      service,
-      user,
-      session,
-      resolveRequestOrigin(request),
-      { intent: "manager" },
-    );
-
     return NextResponse.json({
       ok: true,
       managerId: result.managerId,
       provisioned: result.provisioned,
-      redirectTo: "/portal/dashboard",
-      calendarConnected: calendar.connected,
-      calendarConnectPath: calendar.connectPath,
+      redirectTo: result.provisioned ? MANAGER_GOOGLE_SERVICES_PATH : "/portal/dashboard",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create manager account.";

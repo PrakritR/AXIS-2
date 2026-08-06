@@ -1002,35 +1002,3 @@ export async function handleClawLeasingInbound(args: {
 
   return { ok: true, intent, replied: true };
 }
-
-/**
- * Stamp the shared Claw agent line onto the manager's profile so listings and
- * Communication → SMS show the one PropLane messaging number.
- */
-export async function assignSharedClawLeasingNumberToManager(
-  userId: string,
-  _opts?: { force?: boolean },
-): Promise<void> {
-  const uid = userId.trim();
-  if (!uid) return;
-  const { isClawSharedLineBridgeEnabled, clawLeasingAgentPhoneE164 } = await import(
-    "@/lib/claw-leasing-links"
-  );
-  if (!isClawSharedLineBridgeEnabled()) {
-    const { scheduleManagerMessagingReady } = await import("@/lib/proplane-sms-transport.server");
-    scheduleManagerMessagingReady(uid);
-    return;
-  }
-  const db = createSupabaseServiceRoleClient();
-  await db
-    .from("profiles")
-    .update({
-      sms_from_number: clawLeasingAgentPhoneE164(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", uid);
-}
-
-export async function assignSharedClawLeasingNumberIfMapped(userId: string, _email: string): Promise<void> {
-  await assignSharedClawLeasingNumberToManager(userId);
-}
