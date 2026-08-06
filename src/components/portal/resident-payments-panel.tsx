@@ -1505,7 +1505,7 @@ export function ResidentPaymentsPanel({
       open={manualPayConfirm !== null}
       onClose={closeManualPayModal}
       title={
-        manualPayConfirm
+        manualPayConfirm && isManualResidentPayMethod(manualPayConfirm.method)
           ? `Pay with ${residentManualPaymentMethodLabel(manualPayConfirm.method)}`
           : "Pay charges"
       }
