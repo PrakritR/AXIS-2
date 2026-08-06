@@ -53,7 +53,7 @@ async function postScheduledMessage(payload: Record<string, unknown>): Promise<v
   }
 }
 
-/** Inline compose/edit form for a scheduled inbox message — hosted as an accordion panel, never a modal. */
+/** Compose/edit form for a scheduled inbox message, hosted by the responsive portal modal. */
 export function ScheduleInboxComposeForm({
   onClose,
   onSaved,
@@ -61,6 +61,7 @@ export function ScheduleInboxComposeForm({
   editMessage,
   onToggleCancelled,
   onSendNow,
+  showHeading = true,
 }: {
   onClose: () => void;
   onSaved: () => void;
@@ -68,6 +69,7 @@ export function ScheduleInboxComposeForm({
   editMessage?: ScheduledInboxMessageRecord | null;
   onToggleCancelled?: (cancelled: boolean) => void | Promise<void>;
   onSendNow?: () => void | Promise<void>;
+  showHeading?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [subject, setSubject] = useState(editMessage?.subject ?? "");
@@ -190,12 +192,16 @@ export function ScheduleInboxComposeForm({
 
   return (
       <div className="space-y-4">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">
-          {editMessage ? "Edit scheduled message" : "Schedule inbox message"}
-        </p>
-        <p className="text-sm text-muted">
-          Compose a message to deliver later through the portal inbox, email, and text.
-        </p>
+        {showHeading ? (
+          <>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">
+              {editMessage ? "Edit scheduled message" : "Schedule inbox message"}
+            </p>
+            <p className="text-sm text-muted">
+              Compose a message to deliver later through the portal inbox, email, and text.
+            </p>
+          </>
+        ) : null}
 
         {!editMessage ? (
           <div>
@@ -253,7 +259,14 @@ export function ScheduleInboxComposeForm({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="primary" className="rounded-full" disabled={busy} onClick={() => submit()}>
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            disabled={busy}
+            onClick={() => submit()}
+            data-attr={editMessage ? "scheduled-message-save" : "scheduled-message-create"}
+          >
             {busy ? "Saving…" : editMessage ? "Save changes" : "Schedule message"}
           </Button>
           {editMessage && editMessage.status === "scheduled" && onSendNow ? (

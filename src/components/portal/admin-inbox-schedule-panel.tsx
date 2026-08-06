@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -113,7 +114,14 @@ export function AdminInboxSchedulePanel({
               ))}
             </Select>
           </label>
-          <Button type="button" variant="primary" className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={onScheduleNew}>
+          <Button
+            type="button"
+            variant="primary"
+            className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={onScheduleNew}
+            aria-haspopup="dialog"
+            data-attr="admin-schedule-message"
+          >
             Schedule message
           </Button>
         </div>
@@ -142,6 +150,8 @@ export function AdminInboxSchedulePanel({
                     key={message.id}
                     className={`${PORTAL_TABLE_TR_EXPANDABLE} cursor-pointer`}
                     onClick={() => setEditMessage(message)}
+                    aria-haspopup="dialog"
+                    data-attr="admin-scheduled-message-edit"
                   >
                     <td className={PORTAL_TABLE_TD}>{formatSendDate(message.sendAt)}</td>
                     <td className={PORTAL_TABLE_TD}>
@@ -163,18 +173,29 @@ export function AdminInboxSchedulePanel({
         </div>
       )}
 
-      {editMessage ? (
-        <ScheduleInboxComposeForm
-          onClose={() => setEditMessage(null)}
-          onSaved={onReload}
-          contacts={[]}
-          editMessage={editMessage}
-          onToggleCancelled={async (cancelled: boolean) => {
-            await toggleCancelled(editMessage, cancelled);
-            setEditMessage(null);
-          }}
-        />
-      ) : null}
+      <Modal
+        open={Boolean(editMessage)}
+        onClose={() => setEditMessage(null)}
+        title="Edit scheduled message"
+        description="Update when this message will be delivered and what it says."
+        panelClassName="max-w-lg"
+        assistantStrip={false}
+      >
+        {editMessage ? (
+          <ScheduleInboxComposeForm
+            key={editMessage.id}
+            onClose={() => setEditMessage(null)}
+            onSaved={onReload}
+            contacts={[]}
+            editMessage={editMessage}
+            showHeading={false}
+            onToggleCancelled={async (cancelled: boolean) => {
+              await toggleCancelled(editMessage, cancelled);
+              setEditMessage(null);
+            }}
+          />
+        ) : null}
+      </Modal>
     </div>
   );
 }

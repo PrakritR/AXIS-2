@@ -297,8 +297,12 @@ function ComposeModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="New message"
-      description="Broadcast to a group or choose specific managers or residents."
+      title={initialSchedule ? "Schedule message" : "New message"}
+      description={
+        initialSchedule
+          ? "Choose recipients, write the message, and set when it should be delivered."
+          : "Broadcast to a group or choose specific managers or residents."
+      }
       assistantStrip={false}
       panelClassName={MODAL_LARGE_PANEL_CLASS}
       footer={

@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { ManagerPortalFilterRow, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import {
@@ -9,14 +10,9 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_EXPAND_TH,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
@@ -91,7 +87,7 @@ export function ManagerInboxSchedulePanel({
   const [manualMessages, setManualMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [manualLoading, setManualLoading] = useState(true);
   const [contactTick, setContactTick] = useState(0);
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const reloadManual = useCallback(async () => {
@@ -141,6 +137,11 @@ export function ManagerInboxSchedulePanel({
       .sort((a, b) => a.message.sendAt.localeCompare(b.message.sendAt));
   }, [manualMessages, automationMessages, horizonDays, filterResidentEmail]);
 
+  const editingRow = useMemo(
+    () => rows.find((row) => rowId(row) === editingRowId) ?? null,
+    [rows, editingRowId],
+  );
+
   const selectableIds = useMemo(
     () => rows.filter((row) => row.message.status === "scheduled").map((row) => rowId(row)),
     [rows],
@@ -172,10 +173,7 @@ export function ManagerInboxSchedulePanel({
     }
   };
 
-  const toggleRowExpand = (row: ScheduleRow) => {
-    const id = rowId(row);
-    setExpandedRowId((cur) => (cur === id ? null : id));
-  };
+  const openRowEditor = (row: ScheduleRow) => setEditingRowId(rowId(row));
 
   const sendRowNow = async (row: ScheduleRow) => {
     if (row.message.status !== "scheduled") return;
@@ -254,12 +252,13 @@ export function ManagerInboxSchedulePanel({
         contacts={liveContacts}
         editMessage={row.message}
         onSaved={reloadAll}
-        onClose={() => setExpandedRowId(null)}
+        onClose={() => setEditingRowId(null)}
+        showHeading={false}
         onToggleCancelled={async (cancelled) => {
           try {
             await toggleManualCancelled(row.message, cancelled);
             showToast(cancelled ? "Send cancelled." : "Send restored.");
-            setExpandedRowId(null);
+            setEditingRowId(null);
             reloadAll();
           } catch (e) {
             showToast(e instanceof Error ? e.message : "Could not update.");
@@ -268,7 +267,7 @@ export function ManagerInboxSchedulePanel({
         onSendNow={async () => {
           await sendRowNow(row);
           showToast("Message sent.");
-          setExpandedRowId(null);
+          setEditingRowId(null);
           reloadAll();
         }}
       />
@@ -276,11 +275,11 @@ export function ManagerInboxSchedulePanel({
       <ScheduledMessageEditForm
         message={row.message}
         onSaved={reloadAll}
-        onClose={() => setExpandedRowId(null)}
+        onClose={() => setEditingRowId(null)}
         onSendNow={async () => {
           await sendRowNow(row);
           showToast("Reminder sent.");
-          setExpandedRowId(null);
+          setEditingRowId(null);
           reloadAll();
         }}
       />
@@ -344,8 +343,6 @@ export function ManagerInboxSchedulePanel({
               const sendAt = row.message.sendAt;
               const sendLabel = formatScheduledSendAt(sendAt);
 
-              const isRowExpanded = expandedRowId === id;
-
               return (
                 <div key={id} className={PORTAL_MOBILE_CARD_CLASS}>
                   <div className="flex items-start gap-3">
@@ -360,15 +357,18 @@ export function ManagerInboxSchedulePanel({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRowExpand(row)}>
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => openRowEditor(row)}
+                      aria-haspopup="dialog"
+                      data-attr="scheduled-message-edit"
+                    >
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold text-foreground">{subject}</p>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                          {isManual ? "Manual" : "Automated"}
-                        </span>
-                        <PortalTableExpandChevron expanded={isRowExpanded} />
-                      </div>
+                      <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
+                        {isManual ? "Manual" : "Automated"}
+                      </span>
                     </div>
                     <p className="mt-1 truncate text-xs text-muted">
                       {recipientName} · {recipientEmail}
@@ -382,9 +382,6 @@ export function ManagerInboxSchedulePanel({
                     <p className={`mt-1.5 text-xs font-medium capitalize ${statusClass(status)}`}>{status}</p>
                     </button>
                   </div>
-                  {isRowExpanded ? (
-                    <div className="mt-3 border-t border-border pt-3">{renderRowEditPanel(row)}</div>
-                  ) : null}
                 </div>
               );
             })}
@@ -412,9 +409,6 @@ export function ManagerInboxSchedulePanel({
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Message</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -431,14 +425,13 @@ export function ManagerInboxSchedulePanel({
                   const sendAt = row.message.sendAt;
                   const sendLabel = formatScheduledSendAt(sendAt);
 
-                  const isRowExpanded = expandedRowId === id;
-
                   return (
-                    <Fragment key={id}>
                       <tr
+                        key={id}
                         className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() => toggleRowExpand(row))}
-                        aria-expanded={isRowExpanded}
+                        onClick={createPortalRowExpandClick(() => openRowEditor(row))}
+                        aria-haspopup="dialog"
+                        data-attr="scheduled-message-edit"
                       >
                         <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
                           {status === "scheduled" ? (
@@ -476,16 +469,7 @@ export function ManagerInboxSchedulePanel({
                           <p className="line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
                         </td>
                         <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
-                        <PortalTableExpandCell expanded={isRowExpanded} />
                       </tr>
-                      {isRowExpanded ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {renderRowEditPanel(row)}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
                   );
                 })}
               </tbody>
@@ -494,6 +478,17 @@ export function ManagerInboxSchedulePanel({
           </div>
         </>
       )}
+
+      <Modal
+        open={Boolean(editingRowId)}
+        onClose={() => setEditingRowId(null)}
+        title="Edit scheduled message"
+        description="Update the delivery time and message without expanding the schedule list."
+        panelClassName="max-w-lg"
+        assistantStrip={false}
+      >
+        {editingRow ? <div key={editingRowId}>{renderRowEditPanel(editingRow)}</div> : null}
+      </Modal>
     </div>
   );
 }
