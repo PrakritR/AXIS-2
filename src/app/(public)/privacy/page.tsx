@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "How PropLane collects, uses, and protects information when you use our property management platform and mobile apps.",
 };
 
-const LAST_UPDATED = "June 28, 2026";
+const LAST_UPDATED = "August 6, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -80,7 +80,8 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-lg font-semibold text-foreground">How we share information</h2>
             <p className="mt-2">
               We share information with service providers that help us operate PropLane, including Supabase (authentication
-              and database hosting), Stripe (payments), Twilio (SMS), Resend (email), and Google Firebase (push
+              and database hosting), Stripe (payments), Twilio (SMS), Resend (email), Google (sign-in and optional
+              Calendar sync), and Google Firebase (push
               notifications). We do not sell your personal information.
             </p>
             <p className="mt-2">
@@ -114,9 +115,55 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section>
+            <h2 className="text-lg font-semibold text-foreground">Google sign-in and Calendar</h2>
+            <p className="mt-2">
+              You may sign in with Google or connect your Google Calendar to PropLane. When you do, we receive your
+              Google account email and, if you authorize it, access to your Google Calendar events through Google&apos;s
+              APIs.
+            </p>
+            <p className="mt-2">We use Google Calendar data only to provide features you request, such as:</p>
+            <ul className="mt-3 list-disc space-y-2 ps-5">
+              <li>Showing your personal busy time on your manager calendar so you avoid double-booking property tours</li>
+              <li>Creating and updating calendar events for tours and work you schedule in PropLane</li>
+              <li>Blocking tour availability on your public listing when your calendar is busy</li>
+            </ul>
+            <p className="mt-2">
+              Calendar data is tied to the manager account that connected it. We do not use Google Calendar data for
+              advertising, and we do not sell it. Other managers or residents cannot see the details of your personal
+              Google events — only blocked time may appear on your scheduling views.
+            </p>
+            <p className="mt-2">
+              You can disconnect Google Calendar at any time from your PropLane portal calendar settings. You can also
+              revoke PropLane&apos;s access from your{" "}
+              <a
+                href="https://myaccount.google.com/permissions"
+                className="font-medium text-primary hover:opacity-90"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Google Account permissions
+              </a>
+              .
+            </p>
+            <p className="mt-2">
+              PropLane&apos;s use of information received from Google APIs adheres to the{" "}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                className="font-medium text-primary hover:opacity-90"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Google API Services User Data Policy
+              </a>
+              , including the Limited Use requirements.
+            </p>
+          </section>
+
+          <section>
             <h2 className="text-lg font-semibold text-foreground">Your choices</h2>
             <ul className="mt-3 list-disc space-y-2 ps-5">
               <li>Update profile information in the manager or resident portal.</li>
+              <li>Disconnect Google Calendar from your manager portal calendar settings.</li>
               <li>Disable push notifications in your device Settings.</li>
               <li>
                 Delete your account at any time from your portal&rsquo;s profile or settings page. This permanently

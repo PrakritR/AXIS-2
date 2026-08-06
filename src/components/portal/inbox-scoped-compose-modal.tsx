@@ -22,6 +22,12 @@ import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
+  composeDirectoryCategories,
+  isAdminOnlyDirectorySelection,
+  mergeAdminComposePersonKey,
+  type InboxComposeDirectoryCategory,
+} from "@/lib/inbox-compose-recipients";
+import {
   broadcastStubForCategory,
   categoryForContactRole,
   contactsForPortal,
@@ -50,7 +56,7 @@ export type ScopedInboxSendPayload = {
   deliverViaSms?: boolean;
 };
 
-type ComposeCategory = "resident" | "management" | "admin" | "vendor";
+type ComposeCategory = InboxComposeDirectoryCategory;
 type PersonKey = "admin" | "broadcast:management" | "broadcast:resident" | `id:${string}`;
 
 function contactOptionLabel(contact: InboxScopedContact): string {
@@ -65,10 +71,11 @@ function contactOptionLabel(contact: InboxScopedContact): string {
   return bits.join(" · ");
 }
 
-function categoriesForPortal(portal: "resident" | "manager" | "vendor"): ComposeCategory[] {
-  if (portal === "manager") return ["resident", "management", "admin", "vendor"];
-  if (portal === "vendor") return ["management", "admin"];
-  return ["resident", "management", "admin"];
+function categoriesForPortal(
+  portal: "resident" | "manager" | "vendor",
+  contacts: InboxScopedContact[],
+): ComposeCategory[] {
+  return composeDirectoryCategories(portal, contacts);
 }
 
 function categoryLabel(category: ComposeCategory): string {
@@ -135,7 +142,7 @@ export function ScopedInboxComposeModal({
   const localContacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
   const [directoryContacts, setDirectoryContacts] = useState<InboxScopedContact[]>([]);
   const contacts = directoryContacts.length > 0 ? directoryContacts : localContacts;
-  const categoryOptions = useMemo(() => categoriesForPortal(portal), [portal]);
+  const categoryOptions = useMemo(() => categoriesForPortal(portal, contacts), [portal, contacts]);
   const [selectedCategories, setSelectedCategories] = useState<ComposeCategory[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<PersonKey[]>([]);
   const [subject, setSubject] = useState("");
@@ -154,6 +161,7 @@ export function ScopedInboxComposeModal({
   const personGroups = useMemo((): CheckboxMultiSelectGroup[] => {
     const cats = selectedCategories.length > 0 ? selectedCategories : [];
     return cats
+      .filter((category) => category !== "admin")
       .map((category) => ({
         label: categoryLabel(category),
         options: peopleForCategory(category, portal, contacts).map((p) => ({
@@ -166,6 +174,7 @@ export function ScopedInboxComposeModal({
 
   const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
   const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+  const adminOnlyDirectory = isAdminOnlyDirectorySelection(selectedCategories);
 
   const showSmsOption = portal === "manager";
 
@@ -229,6 +238,14 @@ export function ScopedInboxComposeModal({
       setSendAt(defaultPortalMessageScheduleAt());
     });
   }, [open, portal]);
+
+  useEffect(() => {
+    setSelectedCategories((prev) => prev.filter((c) => categoryOptions.includes(c)));
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    setSelectedKeys((prev) => mergeAdminComposePersonKey(selectedCategories, prev));
+  }, [selectedCategories]);
 
   useEffect(() => {
     setSelectedKeys((prev) => prev.filter((key) => validPersonKeys.has(key)));
@@ -385,10 +402,14 @@ export function ScopedInboxComposeModal({
             groups={personGroups}
             selected={selectedKeys}
             onChange={onPeopleChange}
-            disabled={selectedCategories.length === 0}
+            disabled={selectedCategories.length === 0 || adminOnlyDirectory}
             searchPlaceholder="Search people…"
             emptyMenuText={
-              selectedCategories.length === 0 ? "Pick a section first" : "No contacts in selected sections"
+              selectedCategories.length === 0
+                ? "Pick a section first"
+                : adminOnlyDirectory
+                  ? "PropLane admin is the recipient"
+                  : "No contacts in selected sections"
             }
             dataAttr="inbox-compose-person"
           />
