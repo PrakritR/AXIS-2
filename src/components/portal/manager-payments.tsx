@@ -4,10 +4,7 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
@@ -17,11 +14,9 @@ import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
-  PORTAL_HEADER_ACTION_BTN_RESPONSIVE,
-  PORTAL_HEADER_PRIMARY_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
+import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerPaymentLedgerRow } from "@/data/demo-portal";
 import { parseMoneyLabel } from "@/lib/portal-monthly-profit";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -168,6 +163,8 @@ function PaymentsFilterSheet({
   listSort,
   onListSortChange,
   sortOptions,
+  open,
+  onOpenChange,
 }: {
   activeCount: number;
   onReset: () => void;
@@ -177,6 +174,8 @@ function PaymentsFilterSheet({
   listSort: PaymentListSort;
   onListSortChange: (next: PaymentListSort) => void;
   sortOptions: { value: PaymentListSort; label: string }[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
     <PortalFilterSortSheet
@@ -186,6 +185,8 @@ function PaymentsFilterSheet({
       className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <PaymentFilterSortFields
         propertyOptions={propertyOptions}
@@ -225,6 +226,7 @@ export function ManagerPayments({
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [checkingManualPayments, setCheckingManualPayments] = useState(false);
+  const [paymentsFilterOpen, setPaymentsFilterOpen] = useState(false);
   const [listSort, setListSort] = useState<PaymentListSort>(DEFAULT_PAYMENT_LIST_SORT);
   const [searchQuery, setSearchQuery] = useState("");
   // Per-payment reminder lists show the full saved default schedule, so bypass
@@ -539,7 +541,13 @@ export function ManagerPayments({
     sortOptions,
   };
 
-  const paymentsFilterControl = <PaymentsFilterSheet {...paymentsFilterSheetProps} />;
+  const paymentsFilterControl = (
+    <PaymentsFilterSheet
+      {...paymentsFilterSheetProps}
+      open={paymentsFilterOpen}
+      onOpenChange={setPaymentsFilterOpen}
+    />
+  );
 
   const runCheckManualPayments = () => {
     void (async () => {
@@ -570,44 +578,6 @@ export function ManagerPayments({
     })();
   };
 
-  const paymentsRemindersButton =
-    direction === "incoming" ? (
-      <Button
-        type="button"
-        variant="outline"
-        className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
-        onClick={() => setReminderSettingsOpen(true)}
-        data-attr="payments-reminder-settings"
-      >
-        Reminders
-      </Button>
-    ) : null;
-
-  const paymentsSetupButton = (
-    <Button
-      type="button"
-      variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
-      onClick={() => setPaymentSetupOpen(true)}
-      data-attr="payments-setup"
-    >
-      Payment setup
-    </Button>
-  );
-
-  const checkPaymentsButton = direction === "incoming" ? (
-    <Button
-      type="button"
-      variant="outline"
-      className={PORTAL_HEADER_ACTION_BTN_RESPONSIVE}
-      disabled={checkingManualPayments}
-      data-attr="manager-check-manual-payments"
-      onClick={runCheckManualPayments}
-    >
-      {checkingManualPayments ? "Checking…" : "Check payments"}
-    </Button>
-  ) : null;
-
   const paymentsAddButton = (
     <Button
       type="button"
@@ -620,58 +590,69 @@ export function ManagerPayments({
     </Button>
   );
 
-  const paymentsOverflowMenu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className={`${PORTAL_HEADER_ACTION_BTN} max-lg:px-3 max-lg:text-base`}
-          data-attr="payments-more-actions"
-          aria-label="More payment actions"
-        >
-          …
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" backdrop>
-        {direction === "incoming" ? (
-          <DropdownMenuItem
-            data-attr="payments-reminder-settings-menu"
-            onSelect={() => setReminderSettingsOpen(true)}
-          >
-            Reminders
-          </DropdownMenuItem>
-        ) : null}
-        {direction === "incoming" ? (
-          <DropdownMenuItem
-            data-attr="manager-check-manual-payments-menu"
-            disabled={checkingManualPayments}
-            onSelect={runCheckManualPayments}
-          >
-            {checkingManualPayments ? "Checking payments…" : "Check payments"}
-          </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuItem data-attr="payments-setup-menu" onSelect={() => setPaymentSetupOpen(true)}>
-          Payment setup
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  const paymentsPinnedMenuItems = [
+    direction === "incoming" ? (
+      <DropdownMenuItem
+        key="reminders"
+        data-attr="payments-reminder-settings-menu"
+        onSelect={() => setReminderSettingsOpen(true)}
+      >
+        Reminders
+      </DropdownMenuItem>
+    ) : null,
+    direction === "incoming" ? (
+      <DropdownMenuItem
+        key="check"
+        data-attr="manager-check-manual-payments-menu"
+        disabled={checkingManualPayments}
+        onSelect={runCheckManualPayments}
+      >
+        {checkingManualPayments ? "Checking payments…" : "Check payments"}
+      </DropdownMenuItem>
+    ) : null,
+    <DropdownMenuItem
+      key="setup"
+      data-attr="payments-setup-menu"
+      onSelect={() => setPaymentSetupOpen(true)}
+    >
+      Payment setup
+    </DropdownMenuItem>,
+  ].filter(Boolean);
 
   const paymentsHeaderActions = (
-    <>
-      <div className="hidden items-center gap-2 lg:flex">
-        {paymentsRemindersButton}
-        {checkPaymentsButton}
-        {paymentsSetupButton}
-        {paymentsAddButton}
-      </div>
-      <div className="flex w-full min-w-0 items-center justify-end gap-2 lg:hidden">
-        {paymentsFilterControl}
-        {paymentsAddButton}
-        {paymentsOverflowMenu}
-      </div>
-    </>
+    <PortalAdaptiveHeaderActions
+      moreDataAttr="payments-more-actions"
+      moreAriaLabel="More payment actions"
+      actions={[
+        {
+          id: "filter",
+          keepPriority: 1,
+          node: paymentsFilterControl,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="payments-filter-menu"
+              onSelect={() => setPaymentsFilterOpen(true)}
+            >
+              Filter & sort
+            </DropdownMenuItem>
+          ),
+        },
+        {
+          id: "add",
+          keepPriority: 2,
+          node: paymentsAddButton,
+          menuItem: (
+            <DropdownMenuItem
+              data-attr="payments-add-menu"
+              onSelect={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+            >
+              {direction === "incoming" ? "Add charge" : "Add payment"}
+            </DropdownMenuItem>
+          ),
+        },
+      ]}
+      pinnedMenuItems={paymentsPinnedMenuItems}
+    />
   );
 
   const activeFilterChips = useMemo((): PortalActiveFilterChip[] => {
@@ -816,7 +797,6 @@ export function ManagerPayments({
     <ManagerPortalPageShell
       title="Payments"
       hideTitleOnMobileNav
-      titleInlineFilter={<span className="hidden lg:block">{paymentsFilterControl}</span>}
       titleAside={paymentsHeaderActions}
       compactFilterRow
     >

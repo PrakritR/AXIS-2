@@ -174,6 +174,9 @@ export function PortalFilterSortSheet({
   mobileSheetRaised = false,
   /** Keep portal popovers inside the page content instead of covering an adjacent rail. */
   constrainDropdownToTitleBand = true,
+  open: controlledOpen,
+  defaultOpen = false,
+  onOpenChange,
 }: {
   children: ReactNode;
   activeCount?: number;
@@ -192,8 +195,13 @@ export function PortalFilterSortSheet({
   mobileSheetRaised?: boolean;
   /** Enabled by default; outside a portal page this safely falls back to viewport bounds. */
   constrainDropdownToTitleBand?: boolean;
+  open?: boolean;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const dismissGuardUntilRef = useRef(0);
   const deferControllerRef = useRef<PortalFilterDeferController | null>(null);
@@ -222,9 +230,10 @@ export function PortalFilterSortSheet({
       const resolved = typeof next === "function" ? next(prev) : next;
       if (!resolved && Date.now() < dismissGuardUntilRef.current) return;
       applyOpenTransition(prev, resolved);
-      setOpen(resolved);
+      if (!isControlled) setUncontrolledOpen(resolved);
+      onOpenChange?.(resolved);
     },
-    [applyOpenTransition],
+    [applyOpenTransition, isControlled, onOpenChange],
   );
 
   const handleSheetOpenChange = useCallback(
@@ -238,8 +247,9 @@ export function PortalFilterSortSheet({
   const close = useCallback(() => {
     const prev = openRef.current;
     applyOpenTransition(prev, false);
-    setOpen(false);
-  }, [applyOpenTransition]);
+    if (!isControlled) setUncontrolledOpen(false);
+    onOpenChange?.(false);
+  }, [applyOpenTransition, isControlled, onOpenChange]);
 
   const handleReset = useCallback(() => {
     deferControllerRef.current?.resetAll();
