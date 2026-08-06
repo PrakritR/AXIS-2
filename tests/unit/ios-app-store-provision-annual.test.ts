@@ -48,7 +48,9 @@ describe("annual App Store subscription provisioning", () => {
       { id: "annual", attributes: { customerPrice: "192.0" } },
     ];
     expect(selectPricePoint(points, "192.00").id).toBe("annual");
-    expect(() => selectPricePoint(points, "193.00")).toThrow(/found 0/);
+    expect(() => selectPricePoint(points, "193.00")).toThrow(
+      /found 0.*Nearest Apple price points: \$192\.00, \$20\.00/,
+    );
     expect(() => selectPricePoint([points[1], points[1]], "192.00")).toThrow(/found 2/);
   });
 

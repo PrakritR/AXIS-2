@@ -37,7 +37,16 @@ function money(value) {
 export function selectPricePoint(pricePoints, expectedUsd) {
   const matches = pricePoints.filter((point) => money(point.attributes?.customerPrice) === expectedUsd);
   if (matches.length !== 1) {
-    throw new Error(`Expected one USA price point at $${expectedUsd}; found ${matches.length}.`);
+    const target = Number(expectedUsd);
+    const nearest = pricePoints
+      .map((point) => money(point.attributes?.customerPrice))
+      .filter(Boolean)
+      .sort((a, b) => Math.abs(Number(a) - target) - Math.abs(Number(b) - target))
+      .slice(0, 5);
+    throw new Error(
+      `Expected one USA price point at $${expectedUsd}; found ${matches.length}. ` +
+        `Nearest Apple price points: ${nearest.map((value) => `$${value}`).join(", ") || "none"}.`,
+    );
   }
   return matches[0];
 }
