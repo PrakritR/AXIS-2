@@ -101,7 +101,8 @@
   --pl-surface-raised: #0f1011;
   --pl-surface-muted: #16181b;
   --pl-ink: #f7f8f8;
-  --pl-muted-fg: #8a8f98;
+  /* Secondary copy stays in the dark theme's lavender family, never neutral grey. */
+  --pl-muted-fg: #c8ccf7;
   --pl-line: rgba(255, 255, 255, 0.08);
   --pl-line-strong: rgba(255, 255, 255, 0.14);
   --pl-accent: var(--pl-purple);
