@@ -95,10 +95,11 @@ export function buildLocalizationCreate(spec, subscriptionId) {
   };
 }
 
-function buildPriceCreate(subscriptionId, pricePointId) {
+export function buildPriceCreate(subscriptionId, pricePointId) {
   return {
     data: {
       type: "subscriptionPrices",
+      attributes: { planType: "UPFRONT" },
       relationships: {
         subscription: { data: { type: "subscriptions", id: subscriptionId } },
         subscriptionPricePoint: {
