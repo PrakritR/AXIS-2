@@ -3,13 +3,14 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack, AuthAccountFooterLink } from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
-import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
+import { type AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { getStartedAddPortalPath } from "@/lib/auth/get-started-path";
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const ROLE_META: Record<
   AuthRole,
@@ -46,11 +47,11 @@ function ChoosePortalForm() {
   const searchParams = useSearchParams();
   useAuthWelcomeChrome(true);
   const nextRaw = searchParams.get("next") ?? "";
-  const safeNext = nextRaw.startsWith("/") ? nextRaw : "";
 
   const [roles, setRoles] = useState<AuthRole[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoChooseAttemptedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +104,7 @@ function ChoosePortalForm() {
           setBusy(null);
           return;
         }
-        const dest = safeNext || portalDashboardPath(role);
+        const dest = normalizePostAuthPath(nextRaw, role);
         // Hard navigation — router.push + refresh left multi-role users stuck on
         // "Opening…" while Turbopack compiled the portal shell (Next "Rendering…").
         window.location.assign(dest);
@@ -112,11 +113,12 @@ function ChoosePortalForm() {
         setBusy(null);
       }
     },
-    [safeNext],
+    [nextRaw],
   );
 
   useEffect(() => {
-    if (roles?.length !== 1 || busy !== null) return;
+    if (roles?.length !== 1 || busy !== null || autoChooseAttemptedRef.current) return;
+    autoChooseAttemptedRef.current = true;
     void choose(roles[0]!);
   }, [roles, busy, choose]);
 
