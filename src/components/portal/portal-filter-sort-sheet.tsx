@@ -193,7 +193,10 @@ export function PortalFilterSortSheet({
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const dismissGuardUntilRef = useRef(0);
   const deferControllerRef = useRef<PortalFilterDeferController | null>(null);
+  const openRef = useRef(false);
   const isMobile = useSmallPortalViewport();
+
+  openRef.current = open;
 
   const armSheetDismissGuard = useCallback(() => {
     dismissGuardUntilRef.current = Date.now() + FILTER_SHEET_DISMISS_GUARD_MS;
@@ -201,19 +204,24 @@ export function PortalFilterSortSheet({
 
   useEffect(() => registerFilterSheetDismissGuard(armSheetDismissGuard), [armSheetDismissGuard]);
 
-  const setFilterOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
-    setOpen((prev) => {
-      const resolved = typeof next === "function" ? next(prev) : next;
-      if (!resolved && Date.now() < dismissGuardUntilRef.current) return prev;
-      if (resolved && !prev) {
-        deferControllerRef.current?.snapshotFromApplied();
-      }
-      if (!resolved && prev) {
-        deferControllerRef.current?.commitAll();
-      }
-      return resolved;
-    });
+  const applyOpenTransition = useCallback((prev: boolean, next: boolean) => {
+    if (next && !prev) {
+      deferControllerRef.current?.snapshotFromApplied();
+    } else if (!next && prev) {
+      deferControllerRef.current?.commitAll();
+    }
   }, []);
+
+  const setFilterOpen = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const prev = openRef.current;
+      const resolved = typeof next === "function" ? next(prev) : next;
+      if (!resolved && Date.now() < dismissGuardUntilRef.current) return;
+      applyOpenTransition(prev, resolved);
+      setOpen(resolved);
+    },
+    [applyOpenTransition],
+  );
 
   const handleSheetOpenChange = useCallback(
     (next: boolean) => {
@@ -224,9 +232,10 @@ export function PortalFilterSortSheet({
   const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
   const close = useCallback(() => {
-    deferControllerRef.current?.commitAll();
+    const prev = openRef.current;
+    applyOpenTransition(prev, false);
     setOpen(false);
-  }, []);
+  }, [applyOpenTransition]);
 
   const handleReset = useCallback(() => {
     deferControllerRef.current?.resetAll();
