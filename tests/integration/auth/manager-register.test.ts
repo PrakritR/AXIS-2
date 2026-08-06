@@ -32,6 +32,10 @@ vi.mock("@/lib/auth/manager-onboarding", () => ({
   provisionPendingManagerAccount: vi.fn(),
 }));
 
+vi.mock("@/lib/auth/manager-google-services-onboarding.server", () => ({
+  resolveManagerPortalEntryPath: vi.fn(),
+}));
+
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { completeManagerSignupTrial } from "@/lib/auth/manager-signup-trial";
@@ -40,6 +44,7 @@ import {
   isManagerOnboardingComplete,
   provisionPendingManagerAccount,
 } from "@/lib/auth/manager-onboarding";
+import { resolveManagerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding.server";
 import { POST as managerRegister } from "@/app/api/auth/manager-register/route";
 
 describe("POST /api/auth/manager-register", () => {
@@ -48,6 +53,7 @@ describe("POST /api/auth/manager-register", () => {
   });
 
   it("returns portal redirect when email already has a complete manager account", async () => {
+    vi.mocked(resolveManagerPortalEntryPath).mockResolvedValue("/portal/dashboard");
     vi.mocked(findAuthUserIdByEmail).mockResolvedValue("user-existing");
     vi.mocked(findManagerPurchaseForAccount).mockResolvedValue({
       id: "purchase-1",
@@ -126,6 +132,7 @@ describe("POST /api/auth/manager-register", () => {
   });
 
   it("grants trial tier and redirects new managers to optional Google setup", async () => {
+    vi.mocked(resolveManagerPortalEntryPath).mockResolvedValue("/auth/connect-google-services");
     vi.mocked(findManagerPurchaseForAccount).mockResolvedValue(null);
     vi.mocked(isManagerOnboardingComplete).mockReturnValue(false);
     vi.mocked(provisionPendingManagerAccount).mockResolvedValue({ managerId: "MGR-PENDING-01" });
@@ -169,7 +176,7 @@ describe("POST /api/auth/manager-register", () => {
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
     expect(data.managerId).toBe("MGR-PENDING-01");
-    expect(data.redirectTo).toBe("/auth/manager/connect-google");
+    expect(data.redirectTo).toBe("/auth/connect-google-services");
     expect(completeManagerSignupTrial).toHaveBeenCalledWith(expect.anything(), {
       userId: "user-new",
       email: "trial@example.com",
