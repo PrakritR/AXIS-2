@@ -45,6 +45,7 @@ export function PromotionAssetStack({
   variant?: "card" | "plain";
 }) {
   if (assets.length === 0) {
+    if (!emptyMessage?.trim()) return null;
     return <PortalDataTableEmpty message={emptyMessage} icon="data" />;
   }
 

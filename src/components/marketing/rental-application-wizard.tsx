@@ -101,6 +101,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
+import { ApplicationUnavailableContactManager } from "@/components/marketing/application-unavailable-contact-manager";
 import { RentalApplicationFinishPanel } from "@/components/marketing/rental-application-finish-panel";
 import {
   activeWizardProgressPct,
@@ -118,6 +119,7 @@ import {
   DEMO_CLOSE_RESIDENT_APPLY_EVENT,
   DEMO_RENTAL_AUTOFILL_EVENT,
 } from "@/lib/demo/demo-playback";
+import { propertyAcceptingOnlineApplications } from "@/lib/property-application-template-sync";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -704,6 +706,14 @@ function RentalApplicationWizardInner({
     if (mode === "manager") return Boolean(linkedPropertyId && linkedProperty);
     return Boolean(linkedPropertyId && linkedProperty);
   }, [linkedProperty, linkedPropertyId, mode]);
+
+  const applicationsAvailable = useMemo(() => {
+    void extrasTick;
+    if (templatePreview || mode === "manager") return true;
+    const prop = linkedProperty;
+    if (!prop?.listingSubmission) return true;
+    return propertyAcceptingOnlineApplications(prop.listingSubmission);
+  }, [extrasTick, linkedProperty, mode, templatePreview]);
 
   useEffect(() => {
     if (templatePreview) return;
@@ -1935,6 +1945,14 @@ function RentalApplicationWizardInner({
                   ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
                   : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
               }
+            />
+          </div>
+        ) : !applicationsAvailable ? (
+          <div className="mt-8">
+            <ApplicationUnavailableContactManager
+              propertyTitle={linkedProperty?.title}
+              managerEmail={linkedProperty?.managerContactEmail}
+              managerPhone={linkedProperty?.contactSmsPhone}
             />
           </div>
         ) : postSubmit ? (

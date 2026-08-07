@@ -135,3 +135,13 @@ export function removePropertyApplicationTemplate(
 ): PropertyApplicationTemplate[] {
   return templates.filter((row) => row.id !== templateId);
 }
+
+export function withPropertyApplicationTemplatesExplicit(
+  sub: ManagerListingSubmissionV1,
+  templates: PropertyApplicationTemplate[],
+): ManagerListingSubmissionV1 {
+  return {
+    ...syncLegacyApplicationFieldsFromTemplates(sub, templates),
+    propertyApplicationTemplatesExplicit: true,
+  };
+}

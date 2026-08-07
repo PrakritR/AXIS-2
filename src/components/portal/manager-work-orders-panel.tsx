@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -45,6 +47,10 @@ import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail
 import { workOrderDetailHref, workOrderListHref } from "@/lib/portal-detail-routes";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
+import {
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 
 function priorityClass(p: string) {
@@ -120,6 +126,7 @@ export function ManagerWorkOrdersPanel({
   onAfterSchedule,
   workOrderId: workOrderIdProp,
   listBasePath,
+  listAddAction,
 }: {
   allRows: DemoManagerWorkOrderRow[];
   bucket: ManagerWorkOrderBucket;
@@ -127,6 +134,13 @@ export function ManagerWorkOrdersPanel({
   onAfterSchedule?: () => void;
   workOrderId?: string;
   listBasePath?: string;
+  listAddAction?: {
+    label?: string;
+    hint?: string;
+    icon?: LucideIcon;
+    onClick: () => void;
+    dataAttr: string;
+  };
 }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
@@ -1142,6 +1156,18 @@ export function ManagerWorkOrdersPanel({
   }
 
   if (rows.length === 0) {
+    if (listAddAction) {
+      return (
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+          <PortalListAddRow
+            label={listAddAction.label ?? "Add"}
+            icon={listAddAction.icon ?? Wrench}
+            onClick={listAddAction.onClick}
+            dataAttr={listAddAction.dataAttr}
+          />
+        </div>
+      );
+    }
     return (
       <PortalDataTableEmpty
         icon="work-order"
@@ -1172,6 +1198,17 @@ export function ManagerWorkOrdersPanel({
           );
         })}
       </div>
+
+      {listAddAction ? (
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+          <PortalListAddRow
+            label={listAddAction.label ?? "Add"}
+            icon={listAddAction.icon ?? Wrench}
+            onClick={listAddAction.onClick}
+            dataAttr={listAddAction.dataAttr}
+          />
+        </div>
+      ) : null}
 
       <Modal
         open={Boolean(completeRow)}

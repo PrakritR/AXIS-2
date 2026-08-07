@@ -76,12 +76,16 @@ import {
   buildFlyerEntryFromDraft,
   buildTextEntryFromCopy,
   appendUploadEntryToRow,
+  removeFlyerEntryFromRow,
+  removeTextEntryFromRow,
+  removeUploadEntryFromRow,
   syncPromotionRowLegacy,
   updateFlyerEntryOnRow,
   updateTextEntryOnRow,
 } from "@/lib/promotion-row-ops";
 import {
   MANAGER_PROMOTIONS_EVENT,
+  deleteManagerPromotionRow,
   generateFlyerCopy,
   generatePromotionTextCopy,
   makePromotionId,
@@ -102,6 +106,20 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
+import { isSystemOwnedPromotionEntryId } from "@/lib/promotion-default-sync";
+
+function promotionEntryId(asset: PromotionAsset): string | null {
+  if (asset.kind === "flyer") return asset.flyerEntry?.id ?? null;
+  if (asset.kind === "text") return asset.textEntry?.id ?? null;
+  if (asset.kind === "upload") return asset.uploadEntry?.id ?? null;
+  return null;
+}
+
+function canDeletePromotionAsset(asset: PromotionAsset): boolean {
+  const entryId = promotionEntryId(asset);
+  if (!entryId) return false;
+  return !isSystemOwnedPromotionEntryId(entryId);
+}
 
 function flyerEntryToDraft(
   row: ManagerPromotionRow,
@@ -634,6 +652,47 @@ export function ManagerPromotion({
     return stored.trim() || promotionAssetListTitle(detailAsset, indexWithinKind);
   }, [detailAsset, assets]);
 
+  const editingFlyerAsset =
+    editingRowId && editingEntryId
+      ? assets.find((a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId) ?? null
+      : null;
+
+  function deleteAsset(asset: PromotionAsset) {
+    if (asset.kind === "flyer" && asset.flyerEntry) {
+      const next = removeFlyerEntryFromRow(asset.row, asset.flyerEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
+    } else if (asset.kind === "text" && asset.textEntry) {
+      const next = removeTextEntryFromRow(asset.row, asset.textEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
+    } else if (asset.kind === "upload" && asset.uploadEntry) {
+      const next = removeUploadEntryFromRow(asset.row, asset.uploadEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
+    }
+    setTick((n) => n + 1);
+    showToast("Promotion deleted.");
+  }
+
+  function handleDeleteAsset(asset: PromotionAsset) {
+    if (!canDeletePromotionAsset(asset)) {
+      showToast("Default flyer and listing blurb cannot be removed.");
+      return;
+    }
+    const title = asset.flyerEntry?.title ?? asset.textEntry?.title ?? asset.uploadEntry?.title ?? "Promotion";
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (previewAssetId === asset.id) closePreview();
+    if (textModalAssetId === asset.id) closeForm();
+    if (editingEntryId && promotionEntryId(asset) === editingEntryId) closeForm();
+    deleteAsset(asset);
+  }
+
+  function handleDeleteFromFlyerModal() {
+    if (!editingFlyerAsset) return;
+    handleDeleteAsset(editingFlyerAsset);
+  }
+
   const promotionModals = (
     <>
       <PromotionNewModal
@@ -659,9 +718,27 @@ export function ManagerPromotion({
         assistantContext={buildPromotionNewModalAssistantContext(draft, "flyer")}
         assistantStorageScopeKey="Edit promotion flyer"
         footer={
-          <ModalFooter>
-            <Button type="button" variant="primary" onClick={() => generate()} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Updating…" : "Update flyer"}
+          <ModalFooter className="w-full">
+            {showForm && editingRowId && editingEntryId ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+                onClick={handleDeleteFromFlyerModal}
+                data-attr="promotion-flyer-delete"
+              >
+                Delete
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="primary"
+              className="ml-auto rounded-full"
+              onClick={() => generate()}
+              disabled={generating}
+              data-attr="promotion-generate"
+            >
+              {generating ? "Saving…" : "Save"}
             </Button>
           </ModalFooter>
         }
@@ -679,13 +756,19 @@ export function ManagerPromotion({
       <PromotionTextGenerateModal
         open={textModalAssetId !== null}
         onClose={closeForm}
+        title="Edit promotion text"
+        submitLabel="Save"
+        submitBusyLabel="Saving…"
         initialFormat={textModalAsset?.textEntry?.copy.format}
         initialTone={textModalAsset?.row.inputs.tone}
         initialImages={textModalAsset?.row.inputs.images}
+        canDelete={Boolean(textModalAsset)}
+        onDelete={textModalAsset ? () => handleDeleteAsset(textModalAsset) : undefined}
         onGenerate={(opts) => {
           if (!textModalAsset?.textEntry) return;
           void regenerateText(textModalAsset.row, textModalAsset.textEntry.id, opts);
         }}
+        busy={generatingTextId === textModalAsset?.textEntry?.id}
       />
 
       <PromotionAssetViewModal
@@ -694,6 +777,7 @@ export function ManagerPromotion({
         onClose={closePreview}
         allAssets={assets}
         dataAttr="promotion-preview"
+        showToast={showToast}
       />
     </>
   );
@@ -795,7 +879,7 @@ export function ManagerPromotion({
 
   const promotionListAddRow = (
     <PortalListAddRow
-      label="Add promotion"
+      label="Add"
       icon={PORTAL_LIST_ADD_ICONS.promotion}
       onClick={() => openNewPromotion()}
       dataAttr="promotion-list-add"

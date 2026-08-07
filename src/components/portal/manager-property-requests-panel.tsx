@@ -18,7 +18,6 @@ import {
   type ManagerListingServiceOption,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 
 type RequestsSaveTarget =
   | { mode: "pending"; saveId: string }
@@ -83,18 +82,6 @@ export function ManagerPropertyRequestsPanel({
     setIsNewOffer(false);
   };
 
-  const removeOffer = (offerId: string) => {
-    if (!saveTarget || !managerUserId) return;
-    const nextOffers = offers.filter((o) => o.id !== offerId);
-    const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: nextOffers };
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not remove request.");
-      return;
-    }
-    showToast("Request removed.");
-    onUpdated();
-  };
-
   if (!saveTarget || !managerUserId) return null;
 
   return (
@@ -119,15 +106,6 @@ export function ManagerPropertyRequestsPanel({
                 onClick={() => openEdit(offer)}
               >
                 Edit
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS}
-                data-attr={`property-request-remove-${offer.id}`}
-                onClick={() => removeOffer(offer.id)}
-              >
-                Remove
               </Button>
             </div>
           </div>

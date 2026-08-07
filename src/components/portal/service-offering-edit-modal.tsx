@@ -145,6 +145,21 @@ export function ServiceOfferingEditModal({
     onSaved();
   };
 
+  const remove = () => {
+    if (isNew || !offering) return;
+    const label = entityLabel.charAt(0).toUpperCase() + entityLabel.slice(1);
+    if (!window.confirm(`Delete this ${entityLabel}? This cannot be undone.`)) return;
+    const nextOffers = (sub.serviceRequestOptions ?? []).filter((o) => o.id !== offering.id);
+    const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: nextOffers };
+    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
+      showToast(`Could not delete ${entityLabel}.`);
+      return;
+    }
+    showToast(`${label} deleted.`);
+    onClose();
+    onSaved();
+  };
+
   return (
     <Modal
       open={open}
@@ -157,11 +172,22 @@ export function ServiceOfferingEditModal({
       panelClassName="max-w-lg"
       stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
       footer={
-        <ModalFooter>
+        <ModalFooter className="w-full">
+          {!isNew && offering ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+              data-attr="service-offering-delete"
+              onClick={remove}
+            >
+              Delete
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="primary"
-            className="rounded-full"
+            className="ml-auto rounded-full"
             data-attr="service-offering-save"
             onClick={save}
           >

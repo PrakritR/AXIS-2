@@ -99,20 +99,26 @@ export function PropertyApplicationFormModal({
       onClose={onClose}
       panelClassName="max-w-lg"
       footer={
-        <ModalFooter className={mode === "edit" && canDelete && onDelete ? "w-full justify-between" : undefined}>
+        <ModalFooter className="w-full">
           {mode === "edit" && canDelete && onDelete ? (
             <Button
               type="button"
               variant="outline"
-              className="border-rose-200 text-rose-800 portal-danger-outline"
+              className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
               data-attr="property-application-delete"
               onClick={onDelete}
             >
-              Delete application
+              Delete
             </Button>
           ) : null}
-          <Button type="button" variant="primary" onClick={submit} data-attr="property-application-save">
-            {mode === "edit" ? "Save changes" : "Add application"}
+          <Button
+            type="button"
+            variant="primary"
+            className="ml-auto rounded-full"
+            onClick={submit}
+            data-attr="property-application-save"
+          >
+            {mode === "edit" ? "Save" : "Add application"}
           </Button>
         </ModalFooter>
       }

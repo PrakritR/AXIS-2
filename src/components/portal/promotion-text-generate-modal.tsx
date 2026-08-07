@@ -213,6 +213,7 @@ export function PromotionTextGenerateModal({
   initialImages,
   title = "Generate promotion text",
   submitLabel = "Generate promotion text",
+  submitBusyLabel,
   canDelete = false,
   onDelete,
 }: {
@@ -225,6 +226,7 @@ export function PromotionTextGenerateModal({
   initialImages?: string[];
   title?: string;
   submitLabel?: string;
+  submitBusyLabel?: string;
   canDelete?: boolean;
   onDelete?: () => void;
 }) {
@@ -260,12 +262,13 @@ export function PromotionTextGenerateModal({
           ) : null}
           <Button
             type="button"
-            className="ml-auto"
+            variant="primary"
+            className="ml-auto rounded-full"
             disabled={busy}
             data-attr="promotion-text-generate-submit"
             onClick={() => textComposerRef.current?.generate()}
           >
-            {busy ? "Generating…" : submitLabel}
+            {busy ? (submitBusyLabel ?? "Generating…") : submitLabel}
           </Button>
         </ModalFooter>
       }

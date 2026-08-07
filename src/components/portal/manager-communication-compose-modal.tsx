@@ -37,6 +37,7 @@ import {
 } from "@/data/inbox-scoped-directory";
 import type { ManagerSmsResidentConversation } from "@/lib/manager-sms-messages";
 import { parseOtherRecipientTokens, normalizePhoneE164, type OtherRecipientToken } from "@/lib/communication-other-recipients";
+import type { ManagerComposePrefill } from "@/lib/manager-compose-prefill";
 import { buildOptimisticSentThread } from "@/lib/inbox-message-timeline";
 import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import { RecipientChipsInput } from "@/components/ui/recipient-chips-input";
@@ -126,6 +127,7 @@ export function ManagerCommunicationComposeModal({
   onSent,
   onStageOptimistic,
   onClearOptimistic,
+  initialDraft = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -136,6 +138,8 @@ export function ManagerCommunicationComposeModal({
   smsUiEnabled?: boolean;
   senderName?: string;
   senderEmail?: string;
+  /** Pre-filled subject/body/recipient when opened from another portal flow. */
+  initialDraft?: ManagerComposePrefill | null;
   onSent?: (result: {
     email: boolean;
     sms: boolean;
@@ -229,11 +233,26 @@ export function ManagerCommunicationComposeModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setSelectedCategories([]);
-      setSelectedKeys([]);
-      setOtherTokens([]);
-      setSubject("");
-      setBody("");
+      const email = initialDraft?.recipientEmail?.trim().toLowerCase();
+      if (initialDraft) {
+        setSubject(initialDraft.subject);
+        setBody(initialDraft.body);
+        if (email) {
+          setSelectedCategories(["other"]);
+          setSelectedKeys([]);
+          setOtherTokens([{ kind: "email", value: email, label: email }]);
+        } else {
+          setSelectedCategories([]);
+          setSelectedKeys([]);
+          setOtherTokens([]);
+        }
+      } else {
+        setSelectedCategories([]);
+        setSelectedKeys([]);
+        setOtherTokens([]);
+        setSubject("");
+        setBody("");
+      }
       setSendVia(
         defaultPortalMessageChannelSelection(
           true,
@@ -246,7 +265,7 @@ export function ManagerCommunicationComposeModal({
       setSendAt(defaultPortalMessageScheduleAt());
       setSending(false);
     });
-  }, [open, initialChannel, smsUiEnabled]);
+  }, [open, initialChannel, smsUiEnabled, initialDraft]);
 
   useEffect(() => {
     setSelectedCategories((prev) => prev.filter((c) => categoryOptions.includes(c)));

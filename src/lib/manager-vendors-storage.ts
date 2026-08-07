@@ -125,12 +125,23 @@ function mirrorVendorsToServer(rows: ManagerVendorRow[], managerUserId?: string 
 
 function mirrorVendorRowToServer(row: ManagerVendorRow) {
   if (typeof window === "undefined" || isDemoModeActive()) return;
-  void fetch("/api/portal-vendors", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "upsert", row }),
-  }).catch(() => undefined);
+  void persistManagerVendorToServer(row);
+}
+
+/** Await server persistence — use before routes that read `manager_vendor_records`. */
+export async function persistManagerVendorToServer(row: ManagerVendorRow): Promise<boolean> {
+  if (typeof window === "undefined" || isDemoModeActive()) return true;
+  try {
+    const res = await fetch("/api/portal-vendors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function deleteVendorFromServer(id: string) {

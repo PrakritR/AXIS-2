@@ -8,6 +8,8 @@ import {
   Home,
   ListTodo,
   Megaphone,
+  MessageSquare,
+  HardHat,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -70,6 +72,8 @@ export const PORTAL_LIST_ADD_ICONS = {
   lease: FileText,
   promotion: Megaphone,
   request: ListTodo,
+  conversation: MessageSquare,
+  vendor: HardHat,
   team: Users,
   payment: CreditCard,
 } satisfies Record<string, LucideIcon>;

@@ -63,6 +63,7 @@ const PUBLIC_PROPERTY_KEYS = [
   "mapLng",
   "managerUserId",
   "contactSmsPhone",
+  "managerContactEmail",
   "adminPublishLive",
 ] as const satisfies readonly (keyof MockProperty)[];
 
@@ -143,6 +144,8 @@ const PUBLIC_SUBMISSION_KEYS = [
   "shortTermApplicationConfigMode",
   "shortTermCustomApplicationFields",
   "shortTermDisabledStandardApplicationKeys",
+  "propertyApplicationTemplates",
+  "propertyApplicationTemplatesExplicit",
 ] as const satisfies readonly (keyof ManagerListingSubmissionV1)[];
 
 /** Excludes `moveInInstructions` (door codes, key handoff) and proration internals. */
@@ -338,6 +341,9 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     const withOwner: MockProperty = {
       ...live,
       ...(row.manager_user_id && !live.managerUserId ? { managerUserId: row.manager_user_id } : {}),
+      managerContactEmail: row.manager_user_id
+        ? managerEmailByUserId.get(row.manager_user_id)?.trim() || undefined
+        : undefined,
       // Always overwrite (never merely default) so an unresolved manager drops
       // the stored number rather than publishing a stale one.
       contactSmsPhone,
