@@ -2358,21 +2358,43 @@ html[data-native] [class*="PORTAL_SECTION_SURFACE"] {
 }
 
 html[data-hide-assistant-fab] .axis-assistant-fab,
-html[data-rental-wizard-active] .axis-assistant-fab,
-html[data-communication-surface] .axis-assistant-fab {
+html[data-rental-wizard-active] .axis-assistant-fab {
+  display: none !important;
+}
+
+html[data-communication-surface][data-communication-thread-reading] .axis-assistant-fab,
+html[data-communication-surface][data-communication-thread-selected] .axis-assistant-fab {
+  display: none !important;
+}
+
+html[data-communication-surface][data-communication-thread-reading] .portal-assistant-dock-rail,
+html[data-communication-surface][data-communication-thread-selected] .portal-assistant-dock-rail {
   display: none !important;
 }
 
 html[data-hide-assistant-fab],
-html[data-rental-wizard-active],
-html[data-communication-surface] {
+html[data-rental-wizard-active] {
   --portal-assistant-fab-clearance: 0px;
+}
+
+html[data-communication-surface] {
   --portal-mobile-scroll-bottom-inset: var(--portal-native-bottom-nav-inset);
 }
 
-html[data-hide-assistant-fab] .portal-communication-inbox .portal-inbox-composer-row,
-html[data-communication-surface] .portal-inbox-composer-row {
+@media (max-width: 1023px) {
+  html[data-communication-thread-reading] {
+    --portal-assistant-fab-clearance: 0px;
+  }
+}
+
+html[data-hide-assistant-fab] .portal-communication-inbox .portal-inbox-composer-row {
   padding-right: 0;
+}
+
+@media (max-width: 1023px) {
+  html[data-communication-thread-reading] .portal-inbox-composer-row {
+    padding-right: 0;
+  }
 }
 
 /* Communication + list pages: fixed chrome, scrollable body below. */

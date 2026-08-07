@@ -75,6 +75,39 @@ describe("POST /api/public/cosigner-submissions", () => {
     expect(res.status).toBe(404);
   });
 
+  it("rejects co-signer when primary application is not submitted", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          in: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                id: "AXIS-TEST1234",
+                manager_user_id: "mgr-1",
+                row_data: {
+                  bucket: "pending",
+                  stage: "In progress",
+                  name: "Primary",
+                  application: { propertyId: "prop-1", email: "primary@example.com" },
+                },
+              },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as never);
+
+    const req = jsonRequest("http://localhost/api/public/cosigner-submissions", {
+      method: "POST",
+      body: baseSubmission,
+    });
+    const res = await cosignerSubmit(req);
+    expect(res.status).toBe(403);
+    const { data } = await parseJsonResponse<{ error?: string }>(res);
+    expect(data.error).toMatch(/not been submitted/i);
+  });
+
   it("accepts valid co-signer submission", async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({

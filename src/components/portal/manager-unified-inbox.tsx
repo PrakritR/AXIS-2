@@ -134,6 +134,7 @@ export function ManagerUnifiedInbox({
   inboxRef,
   smsRef,
   onThreadOpenChange,
+  onThreadSelectedChange,
   searchQuery: searchQueryProp,
   onSearchQueryChange,
   listChrome = "internal",
@@ -155,6 +156,8 @@ export function ManagerUnifiedInbox({
   inboxRef?: React.RefObject<ManagerInboxHandle | null>;
   smsRef?: React.RefObject<ManagerSmsPanelHandle | null>;
   onThreadOpenChange?: (open: boolean) => void;
+  /** Fires when any conversation row is selected (desktop split or mobile). */
+  onThreadSelectedChange?: (selected: boolean) => void;
   /** Controlled search when list chrome is rendered by the parent control stack. */
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
@@ -375,9 +378,15 @@ export function ManagerUnifiedInbox({
 
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
 
+  const threadOpen = (mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection);
+
   useEffect(() => {
-    onThreadOpenChange?.(mobileThreadOpen && Boolean(selection));
-  }, [onThreadOpenChange, mobileThreadOpen, selection]);
+    onThreadOpenChange?.(threadOpen);
+  }, [onThreadOpenChange, threadOpen]);
+
+  useEffect(() => {
+    onThreadSelectedChange?.(Boolean(selection));
+  }, [onThreadSelectedChange, selection]);
 
   useEffect(() => {
     setMobileThreadOpen(Boolean(routeThreadId));
@@ -551,8 +560,6 @@ export function ManagerUnifiedInbox({
         hint="Choose a resident on the left to read and reply."
       />
     );
-
-  const threadOpen = (mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection);
 
   return (
     <InboxTwoPane

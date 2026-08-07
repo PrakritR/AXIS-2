@@ -21,6 +21,7 @@ export function PortalCommunicationShell({
   hideMobileFilterRow = false,
   compactFilterRow = true,
   mobileThreadReading = false,
+  threadSelected = false,
   hideTitleOnMobileNav = true,
 }: {
   title: string;
@@ -32,13 +33,15 @@ export function PortalCommunicationShell({
   hideMobileFilterRow?: boolean;
   compactFilterRow?: boolean;
   mobileThreadReading?: boolean;
+  /** Any open conversation (desktop split or mobile) — hides the assistant FAB. */
+  threadSelected?: boolean;
   hideTitleOnMobileNav?: boolean;
 }) {
   const resolvedStack =
     controlStack ??
     (threadFilters ? <PortalListControlStack filterRow={threadFilters} /> : null);
 
-  useCommunicationSurfaceChrome({ active: true, threadReading: mobileThreadReading });
+  useCommunicationSurfaceChrome({ active: true, threadReading: mobileThreadReading, threadSelected });
 
   return (
     <ManagerPortalPageShell

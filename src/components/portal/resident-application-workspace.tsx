@@ -50,11 +50,7 @@ function SubmittedApplicationCard({
         />
       ) : null}
       {row.application?.hasCosigner === "yes" ? (
-        <CosignerInviteCallout
-          signerAppId={row.id}
-          signerName={row.application?.fullLegalName}
-          className="mt-4 rounded-2xl border border-border bg-accent/30 p-5"
-        />
+        <CosignerInviteCallout signerAppId={row.id} className="mt-4" />
       ) : null}
       {row.application ? (
         <div className="mt-4 border-t border-border pt-4">

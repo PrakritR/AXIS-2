@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildCosignerApplyPath } from "@/lib/rental-application/cosigner-apply-link";
@@ -9,10 +8,13 @@ export function CosignerInviteCallout({
   signerAppId,
   signerName,
   className,
+  pendingSubmit = false,
 }: {
   signerAppId: string;
   signerName?: string;
   className?: string;
+  /** Wizard step — link is shown early but only works after the primary application is submitted. */
+  pendingSubmit?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const invitePath = buildCosignerApplyPath(signerAppId);
@@ -31,36 +33,30 @@ export function CosignerInviteCallout({
 
   return (
     <div className={`text-left ${className ?? ""}`}>
-      <p className="text-[13px] font-semibold text-foreground">Invite your co-signer</p>
+      <p className="text-[13px] font-semibold text-foreground">Co-signer invite</p>
       <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-sm">
-        Share this link so they can complete the co-signer form. Their application will open with your
-        {signerName ? ` (${signerName})` : ""} application ID already filled in.
+        Share this link so your co-signer can complete their form
+        {signerName ? ` for ${signerName}'s application` : ""}. Their form opens with your application ID prefilled.
       </p>
-      <p className="mt-2 font-mono text-xs text-muted">Your application ID: {signerAppId}</p>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <code className="min-w-0 flex-1 truncate rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-[11px] text-foreground sm:text-[12px]">
+      {pendingSubmit ? (
+        <p className="mt-2 text-[12px] font-medium text-amber-800 [html[data-theme=dark]_&]:text-amber-200">
+          The link works only after you finish and submit this application.
+        </p>
+      ) : null}
+      <p className="mt-2 font-mono text-xs text-muted">Application ID: {signerAppId}</p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <code className="min-w-0 flex-1 truncate rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-[11px] text-foreground">
           {inviteUrl}
         </code>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-9 rounded-full px-4 text-xs"
-            data-attr="cosigner-invite-copy"
-            onClick={() => void copy()}
-          >
-            {copied ? "Copied" : "Copy invite link"}
-          </Button>
-          <Link
-            href={invitePath}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-background px-4 text-xs font-semibold text-foreground hover:bg-accent/40"
-            data-attr="cosigner-invite-open"
-          >
-            Open co-signer form
-          </Link>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 shrink-0 rounded-full px-4 text-xs"
+          data-attr="cosigner-invite-copy"
+          onClick={() => void copy()}
+        >
+          {copied ? "Copied" : "Copy link"}
+        </Button>
       </div>
     </div>
   );

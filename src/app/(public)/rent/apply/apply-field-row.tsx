@@ -8,6 +8,8 @@ export function ApplyFieldRow({
   children,
   className = "",
   optional = false,
+  inline = false,
+  showRequiredMarker,
   labelClassName = "text-xs font-semibold text-foreground",
   fieldKey,
 }: {
@@ -17,18 +19,35 @@ export function ApplyFieldRow({
   children: ReactNode;
   className?: string;
   optional?: boolean;
+  /** Label and control share one row (e.g. Yes/No pills). */
+  inline?: boolean;
+  /** Defaults to !optional. Use false on inline Yes/No rows — validation still applies. */
+  showRequiredMarker?: boolean;
   /** e.g. larger text for long signer questions */
   labelClassName?: string;
   fieldKey?: string;
 }) {
+  const requiredMarker = showRequiredMarker ?? !optional;
+
   return (
     <div
-      className={`grid gap-3 border-b border-border/60 py-4 last:border-b-0 sm:border-b-0 sm:py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] sm:items-start ${className}`}
+      className={`grid gap-3 border-b border-border/60 py-4 last:border-b-0 sm:border-b-0 sm:py-4 sm:grid-cols-[minmax(168px,220px)_minmax(0,1fr)] ${inline ? "sm:items-center" : "sm:items-start"} ${className}`}
     >
-      <div className="sm:pt-2">
-        <div className={labelClassName}>
+      <div className={inline ? undefined : "sm:pt-2"}>
+        <div
+          className={
+            inline
+              ? `inline-flex flex-wrap items-baseline gap-x-1 ${labelClassName}`
+              : labelClassName
+          }
+        >
           {label}
-          {!optional ? <span className="font-semibold text-primary"> *</span> : null}
+          {requiredMarker ? (
+            <span className="text-primary" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+          {optional ? <span className="font-normal text-muted/70">(optional)</span> : null}
         </div>
         {hint ? <p className="mt-1 text-[11px] leading-snug text-muted/70">{hint}</p> : null}
       </div>

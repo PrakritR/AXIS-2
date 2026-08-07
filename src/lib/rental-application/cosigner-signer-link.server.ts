@@ -1,14 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
-  assessGroupLeaderApplication,
-  type GroupLeaderLinkPreview,
-  validateGroupLeaderAppIdInput,
-} from "@/lib/rental-application/group-leader-link";
+  assessCosignerSignerApplication,
+  type CosignerSignerLinkPreview,
+  validateCosignerSignerAppIdInput,
+} from "@/lib/rental-application/cosigner-signer-link";
 
 function rowFromRecord(record: { id: string; row_data: unknown; property_id?: string | null } | null): Pick<
   DemoApplicantRow,
-  "id" | "application" | "name" | "propertyId" | "bucket" | "stage" | "withdrawnAt" | "property"
+  "id" | "name" | "propertyId" | "application" | "bucket" | "stage" | "withdrawnAt" | "property"
 > | null {
   if (!record?.row_data) return null;
   const row = record.row_data as DemoApplicantRow;
@@ -29,11 +29,11 @@ function rowFromRecord(record: { id: string; row_data: unknown; property_id?: st
   };
 }
 
-export async function loadGroupLeaderLinkPreview(
+export async function loadCosignerSignerLinkPreview(
   db: SupabaseClient,
-  leaderAppId: string,
-): Promise<GroupLeaderLinkPreview> {
-  const validated = validateGroupLeaderAppIdInput(leaderAppId);
+  signerAppId: string,
+): Promise<CosignerSignerLinkPreview> {
+  const validated = validateCosignerSignerAppIdInput(signerAppId);
   if (!validated.ok) {
     return { ok: false, code: "invalid_id", message: validated.message };
   }
@@ -53,8 +53,8 @@ export async function loadGroupLeaderLinkPreview(
   }
 
   if (!data) {
-    return assessGroupLeaderApplication(validated.normalized, null);
+    return assessCosignerSignerApplication(validated.normalized, null);
   }
 
-  return assessGroupLeaderApplication(validated.normalized, rowFromRecord(data));
+  return assessCosignerSignerApplication(validated.normalized, rowFromRecord(data));
 }

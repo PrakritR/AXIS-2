@@ -1,5 +1,6 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { applicationLinkBlock } from "@/lib/rental-application/application-link-eligibility";
 import { normalizeGroupId } from "@/lib/rental-application/application-groups";
 
 export type GroupLeaderLinkOk = {
@@ -8,13 +9,15 @@ export type GroupLeaderLinkOk = {
   groupId: string;
   groupSize: number | null;
   organizerFirstName: string | null;
+  propertyId: string | null;
 };
 
 export type GroupLeaderLinkErrorCode =
   | "invalid_id"
   | "not_found"
   | "not_group_organizer"
-  | "missing_group_link";
+  | "missing_group_link"
+  | "not_submitted";
 
 export type GroupLeaderLinkError = {
   ok: false;
@@ -45,7 +48,7 @@ export function validateGroupLeaderAppIdInput(
  */
 export function assessGroupLeaderApplication(
   leaderAppId: string,
-  row: Pick<DemoApplicantRow, "id" | "application" | "name"> | null | undefined,
+  row: Pick<DemoApplicantRow, "id" | "application" | "name" | "propertyId" | "bucket" | "stage" | "withdrawnAt" | "property"> | null | undefined,
 ): GroupLeaderLinkPreview {
   const validated = validateGroupLeaderAppIdInput(leaderAppId);
   if (!validated.ok) {
@@ -60,8 +63,14 @@ export function assessGroupLeaderApplication(
     };
   }
 
+  const blocked = applicationLinkBlock(row);
+  if (blocked) {
+    return { ok: false, code: blocked.code, message: blocked.message };
+  }
+
   const app = row.application;
-  if (!app || app.applyingAsGroup !== "yes" || app.groupRole !== "first") {
+  const joining = app?.groupRole === "joining" || Boolean(app?.groupLeaderAppId?.trim());
+  if (!app || app.applyingAsGroup !== "yes" || joining) {
     return {
       ok: false,
       code: "not_group_organizer",
@@ -85,11 +94,14 @@ export function assessGroupLeaderApplication(
   const name = (row.name || app.fullLegalName || "").trim();
   const organizerFirstName = name.split(/\s+/).filter(Boolean)[0] ?? null;
 
+  const propertyId = row.propertyId?.trim() || app.propertyId?.trim() || null;
+
   return {
     ok: true,
     leaderAppId: validated.normalized,
     groupId,
     groupSize,
     organizerFirstName,
+    propertyId,
   };
 }
