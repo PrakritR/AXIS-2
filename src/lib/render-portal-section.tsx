@@ -606,7 +606,7 @@ export async function renderPortalSection(
       if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
 
       if (servicesTab === "vendors") {
-        if (tabParts.length > 1) notFound();
+        if (tabParts.length > 2) notFound();
       } else if (servicesTab === "requests") {
         if (tabParts.length === 1) {
           redirect(`${def.basePath}/services/requests/pending`);
@@ -649,6 +649,10 @@ export async function renderPortalSection(
         servicesTab === "work-orders" && tabParts.length >= 3
           ? decodeURIComponent(tabParts[2]!)
           : undefined;
+      const vendorId =
+        servicesTab === "vendors" && tabParts.length >= 2
+          ? decodeURIComponent(tabParts[1]!)
+          : undefined;
 
       const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
       return subscriptionGated(
@@ -659,6 +663,7 @@ export async function renderPortalSection(
           workOrderBucket={workOrderBucket}
           serviceRequestId={serviceRequestId}
           workOrderId={workOrderId}
+          vendorId={vendorId}
         />,
         kind,
         "services",

@@ -395,6 +395,14 @@ export function workOrderDetailHref(
   return `${basePath}/services/work-orders/${bucket}/${encodeURIComponent(workOrderId)}`;
 }
 
+export function vendorListHref(basePath: string): string {
+  return `${basePath}/services/vendors`;
+}
+
+export function vendorDetailHref(basePath: string, vendorId: string): string {
+  return `${basePath}/services/vendors/${encodeURIComponent(vendorId)}`;
+}
+
 /** Legacy promotion content filters — routes now redirect to the unified list. */
 export const PROMOTION_CONTENT_FILTERS = ["text", "image"] as const;
 export type PromotionContentFilterId = (typeof PROMOTION_CONTENT_FILTERS)[number];

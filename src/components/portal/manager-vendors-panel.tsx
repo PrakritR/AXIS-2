@@ -1,10 +1,9 @@
 "use client";
 
-import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ManagerPortalPageShell,
-  MANAGER_TABLE_TH,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
@@ -27,23 +26,17 @@ import { ManagerVendorInviteModal } from "@/components/portal/manager-vendor-inv
 import { ManagerVendorFormModal } from "@/components/portal/manager-vendor-form-modal";
 import { stageManagerComposePrefill } from "@/lib/manager-compose-prefill";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { vendorDetailHref, vendorListHref } from "@/lib/portal-detail-routes";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   PORTAL_LIST_ADD_ICONS,
   PORTAL_LIST_ADD_ROW_WRAP_CLASS,
   PortalListAddRow,
 } from "@/components/portal/portal-list-add-row";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
+import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
 
 export type ManagerVendorsPanelHandle = {
   openCatalog: () => void;
@@ -93,21 +86,37 @@ export function ManagerVendorsToolbar({
   );
 }
 
+function vendorRowMeta(row: ManagerVendorRow): string | undefined {
+  if (row.active === false) return "Inactive";
+  if (row.vendorPriority === "primary") return "Primary";
+  if (row.vendorPriority === "secondary") return "Secondary";
+  return undefined;
+}
+
+function vendorRowPreview(row: ManagerVendorRow): string {
+  return [row.email, row.phone].filter(Boolean).join(" · ") || row.trade || "—";
+}
+
 export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   {
     embedded = false,
+    vendorId: vendorIdProp,
+    listBasePath,
   }: {
     /** When true, render inside Services tab shell (no duplicate page header). */
     embedded?: boolean;
+    vendorId?: string;
+    listBasePath?: string;
   },
   ref: React.Ref<ManagerVendorsPanelHandle>,
 ) {
   const { showToast } = useAppUi();
   const router = useRouter();
+  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
+  const basePath = listBasePath ?? portalBase;
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
   const [defaultsTrade, setDefaultsTrade] = useState<string | undefined>(undefined);
@@ -130,8 +139,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   const vendors = useMemo(() => {
     void tick;
-    return readOwnManagerVendorRows(userId, undefined, { includeOwnerIds: collectLinkedOwnerIdsForModule(userId ?? "", "services") }).sort((a, b) => a.name.localeCompare(b.name));
+    return readOwnManagerVendorRows(userId, undefined, {
+      includeOwnerIds: collectLinkedOwnerIdsForModule(userId ?? "", "services"),
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tick, userId]);
+
+  const routeVendorId = vendorIdProp ? decodeURIComponent(vendorIdProp) : null;
+  const routeVendor = useMemo(() => {
+    if (!routeVendorId) return null;
+    return vendors.find((row) => row.id === routeVendorId) ?? null;
+  }, [routeVendorId, vendors]);
 
   const openCatalogForm = useCallback(() => {
     setShowCatalog(true);
@@ -154,8 +171,18 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     setEditingVendor(row);
     setAddTrade(undefined);
     setVendorFormOpen(true);
-    setExpandedId(row.id);
   }, []);
+
+  const navigateToList = useCallback(() => {
+    navigate(vendorListHref(basePath));
+  }, [basePath, navigate]);
+
+  const openVendorDetail = useCallback(
+    (row: ManagerVendorRow) => {
+      navigate(vendorDetailHref(basePath, row.id));
+    },
+    [basePath, navigate],
+  );
 
   const openVendorOnboardingCompose = useCallback(
     async (vendor: { id: string; name: string; email: string }) => {
@@ -210,7 +237,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   function removeVendor(id: string) {
     if (!deleteManagerVendorRow(id, userId)) return;
-    if (expandedId === id) setExpandedId(null);
+    if (routeVendorId === id) navigateToList();
     showToast("Vendor removed.");
   }
 
@@ -324,77 +351,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     </div>
   );
 
-  const vendorTable = (
-    <>
-      <div className="space-y-2 lg:hidden">
-        {vendors.map((row) => {
-          const open = expandedId === row.id;
-          return (
-            <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-              <button
-                type="button"
-                className="flex w-full gap-2 text-left"
-                onClick={() => setExpandedId(open ? null : row.id)}
-                aria-expanded={open}
-                data-attr="vendor-card-toggle"
-              >
-                <div className="min-w-0 flex-1">
-                  <PortalTableInlineExpand expanded={open} className="font-semibold text-foreground">
-                    <span className="truncate">{row.name}</span>
-                  </PortalTableInlineExpand>
-                </div>
-              </button>
-              {open ? <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div> : null}
-            </div>
-          );
-        })}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={MANAGER_TABLE_TH}>Name</th>
-                <th className={MANAGER_TABLE_TH}>Trade</th>
-                <th className={MANAGER_TABLE_TH}>Phone</th>
-                <th className={MANAGER_TABLE_TH}>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendors.map((row) => {
-                const open = expandedId === row.id;
-                return (
-                  <Fragment key={row.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
-                      aria-expanded={open}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <PortalTableInlineExpand expanded={open}>{row.name}</PortalTableInlineExpand>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
-                    </tr>
-                    {open ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                          {renderVendorDetail(row)}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  );
-
-  const body = (
+  const modals = (
     <>
       <ManagerVendorFormModal
         open={vendorFormOpen}
@@ -410,14 +367,11 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         onBrowseCatalog={() => openCatalogForm()}
         onAdded={openVendorOnboardingCompose}
         onDeleted={() => {
-          if (editingVendor && expandedId === editingVendor.id) setExpandedId(null);
+          if (editingVendor && routeVendorId === editingVendor.id) navigateToList();
           setEditingVendor(null);
         }}
       />
-      <ManagerVendorCatalogModal
-        open={showCatalog}
-        onClose={() => setShowCatalog(false)}
-      />
+      <ManagerVendorCatalogModal open={showCatalog} onClose={() => setShowCatalog(false)} />
       <ManagerVendorDefaultsModal
         open={showDefaults}
         onClose={() => {
@@ -437,8 +391,59 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         }}
         showToast={showToast}
       />
+    </>
+  );
 
-      {vendors.length === 0 ? vendorListAddRow : vendorTable}
+  if (routeVendorId) {
+    if (!routeVendor) {
+      return (
+        <>
+          {modals}
+          <PortalDataTableEmpty icon="vendor" message="Vendor not found." />
+        </>
+      );
+    }
+    return (
+      <>
+        {modals}
+        <PortalRecordDetailPage
+          pageTitle="Services"
+          title={routeVendor.name}
+          subtitle={routeVendor.trade || undefined}
+          backHref={vendorListHref(basePath)}
+          backLabel="Back to vendors"
+          dataAttrBack="vendor-detail-back"
+        >
+          {renderVendorDetail(routeVendor)}
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  const listBody =
+    vendors.length === 0 ? (
+      vendorListAddRow
+    ) : (
+      <div className={PORTAL_LIST_PAGE_BODY}>
+        {vendors.map((row) => (
+          <PortalPersonRecordRow
+            key={row.id}
+            name={row.name}
+            subtitle={row.trade || undefined}
+            preview={vendorRowPreview(row)}
+            meta={vendorRowMeta(row)}
+            onOpen={() => openVendorDetail(row)}
+            dataAttr="vendor-list-row"
+          />
+        ))}
+        {vendorListAddRow}
+      </div>
+    );
+
+  const body = (
+    <>
+      {modals}
+      {listBody}
     </>
   );
 
