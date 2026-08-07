@@ -515,6 +515,11 @@ export type ManagerListingSubmissionV1 = {
   propertyLeaseTemplates?: import("@/lib/property-lease-templates").PropertyLeaseTemplate[];
   /** Multiple application templates per property (long-term, short-term, custom). */
   propertyApplicationTemplates?: import("@/lib/property-application-templates").PropertyApplicationTemplate[];
+  /**
+   * When true, the manager has taken explicit control of the application list —
+   * auto-seeded defaults are not re-created after deletion (including an empty list).
+   */
+  propertyApplicationTemplatesExplicit?: boolean;
 
   // ---------------------------------------------------------------------------
   // Disclosure trigger fields (building-level compliance inputs)
@@ -1518,6 +1523,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     propertyApplicationTemplates: Array.isArray((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates)
       ? ((sub as { propertyApplicationTemplates?: unknown }).propertyApplicationTemplates as import("@/lib/property-application-templates").PropertyApplicationTemplate[])
       : undefined,
+    propertyApplicationTemplatesExplicit:
+      (sub as { propertyApplicationTemplatesExplicit?: unknown }).propertyApplicationTemplatesExplicit === true
+        ? true
+        : undefined,
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,

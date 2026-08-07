@@ -41,6 +41,7 @@ import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/applicatio
 import {
   createPropertyApplicationTemplate,
   syncLegacyApplicationFieldsFromTemplates,
+  withPropertyApplicationTemplatesExplicit,
   updatePropertyApplicationTemplate,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
@@ -284,7 +285,7 @@ export function ManagerApplicationQuestionsEditorModal({
           label: trimmed,
         });
       }
-      const merged = syncLegacyApplicationFieldsFromTemplates(localSub, nextTemplates);
+      const merged = withPropertyApplicationTemplatesExplicit(localSub, nextTemplates);
       if (
         !onPersistSubmission(merged, {
           message: templateEditorMode === "add" ? "Application added." : "Application saved.",

@@ -46,16 +46,20 @@ function leaseCtx(submission: ManagerListingSubmissionV1 | undefined): LeaseGene
 }
 
 describe("application section catalog", () => {
-  it("maps every section to an applicant wizard step at or after property selection", () => {
+  it("maps every section to a valid applicant wizard step (household/co-signer before property)", () => {
     for (const section of RENTAL_APPLICATION_SECTIONS) {
-      expect(section.wizardStep).toBeGreaterThanOrEqual(3);
+      expect(section.wizardStep).toBeGreaterThanOrEqual(1);
       expect(section.wizardStep).toBeLessThanOrEqual(10);
     }
+    expect(RENTAL_APPLICATION_SECTIONS.find((s) => s.id === "household")?.wizardStep).toBe(1);
+    expect(RENTAL_APPLICATION_SECTIONS.find((s) => s.id === "cosigner_intent")?.wizardStep).toBe(2);
+    expect(RENTAL_APPLICATION_SECTIONS.find((s) => s.id === "property")?.wizardStep).toBe(3);
   });
 
   it("routes untagged and unknown sections to the Additional details step", () => {
     expect(applicationWizardStepForSection(undefined)).toBe(9);
     expect(applicationWizardStepForSection("bogus")).toBe(9);
+    expect(applicationWizardStepForSection("household")).toBe(1);
     expect(applicationWizardStepForSection("property")).toBe(3);
   });
 });

@@ -7,8 +7,10 @@ import { PublicApplyAccountPrompt } from "@/components/marketing/public-apply-ac
 import { SignedInResidentAccountPrompt } from "@/components/marketing/signed-in-resident-account-prompt";
 import { ApplyPropertyPicker } from "@/components/marketing/apply-property-picker";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
+import { ApplicationUnavailableContactManager } from "@/components/marketing/application-unavailable-contact-manager";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { getPropertyForPublicLink } from "@/lib/rental-application/data";
+import { propertyAcceptingOnlineApplications } from "@/lib/property-application-template-sync";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-links";
 import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -65,6 +67,17 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     return getPropertyForPublicLink(propertyId)?.title?.trim();
   }, [propertyId, extrasTick]);
 
+  const linkedProperty = useMemo(() => {
+    void extrasTick;
+    if (!propertyId) return undefined;
+    return getPropertyForPublicLink(propertyId);
+  }, [propertyId, extrasTick]);
+
+  const applicationsAvailable = useMemo(() => {
+    if (!linkedProperty?.listingSubmission) return true;
+    return propertyAcceptingOnlineApplications(linkedProperty.listingSubmission);
+  }, [linkedProperty]);
+
   const [guestGateOpen, setGuestGateOpen] = useState(() =>
     propertyId ? !hasPublicApplyGuestContinue(propertyId) : false,
   );
@@ -116,6 +129,12 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
           propertyId={propertyId}
           propertyTitle={propertyTitle}
           onContinueGuest={() => setGuestGateOpen(false)}
+        />
+      ) : !applicationsAvailable ? (
+        <ApplicationUnavailableContactManager
+          propertyTitle={linkedProperty?.title}
+          managerEmail={linkedProperty?.managerContactEmail}
+          managerPhone={linkedProperty?.contactSmsPhone}
         />
       ) : (
         <RentalApplicationWizard showToast={showToast} mode="public" exitPath="/rent/browse" />

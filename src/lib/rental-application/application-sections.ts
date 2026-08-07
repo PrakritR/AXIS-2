@@ -10,6 +10,8 @@
  */
 
 export type RentalApplicationSectionId =
+  | "household"
+  | "cosigner_intent"
   | "property"
   | "personal"
   | "current_address"
@@ -30,11 +32,27 @@ export type RentalApplicationSection = {
 
 /**
  * Sections managers can review and extend with custom questions, in applicant
- * order. Group/co-signer steps are intentionally excluded: they run before the
- * applicant has picked a property, so per-property questions there could be
- * skipped.
+ * order. Household / co-signer intent run on steps 1–2 before property pick.
  */
 export const RENTAL_APPLICATION_SECTIONS: readonly RentalApplicationSection[] = [
+  {
+    id: "household",
+    title: "Household application",
+    wizardStep: 1,
+    standardFields: [
+      "Primary applicant or co-signer",
+      "Applying as part of a group",
+      "Group role",
+      "Group size",
+      "Group ID",
+    ],
+  },
+  {
+    id: "cosigner_intent",
+    title: "Co-signer",
+    wizardStep: 2,
+    standardFields: ["Co-signer on this application"],
+  },
   {
     id: "property",
     title: "Property information",

@@ -27,7 +27,7 @@ import {
 import {
   readPropertyApplicationTemplates,
   removePropertyApplicationTemplate,
-  syncLegacyApplicationFieldsFromTemplates,
+  withPropertyApplicationTemplatesExplicit,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
 import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
@@ -38,10 +38,6 @@ type QuestionsSaveTarget =
   | { mode: "listing"; saveId: string }
   | { mode: "requestChange"; saveId: string }
   | null;
-
-function isManagerOwnedApplicationTemplate(template: PropertyApplicationTemplate): boolean {
-  return !template.listingSeedKey;
-}
 
 /**
  * Per-property application templates — same list chrome as the lease tab.
@@ -93,8 +89,13 @@ export function ManagerPropertyApplicationQuestionsPanel({
             failed += 1;
             continue;
           }
-          const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
-          const next = syncLegacyApplicationFieldsFromTemplates({ ...base, ...configFields }, nextTemplates);
+          const base = hit.sub.propertyApplicationTemplatesExplicit
+          ? hit.sub
+          : syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const next = withPropertyApplicationTemplatesExplicit(
+          { ...base, ...configFields },
+          nextTemplates,
+        );
           if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
           else failed += 1;
         }
@@ -135,7 +136,9 @@ export function ManagerPropertyApplicationQuestionsPanel({
           failed += 1;
           continue;
         }
-        const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const base = hit.sub.propertyApplicationTemplatesExplicit
+          ? hit.sub
+          : syncPropertyApplicationTemplatesFromListing(hit.sub);
         const persisted = persistManagerListingSubmission(
           hit.saveTarget,
           managerUserId,
@@ -151,7 +154,10 @@ export function ManagerPropertyApplicationQuestionsPanel({
     return persistManagerListingSubmission(
       saveTarget,
       managerUserId,
-      submissionAfterRemovingApplicationTemplate(syncedSub, nextTemplates),
+      submissionAfterRemovingApplicationTemplate(
+        sub.propertyApplicationTemplatesExplicit ? sub : syncedSub,
+        nextTemplates,
+      ),
     );
   };
 
@@ -182,16 +188,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
     setEditorOpen(true);
   };
 
-  const handleDeleteTemplate = (templateId: string, label: string) => {
-    if (templates.length <= 1) {
-      showToast("Keep at least one application on this property.");
-      return;
-    }
-    const target = templates.find((t) => t.id === templateId);
-    if (target && !isManagerOwnedApplicationTemplate(target)) {
-      showToast("Long-term and short-term defaults cannot be removed.");
-      return;
-    }
+  const handleDeleteTemplate = (templateId: string) => {
     const next = removePropertyApplicationTemplate(templates, templateId);
     const persisted = persistRemoval(next);
     if (!persisted) {
@@ -276,10 +273,10 @@ export function ManagerPropertyApplicationQuestionsPanel({
           applicationTemplate={editingTemplate}
           templates={templates}
           onPersistSubmission={persistSubmission}
-          canDelete={editorMode === "edit" && templates.length > 1}
+          canDelete={editorMode === "edit"}
           onDelete={
             editingTemplate
-              ? () => handleDeleteTemplate(editingTemplate.id, editingTemplate.label)
+              ? () => handleDeleteTemplate(editingTemplate.id)
               : undefined
           }
           onClose={closeEditor}

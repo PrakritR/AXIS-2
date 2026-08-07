@@ -369,152 +369,172 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   })();
 
   if (step === 1) {
+    const effectiveApplicantRole = showWizardField("applicantRole") ? form.applicantRole : "signer";
+    const showGroupBlock =
+      effectiveApplicantRole === "signer" &&
+      (showWizardField("applyingAsGroup") ||
+        showWizardField("groupRole") ||
+        showWizardField("groupSize") ||
+        showWizardField("groupId"));
+
     return (
       <div className="rental-wizard-step space-y-6">
-        <div className="space-y-2" data-wizard-field="applicantRole">
-          <Label required>Are you the primary applicant or a co-signer?</Label>
-          <p className="text-sm leading-relaxed text-muted">
-            Choose <span className="font-medium text-foreground">Primary applicant</span> if you are applying for the
-            lease. Choose <span className="font-medium text-foreground">Co-signer</span> if someone else applied first
-            and asked you to complete the co-signer form.
-          </p>
-          <div
-            className={`${groupRoleStack} ${errors.applicantRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
-            role="group"
-            aria-label="Applicant role"
-          >
-            <button
-              type="button"
-              onClick={() =>
-                patch({
-                  applicantRole: "signer",
-                })
-              }
-              className={form.applicantRole === "signer" ? choiceActive : choiceIdle}
-            >
-              Primary applicant
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                patch({
-                  applicantRole: "cosigner",
-                  applyingAsGroup: null,
-                  groupRole: null,
-                  groupSize: "",
-                  groupId: "",
-                })
-              }
-              className={form.applicantRole === "cosigner" ? choiceActive : choiceIdle}
-            >
-              Co-signer
-            </button>
-          </div>
-          <FieldError msg={errors.applicantRole} />
-        </div>
-
-        {form.applicantRole === "signer" ? (
-          <>
-        <h3 className="text-base font-bold tracking-tight text-foreground">Group application</h3>
-        <StepIntro>
-          Applying with roommates? One person submits first and shares a Group ID so everyone&apos;s applications stay
-          linked.
-        </StepIntro>
-
-        <div className="space-y-2">
-          <Label required>Are you applying as part of a group?</Label>
-          <YesNoPills
-            value={form.applyingAsGroup}
-            error={errors.applyingAsGroup}
-            name="Group application"
-            fieldKey="applyingAsGroup"
-            onChange={(v) => {
-              patch({
-                applyingAsGroup: v,
-                groupRole: v === "no" ? null : form.groupRole,
-                groupSize: v === "no" ? "" : form.groupSize,
-                groupId: v === "no" ? "" : form.groupId,
-              });
-            }}
-          />
-        </div>
-
-        {form.applyingAsGroup === "yes" ? (
-          <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+        <WizardFieldGate fieldKey="applicantRole" enabled={showWizardField}>
+          <div className="space-y-2" data-wizard-field="applicantRole">
+            <Label required>Are you the primary applicant or a co-signer?</Label>
             <p className="text-sm leading-relaxed text-muted">
-              Start the group and share your Group ID, or paste the ID from whoever applied first.
+              Choose <span className="font-medium text-foreground">Primary applicant</span> if you are applying for the
+              lease. Choose <span className="font-medium text-foreground">Co-signer</span> if someone else applied first
+              and asked you to complete the co-signer form.
             </p>
-
-            <div className="space-y-2" data-wizard-field="groupRole">
-              <Label required>What is your role in the group?</Label>
-              <div
-                className={`${groupRoleStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
-                role="group"
-                aria-label="Group role"
+            <div
+              className={`${groupRoleStack} ${errors.applicantRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
+              role="group"
+              aria-label="Applicant role"
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  patch({
+                    applicantRole: "signer",
+                  })
+                }
+                className={form.applicantRole === "signer" ? choiceActive : choiceIdle}
               >
-                <button
-                  type="button"
-                  onClick={() => patch({ groupRole: "first", groupId: "" })}
-                  className={form.groupRole === "first" ? choiceActive : choiceIdle}
-                >
-                  I am the first person applying
-                </button>
-                <button
-                  type="button"
-                  onClick={() => patch({ groupRole: "joining", groupSize: "" })}
-                  className={form.groupRole === "joining" ? choiceActive : choiceIdle}
-                >
-                  I am joining an existing group
-                </button>
-              </div>
-              <FieldError msg={errors.groupRole} />
+                Primary applicant
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  patch({
+                    applicantRole: "cosigner",
+                    applyingAsGroup: null,
+                    groupRole: null,
+                    groupSize: "",
+                    groupId: "",
+                  })
+                }
+                className={form.applicantRole === "cosigner" ? choiceActive : choiceIdle}
+              >
+                Co-signer
+              </button>
             </div>
-
-            {form.groupRole === "first" ? (
-              <div className="space-y-2">
-                <Label htmlFor="groupSize" required>
-                  How many people are applying together?
-                </Label>
-                <p className="text-xs text-muted">Include yourself. Whole numbers from 2 to 30.</p>
-                <Select
-                  id="groupSize"
-                  value={form.groupSize}
-                  onChange={(e) => patch({ groupSize: e.target.value })}
-                  className={errors.groupSize ? "border-red-400 ring-2 ring-red-100" : ""}
-                >
-                  <option value="">Select group size</option>
-                  {Array.from({ length: 29 }, (_, i) => i + 2).map((n) => (
-                    <option key={n} value={String(n)}>
-                      {n} people
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-muted">
-                  We&apos;ll generate a Group ID after submission for you to share with roommates.
-                </p>
-                <FieldError msg={errors.groupSize} />
-              </div>
-            ) : null}
-
-            {form.groupRole === "joining" ? (
-              <div className="space-y-2">
-                <Label htmlFor="groupId" required>
-                  Group ID
-                </Label>
-                <p className="text-xs text-muted">Paste the Group ID shared by the first applicant. Format: {GROUP_ID_FORMAT_HINT}</p>
-                <Input
-                  id="groupId"
-                  value={form.groupId}
-                  onChange={(e) => patch({ groupId: e.target.value })}
-                  placeholder={GROUP_ID_FORMAT_HINT}
-                  autoComplete="off"
-                  className={errors.groupId ? "border-red-400 ring-2 ring-red-100" : ""}
-                />
-                <FieldError msg={errors.groupId} />
-              </div>
-            ) : null}
+            <FieldError msg={errors.applicantRole} />
           </div>
-        ) : null}
+        </WizardFieldGate>
+
+        {showGroupBlock ? (
+          <>
+            <h3 className="text-base font-bold tracking-tight text-foreground">Group application</h3>
+            <StepIntro>
+              Applying with roommates? One person submits first and shares a Group ID so everyone&apos;s applications stay
+              linked.
+            </StepIntro>
+
+            <WizardFieldGate fieldKey="applyingAsGroup" enabled={showWizardField}>
+              <div className="space-y-2">
+                <Label required>Are you applying as part of a group?</Label>
+                <YesNoPills
+                  value={form.applyingAsGroup}
+                  error={errors.applyingAsGroup}
+                  name="Group application"
+                  fieldKey="applyingAsGroup"
+                  onChange={(v) => {
+                    patch({
+                      applyingAsGroup: v,
+                      groupRole: v === "no" ? null : form.groupRole,
+                      groupSize: v === "no" ? "" : form.groupSize,
+                      groupId: v === "no" ? "" : form.groupId,
+                    });
+                  }}
+                />
+              </div>
+            </WizardFieldGate>
+
+            {form.applyingAsGroup === "yes" ? (
+              <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+                <p className="text-sm leading-relaxed text-muted">
+                  Start the group and share your Group ID, or paste the ID from whoever applied first.
+                </p>
+
+                <WizardFieldGate fieldKey="groupRole" enabled={showWizardField}>
+                  <div className="space-y-2" data-wizard-field="groupRole">
+                    <Label required>What is your role in the group?</Label>
+                    <div
+                      className={`${groupRoleStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
+                      role="group"
+                      aria-label="Group role"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => patch({ groupRole: "first", groupId: "" })}
+                        className={form.groupRole === "first" ? choiceActive : choiceIdle}
+                      >
+                        I am the first person applying
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => patch({ groupRole: "joining", groupSize: "" })}
+                        className={form.groupRole === "joining" ? choiceActive : choiceIdle}
+                      >
+                        I am joining an existing group
+                      </button>
+                    </div>
+                    <FieldError msg={errors.groupRole} />
+                  </div>
+                </WizardFieldGate>
+
+                {form.groupRole === "first" ? (
+                  <WizardFieldGate fieldKey="groupSize" enabled={showWizardField}>
+                    <div className="space-y-2" data-wizard-field="groupSize">
+                      <Label htmlFor="groupSize" required>
+                        How many people are applying together?
+                      </Label>
+                      <p className="text-xs text-muted">Include yourself. Whole numbers from 2 to 30.</p>
+                      <Select
+                        id="groupSize"
+                        value={form.groupSize}
+                        onChange={(e) => patch({ groupSize: e.target.value })}
+                        className={errors.groupSize ? "border-red-400 ring-2 ring-red-100" : ""}
+                      >
+                        <option value="">Select group size</option>
+                        {Array.from({ length: 29 }, (_, i) => i + 2).map((n) => (
+                          <option key={n} value={String(n)}>
+                            {n} people
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-muted">
+                        We&apos;ll generate a Group ID after submission for you to share with roommates.
+                      </p>
+                      <FieldError msg={errors.groupSize} />
+                    </div>
+                  </WizardFieldGate>
+                ) : null}
+
+                {form.groupRole === "joining" ? (
+                  <WizardFieldGate fieldKey="groupId" enabled={showWizardField}>
+                    <div className="space-y-2" data-wizard-field="groupId">
+                      <Label htmlFor="groupId" required>
+                        Group ID
+                      </Label>
+                      <p className="text-xs text-muted">
+                        Paste the Group ID shared by the first applicant. Format: {GROUP_ID_FORMAT_HINT}
+                      </p>
+                      <Input
+                        id="groupId"
+                        value={form.groupId}
+                        onChange={(e) => patch({ groupId: e.target.value })}
+                        placeholder={GROUP_ID_FORMAT_HINT}
+                        autoComplete="off"
+                        className={errors.groupId ? "border-red-400 ring-2 ring-red-100" : ""}
+                      />
+                      <FieldError msg={errors.groupId} />
+                    </div>
+                  </WizardFieldGate>
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -522,6 +542,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   }
 
   if (step === 2) {
+    if (!showWizardField("hasCosigner")) {
+      return null;
+    }
     return (
       <div className="space-y-8">
         <div>
@@ -531,7 +554,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             short form later.
           </StepIntro>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2" data-wizard-field="hasCosigner">
           <Label required>Will someone be co-signing this application with you?</Label>
           <YesNoPills
             value={form.hasCosigner}
@@ -1854,18 +1877,46 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <StepIntro className="mt-3">Confirm everything below, then continue to the application fee step.</StepIntro>
         </div>
         <div className="space-y-4">
-          <ReviewSection title="Group application" stepTarget={1} onEdit={editFromReview}>
-            <ReviewRow k="Applying as group" v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"} />
-            {form.applyingAsGroup === "yes" ? (
-              <>
-                <ReviewRow k="Role" v={form.groupRole === "first" ? "First applicant" : form.groupRole === "joining" ? "Joining group" : "—"} />
-                <ReviewRow k={form.groupRole === "first" ? "Group size" : "Group ID"} v={displayOrDash(form.groupRole === "first" ? form.groupSize : form.groupId)} />
-              </>
-            ) : null}
-          </ReviewSection>
-          <ReviewSection title="Co-signer" stepTarget={2} onEdit={editFromReview}>
-            <ReviewRow k="Co-signer planned" v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"} />
-          </ReviewSection>
+          {activeStepSet.has(1) ? (
+            <ReviewSection title="Group application" stepTarget={1} onEdit={editFromReview}>
+              {showWizardField("applyingAsGroup") ? (
+                <ReviewRow
+                  k="Applying as group"
+                  v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"}
+                />
+              ) : null}
+              {form.applyingAsGroup === "yes" ? (
+                <>
+                  {showWizardField("groupRole") ? (
+                    <ReviewRow
+                      k="Role"
+                      v={
+                        form.groupRole === "first"
+                          ? "First applicant"
+                          : form.groupRole === "joining"
+                            ? "Joining group"
+                            : "—"
+                      }
+                    />
+                  ) : null}
+                  {showWizardField("groupSize") || showWizardField("groupId") ? (
+                    <ReviewRow
+                      k={form.groupRole === "first" ? "Group size" : "Group ID"}
+                      v={displayOrDash(form.groupRole === "first" ? form.groupSize : form.groupId)}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+            </ReviewSection>
+          ) : null}
+          {activeStepSet.has(2) ? (
+            <ReviewSection title="Co-signer" stepTarget={2} onEdit={editFromReview}>
+              <ReviewRow
+                k="Co-signer planned"
+                v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"}
+              />
+            </ReviewSection>
+          ) : null}
           <ReviewSection title="Property information" stepTarget={3} onEdit={editFromReview}>
             <ReviewRow k="Property" v={displayOrDash(prop?.title)} />
             {reviewBundleLabel ? (
