@@ -29,6 +29,8 @@ export type MockProperty = {
    * Populated from `profiles.sms_from_number` on public listing APIs.
    */
   contactSmsPhone?: string;
+  /** Manager account email for public apply contact when applications are closed. */
+  managerContactEmail?: string;
   /** When true, listing is admin-approved for live rent display; property portal inventory only shows extras with this set. */
   adminPublishLive?: boolean;
   /**

@@ -133,32 +133,40 @@ export function validateStandardWizardStep(
   const e: RentalWizardErrors = {};
 
   if (step === 1) {
-    if (f.applicantRole === null) {
+    const role = fieldEnabled("applicantRole") ? f.applicantRole : "signer";
+    if (fieldEnabled("applicantRole") && f.applicantRole === null) {
       e.applicantRole = "Please choose whether you are the primary applicant or a co-signer.";
       return e;
     }
-    if (f.applicantRole === "cosigner") return e;
-    if (f.applyingAsGroup === null) {
+    if (role === "cosigner") return e;
+    if (fieldEnabled("applyingAsGroup") && f.applyingAsGroup === null) {
       e.applyingAsGroup = "Please choose whether you are applying as part of a group.";
       return e;
     }
-    if (f.applyingAsGroup === "no") return e;
-    if (f.groupRole === null) {
+    const applyingAsGroup = fieldEnabled("applyingAsGroup") ? f.applyingAsGroup : "no";
+    if (applyingAsGroup === "no") return e;
+    if (fieldEnabled("groupRole") && f.groupRole === null) {
       e.groupRole = "Select your role in the group.";
       return e;
     }
-    if (f.groupRole === "first") {
-      const c = validateHouseholdCount(f.groupSize);
-      if (!c.ok) e.groupSize = c.message;
+    if (fieldEnabled("groupRole") && f.groupRole === "first") {
+      if (fieldEnabled("groupSize")) {
+        const c = validateHouseholdCount(f.groupSize);
+        if (!c.ok) e.groupSize = c.message;
+      }
       return e;
     }
-    const g = validateAxisGroupId(f.groupId);
-    if (!g.ok) e.groupId = g.message;
+    if (fieldEnabled("groupId")) {
+      const g = validateAxisGroupId(f.groupId);
+      if (!g.ok) e.groupId = g.message;
+    }
     return e;
   }
 
   if (step === 2) {
-    if (f.hasCosigner === null) e.hasCosigner = "Please choose whether a co-signer will be added.";
+    if (fieldEnabled("hasCosigner") && f.hasCosigner === null) {
+      e.hasCosigner = "Please choose whether a co-signer will be added.";
+    }
     return e;
   }
 

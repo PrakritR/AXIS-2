@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
 import {
   activeApplicationWizardSteps,
   applicationConfigForVariant,
@@ -11,8 +10,40 @@ import {
   SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS,
   STANDARD_APPLICATION_FIELD_CATALOG,
 } from "@/lib/rental-application/application-field-catalog";
+import { createDefaultListingSubmission, normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
 
 const employmentKey = STANDARD_APPLICATION_FIELD_CATALOG.find((d) => d.section === "employment")!.standardKey;
+
+function catalogField(section: (typeof STANDARD_APPLICATION_FIELD_CATALOG)[number]["section"], label: string) {
+  const def = STANDARD_APPLICATION_FIELD_CATALOG.find((d) => d.section === section && d.label === label);
+  if (!def) throw new Error(`Missing catalog field ${section}:${label}`);
+  return def;
+}
+describe("household and co-signer application questions", () => {
+  it("includes group and co-signer prompts in the standard catalog by default", () => {
+    const household = catalogField("household", "Applying as part of a group");
+    const cosignerIntent = catalogField("cosigner_intent", "Co-signer on this application");
+    expect(household.wizardFormKeys).toEqual(["applyingAsGroup"]);
+    expect(cosignerIntent.wizardFormKeys).toEqual(["hasCosigner"]);
+    const fields = resolveListingApplicationFields(createDefaultListingSubmission(), normalizeCustomApplicationFields);
+    expect(fields.some((f) => f.standardKey === household.standardKey)).toBe(true);
+    expect(fields.some((f) => f.standardKey === cosignerIntent.standardKey)).toBe(true);
+  });
+
+  it("omits household steps when every household question is disabled", () => {
+    const householdKeys = STANDARD_APPLICATION_FIELD_CATALOG.filter((d) => d.section === "household").map(
+      (d) => d.standardKey,
+    );
+    const sub = {
+      disabledStandardApplicationKeys: householdKeys,
+      customApplicationFields: [],
+      applicationConfigMode: "custom" as const,
+    };
+    const steps = activeApplicationWizardSteps(sub, normalizeCustomApplicationFields);
+    expect(steps).not.toContain(1);
+    expect(steps).toContain(2);
+  });
+});
 
 describe("application form variants — short-term vs long-term are configured independently", () => {
   it("long-term reads the top-level config triplet unchanged", () => {

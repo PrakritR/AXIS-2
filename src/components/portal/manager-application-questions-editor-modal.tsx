@@ -41,6 +41,7 @@ import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/applicatio
 import {
   createPropertyApplicationTemplate,
   syncLegacyApplicationFieldsFromTemplates,
+  withPropertyApplicationTemplatesExplicit,
   updatePropertyApplicationTemplate,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
@@ -143,6 +144,8 @@ export function ManagerApplicationQuestionsEditorModal({
   applicationTemplate = null,
   templates,
   onPersistSubmission,
+  onDelete,
+  canDelete = false,
   onClose,
   onSaved,
   showToast,
@@ -166,6 +169,10 @@ export function ManagerApplicationQuestionsEditorModal({
     merged: ManagerListingSubmissionV1,
     opts: { message: string },
   ) => boolean;
+  /** Property template edit — removes the application (defaults show Delete but toast on click). */
+  onDelete?: () => void;
+  /** Mirrors lease modal — Delete is shown only when more than one template exists. */
+  canDelete?: boolean;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
@@ -203,8 +210,15 @@ export function ManagerApplicationQuestionsEditorModal({
 
   const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
   const isBulkSave = bulkIds.length > 0;
+  const showDelete = templateEditorMode === "edit" && canDelete && Boolean(onDelete);
 
-  // The config slice for the form the manager is editing. Long-term reads the
+  const handleDelete = () => {
+    if (!showDelete || !onDelete) return;
+    if (!window.confirm("Delete this application? This cannot be undone.")) return;
+    onDelete();
+  };
+
+  // The config slice for the form the manager is editing.
   // top-level triplet; short-term reads its own, defaulting to PropLane's
   // curated short-term question set until edited. Edits to one never touch the
   // other.
@@ -271,7 +285,7 @@ export function ManagerApplicationQuestionsEditorModal({
           label: trimmed,
         });
       }
-      const merged = syncLegacyApplicationFieldsFromTemplates(localSub, nextTemplates);
+      const merged = withPropertyApplicationTemplatesExplicit(localSub, nextTemplates);
       if (
         !onPersistSubmission(merged, {
           message: templateEditorMode === "add" ? "Application added." : "Application saved.",
@@ -409,16 +423,28 @@ export function ManagerApplicationQuestionsEditorModal({
         assistantStrip={false}
         panelClassName="flex max-h-[min(90vh,56rem)] w-full max-w-4xl flex-col"
         footer={
-          <ModalFooter className="w-full justify-end">
+          <ModalFooter className="w-full">
+            {showDelete ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+                data-attr="application-questions-delete"
+                disabled={saving}
+                onClick={handleDelete}
+              >
+                Delete
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="primary"
-              className="rounded-full"
+              className="ml-auto rounded-full"
               data-attr="application-questions-save"
               disabled={saving || (isTemplateEditor ? !templateLabel.trim() : !dirty)}
               onClick={commitSave}
             >
-              {saving ? "Saving…" : templateEditorMode === "add" ? "Add application" : "Save changes"}
+              {saving ? "Saving…" : templateEditorMode === "add" ? "Add application" : "Save"}
             </Button>
           </ModalFooter>
         }

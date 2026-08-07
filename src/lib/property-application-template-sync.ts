@@ -96,8 +96,12 @@ function adoptLegacyDefaultTemplate(
 export function syncPropertyApplicationTemplatesFromListing(
   sub: ManagerListingSubmissionV1,
 ): ManagerListingSubmissionV1 {
+  const autoSeed = sub.propertyApplicationTemplatesExplicit !== true;
   const seeds = buildApplicationTemplateSeeds(sub);
   const existing = readPropertyApplicationTemplates(sub);
+  if (!autoSeed && existing.length === 0) {
+    return syncLegacyApplicationFieldsFromTemplates(sub, []);
+  }
   const adoptedLegacyIds = new Set<string>();
   const seededExisting = existing.filter((t) => Boolean(t.listingSeedKey));
 
@@ -122,7 +126,7 @@ export function syncPropertyApplicationTemplatesFromListing(
         label: prev.label.trim() && prev.label !== defaultLabel ? prev.label : defaultLabel,
         updatedAt: nowIso(),
       });
-    } else {
+    } else if (autoSeed) {
       const created = createPropertyApplicationTemplate({
         kind: seed.kind,
         label: defaultLabelForSeed(seed),
@@ -151,7 +155,10 @@ export function submissionAfterRemovingApplicationTemplate(
   templates: PropertyApplicationTemplate[],
 ): ManagerListingSubmissionV1 {
   const hasShortTerm = templates.some((t) => t.formVariant === "short_term");
-  let next = syncLegacyApplicationFieldsFromTemplates(sub, templates);
+  let next = syncLegacyApplicationFieldsFromTemplates(
+    { ...sub, propertyApplicationTemplatesExplicit: true },
+    templates,
+  );
   if (!hasShortTerm && next.shortTermRentalsAllowed) {
     const allowed = (next.allowedLeaseTerms ?? []).filter((t) => t !== SHORT_TERM_LEASE_TERM);
     next = {
@@ -161,4 +168,21 @@ export function submissionAfterRemovingApplicationTemplate(
     };
   }
   return next;
+}
+
+/** Prospect-facing read: honors a manager-cleared list; otherwise auto-seeds defaults. */
+export function readPropertyApplicationTemplatesForProspect(
+  sub: ManagerListingSubmissionV1,
+): PropertyApplicationTemplate[] {
+  if (sub.propertyApplicationTemplatesExplicit === true) {
+    return readPropertyApplicationTemplates(sub);
+  }
+  return readPropertyApplicationTemplates(syncPropertyApplicationTemplatesFromListing(sub));
+}
+
+export function propertyAcceptingOnlineApplications(
+  sub: ManagerListingSubmissionV1 | undefined,
+): boolean {
+  if (!sub || sub.v !== 1) return true;
+  return readPropertyApplicationTemplatesForProspect(sub).length > 0;
 }

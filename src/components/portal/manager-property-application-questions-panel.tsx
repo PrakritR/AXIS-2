@@ -1,15 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import { CosignerApplyFlow } from "@/app/(public)/rent/apply/cosigner-flow";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
-import {
-  PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS,
-} from "@/components/portal/portal-collapsible-edit-row";
 import {
   PORTAL_LIST_ADD_ICONS,
   PORTAL_LIST_ADD_ROW_WRAP_CLASS,
@@ -31,7 +27,7 @@ import {
 import {
   readPropertyApplicationTemplates,
   removePropertyApplicationTemplate,
-  syncLegacyApplicationFieldsFromTemplates,
+  withPropertyApplicationTemplatesExplicit,
   type PropertyApplicationTemplate,
 } from "@/lib/property-application-templates";
 import { submissionAfterRemovingApplicationTemplate, syncPropertyApplicationTemplatesFromListing } from "@/lib/property-application-template-sync";
@@ -42,10 +38,6 @@ type QuestionsSaveTarget =
   | { mode: "listing"; saveId: string }
   | { mode: "requestChange"; saveId: string }
   | null;
-
-function isManagerOwnedApplicationTemplate(template: PropertyApplicationTemplate): boolean {
-  return !template.listingSeedKey;
-}
 
 /**
  * Per-property application templates — same list chrome as the lease tab.
@@ -97,8 +89,13 @@ export function ManagerPropertyApplicationQuestionsPanel({
             failed += 1;
             continue;
           }
-          const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
-          const next = syncLegacyApplicationFieldsFromTemplates({ ...base, ...configFields }, nextTemplates);
+          const base = hit.sub.propertyApplicationTemplatesExplicit
+          ? hit.sub
+          : syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const next = withPropertyApplicationTemplatesExplicit(
+          { ...base, ...configFields },
+          nextTemplates,
+        );
           if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) saved += 1;
           else failed += 1;
         }
@@ -139,7 +136,9 @@ export function ManagerPropertyApplicationQuestionsPanel({
           failed += 1;
           continue;
         }
-        const base = syncPropertyApplicationTemplatesFromListing(hit.sub);
+        const base = hit.sub.propertyApplicationTemplatesExplicit
+          ? hit.sub
+          : syncPropertyApplicationTemplatesFromListing(hit.sub);
         const persisted = persistManagerListingSubmission(
           hit.saveTarget,
           managerUserId,
@@ -155,7 +154,10 @@ export function ManagerPropertyApplicationQuestionsPanel({
     return persistManagerListingSubmission(
       saveTarget,
       managerUserId,
-      submissionAfterRemovingApplicationTemplate(syncedSub, nextTemplates),
+      submissionAfterRemovingApplicationTemplate(
+        sub.propertyApplicationTemplatesExplicit ? sub : syncedSub,
+        nextTemplates,
+      ),
     );
   };
 
@@ -186,17 +188,11 @@ export function ManagerPropertyApplicationQuestionsPanel({
     setEditorOpen(true);
   };
 
-  const handleDeleteTemplate = (templateId: string, label: string) => {
-    const target = templates.find((t) => t.id === templateId);
-    if (target && !isManagerOwnedApplicationTemplate(target)) {
-      showToast("Long-term and short-term defaults cannot be removed.");
-      return;
-    }
-    if (!window.confirm(`Remove "${label}"? This cannot be undone.`)) return;
+  const handleDeleteTemplate = (templateId: string) => {
     const next = removePropertyApplicationTemplate(templates, templateId);
     const persisted = persistRemoval(next);
     if (!persisted) {
-      showToast("Could not remove application.");
+      showToast("Could not delete application.");
       return;
     }
     setEditorOpen(false);
@@ -204,7 +200,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
     setEditingTemplate(null);
     setPreviewTemplate(null);
     onUpdated();
-    showToast("Application removed.");
+    showToast("Application deleted.");
   };
 
   const closeEditor = () => {
@@ -223,28 +219,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
         {templates.map((template) => (
           <div key={template.id} className={PORTAL_PROPERTY_DETAIL_LIST_ROW_CLASS}>
             <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left text-sm font-semibold text-foreground hover:underline"
-                  data-attr={`application-rename-${template.id}`}
-                  onClick={() => openEditApplication(template)}
-                >
-                  {template.label}
-                </button>
-                {isManagerOwnedApplicationTemplate(template) ? (
-                  <button
-                    type="button"
-                    className={PORTAL_EDIT_ROW_ICON_DANGER_BUTTON_CLASS}
-                    title={`Remove ${template.label}`}
-                    aria-label={`Remove ${template.label}`}
-                    data-attr={`application-remove-${template.id}`}
-                    onClick={() => handleDeleteTemplate(template.id, template.label)}
-                  >
-                    <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                  </button>
-                ) : null}
-              </div>
+              <p className="text-sm font-semibold text-foreground">{template.label}</p>
               {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms) ? (
                 <p className="mt-0.5 text-xs text-muted">
                   Applicants: {formatApplicationLeaseTermsLabel(template.applicationLeaseTerms)}
@@ -275,16 +250,14 @@ export function ManagerPropertyApplicationQuestionsPanel({
         ))}
       </PortalPropertyDetailSection>
 
-      {onRegisterAddApplication == null ? (
-        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
-          <PortalListAddRow
-            label="Add"
-            icon={PORTAL_LIST_ADD_ICONS.application}
-            onClick={openAdd}
-            dataAttr="property-application-add"
-          />
-        </div>
-      ) : null}
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label="Add"
+          icon={PORTAL_LIST_ADD_ICONS.application}
+          onClick={openAdd}
+          dataAttr="property-application-add"
+        />
+      </div>
 
       {editorOpen ? (
         <ManagerApplicationQuestionsEditorModal
@@ -300,6 +273,12 @@ export function ManagerPropertyApplicationQuestionsPanel({
           applicationTemplate={editingTemplate}
           templates={templates}
           onPersistSubmission={persistSubmission}
+          canDelete={editorMode === "edit"}
+          onDelete={
+            editingTemplate
+              ? () => handleDeleteTemplate(editingTemplate.id)
+              : undefined
+          }
           onClose={closeEditor}
           onSaved={onUpdated}
           showToast={showToast}

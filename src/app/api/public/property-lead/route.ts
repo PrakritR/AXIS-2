@@ -73,6 +73,7 @@ export async function GET(req: Request) {
       ...property,
       id: property.id || propertyId,
       managerUserId: property.managerUserId ?? data.manager_user_id ?? undefined,
+      managerContactEmail: managerEmail?.trim() || undefined,
       // Same per-property rule as the public catalog: this listing's own
       // manager, and the stored blob number is never trusted. See
       // `resolveListingCtaSmsPhone`.
