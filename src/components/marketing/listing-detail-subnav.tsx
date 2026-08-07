@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { getPortalScrollRoot, syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
+import {
+  getPortalScrollRoot,
+  syncPortalDetailDestinationOffset,
+  syncPortalMobileTopChrome,
+} from "@/lib/portal-mobile-top-chrome";
 
 type ListingSubnavMode = "page" | "modal" | "portal";
 
@@ -65,7 +69,11 @@ function syncListingScrollStack(
             ),
           ) || 0
         : 0;
-    const stack = chrome + destOffset + subnavEl.offsetHeight + 12;
+    const subnavInPropertyChrome = Boolean(
+      subnavEl.closest("[data-portal-property-detail-chrome]"),
+    );
+    const subnavH = subnavInPropertyChrome ? 0 : subnavEl.offsetHeight;
+    const stack = chrome + destOffset + subnavH + 12;
     const listingRoot = getListingSectionsRoot(subnavEl);
     listingRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
     return stack;
@@ -110,13 +118,17 @@ function scrollToSection(
   if (mode === "portal") {
     const root = getPortalScrollRoot(subnavEl);
     if (!root || !subnavEl) return;
+    syncPortalDetailDestinationOffset(subnavEl);
     syncListingScrollStack(mode, subnavEl, pinned);
     const chromeH = readPortalStickyTopInset(subnavEl);
     const destOffset =
       Number.parseFloat(
         getComputedStyle(root).getPropertyValue("--portal-detail-destination-offset"),
       ) || 0;
-    const subnavH = subnavEl.getBoundingClientRect().height;
+    const subnavInPropertyChrome = Boolean(
+      subnavEl.closest("[data-portal-property-detail-chrome]"),
+    );
+    const subnavH = subnavInPropertyChrome ? 0 : subnavEl.getBoundingClientRect().height;
     const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
     root.scrollTo({ top: Math.max(0, y - chromeH - destOffset - subnavH - 10), behavior: "smooth" });
     return;
@@ -287,17 +299,23 @@ export function ListingStickySubnav({
       const mobileChrome = scrollRoot?.querySelector<HTMLElement>(".portal-mobile-nav-bar") ?? null;
       const destinationNav =
         scrollRoot?.querySelector<HTMLElement>("[data-portal-detail-destination-nav]") ?? null;
+      const propertyChrome =
+        scrollRoot?.querySelector<HTMLElement>("[data-portal-property-detail-chrome]") ?? null;
       const ro = new ResizeObserver(() => {
         publishStackAndSpy();
       });
       ro.observe(subEl);
       if (mobileChrome) ro.observe(mobileChrome);
       if (destinationNav) ro.observe(destinationNav);
+      if (propertyChrome) ro.observe(propertyChrome);
 
       const onScroll = () => publishStackAndSpy();
       scrollRoot?.addEventListener("scroll", onScroll, { passive: true });
       window.addEventListener("resize", publishStackAndSpy, { passive: true });
-      queueMicrotask(() => publishStackAndSpy());
+      queueMicrotask(() => {
+        syncPortalDetailDestinationOffset(subEl);
+        publishStackAndSpy();
+      });
 
       return () => {
         ro.disconnect();

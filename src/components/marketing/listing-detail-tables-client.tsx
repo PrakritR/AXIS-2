@@ -419,29 +419,22 @@ function PreviewSafeModalActions(props: Parameters<typeof ListingModalActions>[0
 }
 
 function InteractiveListingRow({
-  previewBrowse,
   onOpen,
   children,
   className,
+  detailsClassName = "",
 }: {
-  previewBrowse: boolean;
   onOpen: () => void;
   children: ReactNode;
   className: string;
+  detailsClassName?: string;
 }) {
-  if (previewBrowse) {
-    return (
-      <button
-        type="button"
-        data-attr="listing-row-open"
-        className={`${className} w-full text-left transition hover:bg-accent/20 active:bg-accent/40`}
-        onClick={onOpen}
-      >
-        {children}
-      </button>
-    );
-  }
-  return <div className={className}>{children}</div>;
+  return (
+    <div className={className}>
+      {children}
+      <DetailsButton className={detailsClassName} onClick={onOpen} />
+    </div>
+  );
 }
 
 function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: string[] }) {
@@ -947,9 +940,8 @@ function FloorPlanSummaryBar({
   floor: ListingFloorCard;
   onOpenFloorPlan: () => void;
 }) {
-  const previewBrowse = useListingPreviewNewTab();
-  const inner = (
-    <>
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{floor.floorLabel}</p>
         <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{floor.fromPrice}</p>
@@ -965,25 +957,8 @@ function FloorPlanSummaryBar({
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</span>
           <span className="text-sm font-bold text-foreground">{floor.roomCount}</span>
         </div>
-        {!previewBrowse ? <DetailsButton onClick={onOpenFloorPlan} /> : null}
+        <DetailsButton onClick={onOpenFloorPlan} />
       </div>
-    </>
-  );
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      {previewBrowse ? (
-        <button
-          type="button"
-          className="flex w-full flex-wrap items-center justify-between gap-4 text-left"
-          onClick={onOpenFloorPlan}
-          data-attr="listing-floor-plan-open"
-        >
-          {inner}
-        </button>
-      ) : (
-        inner
-      )}
     </div>
   );
 }
@@ -1031,7 +1006,6 @@ export function LeaseBasicsTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
-  const previewBrowse = useListingPreviewNewTab();
 
   const sectionGroups: { key: "long-term" | "short-term"; label: string; rows: LeaseBasicRow[] }[] = [];
   const longTerm = rows.filter((r) => r.section !== "short-term");
@@ -1043,9 +1017,9 @@ export function LeaseBasicsTableInteractive({
     sectionRows.map((r) => (
       <InteractiveListingRow
         key={r.id}
-        previewBrowse={previewBrowse}
         onOpen={() => setModal({ kind: "lease", row: r })}
         className={LISTING_ROW_SURFACE}
+        detailsClassName="mt-2.5 w-full"
       >
         <div className="flex items-start gap-2">
           <span className="text-lg leading-none" aria-hidden>
@@ -1057,9 +1031,6 @@ export function LeaseBasicsTableInteractive({
           </div>
         </div>
         <p className="mt-2 text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-        {!previewBrowse ? (
-          <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "lease", row: r })} />
-        ) : null}
       </InteractiveListingRow>
     ));
 
@@ -1067,7 +1038,6 @@ export function LeaseBasicsTableInteractive({
     sectionRows.map((r) => (
       <InteractiveListingRow
         key={r.id}
-        previewBrowse={previewBrowse}
         onOpen={() => setModal({ kind: "lease", row: r })}
         className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
       >
@@ -1081,7 +1051,6 @@ export function LeaseBasicsTableInteractive({
           </div>
         </div>
         <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
-        {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "lease", row: r })} /> : null}
       </InteractiveListingRow>
     ));
 
@@ -1190,14 +1159,15 @@ export function BundleTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
-  const previewBrowse = useListingPreviewNewTab();
 
   return (
     <>
       <div className={`grid gap-4 ${rows.length >= 3 ? "xl:grid-cols-3" : ""} md:grid-cols-2`}>
         {rows.map((c) => {
-          const cardBody = (
-            <>
+          const cardClass =
+            "group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 sm:p-5 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20";
+          return (
+            <div key={c.id} className={cardClass}>
               <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
               <div className="relative pl-2">
                 <div className="min-w-0">
@@ -1229,33 +1199,8 @@ export function BundleTableInteractive({
                   </div>
                 ) : null}
                 <BundleRoomPreview row={c} />
-                {!previewBrowse ? (
-                  <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
-                ) : null}
+                <DetailsButton className="mt-4 w-full" onClick={() => setModal({ kind: "bundle", row: c })} />
               </div>
-            </>
-          );
-          const cardClass =
-            "group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 sm:p-5";
-          if (previewBrowse) {
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className={`${cardClass} w-full text-left hover:border-primary/35 hover:shadow-lg hover:ring-primary/20`}
-                onClick={() => setModal({ kind: "bundle", row: c })}
-                data-attr="listing-bundle-open"
-              >
-                {cardBody}
-              </button>
-            );
-          }
-          return (
-            <div
-              key={c.id}
-              className={`${cardClass} hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20`}
-            >
-              {cardBody}
             </div>
           );
         })}
@@ -1283,7 +1228,6 @@ export function AmenitiesTableInteractive({
   contactSmsPhone?: string | null;
 }) {
   const [modal, setModal] = useState<ModalState>(null);
-  const previewBrowse = useListingPreviewNewTab();
 
   return (
     <>
@@ -1291,9 +1235,9 @@ export function AmenitiesTableInteractive({
         {rows.map((a) => (
           <InteractiveListingRow
             key={a.id}
-            previewBrowse={previewBrowse}
             onOpen={() => setModal({ kind: "amenity", row: a })}
             className={LISTING_ROW_SURFACE}
+            detailsClassName="mt-2.5 w-full"
           >
             <div className="flex items-start gap-2">
               <span className="text-lg text-primary" aria-hidden>
@@ -1302,9 +1246,6 @@ export function AmenitiesTableInteractive({
               <p className="text-sm font-semibold text-foreground">{a.label}</p>
             </div>
             <p className="mt-2 text-xs text-muted">House feature · included with this listing</p>
-            {!previewBrowse ? (
-              <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "amenity", row: a })} />
-            ) : null}
           </InteractiveListingRow>
         ))}
       </div>
@@ -1318,7 +1259,6 @@ export function AmenitiesTableInteractive({
           {rows.map((a) => (
             <InteractiveListingRow
               key={a.id}
-              previewBrowse={previewBrowse}
               onOpen={() => setModal({ kind: "amenity", row: a })}
               className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
@@ -1329,7 +1269,6 @@ export function AmenitiesTableInteractive({
                 <p className="min-w-0 text-sm font-semibold text-foreground">{a.label}</p>
               </div>
               <p className="text-xs text-muted sm:text-sm">With listing</p>
-              {!previewBrowse ? <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} /> : null}
             </InteractiveListingRow>
           ))}
         </div>

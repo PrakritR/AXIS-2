@@ -378,6 +378,8 @@ export function ListingDetailSections({
   expandSectionsOnMobile = false,
   /** Tighter portal chrome inside manager property preview tab. */
   managerPreviewChrome = false,
+  /** Parent renders listing section tabs in property detail chrome (manager preview). */
+  hidePortalSubnav = false,
 }: {
   property: MockProperty;
   rich: ListingRichContent;
@@ -388,6 +390,7 @@ export function ListingDetailSections({
   portalEmbedded?: boolean;
   expandSectionsOnMobile?: boolean;
   managerPreviewChrome?: boolean;
+  hidePortalSubnav?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   const collapseOnMobile = !expandSectionsOnMobile;
@@ -407,7 +410,7 @@ export function ListingDetailSections({
         } ${
           embeddedPreview
             ? managerPreviewChrome
-              ? "pb-6 pt-1 sm:pb-8 sm:pt-2"
+              ? "pb-6 pt-0 sm:pb-8"
               : "pb-8 pt-2 sm:pb-10 sm:pt-3"
             : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))]"
         }`}
@@ -450,13 +453,15 @@ export function ListingDetailSections({
         </div>
         ) : null}
 
-        <div className={`order-4 ${embeddedPreview ? (managerPreviewChrome ? "mt-4" : "mt-6") : "mt-6 lg:mt-8"}`}>
+        <div className={`order-4 ${embeddedPreview ? (managerPreviewChrome ? "mt-0" : "mt-6") : "mt-6 lg:mt-8"}`}>
           {portalEmbedded ? (
-            <ListingStickySubnav
-              mode="portal"
-              appearance="portal"
-              className="mb-4 sm:rounded-2xl lg:mb-6"
-            />
+            hidePortalSubnav ? null : (
+              <ListingStickySubnav
+                mode="portal"
+                appearance="portal"
+                className="mb-4 sm:rounded-2xl lg:mb-6"
+              />
+            )
           ) : !previewModal ? (
             <ListingStickySubnav className="mb-4 lg:mb-6" />
           ) : null}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { DestinationNav, type DestinationNavItem } from "@/components/ui/destination-nav";
-import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
+import { syncPortalDetailDestinationOffset, syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,7 +33,10 @@ export function PortalDetailDestinationNav({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const sync = () => syncPortalMobileTopChrome(el);
+    const sync = () => {
+      syncPortalMobileTopChrome(el);
+      syncPortalDetailDestinationOffset(el);
+    };
     sync();
     const ro = new ResizeObserver(sync);
     const main = el.closest("#portal-main-content");

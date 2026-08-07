@@ -27,12 +27,25 @@ export function syncPortalMobileTopChrome(anchorEl: HTMLElement | null): number 
   return height;
 }
 
-/** When the record-detail tab row is sticky, stack listing section tabs beneath it. */
+/** Pinned property-detail chrome (top tabs + Preview/House details + listing subnav). */
 export function syncPortalDetailDestinationOffset(anchorEl: HTMLElement | null): number {
   const main = getPortalScrollRoot(anchorEl);
-  const destNav = main?.querySelector<HTMLElement>("[data-portal-detail-destination-nav]");
-  if (!main || !destNav) {
-    main?.style.removeProperty("--portal-detail-destination-offset");
+  if (!main) return 0;
+
+  const propertyChrome = main.querySelector<HTMLElement>("[data-portal-property-detail-chrome]");
+  if (propertyChrome) {
+    const height = propertyChrome.getBoundingClientRect().height;
+    if (height > 0) {
+      main.style.setProperty("--portal-detail-destination-offset", `${height}px`);
+      return height;
+    }
+    main.style.removeProperty("--portal-detail-destination-offset");
+    return 0;
+  }
+
+  const destNav = main.querySelector<HTMLElement>("[data-portal-detail-destination-nav]");
+  if (!destNav) {
+    main.style.removeProperty("--portal-detail-destination-offset");
     return 0;
   }
   const style = window.getComputedStyle(destNav);

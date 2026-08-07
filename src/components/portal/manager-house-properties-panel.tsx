@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
+import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
@@ -809,17 +810,24 @@ function ManagerPropertyInlineDetails({
               centerEqualRow
             />
           ) : null}
+          {activeDetailTab === "preview" && hasPreview ? (
+            <ListingStickySubnav
+              mode="portal"
+              appearance="portal"
+              className="shrink-0 rounded-none border-0 border-t border-border bg-accent/30 py-1.5 shadow-none"
+            />
+          ) : null}
         </div>
       </PortalPageChrome>
 
       <PortalPageScrollBody
         className={cn(
           "min-w-0 max-w-full",
-          activeDetailTab !== "calendar" && "pt-3",
+          activeDetailTab !== "calendar" && activeDetailTab !== "preview" && "pt-3",
         )}
       >
       {activeDetailTab === "preview" ? (
-        <div className="space-y-3">
+        <div>
           {hasPreview ? (
             <ListingDetailSections
               property={previewProperty!}
@@ -827,6 +835,7 @@ function ManagerPropertyInlineDetails({
               portalEmbedded
               expandSectionsOnMobile
               managerPreviewChrome
+              hidePortalSubnav
             />
           ) : bucket === 3 || bucket === 5 ? (
             <p className="text-sm text-muted">
