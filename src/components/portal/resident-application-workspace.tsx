@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
 import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { PORTAL_HEADER_ACTION_BTN, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -40,11 +41,19 @@ function SubmittedApplicationCard({
       </div>
       {applicationHasGroup(row.application) ? (
         <GroupShareCallout
-          groupId={(row.application?.groupId ?? "").trim()}
+          leaderAppId={row.application?.groupRole === "first" ? row.id : undefined}
           groupRole={row.application?.groupRole}
           groupSize={row.application?.groupSize}
+          propertyId={row.propertyId}
           className="mt-4"
           shareable={row.bucket !== "rejected"}
+        />
+      ) : null}
+      {row.application?.hasCosigner === "yes" ? (
+        <CosignerInviteCallout
+          signerAppId={row.id}
+          signerName={row.application?.fullName}
+          className="mt-4 rounded-2xl border border-border bg-accent/30 p-5"
         />
       ) : null}
       {row.application ? (

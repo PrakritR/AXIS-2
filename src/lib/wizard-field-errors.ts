@@ -42,17 +42,16 @@ export function scrollToFirstWizardFieldError(
 }
 
 export const RENTAL_WIZARD_STEP_FIELD_ORDER: Record<number, string[]> = {
-  1: ["applicantRole", "applyingAsGroup", "groupRole", "groupSize", "groupId"],
-  2: ["hasCosigner"],
+  1: ["hasCosigner", "applyingAsGroup", "groupLeaderAppId"],
+  2: ["fullLegalName", "phone", "email", "dateOfBirth", "ssn", "driversLicense"],
   3: ["propertyId", "roomChoice1", "leaseTerm", "leaseStart", "leaseEnd", "shortTermCheckInTime", "shortTermCheckOutTime", "shortTermRulesAck"],
-  4: ["fullLegalName", "phone", "email", "dateOfBirth", "ssn", "driversLicense"],
-  5: ["currentStreet", "currentCity", "currentState", "currentZip", "currentMoveIn"],
-  6: ["prevStreet", "prevCity", "prevState", "prevZip"],
-  7: ["employer", "monthlyIncome", "annualIncome", "otherIncome"],
-  8: ["ref1Name", "ref1Relationship", "ref1Phone"],
-  9: ["occupancyCount", "evictionHistory", "bankruptcyHistory", "criminalHistory"],
-  10: ["consentCredit", "consentTruth", "digitalSignature", "dateSigned"],
-  12: ["applicationFeeZelleSentConfirmed"],
+  4: ["currentStreet", "currentCity", "currentState", "currentZip", "currentMoveIn"],
+  5: ["prevStreet", "prevCity", "prevState", "prevZip"],
+  6: ["employer", "monthlyIncome", "annualIncome", "otherIncome"],
+  7: ["ref1Name", "ref1Relationship", "ref1Phone"],
+  8: ["occupancyCount", "evictionHistory", "bankruptcyHistory", "criminalHistory"],
+  9: ["consentCredit", "consentTruth", "digitalSignature", "dateSigned"],
+  11: ["applicationFeeZelleSentConfirmed"],
 };
 
 export const LISTING_STEP_FIELD_ORDER: Record<number, string[]> = {

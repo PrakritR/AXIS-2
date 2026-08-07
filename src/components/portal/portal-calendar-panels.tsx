@@ -319,6 +319,11 @@ export function PortalCalendarPanels({
   onAnchorDateChange,
   /** Flat portal canvas — no outer card or input-style chrome (property calendar tab). */
   bareSurface = false,
+  /**
+   * Scroll with the parent page instead of a nested grid viewport (property detail
+   * tab). Keeps the week toolbar sticky inside that one scroll surface.
+   */
+  flowScroll = false,
 }: {
   storageKey: string | null;
   availabilityStorageKeys?: string[];
@@ -329,6 +334,7 @@ export function PortalCalendarPanels({
   unavailableMessage?: string;
   compactAvailability?: boolean;
   bareSurface?: boolean;
+  flowScroll?: boolean;
   otherProperties?: { id: string; name: string }[];
   onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[], scope: "week" | "entire") => void;
   scheduledTourFilter?: ScheduledTourFilter;
@@ -1737,25 +1743,35 @@ export function PortalCalendarPanels({
   if (compactAvailability) {
     const vendorMode = Boolean(vendorDayFlexibility);
     const compactShellClass = cn(
-      "portal-calendar-compact flex min-h-0 flex-1 flex-col",
+      "portal-calendar-compact flex flex-col",
+      flowScroll ? "portal-calendar-flow-scroll" : "min-h-0 flex-1",
       !bareSurface && "overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
     );
     const compactToolbarClass = cn(
       "portal-calendar-toolbar shrink-0",
       "px-2 py-2.5 sm:px-3 sm:py-3",
       bareSurface
-        ? "border-b border-border/50"
+        ? flowScroll
+          ? "border-b border-border/50 bg-background"
+          : "border-b border-border/50"
         : "border-b border-border/60 bg-gradient-to-b from-accent/35 to-accent/15 [html[data-theme=dark]_&]:portal-calendar-week-banner",
     );
     const compactBodyClass = cn(
-      "portal-calendar-compact-body min-h-0 flex-1",
-      bareSurface ? "pt-2 max-lg:pt-4" : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5",
+      "portal-calendar-compact-body",
+      flowScroll ? "" : "min-h-0 flex-1",
+      bareSurface
+        ? flowScroll
+          ? ""
+          : "pt-2 max-lg:pt-4"
+        : "p-3 sm:p-4 max-lg:px-4 max-lg:pt-4 max-lg:pb-5",
     );
+    const compactGridTopGap = flowScroll ? "mt-0" : "mt-2";
+    const compactMobileTopGap = flowScroll ? "mt-0" : "mt-2 max-lg:mt-4";
     return (
       <>
         <div className={compactShellClass}>
           <div className={compactToolbarClass}>
-            <div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-center sm:gap-2">
+            <div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-center gap-1.5 sm:gap-2">
               <Button
                 type="button"
                 variant="ghost"
@@ -1805,61 +1821,61 @@ export function PortalCalendarPanels({
                   Add work
                 </Button>
               ) : null}
-              {!vendorMode ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    disabled={readOnly}
-                    title={readOnly ? "Select one house to edit availability" : undefined}
-                    onClick={copyPreviousWeek}
-                  >
-                    Copy previous week
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    disabled={readOnly}
-                    title={readOnly ? "Select one house to edit availability" : undefined}
-                    onClick={openBlockModal}
-                  >
-                    Block
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    disabled={readOnly}
-                    title={readOnly ? "Select one house to edit availability" : undefined}
-                    onClick={clearCurrentWeek}
-                  >
-                    Clear
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={COMPACT_CALENDAR_ACTION_BTN}
-                    disabled={readOnly || !onCopyWeekToHouses || !otherProperties?.length}
-                    title={
-                      readOnly
-                        ? "Select one house to edit availability"
-                        : !otherProperties?.length
-                          ? "Add another house to copy availability"
-                          : undefined
-                    }
-                    onClick={() => {
-                      setSelectedHouseIds(new Set());
-                      setCopyToHousesScope("week");
-                      setUpdateToHousesOpen(true);
-                    }}
-                  >
-                    Copy to houses
-                  </Button>
-                </>
-              ) : null}
             </div>
+            {!vendorMode ? (
+              <div className="mt-2 flex w-full flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={COMPACT_CALENDAR_ACTION_BTN}
+                  disabled={readOnly}
+                  title={readOnly ? "Select one house to edit availability" : undefined}
+                  onClick={copyPreviousWeek}
+                >
+                  Copy previous week
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={COMPACT_CALENDAR_ACTION_BTN}
+                  disabled={readOnly}
+                  title={readOnly ? "Select one house to edit availability" : undefined}
+                  onClick={openBlockModal}
+                >
+                  Block
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={COMPACT_CALENDAR_ACTION_BTN}
+                  disabled={readOnly}
+                  title={readOnly ? "Select one house to edit availability" : undefined}
+                  onClick={clearCurrentWeek}
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={COMPACT_CALENDAR_ACTION_BTN}
+                  disabled={readOnly || !onCopyWeekToHouses || !otherProperties?.length}
+                  title={
+                    readOnly
+                      ? "Select one house to edit availability"
+                      : !otherProperties?.length
+                        ? "Add another house to copy availability"
+                        : undefined
+                  }
+                  onClick={() => {
+                    setSelectedHouseIds(new Set());
+                    setCopyToHousesScope("week");
+                    setUpdateToHousesOpen(true);
+                  }}
+                >
+                  Copy to houses
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className={compactBodyClass}>
@@ -1992,7 +2008,7 @@ export function PortalCalendarPanels({
             return (
               <>
                 {/* Mobile: week strip — seven equal columns across full width. */}
-                <div className="mt-2 max-lg:mt-4 lg:hidden">
+                <div className={`${compactMobileTopGap} lg:hidden`}>
                   <div className="grid w-full grid-cols-7 gap-1 pb-1 sm:gap-1.5">
                     {activeBlockDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
@@ -2043,7 +2059,7 @@ export function PortalCalendarPanels({
                 </div>
 
                 {/* Desktop: full-week grid with horizontal scroll on narrower viewports. */}
-                <div className="mt-2 hidden lg:block">
+                <div className={`${compactGridTopGap} hidden lg:block`}>
                   <div className={bareSurface ? "" : "overflow-hidden rounded-2xl border border-border bg-card"}>
                     <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
                       <div className={`grid min-w-[760px] grid-cols-[56px_repeat(7,minmax(72px,1fr))] text-[10px] sm:text-xs ${CALENDAR_GRID_GAP}`}>
@@ -2498,13 +2514,7 @@ export function PortalCalendarPanels({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto",
-          PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-        )}
-        {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
-      >
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={openBlockModal}>
           Create block
         </Button>

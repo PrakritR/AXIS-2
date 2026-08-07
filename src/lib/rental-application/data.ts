@@ -11,6 +11,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { effectiveApplicationForRow, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { isEntireHomeListing, normalizeManagerListingSubmissionV1, resolveAllowedLeaseTerms } from "@/lib/manager-listing-submission";
+import { bundleShortTermPriceLabel } from "@/lib/listing-bundle-short-term";
 import { LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM, type LeaseTermOption } from "@/lib/rental-application/lease-terms";
 import { roomDailyRentPrice } from "@/lib/room-pricing";
 
@@ -454,20 +455,51 @@ export function getBundlesForProperty(propertyId: string) {
 }
 
 /** Dropdown options for the application form's bundle picker. */
-export function getBundleOptionsForProperty(propertyId: string): { value: string; label: string }[] {
-  return getBundlesForProperty(propertyId).map((b) => {
-    const label = [b.label.trim() || "Package", b.price.trim()].filter(Boolean).join(" · ");
-    return { value: b.id, label };
-  });
+export function getBundleOptionsForProperty(
+  propertyId: string,
+  opts?: { rentalType?: "standard" | "short_term" },
+): { value: string; label: string }[] {
+  const selected = getPropertyById(propertyId);
+  const sub =
+    selected?.listingSubmission?.v === 1
+      ? normalizeManagerListingSubmissionV1(selected.listingSubmission)
+      : null;
+  const shortTerm = opts?.rentalType === "short_term";
+
+  return getBundlesForProperty(propertyId)
+    .filter((b) => (shortTerm ? Boolean(b.shortTermEnabled) : Boolean(b.price.trim())))
+    .map((b) => {
+      const name = b.label.trim() || "Package";
+      if (shortTerm) {
+        const nightly =
+          (sub ? bundleShortTermPriceLabel(b, sub) : undefined) ??
+          (b.shortTermNightlyRent?.trim() ? `${b.shortTermNightlyRent.trim()}/night` : "");
+        return { value: b.id, label: [name, nightly].filter(Boolean).join(" · ") };
+      }
+      return { value: b.id, label: [name, b.price.trim()].filter(Boolean).join(" · ") };
+    });
 }
 
 /** Human-readable label for an application's selected bundle (manager views + lease). */
-export function getBundleChoiceLabel(propertyId: string, bundleId: string): string {
+export function getBundleChoiceLabel(
+  propertyId: string,
+  bundleId: string,
+  opts?: { rentalType?: "standard" | "short_term" },
+): string {
   const id = bundleId.trim();
   if (!id) return "";
   const bundle = getBundlesForProperty(propertyId).find((b) => b.id === id);
   if (!bundle) return "";
-  const parts = [bundle.label.trim() || "Package", bundle.price.trim()].filter(Boolean);
+  const selected = getPropertyById(propertyId);
+  const sub =
+    selected?.listingSubmission?.v === 1
+      ? normalizeManagerListingSubmissionV1(selected.listingSubmission)
+      : null;
+  const shortTerm = opts?.rentalType === "short_term";
+  const pricePart = shortTerm
+    ? (sub ? bundleShortTermPriceLabel(bundle, sub) : undefined) ?? bundle.shortTermNightlyRent?.trim() ?? ""
+    : bundle.price.trim();
+  const parts = [bundle.label.trim() || "Package", pricePart].filter(Boolean);
   const scope = bundle.roomsLine.trim();
   return scope ? `${parts.join(" · ")} (${scope})` : parts.join(" · ");
 }

@@ -6,7 +6,8 @@ import { syncPortalMobileTopChrome } from "@/lib/portal-mobile-top-chrome";
 import { cn } from "@/lib/utils";
 
 /**
- * Record-detail tab row (Preview, House details, …) — scrolls with page content.
+ * Record-detail tab row (Preview, House details, …) — pinned with page chrome when
+ * the parent uses {@link PortalRecordDetailPage} `pinScrollBody`.
  */
 export function PortalDetailDestinationNav({
   items,
@@ -14,12 +15,18 @@ export function PortalDetailDestinationNav({
   activeHref,
   ariaLabel,
   className,
+  denseEqualRow = false,
+  centerEqualRow = false,
 }: {
   items: DestinationNavItem[];
   activeId?: string;
   activeHref?: string;
   ariaLabel?: string;
   className?: string;
+  /** Property detail top tabs — one row with smaller labels on phones. */
+  denseEqualRow?: boolean;
+  /** Center equal-width tabs (Preview / House details sub-row). */
+  centerEqualRow?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +50,7 @@ export function PortalDetailDestinationNav({
 
   return (
     <div
-      className={cn("w-full min-w-0 bg-background lg:static")}
+      className="w-full min-w-0 bg-background"
       data-portal-detail-destination-nav
       ref={wrapRef}
     >
@@ -53,6 +60,8 @@ export function PortalDetailDestinationNav({
         activeHref={activeHref}
         ariaLabel={ariaLabel}
         itemLayout="equal"
+        denseEqualRow={denseEqualRow}
+        centerEqualRow={centerEqualRow}
         className={cn(
           "max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent max-lg:p-0",
           className,

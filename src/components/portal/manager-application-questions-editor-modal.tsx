@@ -30,6 +30,7 @@ import {
   reenableListingApplicationField,
   removeListingApplicationField,
   resolveDisabledStandardApplicationFields,
+  editorVisibleDisabledApplicationFields,
   resolveListingApplicationFields,
   restoreDefaultApplicationConfig,
   STANDARD_APPLICATION_FIELD_COUNT,
@@ -228,7 +229,10 @@ export function ManagerApplicationQuestionsEditorModal({
     () => resolveListingApplicationFields(configSlice, normalizeCustomApplicationFields),
     [configSlice],
   );
-  const disabledFields = useMemo(() => resolveDisabledStandardApplicationFields(configSlice), [configSlice]);
+  const disabledFields = useMemo(
+    () => editorVisibleDisabledApplicationFields(variant, configSlice),
+    [configSlice, variant],
+  );
 
   // Apply an edit to LOCAL state only — nothing is persisted until Save.
   const applySlice = (nextSlice: ApplicationConfigSlice): void => {
@@ -245,7 +249,7 @@ export function ManagerApplicationQuestionsEditorModal({
   // with a fresh default) intentionally returns short-term to the curated set.
   const applyEditedSlice = (nextSlice: ApplicationConfigSlice): void =>
     applySlice(
-      variant === "short_term" || templateEditorMode === "add" || templateEditorMode === "edit"
+      variant === "short_term" || variant === "cosigner" || templateEditorMode === "add" || templateEditorMode === "edit"
         ? { ...nextSlice, applicationConfigMode: "custom" }
         : nextSlice,
     );

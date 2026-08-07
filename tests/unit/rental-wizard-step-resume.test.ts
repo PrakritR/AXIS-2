@@ -98,16 +98,16 @@ describe("initialWizardStepFromRequest", () => {
 // The step PERSISTED on the server application record covers the full range and
 // is what the reconciliation effect uses to land them back where they were.
 describe("parsePersistedWizardStep", () => {
-  it("accepts any real step 1..12 (covers the return-from-payment step 12 case)", () => {
+  it("accepts any real step 1..11 (covers the return-from-payment step 11 case)", () => {
     expect(parsePersistedWizardStep(1)).toBe(1);
     expect(parsePersistedWizardStep(4)).toBe(4);
-    expect(parsePersistedWizardStep(12)).toBe(12);
-    expect(parsePersistedWizardStep("12")).toBe(12);
+    expect(parsePersistedWizardStep(11)).toBe(11);
+    expect(parsePersistedWizardStep("11")).toBe(11);
   });
 
   it("rejects out-of-range, missing, or malformed values", () => {
     expect(parsePersistedWizardStep(0)).toBeNull();
-    expect(parsePersistedWizardStep(13)).toBeNull();
+    expect(parsePersistedWizardStep(12)).toBeNull();
     expect(parsePersistedWizardStep(undefined)).toBeNull();
     expect(parsePersistedWizardStep(null)).toBeNull();
     expect(parsePersistedWizardStep("abc")).toBeNull();

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { CosignerApplyFlow } from "@/app/(public)/rent/apply/cosigner-flow";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import {
   loadPublicExtraListingsFromServer,
@@ -66,7 +65,13 @@ import {
 } from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { GroupRole, RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
-import { resolveSubmitGroupId } from "@/lib/rental-application/application-groups";
+import { resolveSubmitGroupId, makeApplicationGroupId } from "@/lib/rental-application/application-groups";
+import {
+  parseGroupLeaderAppIdParam,
+  GROUP_LEADER_APP_ID_PARAM,
+  groupLeaderInviteFormPatch,
+} from "@/lib/rental-application/group-apply-link";
+import { fetchGroupLeaderLinkPreview } from "@/lib/rental-application/group-leader-link-client";
 import { rentalWizardStepTitle } from "@/lib/rental-application/wizard-step-titles";
 import {
   computeLeaseEndDate,
@@ -336,6 +341,11 @@ function RentalApplicationWizardInner({
   // step in exactly the full-reload case this exists to fix.
   const initialWizardStepParamRef = useRef(searchParams.get("wizardStep"));
   const [form, setForm] = useState<RentalWizardFormState>(() => {
+    const leaderAppIdFromUrl = templatePreview
+      ? ""
+      : parseGroupLeaderAppIdParam(searchParams.get(GROUP_LEADER_APP_ID_PARAM));
+    const groupInvitePatch = leaderAppIdFromUrl ? groupLeaderInviteFormPatch(leaderAppIdFromUrl) : {};
+
     if (templatePreview) {
       const pid = linkedPropertyIdProp?.trim() ?? "";
       const shortTerm = linkedRentalType === "short_term";
@@ -351,16 +361,16 @@ function RentalApplicationWizardInner({
       };
     }
     const draft = loadRentalWizardDraft();
-    if (!draft) return createInitialRentalWizardState();
+    if (!draft) return { ...createInitialRentalWizardState(), ...groupInvitePatch };
     // A draft still loaded (same tab, no reload) for a DIFFERENT property/room
     // than this request must never flash onto a fresh apply — start blank and
     // let the reconciliation effect resolve the real target (an existing
     // in-progress application for it, or a clean new one).
     if (requestedTarget && draft && !targetMatchesApplication(requestedTarget, { application: draft })) {
       clearRentalWizardDraft();
-      return createInitialRentalWizardState();
+      return { ...createInitialRentalWizardState(), ...groupInvitePatch };
     }
-    return { ...createInitialRentalWizardState(), ...draft };
+    return { ...createInitialRentalWizardState(), ...draft, ...groupInvitePatch };
   });
   // Tracks which target signature has been confirmed (matched to an existing
   // in-progress application, or confirmed fresh) by the reconciliation effect.
@@ -400,10 +410,12 @@ function RentalApplicationWizardInner({
     guestFlow?: boolean;
     mailtoHref?: string;
     setupHref?: string;
-    /** Shared Group ID for group applications (first applicant shares it, joining members paste it). */
-    groupId?: string;
+    /** Organizer application id for group invite link on the finish screen. */
+    groupLeaderAppId?: string;
     groupRole?: GroupRole;
     groupSize?: string;
+    groupPropertyId?: string;
+    hasCosigner?: "yes" | "no" | null;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
@@ -480,7 +492,12 @@ function RentalApplicationWizardInner({
     const scrollParent = rootRef.current?.closest(".overflow-y-auto");
     scrollParent?.scrollTo({ top: 0 });
     rootRef.current?.querySelector(".rental-wizard-step-content")?.scrollTo?.({ top: 0 });
-  }, [templatePreview, step, form.applicantRole]);
+  }, [templatePreview, step]);
+
+  useEffect(() => {
+    if (templatePreview || form.applicantRole !== "cosigner") return;
+    router.replace("/rent/apply/cosigner");
+  }, [form.applicantRole, router, templatePreview]);
 
   useEffect(() => {
     if (mode !== "portal" && mode !== "manager") return;
@@ -606,7 +623,7 @@ function RentalApplicationWizardInner({
   }, []);
 
   useEffect(() => {
-    if (step !== 12) return;
+    if (step !== 11) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -628,7 +645,7 @@ function RentalApplicationWizardInner({
   // or fee step (re-runs as catalogs arrive via extrasTick, since the
   // listing's managerUserId may not be resolvable on a cold browser).
   useEffect(() => {
-    if ((step !== 11 && step !== 12) || isDemoModeActive()) return;
+    if ((step !== 10 && step !== 11) || isDemoModeActive()) return;
     const pid = form.propertyId.trim();
     if (!pid) return;
     const managerUserId = getPropertyById(pid)?.managerUserId?.trim() ?? "";
@@ -979,7 +996,7 @@ function RentalApplicationWizardInner({
         // "Apply for this bundle" — pre-select the bundle when it matches a
         // manager-defined bundle on this listing. A bundle application on a
         // by-room listing carries no ranked room choices.
-        const bundleId = bundleParam && getBundleOptionsForProperty(pid).some((o) => o.value === bundleParam)
+        const bundleId = bundleParam && getBundleOptionsForProperty(pid, { rentalType: shortTermFromLink ? "short_term" : "standard" }).some((o) => o.value === bundleParam)
           ? bundleParam
           : "";
         const bundleReplacesRooms = Boolean(bundleId) && isPropertyRentedByRoom(pid);
@@ -1012,6 +1029,23 @@ function RentalApplicationWizardInner({
       });
     });
   }, [draftReady, extrasTick, linkedPropertyIdProp, linkedRentalType, listingPrefillKey, searchParams, sessionEmail]);
+
+  useEffect(() => {
+    if (!draftReady || templatePreview) return;
+    const leaderAppId = parseGroupLeaderAppIdParam(searchParams.get(GROUP_LEADER_APP_ID_PARAM));
+    if (!leaderAppId) return;
+    setForm((prev) => {
+      const patch = groupLeaderInviteFormPatch(leaderAppId);
+      if (
+        prev.groupLeaderAppId.trim().toUpperCase() === patch.groupLeaderAppId &&
+        prev.applyingAsGroup === patch.applyingAsGroup &&
+        prev.groupRole === patch.groupRole
+      ) {
+        return prev;
+      }
+      return { ...prev, ...patch };
+    });
+  }, [draftReady, searchParams, templatePreview]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
@@ -1070,7 +1104,7 @@ function RentalApplicationWizardInner({
   }, [sessionEmail]);
 
   useEffect(() => {
-    if (!draftReady || step !== 12) return;
+    if (!draftReady || step !== 11) return;
     const pid = form.propertyId.trim();
     const prop = pid ? getPropertyById(pid) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
@@ -1116,7 +1150,7 @@ function RentalApplicationWizardInner({
   }, [maxStepReached]);
 
   const validateAllPrior = useCallback(() => {
-    for (let s = 1; s <= 10; s++) {
+    for (let s = 1; s <= 9; s++) {
       const e = validateRentalWizardStep(s, form);
       if (countValidationErrors(e) > 0) {
         setErrors(e);
@@ -1314,12 +1348,34 @@ function RentalApplicationWizardInner({
       const listing = prop;
       const applicantName = form.fullLegalName.trim() || "Applicant";
 
-      // Group applications: the first applicant mints a shareable Group ID on submit;
-      // joining members keep the id they pasted. Persist it on the stored snapshot so
-      // every member's independent application row can be reconciled into one group.
-      const resolvedGroupId = resolveSubmitGroupId(form);
+      // Group applications: organizers mint (or keep) a household link code; joiners
+      // resolve it from the organizer's application id via the public link preview.
+      let formForGroup = form;
+      if (form.applyingAsGroup === "yes" && form.groupLeaderAppId.trim()) {
+        const preview = await fetchGroupLeaderLinkPreview(form.groupLeaderAppId);
+        if (!preview.ok) {
+          setSubmitting(false);
+          showToast(preview.message);
+          return;
+        }
+        formForGroup = {
+          ...form,
+          groupId: preview.groupId,
+          groupLeaderAppId: preview.leaderAppId,
+          groupRole: "joining",
+        };
+      } else if (form.applyingAsGroup === "yes") {
+        formForGroup = {
+          ...form,
+          groupRole: "first",
+          groupId: form.groupId.trim() || makeApplicationGroupId(),
+        };
+      }
+      const resolvedGroupId = resolveSubmitGroupId(formForGroup);
       const withGroupId: RentalWizardFormState =
-        resolvedGroupId && resolvedGroupId !== form.groupId ? { ...form, groupId: resolvedGroupId } : form;
+        resolvedGroupId && resolvedGroupId !== formForGroup.groupId
+          ? { ...formForGroup, groupId: resolvedGroupId }
+          : formForGroup;
       // Sanitize at SUBMIT (only here — never on a mid-form lease-term switch, so
       // toggling long<->short keeps in-progress answers): the stored snapshot and
       // the manager view must carry ONLY the questions the CHOSEN form actually
@@ -1458,9 +1514,14 @@ function RentalApplicationWizardInner({
         guestFlow: isGuestSubmit,
         mailtoHref,
         setupHref,
-        groupId: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupId : undefined,
+        groupLeaderAppId:
+          submittedForm.applyingAsGroup === "yes" && submittedForm.groupRole === "first"
+            ? axisId
+            : undefined,
         groupRole: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupRole : undefined,
         groupSize: submittedForm.applyingAsGroup === "yes" ? submittedForm.groupSize : undefined,
+        groupPropertyId: submittedForm.applyingAsGroup === "yes" ? submittedForm.propertyId : undefined,
+        hasCosigner: submittedForm.hasCosigner,
       });
       if (sync.ok) {
         showToast("Application submitted.");
@@ -1478,10 +1539,10 @@ function RentalApplicationWizardInner({
   }, [demoAutofillSubmitPending, finalizeApplicationSubmit, form]);
 
   const primaryButtonLabel = useMemo(() => {
-    if (mode === "manager" && step === 11) {
+    if (mode === "manager" && step === 10) {
       return managerActionBusy ? "Loading preview…" : "Send to resident";
     }
-    if (step !== 12) return "Continue";
+    if (step !== 11) return "Continue";
     if (!applicationFeeGate.needsFee) return submitting ? "Submitting…" : "Submit application";
     const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
@@ -1622,7 +1683,7 @@ function RentalApplicationWizardInner({
       showToast("Preview only — applicants submit from this screen.");
       return;
     }
-    if (step === 12) {
+    if (step === 11) {
       if (!validateAllPrior()) return;
       void (async () => {
         if (isDemoModeActive()) {
@@ -1700,7 +1761,7 @@ function RentalApplicationWizardInner({
               applicationFeeZelleSentConfirmed: hint,
             }));
             queueMicrotask(() =>
-              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], {
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[11] ?? [], {
                 applicationFeeZelleSentConfirmed: hint,
               }),
             );
@@ -1753,7 +1814,7 @@ function RentalApplicationWizardInner({
             }));
             showToast(msg);
             queueMicrotask(() =>
-              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[12] ?? [], {
+              scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[11] ?? [], {
                 applicationFeeZelleSentConfirmed: msg,
               }),
             );
@@ -1772,7 +1833,7 @@ function RentalApplicationWizardInner({
       })();
       return;
     }
-    if (step === 11) {
+    if (step === 10) {
       if (!validateAllPrior()) return;
       if (mode === "manager") {
         const axisId = ensureRentalWizardAxisId();
@@ -1787,8 +1848,8 @@ function RentalApplicationWizardInner({
         onManagerSendToResident?.({ axisId });
         return;
       }
-      setStep(12);
-      setMaxStepReached((m) => nextWizardMaxReached(m, 12));
+      setStep(11);
+      setMaxStepReached((m) => nextWizardMaxReached(m, 11));
       setErrors({});
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -1821,7 +1882,7 @@ function RentalApplicationWizardInner({
       }
     }
     if (reviewReturnStep != null && reviewReturnStep === step) {
-      setStep(11);
+      setStep(10);
       setReviewReturnStep(null);
     } else {
       const next = nextActiveStep(step);
@@ -1837,14 +1898,14 @@ function RentalApplicationWizardInner({
       exitApplication();
       return;
     }
-    if (step === 12) {
-      setStep(11);
+    if (step === 11) {
+      setStep(10);
       setErrors({});
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     if (reviewReturnStep != null && reviewReturnStep === step) {
-      setStep(11);
+      setStep(10);
       setErrors({});
       setReviewReturnStep(null);
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1875,28 +1936,7 @@ function RentalApplicationWizardInner({
         </div>
       ) : null}
 
-      {form.applicantRole === "cosigner" ? (
-        <div
-          className={
-            embedded
-              ? "rental-wizard-shell rental-wizard-shell--cosigner"
-              : "rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
-          }
-        >
-          <CosignerApplyFlow
-            embedded={embedded}
-            previewMode={templatePreview}
-            showToast={showToast}
-            applicationKind={form.rentalType === "short_term" ? "short-term" : "long-term"}
-            onBack={() => {
-              patchForm({ applicantRole: null });
-              setStep(1);
-              setErrors({});
-            }}
-            onDone={onManagerCancel ?? exitApplication}
-          />
-        </div>
-      ) : !canRenderWizard ? (
+      {form.applicantRole === "cosigner" ? null : !canRenderWizard ? (
           <div className="mt-8">
             <ManagerLinkGate
               title="Open your manager’s apply link"
@@ -1924,9 +1964,11 @@ function RentalApplicationWizardInner({
             guestFlow={postSubmit.guestFlow}
             mailtoHref={postSubmit.mailtoHref}
             setupHref={postSubmit.setupHref}
-            groupId={postSubmit.groupId}
+            groupLeaderAppId={postSubmit.groupLeaderAppId}
             groupRole={postSubmit.groupRole}
             groupSize={postSubmit.groupSize}
+            groupPropertyId={postSubmit.groupPropertyId}
+            hasCosigner={postSubmit.hasCosigner}
             onDone={() => setPostSubmit(null)}
           />
         ) : (

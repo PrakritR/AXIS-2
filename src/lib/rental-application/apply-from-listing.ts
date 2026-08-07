@@ -17,6 +17,8 @@ export type RentalApplyFromListingParams = {
   phone?: string;
   /** Pre-select long-term vs short-term application form (`standard` | `short_term`). */
   rentalType?: "standard" | "short_term";
+  /** Organizer application id for a joining roommate (`groupLeaderAppId` query param). */
+  groupLeaderAppId?: string;
 };
 
 export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
@@ -29,5 +31,6 @@ export function buildRentalApplyHref(p: RentalApplyFromListingParams): string {
   if (p.bundleId) q.set("bundle", p.bundleId);
   if (p.phone?.trim()) q.set("phone", p.phone.trim());
   if (p.rentalType === "short_term") q.set("rentalType", "short_term");
+  if (p.groupLeaderAppId?.trim()) q.set("groupLeaderAppId", p.groupLeaderAppId.trim());
   return `/rent/apply?${q.toString()}`;
 }

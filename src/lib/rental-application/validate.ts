@@ -1,9 +1,8 @@
+import { validateGroupLeaderAppIdInput } from "@/lib/rental-application/group-leader-link";
 import {
-  validateAxisGroupId,
   validateDateRequired,
   validateEmail,
   validateFullName,
-  validateHouseholdCount,
   validatePhone10,
   validateRequired,
   validateSsn,
@@ -113,7 +112,7 @@ export function validateRentalWizardStep(
   const configSlice = applicationConfigForVariant(sub, f.rentalType);
   const fieldEnabled = (key: string) => isWizardFormFieldEnabled(configSlice, key);
   const e = validateStandardWizardStep(step, f, fieldEnabled, prop);
-  // Manager custom questions are asked inside their configured section's step (untagged → step 9).
+  // Manager custom questions are asked inside their configured section's step (untagged → step 8).
   const stepCustomFields = customFieldsForWizardStep(
     listingCustomApplicationFields(configSlice),
     step,
@@ -133,39 +132,48 @@ export function validateStandardWizardStep(
   const e: RentalWizardErrors = {};
 
   if (step === 1) {
-    const role = fieldEnabled("applicantRole") ? f.applicantRole : "signer";
-    if (fieldEnabled("applicantRole") && f.applicantRole === null) {
-      e.applicantRole = "Please choose whether you are the primary applicant or a co-signer.";
-      return e;
+    if (f.applicantRole === "cosigner") return e;
+    if (fieldEnabled("hasCosigner") && f.hasCosigner === null) {
+      e.hasCosigner = "Please choose whether a co-signer will be added.";
     }
-    if (role === "cosigner") return e;
-    if (fieldEnabled("applyingAsGroup") && f.applyingAsGroup === null) {
+    if (!fieldEnabled("applyingAsGroup")) return e;
+    if (f.applyingAsGroup === null) {
       e.applyingAsGroup = "Please choose whether you are applying as part of a group.";
       return e;
     }
-    const applyingAsGroup = fieldEnabled("applyingAsGroup") ? f.applyingAsGroup : "no";
-    if (applyingAsGroup === "no") return e;
-    if (fieldEnabled("groupRole") && f.groupRole === null) {
-      e.groupRole = "Select your role in the group.";
-      return e;
-    }
-    if (fieldEnabled("groupRole") && f.groupRole === "first") {
-      if (fieldEnabled("groupSize")) {
-        const c = validateHouseholdCount(f.groupSize);
-        if (!c.ok) e.groupSize = c.message;
-      }
-      return e;
-    }
-    if (fieldEnabled("groupId")) {
-      const g = validateAxisGroupId(f.groupId);
-      if (!g.ok) e.groupId = g.message;
+    if (f.applyingAsGroup === "no") return e;
+    if (f.groupLeaderAppId.trim()) {
+      const leader = validateGroupLeaderAppIdInput(f.groupLeaderAppId);
+      if (!leader.ok) e.groupLeaderAppId = leader.message;
     }
     return e;
   }
 
   if (step === 2) {
-    if (fieldEnabled("hasCosigner") && f.hasCosigner === null) {
-      e.hasCosigner = "Please choose whether a co-signer will be added.";
+    if (fieldEnabled("fullLegalName")) {
+      const n = validateFullName(f.fullLegalName);
+      if (!n.ok) e.fullLegalName = n.message;
+    }
+    if (fieldEnabled("dateOfBirth")) {
+      if (!f.dateOfBirth.trim()) e.dateOfBirth = "Date of birth is required.";
+      else if (isFutureLocalDate(f.dateOfBirth)) e.dateOfBirth = "Date of birth cannot be in the future.";
+      else if (!isAtLeastAge(f.dateOfBirth, 18)) e.dateOfBirth = "You must be at least 18 years old to apply.";
+    }
+    if (fieldEnabled("ssn")) {
+      const ss = validateSsn(f.ssn);
+      if (!ss.ok) e.ssn = ss.message;
+    }
+    if (fieldEnabled("driversLicense")) {
+      const dl = validateRequired(f.driversLicense, "Driver’s license or ID number");
+      if (!dl.ok) e.driversLicense = dl.message;
+    }
+    if (fieldEnabled("phone")) {
+      const ph = validatePhone10(f.phone);
+      if (!ph.ok) e.phone = ph.message;
+    }
+    if (fieldEnabled("email")) {
+      const em = validateEmail(f.email);
+      if (!em.ok) e.email = em.message;
     }
     return e;
   }
@@ -236,38 +244,6 @@ export function validateStandardWizardStep(
   }
 
   if (step === 4) {
-    if (fieldEnabled("fullLegalName")) {
-      const n = validateFullName(f.fullLegalName);
-      if (!n.ok) e.fullLegalName = n.message;
-    }
-    if (fieldEnabled("dateOfBirth")) {
-      if (!f.dateOfBirth.trim()) e.dateOfBirth = "Date of birth is required.";
-      // A future date is not an age problem — reject it on its own terms before
-      // the age check, whose "must be at least 18" message would otherwise be
-      // shown for a date that simply hasn't happened yet.
-      else if (isFutureLocalDate(f.dateOfBirth)) e.dateOfBirth = "Date of birth cannot be in the future.";
-      else if (!isAtLeastAge(f.dateOfBirth, 18)) e.dateOfBirth = "You must be at least 18 years old to apply.";
-    }
-    if (fieldEnabled("ssn")) {
-      const ss = validateSsn(f.ssn);
-      if (!ss.ok) e.ssn = ss.message;
-    }
-    if (fieldEnabled("driversLicense")) {
-      const dl = validateRequired(f.driversLicense, "Driver’s license or ID number");
-      if (!dl.ok) e.driversLicense = dl.message;
-    }
-    if (fieldEnabled("phone")) {
-      const ph = validatePhone10(f.phone);
-      if (!ph.ok) e.phone = ph.message;
-    }
-    if (fieldEnabled("email")) {
-      const em = validateEmail(f.email);
-      if (!em.ok) e.email = em.message;
-    }
-    return e;
-  }
-
-  if (step === 5) {
     if (fieldEnabled("currentStreet")) {
       const st = validateRequired(f.currentStreet, "Street address");
       if (!st.ok) e.currentStreet = st.message;
@@ -293,7 +269,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 6) {
+  if (step === 5) {
     if (f.noPreviousAddress) return e;
     if (fieldEnabled("prevStreet")) {
       const st = validateRequired(f.prevStreet, "Previous street address");
@@ -320,7 +296,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 7) {
+  if (step === 6) {
     if (!f.notEmployed) {
       if (fieldEnabled("employer")) {
         const emp = validateRequired(f.employer, "Employer name");
@@ -363,7 +339,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 8) {
+  if (step === 7) {
     if (fieldEnabled("ref1Name")) {
       const n1 = validateRequired(f.ref1Name, "Reference 1 name");
       if (!n1.ok) e.ref1Name = n1.message;
@@ -388,7 +364,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 9) {
+  if (step === 8) {
     if (fieldEnabled("occupancyCount")) {
       if (!f.occupancyCount.trim()) e.occupancyCount = "Number of occupants is required.";
       else {
@@ -417,7 +393,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 10) {
+  if (step === 9) {
     if (fieldEnabled("consentCredit") && !f.consentCredit) e.consentCredit = "You must authorize a credit and background check to continue.";
     if (fieldEnabled("consentTruth") && !f.consentTruth) e.consentTruth = "You must confirm your information is true and complete.";
     if (fieldEnabled("digitalSignature") && !f.digitalSignature.trim()) e.digitalSignature = "Type your full legal name as your digital signature.";
@@ -425,7 +401,7 @@ export function validateStandardWizardStep(
     return e;
   }
 
-  if (step === 12) {
+  if (step === 11) {
     const pid = f.propertyId.trim();
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const amount = sub ? parseMoneyAmount(sub.applicationFee) : listingApplicationFeeAmount(pid).amount;

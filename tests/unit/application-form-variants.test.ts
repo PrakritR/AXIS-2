@@ -6,6 +6,7 @@ import {
   mergeApplicationConfigForVariant,
   reenableListingApplicationField,
   resolveListingApplicationFields,
+  editorVisibleDisabledApplicationFields,
   COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS,
   SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS,
   STANDARD_APPLICATION_FIELD_CATALOG,
@@ -21,16 +22,16 @@ function catalogField(section: (typeof STANDARD_APPLICATION_FIELD_CATALOG)[numbe
 }
 describe("household and co-signer application questions", () => {
   it("includes group and co-signer prompts in the standard catalog by default", () => {
-    const household = catalogField("household", "Applying as part of a group");
-    const cosignerIntent = catalogField("cosigner_intent", "Co-signer on this application");
+    const cosigner = catalogField("household", "Co-signer planned");
+    const household = catalogField("household", "Group application");
+    expect(cosigner.wizardFormKeys).toEqual(["hasCosigner"]);
     expect(household.wizardFormKeys).toEqual(["applyingAsGroup"]);
-    expect(cosignerIntent.wizardFormKeys).toEqual(["hasCosigner"]);
     const fields = resolveListingApplicationFields(createDefaultListingSubmission(), normalizeCustomApplicationFields);
     expect(fields.some((f) => f.standardKey === household.standardKey)).toBe(true);
-    expect(fields.some((f) => f.standardKey === cosignerIntent.standardKey)).toBe(true);
+    expect(fields.some((f) => f.standardKey === cosigner.standardKey)).toBe(true);
   });
 
-  it("omits household steps when every household question is disabled", () => {
+  it("omits household questions when every household question is disabled", () => {
     const householdKeys = STANDARD_APPLICATION_FIELD_CATALOG.filter((d) => d.section === "household").map(
       (d) => d.standardKey,
     );
@@ -39,8 +40,10 @@ describe("household and co-signer application questions", () => {
       customApplicationFields: [],
       applicationConfigMode: "custom" as const,
     };
+    const fields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
+    expect(fields.some((f) => f.section === "household")).toBe(false);
     const steps = activeApplicationWizardSteps(sub, normalizeCustomApplicationFields);
-    expect(steps).not.toContain(1);
+    expect(steps).toContain(1);
     expect(steps).toContain(2);
   });
 });
@@ -65,6 +68,8 @@ describe("application form variants — short-term vs long-term are configured i
     );
     expect(isWizardFormFieldEnabled(slice, "fullLegalName")).toBe(true);
     expect(isWizardFormFieldEnabled(slice, "employer")).toBe(true);
+    expect(isWizardFormFieldEnabled(slice, "hasCosigner")).toBe(false);
+    expect(isWizardFormFieldEnabled(slice, "applyingAsGroup")).toBe(false);
     expect(isWizardFormFieldEnabled(slice, "propertyId")).toBe(false);
     expect(isWizardFormFieldEnabled(slice, "ref1Name")).toBe(false);
     expect(isWizardFormFieldEnabled(slice, "pets")).toBe(false);
@@ -136,13 +141,35 @@ describe("application form variants — short-term vs long-term are configured i
   });
 });
 
+describe("manager editor — disabled question visibility", () => {
+  it("hides curated default-off questions from the ghost list", () => {
+    const shortDefault = applicationConfigForVariant({}, "short_term");
+    expect(editorVisibleDisabledApplicationFields("short_term", shortDefault)).toEqual([]);
+    const cosignerDefault = applicationConfigForVariant({}, "cosigner");
+    expect(editorVisibleDisabledApplicationFields("cosigner", cosignerDefault)).toEqual([]);
+  });
+
+  it("shows only manager-removed questions once a variant is customized", () => {
+    const nameKey = STANDARD_APPLICATION_FIELD_CATALOG.find((d) =>
+      d.wizardFormKeys.includes("fullLegalName"),
+    )!.standardKey;
+    const slice = {
+      ...applicationConfigForVariant({}, "short_term"),
+      applicationConfigMode: "custom" as const,
+      disabledStandardApplicationKeys: [...SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS, nameKey],
+    };
+    const ghosts = editorVisibleDisabledApplicationFields("short_term", slice);
+    expect(ghosts.map((f) => f.standardKey)).toEqual([nameKey]);
+  });
+});
+
 describe("active wizard steps derive from the variant's enabled questions", () => {
   it("the long-term default walks every step", () => {
     const steps = activeApplicationWizardSteps(
       applicationConfigForVariant({}, "standard"),
       normalizeCustomApplicationFields,
     );
-    expect(steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   });
 
   it("the short-term default skips the screening sections it turns off", () => {
@@ -150,8 +177,8 @@ describe("active wizard steps derive from the variant's enabled questions", () =
       applicationConfigForVariant({}, "short_term"),
       normalizeCustomApplicationFields,
     );
-    // 5 Current address, 6 Previous address, 7 Employment, 8 References, 9 Additional are gone.
-    expect(steps).toEqual([1, 2, 3, 4, 10, 11, 12]);
+    // 4 Current address, 5 Previous address, 6 Employment, 7 References, 8 Additional are gone.
+    expect(steps).toEqual([1, 2, 3, 9, 10, 11]);
   });
 
   it("a short-term form with every built-in re-enabled stays fully enabled (does not revert to the curated default)", () => {
@@ -178,7 +205,7 @@ describe("active wizard steps derive from the variant's enabled questions", () =
     const shortDefault = applicationConfigForVariant({}, "short_term");
     const reenabled = reenableListingApplicationField(shortDefault, employmentKey);
     const steps = activeApplicationWizardSteps(reenabled, normalizeCustomApplicationFields);
-    expect(steps).toContain(7);
+    expect(steps).toContain(6);
     // The re-add flips the form to a customized config.
     expect(reenabled.applicationConfigMode).toBe("custom");
     // The long-term form is untouched.
@@ -186,7 +213,7 @@ describe("active wizard steps derive from the variant's enabled questions", () =
       applicationConfigForVariant({}, "standard"),
       normalizeCustomApplicationFields,
     );
-    expect(longSteps).toContain(7);
+    expect(longSteps).toContain(6);
   });
 });
 

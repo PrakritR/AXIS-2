@@ -81,8 +81,8 @@ afterAll(() => {
 });
 
 describe("F-FIN-1 / F8 — Review and the fee step quote one number", () => {
-  it("Review states the waiver beside the published fee, and step 12 says the same", () => {
-    render(<RentalWizardStepBody {...props({ step: 11 })} />);
+  it("Review states the waiver beside the published fee, and step 11 says the same", () => {
+    render(<RentalWizardStepBody {...props({ step: 10 })} />);
     const row = screen.getByText("Application fee").closest("div")!.parentElement!;
     // Capture before asserting, so the artifact exists in the pre-fix state too.
     captured.push({ name: "f8-review-fee-row", html: (row as HTMLElement).outerHTML });
@@ -91,7 +91,7 @@ describe("F-FIN-1 / F8 — Review and the fee step quote one number", () => {
     expect(row.textContent).toContain("$50.00");
     cleanup();
 
-    const feeStep = render(<RentalWizardStepBody {...props({ step: 12 })} />);
+    const feeStep = render(<RentalWizardStepBody {...props({ step: 11 })} />);
     captured.push({
       name: "f8-fee-step",
       html: (feeStep.container.firstElementChild as HTMLElement).innerHTML,
@@ -103,7 +103,7 @@ describe("F-FIN-1 / F8 — Review and the fee step quote one number", () => {
     render(
       <RentalWizardStepBody
         {...props({
-          step: 11,
+          step: 10,
           applicationFeeGate: { needsFee: true, paid: false, displayLabel: "$50.00", amount: 50, waived: false },
         })}
       />,

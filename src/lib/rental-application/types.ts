@@ -1,6 +1,6 @@
 import type { ManagerCustomApplicationFieldType } from "@/lib/manager-listing-submission";
 
-export const RENTAL_WIZARD_STEP_COUNT = 12;
+export const RENTAL_WIZARD_STEP_COUNT = 11;
 
 export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
@@ -50,7 +50,10 @@ export type RentalWizardFormState = {
   applyingAsGroup: YesNo;
   groupRole: GroupRole;
   groupSize: string;
+  /** Internal household link code — minted for organizers; resolved from {@link groupLeaderAppId} for joiners. */
   groupId: string;
+  /** Organizer application id typed or prefilled from a group invite link (joining members only). */
+  groupLeaderAppId: string;
   hasCosigner: YesNo;
   propertyId: string;
   roomChoice1: string;

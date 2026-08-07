@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { PropertySearchPicker } from "@/components/marketing/property-search-picker";
+import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
+import { GroupInviteCallout } from "@/components/marketing/group-invite-callout";
+import { GroupLeaderAppIdField } from "@/components/marketing/group-leader-app-id-field";
 import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
@@ -13,7 +16,7 @@ import {
   applicationFeeReviewNote,
   applicationFeeWaiverExplanation,
 } from "@/lib/rental-application/application-fee-display";
-import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
+import { ApplyFieldRow } from "@/app/(public)/rent/apply/apply-field-row";
 import {
   LEASE_TERM_OPTIONS,
   SHORT_TERM_LEASE_TERM,
@@ -33,7 +36,7 @@ import {
   utilitiesListingEstimateLabel,
 } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
-import { GROUP_ID_FORMAT_HINT } from "@/lib/rental-application/application-groups";
+import { makeApplicationGroupId } from "@/lib/rental-application/application-groups";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
   customFieldAnswerValue,
@@ -110,12 +113,15 @@ function YesNoPills({
   error,
   name,
   fieldKey,
+  suppressError = false,
 }: {
   value: YesNo;
   onChange: (v: "yes" | "no") => void;
   error?: string;
   name: string;
   fieldKey?: string;
+  /** When a parent row (e.g. ApplyFieldRow) renders the error message. */
+  suppressError?: boolean;
 }) {
   return (
     <div data-wizard-field={fieldKey} className={wizardSectionErrorClass(Boolean(error))}>
@@ -139,7 +145,7 @@ function YesNoPills({
           No
         </button>
       </div>
-      <FieldError msg={error} />
+      {suppressError ? null : <FieldError msg={error} />}
     </div>
   );
 }
@@ -338,7 +344,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
-    if (step < 3 || step > 10) return null;
+    if (step < 2 || step > 9) return null;
     const stepProp = getPropertyById(form.propertyId);
     const fields = customFieldsForWizardStep(
       listingCustomApplicationFields(applicationConfig),
@@ -369,207 +375,146 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   })();
 
   if (step === 1) {
-    const effectiveApplicantRole = showWizardField("applicantRole") ? form.applicantRole : "signer";
-    const showGroupBlock =
-      effectiveApplicantRole === "signer" &&
-      (showWizardField("applyingAsGroup") ||
-        showWizardField("groupRole") ||
-        showWizardField("groupSize") ||
-        showWizardField("groupId"));
+    const showCosigner = showWizardField("hasCosigner");
+    const showGroup = showWizardField("applyingAsGroup");
+    const joiningGroup = Boolean(form.groupLeaderAppId.trim());
+    const organizingGroup = form.applyingAsGroup === "yes" && !joiningGroup;
 
     return (
       <div className="rental-wizard-step space-y-6">
-        <WizardFieldGate fieldKey="applicantRole" enabled={showWizardField}>
-          <div className="space-y-2" data-wizard-field="applicantRole">
-            <Label required>Are you the primary applicant or a co-signer?</Label>
-            <p className="text-sm leading-relaxed text-muted">
-              Choose <span className="font-medium text-foreground">Primary applicant</span> if you are applying for the
-              lease. Choose <span className="font-medium text-foreground">Co-signer</span> if someone else applied first
-              and asked you to complete the co-signer form.
-            </p>
-            <div
-              className={`${groupRoleStack} ${errors.applicantRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
-              role="group"
-              aria-label="Applicant role"
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  patch({
-                    applicantRole: "signer",
-                  })
-                }
-                className={form.applicantRole === "signer" ? choiceActive : choiceIdle}
-              >
-                Primary applicant
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  patch({
-                    applicantRole: "cosigner",
-                    applyingAsGroup: null,
-                    groupRole: null,
-                    groupSize: "",
-                    groupId: "",
-                  })
-                }
-                className={form.applicantRole === "cosigner" ? choiceActive : choiceIdle}
-              >
-                Co-signer
-              </button>
-            </div>
-            <FieldError msg={errors.applicantRole} />
-          </div>
-        </WizardFieldGate>
+        <div>
+          <StepIntro>
+            {showCosigner && showGroup
+              ? "Tell us about co-signers and roommates. One person applies first and shares an invite link so everyone&apos;s applications stay linked."
+              : showGroup
+                ? "Applying with roommates? One person applies first and shares an invite link so everyone&apos;s applications stay linked."
+                : "A co-signer may strengthen your application. They complete a separate short form after you submit."}
+          </StepIntro>
+        </div>
 
-        {showGroupBlock ? (
-          <>
-            <h3 className="text-base font-bold tracking-tight text-foreground">Group application</h3>
-            <StepIntro>
-              Applying with roommates? One person submits first and shares a Group ID so everyone&apos;s applications stay
-              linked.
-            </StepIntro>
+        <div className="divide-y divide-border/60 rounded-2xl border border-border bg-card/30 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+          {showCosigner ? (
+            <>
+              <ApplyFieldRow
+                label="Will someone be co-signing this application with you?"
+                error={errors.hasCosigner}
+                fieldKey="hasCosigner"
+                labelClassName="text-sm font-semibold text-foreground"
+                className="px-4 sm:px-5"
+              >
+                <YesNoPills
+                  value={form.hasCosigner}
+                  error={errors.hasCosigner}
+                  name="Co-signer"
+                  fieldKey="hasCosigner"
+                  suppressError
+                  onChange={(v) => patch({ applicantRole: "signer", hasCosigner: v })}
+                />
+              </ApplyFieldRow>
+              {form.hasCosigner === "yes" && p.getApplicationId ? (
+                <div className="px-4 pb-5 sm:px-5">
+                  <CosignerInviteCallout
+                    signerAppId={getApplicationId().trim()}
+                    signerName={form.fullLegalName.trim() || undefined}
+                    className="rounded-2xl border border-border bg-accent/30 p-4"
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : null}
 
-            <WizardFieldGate fieldKey="applyingAsGroup" enabled={showWizardField}>
-              <div className="space-y-2">
-                <Label required>Are you applying as part of a group?</Label>
+          {showGroup ? (
+            <>
+              <ApplyFieldRow
+                label="Are you applying as part of a group?"
+                error={errors.applyingAsGroup}
+                fieldKey="applyingAsGroup"
+                labelClassName="text-sm font-semibold text-foreground"
+                className="px-4 sm:px-5"
+              >
                 <YesNoPills
                   value={form.applyingAsGroup}
                   error={errors.applyingAsGroup}
                   name="Group application"
                   fieldKey="applyingAsGroup"
+                  suppressError
                   onChange={(v) => {
+                    if (v === "no") {
+                      patch({
+                        applicantRole: "signer",
+                        applyingAsGroup: v,
+                        groupRole: null,
+                        groupSize: "",
+                        groupId: "",
+                        groupLeaderAppId: "",
+                      });
+                      return;
+                    }
                     patch({
+                      applicantRole: "signer",
                       applyingAsGroup: v,
-                      groupRole: v === "no" ? null : form.groupRole,
-                      groupSize: v === "no" ? "" : form.groupSize,
-                      groupId: v === "no" ? "" : form.groupId,
+                      groupRole: joiningGroup ? "joining" : "first",
+                      groupId: joiningGroup
+                        ? form.groupId
+                        : form.groupId.trim() || makeApplicationGroupId(),
                     });
                   }}
                 />
-              </div>
-            </WizardFieldGate>
+              </ApplyFieldRow>
 
-            {form.applyingAsGroup === "yes" ? (
-              <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
-                <p className="text-sm leading-relaxed text-muted">
-                  Start the group and share your Group ID, or paste the ID from whoever applied first.
-                </p>
+              {form.applyingAsGroup === "yes" ? (
+                <>
+                  <ApplyFieldRow
+                    label="Organizer application ID"
+                    hint="Paste the ID from your roommate's invite link, or leave blank if you are the first applicant."
+                    optional
+                    error={errors.groupLeaderAppId}
+                    fieldKey="groupLeaderAppId"
+                    labelClassName="text-sm font-semibold text-foreground"
+                    className="px-4 sm:px-5"
+                  >
+                    <GroupLeaderAppIdField
+                      value={form.groupLeaderAppId}
+                      onChange={(next) => {
+                        const trimmed = next.trim();
+                        patch({
+                          groupLeaderAppId: next,
+                          groupRole: trimmed ? "joining" : "first",
+                          groupId: trimmed
+                            ? form.groupId
+                            : form.groupId.trim() || makeApplicationGroupId(),
+                          ...(trimmed ? { groupSize: "" } : {}),
+                        });
+                      }}
+                      error={errors.groupLeaderAppId}
+                      onResolved={(preview) => {
+                        if (preview) {
+                          patch({
+                            groupLeaderAppId: preview.leaderAppId,
+                            groupId: preview.groupId,
+                            groupRole: "joining",
+                          });
+                        }
+                      }}
+                      suppressError
+                    />
+                  </ApplyFieldRow>
 
-                <WizardFieldGate fieldKey="groupRole" enabled={showWizardField}>
-                  <div className="space-y-2" data-wizard-field="groupRole">
-                    <Label required>What is your role in the group?</Label>
-                    <div
-                      className={`${groupRoleStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
-                      role="group"
-                      aria-label="Group role"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => patch({ groupRole: "first", groupId: "" })}
-                        className={form.groupRole === "first" ? choiceActive : choiceIdle}
-                      >
-                        I am the first person applying
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => patch({ groupRole: "joining", groupSize: "" })}
-                        className={form.groupRole === "joining" ? choiceActive : choiceIdle}
-                      >
-                        I am joining an existing group
-                      </button>
-                    </div>
-                    <FieldError msg={errors.groupRole} />
-                  </div>
-                </WizardFieldGate>
-
-                {form.groupRole === "first" ? (
-                  <WizardFieldGate fieldKey="groupSize" enabled={showWizardField}>
-                    <div className="space-y-2" data-wizard-field="groupSize">
-                      <Label htmlFor="groupSize" required>
-                        How many people are applying together?
-                      </Label>
-                      <p className="text-xs text-muted">Include yourself. Whole numbers from 2 to 30.</p>
-                      <Select
-                        id="groupSize"
-                        value={form.groupSize}
-                        onChange={(e) => patch({ groupSize: e.target.value })}
-                        className={errors.groupSize ? "border-red-400 ring-2 ring-red-100" : ""}
-                      >
-                        <option value="">Select group size</option>
-                        {Array.from({ length: 29 }, (_, i) => i + 2).map((n) => (
-                          <option key={n} value={String(n)}>
-                            {n} people
-                          </option>
-                        ))}
-                      </Select>
-                      <p className="text-xs text-muted">
-                        We&apos;ll generate a Group ID after submission for you to share with roommates.
-                      </p>
-                      <FieldError msg={errors.groupSize} />
-                    </div>
-                  </WizardFieldGate>
-                ) : null}
-
-                {form.groupRole === "joining" ? (
-                  <WizardFieldGate fieldKey="groupId" enabled={showWizardField}>
-                    <div className="space-y-2" data-wizard-field="groupId">
-                      <Label htmlFor="groupId" required>
-                        Group ID
-                      </Label>
-                      <p className="text-xs text-muted">
-                        Paste the Group ID shared by the first applicant. Format: {GROUP_ID_FORMAT_HINT}
-                      </p>
-                      <Input
-                        id="groupId"
-                        value={form.groupId}
-                        onChange={(e) => patch({ groupId: e.target.value })}
-                        placeholder={GROUP_ID_FORMAT_HINT}
-                        autoComplete="off"
-                        className={errors.groupId ? "border-red-400 ring-2 ring-red-100" : ""}
+                  {organizingGroup && p.getApplicationId ? (
+                    <div className="px-4 pb-5 sm:px-5">
+                      <GroupInviteCallout
+                        leaderAppId={getApplicationId().trim()}
+                        organizerName={form.fullLegalName.trim() || undefined}
+                        propertyId={form.propertyId.trim() || undefined}
+                        className="rounded-2xl border border-border bg-accent/30 p-4"
                       />
-                      <FieldError msg={errors.groupId} />
                     </div>
-                  </WizardFieldGate>
-                ) : null}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (step === 2) {
-    if (!showWizardField("hasCosigner")) {
-      return null;
-    }
-    return (
-      <div className="space-y-8">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Co-signer</h2>
-          <StepIntro>
-            A co-signer may strengthen your application. This step only records your intent; they will complete a separate
-            short form later.
-          </StepIntro>
+                  ) : null}
+                </>
+              ) : null}
+            </>
+          ) : null}
         </div>
-        <div className="space-y-2" data-wizard-field="hasCosigner">
-          <Label required>Will someone be co-signing this application with you?</Label>
-          <YesNoPills
-            value={form.hasCosigner}
-            error={errors.hasCosigner}
-            name="Co-signer"
-            fieldKey="hasCosigner"
-            onChange={(v) => patch({ hasCosigner: v })}
-          />
-        </div>
-        {form.hasCosigner === "yes" ? (
-          <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
-            After you pay the listing&apos;s application fee on the last step, you&apos;ll receive an{" "}
-            <strong className="text-foreground">application ID</strong> to share with your co-signer so they can link their information to yours.
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -591,7 +536,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     // Entire-home pricing: itemized rooms are bedrooms on display, not units —
     // there is nothing to choose (the application is for the whole home).
     const entireHome = Boolean(form.propertyId) && isEntireHomeProperty(form.propertyId);
-    const bundleOptions = form.propertyId ? getBundleOptionsForProperty(form.propertyId) : [];
+    const bundleOptions = form.propertyId
+      ? getBundleOptionsForProperty(form.propertyId, { rentalType: form.rentalType })
+      : [];
     const bundleSelected = Boolean(form.bundleId.trim());
     const propertySearchOptions = propertyOptions.map((o) => {
       const prop = getPropertyById(o.value);
@@ -612,7 +559,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Property information</h2>
           <StepIntro>
             Your property manager shared this listing with you. Choose your room preferences and lease dates you are prepared to
             sign.
@@ -667,17 +613,82 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
         </WizardFieldGate>
 
+        <WizardFieldGate fieldKey="leaseTerm" enabled={showWizardField}>
+        <div className="space-y-2" data-wizard-field="leaseTerm">
+          <Label htmlFor="leaseTerm" required>
+            Lease term
+          </Label>
+          <Select
+            id="leaseTerm"
+            value={form.leaseTerm}
+            onChange={(e) => {
+              const v = e.target.value;
+              // The single dropdown carries short-term as one option; rentalType is
+              // derived from the choice so the two can never contradict each other.
+              const rentalType = v === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
+              const nextBundleOptions = form.propertyId.trim()
+                ? getBundleOptionsForProperty(form.propertyId, { rentalType })
+                : [];
+              const keepBundle =
+                Boolean(form.bundleId.trim()) &&
+                nextBundleOptions.some((o) => o.value === form.bundleId);
+              patch(
+                v === "Month-to-Month"
+                  ? {
+                      leaseTerm: v,
+                      leaseEnd: "",
+                      rentalType,
+                      ...(keepBundle ? {} : { bundleId: "" }),
+                    }
+                  : {
+                      leaseTerm: v,
+                      rentalType,
+                      ...(keepBundle ? {} : { bundleId: "" }),
+                    },
+              );
+            }}
+            className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
+          >
+            <option value="">Select lease length</option>
+            {leaseTermOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+          <FieldError msg={errors.leaseTerm} />
+          {form.rentalType === "short_term" ? (
+            <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
+              <p>
+                Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
+                {" · "}
+                Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
+              </p>
+              {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
+                <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {form.leaseTerm === "Month-to-Month" ? (
+            <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
+              Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
+            </p>
+          ) : null}
+        </div>
+        </WizardFieldGate>
+
         {bundleOptions.length > 0 ? (
           <div className="space-y-2" data-wizard-field="bundleId">
             <Label htmlFor="bundleId">Lease bundle</Label>
             <p className="text-xs text-muted">
-              This listing offers bundle pricing. Choose a bundle to apply for it
-              {isByRoom ? " instead of individual rooms" : ""}, or leave as none.
+              {form.rentalType === "short_term"
+                ? "Short-term bundle pricing for your stay. Choose a bundle or leave as none."
+                : `This listing offers bundle pricing. Choose a bundle to apply for it${isByRoom ? " instead of individual rooms" : ""}, or leave as none.`}
             </p>
             <Select
               id="bundleId"
               value={form.bundleId}
-              disabled={!form.propertyId}
+              disabled={!form.propertyId || !form.leaseTerm}
               onChange={(e) => {
                 const next = e.target.value;
                 if (next && isByRoom) {
@@ -697,7 +708,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 }
               }}
             >
-              <option value="">None: {isByRoom ? "apply for individual rooms" : "standard lease"}</option>
+              <option value="">
+                {form.rentalType === "short_term"
+                  ? "None: standard short-term stay"
+                  : `None: ${isByRoom ? "apply for individual rooms" : "standard lease"}`}
+              </option>
               {bundleOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -797,55 +812,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           // property select) or a bundle application: nothing to ask.
           <div data-wizard-field="roomChoice1" className="hidden" aria-hidden />
         )}
-        </WizardFieldGate>
-
-        <WizardFieldGate fieldKey="leaseTerm" enabled={showWizardField}>
-        <div className="space-y-2" data-wizard-field="leaseTerm">
-          <Label htmlFor="leaseTerm" required>
-            Lease term
-          </Label>
-          <Select
-            id="leaseTerm"
-            value={form.leaseTerm}
-            onChange={(e) => {
-              const v = e.target.value;
-              // The single dropdown carries short-term as one option; rentalType is
-              // derived from the choice so the two can never contradict each other.
-              const rentalType = v === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
-              patch(
-                v === "Month-to-Month"
-                  ? { leaseTerm: v, leaseEnd: "", rentalType }
-                  : { leaseTerm: v, rentalType },
-              );
-            }}
-            className={errors.leaseTerm ? "border-red-400 ring-2 ring-red-100" : ""}
-          >
-            <option value="">Select lease length</option>
-            {leaseTermOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          <FieldError msg={errors.leaseTerm} />
-          {form.rentalType === "short_term" ? (
-            <div className="rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground">
-              <p>
-                Daily cost: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDailyCost || "Set by host"}</span>
-                {" · "}
-                Deposit: <span className="font-semibold">{selectedProperty?.listingSubmission?.shortTermDeposit || "Set by host"}</span>
-              </p>
-              {selectedProperty?.listingSubmission?.shortTermRequirements?.trim() ? (
-                <p className="mt-1 text-muted">{selectedProperty.listingSubmission.shortTermRequirements.trim()}</p>
-              ) : null}
-            </div>
-          ) : null}
-          {form.leaseTerm === "Month-to-Month" ? (
-            <p className="rounded-lg border px-3 py-2 text-sm portal-banner-pending">
-              Month-to-month leases include an additional <span className="font-semibold">$25</span> charge to rent.
-            </p>
-          ) : null}
-        </div>
         </WizardFieldGate>
 
         <WizardFieldGate fieldKey="leaseStart" enabled={showWizardField}>
@@ -954,12 +920,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 4) {
+  if (step === 2) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Signer Information</h2>
-          <StepIntro className="mt-3">
+          <StepIntro>
             Start with how we can reach you, then confirm your identity exactly as it appears on your ID. This section is
             encrypted in transit in production environments.
           </StepIntro>
@@ -1133,12 +1098,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 5) {
+  if (step === 4) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Current address</h2>
-          <StepIntro className="mt-3">Where you live today. Landlord and move dates help us verify your rental history.</StepIntro>
+          <StepIntro>Where you live today. Landlord and move dates help us verify your rental history.</StepIntro>
         </div>
         <WizardFieldGate fieldKey="currentStreet" enabled={showWizardField}>
         <div className="space-y-2">
@@ -1260,12 +1224,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 6) {
+  if (step === 5) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Previous address</h2>
-          <StepIntro className="mt-3">If this is your first lease, you can indicate that you have no prior address to report.</StepIntro>
+          <StepIntro>If this is your first lease, you can indicate that you have no prior address to report.</StepIntro>
         </div>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4">
           <input
@@ -1394,12 +1357,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 7) {
+  if (step === 6) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Employment and income</h2>
-          <StepIntro className="mt-3">
+          <StepIntro>
             Income helps us confirm you can meet rent obligations when you are employed. Enter at least one positive amount
             in the income section below. If you are not employed, income is optional; use Other income for benefits or support
             if applicable, and explain gaps on the next screens if needed.
@@ -1486,7 +1448,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className="space-y-4 rounded-2xl border border-border p-5 sm:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Income</p>
-            <StepIntro className="mt-2">
+            <StepIntro>
               If you are employed, provide at least one of the amounts below (you do not need to fill all three). If you
               checked &ldquo;not currently employed,&rdquo; all income fields are optional.
             </StepIntro>
@@ -1568,12 +1530,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 8) {
+  if (step === 7) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">References</h2>
-          <StepIntro className="mt-3">List people who can speak to your character or employment. Avoid family members when possible.</StepIntro>
+          <StepIntro>List people who can speak to your character or employment. Avoid family members when possible.</StepIntro>
         </div>
         <WizardFieldGate fieldKey="ref1Name" enabled={showWizardField}>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
@@ -1658,12 +1619,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 9) {
+  if (step === 8) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Additional details</h2>
-          <StepIntro className="mt-3">
+          <StepIntro>
             These questions are standard for rental screening. Your answers are reviewed in context; answer honestly.
           </StepIntro>
         </div>
@@ -1687,7 +1647,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </Select>
           {Number(form.occupancyCount) > 1 && (
             <p className="rounded-lg border px-3 py-2 text-xs leading-relaxed portal-banner-pending">
-              <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application. Make sure you set up a group in step 1 and share your Group ID so all applications are linked together.
+              <span className="font-semibold">Note:</span> More than 1 occupant may increase the total cost. Each additional occupant must submit their own application. Set up a group in step 1 and share your invite link so all applications stay linked.
             </p>
           )}
           <FieldError msg={errors.occupancyCount} />
@@ -1783,12 +1743,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 10) {
+  if (step === 9) {
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Consent and Signature</h2>
-          <StepIntro className="mt-3">Review the authorizations below. Your typed name carries the same effect as a handwritten signature.</StepIntro>
+          <StepIntro>Review the authorizations below. Your typed name carries the same effect as a handwritten signature.</StepIntro>
         </div>
         <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
           <p>
@@ -1857,12 +1816,12 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     );
   }
 
-  if (step === 11) {
+  if (step === 10) {
     const prop = getPropertyById(form.propertyId);
     const roomLabel = (id: string) => getRoomChoiceLabel(id);
     const reviewByRoom = isPropertyRentedByRoom(form.propertyId);
     const reviewBundleLabel = form.bundleId.trim()
-      ? getBundleChoiceLabel(form.propertyId, form.bundleId)
+      ? getBundleChoiceLabel(form.propertyId, form.bundleId, { rentalType: form.rentalType })
       : "";
     // Only review the sections this form actually asks. The short-term form
     // skips the screening sections, so the summary (and its "Edit" links) must
@@ -1870,53 +1829,31 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const activeStepSet = new Set(
       activeApplicationWizardSteps(applicationConfig, normalizeCustomApplicationFields),
     );
+    const showCosignerReview = showWizardField("hasCosigner");
+    const showGroupReview = showWizardField("applyingAsGroup");
+    const showHouseholdReview = showCosignerReview || showGroupReview;
     return (
       <div className="space-y-8">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Review</h2>
-          <StepIntro className="mt-3">Confirm everything below, then continue to the application fee step.</StepIntro>
+          <StepIntro>Confirm everything below, then continue to the application fee step.</StepIntro>
         </div>
         <div className="space-y-4">
-          {activeStepSet.has(1) ? (
-            <ReviewSection title="Group application" stepTarget={1} onEdit={editFromReview}>
-              {showWizardField("applyingAsGroup") ? (
-                <ReviewRow
-                  k="Applying as group"
-                  v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"}
-                />
-              ) : null}
-              {form.applyingAsGroup === "yes" ? (
+          {showHouseholdReview ? (
+            <ReviewSection title="Household application" stepTarget={1} onEdit={editFromReview}>
+              {showGroupReview ? (
                 <>
-                  {showWizardField("groupRole") ? (
-                    <ReviewRow
-                      k="Role"
-                      v={
-                        form.groupRole === "first"
-                          ? "First applicant"
-                          : form.groupRole === "joining"
-                            ? "Joining group"
-                            : "—"
-                      }
-                    />
-                  ) : null}
-                  {showWizardField("groupSize") || showWizardField("groupId") ? (
-                    <ReviewRow
-                      k={form.groupRole === "first" ? "Group size" : "Group ID"}
-                      v={displayOrDash(form.groupRole === "first" ? form.groupSize : form.groupId)}
-                    />
+                  <ReviewRow k="Applying as group" v={form.applyingAsGroup === "yes" ? "Yes" : form.applyingAsGroup === "no" ? "No" : "—"} />
+                  {form.applyingAsGroup === "yes" && form.groupLeaderAppId.trim() ? (
+                    <ReviewRow k="Organizer application ID" v={displayOrDash(form.groupLeaderAppId)} />
                   ) : null}
                 </>
               ) : null}
+              {showCosignerReview ? (
+                <ReviewRow k="Co-signer planned" v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"} />
+              ) : null}
             </ReviewSection>
           ) : null}
-          {activeStepSet.has(2) ? (
-            <ReviewSection title="Co-signer" stepTarget={2} onEdit={editFromReview}>
-              <ReviewRow
-                k="Co-signer planned"
-                v={form.hasCosigner === "yes" ? "Yes" : form.hasCosigner === "no" ? "No" : "—"}
-              />
-            </ReviewSection>
-          ) : null}
+          {activeStepSet.has(3) ? (
           <ReviewSection title="Property information" stepTarget={3} onEdit={editFromReview}>
             <ReviewRow k="Property" v={displayOrDash(prop?.title)} />
             {reviewBundleLabel ? (
@@ -1941,7 +1878,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </>
             ) : null}
           </ReviewSection>
+          ) : null}
           {prop?.listingSubmission?.v === 1 ? (
+            activeStepSet.has(3) ? (
             <ReviewSection title="Housing charges (this listing)" stepTarget={3} onEdit={editFromReview}>
               <ReviewRow
                 k="Application fee"
@@ -1961,24 +1900,27 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               <ReviewRow k="Payment due at signing" v={displayOrDash(paymentAtSigningPriceLabel(prop.listingSubmission))} />
               <ReviewRow k="Utilities (estimate, by room)" v={displayOrDash(utilitiesListingEstimateLabel(prop.listingSubmission))} />
             </ReviewSection>
-          ) : (
+            ) : null
+          ) : activeStepSet.has(3) ? (
             <ReviewSection title="Housing charges" stepTarget={3} onEdit={editFromReview}>
               <ReviewRow
                 k="Listing fees"
                 v="This property has not published detailed fee lines yet. Confirm dollar amounts with the property manager before you pay or sign."
               />
             </ReviewSection>
-          )}
-          <ReviewSection title="Personal information" stepTarget={4} onEdit={editFromReview}>
-            <ReviewRow k="Legal name" v={displayOrDash(form.fullLegalName)} />
-            <ReviewRow k="Phone" v={displayOrDash(form.phone)} />
-            <ReviewRow k="Email" v={displayOrDash(form.email)} />
-            <ReviewRow k="Date of birth" v={displayOrDash(form.dateOfBirth)} />
-            <ReviewRow k="SSN" v={maskSsnReview(form.ssn)} />
-            <ReviewRow k="ID number" v={displayOrDash(form.driversLicense)} />
+          ) : null}
+          {activeStepSet.has(2) ? (
+          <ReviewSection title="Signer information" stepTarget={2} onEdit={editFromReview}>
+            {showWizardField("fullLegalName") ? <ReviewRow k="Legal name" v={displayOrDash(form.fullLegalName)} /> : null}
+            {showWizardField("phone") ? <ReviewRow k="Phone" v={displayOrDash(form.phone)} /> : null}
+            {showWizardField("email") ? <ReviewRow k="Email" v={displayOrDash(form.email)} /> : null}
+            {showWizardField("dateOfBirth") ? <ReviewRow k="Date of birth" v={displayOrDash(form.dateOfBirth)} /> : null}
+            {showWizardField("ssn") ? <ReviewRow k="SSN" v={maskSsnReview(form.ssn)} /> : null}
+            {showWizardField("driversLicense") ? <ReviewRow k="ID number" v={displayOrDash(form.driversLicense)} /> : null}
           </ReviewSection>
-          {activeStepSet.has(5) || activeStepSet.has(6) ? (
-          <ReviewSection title="Address history" stepTarget={5} onEdit={editFromReview}>
+          ) : null}
+          {activeStepSet.has(4) || activeStepSet.has(5) ? (
+          <ReviewSection title="Address history" stepTarget={4} onEdit={editFromReview}>
             <ReviewRow
               k="Current address"
               v={displayOrDash(
@@ -2021,8 +1963,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             )}
           </ReviewSection>
           ) : null}
-          {activeStepSet.has(7) ? (
-          <ReviewSection title="Employment" stepTarget={7} onEdit={editFromReview}>
+          {activeStepSet.has(6) ? (
+          <ReviewSection title="Employment and income" stepTarget={6} onEdit={editFromReview}>
             <ReviewRow k="Not employed" v={form.notEmployed ? "Yes" : "No"} />
             <ReviewRow k="Employer" v={displayOrDash(form.employer)} />
             <ReviewRow k="Employer address" v={displayOrDash(form.employerAddress)} />
@@ -2034,14 +1976,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Other income" v={displayOrDash(form.otherIncome)} />
           </ReviewSection>
           ) : null}
-          {activeStepSet.has(8) ? (
-          <ReviewSection title="References" stepTarget={8} onEdit={editFromReview}>
+          {activeStepSet.has(7) ? (
+          <ReviewSection title="References" stepTarget={7} onEdit={editFromReview}>
             <ReviewRow k="Reference 1" v={displayOrDash(`${form.ref1Name} · ${form.ref1Relationship} · ${form.ref1Phone}`)} />
             <ReviewRow k="Reference 2" v={form.ref2Name.trim() ? displayOrDash(`${form.ref2Name} · ${form.ref2Relationship} · ${form.ref2Phone}`) : displayOrDash("")} />
           </ReviewSection>
           ) : null}
-          {activeStepSet.has(9) ? (
-          <ReviewSection title="Additional details" stepTarget={9} onEdit={editFromReview}>
+          {activeStepSet.has(8) ? (
+          <ReviewSection title="Additional details" stepTarget={8} onEdit={editFromReview}>
             <ReviewRow k="Occupants" v={displayOrDash(form.occupancyCount)} />
             <ReviewRow k="Pets" v={displayOrDash(form.pets)} />
             <ReviewRow k="Eviction" v={form.evictionHistory === "yes" ? `Yes: ${form.evictionDetails}` : form.evictionHistory === "no" ? "No" : "—"} />
@@ -2050,13 +1992,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </ReviewSection>
           ) : null}
           {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
-            <ReviewSection title="Manager questions" stepTarget={9} onEdit={editFromReview}>
+            <ReviewSection title="Manager questions" stepTarget={8} onEdit={editFromReview}>
               {displayableCustomFieldAnswers(form.customFieldAnswers).map((answer) => (
                 <ReviewRow key={answer.key} k={answer.label} v={displayOrDash(formatCustomFieldAnswerDisplay(answer))} />
               ))}
             </ReviewSection>
           ) : null}
-          <ReviewSection title="Consent" stepTarget={10} onEdit={editFromReview}>
+          {activeStepSet.has(9) ? (
+          <ReviewSection title="Consent and signature" stepTarget={9} onEdit={editFromReview}>
             {showWizardField("consentCredit") ? (
               <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
             ) : null}
@@ -2064,13 +2007,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Signature" v={displayOrDash(form.digitalSignature)} />
             <ReviewRow k="Date signed" v={displayOrDash(form.dateSigned)} />
           </ReviewSection>
+          ) : null}
         </div>
         <p className="text-center text-xs text-muted">Next: application fee confirmation before final submit.</p>
       </div>
     );
   }
 
-  if (step === 12) {
+  if (step === 11) {
     const prop = form.propertyId ? getPropertyById(form.propertyId) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const channels = listingApplicationFeeChannels(sub);
@@ -2108,8 +2052,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Application fee</h2>
-          <StepIntro className="mt-2">
+          <StepIntro>
             The application fee is the only payment collected here — any deposit is billed later, under Payments, after
             you&apos;re approved.
           </StepIntro>

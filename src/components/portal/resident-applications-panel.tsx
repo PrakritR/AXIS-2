@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
   ManagerPortalPageShell,
@@ -901,6 +902,23 @@ export function ResidentApplicationsPanel({
     return (
       <div className="space-y-4">
         {group ? <ApplicationGroupSection group={group} currentRowId={row.id} /> : null}
+        {row.application?.applyingAsGroup === "yes" && row.application?.groupRole === "first" ? (
+          <GroupShareCallout
+            leaderAppId={row.id}
+            groupRole="first"
+            groupSize={row.application?.groupSize}
+            propertyId={row.propertyId}
+            className="rounded-2xl border border-border bg-accent/30 p-5"
+            shareable={row.bucket !== "rejected"}
+          />
+        ) : null}
+        {row.application?.hasCosigner === "yes" ? (
+          <CosignerInviteCallout
+            signerAppId={row.id}
+            signerName={row.application?.fullName}
+            className="rounded-2xl border border-border bg-accent/30 p-5"
+          />
+        ) : null}
         {cosignerSubmissions.length > 0 ? (
           <ApplicationCosignerSection
             submissions={cosignerSubmissions}

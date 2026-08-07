@@ -93,6 +93,7 @@ export function ManagerPropertyTourPanel({
           storageKey={storageKey}
           bareSurface
           compactAvailability
+          flowScroll
           defaultViewMode="week"
           availabilityHeading="Your availability"
           tourScopeLabel={propertyLabel}
