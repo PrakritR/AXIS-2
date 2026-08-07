@@ -777,6 +777,7 @@ export function ManagerPromotion({
         onClose={closePreview}
         allAssets={assets}
         dataAttr="promotion-preview"
+        showToast={showToast}
       />
     </>
   );

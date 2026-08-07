@@ -669,6 +669,7 @@ export function ManagerPropertyPromotionPanel({
         onClose={closePreview}
         allAssets={assets}
         dataAttr="property-promotion-preview"
+        showToast={showToast}
       />
     </>
   );

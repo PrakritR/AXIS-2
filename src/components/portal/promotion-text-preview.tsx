@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PromotionEntryEditableTitle } from "@/components/portal/promotion-entry-title";
+import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import {
   PROMOTION_TEXT_FORMAT_OPTIONS,
   formatPromotionTextPlain,
@@ -53,6 +54,16 @@ export async function copyPromotionTextToClipboard(copy: PromotionTextCopy): Pro
   } catch {
     return false;
   }
+}
+
+export async function downloadPromotionText(copy: PromotionTextCopy, fileName = "promotion-text.txt"): Promise<void> {
+  const plain = formatPromotionTextPlain(copy);
+  await downloadOrShareFile({
+    fileName,
+    mimeType: "text/plain",
+    content: plain,
+    title: "Promotion text",
+  });
 }
 
 export function PromotionTextCopyButton({
