@@ -34,7 +34,6 @@ import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
-  PortalDataTableEmpty,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
@@ -45,7 +44,11 @@ import { ApplicationReviewLauncherRow, type ApplicationReviewView } from "@/comp
 import { downloadBackgroundCheckForApplication } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { ManagerApplicationOnBehalfModal } from "@/components/portal/manager-application-on-behalf-modal";
-import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/portal-list-add-row";
+import {
+  PortalListAddRow,
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+} from "@/components/portal/portal-list-add-row";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerApplicationSettingsModal } from "@/components/portal/manager-application-settings-modal";
@@ -1549,6 +1552,7 @@ export function ManagerApplications({
             hideBackText
             bareHeader
             dataAttrBack="application-detail-back"
+            pinScrollBody
           >
             <div className="px-3 py-6">
               <ListSkeleton rows={4} showLeading={false} />
@@ -1588,6 +1592,7 @@ export function ManagerApplications({
           dataAttrBack="application-detail-back"
           inlineActions={!activeCosignerSubmission}
           actions={activeCosignerSubmission ? undefined : renderApplicationRowActions(detailRow)}
+          pinScrollBody
         >
           {activeCosignerSubmission ? (
             <ManagerCosignerReadonlyReview
@@ -1670,27 +1675,10 @@ export function ManagerApplications({
           <ListSkeleton rows={5} showLeading={false} />
         </div>
       ) : rowsForBucket.length === 0 ? (
-        <div className="px-3 py-2">
-          {scopedRows.length > 0 ? (
-            <PortalDataTableEmpty
-              icon="application"
-              message={
-                searchQuery.trim()
-                  ? "No applications match your search."
-                  : propertyFilters.length > 0
-                    ? "No applications for this property yet."
-                    : bucket === "pending"
-                      ? "No pending applications. Submitted applications awaiting your review will appear here."
-                      : bucket === "incomplete"
-                        ? "No incomplete applications. Drafts started on your apply link appear here until submitted."
-                        : "No applications in this tab yet."
-              }
-            />
-          ) : null}
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
           <PortalListAddRow
             label="Add"
             icon={PORTAL_LIST_ADD_ICONS.application}
-            hint="Complete an application for a resident and email them to finish"
             onClick={() => setAddApplicationOpen(true)}
             disabled={propertyOptions.length === 0}
             dataAttr="applications-list-add"
@@ -1773,11 +1761,10 @@ export function ManagerApplications({
               </ApplicationHouseholdCluster>
             );
           })}
-          <div className="px-3 py-3 max-md:px-2.5">
+          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
             <PortalListAddRow
               label="Add"
               icon={PORTAL_LIST_ADD_ICONS.application}
-              hint="Complete an application for a resident and email them to finish"
               onClick={() => setAddApplicationOpen(true)}
               disabled={propertyOptions.length === 0}
               dataAttr="applications-list-add"

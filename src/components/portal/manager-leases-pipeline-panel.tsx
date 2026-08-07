@@ -949,6 +949,7 @@ export function ManagerLeasesPipelinePanel({
           dataAttrBack="lease-detail-back"
           inlineActions
           actions={renderLeaseHeaderActions(detailRow)}
+          pinScrollBody
         >
           {renderLeaseRowDetail(detailRow)}
         </PortalRecordDetailPage>

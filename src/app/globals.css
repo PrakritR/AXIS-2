@@ -2461,6 +2461,39 @@ html[data-portal-sticky-chrome] .portal-calendar-grid-slot {
   touch-action: pan-y;
 }
 
+/* Property-detail calendar: one page scroll (no nested grid viewport). */
+html[data-portal-sticky-chrome] .portal-list-page-scroll .portal-calendar-flow-scroll.portal-calendar-compact {
+  flex: none;
+  min-height: auto;
+}
+
+html[data-portal-sticky-chrome] .portal-list-page-scroll .portal-calendar-flow-scroll .portal-calendar-compact-body {
+  overflow: visible;
+  flex: none;
+  min-height: auto;
+  touch-action: pan-y;
+}
+
+html[data-portal-sticky-chrome] .portal-list-page-scroll .portal-calendar-flow-scroll .portal-calendar-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  flex-shrink: 0;
+  touch-action: pan-y;
+  background-color: var(--portal-surface-light);
+}
+
+html[data-theme="dark"][data-portal-sticky-chrome]
+  .portal-list-page-scroll
+  .portal-calendar-flow-scroll
+  .portal-calendar-toolbar {
+  background-color: var(--portal-surface-dark);
+}
+
+html[data-portal-sticky-chrome] .portal-list-page-scroll .portal-calendar-flow-scroll .portal-calendar-grid-slot {
+  touch-action: pan-y;
+}
+
 html[data-communication-surface] .portal-communication-inbox {
   flex: 1 1 0%;
   min-height: 0;
@@ -2626,7 +2659,15 @@ html[data-native] [data-listing-sections-root] {
   margin-bottom: 0;
 }
 
-/* Property / resident record detail: destination tabs scroll with content (not sticky). */
+/* Property / resident record detail: destination tabs stick under the mobile top bar. */
+#portal-main-content [data-portal-property-detail-chrome] {
+  top: var(--portal-mobile-top-chrome, 0px);
+  z-index: 39;
+}
+
+#portal-main-content:has([data-portal-property-detail-chrome]) .portal-mobile-nav-bar {
+  margin-bottom: 0;
+}
 
 /* Manager list sections: pipeline tabs stick flush under the mobile top bar. */
 #portal-main-content [data-portal-list-destination-nav] {

@@ -25,12 +25,15 @@ function dumpHtml(name: string, html: string) {
 
 const GROUP_ID = "PROPLANE-7KQ2MW9D";
 
+const ORGANIZER_ID = "PROPLANE-7KQ2MW9D";
+
 function application(over: Partial<RentalWizardFormState>): RentalWizardFormState {
   return {
     applyingAsGroup: "yes",
     groupRole: "first",
     groupSize: "3",
     groupId: GROUP_ID,
+    groupLeaderAppId: "",
     ...over,
   } as RentalWizardFormState;
 }
@@ -131,22 +134,22 @@ import { makeApplicationGroupId } from "@/lib/rental-application/application-gro
 afterEach(cleanup);
 
 describe("group application — applicant Group ID hand-off", () => {
-  it("shows the organizer a shareable Group ID sized to the household", () => {
+  it("shows the organizer a shareable invite link sized to the household", () => {
     const { container } = render(
       <div className="mx-auto max-w-xl p-6">
-        <GroupShareCallout groupId={GROUP_ID} groupRole="first" groupSize="3" />
+        <GroupShareCallout leaderAppId={ORGANIZER_ID} groupRole="first" groupSize="3" />
       </div>,
     );
-    expect(screen.getByText("Your group is ready")).toBeTruthy();
-    expect(screen.getByText(/Share this Group ID with your 2 roommates/)).toBeTruthy();
-    expect(screen.getByText(GROUP_ID)).toBeTruthy();
+    expect(screen.getByText("Invite your roommates")).toBeTruthy();
+    expect(screen.getByText(/send it to 2 roommates/)).toBeTruthy();
+    expect(screen.getByText(/groupLeaderAppId=PROPLANE-7KQ2MW9D/)).toBeTruthy();
     dumpHtml("callout-organizer", container.innerHTML);
   });
 
   it("tells a joining member their application is linked", () => {
     const { container } = render(
       <div className="mx-auto max-w-xl p-6">
-        <GroupShareCallout groupId={GROUP_ID} groupRole="joining" />
+        <GroupShareCallout groupRole="joining" />
       </div>,
     );
     expect(screen.getByText("You joined a group application")).toBeTruthy();
@@ -154,15 +157,15 @@ describe("group application — applicant Group ID hand-off", () => {
     dumpHtml("callout-joining", container.innerHTML);
   });
 
-  it("keeps the Group ID readable but drops the share pitch once rejected", () => {
+  it("keeps the organizer application id readable but drops the share pitch once rejected", () => {
     const { container } = render(
       <div className="mx-auto max-w-xl p-6">
-        <GroupShareCallout groupId={GROUP_ID} groupRole="first" groupSize="3" shareable={false} />
+        <GroupShareCallout leaderAppId={ORGANIZER_ID} groupRole="first" groupSize="3" shareable={false} />
       </div>,
     );
     expect(screen.getByText("Group application")).toBeTruthy();
     expect(screen.getByText(/kept here for reference/)).toBeTruthy();
-    expect(screen.queryByText(/Share this Group ID/)).toBeNull();
+    expect(screen.queryByText(/Invite your roommates/)).toBeNull();
     dumpHtml("callout-rejected", container.innerHTML);
   });
 

@@ -16,6 +16,8 @@ import { ManagerPropertyTourPanel } from "@/components/portal/manager-property-t
 import { ConfirmDeleteModal } from "@/components/portal/confirm-delete-modal";
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { PortalPageFooterActions, PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalPageChrome, PortalPageScrollBody } from "@/lib/portal-page-chrome-layout";
+import { cn } from "@/lib/utils";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { PORTAL_PROPERTY_DETAIL_ACTION_BUTTON_CLASS } from "@/components/portal/portal-property-detail-section";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -780,28 +782,42 @@ function ManagerPropertyInlineDetails({
   if (!row || !mock || !managerSubmission) return null;
 
   return (
-    <div className="space-y-0">
-      <PortalDetailDestinationNav
-        items={topNavItems}
-        activeId={activeTopNavId}
-        ariaLabel="Property sections"
-      />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PortalPageChrome>
+        <div
+          className="border-b border-border/40 bg-background"
+          data-portal-property-detail-chrome
+        >
+          <PortalDetailDestinationNav
+            items={topNavItems}
+            activeId={activeTopNavId}
+            ariaLabel="Property sections"
+            denseEqualRow
+          />
 
-      {showDetailSectionNav ? (
-        <PortalDetailDestinationNav
-          items={detailSectionTabs.map((tab) => ({
-            id: tab,
-            label: PROPERTY_DETAIL_TAB_LABELS[tab],
-            href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
-            dataAttr: `property-detail-tab-${tab}`,
-          }))}
-          activeId={activeDetailTab}
-          ariaLabel="Property detail sections"
-          className="border-t border-border/40 bg-background/80"
-        />
-      ) : null}
+          {showDetailSectionNav ? (
+            <PortalDetailDestinationNav
+              items={detailSectionTabs.map((tab) => ({
+                id: tab,
+                label: PROPERTY_DETAIL_TAB_LABELS[tab],
+                href: propertyDetailHref(propertiesBase, stage, propertyRouteKey, tab),
+                dataAttr: `property-detail-tab-${tab}`,
+              }))}
+              activeId={activeDetailTab}
+              ariaLabel="Property detail sections"
+              className="border-t border-border/40 bg-background/80 max-lg:px-2"
+              centerEqualRow
+            />
+          ) : null}
+        </div>
+      </PortalPageChrome>
 
-      <div className="pt-3 min-w-0 max-w-full">
+      <PortalPageScrollBody
+        className={cn(
+          "min-w-0 max-w-full",
+          activeDetailTab !== "calendar" && "pt-3",
+        )}
+      >
       {activeDetailTab === "preview" ? (
         <div className="space-y-3">
           {hasPreview ? (
@@ -890,7 +906,7 @@ function ManagerPropertyInlineDetails({
         />
       ) : null}
 
-      </div>
+      </PortalPageScrollBody>
 
       {propertyTabFooterActions ? (
         <PortalPageFooterActions pinned rowVariant="header">
@@ -1095,6 +1111,8 @@ export function ManagerHousePropertiesPanel({
         actions={detailHeaderActions}
         inlineActions
         suppressMobileActions
+        pinScrollBody
+        scrollBody={false}
       >
         {renderRowDetail(sourceBucket, row, rowKey)}
       </PortalRecordDetailPage>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
+import { GroupInviteCallout } from "@/components/marketing/group-invite-callout";
 import type { GroupRole } from "@/lib/rental-application/types";
 
 type FinishPanelProps = {
@@ -16,83 +17,69 @@ type FinishPanelProps = {
   mailtoHref?: string;
   /** Same-session handoff to resident account setup (guest flow). */
   setupHref?: string;
-  /** Shared Group ID when this was submitted as part of a group application. */
-  groupId?: string;
+  /** Organizer application id for sharing a group invite link after submit. */
+  groupLeaderAppId?: string;
   groupRole?: GroupRole;
   groupSize?: string;
+  groupPropertyId?: string;
+  hasCosigner?: "yes" | "no" | null;
   onDone: () => void;
 };
 
 /**
- * Group-application confirmation: the first applicant shares the Group ID; joiners see
- * they linked in. Rendered both on the finish screen and, durably, on the resident's
- * submitted application in the portal so the code can be re-read and re-shared later.
+ * Group-application confirmation: the organizer shares an invite link; joiners see
+ * they linked in. Rendered on the finish screen and on the resident's submitted application.
  */
 export function GroupShareCallout({
-  groupId,
+  leaderAppId,
   groupRole,
   groupSize,
+  propertyId,
   className,
   shareable = true,
 }: {
-  groupId: string;
+  leaderAppId?: string;
   groupRole?: GroupRole;
   groupSize?: string;
+  propertyId?: string;
   className?: string;
-  /**
-   * False only for a terminal application (not approved). An approved organizer whose
-   * roommates have not applied yet still needs to hand out the code. The id stays
-   * retrievable either way.
-   */
   shareable?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const size = Number.parseInt((groupSize ?? "").trim(), 10);
-  const others = Number.isFinite(size) && size >= 2 ? size - 1 : null;
+  if (groupRole === "joining") {
+    return (
+      <div className={`mt-6 text-left ${className ?? ""}`}>
+        <p className="text-[13px] font-semibold text-foreground">You joined a group application</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-sm">
+          Your application is linked to your group. Each member applies with their own account, and your manager reviews
+          you together.
+        </p>
+      </div>
+    );
+  }
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(groupId);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked (e.g. insecure context) — the id stays visible to copy manually.
-    }
-  };
+  if (!shareable) {
+    return (
+      <div className={`mt-6 text-left ${className ?? ""}`}>
+        <p className="text-[13px] font-semibold text-foreground">Group application</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-sm">
+          Your application was not approved. Your group link is kept here for reference.
+        </p>
+        <p className="mt-2 font-mono text-xs text-muted">Application ID: {leaderAppId}</p>
+      </div>
+    );
+  }
+
+  if (!leaderAppId?.trim()) {
+    return null;
+  }
 
   return (
-    <div className={`mt-6 text-left ${className ?? ""}`}>
-      <p className="text-[13px] font-semibold text-foreground">
-        {!shareable
-          ? "Group application"
-          : groupRole === "joining"
-            ? "You joined a group application"
-            : "Your group is ready"}
-      </p>
-      <p className="mt-1 text-[12px] leading-relaxed text-muted sm:text-sm">
-        {!shareable
-          ? "Your application was not approved. Your Group ID is kept here for reference."
-          : groupRole === "joining"
-            ? "Your application is linked to your group. Each member applies with their own account, and your manager reviews you together."
-            : others != null
-              ? `Share this Group ID with your ${others} ${others === 1 ? "roommate" : "roommates"} so their applications link to yours. Each of you keeps your own account.`
-              : "Share this Group ID with your roommates so their applications link to yours. Each of you keeps your own account."}
-      </p>
-      <div className="mt-3 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg border border-border/60 bg-background/40 px-3 py-2 font-mono text-[13px] text-foreground">
-          {groupId}
-        </code>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 shrink-0 rounded-full px-4 text-xs"
-          data-attr="group-id-copy"
-          onClick={() => copy()}
-        >
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
-    </div>
+    <GroupInviteCallout
+      leaderAppId={leaderAppId}
+      groupSize={groupSize}
+      propertyId={propertyId}
+      className={`mt-6 ${className ?? ""}`}
+    />
   );
 }
 
@@ -104,14 +91,18 @@ export function RentalApplicationFinishPanel({
   guestFlow = false,
   mailtoHref,
   setupHref,
-  groupId,
+  groupLeaderAppId,
   groupRole,
   groupSize,
+  groupPropertyId,
+  hasCosigner,
   onDone,
 }: FinishPanelProps) {
   const signInHref = `/auth/sign-in?intent=resident&next=${encodeURIComponent("/resident/applications")}`;
   const emailFailed = guestFlow && emailSent === false;
-  const showGroup = Boolean(groupId && groupId.trim());
+  const showGroup = Boolean(groupLeaderAppId?.trim() && groupRole === "first");
+  const showGroupJoined = groupRole === "joining";
+  const showCosignerInvite = hasCosigner === "yes";
   const canCreateAccount = guestFlow && Boolean(setupHref?.startsWith("/auth/resident-setup"));
 
   return (
@@ -141,7 +132,18 @@ export function RentalApplicationFinishPanel({
       <p className="mt-4 font-mono text-xs text-muted">Application ID: {axisId}</p>
 
       {showGroup ? (
-        <GroupShareCallout groupId={groupId!.trim()} groupRole={groupRole} groupSize={groupSize} />
+        <GroupShareCallout
+          leaderAppId={groupLeaderAppId!.trim()}
+          groupRole={groupRole}
+          groupSize={groupSize}
+          propertyId={groupPropertyId}
+        />
+      ) : showGroupJoined ? (
+        <GroupShareCallout groupRole="joining" />
+      ) : null}
+
+      {showCosignerInvite ? (
+        <CosignerInviteCallout signerAppId={axisId} className="mt-6 rounded-2xl border border-border bg-accent/30 p-5" />
       ) : null}
 
       <div className="mt-6 space-y-2.5 sm:mt-8 sm:space-y-3">

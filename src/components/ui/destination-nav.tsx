@@ -29,6 +29,10 @@ export function DestinationNav({
   size = "default",
   /** `equal` stretches every tab across the full bar (record-detail rows). */
   itemLayout = "auto",
+  /** With `equal`, fit every tab on one row via smaller labels (property detail). */
+  denseEqualRow = false,
+  /** With `equal`, center the tab row (property detail sub-nav). */
+  centerEqualRow = false,
 }: {
   items: DestinationNavItem[];
   /** Match the active item by normalized href. */
@@ -40,13 +44,14 @@ export function DestinationNav({
   /** `toolbar` matches {@link PORTAL_HEADER_ACTION_BTN} in page header rows. */
   size?: "default" | "toolbar";
   itemLayout?: "auto" | "equal";
+  denseEqualRow?: boolean;
 }) {
   const normalize = (href: string) => href.replace(/\/$/, "");
   const compactItems = itemLayout === "equal" ? false : items.length > 4;
 
   return (
     <nav
-      className={destinationNavShellClassName(className, itemLayout)}
+      className={destinationNavShellClassName(className, itemLayout, denseEqualRow, centerEqualRow)}
       aria-label={ariaLabel}
       data-slot="destination-nav"
       {...(itemLayout === "equal" ? {} : { [HORIZONTAL_SCROLL_ATTR]: "" })}
@@ -64,7 +69,9 @@ export function DestinationNav({
               itemLayout === "equal" ? "min-w-0" : destinationNavItemWidthClass(compactItems),
               "portal-pressable inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-colors",
               itemLayout === "equal"
-                ? "min-h-10 min-w-0 px-0.5 py-1.5 text-center leading-tight lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
+                ? denseEqualRow
+                  ? "min-h-9 min-w-0 px-0 py-1 text-center leading-none lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
+                  : "min-h-10 min-w-0 px-0.5 py-1.5 text-center leading-tight lg:min-h-11 lg:px-2 lg:py-2 lg:text-sm"
                 : size === "toolbar"
                   ? "h-9 px-2 text-xs sm:px-3 md:h-10 md:text-sm"
                   : "min-h-11 px-2 py-2 text-sm sm:px-3.5",
@@ -79,7 +86,9 @@ export function DestinationNav({
             <span
               className={
                 itemLayout === "equal"
-                  ? "block w-full min-w-0 max-w-full whitespace-nowrap text-xs leading-tight lg:truncate"
+                  ? denseEqualRow
+                    ? "block w-full min-w-0 max-w-full whitespace-nowrap text-[length:clamp(8px,2.1vw,0.875rem)] leading-none lg:text-sm lg:leading-tight lg:truncate"
+                    : "block w-full min-w-0 max-w-full whitespace-nowrap text-xs leading-tight lg:truncate"
                   : undefined
               }
             >
@@ -107,10 +116,19 @@ export type LocalDestinationNavItem = {
   dataAttr?: string;
 };
 
-function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
+function destinationNavShellClassName(
+  className?: string,
+  itemLayout: "auto" | "equal" = "auto",
+  denseEqualRow = false,
+  centerEqualRow = false,
+) {
   return cn(
     itemLayout === "equal"
-      ? "grid w-full min-w-0 gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:grid-cols-3 max-lg:grid-flow-row max-lg:gap-1.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent lg:[grid-template-columns:none] lg:auto-cols-fr lg:grid-flow-col"
+      ? denseEqualRow
+        ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:gap-0.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
+        : centerEqualRow
+          ? "mx-auto grid w-full min-w-0 max-w-2xl auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:max-w-none max-lg:gap-0.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
+          : "grid w-full min-w-0 gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:grid-cols-3 max-lg:grid-flow-row max-lg:gap-1.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent lg:[grid-template-columns:none] lg:auto-cols-fr lg:grid-flow-col"
       : cn(
           "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
           PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,

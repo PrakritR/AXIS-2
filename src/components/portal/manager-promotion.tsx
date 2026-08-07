@@ -710,6 +710,7 @@ export function ManagerPromotion({
             hideBackText
             bareHeader
             dataAttrBack="promotion-detail-back"
+            pinScrollBody
           >
             <div className="px-3 py-6">
               {authReady ? (
@@ -734,6 +735,7 @@ export function ManagerPromotion({
           hideBackText
           bareHeader
           dataAttrBack="promotion-detail-back"
+          pinScrollBody
           actions={
             detailAsset.kind === "flyer" || detailAsset.kind === "text" ? (
               <Button

@@ -2,7 +2,10 @@
 
 import type { ReactNode } from "react";
 import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell";
+import { PortalPageScrollBody } from "@/lib/portal-page-chrome-layout";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { usePortalStickyPageChrome } from "@/hooks/use-portal-sticky-page-chrome";
+import { cn } from "@/lib/utils";
 
 /**
  * Full-page record detail (Appendix E2) — no split list pane; URL is the lease route.
@@ -23,6 +26,16 @@ export function PortalRecordDetailPage({
   inlineActionsClassName,
   children,
   fillBody = false,
+  /**
+   * Pin the back header (and optional in-page tab chrome) while the body scrolls
+   * below — same model as list sections (Applications, Properties, Calendar).
+   */
+  pinScrollBody = false,
+  /**
+   * When `pinScrollBody`, wrap `children` in {@link PortalPageScrollBody}. Set
+   * false when children supply their own chrome + scroll split (property detail).
+   */
+  scrollBody = true,
   dataAttrBack = "portal-record-detail-back",
 }: {
   /** @deprecated Detail chrome no longer renders a duplicate section title. */
@@ -54,11 +67,21 @@ export function PortalRecordDetailPage({
    * detail pages keep block layout unchanged.
    */
   fillBody?: boolean;
+  pinScrollBody?: boolean;
+  scrollBody?: boolean;
   dataAttrBack?: string;
 }) {
   const navigate = usePortalNavigate();
+  usePortalStickyPageChrome(pinScrollBody);
+  const bodyFill = fillBody || pinScrollBody;
+  const body = pinScrollBody && scrollBody && !fillBody ? (
+    <PortalPageScrollBody>{children}</PortalPageScrollBody>
+  ) : (
+    children
+  );
   return (
-    <div className={`flex min-h-0 flex-col${fillBody ? " flex-1" : ""}`}>
+    <div className={cn("flex min-h-0 flex-col", bodyFill && "flex-1")}>
+      <div className={pinScrollBody ? "shrink-0" : undefined}>
       <PortalDetailHeader
         title={title}
         subtitle={subtitle}
@@ -73,7 +96,8 @@ export function PortalRecordDetailPage({
         inlineActions={inlineActions}
         inlineActionsClassName={inlineActionsClassName}
       />
-      <div className={fillBody ? "flex min-h-0 flex-1 flex-col" : "min-h-0 flex-1"}>{children}</div>
+      </div>
+      <div className={cn(bodyFill && "flex min-h-0 flex-1 flex-col")}>{body}</div>
     </div>
   );
 }

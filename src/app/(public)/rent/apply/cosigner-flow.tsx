@@ -116,6 +116,8 @@ export function CosignerApplyFlow({
   embedded = false,
   showToast,
   applicationKind = "long-term",
+  initialSignerAppId = "",
+  initialSignerFullName = "",
 }: {
   onBack: () => void;
   /** Called from the success screen when the user finishes (e.g. navigate back to the main application). */
@@ -125,13 +127,23 @@ export function CosignerApplyFlow({
   embedded?: boolean;
   showToast?: (message: string) => void;
   applicationKind?: CosignerApplicationKind;
+  /** Prefill from a resident-portal invite link (`?signerAppId=`). */
+  initialSignerAppId?: string;
+  initialSignerFullName?: string;
 }) {
   const [step, setStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState(1);
   const [f, setF] = useState<CosignerFields>(() => {
-    if (previewMode) return emptyCosigner();
-    const draft = loadCosignerDraft<CosignerFields>();
-    return draft ? { ...emptyCosigner(), ...draft } : emptyCosigner();
+    const base = (() => {
+      if (previewMode) return emptyCosigner();
+      const draft = loadCosignerDraft<CosignerFields>();
+      return draft ? { ...emptyCosigner(), ...draft } : emptyCosigner();
+    })();
+    return {
+      ...base,
+      signerAppId: base.signerAppId.trim() || initialSignerAppId.trim(),
+      signerFullName: base.signerFullName.trim() || initialSignerFullName.trim(),
+    };
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [draftReady] = useState(true);

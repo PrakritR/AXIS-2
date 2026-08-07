@@ -26,17 +26,21 @@ describe("rental-application validate", () => {
   });
 
   it("passes step 1 when not applying as group", () => {
-    const state = { ...createInitialRentalWizardState(), applyingAsGroup: "no" as const };
+    const state = {
+      ...createInitialRentalWizardState(),
+      applyingAsGroup: "no" as const,
+      hasCosigner: "no" as const,
+    };
     expect(validateRentalWizardStep(1, state)).toEqual({});
   });
 
-  it("requires cosigner choice on step 2", () => {
-    const state = createInitialRentalWizardState();
-    const errors = validateRentalWizardStep(2, state);
+  it("requires cosigner choice on step 1 when enabled", () => {
+    const state = { ...createInitialRentalWizardState(), applyingAsGroup: "no" as const };
+    const errors = validateRentalWizardStep(1, state);
     expect(errors.hasCosigner).toBeDefined();
   });
 
-  it("requires check payment confirmation for Zelle application fees on step 12", () => {
+  it("requires check payment confirmation for Zelle application fees on step 11", () => {
     const sub = {
       ...createDefaultListingSubmission(),
       applicationFee: "$50",
@@ -50,7 +54,7 @@ describe("rental-application validate", () => {
       applicationFeePayChannel: "zelle" as const,
       applicationFeeZelleSentConfirmed: false,
     };
-    const errors = validateRentalWizardStep(12, state, {
+    const errors = validateRentalWizardStep(11, state, {
       property: { id: "prop-zelle", listingSubmission: sub },
     });
     expect(errors.applicationFeeZelleSentConfirmed).toContain("Check payment");
@@ -61,7 +65,7 @@ describe("rental-application validate", () => {
     future.setFullYear(future.getFullYear() + 1);
     const iso = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}`;
     const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
-    const errors = validateRentalWizardStep(4, state);
+    const errors = validateRentalWizardStep(2, state);
     expect(errors.dateOfBirth).toBe("Date of birth cannot be in the future.");
     expect(errors.dateOfBirth).not.toContain("18 years");
   });
@@ -71,7 +75,7 @@ describe("rental-application validate", () => {
     child.setFullYear(child.getFullYear() - 5);
     const iso = `${child.getFullYear()}-${String(child.getMonth() + 1).padStart(2, "0")}-${String(child.getDate()).padStart(2, "0")}`;
     const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
-    const errors = validateRentalWizardStep(4, state);
+    const errors = validateRentalWizardStep(2, state);
     expect(errors.dateOfBirth).toContain("at least 18 years old");
   });
 
@@ -80,7 +84,7 @@ describe("rental-application validate", () => {
     adult.setFullYear(adult.getFullYear() - 30);
     const iso = `${adult.getFullYear()}-${String(adult.getMonth() + 1).padStart(2, "0")}-${String(adult.getDate()).padStart(2, "0")}`;
     const state = { ...createInitialRentalWizardState(), dateOfBirth: iso };
-    const errors = validateRentalWizardStep(4, state);
+    const errors = validateRentalWizardStep(2, state);
     expect(errors.dateOfBirth).toBeUndefined();
   });
 
@@ -98,7 +102,7 @@ describe("rental-application validate", () => {
     expect(errors.leaseTerm).toContain("short-term");
   });
 
-  it("passes step 12 when manual application fee is verified", () => {
+  it("passes step 11 when manual application fee is verified", () => {
     const sub = {
       ...createDefaultListingSubmission(),
       applicationFee: "$50",
@@ -112,7 +116,7 @@ describe("rental-application validate", () => {
       applicationFeePayChannel: "venmo" as const,
       applicationFeeZelleSentConfirmed: true,
     };
-    const errors = validateRentalWizardStep(12, state, {
+    const errors = validateRentalWizardStep(11, state, {
       property: { id: "prop-venmo", listingSubmission: sub },
     });
     expect(errors.applicationFeeZelleSentConfirmed).toBeUndefined();

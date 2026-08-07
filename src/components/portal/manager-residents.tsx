@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { Button } from "@/components/ui/button";
 import { SegmentedThree } from "@/components/ui/segmented-control";
 import { PortalDetailDestinationNav } from "@/components/portal/portal-detail-destination-nav";
+import { PortalPageChrome, PortalPageScrollBody } from "@/lib/portal-page-chrome-layout";
 import {Input, Textarea, Select, NativeSelect} from "@/components/ui/input";
 import {
   Modal,
@@ -2569,6 +2570,7 @@ export function ManagerResidents({
   const residentDetailPanel =
     selected ? (
                           <div className="flex min-h-0 flex-1 flex-col gap-0">
+                            <PortalPageChrome>
                             <PortalDetailDestinationNav
                                 items={(
                                   [
@@ -2590,6 +2592,21 @@ export function ManagerResidents({
                                 activeId={resolvedDetailTab}
                                 ariaLabel="Resident profile sections"
                               />
+                            </PortalPageChrome>
+
+                            {resolvedDetailTab === "communication" ? (
+                            <div className="flex min-h-0 flex-1 flex-col">
+                            <ResidentDetailTabPanel fill>
+                              <ManagerResidentDetailInbox
+                                residentEmail={selected.email}
+                                residentName={selected.name}
+                                portalBase={portalBase}
+                                smsUiEnabled={smsUiEnabled}
+                              />
+                            </ResidentDetailTabPanel>
+                            </div>
+                            ) : (
+                            <PortalPageScrollBody>
 
                             {showResidentApplication && resolvedDetailTab === "application" ? (
                             <ResidentDetailTabPanel>
@@ -2831,16 +2848,8 @@ export function ManagerResidents({
                             </ResidentDetailTabPanel>
                             ) : null}
 
-                            {resolvedDetailTab === "communication" ? (
-                            <ResidentDetailTabPanel fill>
-                              <ManagerResidentDetailInbox
-                                residentEmail={selected.email}
-                                residentName={selected.name}
-                                portalBase={portalBase}
-                                smsUiEnabled={smsUiEnabled}
-                              />
-                            </ResidentDetailTabPanel>
-                            ) : null}
+                            </PortalPageScrollBody>
+                            )}
 
                             {residentDetailBottomBarActions ? (
                               <PortalPageFooterActions pinned rowVariant="header">
@@ -2964,6 +2973,8 @@ export function ManagerResidents({
           // other tab flows. Without this the chat has no bounded height, so it
           // overflows the clipped Communication surface and shoves the back
           // button and the profile tabs off a page that cannot scroll.
+          pinScrollBody
+          scrollBody={false}
           fillBody={resolvedDetailTab === "communication"}
         >
           {residentDetailPanel}

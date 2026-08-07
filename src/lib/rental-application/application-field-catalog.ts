@@ -10,6 +10,8 @@ import {
 
 /** Applicant wizard `RentalWizardFormState` keys controlled by one built-in question row. */
 const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
+  "household:Co-signer planned": ["hasCosigner"],
+  "household:Group application": ["applyingAsGroup"],
   "property:Property": ["propertyId"],
   "property:Room choices (1st – 3rd)": ["roomChoice1", "roomChoice2", "roomChoice3"],
   "property:Lease term": ["leaseTerm"],
@@ -75,6 +77,8 @@ type StandardFieldConfig = {
 
 /** Default editor types/options aligned with the applicant rental wizard. */
 const STANDARD_FIELD_TYPE_MAP: Record<string, StandardFieldConfig> = {
+  "household:Co-signer planned": { type: "select", options: YES_NO_OPTIONS },
+  "household:Group application": { type: "select", options: YES_NO_OPTIONS },
   "property:Property": { type: "select" },
   "property:Room choices (1st – 3rd)": { type: "select" },
   "property:Lease term": { type: "select" },
@@ -187,6 +191,7 @@ export const SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
   ).map((def) => def.standardKey);
 
 const COSIGNER_OMITTED_SECTIONS = new Set<RentalApplicationSectionId>([
+  "household",
   "property",
   "current_address",
   "previous_address",
@@ -424,6 +429,34 @@ export function resolveDisabledStandardApplicationFields(
   return STANDARD_APPLICATION_FIELD_CATALOG.filter((def) => disabled.has(def.standardKey)).map(defaultRowFromDef);
 }
 
+const CURATED_DEFAULT_DISABLED_BY_VARIANT: Record<
+  Extract<ApplicationFormVariant, "short_term" | "cosigner">,
+  ReadonlySet<string>
+> = {
+  short_term: new Set(SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS),
+  cosigner: new Set(COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS),
+};
+
+/**
+ * Disabled built-ins shown in the manager application editor. Curated default-off
+ * questions (short-term / co-signer baselines) stay hidden unless the manager
+ * explicitly turned off an otherwise-on question.
+ */
+export function editorVisibleDisabledApplicationFields(
+  variant: ApplicationFormVariant,
+  slice: ApplicationConfigSlice,
+): ResolvedApplicationField[] {
+  const disabled = resolveDisabledStandardApplicationFields(slice);
+  if (slice.applicationConfigMode === "standard" && (variant === "short_term" || variant === "cosigner")) {
+    return [];
+  }
+  if (variant === "short_term" || variant === "cosigner") {
+    const baseline = CURATED_DEFAULT_DISABLED_BY_VARIANT[variant];
+    return disabled.filter((f) => f.standardKey && !baseline.has(f.standardKey));
+  }
+  return disabled;
+}
+
 export function restoreDefaultApplicationConfig(): {
   disabledStandardApplicationKeys: string[];
   customApplicationFields: ManagerCustomApplicationField[];
@@ -600,14 +633,14 @@ export function isWizardFormFieldEnabled(
 
 /**
  * Wizard steps that carry at least one visible question for a resolved config
- * slice. Group / co-signer / review / fee (1, 2, 11, 12) are structural and
- * always present; the section steps (3-10) appear only when they still have an
+ * slice. Household / review / fee (1, 10, 11) are structural and always
+ * present; section steps (2-9) appear only when they still have an enabled
  * enabled built-in or custom question. This is what lets the short-term form
  * quietly skip the screening sections its curated default turns off — and bring
  * a section back the moment a manager re-enables a question in it. The applicant
  * never sees a total, so a shorter step list simply reads as a shorter form.
  */
-const ALWAYS_ACTIVE_WIZARD_STEPS: readonly number[] = [1, 2, 11, 12];
+const ALWAYS_ACTIVE_WIZARD_STEPS: readonly number[] = [1, 10, 11];
 
 export function activeApplicationWizardSteps(
   sub:

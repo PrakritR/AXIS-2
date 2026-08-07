@@ -82,10 +82,9 @@ export function PortalListControlStack({
       {showDestinations ? (
         <HorizontalScrollCapture
           className={cn(
-            "sticky z-[38] bg-background/95 backdrop-blur-md lg:static lg:mx-0",
+            "sticky z-[38] bg-background/95 backdrop-blur-md",
             destinationInset ? "mx-0" : "-mx-2.5 sm:-mx-4",
             "[top:var(--portal-mobile-top-chrome,0px)]",
-            "lg:bg-transparent lg:backdrop-blur-none",
           )}
         >
           <div ref={destinationRef} data-portal-list-destination-nav>
