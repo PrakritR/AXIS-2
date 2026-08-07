@@ -10,6 +10,7 @@ import { ManagerSmsPanel, type ManagerSmsPanelHandle } from "@/components/portal
 import { DestinationNav } from "@/components/ui/destination-nav";
 import {
   INBOX_LIST_SCROLL,
+  InboxConversationListAddRow,
   InboxConversationRow,
   InboxThreadEmpty,
   InboxTwoPane,
@@ -136,6 +137,7 @@ export function ManagerUnifiedInbox({
   searchQuery: searchQueryProp,
   onSearchQueryChange,
   listChrome = "internal",
+  onAddConversation,
 }: {
   tabId: string;
   commBase: string;
@@ -158,6 +160,8 @@ export function ManagerUnifiedInbox({
   onSearchQueryChange?: (value: string) => void;
   /** `external` — segment tabs + search live in {@link PortalListControlStack}. */
   listChrome?: "internal" | "external";
+  /** Opens the new-message / compose flow when the list is empty on Active. */
+  onAddConversation?: () => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() =>
     loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []),
@@ -458,17 +462,17 @@ export function ManagerUnifiedInbox({
       ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {mergedRows.length === 0 ? (
-          <div className="p-4">
-            <PortalInboxEmptyState
-              title={
-                query.trim()
-                  ? `No messages match “${query.trim()}”.`
-                  : listSegment === "archived"
-                    ? "No archived conversations."
-                    : "No conversations yet."
-              }
-            />
-          </div>
+          query.trim() ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title={`No messages match “${query.trim()}”.`} />
+            </div>
+          ) : listSegment === "archived" ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title="No archived conversations." />
+            </div>
+          ) : onAddConversation ? (
+            <InboxConversationListAddRow onClick={onAddConversation} />
+          ) : null
         ) : (
           mergedRows.map((row) => (
             <InboxConversationRow

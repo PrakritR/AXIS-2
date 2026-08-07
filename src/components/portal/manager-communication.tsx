@@ -35,6 +35,7 @@ import { useCommunicationThreadId } from "@/hooks/use-communication-thread-id";
 import { selectCommunicationThreadUrl } from "@/lib/portal-communication-nav";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import { consumeManagerComposePrefill, type ManagerComposePrefill } from "@/lib/manager-compose-prefill";
 
 export type ManagerInboxTabId = "unopened" | "opened" | "schedule" | "sent" | "trash";
 /** @deprecated Legacy SMS routes redirect to unified inbox. */
@@ -93,6 +94,7 @@ export function ManagerCommunication({
   const [listSort, setListSort] = useState<CommunicationListSort>("recent");
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeChannel, setComposeChannel] = useState<CommunicationComposeChannel>("email");
+  const [composeDraft, setComposeDraft] = useState<ManagerComposePrefill | null>(null);
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
 
@@ -128,6 +130,14 @@ export function ManagerCommunication({
   useEffect(() => {
     void loadSmsRecipients();
   }, [loadSmsRecipients]);
+
+  useEffect(() => {
+    const prefill = consumeManagerComposePrefill();
+    if (!prefill) return;
+    setComposeDraft(prefill);
+    setComposeChannel("email");
+    setComposeOpen(true);
+  }, []);
 
   const openCompose = useCallback(
     (preferred: CommunicationComposeChannel) => {
@@ -281,8 +291,12 @@ export function ManagerCommunication({
     >
       <ManagerCommunicationComposeModal
         open={composeOpen}
-        onClose={() => setComposeOpen(false)}
+        onClose={() => {
+          setComposeOpen(false);
+          setComposeDraft(null);
+        }}
         initialChannel={composeChannel}
+        initialDraft={composeDraft}
         liveContacts={liveContacts}
         smsRecipients={smsRecipients}
         smsUiEnabled={smsUiEnabled}
@@ -307,6 +321,7 @@ export function ManagerCommunication({
         listChrome="external"
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        onAddConversation={() => openCompose("email")}
       />
     </PortalCommunicationShell>
   );

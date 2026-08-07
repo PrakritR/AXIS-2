@@ -56,13 +56,18 @@ import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-cr
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import {
   ManagerVendorsPanel,
+  ManagerVendorsToolbar,
   type ManagerVendorsPanelHandle,
 } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { useShallowTabId } from "@/components/ui/tabs";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import {
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
@@ -402,15 +407,11 @@ export function ManagerAllServicesPanel({
 
   const servicesAddButton =
     typeFilter === "vendors" ? (
-      <Button
-        type="button"
-        variant="outline"
-        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
-        onClick={() => vendorsPanelRef.current?.openSettings()}
-        data-attr="manager-vendor-settings-open"
-      >
-        Vendor settings
-      </Button>
+      <ManagerVendorsToolbar
+        onCatalog={() => vendorsPanelRef.current?.openCatalog()}
+        onDefaults={() => vendorsPanelRef.current?.openDefaults()}
+        onAdd={() => vendorsPanelRef.current?.openAddVendor()}
+      />
     ) : typeFilter === "requests" ? (
       <Button
         type="button"
@@ -537,7 +538,7 @@ export function ManagerAllServicesPanel({
 
   return (
     <ManagerPortalPageShell
-      title={typeFilter === "vendors" ? "Vendors" : "Services"}
+      title="Services"
       titleInlineFilter={typeFilter !== "vendors" ? servicesFilterSheet : null}
       titleAside={servicesAddButton}
       hideTitleOnMobileNav
@@ -571,32 +572,51 @@ export function ManagerAllServicesPanel({
           workOrderId={workOrderIdProp}
           listBasePath={basePath}
           onAfterSchedule={() => router.push(`${basePath}/services/work-orders/scheduled`)}
+          listAddAction={{
+            label: "Add",
+            onClick: () => setAddWorkOrderOpen(true),
+            dataAttr: "services-work-orders-list-add",
+          }}
         />
       ) : bucketedRequests.length === 0 ? (
-        <PortalDataTableEmpty
-          message={filteredRequests.length === 0 ? "No requests yet." : "No requests in this status yet."}
-          icon="service"
-        />
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+          <PortalListAddRow
+            label="Add"
+            icon={PORTAL_LIST_ADD_ICONS.request}
+            onClick={() => setAddRequestOpen(true)}
+            dataAttr="services-requests-list-add"
+          />
+        </div>
       ) : (
-        <div className={INBOX_LIST_SCROLL}>
-          {bucketedRequests.map((req) => {
-            const propertyLabel = resolveRequestPropertyLabel(req);
-            const unit = resolveRequestUnit(req);
-            const subtitle = [req.residentName, propertyLabel, unit].filter(Boolean).join(" · ");
-            return (
-              <PortalServiceRecordRow
-                key={req.id}
-                title={req.offerName}
-                subtitle={subtitle || undefined}
-                statusLabel={reqBucket === "pending" ? "Pending" : reqBucket === "approved" ? "Approved" : "Denied"}
-                statusTone={
-                  reqBucket === "approved" ? "success" : reqBucket === "denied" ? "danger" : "warning"
-                }
-                onOpen={() => navigate(serviceRequestDetailHref(basePath, reqBucket, req.id))}
-                dataAttr="service-request-list-row"
-              />
-            );
-          })}
+        <div>
+          <div className={INBOX_LIST_SCROLL}>
+            {bucketedRequests.map((req) => {
+              const propertyLabel = resolveRequestPropertyLabel(req);
+              const unit = resolveRequestUnit(req);
+              const subtitle = [req.residentName, propertyLabel, unit].filter(Boolean).join(" · ");
+              return (
+                <PortalServiceRecordRow
+                  key={req.id}
+                  title={req.offerName}
+                  subtitle={subtitle || undefined}
+                  statusLabel={reqBucket === "pending" ? "Pending" : reqBucket === "approved" ? "Approved" : "Denied"}
+                  statusTone={
+                    reqBucket === "approved" ? "success" : reqBucket === "denied" ? "danger" : "warning"
+                  }
+                  onOpen={() => navigate(serviceRequestDetailHref(basePath, reqBucket, req.id))}
+                  dataAttr="service-request-list-row"
+                />
+              );
+            })}
+          </div>
+          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+            <PortalListAddRow
+              label="Add"
+              icon={PORTAL_LIST_ADD_ICONS.request}
+              onClick={() => setAddRequestOpen(true)}
+              dataAttr="services-requests-list-add"
+            />
+          </div>
         </div>
       )}
 

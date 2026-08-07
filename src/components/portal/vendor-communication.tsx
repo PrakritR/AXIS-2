@@ -6,6 +6,7 @@ import { VendorInboxPanel, type VendorInboxPanelHandle } from "@/components/port
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import {
   INBOX_LIST_SCROLL,
+  InboxConversationListAddRow,
   InboxConversationRow,
   InboxTwoPane,
   PortalInboxEmptyState,
@@ -71,6 +72,7 @@ function VendorUnifiedInbox({
   searchQuery,
   onThreadOpenChange,
   commBase,
+  onAddConversation,
 }: {
   inboxRef: React.RefObject<VendorInboxPanelHandle | null>;
   smsUiEnabled: boolean;
@@ -80,6 +82,7 @@ function VendorUnifiedInbox({
   searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
   commBase: string;
+  onAddConversation?: () => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(VENDOR_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
@@ -196,17 +199,17 @@ function VendorUnifiedInbox({
       ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {merged.length === 0 ? (
-          <div className="p-4">
-            <PortalInboxEmptyState
-              title={
-                searchQuery.trim()
-                  ? `No messages match “${searchQuery.trim()}”.`
-                  : listSegment === "archived"
-                    ? "No archived conversations."
-                    : "No conversations yet."
-              }
-            />
-          </div>
+          searchQuery.trim() ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title={`No messages match “${searchQuery.trim()}”.`} />
+            </div>
+          ) : listSegment === "archived" ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title="No archived conversations." />
+            </div>
+          ) : onAddConversation ? (
+            <InboxConversationListAddRow onClick={onAddConversation} dataAttr="vendor-communication-add-conversation" />
+          ) : null
         ) : (
           merged.map((row) => (
             <InboxConversationRow
@@ -362,6 +365,7 @@ export function VendorCommunication({
         searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
         commBase={commBase}
+        onAddConversation={() => inboxRef.current?.openCompose()}
       />
     </PortalCommunicationShell>
   );

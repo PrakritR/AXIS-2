@@ -1,29 +1,40 @@
 "use client";
 
 import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { useRouter } from "next/navigation";
+import {
+  ManagerPortalPageShell,
+  MANAGER_TABLE_TH,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
+} from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { collectLinkedOwnerIdsForModule } from "@/lib/manager-portfolio-access";
 import {
   MANAGER_VENDORS_EVENT,
-  makeVendorId,
   readOwnManagerVendorRows,
   syncManagerVendorsFromServer,
-  upsertManagerVendor,
   deleteManagerVendorRow,
   setManagerVendorActive,
   setManagerVendorPriority,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
-import { ManagerVendorSettingsModal } from "@/components/portal/manager-vendor-settings-modal";
+import { ManagerVendorCatalogModal } from "@/components/portal/manager-vendor-catalog-modal";
+import { ManagerVendorDefaultsModal } from "@/components/portal/manager-vendor-defaults-modal";
 import { ManagerVendorInviteModal } from "@/components/portal/manager-vendor-invite-modal";
+import { ManagerVendorFormModal } from "@/components/portal/manager-vendor-form-modal";
+import { stageManagerComposePrefill } from "@/lib/manager-compose-prefill";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import {
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
-  PortalDataTableEmpty,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -33,35 +44,54 @@ import {
   PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
-
-const TRADE_OPTIONS: readonly string[] = VENDOR_TRADE_OPTIONS;
-
-type VendorDraft = {
-  name: string;
-  trade: string;
-  phone: string;
-  email: string;
-  notes: string;
-  active: boolean;
-  sharedWithManagers: boolean;
-  vendorPriority: "" | "primary" | "secondary";
-};
-
-const EMPTY_DRAFT: VendorDraft = {
-  name: "",
-  trade: TRADE_OPTIONS[0]!,
-  phone: "",
-  email: "",
-  notes: "",
-  active: true,
-  sharedWithManagers: false,
-  vendorPriority: "",
-};
 
 export type ManagerVendorsPanelHandle = {
-  openSettings: (trade?: string) => void;
+  openCatalog: () => void;
+  openDefaults: (trade?: string) => void;
+  openAddVendor: (trade?: string) => void;
 };
+
+export function ManagerVendorsToolbar({
+  onCatalog,
+  onDefaults,
+  onAdd,
+}: {
+  onCatalog: () => void;
+  onDefaults: () => void;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        onClick={onCatalog}
+        data-attr="manager-vendor-catalog-open"
+      >
+        Vendor catalog
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        onClick={onDefaults}
+        data-attr="manager-vendor-defaults-open"
+      >
+        Defaults
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+        onClick={onAdd}
+        data-attr="manager-vendor-add"
+      >
+        Add
+      </Button>
+    </div>
+  );
+}
 
 export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   {
@@ -73,14 +103,19 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   ref: React.Ref<ManagerVendorsPanelHandle>,
 ) {
   const { showToast } = useAppUi();
+  const router = useRouter();
+  const portalBase = usePaidPortalBasePath();
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<VendorDraft>(EMPTY_DRAFT);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsTrade, setSettingsTrade] = useState<string | undefined>(undefined);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [showDefaults, setShowDefaults] = useState(false);
+  const [defaultsTrade, setDefaultsTrade] = useState<string | undefined>(undefined);
   const [inviteVendor, setInviteVendor] = useState<ManagerVendorRow | null>(null);
+  const [vendorFormOpen, setVendorFormOpen] = useState(false);
+  const [vendorFormMode, setVendorFormMode] = useState<"add" | "edit">("add");
+  const [editingVendor, setEditingVendor] = useState<ManagerVendorRow | null>(null);
+  const [addTrade, setAddTrade] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!authReady) return;
@@ -98,61 +133,80 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     return readOwnManagerVendorRows(userId, undefined, { includeOwnerIds: collectLinkedOwnerIdsForModule(userId ?? "", "services") }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tick, userId]);
 
-  const openSettingsForm = useCallback((trade?: string) => {
-    setSettingsTrade(trade);
-    setShowSettings(true);
+  const openCatalogForm = useCallback(() => {
+    setShowCatalog(true);
   }, []);
 
-  useImperativeHandle(ref, () => ({ openSettings: openSettingsForm }), [openSettingsForm]);
+  const openDefaultsForm = useCallback((trade?: string) => {
+    setDefaultsTrade(trade);
+    setShowDefaults(true);
+  }, []);
 
-  function startEdit(row: ManagerVendorRow) {
-    setEditingId(row.id);
-    setDraft({
-      name: row.name,
-      trade: row.trade || TRADE_OPTIONS[0]!,
-      phone: row.phone,
-      email: row.email,
-      notes: row.notes,
-      active: row.active !== false,
-      sharedWithManagers: row.sharedWithManagers === true,
-      vendorPriority: row.vendorPriority ?? "",
-    });
+  const openAddVendorForm = useCallback((trade?: string) => {
+    setVendorFormMode("add");
+    setEditingVendor(null);
+    setAddTrade(trade);
+    setVendorFormOpen(true);
+  }, []);
+
+  const openEditVendorForm = useCallback((row: ManagerVendorRow) => {
+    setVendorFormMode("edit");
+    setEditingVendor(row);
+    setAddTrade(undefined);
+    setVendorFormOpen(true);
     setExpandedId(row.id);
-  }
+  }, []);
 
-  function saveVendor(existingId?: string) {
-    const name = draft.name.trim();
-    if (!name) {
-      showToast("Vendor name is required.");
-      return;
-    }
-    const id = existingId ?? makeVendorId();
-    const now = new Date().toISOString();
-    const existing = vendors.find((v) => v.id === id);
-    upsertManagerVendor(
-      {
-        id,
-        managerUserId: userId ?? null,
-        name,
-        trade: draft.trade.trim() || TRADE_OPTIONS[0]!,
-        phone: draft.phone.trim(),
-        email: draft.email.trim(),
-        notes: draft.notes.trim(),
-        active: draft.active,
-        sharedWithManagers: draft.sharedWithManagers,
-        vendorPriority: draft.vendorPriority || undefined,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      },
-      userId,
-    );
-    if (draft.vendorPriority === "primary") {
-      setManagerVendorPriority(id, "primary", userId);
-    }
-    setEditingId(null);
-    setDraft(EMPTY_DRAFT);
-    showToast(existingId ? "Vendor updated." : "Vendor added.");
-  }
+  const openVendorOnboardingCompose = useCallback(
+    async (vendor: { id: string; name: string; email: string }) => {
+      const email = vendor.email.trim().toLowerCase();
+      if (!email) {
+        showToast("Add an email address on the vendor to send the onboarding invite.");
+        return;
+      }
+      try {
+        const res = await fetch("/api/portal/vendor-invite-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            vendorId: vendor.id,
+            vendorName: vendor.name,
+            vendorEmail: email,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          subject?: string;
+          body?: string;
+          error?: string;
+        };
+        if (!res.ok || !data.subject?.trim() || !data.body?.trim()) {
+          showToast(data.error ?? "Could not prepare the vendor onboarding message.");
+          return;
+        }
+        stageManagerComposePrefill({
+          subject: data.subject,
+          body: data.body,
+          recipientEmail: email,
+        });
+        router.push(`${portalBase}/communication/active`);
+      } catch {
+        showToast("Could not prepare the vendor onboarding message.");
+      }
+    },
+    [portalBase, router, showToast],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCatalog: openCatalogForm,
+      openDefaults: openDefaultsForm,
+      openAddVendor: openAddVendorForm,
+    }),
+    [openCatalogForm, openDefaultsForm, openAddVendorForm],
+  );
 
   function removeVendor(id: string) {
     if (!deleteManagerVendorRow(id, userId)) return;
@@ -211,62 +265,167 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     </div>
   );
 
-  const renderVendorDetail = (row: ManagerVendorRow) => {
-    const editing = editingId === row.id;
-    return editing ? (
-      <>
-        <VendorForm draft={draft} setDraft={setDraft} />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" onClick={() => saveVendor(row.id)}>Save changes</Button>
-          <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
-        </div>
-      </>
-    ) : (
-      <div className="space-y-3">
-        {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
-        {renderVendorQuickControls(row)}
-        <div className="flex flex-wrap gap-2">
-          {row.phone ? (
-            <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
-              Call {row.phone}
-            </a>
-          ) : null}
-          {row.email ? (
-            <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
-              Email {row.email}
-            </a>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
-            Edit
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={() => setInviteVendor(row)}
-            data-attr="vendor-send-invite"
-          >
-            Send invite
-          </Button>
-          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
-            Remove
-          </Button>
+  const renderVendorDetail = (row: ManagerVendorRow) => (
+    <div className="space-y-3">
+      {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
+      {renderVendorQuickControls(row)}
+      <div className="flex flex-wrap gap-2">
+        {row.phone ? (
+          <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
+            Call {row.phone}
+          </a>
+        ) : null}
+        {row.email ? (
+          <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
+            Email {row.email}
+          </a>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full text-xs"
+          onClick={() => openEditVendorForm(row)}
+          data-attr="vendor-edit"
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full text-xs"
+          onClick={() => setInviteVendor(row)}
+          data-attr="vendor-send-invite"
+        >
+          Send invite
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full border-red-200 text-xs text-red-700 hover:bg-red-50"
+          onClick={() => removeVendor(row.id)}
+          data-attr="vendor-remove"
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
+
+  const vendorListAddRow = (
+    <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+      <PortalListAddRow
+        label="Add"
+        icon={PORTAL_LIST_ADD_ICONS.vendor}
+        onClick={() => openAddVendorForm()}
+        dataAttr="vendors-list-add"
+      />
+    </div>
+  );
+
+  const vendorTable = (
+    <>
+      <div className="space-y-2 lg:hidden">
+        {vendors.map((row) => {
+          const open = expandedId === row.id;
+          return (
+            <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+              <button
+                type="button"
+                className="flex w-full gap-2 text-left"
+                onClick={() => setExpandedId(open ? null : row.id)}
+                aria-expanded={open}
+                data-attr="vendor-card-toggle"
+              >
+                <div className="min-w-0 flex-1">
+                  <PortalTableInlineExpand expanded={open} className="font-semibold text-foreground">
+                    <span className="truncate">{row.name}</span>
+                  </PortalTableInlineExpand>
+                </div>
+              </button>
+              {open ? <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={MANAGER_TABLE_TH}>Name</th>
+                <th className={MANAGER_TABLE_TH}>Trade</th>
+                <th className={MANAGER_TABLE_TH}>Phone</th>
+                <th className={MANAGER_TABLE_TH}>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendors.map((row) => {
+                const open = expandedId === row.id;
+                return (
+                  <Fragment key={row.id}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
+                      aria-expanded={open}
+                    >
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        <PortalTableInlineExpand expanded={open}>{row.name}</PortalTableInlineExpand>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
+                      <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
+                    </tr>
+                    {open ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          {renderVendorDetail(row)}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
-    );
-  };
+    </>
+  );
 
   const body = (
     <>
-      <ManagerVendorSettingsModal
-        open={showSettings}
+      <ManagerVendorFormModal
+        open={vendorFormOpen}
+        mode={vendorFormMode}
+        vendor={editingVendor}
+        initialTrade={addTrade}
         onClose={() => {
-          setShowSettings(false);
-          setSettingsTrade(undefined);
+          setVendorFormOpen(false);
+          setEditingVendor(null);
+          setAddTrade(undefined);
         }}
-        initialTrade={settingsTrade}
+        showToast={showToast}
+        onBrowseCatalog={() => openCatalogForm()}
+        onAdded={openVendorOnboardingCompose}
+        onDeleted={() => {
+          if (editingVendor && expandedId === editingVendor.id) setExpandedId(null);
+          setEditingVendor(null);
+        }}
+      />
+      <ManagerVendorCatalogModal
+        open={showCatalog}
+        onClose={() => setShowCatalog(false)}
+      />
+      <ManagerVendorDefaultsModal
+        open={showDefaults}
+        onClose={() => {
+          setShowDefaults(false);
+          setDefaultsTrade(undefined);
+        }}
+        initialTrade={defaultsTrade}
+        onAddForCategory={(trade) => openAddVendorForm(trade)}
       />
       <ManagerVendorInviteModal
         open={inviteVendor !== null}
@@ -279,79 +438,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         showToast={showToast}
       />
 
-      {vendors.length === 0 ? (
-        <PortalDataTableEmpty message="No vendors on your account yet. Open Vendor settings to add one." icon="vendor" />
-      ) : (
-        <>
-        <div className="space-y-2 lg:hidden">
-          {vendors.map((row) => {
-            const open = expandedId === row.id;
-            return (
-              <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-                <button
-                  type="button"
-                  className="flex w-full gap-2 text-left"
-                  onClick={() => setExpandedId(open ? null : row.id)}
-                  aria-expanded={open}
-                  data-attr="vendor-card-toggle"
-                >
-                  <div className="min-w-0 flex-1">
-                    <PortalTableInlineExpand expanded={open} className="font-semibold text-foreground">
-                      <span className="truncate">{row.name}</span>
-                    </PortalTableInlineExpand>
-                  </div>
-                </button>
-                {open ? (
-                  <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full table-fixed border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={MANAGER_TABLE_TH}>Name</th>
-                  <th className={MANAGER_TABLE_TH}>Trade</th>
-                  <th className={MANAGER_TABLE_TH}>Phone</th>
-                  <th className={MANAGER_TABLE_TH}>Email</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendors.map((row) => {
-                  const open = expandedId === row.id;
-                  return (
-                    <Fragment key={row.id}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
-                        aria-expanded={open}
-                      >
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                          <PortalTableInlineExpand expanded={open}>{row.name}</PortalTableInlineExpand>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
-                      </tr>
-                      {open ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {renderVendorDetail(row)}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </>
-      )}
+      {vendors.length === 0 ? vendorListAddRow : vendorTable}
     </>
   );
 
@@ -361,109 +448,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   return (
     <ManagerPortalPageShell
-      title="Vendors"
-      subtitle="Vendors on your account for work orders and outgoing payments."
+      title="Services"
       titleAside={
-        <Button type="button" onClick={() => openSettingsForm()} data-attr="manager-vendor-settings-open">
-          Vendor settings
-        </Button>
+        <ManagerVendorsToolbar
+          onCatalog={openCatalogForm}
+          onDefaults={() => openDefaultsForm()}
+          onAdd={() => openAddVendorForm()}
+        />
       }
     >
       {body}
     </ManagerPortalPageShell>
   );
 });
-
-function VendorForm({
-  draft,
-  setDraft,
-}: {
-  draft: VendorDraft;
-  setDraft: (d: VendorDraft) => void;
-}) {
-  return (
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <div>
-        <label className="text-xs font-semibold text-muted">Name</label>
-        <Input className="mt-1" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-muted">Trade</label>
-        <Select
-          className="mt-1"
-          value={draft.trade}
-          onChange={(e) => setDraft({ ...draft, trade: e.target.value })}
-        >
-          {TRADE_OPTIONS.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </Select>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-muted">Phone</label>
-        <Input className="mt-1" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-muted">Email</label>
-        <Input className="mt-1" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
-      </div>
-      <div className="sm:col-span-2">
-        <label className="text-xs font-semibold text-muted">Notes</label>
-        <Input className="mt-1" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
-      </div>
-      <div className="flex items-center gap-2 sm:col-span-2">
-        <input
-          id="vendor-active"
-          type="checkbox"
-          checked={draft.active}
-          onChange={(e) => setDraft({ ...draft, active: e.target.checked })}
-        />
-        <label htmlFor="vendor-active" className="text-sm text-foreground">Active (available for assignment)</label>
-      </div>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
-          id="vendor-priority-primary"
-          type="radio"
-          name="vendor-priority"
-          checked={draft.vendorPriority === "primary"}
-          onChange={() => setDraft({ ...draft, vendorPriority: "primary" })}
-        />
-        <label htmlFor="vendor-priority-primary" className="text-sm text-foreground">Primary for this trade</label>
-      </div>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
-          id="vendor-priority-secondary"
-          type="radio"
-          name="vendor-priority"
-          checked={draft.vendorPriority === "secondary"}
-          onChange={() => setDraft({ ...draft, vendorPriority: "secondary" })}
-        />
-        <label htmlFor="vendor-priority-secondary" className="text-sm text-foreground">Secondary for this trade</label>
-      </div>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
-          id="vendor-priority-standard"
-          type="radio"
-          name="vendor-priority"
-          checked={draft.vendorPriority === ""}
-          onChange={() => setDraft({ ...draft, vendorPriority: "" })}
-        />
-        <label htmlFor="vendor-priority-standard" className="text-sm text-foreground">Standard (no priority)</label>
-      </div>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
-          id="vendor-shared"
-          type="checkbox"
-          checked={draft.sharedWithManagers}
-          onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
-        />
-        <label htmlFor="vendor-shared" className="text-sm leading-6 text-foreground">
-          Share with other managers on PropLane
-          <span className="mt-0.5 block text-xs text-muted">
-            Other property managers can view and assign this vendor to work orders. You can turn this off anytime.
-          </span>
-        </label>
-      </div>
-    </div>
-  );
-}

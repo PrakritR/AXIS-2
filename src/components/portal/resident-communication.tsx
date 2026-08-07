@@ -6,6 +6,7 @@ import { ResidentInboxPanel, type ResidentInboxPanelHandle } from "@/components/
 import { RoleSmsPanel } from "@/components/portal/role-sms-panel";
 import {
   INBOX_LIST_SCROLL,
+  InboxConversationListAddRow,
   InboxConversationRow,
   InboxTwoPane,
   PortalInboxEmptyState,
@@ -72,6 +73,7 @@ function ResidentUnifiedInbox({
   searchQuery,
   onThreadOpenChange,
   commBase,
+  onAddConversation,
 }: {
   inboxRef: React.RefObject<ResidentInboxPanelHandle | null>;
   smsUiEnabled: boolean;
@@ -81,6 +83,7 @@ function ResidentUnifiedInbox({
   searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
   commBase: string;
+  onAddConversation?: () => void;
 }) {
   const [emailThreads, setEmailThreads] = useState(() => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, []));
   const [smsMessages, setSmsMessages] = useState<ManagerSmsMessageRow[]>([]);
@@ -197,17 +200,17 @@ function ResidentUnifiedInbox({
       ) : null}
       <div className={INBOX_LIST_SCROLL}>
         {merged.length === 0 ? (
-          <div className="p-4">
-            <PortalInboxEmptyState
-              title={
-                searchQuery.trim()
-                  ? `No messages match “${searchQuery.trim()}”.`
-                  : listSegment === "archived"
-                    ? "No archived conversations."
-                    : "No conversations yet."
-              }
-            />
-          </div>
+          searchQuery.trim() ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title={`No messages match “${searchQuery.trim()}”.`} />
+            </div>
+          ) : listSegment === "archived" ? (
+            <div className="p-4">
+              <PortalInboxEmptyState title="No archived conversations." />
+            </div>
+          ) : onAddConversation ? (
+            <InboxConversationListAddRow onClick={onAddConversation} dataAttr="resident-communication-add-conversation" />
+          ) : null
         ) : (
           merged.map((row) => (
             <InboxConversationRow
@@ -363,6 +366,7 @@ export function ResidentCommunication({
         searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
         commBase={commBase}
+        onAddConversation={() => inboxRef.current?.openCompose()}
       />
     </PortalCommunicationShell>
   );
