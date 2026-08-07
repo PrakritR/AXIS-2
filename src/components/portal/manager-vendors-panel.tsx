@@ -1,13 +1,11 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { collectLinkedOwnerIdsForModule } from "@/lib/manager-portfolio-access";
@@ -20,11 +18,20 @@ import {
   setManagerVendorPriority,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
+import {
+  deliverManagerVendorInvite,
+  fetchManagerVendorInviteDraft,
+  type ManagerVendorInvitePreview,
+} from "@/lib/manager-vendor-invite-client";
 import { ManagerVendorCatalogModal } from "@/components/portal/manager-vendor-catalog-modal";
 import { ManagerVendorDefaultsModal } from "@/components/portal/manager-vendor-defaults-modal";
-import { ManagerVendorInviteModal } from "@/components/portal/manager-vendor-invite-modal";
 import { ManagerVendorFormModal } from "@/components/portal/manager-vendor-form-modal";
-import { stageManagerComposePrefill } from "@/lib/manager-compose-prefill";
+import {
+  PortalNotificationPreviewModal,
+  type NotificationConfirmDraft,
+  type NotificationDeliveryChannels,
+} from "@/components/portal/portal-notification-preview-modal";
+import { ManagerVendorDetail, type VendorDetailEditDraft } from "@/components/portal/manager-vendor-detail";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { vendorDetailHref, vendorListHref } from "@/lib/portal-detail-routes";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
@@ -33,7 +40,7 @@ import {
   PORTAL_LIST_ADD_ROW_WRAP_CLASS,
   PortalListAddRow,
 } from "@/components/portal/portal-list-add-row";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PortalDataTableEmpty, PORTAL_DETAIL_BTN, PortalTableDetailActions } from "@/components/portal/portal-data-table";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { PortalPersonRecordRow } from "@/components/portal/portal-record-row";
@@ -111,7 +118,6 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   ref: React.Ref<ManagerVendorsPanelHandle>,
 ) {
   const { showToast } = useAppUi();
-  const router = useRouter();
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const basePath = listBasePath ?? portalBase;
@@ -120,11 +126,14 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   const [showCatalog, setShowCatalog] = useState(false);
   const [showDefaults, setShowDefaults] = useState(false);
   const [defaultsTrade, setDefaultsTrade] = useState<string | undefined>(undefined);
-  const [inviteVendor, setInviteVendor] = useState<ManagerVendorRow | null>(null);
+  const [invitePreview, setInvitePreview] = useState<ManagerVendorInvitePreview | null>(null);
+  const [invitePreviewBusy, setInvitePreviewBusy] = useState(false);
   const [vendorFormOpen, setVendorFormOpen] = useState(false);
   const [vendorFormMode, setVendorFormMode] = useState<"add" | "edit">("add");
   const [editingVendor, setEditingVendor] = useState<ManagerVendorRow | null>(null);
   const [addTrade, setAddTrade] = useState<string | undefined>(undefined);
+  const [vendorDetailEditing, setVendorDetailEditing] = useState(false);
+  const [vendorEditDraft, setVendorEditDraft] = useState<VendorDetailEditDraft | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -149,6 +158,11 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     if (!routeVendorId) return null;
     return vendors.find((row) => row.id === routeVendorId) ?? null;
   }, [routeVendorId, vendors]);
+
+  useEffect(() => {
+    setVendorDetailEditing(false);
+    setVendorEditDraft(null);
+  }, [routeVendorId]);
 
   const openCatalogForm = useCallback(() => {
     setShowCatalog(true);
@@ -184,47 +198,6 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     [basePath, navigate],
   );
 
-  const openVendorOnboardingCompose = useCallback(
-    async (vendor: { id: string; name: string; email: string }) => {
-      const email = vendor.email.trim().toLowerCase();
-      if (!email) {
-        showToast("Add an email address on the vendor to send the onboarding invite.");
-        return;
-      }
-      try {
-        const res = await fetch("/api/portal/vendor-invite-draft", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            vendorId: vendor.id,
-            vendorName: vendor.name,
-            vendorEmail: email,
-          }),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          subject?: string;
-          body?: string;
-          error?: string;
-        };
-        if (!res.ok || !data.subject?.trim() || !data.body?.trim()) {
-          showToast(data.error ?? "Could not prepare the vendor onboarding message.");
-          return;
-        }
-        stageManagerComposePrefill({
-          subject: data.subject,
-          body: data.body,
-          recipientEmail: email,
-        });
-        router.push(`${portalBase}/communication/active`);
-      } catch {
-        showToast("Could not prepare the vendor onboarding message.");
-      }
-    },
-    [portalBase, router, showToast],
-  );
-
   useImperativeHandle(
     ref,
     () => ({
@@ -240,6 +213,50 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     if (routeVendorId === id) navigateToList();
     showToast("Vendor removed.");
   }
+
+  const openVendorInvitePreview = useCallback(
+    async (row: ManagerVendorRow) => {
+      setInvitePreviewBusy(true);
+      const result = await fetchManagerVendorInviteDraft({
+        vendorId: row.id,
+        vendorName: row.name,
+        vendorEmail: row.email,
+      });
+      setInvitePreviewBusy(false);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      setInvitePreview({
+        ...result.preview,
+        phone: row.phone?.trim() ?? "",
+      });
+    },
+    [showToast],
+  );
+
+  const confirmVendorInvite = useCallback(
+    async (
+      skipMessage: boolean,
+      channels?: NotificationDeliveryChannels,
+      messageDraft?: NotificationConfirmDraft,
+    ) => {
+      if (!invitePreview || invitePreviewBusy) return;
+      setInvitePreviewBusy(true);
+      try {
+        const result = await deliverManagerVendorInvite(invitePreview, skipMessage, channels, messageDraft);
+        if (result.message) {
+          showToast(result.message);
+        }
+        if (result.ok) {
+          setInvitePreview(null);
+        }
+      } finally {
+        setInvitePreviewBusy(false);
+      }
+    },
+    [invitePreview, invitePreviewBusy, showToast],
+  );
 
   function updateVendorStatus(row: ManagerVendorRow, active: boolean) {
     setManagerVendorActive(row.id, active, userId);
@@ -257,87 +274,92 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     }
   }
 
-  const renderVendorQuickControls = (row: ManagerVendorRow) => (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div>
-        <label className="text-xs font-semibold text-muted">Status</label>
-        <Select
-          className="mt-1"
-          value={row.active !== false ? "active" : "inactive"}
-          onChange={(e) => updateVendorStatus(row, e.target.value === "active")}
-          data-attr="vendor-status-select"
-        >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </Select>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-muted">Priority</label>
-        <Select
-          className="mt-1"
-          value={row.vendorPriority ?? ""}
-          onChange={(e) =>
-            updateVendorPriority(
-              row,
-              e.target.value === "primary" || e.target.value === "secondary" ? e.target.value : undefined,
-            )
-          }
-          data-attr="vendor-priority-select"
-        >
-          <option value="">Standard</option>
-          <option value="primary">Primary</option>
-          <option value="secondary">Secondary</option>
-        </Select>
-      </div>
-    </div>
-  );
+  function startVendorDetailEdit(row: ManagerVendorRow) {
+    setVendorEditDraft({
+      active: row.active !== false,
+      priority: row.vendorPriority,
+    });
+    setVendorDetailEditing(true);
+  }
 
-  const renderVendorDetail = (row: ManagerVendorRow) => (
-    <div className="space-y-3">
-      {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
-      {renderVendorQuickControls(row)}
-      <div className="flex flex-wrap gap-2">
-        {row.phone ? (
-          <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
-            Call {row.phone}
-          </a>
-        ) : null}
-        {row.email ? (
-          <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
-            Email {row.email}
-          </a>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
+  function cancelVendorDetailEdit() {
+    setVendorDetailEditing(false);
+    setVendorEditDraft(null);
+  }
+
+  function saveVendorDetailEdit(row: ManagerVendorRow) {
+    if (!vendorEditDraft) {
+      cancelVendorDetailEdit();
+      return;
+    }
+    const wasActive = row.active !== false;
+    if (vendorEditDraft.active !== wasActive) {
+      updateVendorStatus(row, vendorEditDraft.active);
+    }
+    const prevPriority = row.vendorPriority ?? undefined;
+    const nextPriority = vendorEditDraft.priority ?? undefined;
+    if (prevPriority !== nextPriority) {
+      updateVendorPriority(row, vendorEditDraft.priority);
+    }
+    cancelVendorDetailEdit();
+  }
+
+  const vendorDangerBtnClass = `${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`;
+
+  const renderVendorHeaderActions = (row: ManagerVendorRow) => (
+    <PortalTableDetailActions>
+      {vendorDetailEditing ? (
+        <>
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="vendor-edit-save"
+            onClick={() => saveVendorDetailEdit(row)}
+          >
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="vendor-edit-cancel"
+            onClick={cancelVendorDetailEdit}
+          >
+            Cancel
+          </Button>
+        </>
+      ) : (
         <Button
           type="button"
           variant="outline"
-          className="h-8 rounded-full text-xs"
-          onClick={() => openEditVendorForm(row)}
+          className={PORTAL_DETAIL_BTN}
           data-attr="vendor-edit"
+          onClick={() => startVendorDetailEdit(row)}
         >
           Edit
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full text-xs"
-          onClick={() => setInviteVendor(row)}
-          data-attr="vendor-send-invite"
-        >
-          Send invite
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full border-red-200 text-xs text-red-700 hover:bg-red-50"
-          onClick={() => removeVendor(row.id)}
-          data-attr="vendor-remove"
-        >
-          Remove
-        </Button>
-      </div>
-    </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        disabled={invitePreviewBusy}
+        onClick={() => void openVendorInvitePreview(row)}
+        data-attr="vendor-send-invite"
+      >
+        {invitePreviewBusy ? "Loading…" : "Send invite"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={vendorDangerBtnClass}
+        onClick={() => removeVendor(row.id)}
+        data-attr="vendor-remove"
+      >
+        Remove
+      </Button>
+    </PortalTableDetailActions>
   );
 
   const vendorListAddRow = (
@@ -365,7 +387,6 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         }}
         showToast={showToast}
         onBrowseCatalog={() => openCatalogForm()}
-        onAdded={openVendorOnboardingCompose}
         onDeleted={() => {
           if (editingVendor && routeVendorId === editingVendor.id) navigateToList();
           setEditingVendor(null);
@@ -381,15 +402,26 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         initialTrade={defaultsTrade}
         onAddForCategory={(trade) => openAddVendorForm(trade)}
       />
-      <ManagerVendorInviteModal
-        open={inviteVendor !== null}
-        vendor={inviteVendor}
-        onClose={() => setInviteVendor(null)}
-        onSent={() => {
-          setInviteVendor(null);
-          showToast("Invite sent.");
-        }}
-        showToast={showToast}
+      <PortalNotificationPreviewModal
+        open={invitePreview !== null}
+        title="Send vendor invite — notification preview"
+        onClose={() => setInvitePreview(null)}
+        recipient={invitePreview?.email ?? ""}
+        recipientPhone={invitePreview?.phone ?? ""}
+        subject={invitePreview?.subject ?? ""}
+        body={invitePreview?.body ?? ""}
+        intro="Review the vendor portal setup message. It explains how to sign up for PropLane, view work orders, and message you."
+        showChannelPicker
+        showSchedule
+        emailAvailable={Boolean(invitePreview?.email?.includes("@"))}
+        smsAvailable={Boolean(invitePreview?.phone?.trim())}
+        defaultViaSms={false}
+        confirmLabel="Send invite"
+        skipMessageLabel="Don't message vendor"
+        confirmBusy={invitePreviewBusy}
+        confirmBusyLabel="Sending…"
+        cancelLabel="Cancel"
+        onConfirm={(skipMessage, channels, messageDraft) => void confirmVendorInvite(skipMessage, channels, messageDraft)}
       />
     </>
   );
@@ -410,11 +442,22 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
           pageTitle="Services"
           title={routeVendor.name}
           subtitle={routeVendor.trade || undefined}
+          avatarName={routeVendor.name}
           backHref={vendorListHref(basePath)}
           backLabel="Back to vendors"
+          hideBackText
+          bareHeader
           dataAttrBack="vendor-detail-back"
+          inlineActions
+          actions={renderVendorHeaderActions(routeVendor)}
         >
-          {renderVendorDetail(routeVendor)}
+          <ManagerVendorDetail
+            row={routeVendor}
+            editing={vendorDetailEditing}
+            draft={vendorEditDraft}
+            onDraftChange={setVendorEditDraft}
+            onEditDetails={() => openEditVendorForm(routeVendor)}
+          />
         </PortalRecordDetailPage>
       </>
     );

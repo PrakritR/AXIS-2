@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Modal, ModalFooter, MODAL_FIELD_LABEL_CLASS, PORTAL_MODAL_FORM_FIELD_CLASS, PORTAL_MODAL_FORM_FULL_ROW_CLASS, PORTAL_MODAL_FORM_GRID_CLASS } from "@/components/ui/modal";
+import {
+  PortalNotificationPreviewModal,
+  type NotificationConfirmDraft,
+  type NotificationDeliveryChannels,
+} from "@/components/portal/portal-notification-preview-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import {
+  deliverManagerVendorInvite,
+  fetchManagerVendorInviteDraft,
+  type ManagerVendorInvitePreview,
+} from "@/lib/manager-vendor-invite-client";
 import {
   deleteManagerVendorRow,
   makeVendorId,
@@ -14,6 +24,8 @@ import {
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
+
+type VendorInvitePreview = ManagerVendorInvitePreview;
 
 export type ManagerVendorFormDraft = {
   name: string;
@@ -128,7 +140,7 @@ export function ManagerVendorFormFields({
           placeholder="License, service area, after-hours contact, billing notes…"
         />
       </div>
-      <div className={`${PORTAL_MODAL_FORM_FULL_ROW_CLASS} space-y-3 rounded-xl border border-border bg-accent/15 p-3`}>
+      <div className={`${PORTAL_MODAL_FORM_FULL_ROW_CLASS} space-y-3`}>
         <label className="flex cursor-pointer items-center gap-2.5">
           <input
             type="checkbox"
@@ -195,7 +207,6 @@ export function ManagerVendorFormModal({
   onClose,
   onSaved,
   onDeleted,
-  onAdded,
   showToast,
   onBrowseCatalog,
 }: {
@@ -206,8 +217,6 @@ export function ManagerVendorFormModal({
   onClose: () => void;
   onSaved?: () => void;
   onDeleted?: () => void;
-  /** After a successful add — parent can open onboarding compose. */
-  onAdded?: (vendor: { id: string; name: string; email: string }) => void | Promise<void>;
   showToast: (message: string) => void;
   /** Opens vendor settings (catalog / defaults) without losing context. */
   onBrowseCatalog?: () => void;
@@ -216,6 +225,8 @@ export function ManagerVendorFormModal({
   const [draft, setDraft] = useState<ManagerVendorFormDraft>(EMPTY_MANAGER_VENDOR_FORM_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [invitePreview, setInvitePreview] = useState<VendorInvitePreview | null>(null);
+  const [createdVendorId, setCreatedVendorId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -229,26 +240,27 @@ export function ManagerVendorFormModal({
     }
     setError(null);
     setSaving(false);
+    setInvitePreview(null);
+    setCreatedVendorId(null);
   }, [open, mode, vendor, initialTrade]);
 
   const patch = (next: Partial<ManagerVendorFormDraft>) => setDraft((prev) => ({ ...prev, ...next }));
 
-  const save = async () => {
+  const buildRow = (): ManagerVendorRow | null => {
     const name = draft.name.trim();
     if (!name) {
       setError("Vendor name is required.");
-      return;
+      return null;
     }
     if (!userId) {
       showToast("Sign in to save vendors.");
-      return;
+      return null;
     }
-    setSaving(true);
     setError(null);
-    const id = mode === "edit" && vendor ? vendor.id : makeVendorId();
+    const id = mode === "edit" && vendor ? vendor.id : createdVendorId ?? makeVendorId();
     const now = new Date().toISOString();
     const existing = mode === "edit" ? vendor : null;
-    const row: ManagerVendorRow = {
+    return {
       id,
       managerUserId: userId,
       name,
@@ -262,22 +274,103 @@ export function ManagerVendorFormModal({
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
+  };
+
+  const persistRow = async (row: ManagerVendorRow): Promise<boolean> => {
+    if (!userId) return false;
     upsertManagerVendor(row, userId);
     if (draft.vendorPriority === "primary") {
-      setManagerVendorPriority(id, "primary", userId);
+      setManagerVendorPriority(row.id, "primary", userId);
     }
     const persisted = await persistManagerVendorToServer(row);
-    setSaving(false);
     if (!persisted) {
       showToast("Vendor saved locally; syncing to the server failed. Try again before sending the invite.");
-    } else {
-      showToast(mode === "edit" ? "Vendor updated." : "Vendor added.");
+      return false;
     }
+    if (mode === "add") setCreatedVendorId(row.id);
+    return true;
+  };
+
+  const saveEdit = async () => {
+    const row = buildRow();
+    if (!row) return;
+    setSaving(true);
+    await persistRow(row);
+    setSaving(false);
+    showToast("Vendor updated.");
     onClose();
-    if (mode === "add") {
-      await onAdded?.({ id, name, email: row.email });
-    } else {
-      onSaved?.();
+    onSaved?.();
+  };
+
+  const addOnly = async () => {
+    const row = buildRow();
+    if (!row) return;
+    setSaving(true);
+    await persistRow(row);
+    setSaving(false);
+    showToast("Vendor added.");
+    onClose();
+  };
+
+  const openInvitePreview = async () => {
+    const row = buildRow();
+    if (!row) return;
+    const email = row.email.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email)) {
+      setError("A valid email is required to preview the vendor portal invite.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const persisted = await persistRow(row);
+    if (!persisted) {
+      setSaving(false);
+      return;
+    }
+    try {
+      const result = await fetchManagerVendorInviteDraft({
+        vendorId: row.id,
+        vendorName: row.name,
+        vendorEmail: email,
+      });
+      if (!result.ok) {
+        showToast(result.error);
+        setSaving(false);
+        return;
+      }
+      setInvitePreview({
+        ...result.preview,
+        phone: row.phone,
+      });
+    } catch {
+      showToast("Could not prepare the vendor onboarding message.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmVendorInvite = async (
+    skipMessage: boolean,
+    channels?: NotificationDeliveryChannels,
+    messageDraft?: NotificationConfirmDraft,
+  ) => {
+    if (!invitePreview || saving) return;
+    setSaving(true);
+    try {
+      if (!skipMessage) {
+        const result = await deliverManagerVendorInvite(invitePreview, skipMessage, channels, messageDraft);
+        if (!result.ok) {
+          showToast(`Vendor added, but ${result.message}`);
+          return;
+        }
+        showToast(result.message ? `Vendor added. ${result.message}` : "Vendor added.");
+      } else {
+        showToast("Vendor added.");
+      }
+      setInvitePreview(null);
+      onClose();
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -296,58 +389,114 @@ export function ManagerVendorFormModal({
   const title = mode === "edit" ? "Edit vendor" : "Add vendor";
 
   return (
-    <Modal
-      open={open}
-      title={title}
-      onClose={onClose}
-      panelClassName="max-w-lg"
-      dense
-      footer={
-        <ModalFooter className="w-full">
-          {mode === "edit" && vendor ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
-              onClick={remove}
-              data-attr="vendor-form-delete"
-            >
-              Delete
-            </Button>
+    <>
+      <Modal
+        open={open && invitePreview === null}
+        title={title}
+        onClose={onClose}
+        panelClassName="max-w-lg"
+        dense
+        footer={
+          <ModalFooter className="w-full">
+            {mode === "edit" && vendor ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-red-200 text-red-700 hover:bg-red-50"
+                onClick={remove}
+                data-attr="vendor-form-delete"
+              >
+                Delete
+              </Button>
+            ) : null}
+            {mode === "add" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={saving}
+                  onClick={() => void addOnly()}
+                  data-attr="vendor-form-add"
+                >
+                  {saving ? "Saving…" : "Add"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="ml-auto rounded-full"
+                  disabled={saving}
+                  onClick={() => void openInvitePreview()}
+                  data-attr="vendor-form-preview-invite"
+                >
+                  {saving ? "Saving…" : "Preview invite"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                className="ml-auto rounded-full"
+                disabled={saving}
+                onClick={() => void saveEdit()}
+                data-attr="vendor-form-save"
+              >
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            )}
+          </ModalFooter>
+        }
+      >
+        <div className="space-y-4">
+          {mode === "add" ? (
+            <p className="text-xs text-muted">
+              Add a vendor to your directory. Use <span className="font-medium text-foreground">Preview invite</span> to
+              review the PropLane vendor portal signup message before it goes out.
+            </p>
           ) : null}
-          <Button
-            type="button"
-            variant="primary"
-            className="ml-auto rounded-full"
-            disabled={saving}
-            onClick={save}
-            data-attr="vendor-form-save"
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </ModalFooter>
-      }
-    >
-      <div className="space-y-4">
-        {onBrowseCatalog ? (
-          <p className="text-xs text-muted">
-            Prefer a curated vendor?{" "}
-            <button
-              type="button"
-              className="font-semibold text-primary hover:underline"
-              data-attr="vendor-form-browse-catalog"
-              onClick={() => {
-                onClose();
-                onBrowseCatalog();
-              }}
-            >
-              Browse PropLane catalog
-            </button>
-          </p>
-        ) : null}
-        <ManagerVendorFormFields draft={draft} onPatch={patch} />
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      </div>
-    </Modal>
+          {onBrowseCatalog ? (
+            <p className="text-xs text-muted">
+              Prefer a curated vendor?{" "}
+              <button
+                type="button"
+                className="font-semibold text-primary hover:underline"
+                data-attr="vendor-form-browse-catalog"
+                onClick={() => {
+                  onClose();
+                  onBrowseCatalog();
+                }}
+              >
+                Browse PropLane catalog
+              </button>
+            </p>
+          ) : null}
+          <ManagerVendorFormFields draft={draft} onPatch={patch} />
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        </div>
+      </Modal>
+
+      <PortalNotificationPreviewModal
+        open={invitePreview !== null}
+        title="Add vendor — notification preview"
+        onClose={() => setInvitePreview(null)}
+        recipient={invitePreview?.email ?? ""}
+        recipientPhone={invitePreview?.phone ?? ""}
+        subject={invitePreview?.subject ?? ""}
+        body={invitePreview?.body ?? ""}
+        intro="Review the vendor portal setup message. It explains how to sign up for PropLane, view work orders, and message you."
+        showChannelPicker
+        showSchedule
+        emailAvailable={Boolean(invitePreview?.email?.includes("@"))}
+        smsAvailable={Boolean(invitePreview?.phone?.trim())}
+        defaultViaSms={false}
+        confirmLabel="Add vendor & send invite"
+        confirmLabelWithoutMessage="Add vendor only"
+        skipMessageLabel="Don't message vendor"
+        confirmBusy={saving}
+        confirmBusyLabel="Adding…"
+        cancelLabel="Back"
+        onConfirm={(skipMessage, channels, messageDraft) => void confirmVendorInvite(skipMessage, channels, messageDraft)}
+      />
+    </>
   );
 }
