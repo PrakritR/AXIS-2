@@ -52,7 +52,7 @@ function SubmittedApplicationCard({
       {row.application?.hasCosigner === "yes" ? (
         <CosignerInviteCallout
           signerAppId={row.id}
-          signerName={row.application?.fullName}
+          signerName={row.application?.fullLegalName}
           className="mt-4 rounded-2xl border border-border bg-accent/30 p-5"
         />
       ) : null}

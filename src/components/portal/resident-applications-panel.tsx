@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
+import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
   ManagerPortalPageShell,
@@ -915,7 +916,7 @@ export function ResidentApplicationsPanel({
         {row.application?.hasCosigner === "yes" ? (
           <CosignerInviteCallout
             signerAppId={row.id}
-            signerName={row.application?.fullName}
+            signerName={row.application?.fullLegalName}
             className="rounded-2xl border border-border bg-accent/30 p-5"
           />
         ) : null}

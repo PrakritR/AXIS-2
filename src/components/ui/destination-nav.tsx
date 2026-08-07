@@ -45,6 +45,7 @@ export function DestinationNav({
   size?: "default" | "toolbar";
   itemLayout?: "auto" | "equal";
   denseEqualRow?: boolean;
+  centerEqualRow?: boolean;
 }) {
   const normalize = (href: string) => href.replace(/\/$/, "");
   const compactItems = itemLayout === "equal" ? false : items.length > 4;

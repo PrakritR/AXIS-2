@@ -8,6 +8,7 @@ import { PropertySearchPicker } from "@/components/marketing/property-search-pic
 import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
 import { GroupInviteCallout } from "@/components/marketing/group-invite-callout";
 import { GroupLeaderAppIdField } from "@/components/marketing/group-leader-app-id-field";
+import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
