@@ -1,4 +1,5 @@
 import type { RentalWizardFormState } from "./types";
+import { RENTAL_WIZARD_STEP_SCHEMA } from "./wizard-step-schema";
 
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -94,5 +95,6 @@ export function createInitialRentalWizardState(): RentalWizardFormState {
     applicationFeeWaiverCode: "",
     applicationFeeWaived: false,
     customFieldAnswers: [],
+    wizardStepSchema: RENTAL_WIZARD_STEP_SCHEMA,
   };
 }

@@ -2,6 +2,8 @@ import type { ManagerCustomApplicationFieldType } from "@/lib/manager-listing-su
 
 export const RENTAL_WIZARD_STEP_COUNT = 11;
 
+export { RENTAL_WIZARD_STEP_SCHEMA } from "./wizard-step-schema";
+
 export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
 /** Primary lease applicant vs. co-signer on someone else's application. */
@@ -185,6 +187,8 @@ export type RentalWizardFormState = {
    * checkout) resumes exactly where they left off, not back at step 1. NOT an
    * application answer — validation, charges, and the manager view ignore it.
    */
+  /** Current wizard step schema; absent rows use legacy 12-step remapping on resume. */
+  wizardStepSchema?: number;
   wizardStep?: number;
   wizardMaxStepReached?: number;
 };

@@ -37,6 +37,7 @@ import {
 } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { makeApplicationGroupId } from "@/lib/rental-application/application-groups";
+import { loadRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
   customFieldAnswerValue,
@@ -341,6 +342,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   // stable axis id an upload attaches to; falls back to the form email context.
   const photosReadOnly = mode === "editor";
   const getApplicationId = p.getApplicationId ?? (() => form.email.trim().toLowerCase() || "");
+  const savedApplicationId = loadRentalWizardDraftAxisId()?.trim() ?? "";
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
@@ -411,10 +413,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   onChange={(v) => patch({ applicantRole: "signer", hasCosigner: v })}
                 />
               </ApplyFieldRow>
-              {form.hasCosigner === "yes" && p.getApplicationId ? (
+              {form.hasCosigner === "yes" && savedApplicationId ? (
                 <div className="px-4 pb-5 sm:px-5">
                   <CosignerInviteCallout
-                    signerAppId={getApplicationId().trim()}
+                    signerAppId={savedApplicationId}
                     signerName={form.fullLegalName.trim() || undefined}
                     className="rounded-2xl border border-border bg-accent/30 p-4"
                   />
@@ -480,9 +482,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                         patch({
                           groupLeaderAppId: next,
                           groupRole: trimmed ? "joining" : "first",
-                          groupId: trimmed
-                            ? form.groupId
-                            : form.groupId.trim() || makeApplicationGroupId(),
+                          groupId: trimmed ? form.groupId : makeApplicationGroupId(),
                           ...(trimmed ? { groupSize: "" } : {}),
                         });
                       }}
@@ -500,10 +500,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                     />
                   </ApplyFieldRow>
 
-                  {organizingGroup && p.getApplicationId ? (
+                  {organizingGroup && savedApplicationId ? (
                     <div className="px-4 pb-5 sm:px-5">
                       <GroupInviteCallout
-                        leaderAppId={getApplicationId().trim()}
+                        leaderAppId={savedApplicationId}
                         organizerName={form.fullLegalName.trim() || undefined}
                         propertyId={form.propertyId.trim() || undefined}
                         className="rounded-2xl border border-border bg-accent/30 p-4"

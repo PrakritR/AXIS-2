@@ -30,6 +30,7 @@ import {
   isElementOnScreen,
   parsePersistedWizardStep,
 } from "@/components/marketing/rental-application-wizard";
+import { RENTAL_WIZARD_STEP_SCHEMA } from "@/lib/rental-application/wizard-step-schema";
 
 function params(query: Record<string, string>): URLSearchParams {
   return new URLSearchParams(query);
@@ -98,16 +99,23 @@ describe("initialWizardStepFromRequest", () => {
 // The step PERSISTED on the server application record covers the full range and
 // is what the reconciliation effect uses to land them back where they were.
 describe("parsePersistedWizardStep", () => {
-  it("accepts any real step 1..11 (covers the return-from-payment step 11 case)", () => {
-    expect(parsePersistedWizardStep(1)).toBe(1);
-    expect(parsePersistedWizardStep(4)).toBe(4);
-    expect(parsePersistedWizardStep(11)).toBe(11);
-    expect(parsePersistedWizardStep("11")).toBe(11);
+  it("accepts any real step 1..11 on the current schema", () => {
+    expect(parsePersistedWizardStep(1, RENTAL_WIZARD_STEP_SCHEMA)).toBe(1);
+    expect(parsePersistedWizardStep(4, RENTAL_WIZARD_STEP_SCHEMA)).toBe(4);
+    expect(parsePersistedWizardStep(11, RENTAL_WIZARD_STEP_SCHEMA)).toBe(11);
+    expect(parsePersistedWizardStep("11", RENTAL_WIZARD_STEP_SCHEMA)).toBe(11);
+  });
+
+  it("remaps legacy 12-step persisted values onto the current flow", () => {
+    expect(parsePersistedWizardStep(12)).toBe(11);
+    expect(parsePersistedWizardStep(11)).toBe(10);
+    expect(parsePersistedWizardStep(4)).toBe(2);
+    expect(parsePersistedWizardStep(2)).toBe(1);
   });
 
   it("rejects out-of-range, missing, or malformed values", () => {
     expect(parsePersistedWizardStep(0)).toBeNull();
-    expect(parsePersistedWizardStep(12)).toBeNull();
+    expect(parsePersistedWizardStep(13)).toBeNull();
     expect(parsePersistedWizardStep(undefined)).toBeNull();
     expect(parsePersistedWizardStep(null)).toBeNull();
     expect(parsePersistedWizardStep("abc")).toBeNull();

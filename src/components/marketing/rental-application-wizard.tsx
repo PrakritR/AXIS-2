@@ -79,6 +79,7 @@ import {
   shouldAutoComputeLeaseEnd,
 } from "@/lib/rental-application/lease-dates";
 import { RENTAL_WIZARD_STEP_COUNT } from "@/lib/rental-application/types";
+import { normalizePersistedWizardStep } from "@/lib/rental-application/wizard-step-schema";
 import { normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
 import {
   activeApplicationWizardSteps,
@@ -211,10 +212,8 @@ function parseBoundedWizardStep(raw: string | null): number | null {
  * redirect (a Stripe checkout) or reload deep in the form, instead of dumping
  * them back at step 1.
  */
-export function parsePersistedWizardStep(raw: unknown): number | null {
-  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
-  if (!Number.isFinite(parsed) || parsed < 1 || parsed > RENTAL_WIZARD_STEP_COUNT) return null;
-  return Math.floor(parsed);
+export function parsePersistedWizardStep(raw: unknown, schema?: unknown): number | null {
+  return normalizePersistedWizardStep(raw, schema);
 }
 
 /**
@@ -496,8 +495,9 @@ function RentalApplicationWizardInner({
 
   useEffect(() => {
     if (templatePreview || form.applicantRole !== "cosigner") return;
-    router.replace("/rent/apply/cosigner");
-  }, [form.applicantRole, router, templatePreview]);
+    const query = searchParams.toString();
+    router.replace(query ? `/rent/apply/cosigner?${query}` : "/rent/apply/cosigner");
+  }, [form.applicantRole, router, searchParams, templatePreview]);
 
   useEffect(() => {
     if (mode !== "portal" && mode !== "manager") return;
@@ -847,9 +847,12 @@ function RentalApplicationWizardInner({
         // `searchParams` lookup, which the step-tracking effect already
         // overwrote to match `step`'s initial value of 1 before this async fetch
         // resolved.
-        const persistedStep = parsePersistedWizardStep(hit.application.wizardStep);
+        const persistedStep = parsePersistedWizardStep(hit.application.wizardStep, hit.application.wizardStepSchema);
         const resumedStep = persistedStep ?? parseBoundedWizardStep(initialWizardStepParamRef.current);
-        const persistedMax = parsePersistedWizardStep(hit.application.wizardMaxStepReached);
+        const persistedMax = parsePersistedWizardStep(
+          hit.application.wizardMaxStepReached,
+          hit.application.wizardStepSchema,
+        );
         if (resumedStep) {
           setStep(resumedStep);
           setMaxStepReached((prev) => Math.max(prev, persistedMax ?? 0, resumedStep));
@@ -928,8 +931,11 @@ function RentalApplicationWizardInner({
       saveRentalWizardDraftAxisId(hit.id);
       saveRentalWizardDraft(restored);
       setForm(restored);
-      const persistedStep = parsePersistedWizardStep(hit.application.wizardStep);
-      const persistedMax = parsePersistedWizardStep(hit.application.wizardMaxStepReached);
+        const persistedStep = parsePersistedWizardStep(hit.application.wizardStep, hit.application.wizardStepSchema);
+        const persistedMax = parsePersistedWizardStep(
+          hit.application.wizardMaxStepReached,
+          hit.application.wizardStepSchema,
+        );
       if (persistedStep) {
         setStep(persistedStep);
         setMaxStepReached((prev) => Math.max(prev, persistedMax ?? 0, persistedStep));
