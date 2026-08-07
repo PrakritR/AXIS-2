@@ -47,12 +47,27 @@ export function buildPortalApplicationOpenHref(axisId: string): string {
   return `/portal/applications?open=${encodeURIComponent(id)}`;
 }
 
+/** Approved application id for a resident email when unambiguous (exactly one approved row). */
+export function approvedApplicationAxisIdForResidentEmail(email: string): string | null {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+  const approved = readManagerApplicationRows().filter(
+    (row) => row.bucket === "approved" && row.email?.trim().toLowerCase() === normalized,
+  );
+  if (approved.length !== 1) return null;
+  return approved[0]!.id.trim() || null;
+}
+
 /** Same application id shown in property portal + create-account; not derived from auth user UUID. */
 export function resolveResidentPortalAxisId(input: {
   profileManagerId?: string | null;
   authUserAxisId?: string | null;
   applicationRowId?: string | null;
+  /** Wins over drifted profiles.manager_id when the resident has one clear approved application. */
+  approvedApplicationRowId?: string | null;
 }): string {
+  const fromApproved = input.approvedApplicationRowId?.trim();
+  if (fromApproved) return normalizeApplicationAxisId(fromApproved);
   const fromProfile = input.profileManagerId?.trim();
   if (fromProfile) return normalizeApplicationAxisId(fromProfile);
   const fromAuth = typeof input.authUserAxisId === "string" ? input.authUserAxisId.trim() : "";

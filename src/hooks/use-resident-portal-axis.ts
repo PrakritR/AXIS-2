@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
+  approvedApplicationAxisIdForResidentEmail,
   readManagerApplicationRows,
   resolveResidentPortalAxisId,
 } from "@/lib/manager-applications-storage";
@@ -24,6 +25,7 @@ export function useResidentPortalAxisContext() {
     }
     let cancelled = false;
     const normalizedEmail = (session.email ?? "").trim().toLowerCase();
+    const approvedApplicationRowId = approvedApplicationAxisIdForResidentEmail(normalizedEmail);
     const matchingApplication = readManagerApplicationRows()
       .slice()
       .reverse()
@@ -33,7 +35,12 @@ export function useResidentPortalAxisContext() {
       queueMicrotask(() => {
         if (cancelled) return;
         setProfileManagerId(null);
-        setResidentAxisId(resolveResidentPortalAxisId({ applicationRowId: matchingApplication?.id }));
+        setResidentAxisId(
+          resolveResidentPortalAxisId({
+            applicationRowId: matchingApplication?.id,
+            approvedApplicationRowId,
+          }),
+        );
         setAxisResolved(true);
       });
       return;
@@ -55,6 +62,7 @@ export function useResidentPortalAxisContext() {
             profileManagerId: profile?.manager_id,
             authUserAxisId: metaAxis,
             applicationRowId: matchingApplication?.id,
+            approvedApplicationRowId,
           }),
         );
       } catch {

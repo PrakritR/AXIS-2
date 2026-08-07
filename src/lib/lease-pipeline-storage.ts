@@ -1783,6 +1783,14 @@ export function residentLeaseAuthorized(row: LeasePipelineRow, ctx: ResidentLeas
     if (app?.managerUserId && row.managerUserId && app.managerUserId === row.managerUserId) return true;
   }
 
+  // profiles.manager_id can drift onto a stale audit application while the live
+  // lease still names the approved application id — match any approved row.
+  for (const app of readManagerApplicationRows()) {
+    if (app.bucket !== "approved" || app.email?.trim().toLowerCase() !== email) continue;
+    if (row.axisId?.trim() && app.id.trim().toUpperCase() === row.axisId.trim().toUpperCase()) return true;
+    if (app.managerUserId && row.managerUserId && app.managerUserId === row.managerUserId) return true;
+  }
+
   // API-scoped fetch is authoritative; allow when email matches and no conflicting axis binding.
   return !residentAxisId || !row.axisId?.trim();
 }
