@@ -7,7 +7,8 @@ import {
   FilterFieldsAccordion,
   FilterSingleSelectDropdown,
 } from "@/components/portal/filter-field-lists";
-import type { ReportFilterState, ReportResult, ReportRow } from "@/lib/reports/types";
+import type { ReportFilterState } from "@/components/portal/reports/report-filter-bar";
+import type { ReportResult, ReportRow } from "@/lib/reports/types";
 
 export type FinanceRowFilterState = {
   resident: string;
