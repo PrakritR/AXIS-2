@@ -439,6 +439,9 @@ export function useFieldSelectMenu({
         portalHost.matches('[data-slot="portal-filter-dropdown-panel"]');
       const inVaulSheet =
         portalHost !== document.body && portalHost.matches('[data-slot="vaul-bottom-sheet"]');
+      const inModalDialog =
+        portalHost !== document.body && portalHost.matches('[data-slot="modal-radix-dialog"]');
+      const useHostAnchoredMenu = inFilterPanel || inVaulSheet || inModalDialog;
       setMenuRect(
         align === "end"
           ? computePortalFilterDropdownRect(button, contentPx, {
@@ -450,11 +453,11 @@ export function useFieldSelectMenu({
                     ?.getBoundingClientRect() ?? undefined)
                 : undefined,
             })
-          : inFilterPanel || inVaulSheet
+          : useHostAnchoredMenu
             ? computeFieldSelectMenuRectInHost(button, contentPx, portalHost, {
                 minWidth: minMenuWidth,
-                preferOpenDown: preferOpenDown || inVaulSheet,
-                matchTriggerWidth: matchTriggerWidth || inVaulSheet,
+                preferOpenDown: preferOpenDown || inVaulSheet || inModalDialog,
+                matchTriggerWidth: matchTriggerWidth || inVaulSheet || inModalDialog,
                 hostPaddingPx: inVaulSheet ? 0 : undefined,
                 topInsetPx: fieldSelectHostTopInsetPx(portalHost),
                 /* FALLBACK ONLY. Containment comes first, so this bound is reached solely

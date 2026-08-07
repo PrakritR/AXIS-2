@@ -2,6 +2,21 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
+import { mockFreeApplicationFee } from "../helpers/e2e-supabase";
+import {
+  continueBtn,
+  fillAdditionalDetailsStep,
+  fillConsentStep,
+  fillCurrentAddressStep,
+  fillEmploymentStep,
+  fillHouseholdStep,
+  fillPreviousAddressStep,
+  fillPropertyLeaseStep,
+  fillReferencesStep,
+  fillSignerStep,
+  openGuestApplyWizard,
+  type HouseholdConfig,
+} from "../helpers/rental-wizard-e2e";
 
 /**
  * Group applications (roommates / bundled-lease household) — full round trip.
@@ -170,40 +185,15 @@ async function signIn(page: Page, email: string, password: string, next: string,
   await page.waitForURL((url) => url.pathname.startsWith(expectPrefix), { timeout: 45_000 });
 }
 
-function continueBtn(page: Page) {
-  return vis(page, '[data-attr="rental-wizard-continue"]');
-}
-
-async function yesNo(page: Page, fieldKey: string, answer: "Yes" | "No") {
-  await page
-    .locator(`[data-wizard-field="${fieldKey}"] button`, { hasText: new RegExp(`^${answer}$`) })
-    .filter({ visible: true })
-    .first()
-    .click();
-}
-
-function isoInDays(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Fill wizard step 1 (the group question — the surface under test). */
-async function fillGroupStep(
-  page: Page,
+function toHouseholdConfig(
   group: { role: "first"; size: string } | { role: "joining"; groupId: string },
-) {
-  await yesNo(page, "applyingAsGroup", "Yes");
-  if (group.role === "first") {
-    await btn(page, /I am the first person applying/i).click();
-    await vis(page, "#groupSize").selectOption(group.size);
-  } else {
-    await btn(page, /I am joining an existing group/i).click();
-    await vis(page, "#groupId").fill(group.groupId);
-  }
+): HouseholdConfig {
+  return group.role === "first"
+    ? { kind: "group-first", size: group.size }
+    : { kind: "group-joining", groupId: group.groupId };
 }
 
-/** Walk the 12-step wizard and submit, either signed in (portal) or as a guest. */
+/** Walk the 11-step wizard and submit, either signed in (portal) or as a guest. */
 async function submitApplication(
   page: Page,
   applicant: { email: string; password: string; name: string },
@@ -213,91 +203,65 @@ async function submitApplication(
 ) {
   if (mode === "portal") {
     await signIn(page, applicant.email, applicant.password, "/resident/dashboard", "/resident");
+    await page.goto(`/rent/apply?propertyId=${PROPERTY_ID}`);
+    await expect(continueBtn(page)).toBeVisible({ timeout: 30_000 });
+  } else {
+    await mockFreeApplicationFee(page);
+    await openGuestApplyWizard(page, PROPERTY_ID);
   }
-  await page.goto(`/rent/apply?propertyId=${PROPERTY_ID}`);
-  await expect(continueBtn(page)).toBeVisible({ timeout: 30_000 });
 
-  // --- Step 1: group ---
-  await fillGroupStep(page, group);
-  await shot(page, `${label}-01-wizard-step1-group`);
+  // Step 1 — household (group + co-signer on one step).
+  await fillHouseholdStep(page, toHouseholdConfig(group));
+  await shot(page, `${label}-01-wizard-step1-household`);
   await continueBtn(page).click();
 
-  // --- Step 2: co-signer ---
-  await expect(vis(page, '[data-wizard-field="hasCosigner"]')).toBeVisible();
-  await yesNo(page, "hasCosigner", "No");
+  // Step 2 — signer information.
+  await fillSignerStep(page, applicant, "04/12/1994");
   await continueBtn(page).click();
 
-  // --- Step 3: property + lease dates (property locked via ?propertyId) ---
-  await expect(vis(page, "#leaseTerm")).toBeVisible();
-  const leaseTerm = vis(page, "#leaseTerm");
-  const leaseTermValues = await leaseTerm
-    .locator("option")
-    .evaluateAll((opts) => (opts as HTMLOptionElement[]).map((o) => o.value).filter(Boolean));
-  await leaseTerm.selectOption(leaseTermValues[0]!);
-  await vis(page, "#leaseStart").fill(isoInDays(30));
-  await vis(page, "#leaseStart").blur();
-  const leaseEnd = vis(page, "#leaseEnd");
-  if ((await leaseEnd.count()) && !(await leaseEnd.inputValue())) await leaseEnd.fill(isoInDays(395));
+  // Step 3 — property + lease dates (property locked via ?propertyId).
+  await fillPropertyLeaseStep(page);
   await continueBtn(page).click();
 
-  // --- Step 4: applicant ---
-  await expect(vis(page, "#fullLegalName")).toBeVisible();
-  await vis(page, "#fullLegalName").fill(applicant.name);
-  await vis(page, "#dateOfBirth").fill("1994-04-12");
-  await vis(page, "#ssn").fill("123456789");
-  await vis(page, "#driversLicense").fill("WDL9931002");
-  await vis(page, "#phone").fill("2065550142");
-  const email = vis(page, "#email");
-  if (await email.isEditable()) await email.fill(applicant.email);
+  // Step 4 — current address.
+  await fillCurrentAddressStep(page, {
+    street: "88 Dexter Ave N, Apt 4",
+    city: "Seattle",
+    state: "WA",
+    zip: "98109",
+  });
   await continueBtn(page).click();
 
-  // --- Step 5: current address ---
-  await expect(vis(page, "#currentStreet")).toBeVisible();
-  await vis(page, "#currentStreet").fill("88 Dexter Ave N, Apt 4");
-  await vis(page, "#currentCity").fill("Seattle");
-  await vis(page, "#currentState").fill("WA");
-  await vis(page, "#currentZip").fill("98109");
+  // Step 5 — previous address.
+  await fillPreviousAddressStep(page);
   await continueBtn(page).click();
 
-  // --- Step 6: previous address ---
-  await txt(page, "I do not have a previous address to provide").click();
+  // Step 6 — employment + income.
+  await fillEmploymentStep(page, "Northwest Design Co.", "6400");
   await continueBtn(page).click();
 
-  // --- Step 7: employment + income ---
-  await expect(vis(page, "#employer")).toBeVisible();
-  await vis(page, "#employer").fill("Northwest Design Co.");
-  await vis(page, "#monthlyIncome").fill("6400");
+  // Step 7 — references.
+  await fillReferencesStep(page, {
+    name: "Dana Whitfield",
+    relationship: "Former landlord",
+    phone: "2065550188",
+  });
   await continueBtn(page).click();
 
-  // --- Step 8: references ---
-  await expect(vis(page, "#ref1Name")).toBeVisible();
-  await vis(page, "#ref1Name").fill("Dana Whitfield");
-  await vis(page, "#ref1Relationship").fill("Former landlord");
-  await vis(page, "#ref1Phone").fill("2065550188");
+  // Step 8 — additional details.
+  await fillAdditionalDetailsStep(page, "2");
   await continueBtn(page).click();
 
-  // --- Step 9: additional details ---
-  await expect(vis(page, "#occupancyCount")).toBeVisible();
-  await vis(page, "#occupancyCount").selectOption("2");
-  await yesNo(page, "evictionHistory", "No");
-  await yesNo(page, "bankruptcyHistory", "No");
-  await yesNo(page, "criminalHistory", "No");
+  // Step 9 — consent + signature.
+  await fillConsentStep(page, applicant.name);
   await continueBtn(page).click();
 
-  // --- Step 10: consent + signature ---
-  await expect(vis(page, "#digitalSignature")).toBeVisible();
-  await vis(page, '[data-wizard-field="consentCredit"] input[type="checkbox"]').check();
-  await vis(page, '[data-wizard-field="consentTruth"] input[type="checkbox"]').check();
-  await vis(page, "#digitalSignature").fill(applicant.name);
-  await vis(page, "#dateSigned").fill(isoInDays(0));
-  await continueBtn(page).click();
-
-  // --- Step 11: review ---
+  // Step 10 — review.
   await expect(txt(page, "Applying as group")).toBeVisible({ timeout: 15_000 });
   await shot(page, `${label}-02-wizard-review`);
   await continueBtn(page).click();
 
-  // --- Step 12: submit (this listing charges no application fee) ---
+  // Step 11 — submit (this listing charges no application fee).
   await expect(continueBtn(page)).toHaveText(/submit application/i, { timeout: 15_000 });
   await shot(page, `${label}-03-wizard-submit-step`);
 
@@ -313,7 +277,6 @@ async function submitApplication(
   if (!persisted) throw new Error(`No submitted application persisted for ${applicant.email}`);
 
   if (mode === "guest") {
-    // Guest flow keeps the standalone finish panel mounted.
     await expect(txt(page, /Application ID:/i)).toBeVisible({ timeout: 60_000 });
   }
   await page.waitForTimeout(500);
@@ -328,8 +291,8 @@ async function reEditApplication(page: Page, applicantName: string) {
   // exact path that used to drop a member out of their household on save.
   await btn(page, /I am the first person applying/i).click();
   await vis(page, "#groupSize").selectOption("2");
-  for (let i = 0; i < 10; i += 1) {
-    await btn(page, /^Continue$/).click();
+  for (let i = 0; i < 9; i += 1) {
+    await continueBtn(page).click();
     await page.waitForTimeout(250);
   }
   await btn(page, /Save application/i).click();
