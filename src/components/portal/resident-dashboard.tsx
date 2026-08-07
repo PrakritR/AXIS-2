@@ -19,6 +19,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useResidentDashboardVisibility } from "@/hooks/use-resident-dashboard-visibility";
+import { useResidentPortalAxisContext } from "@/hooks/use-resident-portal-axis";
 import { RESIDENT_DASHBOARD_SECTIONS } from "@/lib/resident-dashboard-preferences";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -416,6 +417,7 @@ export function ResidentDashboard({
   const canUsePayments = applicationApproved;
   const canUseServices = leaseSigned;
   const userId = session.userId ?? residentUserId;
+  const { residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
   const { visibility, setVisible, reset } = useResidentDashboardVisibility(userId);
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
@@ -526,7 +528,10 @@ export function ResidentDashboard({
       };
     }
 
-    const leaseRow = email ? findLeaseForResidentEmail(email) : null;
+    const leaseRow =
+      email && axisResolved
+        ? findLeaseForResidentEmail(email, { email, residentAxisId, profileManagerId })
+        : null;
     const lease = leaseBadge(leaseRow, appStatus === "approved");
 
     const workOrders = email
@@ -562,7 +567,7 @@ export function ResidentDashboard({
       applicationRows: email ? applicationsForResidentEmail(email) : [],
       serviceItems,
     };
-  }, [tick, email, appStatus, residentUserId, clientReady]);
+  }, [tick, email, appStatus, residentUserId, clientReady, axisResolved, residentAxisId, profileManagerId]);
 
   const {
     leaseRow,

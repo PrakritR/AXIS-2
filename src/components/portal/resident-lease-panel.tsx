@@ -29,13 +29,7 @@ import {
   residentUploadLeasePdf,
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
-import {
-  readManagerApplicationRows,
-  resolveResidentPortalAxisId,
-} from "@/lib/manager-applications-storage";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { usePortalSession } from "@/hooks/use-portal-session";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { useResidentPortalAxisContext } from "@/hooks/use-resident-portal-axis";
 
 /**
  * Self-contained resident Lease tab: review + sign the lease and download or
@@ -44,67 +38,12 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
  */
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
-  const session = usePortalSession();
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
-  const [residentAxisId, setResidentAxisId] = useState("");
-  const [profileManagerId, setProfileManagerId] = useState<string | null>(null);
-  const [axisResolved, setAxisResolved] = useState(false);
-  const email = session.email?.trim() || null;
-
-  useEffect(() => {
-    if (!session.userId) {
-      queueMicrotask(() => setAxisResolved(true));
-      return;
-    }
-    let cancelled = false;
-    const normalizedEmail = (session.email ?? "").trim().toLowerCase();
-    const matchingApplication = readManagerApplicationRows()
-      .slice()
-      .reverse()
-      .find((row) => row.email?.trim().toLowerCase() === normalizedEmail);
-
-    if (isDemoModeActive()) {
-      queueMicrotask(() => {
-        if (cancelled) return;
-        setProfileManagerId(null);
-        setResidentAxisId(resolveResidentPortalAxisId({ applicationRowId: matchingApplication?.id }));
-        setAxisResolved(true);
-      });
-      return;
-    }
-
-    void (async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const [{ data: profile }, { data: authUser }] = await Promise.all([
-          supabase.from("profiles").select("manager_id").eq("id", session.userId).maybeSingle(),
-          supabase.auth.getUser(),
-        ]);
-        if (cancelled) return;
-        const meta = authUser?.user?.user_metadata as Record<string, unknown> | undefined;
-        const metaAxis = typeof meta?.axis_id === "string" ? meta.axis_id : null;
-        setProfileManagerId(profile?.manager_id ?? null);
-        setResidentAxisId(
-          resolveResidentPortalAxisId({
-            profileManagerId: profile?.manager_id,
-            authUserAxisId: metaAxis,
-            applicationRowId: matchingApplication?.id,
-          }),
-        );
-      } catch {
-        /* ignore */
-      } finally {
-        if (!cancelled) setAxisResolved(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [session.userId, session.email]);
+  const { email, residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
 
   useEffect(() => {
     const on = () => setPipelineTick((t) => t + 1);
@@ -132,9 +71,9 @@ export function ResidentLeasePanel() {
     return residentLeaseAuthorized(pipelineRow, {
       email,
       residentAxisId,
-      profileManagerId: residentAxisId,
+      profileManagerId,
     });
-  }, [pipelineRow, email, residentAxisId]);
+  }, [pipelineRow, email, residentAxisId, profileManagerId]);
 
   const leaseCtx = useMemo(() => {
     if (pipelineRow?.application && Object.keys(pipelineRow.application).length > 0) {

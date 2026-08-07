@@ -139,6 +139,7 @@ function buildResidentSections(
   email: string,
   userId: string | null,
   residentAxisId: string,
+  profileManagerId: string | null = null,
 ): DownloadSection[] {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return [];
@@ -161,7 +162,7 @@ function buildResidentSections(
   const leaseRow = findLeaseForResidentEmail(normalizedEmail, {
     email: normalizedEmail,
     residentAxisId,
-    profileManagerId: residentAxisId,
+    profileManagerId,
   });
   if (leaseRow && hasBothLeaseSignatures(leaseRow)) {
     const leaseName = `Signed lease${leaseRow.unit ? ` · ${leaseRow.unit}` : ""}`;
@@ -307,6 +308,7 @@ export function DocumentsDownloadAllModal({
   residentEmail = "",
   residentUserId = null,
   residentAxisId = "",
+  profileManagerId = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -315,6 +317,7 @@ export function DocumentsDownloadAllModal({
   residentEmail?: string;
   residentUserId?: string | null;
   residentAxisId?: string;
+  profileManagerId?: string | null;
 }) {
   const { showToast } = useAppUi();
   const [sections, setSections] = useState<DownloadSection[]>([]);
@@ -327,7 +330,7 @@ export function DocumentsDownloadAllModal({
     const next =
       portal === "manager"
         ? buildManagerSections(userId)
-        : buildResidentSections(residentEmail, residentUserId, residentAxisId);
+        : buildResidentSections(residentEmail, residentUserId, residentAxisId, profileManagerId);
     setSections(next);
     const allIds = new Set(next.flatMap((section) => section.items.map((item) => item.id)));
     setSelectedIds(allIds);
@@ -339,7 +342,7 @@ export function DocumentsDownloadAllModal({
       }
     }
     runMapRef.current = runMap;
-  }, [portal, userId, residentEmail, residentUserId, residentAxisId]);
+  }, [portal, userId, residentEmail, residentUserId, residentAxisId, profileManagerId]);
 
   useEffect(() => {
     if (!open) return;
