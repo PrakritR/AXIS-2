@@ -28,6 +28,7 @@ import {
   PROPERTY_DETAIL_TOP_TAB_LABELS,
   PROPERTY_DETAIL_TOP_TAB_SHORT_LABELS,
   propertyDetailHref,
+  propertyListHref,
   propertyDetailTopNavId,
   parsePropertyDetailTab,
   type PropertyDetailTabId,
@@ -157,6 +158,7 @@ function ManagerPropertyInlineDetails({
   bucket,
   row,
   onUpdated,
+  onAfterUnlist,
   showToast,
   managerUserId,
   skuTier,
@@ -171,6 +173,7 @@ function ManagerPropertyInlineDetails({
   bucket: AdminPropertyBucketIndex;
   row: AdminPropertyRow | null;
   onUpdated: () => void;
+  onAfterUnlist?: (propertyKey: string) => void;
   showToast: (m: string) => void;
   managerUserId: string | null;
   skuTier: string | null;
@@ -514,9 +517,16 @@ function ManagerPropertyInlineDetails({
           setPendingDestructiveAction(null);
           return;
         }
-        run("Listing unlisted.", unlistManagerListing(listingId, managerUserId));
+        const ok = unlistManagerListing(listingId, managerUserId);
         setDestructiveBusy(false);
         setPendingDestructiveAction(null);
+        if (!ok) {
+          showToast("Could not unlist.");
+          return;
+        }
+        showToast("Listing unlisted.");
+        onUpdated();
+        onAfterUnlist?.(listingId.trim() || row.adminRefId.trim());
       }
     });
   };
@@ -962,6 +972,7 @@ function ManagerPropertyInlineDetails({
 export function ManagerHousePropertiesPanel({
   showToast,
   activeStage,
+  onStageChange,
   onSendToProspect,
   skuTier,
   skuLoaded,
@@ -990,6 +1001,20 @@ export function ManagerHousePropertiesPanel({
   const [detailHeaderActions, setDetailHeaderActions] = useState<ReactNode>(null);
   const detailHeaderKeyRef = useRef<string | null>(null);
   const handlePropertyUpdated = useCallback(() => setTick((t) => t + 1), []);
+  const handleAfterUnlist = useCallback(
+    (propertyKey: string) => {
+      onStageChange("unlisted");
+      if (propertyKeyProp) {
+        router.push(
+          propertyDetailHref(propertiesBase, "unlisted", propertyKey, detailTabProp ?? "preview"),
+          { scroll: false },
+        );
+      } else {
+        router.push(propertyListHref(propertiesBase, "unlisted"), { scroll: false });
+      }
+    },
+    [detailTabProp, onStageChange, propertiesBase, propertyKeyProp, router],
+  );
   const handleDetailHeaderActions = useCallback((key: string, actions: ReactNode) => {
     if (key === "none") {
       detailHeaderKeyRef.current = null;
@@ -1083,6 +1108,7 @@ export function ManagerHousePropertiesPanel({
       bucket={sourceBucket}
       row={row}
       onUpdated={handlePropertyUpdated}
+      onAfterUnlist={handleAfterUnlist}
       showToast={showToast}
       managerUserId={managerUserId}
       skuTier={skuTier}

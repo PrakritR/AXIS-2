@@ -59,6 +59,10 @@ import {
 import { PortalAssistantConfigProvider } from "@/lib/axis-assistant/portal-assistant-context";
 import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { cn } from "@/lib/utils";
+import {
+  shouldHideAssistantFab,
+  subscribeAssistantFabVisibility,
+} from "@/lib/axis-assistant/fab-visibility";
 
 const AxisAssistantPresenceContext = createContext(false);
 
@@ -117,22 +121,7 @@ function handleOpenAssistant() {
  */
 function AxisAssistantFixedTrigger({ docked }: { docked: boolean }) {
   const open = useAxisAssistantOpen();
-  const hideFab = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof document === "undefined") return () => {};
-      const obs = new MutationObserver(onStoreChange);
-      obs.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["data-hide-assistant-fab", "data-communication-surface"],
-      });
-      return () => obs.disconnect();
-    },
-    () =>
-      typeof document !== "undefined" &&
-      (document.documentElement.hasAttribute("data-hide-assistant-fab") ||
-        document.documentElement.hasAttribute("data-communication-surface")),
-    () => false,
-  );
+  const hideFab = useSyncExternalStore(subscribeAssistantFabVisibility, shouldHideAssistantFab, () => false);
   if (open || hideFab) return null;
 
   return (
@@ -166,6 +155,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const { dockable, mode, setMode } = useAxisAssistantDock();
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
+  const hideFab = useSyncExternalStore(subscribeAssistantFabVisibility, shouldHideAssistantFab, () => false);
   const [panelReady, setPanelReady] = useState(false);
   // This is the same provider consumed by the dock rail, so switching layouts
   // cannot fork the conversation or strand a pending confirmation.
@@ -222,6 +212,10 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     });
     return () => cancelAnimationFrame(frame);
   }, [open]);
+
+  useEffect(() => {
+    if (hideFab && open) closeAxisAssistant();
+  }, [hideFab, open]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });

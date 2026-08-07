@@ -182,7 +182,7 @@ export function appendPartnerInboxMessage(payload: { name: string; email: string
   });
 }
 
-/** Property, resident, or vendor portal → admin inbox */
+/** Property, resident, or vendor portal → admin inbox (one thread per sender email). */
 export function appendPortalMessageToAdminInbox(payload: {
   role: "manager" | "resident" | "vendor";
   name: string;
@@ -190,6 +190,33 @@ export function appendPortalMessageToAdminInbox(payload: {
   topic: string;
   body: string;
 }): InboxMessage {
+  const rows = readAll();
+  const senderEmail = payload.email.trim().toLowerCase();
+  const existingIdx = rows.findIndex(
+    (r) =>
+      r.folder === "inbox" &&
+      r.email.trim().toLowerCase() === senderEmail &&
+      r.senderRole === payload.role,
+  );
+  if (existingIdx !== -1) {
+    const row = rows[existingIdx]!;
+    const reply: InboxThreadReply = {
+      id: crypto.randomUUID(),
+      authorLabel: payload.name,
+      body: payload.body.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const next = [...rows];
+    next[existingIdx] = {
+      ...row,
+      topic: payload.topic.trim() || row.topic,
+      read: false,
+      createdAt: new Date().toISOString(),
+      thread: [...row.thread, reply],
+    };
+    writeAll(next);
+    return next[existingIdx]!;
+  }
   return appendInboxMessage({
     name: payload.name,
     email: payload.email,
@@ -288,7 +315,7 @@ export function markPartnerInboxMessageRead(id: string): boolean {
 }
 
 export function roleAllowsThread(role: InboxSenderRole): boolean {
-  return role === "manager" || role === "resident" || role === "partner" || role === "admin";
+  return role === "manager" || role === "resident" || role === "vendor" || role === "partner" || role === "admin";
 }
 
 export type PartnerInboxMessage = InboxMessage;

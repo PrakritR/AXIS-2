@@ -23,6 +23,7 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
   composeDirectoryCategories,
+  composeValidPersonKeys,
   isAdminOnlyDirectorySelection,
   mergeAdminComposePersonKey,
   type InboxComposeDirectoryCategory,
@@ -188,7 +189,6 @@ export function ManagerCommunicationComposeModal({
 
   const personGroups = useMemo((): CheckboxMultiSelectGroup[] => {
     return directoryCategories
-      .filter((category) => category !== "admin")
       .map((category) => ({
         label: categoryLabel(category),
         options: peopleForCategory(category, contacts).map((p) => ({
@@ -200,7 +200,10 @@ export function ManagerCommunicationComposeModal({
   }, [directoryCategories, contacts]);
 
   const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
-  const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+  const validPersonKeys = useMemo(
+    () => composeValidPersonKeys(flatPersonOptions.map((o) => o.value), directoryCategories),
+    [directoryCategories, flatPersonOptions],
+  );
   const adminOnlyDirectory = isAdminOnlyDirectorySelection(directoryCategories);
 
   useEffect(() => {
@@ -288,6 +291,8 @@ export function ManagerCommunicationComposeModal({
       categoryOptions.includes(v as ComposeCategory),
     );
     setSelectedCategories(cats);
+    const dirs = cats.filter((c): c is DirectoryComposeCategory => c !== "other");
+    setSelectedKeys((prev) => mergeAdminComposePersonKey(dirs, prev));
   };
 
   const resolveEmailTargets = () => {
@@ -560,7 +565,7 @@ export function ManagerCommunicationComposeModal({
     try {
       if (viaEmail) {
         const emailTargets = resolveEmailTargets();
-        if (emailTargets.includesAxisAdmin) {
+        if (emailTargets.includesAxisAdmin && isDemoModeActive()) {
           appendPortalMessageToAdminInbox({
             role: "manager",
             name: senderName,

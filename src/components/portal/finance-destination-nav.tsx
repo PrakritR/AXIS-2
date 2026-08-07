@@ -69,7 +69,7 @@ export function FinanceDestinationNav({
   }));
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 pl-1.5 md:pl-3">
       <LocalDestinationNav
         items={groupItems}
         activeId={activeGroupId}

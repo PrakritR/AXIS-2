@@ -450,7 +450,7 @@ export const VendorInboxPanel = forwardRef<
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      if (p.includesAxisAdmin) {
+      if (p.includesAxisAdmin && isDemoModeActive()) {
         appendPortalMessageToAdminInbox({
           role: "vendor",
           name: p.senderName,

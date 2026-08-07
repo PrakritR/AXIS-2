@@ -72,6 +72,7 @@ function ResidentUnifiedInbox({
   onRouteThreadChange,
   searchQuery,
   onThreadOpenChange,
+  onThreadSelectedChange,
   commBase,
   onAddConversation,
 }: {
@@ -82,6 +83,7 @@ function ResidentUnifiedInbox({
   onRouteThreadChange?: (threadId: string | undefined) => void;
   searchQuery: string;
   onThreadOpenChange?: (open: boolean) => void;
+  onThreadSelectedChange?: (selected: boolean) => void;
   commBase: string;
   onAddConversation?: () => void;
 }) {
@@ -188,8 +190,12 @@ function ResidentUnifiedInbox({
   }, [routeThreadId, merged]);
 
   useEffect(() => {
-    onThreadOpenChange?.(Boolean(selection));
-  }, [onThreadOpenChange, selection]);
+    onThreadOpenChange?.(Boolean(routeThreadId) && Boolean(selection));
+  }, [onThreadOpenChange, routeThreadId, selection]);
+
+  useEffect(() => {
+    onThreadSelectedChange?.(Boolean(selection));
+  }, [onThreadSelectedChange, selection]);
 
   const listPane = (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -308,11 +314,8 @@ export function ResidentCommunication({
   const inboxRef = useRef<ResidentInboxPanelHandle>(null);
   const { activeThreadId, setActiveThreadId } = useCommunicationThreadId(commBase, threadId);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
+  const [threadSelected, setThreadSelected] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    setThreadOpen(Boolean(activeThreadId));
-  }, [activeThreadId]);
 
   const newMessageButton = (
     <Button
@@ -356,6 +359,7 @@ export function ResidentCommunication({
       controlStack={controlStack}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
+      threadSelected={threadSelected}
     >
       <ResidentUnifiedInbox
         inboxRef={inboxRef}
@@ -365,6 +369,7 @@ export function ResidentCommunication({
         onRouteThreadChange={setActiveThreadId}
         searchQuery={searchQuery}
         onThreadOpenChange={setThreadOpen}
+        onThreadSelectedChange={setThreadSelected}
         commBase={commBase}
         onAddConversation={() => inboxRef.current?.openCompose()}
       />

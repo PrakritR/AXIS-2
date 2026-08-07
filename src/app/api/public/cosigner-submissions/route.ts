@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
+import type { DemoApplicantRow } from "@/data/demo-portal";
+import { applicationLinkBlock } from "@/lib/rental-application/application-link-eligibility";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { notifyManagerCosignerSubmitted } from "@/lib/cosigner-notification.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
@@ -46,6 +48,11 @@ export async function POST(req: Request) {
 
     if (!appRow) {
       return NextResponse.json({ error: "Application ID not found. Check the application ID from the primary applicant." }, { status: 404 });
+    }
+
+    const blocked = applicationLinkBlock(appRow.row_data as DemoApplicantRow);
+    if (blocked) {
+      return NextResponse.json({ error: blocked.message }, { status: 403 });
     }
 
     const submission: CosignerSubmission = {

@@ -129,6 +129,8 @@ export function CheckboxMultiSelect({
     open,
     onOpenChange: setOpenAndReset,
     contentPx,
+    matchTriggerWidth: !pill,
+    preferOpenDown: !pill,
   });
 
   const toggle = (value: string) => {
@@ -333,6 +335,8 @@ export function FieldSingleSelect({
     open,
     onOpenChange: setOpenAndReset,
     contentPx,
+    matchTriggerWidth: !pill,
+    preferOpenDown: !pill,
   });
 
   const filteredOptions = useMemo(() => {

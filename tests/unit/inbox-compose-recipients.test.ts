@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   composeDirectoryCategories,
+  composeValidPersonKeys,
   isAdminOnlyDirectorySelection,
   mergeAdminComposePersonKey,
 } from "@/lib/inbox-compose-recipients";
@@ -66,5 +67,12 @@ describe("admin compose auto-select", () => {
       "broadcast:resident",
       "admin",
     ]);
+  });
+
+  it("keeps the synthetic admin key in valid person keys", () => {
+    const keys = composeValidPersonKeys(["broadcast:resident"], ["admin", "resident"]);
+    expect(keys.has("admin")).toBe(true);
+    expect(keys.has("broadcast:resident")).toBe(true);
+    expect(composeValidPersonKeys([], ["resident"]).has("admin")).toBe(false);
   });
 });

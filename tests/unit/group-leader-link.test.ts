@@ -4,13 +4,16 @@ import {
   validateGroupLeaderAppIdInput,
 } from "@/lib/rental-application/group-leader-link";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import type { DemoApplicantRow } from "@/data/demo-portal";
 
 const ORGANIZER_ID = "PROPLANE-ORGANIZER1";
 
-function organizerRow(over: Partial<RentalWizardFormState> = {}) {
+function organizerRow(over: Partial<RentalWizardFormState> = {}, rowOver: Partial<DemoApplicantRow> = {}) {
   return {
     id: ORGANIZER_ID,
     name: "Jordan Reyes",
+    bucket: "pending" as const,
+    stage: "Submitted",
     application: {
       applyingAsGroup: "yes",
       groupRole: "first",
@@ -19,6 +22,7 @@ function organizerRow(over: Partial<RentalWizardFormState> = {}) {
       fullLegalName: "Jordan Reyes",
       ...over,
     } as RentalWizardFormState,
+    ...rowOver,
   };
 }
 
@@ -43,7 +47,26 @@ describe("assessGroupLeaderApplication", () => {
       expect(result.groupId).toBe("PROPLANE-HOUSEHOLD1");
       expect(result.groupSize).toBe(3);
       expect(result.organizerFirstName).toBe("Jordan");
+      expect(result.propertyId).toBeNull();
     }
+  });
+
+  it("returns the organizer property when present on the row", () => {
+    const result = assessGroupLeaderApplication(ORGANIZER_ID, {
+      ...organizerRow(),
+      propertyId: "mgr-demo-pioneer",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.propertyId).toBe("mgr-demo-pioneer");
+  });
+
+  it("refuses an in-progress organizer", () => {
+    const result = assessGroupLeaderApplication(
+      ORGANIZER_ID,
+      organizerRow({ groupRole: null, groupId: "PROPLANE-HOUSEHOLD1" }, { stage: "In progress" }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("not_submitted");
   });
 
   it("refuses a missing application", () => {

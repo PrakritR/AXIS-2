@@ -143,7 +143,7 @@ export function RentalApplicationFinishPanel({
       ) : null}
 
       {showCosignerInvite ? (
-        <CosignerInviteCallout signerAppId={axisId} className="mt-6 rounded-2xl border border-border bg-accent/30 p-5" />
+        <CosignerInviteCallout signerAppId={axisId} className="mt-6" />
       ) : null}
 
       <div className="mt-6 space-y-2.5 sm:mt-8 sm:space-y-3">

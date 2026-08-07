@@ -26,8 +26,8 @@ describe("Finance and Documents title-row controls", () => {
     const bank = portalSource("manager-bank-reconciliation-panel.tsx");
     const distributions = portalSource("manager-owner-distributions-panel.tsx");
 
-    expect(finances).toContain("const financesSpecialTabActions =");
-    expect(finances).toContain("{financesSpecialTabActions}");
+    expect(finances).toContain("const financesAddButton =");
+    expect(finances).toContain("PortalAdaptiveHeaderActions");
     expect(finances).toContain("titleAside={financesHeaderActions}");
     expect(finances).toContain('data-attr="finances-add-bill"');
     expect(finances).toContain('data-attr="bank-add-account"');

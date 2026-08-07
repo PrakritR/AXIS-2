@@ -327,9 +327,11 @@ function ChannelPaymentSetupModal({
                       variant="outline"
                       className="shrink-0 rounded-full px-4 text-[13px]"
                       data-attr={`manager-payment-${channel}-inbox-copy`}
-                      onClick={() =>
-                        navigator.clipboard?.writeText(paymentInboxAddress).then(() => showToast("Copied."))
-                      }
+                      onClick={() => {
+                        const address = paymentInboxAddress?.trim();
+                        if (!address) return;
+                        void navigator.clipboard?.writeText(address).then(() => showToast("Copied."));
+                      }}
                     >
                       Copy
                     </Button>

@@ -719,12 +719,35 @@ export const AdminInboxClient = forwardRef<
                     if (!message) return;
                     if (!roleAllowsThread(message.senderRole)) return;
                     if (message.folder !== "inbox" && message.folder !== "sent") return;
-                    if (appendThreadReply(row.id, "PropLane Admin", text)) {
-                      showToast("Added to thread.");
-                      setTick((t) => t + 1);
-                    } else {
-                      showToast("Could not add reply.");
-                    }
+                    void (async () => {
+                      if (isDemoModeActive()) {
+                        if (appendThreadReply(row.id, "PropLane admin", text)) {
+                          showToast("Added to thread.");
+                          setTick((t) => t + 1);
+                        } else {
+                          showToast("Could not add reply.");
+                        }
+                        return;
+                      }
+                      try {
+                        const res = await fetch("/api/admin/inbox-reply", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ threadId: row.id, text }),
+                        });
+                        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+                        if (!res.ok || !data.ok) {
+                          showToast(data.error ?? "Could not send reply.");
+                          return;
+                        }
+                        await syncInboxMessagesFromServer({ force: true });
+                        showToast("Reply sent.");
+                        setTick((t) => t + 1);
+                      } catch {
+                        showToast("Could not send reply.");
+                      }
+                    })();
                   }
             }
             expandedId={expandedId}

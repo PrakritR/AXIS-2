@@ -8,6 +8,7 @@ import { PropertySearchPicker } from "@/components/marketing/property-search-pic
 import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
 import { GroupInviteCallout } from "@/components/marketing/group-invite-callout";
 import { GroupLeaderAppIdField } from "@/components/marketing/group-leader-app-id-field";
+import { ApplicationFeeInlinePayment } from "@/components/marketing/application-fee-inline-payment";
 import { ApplicationPhotoField, IncomeProofPhotos } from "@/components/marketing/application-photo-field";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import { listingApplicationFeeChannels, resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
@@ -37,7 +38,6 @@ import {
 } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { makeApplicationGroupId } from "@/lib/rental-application/application-groups";
-import { loadRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
   customFieldAnswerValue,
@@ -201,6 +201,10 @@ export type WizardStepsProps = {
    * an attached photo resumes with the rest of the answers.
    */
   getApplicationId?: () => string;
+  /** Mint/persist the stable application id so invite links can be shown immediately. */
+  onEnsureApplicationId?: () => void;
+  /** Stable application id for invite links (updates when {@link onEnsureApplicationId} runs). */
+  savedApplicationId?: string;
   /**
    * Guest (no-session) capture is gated on the row's resident-setup token —
    * minted when the draft first autosaves — which authorizes the photo writes.
@@ -323,7 +327,29 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings, applicationFeeCheckBusy, applicationFeeCheckError, applicationFeePaymentVerified, onCheckApplicationFeePayment, waiverCodeBusy, waiverCodeError, onApplyWaiverCode, applyReturnPath } = p;
+  const {
+    step,
+    form,
+    errors,
+    mode = "public",
+    propertyOptions,
+    propertyLocked,
+    patch,
+    editFromReview,
+    applicationFeeGate,
+    occupancySyncEpoch,
+    showAvailabilityWarnings,
+    applicationFeeCheckBusy,
+    applicationFeeCheckError,
+    applicationFeePaymentVerified,
+    onCheckApplicationFeePayment,
+    waiverCodeBusy,
+    waiverCodeError,
+    onApplyWaiverCode,
+    applyReturnPath,
+    onEnsureApplicationId,
+    savedApplicationId = "",
+  } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
@@ -342,7 +368,6 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   // stable axis id an upload attaches to; falls back to the form email context.
   const photosReadOnly = mode === "editor";
   const getApplicationId = p.getApplicationId ?? (() => form.email.trim().toLowerCase() || "");
-  const savedApplicationId = loadRentalWizardDraftAxisId()?.trim() ?? "";
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
@@ -381,28 +406,21 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
     const showGroup = showWizardField("applyingAsGroup");
     const joiningGroup = Boolean(form.groupLeaderAppId.trim());
     const organizingGroup = form.applyingAsGroup === "yes" && !joiningGroup;
+    const inviteAppId = savedApplicationId.trim();
 
     return (
-      <div className="rental-wizard-step space-y-6">
-        <div>
-          <StepIntro>
-            {showCosigner && showGroup
-              ? "Tell us about co-signers and roommates. One person applies first and shares an invite link so everyone&apos;s applications stay linked."
-              : showGroup
-                ? "Applying with roommates? One person applies first and shares an invite link so everyone&apos;s applications stay linked."
-                : "A co-signer may strengthen your application. They complete a separate short form after you submit."}
-          </StepIntro>
-        </div>
-
+      <div className="rental-wizard-step space-y-4">
         <div className="divide-y divide-border/60 rounded-2xl border border-border bg-card/30 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
           {showCosigner ? (
             <>
               <ApplyFieldRow
-                label="Will someone be co-signing this application with you?"
+                label="Will someone co-sign with you?"
                 error={errors.hasCosigner}
                 fieldKey="hasCosigner"
+                inline
+                showRequiredMarker={false}
                 labelClassName="text-sm font-semibold text-foreground"
-                className="px-4 sm:px-5"
+                className="px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5"
               >
                 <YesNoPills
                   value={form.hasCosigner}
@@ -410,15 +428,18 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                   name="Co-signer"
                   fieldKey="hasCosigner"
                   suppressError
-                  onChange={(v) => patch({ applicantRole: "signer", hasCosigner: v })}
+                  onChange={(v) => {
+                    if (v === "yes") onEnsureApplicationId?.();
+                    patch({ applicantRole: "signer", hasCosigner: v });
+                  }}
                 />
               </ApplyFieldRow>
-              {form.hasCosigner === "yes" && savedApplicationId ? (
-                <div className="px-4 pb-5 sm:px-5">
+              {form.hasCosigner === "yes" && inviteAppId ? (
+                <div className="px-4 pb-4 sm:px-5">
                   <CosignerInviteCallout
-                    signerAppId={savedApplicationId}
+                    signerAppId={inviteAppId}
                     signerName={form.fullLegalName.trim() || undefined}
-                    className="rounded-2xl border border-border bg-accent/30 p-4"
+                    pendingSubmit
                   />
                 </div>
               ) : null}
@@ -428,11 +449,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           {showGroup ? (
             <>
               <ApplyFieldRow
-                label="Are you applying as part of a group?"
+                label="Applying as part of a group?"
                 error={errors.applyingAsGroup}
                 fieldKey="applyingAsGroup"
+                inline
+                showRequiredMarker={false}
                 labelClassName="text-sm font-semibold text-foreground"
-                className="px-4 sm:px-5"
+                className="px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5"
               >
                 <YesNoPills
                   value={form.applyingAsGroup}
@@ -452,6 +475,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                       });
                       return;
                     }
+                    onEnsureApplicationId?.();
                     patch({
                       applicantRole: "signer",
                       applyingAsGroup: v,
@@ -465,52 +489,57 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </ApplyFieldRow>
 
               {form.applyingAsGroup === "yes" ? (
-                <>
-                  <ApplyFieldRow
-                    label="Organizer application ID"
-                    hint="Paste the ID from your roommate's invite link, or leave blank if you are the first applicant."
-                    optional
+                <ApplyFieldRow
+                  label="Organizer application ID"
+                  optional
+                  inline
+                  error={errors.groupLeaderAppId}
+                  fieldKey="groupLeaderAppId"
+                  labelClassName="text-sm font-semibold text-foreground"
+                  className="px-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)] sm:px-5"
+                >
+                  <GroupLeaderAppIdField
+                    value={form.groupLeaderAppId}
+                    onChange={(next) => {
+                      const trimmed = next.trim();
+                      patch({
+                        groupLeaderAppId: next,
+                        groupRole: trimmed ? "joining" : "first",
+                        groupId: trimmed ? form.groupId : makeApplicationGroupId(),
+                        ...(trimmed ? { groupSize: "" } : {}),
+                      });
+                    }}
                     error={errors.groupLeaderAppId}
-                    fieldKey="groupLeaderAppId"
-                    labelClassName="text-sm font-semibold text-foreground"
-                    className="px-4 sm:px-5"
-                  >
-                    <GroupLeaderAppIdField
-                      value={form.groupLeaderAppId}
-                      onChange={(next) => {
-                        const trimmed = next.trim();
+                    onResolved={(preview) => {
+                      if (preview) {
                         patch({
-                          groupLeaderAppId: next,
-                          groupRole: trimmed ? "joining" : "first",
-                          groupId: trimmed ? form.groupId : makeApplicationGroupId(),
-                          ...(trimmed ? { groupSize: "" } : {}),
+                          groupLeaderAppId: preview.leaderAppId,
+                          groupId: preview.groupId,
+                          groupRole: "joining",
+                          ...(preview.propertyId && !form.propertyId.trim()
+                            ? { propertyId: preview.propertyId }
+                            : {}),
+                          ...(preview.groupSize != null && !form.groupSize.trim()
+                            ? { groupSize: String(preview.groupSize) }
+                            : {}),
                         });
-                      }}
-                      error={errors.groupLeaderAppId}
-                      onResolved={(preview) => {
-                        if (preview) {
-                          patch({
-                            groupLeaderAppId: preview.leaderAppId,
-                            groupId: preview.groupId,
-                            groupRole: "joining",
-                          });
-                        }
-                      }}
-                      suppressError
-                    />
-                  </ApplyFieldRow>
+                      }
+                    }}
+                    suppressError
+                  />
+                </ApplyFieldRow>
+              ) : null}
 
-                  {organizingGroup && savedApplicationId ? (
-                    <div className="px-4 pb-5 sm:px-5">
-                      <GroupInviteCallout
-                        leaderAppId={savedApplicationId}
-                        organizerName={form.fullLegalName.trim() || undefined}
-                        propertyId={form.propertyId.trim() || undefined}
-                        className="rounded-2xl border border-border bg-accent/30 p-4"
-                      />
-                    </div>
-                  ) : null}
-                </>
+              {organizingGroup && inviteAppId ? (
+                <div className="px-4 pb-4 sm:px-5">
+                  <GroupInviteCallout
+                    leaderAppId={inviteAppId}
+                    organizerName={form.fullLegalName.trim() || undefined}
+                    groupSize={form.groupSize.trim() || undefined}
+                    propertyId={form.propertyId.trim() || undefined}
+                    pendingSubmit
+                  />
+                </div>
               ) : null}
             </>
           ) : null}

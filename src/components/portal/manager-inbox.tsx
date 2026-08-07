@@ -718,7 +718,7 @@ export const ManagerInbox = forwardRef<
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      if (p.includesAxisAdmin) {
+      if (p.includesAxisAdmin && isDemoModeActive()) {
         appendPortalMessageToAdminInbox({
           role: "manager",
           name: p.senderName,

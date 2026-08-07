@@ -97,10 +97,7 @@ export function ManagerCommunication({
   const [composeDraft, setComposeDraft] = useState<ManagerComposePrefill | null>(null);
   const [smsRecipients, setSmsRecipients] = useState<ManagerSmsResidentConversation[]>([]);
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
-
-  useEffect(() => {
-    setThreadOpen(Boolean(activeThreadId));
-  }, [activeThreadId]);
+  const [threadSelected, setThreadSelected] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
 
   const filterContacts = useMemo(() => {
@@ -288,6 +285,7 @@ export function ManagerCommunication({
       controlStack={controlStack}
       hideMobileFilterRow={threadOpen}
       mobileThreadReading={threadOpen}
+      threadSelected={threadSelected}
     >
       <ManagerCommunicationComposeModal
         open={composeOpen}
@@ -318,6 +316,7 @@ export function ManagerCommunication({
         inboxRef={inboxRef}
         smsRef={smsRef}
         onThreadOpenChange={setThreadOpen}
+        onThreadSelectedChange={setThreadSelected}
         listChrome="external"
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}

@@ -2,19 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input, Select } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import {
+  FinanceFilterSortFields,
+  financeFilterFieldCount,
+  type FinanceRowFilterState,
+} from "@/components/portal/finance-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import { FilterFieldsAccordion, FilterSingleSelectDropdown } from "@/components/portal/filter-field-lists";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
+import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_HEADER_PRIMARY_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
   ManagerBankReconciliationPanel,
@@ -27,7 +34,6 @@ import {
   type ManagerOwnerDistributionsPanelHandle,
 } from "@/components/portal/manager-owner-distributions-panel";
 import { ManagerSecurityDepositsPanel } from "@/components/portal/manager-security-deposits-panel";
-import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
   PortalListAddRow,
   PORTAL_LIST_ADD_ICONS,
@@ -35,7 +41,6 @@ import {
 } from "@/components/portal/portal-list-add-row";
 import {
   ReportExportButtons,
-  ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
 import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_WRAP,
@@ -80,24 +85,8 @@ import {
 
 const HIDDEN_FINANCE_COLS = new Set(["scheduleERef", "id", "workOrderId", "taxDeductible"]);
 
-type RowFilterState = {
-  resident: string;
-  type: string;
-  category: string;
-  vendor: string;
-};
-
-function emptyRowFilters(): RowFilterState {
+function emptyRowFilters(): FinanceRowFilterState {
   return { resident: "", type: "", category: "", vendor: "" };
-}
-
-function uniqueRowValues(rows: ReportRow[], key: string): string[] {
-  const values = new Set<string>();
-  for (const row of rows) {
-    const value = String(row[key] ?? "").trim();
-    if (value && value !== "—") values.add(value);
-  }
-  return [...values].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 
 function parseMoneyAmount(raw: unknown): number {
@@ -107,7 +96,7 @@ function parseMoneyAmount(raw: unknown): number {
 function filterFinanceReport(
   report: ReportResult,
   tabId: string,
-  rowFilters: RowFilterState,
+  rowFilters: FinanceRowFilterState,
   searchQuery = "",
 ): ReportResult {
   if (LEDGER_TAB_IDS.has(tabId)) return report;
@@ -318,70 +307,6 @@ function FinancesDataTable({
   );
 }
 
-function FinancesRowFilters({
-  tabId,
-  report,
-  rowFilters,
-  onChange,
-}: {
-  tabId: string;
-  report: ReportResult | null;
-  rowFilters: RowFilterState;
-  onChange: (next: Partial<RowFilterState>) => void;
-}) {
-  const rows = report?.rows ?? [];
-  const residents = useMemo(() => uniqueRowValues(rows, "resident"), [rows]);
-  const types = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
-  const categories = useMemo(() => uniqueRowValues(rows, "category"), [rows]);
-  const vendors = useMemo(() => uniqueRowValues(rows, "vendor"), [rows]);
-
-  if (!report || rows.length === 0) return null;
-
-  return tabId === "income" ? (
-    <FilterFieldsAccordion>
-      <FilterSingleSelectDropdown
-        sectionId="resident"
-        label="Resident"
-        options={[{ value: "", label: "All residents" }, ...residents.map((value) => ({ value, label: value }))]}
-        value={rowFilters.resident}
-        onChange={(resident) => onChange({ resident })}
-        placeholder="All residents"
-        dataAttr="finances-filter-resident"
-      />
-      <FilterSingleSelectDropdown
-        sectionId="type"
-        label="Type"
-        options={[{ value: "", label: "All types" }, ...types.map((value) => ({ value, label: value }))]}
-        value={rowFilters.type}
-        onChange={(type) => onChange({ type })}
-        placeholder="All types"
-        dataAttr="finances-filter-type"
-      />
-    </FilterFieldsAccordion>
-  ) : (
-    <FilterFieldsAccordion>
-      <FilterSingleSelectDropdown
-        sectionId="category"
-        label="Category"
-        options={[{ value: "", label: "All categories" }, ...categories.map((value) => ({ value, label: value }))]}
-        value={rowFilters.category}
-        onChange={(category) => onChange({ category })}
-        placeholder="All categories"
-        dataAttr="finances-filter-category"
-      />
-      <FilterSingleSelectDropdown
-        sectionId="vendor"
-        label="Vendor"
-        options={[{ value: "", label: "All vendors" }, ...vendors.map((value) => ({ value, label: value }))]}
-        value={rowFilters.vendor}
-        onChange={(vendor) => onChange({ vendor })}
-        placeholder="All vendors"
-        dataAttr="finances-filter-vendor"
-      />
-    </FilterFieldsAccordion>
-  );
-}
-
 const FINANCE_TABS = [
   { id: "income", label: "Income" },
   { id: "expenses", label: "Expenses" },
@@ -480,6 +405,73 @@ type IncomeDraft = {
   propertyId: string;
 };
 
+function FinancesFilterSheet({
+  activeCount,
+  onReset,
+  tabId,
+  propertyOptions,
+  filters,
+  onFiltersChange,
+  report,
+  rowFilters,
+  onRowFiltersChange,
+  sortOptions,
+  sortKey,
+  onSortKeyChange,
+  sortDir,
+  onSortDirChange,
+  filterFieldCount,
+  open,
+  onOpenChange,
+}: {
+  activeCount: number;
+  onReset: () => void;
+  tabId: string;
+  propertyOptions: { id: string; label: string }[];
+  filters: ReportFilterState;
+  onFiltersChange: (next: Partial<ReportFilterState>) => void;
+  report: ReportResult | null;
+  rowFilters: FinanceRowFilterState;
+  onRowFiltersChange: (next: Partial<FinanceRowFilterState>) => void;
+  sortOptions: { value: string; label: string }[];
+  sortKey: string;
+  onSortKeyChange: (next: string) => void;
+  sortDir: "asc" | "desc";
+  onSortDirChange: (next: "asc" | "desc") => void;
+  filterFieldCount: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  return (
+    <PortalFilterSortSheet
+      activeCount={activeCount}
+      compactPanel
+      filterFieldCount={filterFieldCount}
+      constrainDropdownToTitleBand
+      className="min-w-0 w-auto shrink-0 max-md:[&_button]:px-2.5 md:!w-auto md:!max-w-none"
+      onReset={onReset}
+      dataAttr="finances-filter-sheet-open"
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <FinanceFilterSortFields
+        tabId={tabId}
+        propertyOptions={propertyOptions}
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+        report={report}
+        rowFilters={rowFilters}
+        onRowFiltersChange={onRowFiltersChange}
+        sortOptions={sortOptions}
+        sortKey={sortKey}
+        onSortKeyChange={onSortKeyChange}
+        sortDir={sortDir}
+        onSortDirChange={onSortDirChange}
+      />
+    </PortalFilterSortSheet>
+  );
+}
+
 export function ManagerFinancesPanel({
   tabId: serverTabId,
   basePath = "/portal",
@@ -509,6 +501,7 @@ export function ManagerFinancesPanel({
   const [loading, setLoading] = useState(false);
   const [rowFilters, setRowFilters] = useState(emptyRowFilters);
   const [searchQuery, setSearchQuery] = useState("");
+  const [financesFilterOpen, setFinancesFilterOpen] = useState(false);
   const [expenseModal, setExpenseModal] = useState(false);
   const [incomeModal, setIncomeModal] = useState(false);
   const billsRef = useRef<ManagerBillsPanelHandle>(null);
@@ -765,59 +758,6 @@ export function ManagerFinancesPanel({
     filters.from !== defaultFinanceFilters.from || filters.to !== defaultFinanceFilters.to;
   const sortChanged = sortKey !== activeDefaultSort.key || sortDir !== activeDefaultSort.dir;
 
-  const financeFilterControls = (
-    <>
-      <ReportFilterBar
-        showProperty
-        showDateRange
-        showDaysAhead={false}
-        showTaxYear={false}
-        propertyOptions={propertyOptions}
-        filters={filters}
-        onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-        onRun={() => void loadTable()}
-        loading={loading}
-        showRunButton={false}
-        stacked
-        trailing={
-          LEDGER_TAB_IDS.has(tabId) ? null : (
-            <FinancesRowFilters
-              tabId={tabId}
-              report={report}
-              rowFilters={rowFilters}
-              onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
-            />
-          )
-        }
-      />
-      {financeSortOptions.length > 0 ? (
-        <FilterFieldsAccordion>
-          <FilterSingleSelectDropdown
-            sectionId="finance-sort-key"
-            label="Sort by"
-            options={financeSortOptions}
-            value={sortKey}
-            onChange={setSortKey}
-            placeholder="Sort by"
-            dataAttr="finances-sort-key"
-          />
-          <FilterSingleSelectDropdown
-            sectionId="finance-sort-direction"
-            label="Direction"
-            options={[
-              { value: "asc", label: "Ascending" },
-              { value: "desc", label: "Descending" },
-            ]}
-            value={sortDir}
-            onChange={(value) => setSortDir(value as "asc" | "desc")}
-            placeholder="Direction"
-            dataAttr="finances-sort-direction"
-          />
-        </FilterFieldsAccordion>
-      ) : null}
-    </>
-  );
-
   const resetFinanceFilters = () => {
     setFilters(defaultFilters());
     setRowFilters(emptyRowFilters());
@@ -825,26 +765,46 @@ export function ManagerFinancesPanel({
     setSortDir(activeDefaultSort.dir);
   };
 
-  const financesFilterSheet = showScopedReportFilters ? (
-    <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([
-        filters.propertyId,
-        rowFilters.resident,
-        rowFilters.type,
-        rowFilters.category,
-        rowFilters.vendor,
-        dateRangeChanged,
-        sortChanged,
-      ])}
-      compactPanel={false}
-      filterFieldCount={5}
-      constrainDropdownToTitleBand
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
-      onReset={resetFinanceFilters}
-      dataAttr="finances-filter-sheet-open"
-    >
-      {financeFilterControls}
-    </PortalFilterSortSheet>
+  const financeFilterSheetFieldCount = financeFilterFieldCount({
+    tabId,
+    hasProperty: propertyOptions.length > 0,
+    hasRowFilters: !LEDGER_TAB_IDS.has(tabId) && Boolean(report && report.rows.length > 0),
+    hasSortOptions: financeSortOptions.length > 0,
+  });
+
+  const financesFilterSheetProps = {
+    activeCount: portalFilterActiveCount([
+      filters.propertyId,
+      rowFilters.resident,
+      rowFilters.type,
+      rowFilters.category,
+      rowFilters.vendor,
+      dateRangeChanged,
+      sortChanged,
+    ]),
+    onReset: resetFinanceFilters,
+    tabId,
+    propertyOptions,
+    filters,
+    onFiltersChange: (next: Partial<ReportFilterState>) => setFilters((current) => ({ ...current, ...next })),
+    report,
+    rowFilters,
+    onRowFiltersChange: (next: Partial<FinanceRowFilterState>) =>
+      setRowFilters((current) => ({ ...current, ...next })),
+    sortOptions: financeSortOptions,
+    sortKey,
+    onSortKeyChange: setSortKey,
+    sortDir,
+    onSortDirChange: setSortDir,
+    filterFieldCount: financeFilterSheetFieldCount,
+  };
+
+  const financesFilterControl = showScopedReportFilters ? (
+    <FinancesFilterSheet
+      {...financesFilterSheetProps}
+      open={financesFilterOpen}
+      onOpenChange={setFinancesFilterOpen}
+    />
   ) : null;
 
   const activeFinanceFilterChips = useMemo((): PortalActiveFilterChip[] => {
@@ -925,7 +885,7 @@ export function ManagerFinancesPanel({
     tabId === "owner-statement" ? (
       <a
         href={`/api/reports/owner-statement/formal-export?${query}`}
-        className="inline-flex h-9 w-full items-center justify-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40 md:w-auto"
+        className={`inline-flex items-center justify-center ${PORTAL_HEADER_ACTION_BTN}`}
         data-attr="owner-statement-formal-pdf"
       >
         Formal PDF
@@ -943,67 +903,71 @@ export function ManagerFinancesPanel({
       <ReportExportButtons reportId={reportId} query={query} formats={["quickbooks"]} />
     ) : null;
 
-  const financesAddIncomeButton =
+  const financesAddButton =
     tabId === "income" ? (
-      <PortalSectionPrimaryButton
-        className="shrink-0"
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
         onClick={openAddIncome}
         data-attr="finances-add-income"
       >
-        + Add
-      </PortalSectionPrimaryButton>
-    ) : null;
-
-  const financesAddExpenseButton =
-    tabId === "expenses" ? (
-      <PortalSectionPrimaryButton
-        className="shrink-0"
+        Add
+      </Button>
+    ) : tabId === "expenses" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
         onClick={openAddExpense}
         data-attr="finances-add-expense"
       >
-        + Add
-      </PortalSectionPrimaryButton>
-    ) : null;
-
-  const financesPrimaryButton = financesAddIncomeButton ?? financesAddExpenseButton;
-
-  const financesSpecialTabActions =
-    tabId === "bills" ? (
-      <PortalSectionPrimaryButton
-        className="shrink-0"
+        Add
+      </Button>
+    ) : tabId === "bills" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
         onClick={() => billsRef.current?.openAddBill()}
         data-attr="finances-add-bill"
       >
         Add bill
-      </PortalSectionPrimaryButton>
+      </Button>
     ) : tabId === "bank-reconciliation" ? (
-      <>
-        <Button
-          type="button"
-          variant="secondary"
-          className="shrink-0"
-          disabled={!canAddBankStatement}
-          onClick={() => bankReconciliationRef.current?.openAddStatement()}
-          data-attr="bank-add-statement"
-        >
-          Add statement
-        </Button>
-        <PortalSectionPrimaryButton
-          className="shrink-0"
-          onClick={() => bankReconciliationRef.current?.openAddAccount()}
-          data-attr="bank-add-account"
-        >
-          Add account
-        </PortalSectionPrimaryButton>
-      </>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
+        onClick={() => bankReconciliationRef.current?.openAddAccount()}
+        data-attr="bank-add-account"
+      >
+        Add account
+      </Button>
     ) : tabId === "owner-distributions" ? (
-      <PortalSectionPrimaryButton
-        className="shrink-0"
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_PRIMARY_ACTION_BTN}
         onClick={() => ownerDistributionsRef.current?.openNewDistribution()}
         data-attr="finances-add-distribution"
       >
         New distribution
-      </PortalSectionPrimaryButton>
+      </Button>
+    ) : null;
+
+  const financesBankStatementButton =
+    tabId === "bank-reconciliation" ? (
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_HEADER_ACTION_BTN}
+        disabled={!canAddBankStatement}
+        onClick={() => bankReconciliationRef.current?.openAddStatement()}
+        data-attr="bank-add-statement"
+      >
+        Add statement
+      </Button>
     ) : null;
 
   const financesListAddRow =
@@ -1023,23 +987,110 @@ export function ManagerFinancesPanel({
     showScopedReportFilters ||
     financesFormalPdfLink ||
     financesExportButtons ||
-    financesPrimaryButton ||
-    financesSpecialTabActions ? (
-      <PortalSectionActionRow
-        variant="header"
-        className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
-      >
-        {financesFormalPdfLink}
-        {financesExportButtons}
-        {financesPrimaryButton}
-        {financesSpecialTabActions}
-      </PortalSectionActionRow>
+    financesAddButton ||
+    financesBankStatementButton ? (
+      <PortalAdaptiveHeaderActions
+        className="w-full min-w-0"
+        moreDataAttr="finances-more-actions"
+        moreAriaLabel="More finance actions"
+        actions={[
+          ...(showScopedReportFilters
+            ? [
+                {
+                  id: "filter",
+                  alwaysVisible: true,
+                  pinEdge: "start" as const,
+                  node: financesFilterControl,
+                  menuItem: (
+                    <DropdownMenuItem
+                      data-attr="finances-filter-menu"
+                      onSelect={() => setFinancesFilterOpen(true)}
+                    >
+                      Filter & sort
+                    </DropdownMenuItem>
+                  ),
+                },
+              ]
+            : []),
+          ...(financesFormalPdfLink
+            ? [
+                {
+                  id: "formal-pdf",
+                  keepPriority: 2,
+                  node: financesFormalPdfLink,
+                  menuItem: (
+                    <DropdownMenuItem asChild>
+                      <a href={`/api/reports/owner-statement/formal-export?${query}`} data-attr="owner-statement-formal-pdf-menu">
+                        Formal PDF
+                      </a>
+                    </DropdownMenuItem>
+                  ),
+                },
+              ]
+            : []),
+          ...(financesExportButtons
+            ? [
+                {
+                  id: "export",
+                  keepPriority: 2,
+                  node: financesExportButtons,
+                  menuItem: (
+                    <DropdownMenuItem disabled className="text-muted">
+                      Export options
+                    </DropdownMenuItem>
+                  ),
+                },
+              ]
+            : []),
+          ...(financesBankStatementButton
+            ? [
+                {
+                  id: "bank-statement",
+                  keepPriority: 2,
+                  node: financesBankStatementButton,
+                  menuItem: (
+                    <DropdownMenuItem
+                      data-attr="bank-add-statement-menu"
+                      disabled={!canAddBankStatement}
+                      onSelect={() => bankReconciliationRef.current?.openAddStatement()}
+                    >
+                      Add statement
+                    </DropdownMenuItem>
+                  ),
+                },
+              ]
+            : []),
+          ...(financesAddButton
+            ? [
+                {
+                  id: "add",
+                  alwaysVisible: true,
+                  pinEdge: "end" as const,
+                  node: financesAddButton,
+                  menuItem: (
+                    <DropdownMenuItem
+                      data-attr="finances-add-menu"
+                      onSelect={() => {
+                        if (tabId === "income") openAddIncome();
+                        else if (tabId === "expenses") openAddExpense();
+                        else if (tabId === "bills") billsRef.current?.openAddBill();
+                        else if (tabId === "bank-reconciliation") bankReconciliationRef.current?.openAddAccount();
+                        else if (tabId === "owner-distributions") ownerDistributionsRef.current?.openNewDistribution();
+                      }}
+                    >
+                      {tabId === "owner-distributions" ? "New distribution" : tabId === "bills" ? "Add bill" : tabId === "bank-reconciliation" ? "Add account" : "Add"}
+                    </DropdownMenuItem>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
     ) : null;
 
   return (
     <ManagerPortalPageShell
       title="Finances"
-      titleInlineFilter={showScopedReportFilters ? financesFilterSheet : null}
       titleAside={financesHeaderActions}
       hideTitleOnMobileNav
       compactFilterRow
@@ -1075,7 +1126,7 @@ export function ManagerFinancesPanel({
       ) : tabId === "owner-distributions" ? (
         <ManagerOwnerDistributionsPanel ref={ownerDistributionsRef} />
       ) : (
-      <div className="space-y-4 max-lg:space-y-3">
+      <div className="min-w-0 space-y-4 max-lg:space-y-3">
         {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}
         {tabId === "cash-flow-statement" ? (
           <MonthlyProfitChart points={monthlyProfitPoints} />

@@ -23,6 +23,7 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { mergeInboxScopedContacts } from "@/lib/manager-inbox-contacts";
 import {
   composeDirectoryCategories,
+  composeValidPersonKeys,
   isAdminOnlyDirectorySelection,
   mergeAdminComposePersonKey,
   type InboxComposeDirectoryCategory,
@@ -161,7 +162,6 @@ export function ScopedInboxComposeModal({
   const personGroups = useMemo((): CheckboxMultiSelectGroup[] => {
     const cats = selectedCategories.length > 0 ? selectedCategories : [];
     return cats
-      .filter((category) => category !== "admin")
       .map((category) => ({
         label: categoryLabel(category),
         options: peopleForCategory(category, portal, contacts).map((p) => ({
@@ -173,7 +173,10 @@ export function ScopedInboxComposeModal({
   }, [selectedCategories, portal, contacts]);
 
   const flatPersonOptions = useMemo(() => personGroups.flatMap((g) => g.options), [personGroups]);
-  const validPersonKeys = useMemo(() => new Set(flatPersonOptions.map((o) => o.value)), [flatPersonOptions]);
+  const validPersonKeys = useMemo(
+    () => composeValidPersonKeys(flatPersonOptions.map((o) => o.value), selectedCategories),
+    [flatPersonOptions, selectedCategories],
+  );
   const adminOnlyDirectory = isAdminOnlyDirectorySelection(selectedCategories);
 
   const showSmsOption = portal === "manager";
@@ -256,6 +259,7 @@ export function ScopedInboxComposeModal({
       categoryOptions.includes(v as ComposeCategory),
     );
     setSelectedCategories(cats);
+    setSelectedKeys((prev) => mergeAdminComposePersonKey(cats, prev));
   };
 
   const onPeopleChange = (next: string[]) => {

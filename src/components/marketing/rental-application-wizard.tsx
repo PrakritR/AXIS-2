@@ -396,6 +396,14 @@ function RentalApplicationWizardInner({
   const isReconcilingTarget = Boolean(requestedTargetSignature) && reconciledSignature !== requestedTargetSignature;
   const [errors, setErrors] = useState<RentalWizardErrors>({});
   const [draftReady] = useState(true);
+  const [applicationAxisId, setApplicationAxisId] = useState(
+    () => loadRentalWizardDraftAxisId()?.trim() ?? "",
+  );
+  const ensureApplicationId = useCallback(() => {
+    const id = ensureRentalWizardAxisId();
+    setApplicationAxisId((prev) => (prev === id ? prev : id));
+    return id;
+  }, []);
   const [extrasTick, setExtrasTick] = useState(0);
   const [chargeTick, setChargeTick] = useState(0);
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
@@ -747,7 +755,7 @@ function RentalApplicationWizardInner({
     const email = (mode === "portal" || mode === "manager" ? sessionEmail ?? form.email : form.email).trim();
     const pid = form.propertyId.trim();
     if (!shouldSyncInProgressDraft({ email, propertyId: pid })) return;
-    const axisId = ensureRentalWizardAxisId();
+    const axisId = ensureApplicationId();
     // The public flow's in-memory draft dies on a real reload — keep the axis id
     // (only the id, no answers) in sessionStorage so the resume effect below can
     // restore the saved application afterwards.
@@ -1040,17 +1048,47 @@ function RentalApplicationWizardInner({
     if (!draftReady || templatePreview) return;
     const leaderAppId = parseGroupLeaderAppIdParam(searchParams.get(GROUP_LEADER_APP_ID_PARAM));
     if (!leaderAppId) return;
-    setForm((prev) => {
-      const patch = groupLeaderInviteFormPatch(leaderAppId);
-      if (
-        prev.groupLeaderAppId.trim().toUpperCase() === patch.groupLeaderAppId &&
-        prev.applyingAsGroup === patch.applyingAsGroup &&
-        prev.groupRole === patch.groupRole
-      ) {
-        return prev;
+
+    let cancelled = false;
+    void fetchGroupLeaderLinkPreview(leaderAppId).then((preview) => {
+      if (cancelled) return;
+      setForm((prev) => {
+        const invitePatch = groupLeaderInviteFormPatch(leaderAppId);
+        const next: RentalWizardFormState = {
+          ...prev,
+          ...invitePatch,
+          ...(preview.ok
+            ? {
+                groupLeaderAppId: preview.leaderAppId,
+                groupId: preview.groupId,
+                ...(preview.groupSize != null && !prev.groupSize.trim()
+                  ? { groupSize: String(preview.groupSize) }
+                  : {}),
+                ...(preview.propertyId && !prev.propertyId.trim()
+                  ? { propertyId: preview.propertyId }
+                  : {}),
+              }
+            : {}),
+        };
+        if (
+          prev.groupLeaderAppId.trim().toUpperCase() === next.groupLeaderAppId.trim().toUpperCase() &&
+          prev.applyingAsGroup === next.applyingAsGroup &&
+          prev.groupRole === next.groupRole &&
+          prev.groupId === next.groupId &&
+          prev.propertyId === next.propertyId &&
+          prev.groupSize === next.groupSize
+        ) {
+          return prev;
+        }
+        return next;
+      });
+      if (!preview.ok) {
+        setErrors((prev) => ({ ...prev, groupLeaderAppId: preview.message }));
       }
-      return { ...prev, ...patch };
     });
+    return () => {
+      cancelled = true;
+    };
   }, [draftReady, searchParams, templatePreview]);
 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
@@ -1369,6 +1407,10 @@ function RentalApplicationWizardInner({
           groupId: preview.groupId,
           groupLeaderAppId: preview.leaderAppId,
           groupRole: "joining",
+          ...(preview.propertyId && !form.propertyId.trim() ? { propertyId: preview.propertyId } : {}),
+          ...(preview.groupSize != null && !form.groupSize.trim()
+            ? { groupSize: String(preview.groupSize) }
+            : {}),
         };
       } else if (form.applyingAsGroup === "yes") {
         formForGroup = {
@@ -1842,7 +1884,7 @@ function RentalApplicationWizardInner({
     if (step === 10) {
       if (!validateAllPrior()) return;
       if (mode === "manager") {
-        const axisId = ensureRentalWizardAxisId();
+        const axisId = ensureApplicationId();
         const email = (sessionEmail ?? form.email).trim();
         syncInProgressApplicationRow({
           axisId,
@@ -1861,42 +1903,58 @@ function RentalApplicationWizardInner({
       return;
     }
     if (step === 1 && form.applicantRole === "cosigner") return;
-    const e = validateRentalWizardStep(step, form);
-    setErrors(e);
-    if (countValidationErrors(e) > 0) {
-      showToast("Please fix the highlighted fields before continuing.");
-      queueMicrotask(() =>
-        scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[step] ?? [], e),
-      );
-      return;
-    }
-    if (step === 1 && maxStepReached < 2) {
-      track("rental_application_started", { property_id: form.propertyId || undefined });
-    }
-    if (step === 3) {
-      const approvedConflict = form.roomChoice1
-        ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
-        : false;
-      const pendingConflict = !approvedConflict && form.roomChoice1
-        ? isRoomPendingConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
-        : false;
-      setShowAvailabilityWarnings(approvedConflict || pendingConflict);
-      if (approvedConflict) {
-        showToast("Your first-choice room may be unavailable for those move-in dates, but your application can still continue.");
-      } else if (pendingConflict) {
-        showToast("Someone else has already applied for your first-choice room on those dates, but your application can still continue.");
+    void (async () => {
+      if (step === 1 && form.applyingAsGroup === "yes" && form.groupLeaderAppId.trim()) {
+        const preview = await fetchGroupLeaderLinkPreview(form.groupLeaderAppId);
+        if (!preview.ok) {
+          setErrors({ groupLeaderAppId: preview.message });
+          showToast(preview.message);
+          queueMicrotask(() =>
+            scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[1] ?? [], {
+              groupLeaderAppId: preview.message,
+            }),
+          );
+          return;
+        }
       }
-    }
-    if (reviewReturnStep != null && reviewReturnStep === step) {
-      setStep(10);
-      setReviewReturnStep(null);
-    } else {
-      const next = nextActiveStep(step);
-      setStep(next);
-      setMaxStepReached((m) => nextWizardMaxReached(m, next));
-    }
-    setErrors({});
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+
+      const e = validateRentalWizardStep(step, form);
+      setErrors(e);
+      if (countValidationErrors(e) > 0) {
+        showToast("Please fix the highlighted fields before continuing.");
+        queueMicrotask(() =>
+          scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[step] ?? [], e),
+        );
+        return;
+      }
+      if (step === 1 && maxStepReached < 2) {
+        track("rental_application_started", { property_id: form.propertyId || undefined });
+      }
+      if (step === 3) {
+        const approvedConflict = form.roomChoice1
+          ? isRoomApprovedConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+          : false;
+        const pendingConflict = !approvedConflict && form.roomChoice1
+          ? isRoomPendingConflict(form.roomChoice1, form.leaseStart, form.leaseEnd)
+          : false;
+        setShowAvailabilityWarnings(approvedConflict || pendingConflict);
+        if (approvedConflict) {
+          showToast("Your first-choice room may be unavailable for those move-in dates, but your application can still continue.");
+        } else if (pendingConflict) {
+          showToast("Someone else has already applied for your first-choice room on those dates, but your application can still continue.");
+        }
+      }
+      if (reviewReturnStep != null && reviewReturnStep === step) {
+        setStep(10);
+        setReviewReturnStep(null);
+      } else {
+        const next = nextActiveStep(step);
+        setStep(next);
+        setMaxStepReached((m) => nextWizardMaxReached(m, next));
+      }
+      setErrors({});
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    })();
   };
 
   const handleBack = () => {
@@ -2046,9 +2104,11 @@ function RentalApplicationWizardInner({
                 setSsn={setSsn}
                 goToStep={goToStep}
                 editFromReview={editFromReview}
-                getApplicationId={ensureRentalWizardAxisId}
+                getApplicationId={ensureApplicationId}
+                onEnsureApplicationId={ensureApplicationId}
+                savedApplicationId={applicationAxisId}
                 photoSetupTokenRequired={mode !== "portal" && !sessionEmail?.includes("@")}
-                getPhotoSetupToken={() => getApplicationSetupToken(ensureRentalWizardAxisId())}
+                getPhotoSetupToken={() => getApplicationSetupToken(ensureApplicationId())}
               />
             </div>
 

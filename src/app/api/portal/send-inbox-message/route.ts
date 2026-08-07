@@ -15,6 +15,12 @@ import {
   deliverPortalMessageThreadSide,
   resolveInboxThreadReplyTarget,
 } from "@/lib/portal-inbox-delivery";
+import {
+  deliverPortalMessageToAdminSharedInbox,
+  isPrimaryAdminRecipientEmail,
+  mapProfileRoleToAdminInboxSenderRole,
+} from "@/lib/admin-shared-inbox.server";
+import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 import { sendPortalConversationEmails } from "@/lib/portal-email-send.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -414,10 +420,43 @@ export async function POST(req: Request) {
 
       const when = formatPacificDateTime(new Date());
       const preview = text.slice(0, 100).replace(/\n/g, " ");
+      const portalSenderRole = mapProfileRoleToAdminInboxSenderRole(senderRole);
+      for (const recipient of recipients) {
+        if (isPrimaryAdminRecipientEmail(recipient.email)) {
+          await deliverPortalMessageToAdminSharedInbox(db, {
+            senderEmail,
+            senderName: fromName,
+            senderRole: portalSenderRole,
+            subject,
+            body: text,
+          });
+        }
+      }
       for (const recipient of recipients) {
         const ts = Date.now();
         const rand = Math.random().toString(36).slice(2, 6);
         const recipientLower = recipient.email;
+
+        if (isPrimaryAdminRecipientEmail(recipientLower)) {
+          // Manager/resident sent copy — one thread with PropLane admin.
+          await deliverPortalMessageThreadSide(db, {
+            scope: senderScope,
+            folder: "sent",
+            ownerUserId: user.id,
+            participantEmail: null,
+            otherPartyEmail: PRIMARY_ADMIN_EMAIL.trim().toLowerCase(),
+            fallbackId: `msg_${user.id}_${ts}_${rand}`,
+            fromName,
+            subject,
+            body: text,
+            preview,
+            when,
+            unread: false,
+            outbound: true,
+            attachments: inboxAttachmentsFromUrls(attachmentUrls),
+          });
+          continue;
+        }
 
         // Sender's Sent record (owner-only, scoped to the sender's portal).
         // Repeated sends to the same person append to the ONE sent thread.

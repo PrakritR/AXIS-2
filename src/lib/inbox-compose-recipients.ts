@@ -24,6 +24,16 @@ export function isAdminOnlyDirectorySelection(categories: InboxComposeDirectoryC
   return categories.length === 1 && categories[0] === "admin";
 }
 
+/** Allowed Which-people keys for the current To sections (includes synthetic admin). */
+export function composeValidPersonKeys(
+  flatOptionValues: string[],
+  categories: InboxComposeDirectoryCategory[],
+): Set<string> {
+  const keys = new Set(flatOptionValues);
+  if (categories.includes("admin")) keys.add("admin");
+  return keys;
+}
+
 export function mergeAdminComposePersonKey<T extends string>(
   categories: InboxComposeDirectoryCategory[],
   keys: T[],

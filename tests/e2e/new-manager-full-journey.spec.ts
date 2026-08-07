@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { mockStripeAllRoutes } from "../helpers/auth";
+import { completeManagerSignupOnboarding, pickListingSelect } from "../helpers/manager-onboarding-e2e";
 
 /**
  * End-to-end walkthrough: brand-new manager from pricing → account creation →
@@ -52,6 +53,7 @@ test.describe("New manager — full journey from scratch", () => {
     const email = `fresh-manager-${stamp}@test.proplane.local`;
     const password = "FreshManager123!";
     const fullName = "Fresh Journey Manager";
+    const phone = "2065550199";
 
     fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
     fs.writeFileSync(
@@ -72,25 +74,21 @@ test.describe("New manager — full journey from scratch", () => {
     await page.getByPlaceholder("Full name").fill(fullName);
     await page.getByPlaceholder("Email").fill(email);
     await page.getByPlaceholder(/Password \(8\+/).fill(password);
+    const phoneInput = page.locator("#mgr-phone-input, #signup-phone").filter({ visible: true }).first();
+    if (await phoneInput.count()) await phoneInput.fill(phone);
     await shot(page, "03-create-account-filled");
     await page.getByRole("button", { name: /create account/i }).click();
 
-    await page.waitForURL(/\/auth\/get-started/, { timeout: 90_000 });
-    await shot(page, "03b-get-started-chooser");
-    await page.getByRole("button", { name: /set up as a property manager/i }).click();
-
-    // Portal chooser or continue may appear for multi-role; fresh account is manager-only.
-    await page.waitForURL(/\/portal/, { timeout: 90_000 });
+    await page.waitForURL(/\/auth\/(get-started|manager\/choose-plan)|\/portal/, { timeout: 90_000 });
+    if (page.url().includes("/auth/get-started")) {
+      await shot(page, "03b-get-started-chooser");
+    }
+    await completeManagerSignupOnboarding(page);
     await page.waitForLoadState("domcontentloaded");
     await shot(page, "04-portal-landing");
 
-    // Pin manager portal if chooser appears.
-    if (page.url().includes("/auth/choose-portal")) {
-      await page.getByRole("button", { name: /^Property\b/ }).click();
-      await page.waitForURL(/\/portal/, { timeout: 30_000 });
-    }
-
-    await expect(page.getByText(new RegExp(fullName, "i")).first()).toBeVisible({ timeout: 30_000 });
+    await page.goto("/portal/properties", { waitUntil: "domcontentloaded" });
+    await expect(page.locator('[data-attr="manager-properties-create"]')).toBeVisible({ timeout: 60_000 });
 
     // ── 3. Tour every major portal section (fresh empty account) ────────────
     const sectionResults: Array<{ name: string; ok: boolean; note?: string }> = [];
@@ -123,9 +121,12 @@ test.describe("New manager — full journey from scratch", () => {
     await expect(page.getByText(/new listing · home/i)).toBeVisible();
     await shot(page, "06-listing-wizard-open");
 
+    await pickListingSelect(page, "Property type", "House");
     await page.getByPlaceholder("e.g. Maple Court").fill(`Journey House ${stamp}`);
     await page.getByPlaceholder("Start typing a street address").fill("400 Broad St");
     await page.getByRole("button", { name: /South Lake Union/i }).first().click();
+    await pickListingSelect(page, "Number of floors", "Single level (1 floor)");
+    await pickListingSelect(page, "Total bathrooms", "1 bathroom");
     await shot(page, "07-listing-home-step");
 
     await page.getByRole("button", { name: /save & close/i }).click();

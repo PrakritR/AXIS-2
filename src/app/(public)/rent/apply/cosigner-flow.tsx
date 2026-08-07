@@ -19,6 +19,7 @@ import {
 } from "./apply-validation";
 import { ApplyFieldRow } from "./apply-field-row";
 import { submitCosignerToServerAwait } from "@/lib/cosigner-submissions-storage";
+import { fetchCosignerSignerLinkPreview } from "@/lib/rental-application/cosigner-signer-link-client";
 import { nextWizardMaxReached, activeWizardProgressPct } from "@/lib/wizard-step-nav";
 import {
   COSIGNER_STEP_FIELD_ORDER,
@@ -147,6 +148,8 @@ export function CosignerApplyFlow({
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [draftReady] = useState(true);
+  const [signerPreviewLoading, setSignerPreviewLoading] = useState(Boolean(initialSignerAppId.trim()));
+  const [signerLinkError, setSignerLinkError] = useState<string | null>(null);
   const [postSubmit, setPostSubmit] = useState<{
     linkedAxisId: string;
     linkedSignerName: string;
@@ -159,6 +162,40 @@ export function CosignerApplyFlow({
     if (!draftReady || previewMode) return;
     saveCosignerDraft(f);
   }, [draftReady, f, previewMode]);
+
+  useEffect(() => {
+    if (previewMode) return;
+    const signerAppId = initialSignerAppId.trim() || f.signerAppId.trim();
+    if (!signerAppId || signerAppId.length < 4) {
+      setSignerPreviewLoading(false);
+      setSignerLinkError(null);
+      return;
+    }
+    let cancelled = false;
+    setSignerPreviewLoading(true);
+    void fetchCosignerSignerLinkPreview(signerAppId).then((preview) => {
+      if (cancelled) return;
+      setSignerPreviewLoading(false);
+      if (!preview.ok) {
+        setSignerLinkError(preview.message);
+        return;
+      }
+      setSignerLinkError(null);
+      setF((prev) => {
+        const nextSignerAppId = prev.signerAppId.trim() || preview.signerAppId;
+        const nextSignerName = prev.signerFullName.trim() || preview.signerFullName?.trim() || "";
+        if (prev.signerAppId === nextSignerAppId && prev.signerFullName === nextSignerName) return prev;
+        return {
+          ...prev,
+          signerAppId: nextSignerAppId,
+          signerFullName: nextSignerName,
+        };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftReady, f.signerAppId, initialSignerAppId, previewMode]);
 
   const clearError = (key: string) => {
     setFieldErrors((prev) => {
@@ -180,6 +217,9 @@ export function CosignerApplyFlow({
 
   const validateStep1 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
+    if (signerLinkError) {
+      errs.signerAppId = signerLinkError;
+    }
     const id = f.signerAppId.trim();
     const name = f.signerFullName.trim();
     if (!id && !name) {
@@ -259,11 +299,29 @@ export function CosignerApplyFlow({
   };
 
   const handleContinue = async () => {
+    if (signerLinkError) {
+      setFieldErrors({ signerAppId: signerLinkError });
+      return;
+    }
     if (step === 1) {
+      if (signerPreviewLoading) return;
       const errs1 = validateStep1();
       if (Object.keys(errs1).length > 0) {
         queueMicrotask(() => scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[1] ?? [], errs1));
         return;
+      }
+      const signerAppId = f.signerAppId.trim();
+      if (signerAppId.length >= 4) {
+        const preview = await fetchCosignerSignerLinkPreview(signerAppId);
+        if (!preview.ok) {
+          setSignerLinkError(preview.message);
+          setFieldErrors({ signerAppId: preview.message });
+          queueMicrotask(() =>
+            scrollToFirstWizardFieldError(COSIGNER_STEP_FIELD_ORDER[1] ?? [], { signerAppId: preview.message }),
+          );
+          return;
+        }
+        setSignerLinkError(null);
       }
     }
     if (step === 2) {
@@ -299,6 +357,14 @@ export function CosignerApplyFlow({
       if (previewMode) {
         showToast?.("Preview only — co-signers submit from the shared apply link.");
         return;
+      }
+      if (linkedAxisId.length >= 4) {
+        const preview = await fetchCosignerSignerLinkPreview(linkedAxisId);
+        if (!preview.ok) {
+          setSignerLinkError(preview.message);
+          setFieldErrors({ submit: preview.message });
+          return;
+        }
       }
       if (submitting) return;
       setSubmitting(true);
@@ -437,6 +503,12 @@ export function CosignerApplyFlow({
         {step === 1 ? (
           <>
             <div className="divide-y divide-slate-100">
+              {signerPreviewLoading ? (
+                <p className="pb-3 text-xs text-muted">Checking invite link…</p>
+              ) : null}
+              {signerLinkError ? (
+                <p className="pb-3 text-sm font-medium text-red-600">{signerLinkError}</p>
+              ) : null}
               <Field fieldKey="signerAppId" label="Signer Application ID" optional hint="Recommended if you have their application ID." error={fieldErrors.signerAppId}>
                 <Input
                   value={f.signerAppId}
@@ -726,7 +798,12 @@ export function CosignerApplyFlow({
         <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
           Back
         </Button>
-        <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue} disabled={submitting}>
+        <Button
+          type="button"
+          className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+          onClick={handleContinue}
+          disabled={submitting || (step === 1 && (signerPreviewLoading || Boolean(signerLinkError)))}
+        >
           {submitting ? "Submitting…" : step === 5 ? "Submit co-signer form" : "Continue"}
         </Button>
       </div>

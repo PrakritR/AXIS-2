@@ -1149,6 +1149,33 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(host);
   });
 
+  it("anchors field-select menus below the trigger inside a Radix dialog host", () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "modal-radix-dialog");
+    document.body.appendChild(host);
+    host.getBoundingClientRect = () =>
+      ({ top: 100, left: 200, right: 700, bottom: 600, width: 500, height: 500, x: 200, y: 100, toJSON: () => ({}) }) as DOMRect;
+
+    const button = document.createElement("button");
+    host.appendChild(button);
+    button.getBoundingClientRect = () =>
+      ({ top: 200, left: 220, right: 680, bottom: 244, width: 460, height: 44, x: 220, y: 200, toJSON: () => ({}) }) as DOMRect;
+
+    const contentPx = 252;
+    const gap = 4;
+    const rect = computeFieldSelectMenuRectInHost(button, contentPx, host, {
+      preferOpenDown: true,
+      matchTriggerWidth: true,
+    });
+
+    expect(rect.position).toBe("absolute");
+    expect(rect.top).toBe(244 - 100 + gap);
+    expect(rect.left).toBe(20);
+    expect(rect.width).toBe(460);
+
+    document.body.removeChild(host);
+  });
+
   it("leaves body-portaled menus untouched when there is no host chrome to clear", () => {
     const button = document.createElement("button");
     document.body.appendChild(button);
