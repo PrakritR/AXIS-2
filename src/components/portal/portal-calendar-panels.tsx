@@ -1755,13 +1755,7 @@ export function PortalCalendarPanels({
       <>
         <div className={compactShellClass}>
           <div className={compactToolbarClass}>
-            <div
-              className={cn(
-                "flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-1.5 sm:justify-center sm:gap-2",
-                PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,
-              )}
-              {...{ [HORIZONTAL_SCROLL_ATTR]: "" }}
-            >
+            <div className="flex w-full min-w-0 max-w-full flex-wrap items-center justify-start gap-1.5 sm:justify-center sm:gap-2">
               <Button
                 type="button"
                 variant="ghost"

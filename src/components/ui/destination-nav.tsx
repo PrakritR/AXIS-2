@@ -79,7 +79,7 @@ export function DestinationNav({
             <span
               className={
                 itemLayout === "equal"
-                  ? "block w-full min-w-0 max-w-full whitespace-nowrap text-[length:clamp(9px,2.35vw,0.875rem)] leading-tight lg:truncate"
+                  ? "block w-full min-w-0 max-w-full whitespace-nowrap text-xs leading-tight lg:truncate"
                   : undefined
               }
             >
@@ -110,7 +110,7 @@ export type LocalDestinationNavItem = {
 function destinationNavShellClassName(className?: string, itemLayout: "auto" | "equal" = "auto") {
   return cn(
     itemLayout === "equal"
-      ? "grid w-full min-w-0 auto-cols-fr grid-flow-col gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:gap-1.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent"
+      ? "grid w-full min-w-0 gap-0.5 rounded-2xl border border-border bg-accent/30 p-1 max-lg:grid-cols-3 max-lg:grid-flow-row max-lg:gap-1.5 max-lg:p-0 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent lg:[grid-template-columns:none] lg:auto-cols-fr lg:grid-flow-col"
       : cn(
           "flex w-full gap-1 rounded-2xl border border-border bg-accent/30 p-1",
           PORTAL_HORIZONTAL_SCROLL_ROW_CLASS,

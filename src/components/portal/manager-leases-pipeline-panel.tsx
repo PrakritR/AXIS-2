@@ -24,7 +24,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
@@ -961,20 +960,16 @@ export function ManagerLeasesPipelinePanel({
     return (
       <>
         {leaseModals}
-        <div className="space-y-3 px-3 py-2">
-          {rows.length > 0 ? (
-            <PortalDataTableEmpty icon="lease" message="No leases in this stage yet." />
-          ) : null}
-          {onAddLease ? (
+        {onAddLease ? (
+          <div className="px-3 py-3 max-md:px-2.5">
             <PortalListAddRow
               label="Add"
               icon={PORTAL_LIST_ADD_ICONS.lease}
-              hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}
               dataAttr="leases-list-add"
             />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </>
     );
   }
@@ -1004,7 +999,6 @@ export function ManagerLeasesPipelinePanel({
             <PortalListAddRow
               label="Add"
               icon={PORTAL_LIST_ADD_ICONS.lease}
-              hint="Upload a signed PDF or generate one from resident details"
               onClick={onAddLease}
               dataAttr="leases-list-add"
             />

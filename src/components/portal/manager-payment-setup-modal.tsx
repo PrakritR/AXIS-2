@@ -150,12 +150,15 @@ function ChannelPaymentSetupModal({
     channel === "zelle"
       ? draft.zellePaymentsEnabled && draft.zelleContact.trim().length > 0
       : draft.venmoPaymentsEnabled && draft.venmoContact.trim().length > 0;
+  const hasForwardingStep = Boolean(paymentInboxAddress?.trim());
+  const autoMarkStep = hasForwardingStep ? 5 : 4;
+  const stepCountWord = hasForwardingStep ? "Five" : "Four";
 
   return (
     <Modal open={open} title={`Link ${label}`} onClose={onClose} dense assistantStrip={false}>
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Five quick steps so residents can pay you with {label} and we auto-match receipts.
+          {stepCountWord} quick steps so residents can pay you with {label} and we auto-match receipts.
         </p>
 
         <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
@@ -259,7 +262,7 @@ function ChannelPaymentSetupModal({
           ) : null}
         </div>
 
-        {paymentInboxAddress ? (
+        {hasForwardingStep ? (
           <div className="space-y-3 rounded-xl border border-border bg-card px-4 py-4">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -338,7 +341,7 @@ function ChannelPaymentSetupModal({
         ) : null}
 
         <div className="space-y-2 rounded-xl border border-border bg-card px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">Step 5 — Auto-mark charges paid</p>
+          <p className="text-sm font-semibold text-foreground">Step {autoMarkStep} — Auto-mark charges paid</p>
           <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
             <input
               type="checkbox"
