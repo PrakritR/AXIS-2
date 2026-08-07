@@ -149,6 +149,7 @@ export type ManagerPaymentDirection = "incoming" | "outgoing";
 
 export type DemoManagerPaymentLedgerRow = {
   id: string;
+  propertyId?: string;
   propertyName: string;
   roomNumber: string;
   /** Household charge kind when the row is backed by a charge (e.g. stay_total). */
@@ -177,6 +178,7 @@ export type DemoManagerPaymentLedgerRow = {
 
 export type DemoManagerOutgoingPaymentRow = {
   id: string;
+  propertyId?: string;
   propertyName: string;
   categoryLabel: string;
   payeeLabel: string;

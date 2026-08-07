@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
-import { PORTAL_FILTER_COMMUNICATION_PANEL_CLASS } from "@/components/portal/filter-field-lists";
+import { PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { CommunicationFilterSortFields } from "@/components/portal/communication-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { ManagerUnifiedInbox } from "@/components/portal/manager-unified-inbox";
@@ -20,12 +20,17 @@ import { PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-met
 import {
   axisAdminFilterContact,
   EMPTY_COMMUNICATION_THREAD_FILTERS,
-  propertyOptionsFromFilterContacts,
   roleLabel,
   type CommunicationFilterRole,
   type CommunicationThreadFilters,
 } from "@/lib/communication-thread-filters";
 import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
+import {
+  buildManagerPropertyFilterOptions,
+  MANAGER_PORTFOLIO_REFRESH_EVENTS,
+} from "@/lib/manager-portfolio-access";
+import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
 import type { CommunicationListSort } from "@/lib/unified-inbox-merge";
 import {
   normalizeManagerSmsConversationsPayload,
@@ -99,6 +104,7 @@ export function ManagerCommunication({
   const [threadOpen, setThreadOpen] = useState(Boolean(threadId));
   const [threadSelected, setThreadSelected] = useState(Boolean(threadId));
   const [searchQuery, setSearchQuery] = useState("");
+  const [propertyTick, setPropertyTick] = useState(0);
 
   const filterContacts = useMemo(() => {
     const live = buildManagerInboxLiveContacts(userId);
@@ -107,7 +113,19 @@ export function ManagerCommunication({
 
   const liveContacts = useMemo(() => buildManagerInboxLiveContacts(userId), [userId]);
 
-  const propertyOptions = useMemo(() => propertyOptionsFromFilterContacts(filterContacts), [filterContacts]);
+  useEffect(() => {
+    const bump = () => setPropertyTick((n) => n + 1);
+    const events = [...MANAGER_PORTFOLIO_REFRESH_EVENTS, PROPERTY_PIPELINE_EVENT, MANAGER_APPLICATIONS_EVENT];
+    for (const eventName of events) window.addEventListener(eventName, bump);
+    return () => {
+      for (const eventName of events) window.removeEventListener(eventName, bump);
+    };
+  }, []);
+
+  const propertyOptions = useMemo(
+    () => buildManagerPropertyFilterOptions(userId).map((option) => ({ value: option.id, label: option.label })),
+    [userId, propertyTick],
+  );
 
   const loadSmsRecipients = useCallback(async () => {
     // SMS UI hidden until A2P clears — never fetch SMS recipients or expose them
@@ -224,10 +242,12 @@ export function ManagerCommunication({
       compactPanel
       filterFieldCount={3}
       constrainDropdownToTitleBand
-      className="min-w-0 shrink-0"
-      panelSizeClassName={PORTAL_FILTER_COMMUNICATION_PANEL_CLASS}
+      className={PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS}
       mobileFlushBody={true}
-      onReset={() => {}}
+      onReset={() => {
+        setFilters(EMPTY_COMMUNICATION_THREAD_FILTERS);
+        setListSort("recent");
+      }}
       dataAttr="communication-filter-sheet-open"
     >
       {filterControls}

@@ -148,7 +148,7 @@ async function renderManagerDocumentsSection(
   if (!tabParts?.length) {
     redirect(`${basePath}/documents/library`);
   }
-  if (tabParts.length > 1) notFound();
+  if (tabParts.length > 2) notFound();
   const docTab = tabParts[0]!;
   const legacyDocTab = legacyTabMapLookup(LEGACY_DOCUMENTS_TAB_MAP, docTab);
   if (legacyDocTab) redirect(`${basePath}/documents/${legacyDocTab}`);
@@ -157,9 +157,14 @@ async function renderManagerDocumentsSection(
     redirect(`${basePath}/financials/${financesRedirect}`);
   }
   if (!DOCUMENTS_TABS.includes(docTab as (typeof DOCUMENTS_TABS)[number])) notFound();
+  const applicationId =
+    docTab === "applications" && tabParts.length === 2
+      ? decodeURIComponent(tabParts[1]!)
+      : undefined;
+  if (tabParts.length === 2 && docTab !== "applications") notFound();
   const ManagerDocumentsPanel = await loadManagerDocumentsPanel();
   return subscriptionGated(
-    <ManagerDocumentsPanel tabId={docTab} basePath={basePath} />,
+    <ManagerDocumentsPanel tabId={docTab} basePath={basePath} applicationId={applicationId} />,
     kind,
     "documents",
     tier,
@@ -983,14 +988,26 @@ export async function renderPortalSection(
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "application"}`);
     }
-    if (tabParts.length > 1) notFound();
+    if (tabParts.length > 2) notFound();
     const docTab = tabParts[0]!;
     // "Shared with you" was merged into "Other documents" — keep old deep links alive.
     if (docTab === "shared") redirect(`${def.basePath}/${section}/other`);
     if (!allowedTabs.includes(docTab)) notFound();
+    const applicationId =
+      docTab === "application" && tabParts.length === 2
+        ? decodeURIComponent(tabParts[1]!)
+        : undefined;
+    if (tabParts.length === 2 && docTab !== "application") notFound();
     const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
-    return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
+    return (
+      <ResidentDocumentsPanel
+        tabId={docTab}
+        basePath={def.basePath}
+        tabs={meta.tabs}
+        applicationId={applicationId}
+      />
+    );
   }
 
   if (kind === "resident" && section === "lease") {

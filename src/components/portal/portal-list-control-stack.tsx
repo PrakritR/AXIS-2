@@ -28,6 +28,8 @@ export function PortalListControlStack({
   className,
   /** When true, destination tabs respect page horizontal padding on mobile (no bleed). */
   destinationInset = false,
+  /** When false, destination tabs scroll with the list instead of sticking under the mobile nav. */
+  stickyDestinations = true,
 }: {
   /** Typically {@link PortalFilterSortSheet} (mobile sheet; optional desktop inline pills or panel modal). */
   filterRow?: ReactNode;
@@ -48,6 +50,7 @@ export function PortalListControlStack({
   activeFilterChips?: ReactNode;
   className?: string;
   destinationInset?: boolean;
+  stickyDestinations?: boolean;
 }) {
   const showDestinations = Boolean(destinationRow) || (destinations && destinations.length > 0);
   const showFindRow = Boolean(filterRow || search);
@@ -82,9 +85,9 @@ export function PortalListControlStack({
       {showDestinations ? (
         <HorizontalScrollCapture
           className={cn(
-            "sticky z-[38] bg-background/95 backdrop-blur-md",
+            stickyDestinations && "sticky z-[38] bg-background/95 backdrop-blur-md",
             destinationInset ? "mx-0" : "-mx-2.5 sm:-mx-4",
-            "[top:var(--portal-mobile-top-chrome,0px)]",
+            stickyDestinations && "[top:var(--portal-mobile-top-chrome,0px)]",
           )}
         >
           <div ref={destinationRef} data-portal-list-destination-nav>

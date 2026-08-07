@@ -8,6 +8,7 @@ import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-p
 import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
@@ -210,8 +211,11 @@ export function ManagerLeases({
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
-      className="min-w-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5"
-      onReset={() => {}}
+      filterFieldCount={1}
+      constrainDropdownToTitleBand
+      mobileFlushBody
+      className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
+      onReset={() => setPropertyFilters([])}
       dataAttr="leases-filter-sheet-open"
     >
       <ApplicationFilterSortFields

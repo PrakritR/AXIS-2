@@ -20,9 +20,14 @@ import {
 } from "@/components/portal/portal-inbox-ui";
 import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import {
+  buildResidentPlaceholderInboxItems,
+  parseContactInboxThreadId,
+} from "@/lib/communication-resident-placeholders";
+import {
   threadPassesCommunicationFilters,
   type CommunicationThreadFilters,
 } from "@/lib/communication-thread-filters";
+import { ResidentDirectChatPane } from "@/components/portal/manager-resident-detail-inbox";
 import {
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -371,12 +376,75 @@ export function ManagerUnifiedInbox({
     return items.filter(({ haystack }) => (q ? haystack.includes(q) : true)).map(({ item }) => item);
   }, [allSmsItems, query, listSegment]);
 
+  const occupiedResidentEmails = useMemo(() => {
+    const occupied = new Set<string>();
+    for (const row of filteredEmail) {
+      if (row.folder === "trash") continue;
+      const email = row.email?.trim().toLowerCase();
+      if (email) occupied.add(email);
+    }
+    for (const resident of smsResidents) {
+      const messages = Array.isArray(resident.messages) ? resident.messages : [];
+      if (messages.length === 0) continue;
+      const rowId = smsConversationId(resident);
+      if (smsHiddenIds.has(rowId)) continue;
+      const email = resident.residentEmail?.trim().toLowerCase();
+      if (email) occupied.add(email);
+    }
+    return occupied;
+  }, [filteredEmail, smsHiddenIds, smsResidents]);
+
+  const placeholderListItems = useMemo(() => {
+    if (!filterContacts || listSegment === "archived") return [];
+    return buildResidentPlaceholderInboxItems({
+      contacts: filterContacts,
+      filters: threadFilters ?? { propertyIds: [], roles: [], contactIds: [] },
+      occupiedEmails: occupiedResidentEmails,
+      searchQuery: query,
+      listSegment,
+    });
+  }, [filterContacts, listSegment, occupiedResidentEmails, query, threadFilters]);
+
   const mergedRows = useMemo(
-    () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems], listSort),
-    [emailListItems, smsListItems, listSort],
+    () => mergeUnifiedInboxItems([...emailListItems, ...smsListItems, ...placeholderListItems], listSort),
+    [emailListItems, smsListItems, placeholderListItems, listSort],
   );
 
   const selection = useMemo(() => (selectedKey ? parseUnifiedInboxKey(selectedKey) : null), [selectedKey]);
+  const placeholderContact = useMemo(() => {
+    if (!selection || !filterContacts) return null;
+    const contactId = parseContactInboxThreadId(selection.threadId);
+    if (!contactId) return null;
+    return filterContacts.find((contact) => contact.id === contactId) ?? null;
+  }, [filterContacts, selection]);
+
+  const refreshAfterDirectSend = useCallback(() => {
+    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
+      setEmailThreads(rows);
+      const contact = placeholderContact;
+      if (!contact) return;
+      const email = contact.email.trim().toLowerCase();
+      const collapsed = collapsePersonInboxThreads(filterEmailInboxThreads(rows, { keepSmsLike: !smsUiEnabled }), {
+        mergeFolders: true,
+      });
+      const thread = collapsed.find((row) => row.email.trim().toLowerCase() === email);
+      if (!thread) return;
+      const key = unifiedInboxKey("email", thread.id);
+      setSelectedKey(key);
+      setMobileThreadOpen(true);
+      onRouteThreadChange?.(thread.id);
+      selectCommunicationThreadUrl(threadDetailHref(thread.id), { replaceExisting: true });
+    });
+    void fetch("/api/manager/sms-conversations", { credentials: "include", cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const body = (await res.json()) as { residents?: ManagerSmsResidentConversation[] };
+        setSmsResidents(normalizeManagerSmsConversationsPayload(body).residents);
+      })
+      .catch(() => {
+        /* keep */
+      });
+  }, [onRouteThreadChange, placeholderContact, smsUiEnabled, threadDetailHref]);
 
   const threadOpen = (mobileThreadOpen || Boolean(routeThreadId)) && Boolean(selection);
 
@@ -510,8 +578,20 @@ export function ManagerUnifiedInbox({
     </div>
   );
 
-  const threadPane =
-    selection?.channel === "email" ? (
+  const threadPane = placeholderContact ? (
+    <ResidentDirectChatPane
+      residentEmail={placeholderContact.email}
+      residentName={placeholderContact.name}
+      smsResident={
+        smsResidents.find(
+          (resident) =>
+            resident.residentEmail?.trim().toLowerCase() === placeholderContact.email.trim().toLowerCase(),
+        ) ?? null
+      }
+      smsUiEnabled={smsUiEnabled}
+      onSent={refreshAfterDirectSend}
+    />
+  ) : selection?.channel === "email" ? (
       <ManagerInbox
         ref={inboxRef}
         tabId={tabId}

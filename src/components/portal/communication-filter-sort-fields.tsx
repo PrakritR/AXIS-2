@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  FilterCheckboxList,
+  FilterCollapsibleSection,
   FilterFieldsAccordion,
-  FilterMultiSelectDropdown,
-  FilterSingleSelectDropdown,
+  FilterSingleSelectList,
+  filterMultiSelectSummary,
+  filterSingleSelectSummary,
 } from "@/components/portal/filter-field-lists";
 import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import {
@@ -39,45 +42,66 @@ export function CommunicationFilterSortFields({
   );
   const [draftListSort, setDraftListSort] = usePortalFilterDraft(listSort, onListSortChange, "recent");
 
+  const propertyListOptions = propertyOptions.map((option) => ({ value: option.value, label: option.label }));
+  const roleListOptions = roleOptions.map((option) => ({ value: option.value, label: option.label }));
+
   return (
     <FilterFieldsAccordion>
-      <FilterMultiSelectDropdown
+      <FilterCollapsibleSection
         sectionId="house"
         label="House"
-        options={propertyOptions}
-        selected={draftFilters.propertyIds}
-        onChange={(propertyIds) => setDraftFilters({ ...draftFilters, propertyIds })}
-        allLabel="All houses"
-        emptyMenuText="No houses"
-        dataAttr="communication-filter-house"
-      />
+        summary={filterMultiSelectSummary(draftFilters.propertyIds, propertyListOptions, "All houses")}
+        empty={draftFilters.propertyIds.length === 0}
+        menuOptionCount={propertyListOptions.length}
+        dataAttr="communication-filter-house-trigger"
+      >
+        <FilterCheckboxList
+          options={propertyListOptions}
+          selected={draftFilters.propertyIds}
+          onChange={(propertyIds) => setDraftFilters({ ...draftFilters, propertyIds })}
+          emptyMenuText="No houses"
+          dataAttr="communication-filter-house"
+        />
+      </FilterCollapsibleSection>
 
-      <FilterMultiSelectDropdown
+      <FilterCollapsibleSection
         sectionId="role"
         label="Role"
-        options={roleOptions}
-        selected={draftFilters.roles}
-        onChange={(roles) =>
-          setDraftFilters({
-            ...draftFilters,
-            roles: roles as CommunicationFilterRole[],
-            contactIds: [],
-          })
-        }
-        allLabel="All roles"
-        emptyMenuText="No roles"
-        dataAttr="communication-filter-role"
-      />
+        summary={filterMultiSelectSummary(draftFilters.roles, roleListOptions, "All roles")}
+        empty={draftFilters.roles.length === 0}
+        menuOptionCount={roleListOptions.length}
+        dataAttr="communication-filter-role-trigger"
+      >
+        <FilterCheckboxList
+          options={roleListOptions}
+          selected={draftFilters.roles}
+          onChange={(roles) =>
+            setDraftFilters({
+              ...draftFilters,
+              roles: roles as CommunicationFilterRole[],
+              contactIds: [],
+            })
+          }
+          emptyMenuText="No roles"
+          dataAttr="communication-filter-role"
+        />
+      </FilterCollapsibleSection>
 
-      <FilterSingleSelectDropdown
+      <FilterCollapsibleSection
         sectionId="sort"
         label="Sort"
-        options={SORT_OPTIONS}
-        value={draftListSort}
-        onChange={(value) => setDraftListSort(value as CommunicationListSort)}
-        placeholder="Most recent"
-        dataAttr="communication-filter-sort"
-      />
+        summary={filterSingleSelectSummary(draftListSort, SORT_OPTIONS, "Most recent")}
+        empty={draftListSort === "recent"}
+        menuOptionCount={SORT_OPTIONS.length}
+        dataAttr="communication-filter-sort-trigger"
+      >
+        <FilterSingleSelectList
+          options={SORT_OPTIONS}
+          value={draftListSort}
+          onChange={(value) => setDraftListSort(value as CommunicationListSort)}
+          dataAttr="communication-filter-sort"
+        />
+      </FilterCollapsibleSection>
     </FilterFieldsAccordion>
   );
 }

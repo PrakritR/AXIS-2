@@ -187,6 +187,8 @@ export function computePortalFilterDropdownRect(
     widthPx?: number;
     fullBleed?: boolean;
     horizontalBoundary?: Pick<DOMRect, "left" | "right">;
+    /** Filter panels always open below the trigger — never flip above it. */
+    preferOpenDown?: boolean;
   },
 ): FieldSelectMenuRect {
   const rect = button.getBoundingClientRect();
@@ -217,7 +219,10 @@ export function computePortalFilterDropdownRect(
   const gap = 8;
   const spaceBelow = viewportH - rect.bottom - viewportPadding;
   const spaceAbove = rect.top - viewportPadding;
-  const openUp = spaceBelow < panelHeightPx && spaceAbove > spaceBelow;
+  const preferOpenDown = options?.preferOpenDown ?? false;
+  const openUp = preferOpenDown
+    ? false
+    : spaceBelow < panelHeightPx && spaceAbove > spaceBelow;
   const maxHeight = Math.min(
     panelHeightPx,
     Math.max(120, openUp ? spaceAbove - gap : spaceBelow - gap),
@@ -247,6 +252,11 @@ export function computeFieldSelectMenuRectInHost(
      * all five rows outranks staying inside. Omit to clamp to the host unconditionally.
      */
     bottomBoundPx?: number;
+    /**
+     * When true, keep the menu inside the host box (mobile sheets). Filter dropdown
+     * panels intentionally spill below the panel shell — see the filter-panel branch.
+     */
+    strictHostContainment?: boolean;
     /**
      * Height of the host's FIXED chrome (drag handle, title, close, Reset) measured from
      * the host's top. The menu is never placed over it. Without this the clamp treated
@@ -282,6 +292,41 @@ export function computeFieldSelectMenuRectInHost(
   const triggerTopInHost = rect.top - hostRect.top;
   const triggerBottomInHost = rect.bottom - hostRect.top;
   const preferOpenDown = options?.preferOpenDown ?? false;
+  const strictHostContainment = options?.strictHostContainment ?? false;
+  const inFilterDropdownPanel = host.matches('[data-slot="portal-filter-dropdown-panel"]');
+
+  /* Desktop filter panel: always open DOWN and size to the viewport below the trigger.
+     The menu may paint past the panel's bottom edge — that is intentional. */
+  if (preferOpenDown && inFilterDropdownPanel) {
+    const bottomBound = options?.bottomBoundPx ?? hostRect.bottom;
+    const spaceBelow = bottomBound - rect.bottom - gap;
+    const top = triggerBottomInHost + gap;
+    const maxHeight = Math.min(
+      contentPx,
+      Math.max(FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12, spaceBelow),
+    );
+    if (maxHeight > 0) {
+      return { top, left, width, maxHeight, position: "absolute" };
+    }
+  }
+
+  if (preferOpenDown && strictHostContainment) {
+    const hostMetricsReady = hostRect.height > 0 && rect.height > 0;
+    if (hostMetricsReady) {
+      const hostBottom = hostRect.height - gap;
+      let top = Math.max(safeTop, triggerBottomInHost + gap);
+      let maxHeight = Math.min(contentPx, hostBottom - top);
+
+      if (maxHeight < FIELD_SELECT_MENU_ITEM_HEIGHT_PX + 12) {
+        maxHeight = Math.min(contentPx, hostRect.height - topInset - gap * 2);
+        top = Math.max(safeTop, hostBottom - maxHeight);
+      }
+
+      if (maxHeight > 0) {
+        return { top, left, width, maxHeight, position: "absolute" };
+      }
+    }
+  }
 
   /*
    * Containment first. A menu that escapes its sheet onto the dimmed page reads as broken,
@@ -447,6 +492,7 @@ export function useFieldSelectMenu({
           ? computePortalFilterDropdownRect(button, contentPx, {
               widthPx: minMenuWidth,
               fullBleed,
+              preferOpenDown: true,
               horizontalBoundary: constrainToTitleBand
                 ? (button
                     .closest('[data-slot="portal-page-title-band"], [data-slot="portal-page-shell"]')
@@ -460,10 +506,7 @@ export function useFieldSelectMenu({
                 matchTriggerWidth: matchTriggerWidth || inVaulSheet || inModalDialog,
                 hostPaddingPx: inVaulSheet ? 0 : undefined,
                 topInsetPx: fieldSelectHostTopInsetPx(portalHost),
-                /* FALLBACK ONLY. Containment comes first, so this bound is reached solely
-                   when the host is too short to seat the menu below its own chrome; both
-                   hosts are `overflow-visible` so that spill can render at all. Without it
-                   the bottom-most field of such a host opens a crushed one-row menu. */
+                strictHostContainment: inVaulSheet || inModalDialog,
                 bottomBoundPx: window.innerHeight - 12,
               })
             : computeFieldSelectMenuRect(button, contentPx, portalHost, {
@@ -510,7 +553,6 @@ export function useFieldSelectMenu({
       const element = fieldSelectEventTargetElement(event.target);
       if (!element) return;
       if (wrapRef.current?.contains(element)) return;
-      if (element.closest('[data-slot="portal-filter-dropdown-panel"]')) return;
       // A click inside ANY portaled field-select menu must not close this one.
       if (element.closest(`[${FIELD_SELECT_MENU_DATA_ATTR}]`)) return;
       const list = document.getElementById(listId);

@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  FilterCheckboxList,
+  FilterCollapsibleSection,
   FilterFieldsAccordion,
-  FilterMultiSelectDropdown,
-  FilterSingleSelectDropdown,
+  FilterSingleSelectList,
+  filterMultiSelectSummary,
+  filterSingleSelectSummary,
 } from "@/components/portal/filter-field-lists";
 import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 
@@ -13,6 +16,10 @@ export function PaymentFilterSortFields({
   propertyOptions,
   propertyFilters,
   onPropertyFiltersChange,
+  residentOptions,
+  residentFilters,
+  onResidentFiltersChange,
+  showResidentFilter = true,
   listSort,
   onListSortChange,
   sortOptions,
@@ -21,6 +28,10 @@ export function PaymentFilterSortFields({
   propertyOptions: { id: string; label: string }[];
   propertyFilters: string[];
   onPropertyFiltersChange: (next: string[]) => void;
+  residentOptions: { id: string; label: string }[];
+  residentFilters: string[];
+  onResidentFiltersChange: (next: string[]) => void;
+  showResidentFilter?: boolean;
   listSort: PaymentListSort;
   onListSortChange: (next: PaymentListSort) => void;
   sortOptions: { value: PaymentListSort; label: string }[];
@@ -31,6 +42,11 @@ export function PaymentFilterSortFields({
     onPropertyFiltersChange,
     [],
   );
+  const [draftResidentFilters, setDraftResidentFilters] = usePortalFilterDraft(
+    residentFilters,
+    onResidentFiltersChange,
+    [],
+  );
   const [draftListSort, setDraftListSort] = usePortalFilterDraft(
     listSort,
     onListSortChange,
@@ -38,30 +54,66 @@ export function PaymentFilterSortFields({
   );
 
   const propertyListOptions = propertyOptions.map((option) => ({ value: option.id, label: option.label }));
+  const residentListOptions = residentOptions.map((option) => ({ value: option.id, label: option.label }));
   const sortListOptions = sortOptions.map((opt) => ({ value: opt.value, label: opt.label }));
 
   return (
     <FilterFieldsAccordion>
-      <FilterMultiSelectDropdown
-        sectionId="property"
-        label="Property"
-        options={propertyListOptions}
-        selected={draftPropertyFilters}
-        onChange={setDraftPropertyFilters}
-        allLabel="All properties"
-        emptyMenuText="No properties"
-        dataAttr="payments-filter-property"
-      />
+      {propertyOptions.length > 0 ? (
+        <FilterCollapsibleSection
+          sectionId="property"
+          label="Property"
+          summary={filterMultiSelectSummary(draftPropertyFilters, propertyListOptions, "All properties")}
+          empty={draftPropertyFilters.length === 0}
+          menuOptionCount={propertyListOptions.length}
+          dataAttr="payments-filter-property-trigger"
+        >
+          <FilterCheckboxList
+            options={propertyListOptions}
+            selected={draftPropertyFilters}
+            onChange={setDraftPropertyFilters}
+            emptyMenuText="No properties"
+            dataAttr="payments-filter-property"
+          />
+        </FilterCollapsibleSection>
+      ) : null}
 
-      <FilterSingleSelectDropdown
-        sectionId="sort"
-        label="Sort"
-        options={sortListOptions}
-        value={draftListSort}
-        onChange={(value) => setDraftListSort(value as PaymentListSort)}
-        placeholder="Default sort"
-        dataAttr="payments-filter-sort"
-      />
+      {showResidentFilter && residentListOptions.length > 0 ? (
+        <FilterCollapsibleSection
+          sectionId="resident"
+          label="Resident"
+          summary={filterMultiSelectSummary(draftResidentFilters, residentListOptions, "All residents")}
+          empty={draftResidentFilters.length === 0}
+          menuOptionCount={residentListOptions.length}
+          dataAttr="payments-filter-resident-trigger"
+        >
+          <FilterCheckboxList
+            options={residentListOptions}
+            selected={draftResidentFilters}
+            onChange={setDraftResidentFilters}
+            emptyMenuText="No residents"
+            dataAttr="payments-filter-resident"
+          />
+        </FilterCollapsibleSection>
+      ) : null}
+
+      {sortListOptions.length > 0 ? (
+        <FilterCollapsibleSection
+          sectionId="sort"
+          label="Sort"
+          summary={filterSingleSelectSummary(draftListSort, sortListOptions, "Default sort")}
+          empty={draftListSort === defaultListSort}
+          menuOptionCount={sortListOptions.length}
+          dataAttr="payments-filter-sort-trigger"
+        >
+          <FilterSingleSelectList
+            options={sortListOptions}
+            value={draftListSort}
+            onChange={(value) => setDraftListSort(value as PaymentListSort)}
+            dataAttr="payments-filter-sort"
+          />
+        </FilterCollapsibleSection>
+      ) : null}
     </FilterFieldsAccordion>
   );
 }

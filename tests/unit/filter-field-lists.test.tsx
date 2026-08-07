@@ -277,6 +277,30 @@ describe("FilterCollapsibleSection — the one filter dropdown pattern", () => {
     );
   });
 
+  it("closes when clicking elsewhere (click off)", async () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    fireEvent.pointerDown(screen.getByTestId("control-below"));
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+  });
+
+  it("closes when clicking elsewhere inside an open filter dropdown panel", async () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-slot", "portal-filter-dropdown-panel");
+    document.body.appendChild(host);
+    render(<Harness />, { container: host });
+    fireEvent.click(screen.getByRole("button", { name: /Property/ }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    fireEvent.pointerDown(screen.getByTestId("control-below"));
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+    host.remove();
+  });
+
   it("shows a search box when there are MORE than 5 options", () => {
     render(<Harness optionCount={8} />);
     fireEvent.click(screen.getByRole("button", { name: /Property/ }));
@@ -586,13 +610,13 @@ describe("PortalFilterSortSheet — mobile dropdown stays open while filtering",
 
 describe("portalFilterPanelSizeClass", () => {
   it("uses shorter height for one field and taller for more", () => {
-    expect(portalFilterPanelSizeClass(1)).toContain("10.5rem");
-    expect(portalFilterPanelSizeClass(2)).toContain("14rem");
-    expect(portalFilterPanelSizeClass(3)).toContain("23rem");
+    expect(portalFilterPanelSizeClass(1)).toContain("max-h-[10.5rem]");
+    expect(portalFilterPanelSizeClass(2)).toContain("max-h-[14rem]");
+    expect(portalFilterPanelSizeClass(3)).toContain("max-h-[23rem]");
     // Four 76px field rows plus header/padding need 23rem; at 19rem the fourth field
     // rendered BELOW the panel and was only reachable by scrolling.
-    expect(portalFilterPanelSizeClass(4)).toContain("23rem");
-    expect(PORTAL_FILTER_COMMUNICATION_PANEL_CLASS).toContain("18rem");
+    expect(portalFilterPanelSizeClass(4)).toContain("max-h-[23rem]");
+    expect(PORTAL_FILTER_COMMUNICATION_PANEL_CLASS).toContain("max-h-[23rem]");
   });
 });
 
@@ -841,7 +865,7 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(button);
   });
 
-  it("keeps field menus inside an open filter dropdown host", () => {
+  it("opens below the trigger and may spill past the filter panel bottom", () => {
     const host = document.createElement("div");
     host.setAttribute("data-slot", "portal-filter-dropdown-panel");
     host.style.position = "fixed";
@@ -877,19 +901,22 @@ describe("portal filter dropdown positioning", () => {
         y: 100,
         toJSON: () => ({}),
       }) as DOMRect;
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
 
-    const rect = computeFieldSelectMenuRectInHost(button, 252, host, { minWidth: 328, preferOpenDown: true });
+    const rect = computeFieldSelectMenuRectInHost(button, 252, host, {
+      minWidth: 328,
+      preferOpenDown: true,
+      bottomBoundPx: 888,
+    });
     expect(rect.position).toBe("absolute");
-    // The 304px host can hold a 252px menu, so the menu is slid back inside its box rather
-    // than hanging off the bottom — full height, wholly within the host.
+    expect(rect.top).toBe(224 - 100 + 4);
     expect(rect.maxHeight).toBe(252);
-    expect(rect.top).toBeGreaterThanOrEqual(0);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304);
+    expect(rect.top + rect.maxHeight).toBeGreaterThan(304);
 
     document.body.removeChild(host);
   });
 
-  it("opens UP rather than crushing the menu when a field sits at the panel bottom", () => {
+  it("opens below the bottom filter field with full height when the viewport has room", () => {
     const host = document.createElement("div");
     host.setAttribute("data-slot", "portal-filter-dropdown-panel");
     host.style.position = "fixed";
@@ -926,51 +953,41 @@ describe("portal filter dropdown positioning", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    // 8px below the trigger inside the host vs 244px above it. `preferOpenDown` still wins
-    // whenever the menu fits below (see the viewport-clamped case above, which is the real
-    // sheet path); here nothing fits below, so forcing down would render a one-row menu.
-    const rect = computeFieldSelectMenuRectInHost(button, 252, host, { preferOpenDown: true });
-    const triggerTopInHost = 348 - 100;
-    // Opens upward and keeps its full height, clamped inside the host. It may overlap the
-    // trigger by the shortfall (244px above vs a 252px menu) — the lesser cost against
-    // hanging the menu off the panel or crushing it below five rows.
-    expect(rect.top).toBeLessThan(triggerTopInHost);
+    Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
+
+    const rect = computeFieldSelectMenuRectInHost(button, 252, host, {
+      preferOpenDown: true,
+      bottomBoundPx: 888,
+    });
+    expect(rect.top).toBe(392 - 100 + 4);
     expect(rect.maxHeight).toBe(252);
-    expect(rect.top).toBeGreaterThanOrEqual(0);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(304);
+    expect(rect.top + rect.maxHeight).toBeGreaterThan(304);
 
     document.body.removeChild(host);
   });
 
-  it("keeps a menu INSIDE its sheet when the sheet can seat it, even offered a viewport bound", () => {
-    // A menu escaping its sheet onto the dimmed page reads as broken, so containment wins
-    // whenever the host can seat the whole menu on either side of the trigger — the
-    // viewport bound is a last resort, not the default.
+  it("opens above the bottom sheet trigger when preferOpenDown but only the space above fits the full menu", () => {
     const host = document.createElement("div");
     host.setAttribute("data-slot", "vaul-bottom-sheet");
     document.body.appendChild(host);
-    // A tall sheet: 395px, so 319px sits above this bottom-most trigger.
     host.getBoundingClientRect = () =>
       ({ top: 179, left: 0, right: 390, bottom: 574, width: 390, height: 395, x: 0, y: 179, toJSON: () => ({}) }) as DOMRect;
 
     const button = document.createElement("button");
     host.appendChild(button);
-    // Last field: only ~24px of the host remains below it.
     button.getBoundingClientRect = () =>
       ({ top: 502, left: 16, right: 374, bottom: 546, width: 358, height: 44, x: 16, y: 502, toJSON: () => ({}) }) as DOMRect;
     Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
 
     const contentPx = fieldSelectMenuContentPx(FILTER_LIST_VISIBLE_ROWS, FILTER_MENU_CHROME_PX);
-    const hostHeight = 395;
+    const triggerTopInHost = 502 - 179;
 
     const rect = computeFieldSelectMenuRectInHost(button, contentPx, host, {
       preferOpenDown: true,
       bottomBoundPx: window.innerHeight - 12,
     });
-    // Full five rows, opened upward, and wholly within the host's own box.
     expect(rect.maxHeight).toBe(contentPx);
-    expect(rect.top).toBeGreaterThanOrEqual(0);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(hostHeight);
+    expect(rect.top).toBe(triggerTopInHost - contentPx - 4);
 
     document.body.removeChild(host);
   });
@@ -995,7 +1012,7 @@ describe("portal filter dropdown positioning", () => {
     const contained = computeFieldSelectMenuRectInHost(button, contentPx, host, {
       preferOpenDown: true,
     });
-    expect(contained.maxHeight).toBeLessThan(contentPx); // crushed with no escape offered
+    expect(contained.maxHeight).toBeLessThan(contentPx);
 
     const spilled = computeFieldSelectMenuRectInHost(button, contentPx, host, {
       preferOpenDown: true,
@@ -1045,7 +1062,7 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(host);
   });
 
-  it("never places a CONTAINED menu over the host's chrome, even when the anchor says so", () => {
+  it("never places a filter menu over the host's chrome when opening below", () => {
     // The reported defect: on the 1-field mobile sheet the close ✕, the Filter title, the
     // drag handle and the trigger were ALL 100% covered. FilterCheckboxList does not close
     // on pick and a phone has no Escape key, so hiding the only visible dismiss control can
@@ -1073,10 +1090,8 @@ describe("portal filter dropdown positioning", () => {
     });
 
     expect(rect.top).toBeGreaterThanOrEqual(PORTAL_FILTER_SHEET_CHROME_PX + gap);
-    // The five-row guarantee and containment both survive the clamp — that is what the
-    // raised-sheet floor buys.
     expect(rect.maxHeight).toBe(contentPx);
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(395);
+    expect(rect.top).toBe(PORTAL_FILTER_SHEET_CHROME_PX + gap);
 
     document.body.removeChild(host);
   });
@@ -1194,37 +1209,24 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(button);
   });
 
-  it("falls back to opening UP when a preferred-down menu cannot fit below", () => {
-    // `preferOpenDown` is a preference, not a lock.
+  it("prefers opening down when preferOpenDown and there is room below", () => {
     const contentPx = 264;
-    expect(resolveOpenUp(300, 100, contentPx, true)).toBe(false); // fits below → down
-    expect(resolveOpenUp(300, 700, contentPx, true)).toBe(false); // still fits below → down
-    expect(resolveOpenUp(40, 700, contentPx, true)).toBe(true); // cannot fit below → up
-    expect(resolveOpenUp(40, 20, contentPx, true)).toBe(false); // neither fits, down roomier
-  });
-
-  it("only flips a preferred-down menu up when that buys at least one more whole row", () => {
-    // The preference has to MEAN something: without it the roomier side wins on a 1px
-    // difference and the menu jumps over the very fields it was opened from. With it,
-    // flipping up must gain a full option row (FIELD_SELECT_MENU_ITEM_HEIGHT_PX = 40).
-    // Every case here is the NEITHER-fits branch (both sides < contentPx), which is the
-    // only place the hysteresis is allowed to arbitrate.
-    const contentPx = 264;
-    expect(resolveOpenUp(100, 120, contentPx, true)).toBe(false); // +20px above → stay down
-    expect(resolveOpenUp(100, 120, contentPx, false)).toBe(true); // no preference → roomier wins
-    expect(resolveOpenUp(100, 140, contentPx, true)).toBe(true); // +40px buys a row → up
-  });
-
-  it("takes the space ABOVE when it fits whole and below would clip a row short", () => {
-    // The captain's requirement is non-negotiable: every dropdown always shows 5 entries.
-    // Stickiness is a nicety, so where the two conflict always-5 wins — a pure difference
-    // test opened this DOWN at 246px (~4.6 rows) while a full 264px sat above it.
-    const contentPx = 264;
-    expect(resolveOpenUp(250, 270, contentPx, true)).toBe(true);
-    expect(resolveOpenUp(250, 270, contentPx, false)).toBe(true);
-    // The fits-below rule still comes first, so a menu that fits below never flips up
-    // just because there is even more room above it.
+    expect(resolveOpenUp(300, 100, contentPx, true)).toBe(false);
+    expect(resolveOpenUp(300, 700, contentPx, true)).toBe(false);
     expect(resolveOpenUp(264, 700, contentPx, true)).toBe(false);
+  });
+
+  it("may open up with preferOpenDown when only the space above fits the full menu", () => {
+    const contentPx = 264;
+    expect(resolveOpenUp(40, 700, contentPx, true)).toBe(true);
+    expect(resolveOpenUp(40, 20, contentPx, true)).toBe(false);
+  });
+
+  it("still picks the roomier side when there is no preferOpenDown preference", () => {
+    const contentPx = 264;
+    expect(resolveOpenUp(100, 120, contentPx, false)).toBe(true);
+    expect(resolveOpenUp(250, 270, contentPx, false)).toBe(true);
+    expect(resolveOpenUp(264, 700, contentPx, false)).toBe(false);
   });
 
   it("opens filter field menus below the trigger on body portal when the menu fits there", () => {
@@ -1260,7 +1262,7 @@ describe("portal filter dropdown positioning", () => {
     document.body.removeChild(button);
   });
 
-  it("still opens UP on the body portal when a preferred-down menu has no room below", () => {
+  it("keeps a full scrollable menu below the trigger when preferOpenDown and near the viewport bottom", () => {
     const button = document.createElement("button");
     document.body.appendChild(button);
     button.getBoundingClientRect = () =>
@@ -1283,7 +1285,7 @@ describe("portal filter dropdown positioning", () => {
       preferOpenDown: true,
       matchTriggerWidth: true,
     });
-    expect(rect.top + rect.maxHeight).toBeLessThanOrEqual(760);
+    expect(rect.top).toBe(760 - contentPx - 4);
     expect(rect.maxHeight).toBe(contentPx);
 
     document.body.removeChild(button);

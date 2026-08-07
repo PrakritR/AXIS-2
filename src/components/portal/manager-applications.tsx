@@ -25,6 +25,7 @@ import {
 import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -1290,9 +1291,12 @@ export function ManagerApplications({
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
-      onReset={() => {}}
+      filterFieldCount={1}
+      constrainDropdownToTitleBand
+      mobileFlushBody
+      onReset={() => setPropertyFilters([])}
       dataAttr="applications-filter-sheet-open"
-      className="min-w-0 shrink-0"
+      className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
     >
       <ApplicationFilterSortFields
         propertyOptions={propertyOptions}

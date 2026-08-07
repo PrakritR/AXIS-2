@@ -8,19 +8,14 @@ import {
   serviceRequestListHref,
 } from "@/lib/portal-detail-routes";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
+import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
   ManagerPortalPageShell,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
-import {
-  FilterCheckboxList,
-  FilterCollapsibleSection,
-  FilterFieldsAccordion,
-  filterMultiSelectSummary,
-} from "@/components/portal/filter-field-lists";
-import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { PortalServiceRecordRow } from "@/components/portal/portal-record-row";
 import { INBOX_LIST_SCROLL } from "@/components/portal/portal-inbox-ui";
@@ -74,29 +69,6 @@ type FilterType = "requests" | "work-orders" | "vendors";
 type RequestBucket = ManagerServiceRequestBucket;
 
 const SERVICES_TAB_IDS = ["requests", "work-orders", "vendors"] as const;
-
-function ServicesPropertyFilterList({
-  options,
-  selected,
-  onChange,
-  dataAttr,
-}: {
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (next: string[]) => void;
-  dataAttr?: string;
-}) {
-  const [draftSelected, setDraftSelected] = usePortalFilterDraft(selected, onChange, []);
-  return (
-    <FilterCheckboxList
-      options={options}
-      selected={draftSelected}
-      onChange={setDraftSelected}
-      emptyMenuText="No properties"
-      dataAttr={dataAttr}
-    />
-  );
-}
 
 export function ManagerAllServicesPanel({
   tabId: serverTabId,
@@ -313,12 +285,7 @@ export function ManagerAllServicesPanel({
     return `${propertyFilters.length} properties`;
   }, [propertyFilters, filterPropertyOptions]);
 
-  const resetServicesFilters = () => {};
-
-  const servicePropertyListOptions = useMemo(
-    () => filterPropertyOptions.map((option) => ({ value: option.id, label: option.label })),
-    [filterPropertyOptions],
-  );
+  const resetServicesFilters = () => setPropertyFilters([]);
 
   const servicesFilterSheet =
     typeFilter !== "vendors" ? (
@@ -326,27 +293,18 @@ export function ManagerAllServicesPanel({
         activeCount={portalFilterActiveCount([propertyFilters])}
         compactPanel
         filterFieldCount={1}
-        className="min-w-0 shrink-0"
+        constrainDropdownToTitleBand
+        mobileFlushBody
+        className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
         onReset={resetServicesFilters}
         dataAttr="services-filter-sheet-open"
       >
-        <FilterFieldsAccordion>
-          <FilterCollapsibleSection
-            sectionId="property"
-            label="Property"
-            summary={filterMultiSelectSummary(propertyFilters, servicePropertyListOptions, "All properties")}
-            empty={propertyFilters.length === 0}
-            menuOptionCount={servicePropertyListOptions.length}
-            dataAttr="services-filter-property-trigger"
-          >
-            <ServicesPropertyFilterList
-              options={servicePropertyListOptions}
-              selected={propertyFilters}
-              onChange={setPropertyFilters}
-              dataAttr="services-filter-property"
-            />
-          </FilterCollapsibleSection>
-        </FilterFieldsAccordion>
+        <ApplicationFilterSortFields
+          propertyOptions={filterPropertyOptions}
+          propertyFilters={propertyFilters}
+          onPropertyFiltersChange={setPropertyFilters}
+          dataAttr="services-filter-property"
+        />
       </PortalFilterSortSheet>
     ) : null;
 
@@ -377,6 +335,7 @@ export function ManagerAllServicesPanel({
         {
           id: "work-orders",
           label: "Work orders",
+          shortLabel: "Orders",
           href: `${basePath}/services/work-orders/open`,
           dataAttr: "manager-services-tab-work-orders",
         },
@@ -389,7 +348,8 @@ export function ManagerAllServicesPanel({
       ]}
       activeId={typeFilter}
       ariaLabel="Services section"
-      size="toolbar"
+      itemLayout="equal"
+      denseEqualRow
       className="max-w-none"
     />
   );
@@ -444,6 +404,7 @@ export function ManagerAllServicesPanel({
       return woTabs.map((t) => ({
         id: t.id,
         label: t.label,
+        shortLabel: t.id === "scheduled" ? "Sched." : t.id === "completed" ? "Done" : t.label,
         href: `${basePath}/services/work-orders/${t.id}`,
         count: t.count,
       }));
@@ -529,13 +490,16 @@ export function ManagerAllServicesPanel({
     typeFilter === "work-orders" ? woBucket : typeFilter === "requests" ? reqBucket : undefined;
 
   const servicesListDestinations = (
-    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-2.5">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       {servicesTypeNav}
       {bucketDestinations ? (
         <DestinationNav
           items={bucketDestinations}
           activeId={activeBucketId}
           ariaLabel={typeFilter === "work-orders" ? "Work order status" : "Request status"}
+          itemLayout="equal"
+          denseEqualRow
+          className="max-w-none"
         />
       ) : null}
     </div>

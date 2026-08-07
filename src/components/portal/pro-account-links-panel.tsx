@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import {
   ManagerPortalPageShell,
@@ -1423,8 +1424,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([teamPropertyFilters])}
       compactPanel
-      className="min-w-0 shrink-0"
-      onReset={() => {}}
+      filterFieldCount={1}
+      constrainDropdownToTitleBand
+      mobileFlushBody
+      className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
+      onReset={() => setTeamPropertyFilters([])}
       dataAttr="team-links-filter-sheet-open"
     >
       <ApplicationFilterSortFields

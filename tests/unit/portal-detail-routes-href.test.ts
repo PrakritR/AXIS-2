@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   applicationListHref,
   legacyManagerPortalSectionPath,
+  managerDocumentsApplicationDetailHref,
+  managerDocumentsApplicationsListHref,
   propertyListHref,
+  residentDocumentsApplicationDetailHref,
+  residentDocumentsApplicationListHref,
 } from "@/lib/portal-detail-routes";
 
 describe("portal-detail-routes href helpers", () => {
@@ -23,5 +27,16 @@ describe("portal-detail-routes href helpers", () => {
     expect(legacyManagerPortalSectionPath("approved")).toBe("applications/approved");
     expect(legacyManagerPortalSectionPath("manager")).toBe("leases/manager");
     expect(legacyManagerPortalSectionPath("dashboard")).toBeNull();
+  });
+
+  it("builds documents application detail URLs", () => {
+    expect(managerDocumentsApplicationsListHref(base)).toBe("/portal/documents/applications");
+    expect(managerDocumentsApplicationDetailHref(base, "APP-1")).toBe(
+      "/portal/documents/applications/APP-1",
+    );
+    expect(residentDocumentsApplicationListHref("/resident")).toBe("/resident/documents/application");
+    expect(residentDocumentsApplicationDetailHref("/resident", "APP-1")).toBe(
+      "/resident/documents/application/APP-1",
+    );
   });
 });

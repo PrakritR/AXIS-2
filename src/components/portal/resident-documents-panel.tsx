@@ -25,11 +25,17 @@ import {
   triggerDocumentDownload,
 } from "@/components/portal/resident-other-documents";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { buildReceiptRows, type ReceiptRow } from "@/lib/rent-receipts";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  residentDocumentsApplicationDetailHref,
+  residentDocumentsApplicationListHref,
+} from "@/lib/portal-detail-routes";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -70,13 +76,13 @@ function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
   return "Pending review";
 }
 
-/** Documents › Application — the resident's applications as table rows with the official PDF below. */
-function ApplicationDocumentsTable() {
+/** Documents › Application — the resident's applications as table rows; tap opens a detail page. */
+function ApplicationDocumentsTable({ basePath }: { basePath: string }) {
   const session = usePortalSession();
+  const navigate = usePortalNavigate();
   const email = session.email?.trim().toLowerCase() ?? "";
   const userId = session.userId;
   const [tick, setTick] = useState(0);
-  const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -96,6 +102,13 @@ function ApplicationDocumentsTable() {
     );
   }, [email, userId, tick]);
 
+  const openApplication = useCallback(
+    (row: DemoApplicantRow) => {
+      navigate(residentDocumentsApplicationDetailHref(basePath, row.id));
+    },
+    [basePath, navigate],
+  );
+
   if (rows.length === 0) {
     return <PortalDataTableEmpty icon="application" message="No applications are linked to your account yet." />;
   }
@@ -111,47 +124,113 @@ function ApplicationDocumentsTable() {
           <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
         </>
       }
-      rows={rows.map((row) => {
-        const isOpen = preview?.id === row.id;
-        const toggle = () => setPreview((cur) => (cur?.id === row.id ? null : row));
-        return {
-          key: row.id,
-          expanded: isOpen,
-          onToggle: toggle,
-          cells: (
-            <>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                <PortalTableInlineExpand expanded={isOpen} className="min-w-0 truncate font-medium text-foreground">
-                  Rental application
-                </PortalTableInlineExpand>
-              </td>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                <p className="min-w-0 truncate">{row.property || "—"}</p>
-              </td>
-            </>
-          ),
-          card: (
-            <PortalMobileSummaryCard
-              title="Rental application"
-              subtitle={applicationStatusLabel(row.bucket)}
-              meta={row.property || "—"}
-              expanded={isOpen}
-              onClick={toggle}
-            />
-          ),
-          detail: isOpen ? (
-            <ApplicationDocumentPreview
-              row={row}
-              collapsible={false}
-              showDownload
-              variant="pdf"
-              downloadPlacement="bottom"
-            />
-          ) : null,
-        };
-      })}
+      rows={rows.map((row) => ({
+        key: row.id,
+        expanded: false,
+        detail: null,
+        onToggle: () => openApplication(row),
+        cells: (
+          <>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>
+              <span className="min-w-0 truncate font-medium text-foreground">Rental application</span>
+            </td>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>
+              <p className="min-w-0 truncate">{row.property || "—"}</p>
+            </td>
+          </>
+        ),
+        card: (
+          <PortalMobileSummaryCard
+            title="Rental application"
+            subtitle={applicationStatusLabel(row.bucket)}
+            meta={row.property || "—"}
+            onClick={() => openApplication(row)}
+          />
+        ),
+      }))}
     />
+  );
+}
+
+function ResidentApplicationDocumentDetail({
+  applicationId,
+  basePath,
+}: {
+  applicationId: string;
+  basePath: string;
+}) {
+  const session = usePortalSession();
+  const email = session.email?.trim().toLowerCase() ?? "";
+  const userId = session.userId;
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const on = () => setTick((t) => t + 1);
+    void syncManagerApplicationsFromServer({ selfScope: true }).then(on);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+  }, []);
+
+  const row = useMemo(() => {
+    void tick;
+    if (!email) return null;
+    return (
+      readManagerApplicationRows().find(
+        (candidate) =>
+          candidate.id === applicationId &&
+          residentOwnsApplicationRow(candidate, { email, userId }) &&
+          !isWithdrawnApplicationRow(candidate),
+      ) ?? null
+    );
+  }, [applicationId, email, tick, userId]);
+
+  const listHref = residentDocumentsApplicationListHref(basePath);
+
+  if (!row) {
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Documents"
+        title="Application"
+        backHref={listHref}
+        hideBackText
+        bareHeader
+        dataAttrBack="resident-documents-application-detail-back"
+        pinScrollBody
+      >
+        <div className="px-3 py-6">
+          {email ? (
+            <PortalDataTableEmpty icon="application" message="Application not found." />
+          ) : (
+            <ListSkeleton rows={4} showLeading={false} />
+          )}
+        </div>
+      </PortalRecordDetailPage>
+    );
+  }
+
+  return (
+    <PortalRecordDetailPage
+      pageTitle="Documents"
+      title="Rental application"
+      subtitle={applicationStatusLabel(row.bucket)}
+      backHref={listHref}
+      hideBackText
+      bareHeader
+      dataAttrBack="resident-documents-application-detail-back"
+      pinScrollBody
+    >
+      <div className="px-3 pb-6 pt-2 sm:px-4">
+        <ApplicationDocumentPreview
+          row={row}
+          collapsible={false}
+          showDownload
+          variant="pdf"
+          downloadPlacement="bottom"
+          bareCanvas
+        />
+      </div>
+    </PortalRecordDetailPage>
   );
 }
 
@@ -514,10 +593,12 @@ export function ResidentDocumentsPanel({
   tabId,
   basePath = "/resident",
   tabs,
+  applicationId,
 }: {
   tabId: string;
   basePath?: string;
   tabs: ReadonlyArray<{ id: string; label: string }>;
+  applicationId?: string;
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
@@ -572,6 +653,12 @@ export function ResidentDocumentsPanel({
     showToast("Removed.");
   };
 
+  if (tabId === "application" && applicationId) {
+    return (
+      <ResidentApplicationDocumentDetail applicationId={applicationId} basePath={basePath} />
+    );
+  }
+
   return (
     <ManagerPortalPageShell
       title="Documents"
@@ -614,7 +701,7 @@ export function ResidentDocumentsPanel({
         activeDestinationId={tabId}
         destinationAriaLabel="Documents"
       />
-      {tabId === "application" ? <ApplicationDocumentsTable /> : null}
+      {tabId === "application" ? <ApplicationDocumentsTable basePath={basePath} /> : null}
 
       {tabId === "lease" ? <SignedLeaseDocumentsTable /> : null}
 

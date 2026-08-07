@@ -1,8 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { DestinationNav, LocalDestinationNav } from "@/components/ui/destination-nav";
-import { cn } from "@/lib/utils";
+import { DestinationNav } from "@/components/ui/destination-nav";
 
 /** Top-level finance areas — keeps the tab bar from cramming 16 views into one row. */
 export const FINANCE_NAV_GROUPS = [
@@ -42,57 +40,54 @@ export function financeGroupIdForTab(tabId: string): string {
 
 type FinanceTabItem = { id: string; label: string; href: string };
 
-const SUB_NAV_WRAP_CLASS =
-  "md:flex-wrap md:gap-1 [&_a]:flex-none [&_a]:basis-auto [&_a]:shrink-0 md:[&_a]:flex-none";
+const EQUAL_NAV_CLASS = "max-w-none max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent";
 
 /**
- * Two-band finance navigation — group switcher (3 items) + wrapped sub-tabs for the active group.
- * Matches Residents / Properties / Documents list chrome without horizontal overflow.
+ * Group switcher + full-width sub-tabs — same chrome as Payments and Documents.
  */
 export function FinanceDestinationNav({
   tabId,
   tabItems,
-  basePath,
 }: {
   tabId: string;
   tabItems: FinanceTabItem[];
-  basePath: string;
 }) {
-  const router = useRouter();
   const activeGroupId = financeGroupIdForTab(tabId);
-  const activeGroup = FINANCE_NAV_GROUPS.find((group) => group.id === activeGroupId) ?? FINANCE_NAV_GROUPS[0];
-  const subItems = tabItems.filter((item) => (activeGroup.tabIds as readonly string[]).includes(item.id));
+  const subItems = tabItems.filter((item) => {
+    const group = FINANCE_NAV_GROUPS.find((entry) => entry.id === activeGroupId) ?? FINANCE_NAV_GROUPS[0];
+    return (group.tabIds as readonly string[]).includes(item.id);
+  });
 
-  const groupItems = FINANCE_NAV_GROUPS.map((group) => ({
-    id: group.id,
-    label: group.label,
-  }));
+  const groupItems = FINANCE_NAV_GROUPS.map((group) => {
+    const targetTab = (group.tabIds as readonly string[]).includes(tabId) ? tabId : group.tabIds[0];
+    const href = tabItems.find((item) => item.id === targetTab)?.href ?? tabItems[0]?.href ?? "";
+    return {
+      id: group.id,
+      label: group.label,
+      href,
+    };
+  });
 
   return (
-    <div className="space-y-2 pl-1.5 md:pl-3">
-      <LocalDestinationNav
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <DestinationNav
         items={groupItems}
         activeId={activeGroupId}
-        onChange={(groupId) => {
-          const group = FINANCE_NAV_GROUPS.find((entry) => entry.id === groupId);
-          if (!group) return;
-          const targetTab = (group.tabIds as readonly string[]).includes(tabId) ? tabId : group.tabIds[0];
-          router.push(`${basePath}/financials/${targetTab}`, { scroll: false });
-        }}
         ariaLabel="Finance section"
+        itemLayout="equal"
+        denseEqualRow
         size="toolbar"
-        className="max-lg:rounded-none max-lg:border-0 max-lg:border-b max-lg:border-border max-lg:bg-transparent"
+        className={EQUAL_NAV_CLASS}
       />
       {subItems.length > 0 ? (
         <DestinationNav
           items={subItems}
           activeId={tabId}
-          ariaLabel="Finance report"
+          ariaLabel="Finance view"
+          itemLayout="equal"
+          denseEqualRow
           size="toolbar"
-          className={cn(
-            SUB_NAV_WRAP_CLASS,
-            "max-lg:rounded-none max-lg:border-0 max-lg:border-b-0 max-lg:bg-transparent",
-          )}
+          className={EQUAL_NAV_CLASS}
         />
       ) : null}
     </div>

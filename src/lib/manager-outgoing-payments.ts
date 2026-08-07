@@ -210,6 +210,7 @@ export function buildManagerOutgoingPaymentRows(input: {
     const vendor = sourceWorkOrder?.vendorId ? vendorById.get(sourceWorkOrder.vendorId) : undefined;
     const baseRow: DemoManagerOutgoingPaymentRow = {
       id: `expense-${expense.id}`,
+      propertyId: expense.propertyId ?? undefined,
       propertyName,
       categoryLabel: expense.categoryLabel,
       payeeLabel: payee,
@@ -237,8 +238,11 @@ export function buildManagerOutgoingPaymentRows(input: {
     if (workOrderExpenseIds.has(workOrder.id)) continue;
     const amountCents = workOrderAmountCents(workOrder);
     const vendor = workOrder.vendorId ? vendorById.get(workOrder.vendorId) : undefined;
+    const workOrderPropertyId =
+      workOrder.assignedPropertyId?.trim() || workOrder.propertyId?.trim() || undefined;
     const baseRow: DemoManagerOutgoingPaymentRow = {
       id: `work-order-${workOrder.id}`,
+      propertyId: workOrderPropertyId,
       propertyName: workOrder.propertyName,
       categoryLabel: "Vendor payment",
       payeeLabel: workOrder.vendorName?.trim() || "Vendor",
@@ -261,8 +265,11 @@ export function buildManagerOutgoingPaymentRows(input: {
     if (workOrderExpenseIds.has(workOrder.id)) continue;
     const amountCents = workOrderAmountCents(workOrder);
     const vendor = workOrder.vendorId ? vendorById.get(workOrder.vendorId) : undefined;
+    const workOrderPropertyId =
+      workOrder.assignedPropertyId?.trim() || workOrder.propertyId?.trim() || undefined;
     const baseRow: DemoManagerOutgoingPaymentRow = {
       id: `work-order-paid-${workOrder.id}`,
+      propertyId: workOrderPropertyId,
       propertyName: workOrder.propertyName,
       categoryLabel: "Vendor payment",
       payeeLabel: workOrder.vendorName?.trim() || "Vendor",

@@ -235,6 +235,32 @@ export function residentApplicationDetailHref(
   return `${basePath}/applications/${bucket}/${encodeURIComponent(applicationId)}`;
 }
 
+/** Manager Documents › Leasing › Applications list. */
+export function managerDocumentsApplicationsListHref(basePath: string): string {
+  return `${basePath}/documents/applications`;
+}
+
+/** Manager Documents › Leasing › one application PDF detail. */
+export function managerDocumentsApplicationDetailHref(
+  basePath: string,
+  applicationId: string,
+): string {
+  return `${basePath}/documents/applications/${encodeURIComponent(applicationId)}`;
+}
+
+/** Resident Documents › Application list. */
+export function residentDocumentsApplicationListHref(basePath: string): string {
+  return `${basePath}/documents/application`;
+}
+
+/** Resident Documents › one application PDF detail. */
+export function residentDocumentsApplicationDetailHref(
+  basePath: string,
+  applicationId: string,
+): string {
+  return `${basePath}/documents/application/${encodeURIComponent(applicationId)}`;
+}
+
 export const RESIDENT_TOUR_BUCKETS = ["pending", "confirmed", "declined"] as const;
 export type ResidentTourBucketId = (typeof RESIDENT_TOUR_BUCKETS)[number];
 

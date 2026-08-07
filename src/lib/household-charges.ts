@@ -3813,6 +3813,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
   return {
     id: c.id,
     householdChargeId: c.id,
+    propertyId: c.propertyId,
     propertyName,
     roomNumber: "—",
     chargeKind: c.kind,

@@ -9,6 +9,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import {
   deleteAmenityOffer,
   readAmenityOffersForProperty,
@@ -123,7 +124,11 @@ export function ManagerServicesPanel() {
               <PortalFilterSortSheet
                 activeCount={portalFilterActiveCount([resolvedPropertyId])}
                 compactPanel
-                onReset={() => {}}
+                filterFieldCount={1}
+                constrainDropdownToTitleBand
+                mobileFlushBody
+                className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
+                onReset={() => setSelectedPropertyId("")}
                 dataAttr="services-catalog-filter-sheet-open"
               >
                 <ApplicationFilterSortFields

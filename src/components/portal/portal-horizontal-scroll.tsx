@@ -9,11 +9,13 @@ import {
   HORIZONTAL_SCROLL_CAPTURE_ATTR,
   HORIZONTAL_SCROLL_SELECTOR,
 } from "@/lib/horizontal-scroll";
+import { isPortaledFieldSelectMenuTarget } from "@/components/ui/field-select-portal-interaction";
 import { PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
 
 function installPortalHorizontalWheelScroll(root: HTMLElement) {
   const onWheel = (event: WheelEvent) => {
     if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    if (isPortaledFieldSelectMenuTarget(event.target)) return;
 
     let el = event.target as HTMLElement | null;
     while (el && el !== root) {

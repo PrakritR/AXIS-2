@@ -48,6 +48,8 @@ export const PORTAL_FILTER_BROWSE_PANEL_WIDTH_PX = 28 * 16;
 
 /** Parse fixed panel height from portal filter size class names (total shell height). */
 export function portalFilterDropdownHeightPx(panelSizeClass: string): number {
+  const maxRemMatch = panelSizeClass.match(/max-h-\[(\d+(?:\.\d+)?)rem\]/);
+  if (maxRemMatch) return parseFloat(maxRemMatch[1]) * 16;
   const remMatch = panelSizeClass.match(/h-\[(\d+(?:\.\d+)?)rem\]/);
   if (remMatch) return parseFloat(remMatch[1]) * 16;
   if (panelSizeClass.includes("min(36rem")) {
@@ -66,9 +68,11 @@ export function portalFilterDropdownWidthPx(panelSizeClass: string): number {
 export const PORTAL_FILTER_PANEL_HEIGHT_CLASS = "h-[28rem]";
 export const PORTAL_FILTER_PANEL_SIZE_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_HEIGHT_CLASS}`;
 /** Single-field compact filter dropdown. */
-export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "h-[10.5rem]";
-export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
-export const PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS = "h-[14rem]";
+export const PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS = "max-h-[10.5rem]";
+export const PORTAL_FILTER_PANEL_COMPACT_MAX_CLASS = `h-auto ${PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS}`;
+export const PORTAL_FILTER_PANEL_COMPACT_CLASS = `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${PORTAL_FILTER_PANEL_COMPACT_MAX_CLASS}`;
+export const PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS = "max-h-[14rem]";
+export const PORTAL_FILTER_PANEL_TWO_FIELD_MAX_CLASS = `h-auto ${PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS}`;
 /**
  * Fixed chrome above a desktop filter panel's fields: the Filter / Reset / ✕ row.
  * MEASURED (58px), not derived from the utility classes — my arithmetic said 37px and the
@@ -80,28 +84,30 @@ export const PORTAL_FILTER_PANEL_CHROME_PX = 58;
 /* 23rem, not 19rem: the panel must hold its own chrome (58px) PLUS a full menu (292px)
    plus the containment gap — 358px minimum. At 19rem/304px the menu fit the panel but
    painted over Reset and Close; at 22rem it cleared them but spilled below the panel. */
-export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "h-[23rem]";
+export const PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS = "max-h-[23rem]";
+export const PORTAL_FILTER_PANEL_THREE_FIELD_MAX_CLASS = `h-auto ${PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS}`;
 /* One field row measures 76px (label + 44px trigger + gap); four of them plus the panel
    header and padding need ~23rem. At 19rem the fourth field rendered BELOW the panel's
    bottom edge and was only reachable by scrolling — measured on Communication, whose
    filter is house/role/resident/sort. */
-export const PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS = "h-[23rem]";
+export const PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS = "max-h-[23rem]";
+export const PORTAL_FILTER_PANEL_FOUR_FIELD_MAX_CLASS = `h-auto ${PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS}`;
 
 /** Pick a fixed filter shell height from the number of filter rows (property, resident, sort, …). */
 export function portalFilterPanelSizeClass(fieldCount: number): string {
   const heightClass =
     fieldCount >= 4
-      ? PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS
+      ? PORTAL_FILTER_PANEL_FOUR_FIELD_MAX_CLASS
       : fieldCount === 3
-        ? PORTAL_FILTER_PANEL_THREE_FIELD_HEIGHT_CLASS
+        ? PORTAL_FILTER_PANEL_THREE_FIELD_MAX_CLASS
         : fieldCount === 2
-          ? PORTAL_FILTER_PANEL_TWO_FIELD_HEIGHT_CLASS
-          : PORTAL_FILTER_PANEL_COMPACT_HEIGHT_CLASS;
+          ? PORTAL_FILTER_PANEL_TWO_FIELD_MAX_CLASS
+          : PORTAL_FILTER_PANEL_COMPACT_MAX_CLASS;
   return `${PORTAL_FILTER_PANEL_WIDTH_CLASS} ${heightClass}`;
 }
-/** Communication filter — three fields (house, role, sort), tightly fit when closed. */
+/** Communication filter — four fields (house, role, resident, sort). */
 export const PORTAL_FILTER_COMMUNICATION_PANEL_CLASS =
-  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex h-[18rem] flex-col overflow-hidden`;
+  `${PORTAL_FILTER_PANEL_WIDTH_CLASS} flex ${PORTAL_FILTER_PANEL_FOUR_FIELD_MAX_CLASS} flex-col overflow-hidden`;
 /**
  * Default compact mobile sheet when callers do not override height. Fills the bottom sheet
  * with white down to the tab bar; filter fields stay at the top and scroll when needed.
@@ -259,7 +265,7 @@ export function FilterFieldsAccordionScope({ children }: { children: ReactNode }
   const [openId, setOpenId] = useState<string | null>(null);
   const setSheetScrollLocked = useContext(FilterSheetScrollLockContext);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setSheetScrollLocked?.(openId !== null);
     return () => setSheetScrollLocked?.(false);
   }, [openId, setSheetScrollLocked]);
@@ -410,10 +416,14 @@ export function FilterCollapsibleSection({
         /* Do not stop pointerdown propagation here — React 17+ dispatches from the root,
            so stopping on this shell prevents option handlers inside the menu from ever
            running. Outside-dismiss paths already ignore `[data-field-select-menu]`. */
-        onTouchMove={(event) => event.stopPropagation()}
+        onTouchMove={(event) => {
+          const element = fieldSelectEventTargetElement(event.target);
+          if (element?.closest('[role="listbox"]')) return;
+          event.stopPropagation();
+        }}
       >
-        {/* The trigger row already shows {@link FILTER_FIELD_LABEL_CLASS} — repeating the
-            label inside the portaled menu duplicated "PROPERTY" on Residents and other sheets. */}
+        {/* The field name lives on the trigger's aria-label and a screen-reader-only row —
+            repeating the label inside the portaled menu duplicated "PROPERTY" on other sheets. */}
         <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
           <FilterMenuOptionCountContext.Provider value={setRenderedOptionCount}>
             {children}
@@ -525,6 +535,7 @@ export function FilterCheckboxList({
             showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
           ),
         }}
+        onWheel={(event) => event.stopPropagation()}
       >
         {options.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -626,6 +637,7 @@ export function FilterSingleSelectList({
             showSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
           ),
         }}
+        onWheel={(event) => event.stopPropagation()}
       >
         {visibleOptions.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">No matches</p>

@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Select } from "@/components/ui/input";
 import {
+  FilterCollapsibleSection,
   FilterFieldsAccordion,
-  FilterSingleSelectDropdown,
+  FilterSingleSelectList,
+  filterSingleSelectSummary,
 } from "@/components/portal/filter-field-lists";
+import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -117,7 +120,15 @@ export type DocumentLibraryFilterFieldsProps = {
   propertyOptions: { id: string; label: string }[];
 };
 
-export function DocumentLibraryFilterFields({
+export function DocumentLibraryFilterFields(props: DocumentLibraryFilterFieldsProps) {
+  return (
+    <FilterFieldsAccordion>
+      <DocumentLibraryFilterFieldsBody {...props} />
+    </FilterFieldsAccordion>
+  );
+}
+
+function DocumentLibraryFilterFieldsBody({
   search,
   onSearchChange,
   categoryFilter,
@@ -134,12 +145,29 @@ export function DocumentLibraryFilterFields({
   propertyFilterOptions,
   propertyOptions,
 }: DocumentLibraryFilterFieldsProps) {
+  const [draftCategoryFilter, setDraftCategoryFilter] = usePortalFilterDraft(
+    categoryFilter,
+    onCategoryFilterChange,
+    "",
+  );
+  const [draftScopeFilter, setDraftScopeFilter] = usePortalFilterDraft(scopeFilter, onScopeFilterChange, "");
+  const [draftPropertyFilter, setDraftPropertyFilter] = usePortalFilterDraft(
+    propertyFilter,
+    onPropertyFilterChange,
+    "",
+  );
+  const [draftExpiryFilter, setDraftExpiryFilter] = usePortalFilterDraft(expiryFilter, onExpiryFilterChange, "");
+
+  const categoryOptions = toFilterOptions(categoryFilterOptions, "All categories");
+  const scopeOptions = toFilterOptions(scopeFilterOptions, "All scopes");
+  const propertyListOptions = toFilterOptions(propertyFilterOptions, "All properties");
+
   return (
     <div className="flex flex-col gap-3">
       <ManagerPortalStatusPills
         tabs={expiryPills}
-        activeId={expiryFilter}
-        onChange={onExpiryFilterChange}
+        activeId={draftExpiryFilter}
+        onChange={setDraftExpiryFilter}
         activeTone="primary"
         compact
       />
@@ -154,43 +182,53 @@ export function DocumentLibraryFilterFields({
           data-attr="document-search"
         />
       ) : null}
-      {/* Category / Scope / Property are the one portal filter dropdown pattern: closed by
-          default, opening portals an overlay so the fields below never shift. They stay
-          SINGLE-select because each maps to one server query param on
-          `GET /api/manager/documents` (`category` / `scope` / `propertyId`); widening any
-          of them to multi-select is an API change, not a presentation one. The expiry row
-          above stays status pills — an in-section status filter, like Pending/Overdue/Paid. */}
-      <FilterFieldsAccordion>
-        <FilterSingleSelectDropdown
-          sectionId="document-category"
-          label="Category"
-          value={categoryFilter}
-          onChange={onCategoryFilterChange}
-          placeholder="All categories"
-          options={toFilterOptions(categoryFilterOptions, "All categories")}
+      <FilterCollapsibleSection
+        sectionId="document-category"
+        label="Category"
+        summary={filterSingleSelectSummary(draftCategoryFilter, categoryOptions, "All categories")}
+        empty={!draftCategoryFilter}
+        menuOptionCount={categoryOptions.length}
+        dataAttr="document-filter-category-trigger"
+      >
+        <FilterSingleSelectList
+          options={categoryOptions}
+          value={draftCategoryFilter}
+          onChange={setDraftCategoryFilter}
           dataAttr="document-filter-category"
         />
-        <FilterSingleSelectDropdown
-          sectionId="document-scope"
-          label="Scope"
-          value={scopeFilter}
-          onChange={onScopeFilterChange}
-          placeholder="All scopes"
-          options={toFilterOptions(scopeFilterOptions, "All scopes")}
+      </FilterCollapsibleSection>
+      <FilterCollapsibleSection
+        sectionId="document-scope"
+        label="Scope"
+        summary={filterSingleSelectSummary(draftScopeFilter, scopeOptions, "All scopes")}
+        empty={!draftScopeFilter}
+        menuOptionCount={scopeOptions.length}
+        dataAttr="document-filter-scope-trigger"
+      >
+        <FilterSingleSelectList
+          options={scopeOptions}
+          value={draftScopeFilter}
+          onChange={setDraftScopeFilter}
           dataAttr="document-filter-scope"
         />
-        {propertyOptions.length > 0 ? (
-          <FilterSingleSelectDropdown
-            sectionId="document-property"
-            label="Property"
-            value={propertyFilter}
-            onChange={onPropertyFilterChange}
-            placeholder="All properties"
-            options={toFilterOptions(propertyFilterOptions, "All properties")}
+      </FilterCollapsibleSection>
+      {propertyOptions.length > 0 ? (
+        <FilterCollapsibleSection
+          sectionId="document-property"
+          label="Property"
+          summary={filterSingleSelectSummary(draftPropertyFilter, propertyListOptions, "All properties")}
+          empty={!draftPropertyFilter}
+          menuOptionCount={propertyListOptions.length}
+          dataAttr="document-filter-property-trigger"
+        >
+          <FilterSingleSelectList
+            options={propertyListOptions}
+            value={draftPropertyFilter}
+            onChange={setDraftPropertyFilter}
             dataAttr="document-filter-property"
           />
-        ) : null}
-      </FilterFieldsAccordion>
+        </FilterCollapsibleSection>
+      ) : null}
     </div>
   );
 }
@@ -599,7 +637,6 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
     <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
       <PortalListAddRow
         label="Add document"
-        hint="Upload a file to your library"
         icon={FileUp}
         onClick={() => setUploadOpen(true)}
         dataAttr="documents-list-add"
@@ -625,7 +662,6 @@ export const ManagerDocumentLibrary = forwardRef<ManagerDocumentLibraryHandle, M
             ? ` · ${expirySummary.within30} expiring within 30 days`
             : ""}
         </p>
-        <p className="mt-0.5 text-xs opacity-90">Review renewals and update expiration dates in your library.</p>
       </div>
     ) : null;
 

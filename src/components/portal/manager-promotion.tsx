@@ -8,6 +8,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import {
@@ -852,8 +853,11 @@ export function ManagerPromotion({
     <PortalFilterSortSheet
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
-      className="min-w-0 shrink-0"
-      onReset={() => {}}
+      filterFieldCount={1}
+      constrainDropdownToTitleBand
+      mobileFlushBody
+      className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
+      onReset={() => setPropertyFilters([])}
       dataAttr="promotion-filter-sheet-open"
     >
       <ApplicationFilterSortFields

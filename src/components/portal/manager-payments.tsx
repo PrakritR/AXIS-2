@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DestinationNav } from "@/components/ui/destination-nav";
 import { PortalFilterSortSheet } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PaymentFilterSortFields } from "@/components/portal/payment-filter-sort-fields";
@@ -45,7 +46,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser, buildManagerPropertyFilterOptions, collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-access";
 import { ledgerRoomNumberForApplication } from "@/lib/rental-application/data";
-import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
+import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { scopeChargesToManagerPaymentsLedger } from "@/lib/manager-payments-scope";
 import {
   ReminderSettingsModal,
@@ -84,11 +85,37 @@ type PaymentListSort = "dueSoon" | "dueLatest" | "amountDesc" | "amountAsc" | "r
 
 const DEFAULT_PAYMENT_LIST_SORT: PaymentListSort = "dueSoon";
 
-function paymentFilterTouches(propertyFilters: string[], listSort: PaymentListSort): number {
+function paymentFilterTouches(
+  propertyFilters: string[],
+  residentFilters: string[],
+  listSort: PaymentListSort,
+): number {
   let count = 0;
   if (propertyFilters.length > 0) count += 1;
+  if (residentFilters.length > 0) count += 1;
   if (listSort !== DEFAULT_PAYMENT_LIST_SORT) count += 1;
   return count;
+}
+
+function paymentRowMatchesProperty(row: { propertyId?: string }, propertyFilters: string[]): boolean {
+  if (propertyFilters.length === 0) return true;
+  const propertyId = row.propertyId?.trim();
+  return Boolean(propertyId && propertyFilters.includes(propertyId));
+}
+
+function paymentResidentKey(row: { residentEmail?: string; residentName: string }): string {
+  const email = row.residentEmail?.trim().toLowerCase();
+  if (email) return email;
+  return row.residentName?.trim() ?? "";
+}
+
+function paymentRowMatchesResident(
+  row: { residentEmail?: string; residentName: string },
+  residentFilters: string[],
+): boolean {
+  if (residentFilters.length === 0) return true;
+  const key = paymentResidentKey(row);
+  return Boolean(key && residentFilters.includes(key));
 }
 
 function sortLedgerRows(
@@ -147,53 +174,54 @@ function sortOutgoingRows(
   });
 }
 
-function normalizePropertyLabel(label: string | undefined): string {
-  const trimmed = (label ?? "").trim();
-  if (!trimmed) return "";
-  return trimmed
-    .replace(/\s*·\s*[^·]*::[^·]*$/i, "")
-    .replace(/\s+[.-]\s+[^\s]+::[^\s]+$/i, "")
-    .trim();
-}
-
 function PaymentsFilterSheet({
   activeCount,
   onReset,
   propertyOptions,
   propertyFilters,
   onPropertyFiltersChange,
+  residentOptions,
+  residentFilters,
+  onResidentFiltersChange,
+  showResidentFilter,
   listSort,
   onListSortChange,
   sortOptions,
-  open,
-  onOpenChange,
+  filterFieldCount,
 }: {
   activeCount: number;
   onReset: () => void;
   propertyOptions: { id: string; label: string }[];
   propertyFilters: string[];
   onPropertyFiltersChange: (next: string[]) => void;
+  residentOptions: { id: string; label: string }[];
+  residentFilters: string[];
+  onResidentFiltersChange: (next: string[]) => void;
+  showResidentFilter: boolean;
   listSort: PaymentListSort;
   onListSortChange: (next: PaymentListSort) => void;
   sortOptions: { value: PaymentListSort; label: string }[];
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  filterFieldCount: number;
 }) {
   return (
     <PortalFilterSortSheet
       activeCount={activeCount}
       compactPanel
-      filterFieldCount={2}
-      className="min-w-0 w-auto shrink-0 max-md:[&_button]:px-2.5 md:!w-auto md:!max-w-none"
+      filterFieldCount={filterFieldCount}
+      mobileFlushBody
+      constrainDropdownToTitleBand
+      className={PORTAL_PROPERTY_FILTER_SHEET_CLASS}
       onReset={onReset}
       dataAttr="payments-filter-sheet-open"
-      open={open}
-      onOpenChange={onOpenChange}
     >
       <PaymentFilterSortFields
         propertyOptions={propertyOptions}
         propertyFilters={propertyFilters}
         onPropertyFiltersChange={onPropertyFiltersChange}
+        residentOptions={residentOptions}
+        residentFilters={residentFilters}
+        onResidentFiltersChange={onResidentFiltersChange}
+        showResidentFilter={showResidentFilter}
         listSort={listSort}
         onListSortChange={onListSortChange}
         sortOptions={sortOptions}
@@ -223,12 +251,12 @@ export function ManagerPayments({
   const [addOpen, setAddOpen] = useState(false);
   const [addOutgoingOpen, setAddOutgoingOpen] = useState(false);
   const [propertyFilters, setPropertyFilters] = useState<string[]>([]);
+  const [residentFilters, setResidentFilters] = useState<string[]>([]);
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [checkingManualPayments, setCheckingManualPayments] = useState(false);
-  const [paymentsFilterOpen, setPaymentsFilterOpen] = useState(false);
   const [listSort, setListSort] = useState<PaymentListSort>(DEFAULT_PAYMENT_LIST_SORT);
   const [searchQuery, setSearchQuery] = useState("");
   // Per-payment reminder lists show the full saved default schedule, so bypass
@@ -239,6 +267,10 @@ export function ManagerPayments({
     [reminderSettings],
   );
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
+
+  useEffect(() => {
+    if (direction !== "incoming") setResidentFilters([]);
+  }, [direction]);
 
   useEffect(() => {
     const onOutgoing = () => setOutgoingTick((n) => n + 1);
@@ -393,17 +425,15 @@ export function ManagerPayments({
       });
   }, [userId, ledgerDataVersion]);
 
-  const propertyLabelById = useMemo(() => {
-    void propertyTick;
-    const map = new Map<string, string>();
-    if (!userId) return map;
-    for (const property of [...readExtraListingsForUser(userId)]) {
-      const id = property.id.trim();
-      const label = normalizePropertyLabel(property.buildingName.trim() || property.title);
-      if (id && label) map.set(id, label);
-    }
-    return map;
-  }, [userId, propertyTick]);
+  const propertyOptions = useMemo(
+    () => buildManagerPropertyFilterOptions(userId),
+    [userId, propertyTick, applicationTick],
+  );
+
+  const propertyLabelById = useMemo(
+    () => new Map(propertyOptions.map((option) => [option.id, option.label])),
+    [propertyOptions],
+  );
 
   const vendorById = useMemo(() => {
     void ledgerDataVersion;
@@ -423,12 +453,25 @@ export function ManagerPayments({
     });
   }, [userId, ledgerDataVersion, propertyLabelById, vendorById]);
 
+  const residentOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of mergedRows) {
+      const id = paymentResidentKey(row);
+      if (!id || seen.has(id)) continue;
+      seen.set(id, row.residentName?.trim() || id);
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [mergedRows]);
+
   const rowsForCounts = useMemo(() => {
     return mergedRows.filter((row) => {
-      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(row.propertyName))) return false;
+      if (!paymentRowMatchesProperty(row, propertyFilters)) return false;
+      if (!paymentRowMatchesResident(row, residentFilters)) return false;
       return true;
     });
-  }, [mergedRows, propertyFilters]);
+  }, [mergedRows, propertyFilters, residentFilters]);
 
   const counts = useMemo(() => {
     const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
@@ -439,10 +482,7 @@ export function ManagerPayments({
   }, [rowsForCounts]);
 
   const outgoingRowsForCounts = useMemo(() => {
-    return outgoingRows.filter((row) => {
-      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(row.propertyName))) return false;
-      return true;
-    });
+    return outgoingRows.filter((row) => paymentRowMatchesProperty(row, propertyFilters));
   }, [outgoingRows, propertyFilters]);
 
   const outgoingCounts = useMemo(() => {
@@ -465,27 +505,7 @@ export function ManagerPayments({
     });
   }, [outgoingRowsForCounts, bucket, listSort, searchQuery]);
 
-  const propertyOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const row of mergedRows) {
-      const key = normalizePropertyLabel(row.propertyName);
-      if (!key) continue;
-      if (!seen.has(key)) seen.set(key, key);
-    }
-    for (const row of outgoingRows) {
-      const key = normalizePropertyLabel(row.propertyName);
-      if (!key) continue;
-      if (!seen.has(key)) seen.set(key, key);
-    }
-    return [...seen.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [mergedRows, outgoingRows]);
-
-  const paymentSetupPropertyOptions = useMemo(
-    () => buildManagerPropertyFilterOptions(userId),
-    [userId, mergedRows, outgoingRows],
-  );
+  const propertyOptionsForFilter = propertyOptions;
 
   const tabs = useMemo(
     () =>
@@ -497,10 +517,12 @@ export function ManagerPayments({
       })),
     [counts, outgoingCounts, direction],
   );
+
   const rowsForBucket = useMemo(() => {
     const filtered = mergedRows.filter((r) => {
       if (r.bucket !== bucket) return false;
-      if (propertyFilters.length > 0 && !propertyFilters.includes(normalizePropertyLabel(r.propertyName))) return false;
+      if (!paymentRowMatchesProperty(r, propertyFilters)) return false;
+      if (!paymentRowMatchesResident(r, residentFilters)) return false;
       return true;
     });
 
@@ -514,9 +536,9 @@ export function ManagerPayments({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [mergedRows, bucket, propertyFilters, listSort, searchQuery]);
+  }, [mergedRows, bucket, propertyFilters, residentFilters, listSort, searchQuery]);
 
-  const filterTouchCount = paymentFilterTouches(propertyFilters, listSort);
+  const filterTouchCount = paymentFilterTouches(propertyFilters, residentFilters, listSort);
 
   const sortOptions = useMemo(
     () => [
@@ -534,21 +556,26 @@ export function ManagerPayments({
 
   const paymentsFilterSheetProps = {
     activeCount: filterTouchCount,
-    onReset: () => {},
-    propertyOptions,
+    onReset: () => {
+      setPropertyFilters([]);
+      setResidentFilters([]);
+      setListSort(DEFAULT_PAYMENT_LIST_SORT);
+    },
+    propertyOptions: propertyOptionsForFilter,
     propertyFilters,
     onPropertyFiltersChange: setPropertyFilters,
+    residentOptions,
+    residentFilters,
+    onResidentFiltersChange: setResidentFilters,
+    showResidentFilter: direction === "incoming",
     listSort,
     onListSortChange: setListSort,
     sortOptions,
+    filterFieldCount: direction === "incoming" ? 3 : 2,
   };
 
-  const paymentsFilterControl = (
-    <PaymentsFilterSheet
-      {...paymentsFilterSheetProps}
-      open={paymentsFilterOpen}
-      onOpenChange={setPaymentsFilterOpen}
-    />
+  const paymentsFilterSheet = (
+    <PaymentsFilterSheet {...paymentsFilterSheetProps} />
   );
 
   const runCheckManualPayments = useCallback((options?: { silent?: boolean }) => {
@@ -618,20 +645,6 @@ export function ManagerPayments({
       moreDataAttr="payments-more-actions"
       moreAriaLabel="More payment actions"
       actions={[
-        {
-          id: "filter",
-          alwaysVisible: true,
-          pinEdge: "start",
-          node: paymentsFilterControl,
-          menuItem: (
-            <DropdownMenuItem
-              data-attr="payments-filter-menu"
-              onSelect={() => setPaymentsFilterOpen(true)}
-            >
-              Filter & sort
-            </DropdownMenuItem>
-          ),
-        },
         ...(direction === "incoming"
           ? [
               {
@@ -732,9 +745,20 @@ export function ManagerPayments({
         id: "property",
         label:
           propertyFilters.length === 1
-            ? `Property: ${propertyFilters[0]}`
+            ? `Property: ${propertyLabelById.get(propertyFilters[0]!) ?? propertyFilters[0]}`
             : `${propertyFilters.length} properties`,
         onRemove: () => setPropertyFilters([]),
+      });
+    }
+    if (residentFilters.length > 0) {
+      const residentLabelById = new Map(residentOptions.map((option) => [option.id, option.label]));
+      chips.push({
+        id: "resident",
+        label:
+          residentFilters.length === 1
+            ? `Resident: ${residentLabelById.get(residentFilters[0]!) ?? residentFilters[0]}`
+            : `${residentFilters.length} residents`,
+        onRemove: () => setResidentFilters([]),
       });
     }
     if (listSort !== DEFAULT_PAYMENT_LIST_SORT) {
@@ -746,7 +770,7 @@ export function ManagerPayments({
       });
     }
     return chips;
-  }, [propertyFilters, listSort, sortOptions]);
+  }, [propertyFilters, residentFilters, listSort, sortOptions, propertyLabelById, residentOptions]);
 
   const directionNav = (
     <DestinationNav
@@ -758,13 +782,14 @@ export function ManagerPayments({
       }))}
       activeId={direction}
       ariaLabel="Payment direction"
-      size="toolbar"
+      itemLayout="equal"
+      denseEqualRow
       className="max-w-none"
     />
   );
 
   const paymentsListDestinations = (
-    <div className="flex w-full min-w-0 flex-col gap-2 max-lg:gap-2.5">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       {directionNav}
       <DestinationNav
         items={tabs.map((t) => ({
@@ -777,6 +802,9 @@ export function ManagerPayments({
         }))}
         activeId={bucket}
         ariaLabel="Payment status"
+        itemLayout="equal"
+        denseEqualRow
+        className="max-w-none"
       />
     </div>
   );
@@ -849,7 +877,7 @@ export function ManagerPayments({
         open={paymentSetupOpen}
         onClose={() => setPaymentSetupOpen(false)}
         portalBase={portalBase}
-        propertyOptions={paymentSetupPropertyOptions}
+        propertyOptions={propertyOptionsForFilter}
       />
     </>
   );
@@ -867,11 +895,12 @@ export function ManagerPayments({
     <ManagerPortalPageShell
       title="Payments"
       hideTitleOnMobileNav
+      titleInlineFilter={paymentsFilterSheet}
       titleAside={paymentsHeaderActions}
       compactFilterRow
     >
       <PortalListControlStack
-        className="mb-2"
+        className="mb-2 max-lg:mb-2"
         destinationRow={paymentsListDestinations}
         search={{
           value: searchQuery,

@@ -57,4 +57,35 @@ describe("usePortalFilterDraft", () => {
       expect(screen.getByTestId("applied")).toHaveTextContent("p0");
     });
   });
+
+  it("resetAll followed by commitAll applies reset values", async () => {
+    function ResetHarness() {
+      const controllerRef = useRef<PortalFilterDeferController | null>(null);
+      const [applied, setApplied] = useState<string[]>(["p0"]);
+
+      return (
+        <PortalFilterDeferProvider controllerRef={controllerRef}>
+          <p data-testid="reset-applied">{applied.join(",") || "none"}</p>
+          <DraftFields applied={applied} onApply={setApplied} />
+          <button
+            type="button"
+            onClick={() => {
+              controllerRef.current?.resetAll();
+              controllerRef.current?.commitAll();
+            }}
+            data-testid="reset"
+          >
+            Reset
+          </button>
+        </PortalFilterDeferProvider>
+      );
+    }
+
+    render(<ResetHarness />);
+    expect(screen.getByTestId("reset-applied")).toHaveTextContent("p0");
+    fireEvent.click(screen.getByTestId("reset"));
+    await waitFor(() => {
+      expect(screen.getByTestId("reset-applied")).toHaveTextContent("none");
+    });
+  });
 });

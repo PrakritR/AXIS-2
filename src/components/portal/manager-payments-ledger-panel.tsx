@@ -6,7 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
@@ -713,12 +712,6 @@ export function ManagerPaymentsLedgerPanel({
             <p className="text-xs font-medium text-muted">Balance due</p>
             <p className="font-semibold tabular-nums text-foreground">{row.balanceDue}</p>
           </div>
-          {row.residentEmail ? (
-            <div>
-              <p className="text-xs font-medium text-muted">Resident email</p>
-              <p className="text-foreground">{row.residentEmail}</p>
-            </div>
-          ) : null}
         </div>
         {row.notes ? (
           <div>
@@ -880,18 +873,6 @@ export function ManagerPaymentsLedgerPanel({
       </Button>
     ) : null;
 
-    const deleteButton = (
-      <Button
-        type="button"
-        variant="outline"
-        className={`${btnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-        data-attr="payments-delete"
-        onClick={() => removePayment(row)}
-      >
-        Delete
-      </Button>
-    );
-
     const mobileOverflowMenu =
       !editing ? (
         <DropdownMenu>
@@ -929,14 +910,6 @@ export function ManagerPaymentsLedgerPanel({
                 Move to pending
               </DropdownMenuItem>
             ) : null}
-            {showSendReminder || showScheduleReminders || showMoveToPending ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem
-              data-attr="payments-delete"
-              className="text-[var(--status-overdue-fg)] focus:text-[var(--status-overdue-fg)]"
-              onSelect={() => removePayment(row)}
-            >
-              Delete
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null;
@@ -954,7 +927,6 @@ export function ManagerPaymentsLedgerPanel({
           {sendReminderButton}
           {scheduleRemindersButton}
           {moveToPendingButton}
-          {deleteButton}
         </div>
       </>
     );

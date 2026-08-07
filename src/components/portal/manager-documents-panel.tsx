@@ -4,9 +4,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Button } from "@/components/ui/button";
 import { useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
+import { DocumentsDestinationNav } from "@/components/portal/documents-destination-nav";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import {
@@ -48,6 +49,7 @@ import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports
 import type { ReportResult } from "@/lib/reports/types";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
+  ManagerApplicationDocumentDetail,
   ManagerApplicationDocumentsTab,
   ManagerLeaseDocumentsTab,
 } from "@/components/portal/manager-documents-leasing-tabs";
@@ -104,9 +106,11 @@ function w9StatusTone(status: string) {
 export function ManagerDocumentsPanel({
   tabId: serverTabId,
   basePath = "/portal",
+  applicationId,
 }: {
   tabId: string;
   basePath?: string;
+  applicationId?: string;
 }) {
   // Tab switches are shallow (client-only) — see TabNav `shallow` below.
   const tabId = useShallowTabId(
@@ -133,7 +137,6 @@ export function ManagerDocumentsPanel({
   const [libraryScopeFilter, setLibraryScopeFilter] = useState("");
   const [libraryPropertyFilter, setLibraryPropertyFilter] = useState("");
   const [libraryExpiryFilter, setLibraryExpiryFilter] = useState("");
-  const [leasingPropertyFilter, setLeasingPropertyFilter] = useState("");
   const [libraryExpiryPills, setLibraryExpiryPills] = useState([
     { id: "", label: "All", count: 0 },
     { id: "expired", label: "Expired", count: 0 },
@@ -344,19 +347,6 @@ export function ManagerDocumentsPanel({
     libraryExpiryPills,
   ]);
 
-  const leasingFilterActiveChips = useMemo((): PortalActiveFilterChip[] => {
-    if (!isLeasingDocumentsTab || !leasingPropertyFilter) return [];
-    const propertyLabel =
-      propertyOptions.find((property) => property.id === leasingPropertyFilter)?.label ?? leasingPropertyFilter;
-    return [
-      {
-        id: "property",
-        label: `Property: ${propertyLabel}`,
-        onRemove: () => setLeasingPropertyFilter(""),
-      },
-    ];
-  }, [isLeasingDocumentsTab, leasingPropertyFilter, propertyOptions]);
-
   const handleGenerateReport = useCallback(() => {
     setGenerateModalOpen(false);
     void runReport();
@@ -406,10 +396,11 @@ export function ManagerDocumentsPanel({
         libraryPropertyFilter,
         libraryExpiryFilter,
       ])}
-      compactPanel={false}
+      compactPanel
       filterFieldCount={3}
       constrainDropdownToTitleBand
-      className="min-w-0 shrink-0 max-md:w-full max-md:[&_button]:w-full"
+      mobileFlushBody
+      className={PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS}
       onReset={resetLibraryFilters}
       dataAttr="documents-filter-sheet-open"
     >
@@ -427,24 +418,6 @@ export function ManagerDocumentsPanel({
         scopeFilterOptions={libraryScopeOptions}
         propertyFilterOptions={libraryPropertyOptions}
         propertyOptions={libraryPropertyOptions}
-      />
-    </PortalFilterSortSheet>
-  ) : null;
-
-  const leasingDocumentsFilterSheet = isLeasingDocumentsTab ? (
-    <PortalFilterSortSheet
-      activeCount={portalFilterActiveCount([leasingPropertyFilter])}
-      compactPanel
-      constrainDropdownToTitleBand
-      onReset={() => setLeasingPropertyFilter("")}
-      dataAttr={`documents-${tabId}-filter-sheet-open`}
-    >
-      <ApplicationFilterSortFields
-        propertyOptions={propertyOptions}
-        propertyFilters={leasingPropertyFilter ? [leasingPropertyFilter] : []}
-        onPropertyFiltersChange={(ids) => setLeasingPropertyFilter(ids[0] ?? "")}
-        selectionMode="single"
-        dataAttr={`documents-${tabId}-filter-property`}
       />
     </PortalFilterSortSheet>
   ) : null;
@@ -478,31 +451,51 @@ export function ManagerDocumentsPanel({
 
   const documentsPrimaryButton = documentsUploadButton ?? documentsGenerateButton;
 
-  const documentsHeaderActions =
-    hasExportActions || documentsPrimaryButton || leasingDocumentsFilterSheet ? (
+  const documentsTitleAside =
+    hasExportActions || documentsPrimaryButton ? (
       <PortalSectionActionRow
         variant="header"
         className="ml-auto gap-2 [&>div]:flex-nowrap [&_a]:shrink-0 [&_a]:whitespace-nowrap"
       >
-        {leasingDocumentsFilterSheet}
         {hasExportActions ? exportActions : null}
         {documentsPrimaryButton}
       </PortalSectionActionRow>
     ) : null;
 
+  const documentsInlineFilter = isLibraryTab
+    ? documentsFilterSheet
+    : documentsTitleAside
+      ? null
+      : undefined;
+
+  const documentsDestinationRow = (
+    <DocumentsDestinationNav tabId={tabId} tabItems={documentTabItems} />
+  );
+
+  if (tabId === "applications" && applicationId) {
+    return (
+      <ManagerApplicationDocumentDetail
+        applicationId={applicationId}
+        basePath={basePath}
+        userId={userId ?? null}
+        ready={ready}
+      />
+    );
+  }
+
   return (
     <ManagerPortalPageShell
       title="Documents"
-      titleInlineFilter={isLibraryTab ? documentsFilterSheet : undefined}
-      titleAside={documentsHeaderActions}
+      titleInlineFilter={documentsInlineFilter}
+      titleAside={documentsTitleAside}
       hideTitleOnMobileNav
       compactFilterRow
     >
       <PortalListControlStack
         className="mb-2 max-lg:mb-1.5"
-        destinations={documentTabItems}
-        activeDestinationId={tabId}
-        destinationAriaLabel="Document views"
+        destinationRow={documentsDestinationRow}
+        stickyDestinations={false}
+        destinationInset
         search={
           isLibraryTab
             ? {
@@ -514,10 +507,8 @@ export function ManagerDocumentsPanel({
             : undefined
         }
         activeFilterChips={
-          libraryFilterActiveChips.length > 0 || leasingFilterActiveChips.length > 0 ? (
-            <PortalActiveFilterChips
-              chips={libraryFilterActiveChips.length > 0 ? libraryFilterActiveChips : leasingFilterActiveChips}
-            />
+          libraryFilterActiveChips.length > 0 ? (
+            <PortalActiveFilterChips chips={libraryFilterActiveChips} />
           ) : null
         }
       />
@@ -542,15 +533,9 @@ export function ManagerDocumentsPanel({
         ) : tabId === "templates" ? (
           <ManagerDocumentTemplatesPanel />
         ) : tabId === "applications" ? (
-          <ManagerApplicationDocumentsTab
-            userId={userId ?? null}
-            propertyFilter={leasingPropertyFilter}
-          />
+          <ManagerApplicationDocumentsTab userId={userId ?? null} basePath={basePath} />
         ) : tabId === "leases" ? (
-          <ManagerLeaseDocumentsTab
-            userId={userId ?? null}
-            propertyFilter={leasingPropertyFilter}
-          />
+          <ManagerLeaseDocumentsTab userId={userId ?? null} />
         ) : tabId === "income-documents" ? (
           <div>
             {loading ? (

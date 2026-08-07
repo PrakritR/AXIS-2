@@ -117,7 +117,7 @@ function FilterPanelFields({
      `min-h-0 flex-1` here plus a real scroll region below, a long field list is silently
      clipped with no scrollbar instead of scrolling to its last option. */
   return (
-    <div className={compact ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-0 flex-1 flex-col"}>
+    <div className={compact ? "flex min-h-0 flex-col overflow-visible" : "flex min-h-0 flex-1 flex-col"}>
       {!compact ? (
         <div className="flex shrink-0 justify-end px-3 pb-1">
           <FilterResetLink onReset={onReset} />
@@ -325,7 +325,8 @@ export function PortalFilterSortSheet({
               top: menuRect.top,
               left: menuRect.left,
               width: menuRect.width,
-              height: menuRect.maxHeight,
+              maxHeight: menuRect.maxHeight,
+              height: "auto",
               zIndex: portalHost ? fieldSelectMenuZIndex(portalHost) : 10000,
             }
           : undefined
@@ -336,7 +337,7 @@ export function PortalFilterSortSheet({
       <div
         className={cn(
           compactPanel
-            ? "flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-2"
+            ? "flex min-h-0 flex-col overflow-visible px-3 py-2"
             : PORTAL_FILTER_BODY_CLASS,
           !compactPanel && "flex-1",
         )}
@@ -354,7 +355,7 @@ export function PortalFilterSortSheet({
         className={cn(
           "relative inline-flex min-w-0 max-w-full",
           compactTrigger
-            ? "w-auto shrink-0 max-md:flex-1 md:w-auto md:max-w-none"
+            ? "w-full shrink-0 max-md:flex-1 md:w-[10.75rem] md:max-w-[10.75rem]"
             : "w-fit flex-1 md:hidden",
           className,
         )}
@@ -367,7 +368,7 @@ export function PortalFilterSortSheet({
             compactTrigger
               ? cn(
                   PORTAL_HEADER_ACTION_BTN,
-                  "inline-flex w-auto min-w-0 max-w-none items-center justify-center gap-1.5 whitespace-nowrap max-md:px-2.5 md:px-3",
+                  "inline-flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap max-md:px-2.5 md:px-3",
                   dropdownOpen && isMobile && "pointer-events-none",
                 )
               : "inline-flex h-9 min-w-0 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold whitespace-nowrap",

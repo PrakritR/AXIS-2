@@ -9,15 +9,17 @@ function portalSource(file: string): string {
 }
 
 describe("Finance and Documents title-row controls", () => {
-  it("renders the Applications and Leases document filters through the Documents header", () => {
+  it("keeps Applications and Leases free of title-row property filters", () => {
     const documents = portalSource("manager-documents-panel.tsx");
     const leasingTabs = portalSource("manager-documents-leasing-tabs.tsx");
 
-    expect(documents).toContain("const leasingDocumentsFilterSheet = isLeasingDocumentsTab");
-    expect(documents).toContain("{leasingDocumentsFilterSheet}");
-    expect(documents).toContain("titleAside={documentsHeaderActions}");
-    expect(documents).toContain('dataAttr={`documents-${tabId}-filter-sheet-open`}');
+    expect(documents).not.toContain("leasingDocumentsFilterSheet");
+    expect(documents).not.toContain("leasingPropertyFilter");
+    expect(documents).toContain("titleInlineFilter={documentsInlineFilter}");
+    expect(documents).toContain("titleAside={documentsTitleAside}");
     expect(leasingTabs).not.toContain("<PortalFilterSortSheet");
+    expect(leasingTabs).toContain("hideColumnHeaders");
+    expect(leasingTabs).toContain("<DataList");
   });
 
   it("renders special Finance actions through the Finance header instead of a body toolbar", () => {
@@ -28,7 +30,8 @@ describe("Finance and Documents title-row controls", () => {
 
     expect(finances).toContain("const financesAddButton =");
     expect(finances).toContain("PortalAdaptiveHeaderActions");
-    expect(finances).toContain("titleAside={financesHeaderActions}");
+    expect(finances).toContain("titleInlineFilter={financesInlineFilter}");
+    expect(finances).toContain("titleAside={financesTitleAside}");
     expect(finances).toContain('data-attr="finances-add-bill"');
     expect(finances).toContain('data-attr="bank-add-account"');
     expect(finances).toContain('data-attr="bank-add-statement"');
@@ -44,15 +47,24 @@ describe("Finance and Documents title-row controls", () => {
     const documents = portalSource("manager-documents-panel.tsx");
     const finances = portalSource("manager-finances-panel.tsx");
 
-    expect(documents.match(/constrainDropdownToTitleBand/g)).toHaveLength(2);
+    expect(documents).toContain("constrainDropdownToTitleBand");
     expect(finances).toContain("constrainDropdownToTitleBand");
   });
 
-  it("keeps the Communication reference filter inside its title row without excess closed height", () => {
+  it("keeps the Communication filter panel tall enough for four fields", () => {
     const communication = portalSource("manager-communication.tsx");
     const filterFields = portalSource("filter-field-lists.tsx");
 
     expect(communication).toContain("constrainDropdownToTitleBand");
-    expect(filterFields).toContain('flex h-[18rem] flex-col overflow-hidden`');
+    expect(filterFields).toContain("PORTAL_FILTER_PANEL_FOUR_FIELD_HEIGHT_CLASS");
+  });
+
+  it("renders Payments filter in the title band like Applications", () => {
+    const payments = portalSource("manager-payments.tsx");
+    const applications = portalSource("manager-applications.tsx");
+
+    expect(payments).toContain("titleInlineFilter={paymentsFilterSheet}");
+    expect(payments).not.toContain('desktopPresentation="inline"');
+    expect(applications).toContain("titleInlineFilter={applicationsFilterSort}");
   });
 });

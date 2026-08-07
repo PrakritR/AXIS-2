@@ -15,8 +15,9 @@ import {
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
 import { FinanceDestinationNav } from "@/components/portal/finance-destination-nav";
-import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { ExpenseTaxStatusToggle } from "@/components/portal/expense-tax-status-toggle";
 import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive-header-actions";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -76,6 +77,7 @@ import {
 } from "@/lib/portal-monthly-profit";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { expenseTaxStatusLabel, isCategoryDeductible, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
+import { cn } from "@/lib/utils";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import {
   MANAGER_VENDORS_EVENT,
@@ -195,14 +197,11 @@ function FinancesDataTable({
 
   const renderCellValue = (col: ReportColumn, row: ReportRow) =>
     col.key === "taxStatus" && onTaxStatusChange && row.id ? (
-      <Select
-        data-attr="expense-tax-status-inline"
-        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
-        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
-      >
-        <option value="deductible">Deductible</option>
-        <option value="non_deductible">Non-deductible</option>
-      </Select>
+      <ExpenseTaxStatusToggle
+        compact
+        deductible={row.taxDeductible !== false}
+        onChange={(next) => onTaxStatusChange(String(row.id), next)}
+      />
     ) : (
       formatCellValue(col, row[col.key])
     );
@@ -214,7 +213,7 @@ function FinancesDataTable({
           <div key={`${row.id ?? idx}-${idx}`} className={PORTAL_MOBILE_CARD_CLASS}>
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               {visibleCols.map((col) => (
-                <div key={col.key} className="min-w-0">
+                <div key={col.key} className={cn("min-w-0", col.key === "taxStatus" && "col-span-2")}>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
                   <div
                     className={`break-words text-sm ${
@@ -401,7 +400,6 @@ type IncomeDraft = {
   amount: string;
   postedDate: string;
   description: string;
-  residentEmail: string;
   propertyId: string;
 };
 
@@ -420,6 +418,10 @@ function FinancesFilterSheet({
   onSortKeyChange,
   sortDir,
   onSortDirChange,
+  defaultSortKey,
+  defaultSortDir,
+  defaultFilters,
+  defaultRowFilters,
   filterFieldCount,
   open,
   onOpenChange,
@@ -438,6 +440,10 @@ function FinancesFilterSheet({
   onSortKeyChange: (next: string) => void;
   sortDir: "asc" | "desc";
   onSortDirChange: (next: "asc" | "desc") => void;
+  defaultSortKey: string;
+  defaultSortDir: "asc" | "desc";
+  defaultFilters: ReportFilterState;
+  defaultRowFilters: FinanceRowFilterState;
   filterFieldCount: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -448,7 +454,8 @@ function FinancesFilterSheet({
       compactPanel
       filterFieldCount={filterFieldCount}
       constrainDropdownToTitleBand
-      className="min-w-0 w-auto shrink-0 max-md:[&_button]:px-2.5 md:!w-auto md:!max-w-none"
+      mobileFlushBody
+      className="min-w-0 w-auto shrink-0 max-md:w-full max-md:[&_button]:w-full max-md:[&_button]:px-2.5 md:!w-auto md:!max-w-none"
       onReset={onReset}
       dataAttr="finances-filter-sheet-open"
       open={open}
@@ -467,6 +474,10 @@ function FinancesFilterSheet({
         onSortKeyChange={onSortKeyChange}
         sortDir={sortDir}
         onSortDirChange={onSortDirChange}
+        defaultFilters={defaultFilters}
+        defaultRowFilters={defaultRowFilters}
+        defaultSortKey={defaultSortKey}
+        defaultSortDir={defaultSortDir}
       />
     </PortalFilterSortSheet>
   );
@@ -501,7 +512,6 @@ export function ManagerFinancesPanel({
   const [loading, setLoading] = useState(false);
   const [rowFilters, setRowFilters] = useState(emptyRowFilters);
   const [searchQuery, setSearchQuery] = useState("");
-  const [financesFilterOpen, setFinancesFilterOpen] = useState(false);
   const [expenseModal, setExpenseModal] = useState(false);
   const [incomeModal, setIncomeModal] = useState(false);
   const billsRef = useRef<ManagerBillsPanelHandle>(null);
@@ -523,7 +533,6 @@ export function ManagerFinancesPanel({
     amount: "",
     postedDate: new Date().toISOString().slice(0, 10),
     description: "",
-    residentEmail: "",
     propertyId: "",
   });
 
@@ -660,7 +669,6 @@ export function ManagerFinancesPanel({
         amountCents,
         postedDate: incomeDraft.postedDate,
         description: incomeDraft.description,
-        residentEmail: incomeDraft.residentEmail || undefined,
         propertyId: incomeDraft.propertyId || filters.propertyId || undefined,
       }),
     });
@@ -797,14 +805,14 @@ export function ManagerFinancesPanel({
     sortDir,
     onSortDirChange: setSortDir,
     filterFieldCount: financeFilterSheetFieldCount,
+    defaultFilters: defaultFinanceFilters,
+    defaultRowFilters: emptyRowFilters(),
+    defaultSortKey: activeDefaultSort.key,
+    defaultSortDir: activeDefaultSort.dir,
   };
 
   const financesFilterControl = showScopedReportFilters ? (
-    <FinancesFilterSheet
-      {...financesFilterSheetProps}
-      open={financesFilterOpen}
-      onOpenChange={setFinancesFilterOpen}
-    />
+    <FinancesFilterSheet {...financesFilterSheetProps} />
   ) : null;
 
   const activeFinanceFilterChips = useMemo((): PortalActiveFilterChip[] => {
@@ -861,7 +869,6 @@ export function ManagerFinancesPanel({
       amount: "",
       postedDate: new Date().toISOString().slice(0, 10),
       description: "",
-      residentEmail: "",
       propertyId: filters.propertyId,
     });
     setIncomeModal(true);
@@ -972,19 +979,19 @@ export function ManagerFinancesPanel({
 
   const financesListAddRow =
     tabId === "income" || tabId === "expenses" ? (
-      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
-        <PortalListAddRow
-          label={tabId === "income" ? "Add income" : "Add expense"}
-          hint={tabId === "income" ? "Record money received" : "Record a business expense"}
-          icon={PORTAL_LIST_ADD_ICONS.payment}
-          onClick={tabId === "income" ? openAddIncome : openAddExpense}
-          dataAttr={tabId === "income" ? "finances-list-add-income" : "finances-list-add-expense"}
-        />
-      </div>
+      <PortalListAddRow
+        label="Add"
+        icon={PORTAL_LIST_ADD_ICONS.payment}
+        onClick={tabId === "income" ? openAddIncome : openAddExpense}
+        dataAttr={tabId === "income" ? "finances-list-add-income" : "finances-list-add-expense"}
+      />
     ) : null;
 
-  const financesHeaderActions =
-    showScopedReportFilters ||
+  const financesDestinationRow = (
+    <FinanceDestinationNav tabId={tabId} tabItems={financeTabItems} />
+  );
+
+  const financesSecondaryActions =
     financesFormalPdfLink ||
     financesExportButtons ||
     financesAddButton ||
@@ -994,24 +1001,6 @@ export function ManagerFinancesPanel({
         moreDataAttr="finances-more-actions"
         moreAriaLabel="More finance actions"
         actions={[
-          ...(showScopedReportFilters
-            ? [
-                {
-                  id: "filter",
-                  alwaysVisible: true,
-                  pinEdge: "start" as const,
-                  node: financesFilterControl,
-                  menuItem: (
-                    <DropdownMenuItem
-                      data-attr="finances-filter-menu"
-                      onSelect={() => setFinancesFilterOpen(true)}
-                    >
-                      Filter & sort
-                    </DropdownMenuItem>
-                  ),
-                },
-              ]
-            : []),
           ...(financesFormalPdfLink
             ? [
                 {
@@ -1088,16 +1077,27 @@ export function ManagerFinancesPanel({
       />
     ) : null;
 
+  const financesTitleAside = financesSecondaryActions;
+
+  const financesInlineFilter = showScopedReportFilters
+    ? financesFilterControl
+    : financesTitleAside
+      ? null
+      : undefined;
+
   return (
     <ManagerPortalPageShell
       title="Finances"
-      titleAside={financesHeaderActions}
+      titleInlineFilter={financesInlineFilter}
+      titleAside={financesTitleAside}
       hideTitleOnMobileNav
       compactFilterRow
     >
       <PortalListControlStack
         className="mb-2 max-lg:mb-1.5"
-        destinationRow={<FinanceDestinationNav tabId={tabId} tabItems={financeTabItems} basePath={basePath} />}
+        destinationRow={financesDestinationRow}
+        stickyDestinations={false}
+        destinationInset
         search={
           showTransactionSearch
             ? {
@@ -1153,12 +1153,18 @@ export function ManagerFinancesPanel({
                 onTaxStatusChange={tabId === "expenses" ? (id, d) => void updateExpenseTaxStatus(id, d) : undefined}
               />
             )}
-            {financesListAddRow}
+            {financesListAddRow ? (
+              <div className={`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} ${filteredReport && filteredReport.rows.length > 0 ? "pt-5 sm:pt-6" : ""}`}>
+                {financesListAddRow}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3">
             <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
-            {financesListAddRow}
+            {financesListAddRow ? (
+              <div className={`${PORTAL_LIST_ADD_ROW_WRAP_CLASS} pt-5 sm:pt-6`}>{financesListAddRow}</div>
+            ) : null}
           </div>
         )}
       </div>
@@ -1210,22 +1216,18 @@ export function ManagerFinancesPanel({
               ))}
             </Select>
           </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+          <label className="flex flex-col gap-2 text-xs font-medium text-muted sm:col-span-2">
             Tax status (suggested from category)
-            <Select
-              data-attr="expense-tax-status-select"
-              value={expenseDraft.taxDeductible ? "deductible" : "non_deductible"}
-              onChange={(e) =>
+            <ExpenseTaxStatusToggle
+              deductible={expenseDraft.taxDeductible}
+              onChange={(taxDeductible) =>
                 setExpenseDraft((d) => ({
                   ...d,
-                  taxDeductible: e.target.value === "deductible",
+                  taxDeductible,
                   taxTouched: true,
                 }))
               }
-            >
-              <option value="deductible">Deductible</option>
-              <option value="non_deductible">Non-deductible</option>
-            </Select>
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
             Amount (USD)
@@ -1311,15 +1313,6 @@ export function ManagerFinancesPanel({
               type="date"
               value={incomeDraft.postedDate}
               onChange={(e) => setIncomeDraft({ ...incomeDraft, postedDate: e.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Resident email (optional)
-            <Input
-              type="email"
-              value={incomeDraft.residentEmail}
-              onChange={(e) => setIncomeDraft({ ...incomeDraft, residentEmail: e.target.value })}
-              placeholder="resident@example.com"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">

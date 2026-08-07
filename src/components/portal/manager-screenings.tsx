@@ -11,7 +11,14 @@ import {
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
+import { PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
+import {
+  FilterCollapsibleSection,
+  FilterFieldsAccordion,
+  FilterSingleSelectList,
+  filterSingleSelectSummary,
+} from "@/components/portal/filter-field-lists";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { ManagerPortalPageShell, PORTAL_HEADER_PRIMARY_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -87,36 +94,38 @@ function ScreeningsNativeFilterFields({
   const [draftSort, setDraftSort] = usePortalFilterDraft(sort, onSortChange, "newest");
 
   return (
-    <>
-      <label className="block px-1">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Status</span>
-        <select
-          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
+    <FilterFieldsAccordion>
+      <FilterCollapsibleSection
+        sectionId="screening-status"
+        label="Status"
+        summary={filterSingleSelectSummary(draftStatusFilter, STATUS_OPTIONS, "All statuses")}
+        empty={draftStatusFilter === "all"}
+        menuOptionCount={STATUS_OPTIONS.length}
+        dataAttr="screenings-filter-status-trigger"
+      >
+        <FilterSingleSelectList
+          options={STATUS_OPTIONS}
           value={draftStatusFilter}
-          onChange={(e) => setDraftStatusFilter(e.target.value as ScreeningStatusFilter)}
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block px-1">
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Sort</span>
-        <select
-          className="h-9 w-full rounded-xl border border-border bg-card px-3 text-sm"
+          onChange={(value) => setDraftStatusFilter(value as ScreeningStatusFilter)}
+          dataAttr="screenings-filter-status"
+        />
+      </FilterCollapsibleSection>
+      <FilterCollapsibleSection
+        sectionId="screening-sort"
+        label="Sort"
+        summary={filterSingleSelectSummary(draftSort, SORT_OPTIONS, "Newest first")}
+        empty={draftSort === "newest"}
+        menuOptionCount={SORT_OPTIONS.length}
+        dataAttr="screenings-filter-sort-trigger"
+      >
+        <FilterSingleSelectList
+          options={SORT_OPTIONS}
           value={draftSort}
-          onChange={(e) => setDraftSort(e.target.value as ScreeningSort)}
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    </>
+          onChange={(value) => setDraftSort(value as ScreeningSort)}
+          dataAttr="screenings-filter-sort"
+        />
+      </FilterCollapsibleSection>
+    </FilterFieldsAccordion>
   );
 }
 
@@ -289,8 +298,15 @@ export function ManagerScreenings({
     <PortalFilterSortSheet
       compactPanel
       filterFieldCount={3}
+      constrainDropdownToTitleBand
+      mobileFlushBody
+      className={PORTAL_MULTI_FIELD_FILTER_SHEET_CLASS}
       activeCount={portalFilterActiveCount([propertyFilters, statusFilter !== "all", sort !== "newest"])}
-      onReset={() => {}}
+      onReset={() => {
+        setPropertyFilters([]);
+        setStatusFilter("all");
+        setSort("newest");
+      }}
       dataAttr="screenings-filter-sheet-open"
     >
       <ApplicationFilterSortFields
