@@ -50,9 +50,11 @@ describe("PublicApplyAccountPrompt renders three ordered actions", () => {
   afterEach(() => cleanup());
 
   it("offers Create account (primary), Sign in, and guest — with create carrying context", async () => {
+    const returnPath = `/rent/apply?propertyId=${PROPERTY_ID}`;
     render(
       <PublicApplyAccountPrompt
-        propertyId={PROPERTY_ID}
+        gateKey={PROPERTY_ID}
+        applyReturnPath={returnPath}
         propertyTitle="QA Madison Studio"
         onContinueGuest={() => {}}
       />,

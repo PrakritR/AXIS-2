@@ -3,7 +3,11 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 /** How long a filter panel ignores an outside-dismiss after a list pick (ghost clicks). */
 const FILTER_SHEET_DISMISS_GUARD_MS = 1000;
 
+/** Ignore filter OPEN toggles briefly after another overlay dismisses (Radix menu → stray click). */
+const FILTER_SHEET_OPEN_SUPPRESS_MS = 450;
+
 let armFilterSheetDismissGuard: (() => void) | null = null;
+let armFilterSheetOpenSuppress: (() => void) | null = null;
 
 /**
  * Filter panels register a short dismiss guard so a synthesized click after a portaled
@@ -19,6 +23,18 @@ export function registerFilterSheetDismissGuard(arm: () => void): () => void {
 /** Arm the guard before any portaled filter option pick (multi- or single-select). */
 export function armFilterSheetDismissGuardFromFieldPick(): void {
   armFilterSheetDismissGuard?.();
+}
+
+export function registerFilterSheetOpenSuppress(arm: () => void): () => void {
+  armFilterSheetOpenSuppress = arm;
+  return () => {
+    if (armFilterSheetOpenSuppress === arm) armFilterSheetOpenSuppress = null;
+  };
+}
+
+/** Call before opening a modal/menu from a header action so a dismiss ghost click cannot open Filter. */
+export function armFilterSheetOpenSuppressFromOverlayDismiss(): void {
+  armFilterSheetOpenSuppress?.();
 }
 
 /** Pointer targets on option labels are often Text nodes — resolve to an Element for `closest`. */
@@ -67,7 +83,7 @@ export function deferAfterFieldSelectPick(action: () => void): void {
   });
 }
 
-export { FILTER_SHEET_DISMISS_GUARD_MS };
+export { FILTER_SHEET_DISMISS_GUARD_MS, FILTER_SHEET_OPEN_SUPPRESS_MS };
 
 /** Menu roots portaled into open modal shells or `document.body` — modal outside-click handlers must ignore these. */
 export const FIELD_SELECT_MENU_DATA_ATTR = "data-field-select-menu";

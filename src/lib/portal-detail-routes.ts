@@ -2,6 +2,7 @@
 export const PROPERTY_DETAIL_TABS = [
   "preview",
   "house-details",
+  "move-in",
   "application",
   "lease",
   "calendar",
@@ -14,6 +15,7 @@ export type PropertyDetailTabId = (typeof PROPERTY_DETAIL_TABS)[number];
 export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
   preview: "Preview",
   "house-details": "House details",
+  "move-in": "Move-in",
   application: "Application",
   lease: "Lease",
   calendar: "Calendar",
@@ -25,6 +27,7 @@ export const PROPERTY_DETAIL_TAB_LABELS: Record<PropertyDetailTabId, string> = {
 export const PROPERTY_DETAIL_SECTION_TABS = [
   "preview",
   "house-details",
+  "move-in",
 ] as const satisfies readonly PropertyDetailTabId[];
 
 export type PropertyDetailSectionTabId = (typeof PROPERTY_DETAIL_SECTION_TABS)[number];

@@ -14,9 +14,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  armFilterSheetDismissGuardFromFieldPick,
   deferAfterFieldSelectPick,
   fieldSelectEventTargetElement,
-  handlePortaledFieldSelectOptionPointerDown,
 } from "@/components/ui/field-select-portal-interaction";
 import { FIELD_SELECT_MENU_OPTION_CLASS } from "@/components/ui/field-select-styles";
 import {
@@ -186,10 +186,14 @@ export const PORTAL_FILTER_RAISED_SHEET_MIN_HEIGHT_PX =
 
 type Option = { value: string; label: string };
 
+/** Pointer movement above this is a scroll gesture, not an option pick. */
+const FILTER_LISTBOX_PICK_SLOP_PX = 8;
+
 /**
  * Portaled filter menus often render under `document.body`, outside the Next.js root where
  * React 17+ attaches delegated listeners — synthetic `onClick` / `onPointerDown` on rows
  * never run in production even though jsdom tests pass. Handle picks on the listbox natively.
+ * Uses pointerup + slop so `preventDefault` on pointerdown never blocks list scrolling.
  */
 function useFilterListboxPointerPick(
   onPick: (value: string, event: PointerEvent) => void,
@@ -197,20 +201,56 @@ function useFilterListboxPointerPick(
   const listRef = useRef<HTMLDivElement>(null);
   const onPickRef = useRef(onPick);
   onPickRef.current = onPick;
+  const pressRef = useRef<{ id: number; x: number; y: number; value: string } | null>(null);
 
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
+
     const onPointerDown = (event: PointerEvent) => {
       const element = fieldSelectEventTargetElement(event.target);
       const row = element?.closest<HTMLElement>('[role="option"][data-filter-option-value]');
       if (!row || !list.contains(row)) return;
       const { filterOptionValue } = row.dataset;
       if (filterOptionValue === undefined) return;
-      onPickRef.current(filterOptionValue, event);
+      pressRef.current = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        value: filterOptionValue,
+      };
     };
+
+    const clearPress = (pointerId?: number) => {
+      const press = pressRef.current;
+      if (!press) return;
+      if (pointerId !== undefined && press.id !== pointerId) return;
+      pressRef.current = null;
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      const press = pressRef.current;
+      if (!press || press.id !== event.pointerId) return;
+      pressRef.current = null;
+      const dx = event.clientX - press.x;
+      const dy = event.clientY - press.y;
+      if (dx * dx + dy * dy > FILTER_LISTBOX_PICK_SLOP_PX * FILTER_LISTBOX_PICK_SLOP_PX) return;
+      armFilterSheetDismissGuardFromFieldPick();
+      onPickRef.current(press.value, event);
+    };
+
+    const onPointerCancel = (event: PointerEvent) => {
+      clearPress(event.pointerId);
+    };
+
     list.addEventListener("pointerdown", onPointerDown);
-    return () => list.removeEventListener("pointerdown", onPointerDown);
+    list.addEventListener("pointerup", onPointerUp);
+    list.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      list.removeEventListener("pointerdown", onPointerDown);
+      list.removeEventListener("pointerup", onPointerUp);
+      list.removeEventListener("pointercancel", onPointerCancel);
+    };
   }, []);
 
   return listRef;
@@ -307,6 +347,139 @@ export function filterSingleSelectSummary(value: string, options: Option[], allL
 }
 
 /**
+ * Modal / form single-select — same trigger + portaled searchable list as filter fields,
+ * without the filter-sheet accordion or deferred-apply wiring.
+ */
+export function PortalFormSingleSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "Select…",
+  disabled = false,
+  dataAttr,
+  labelClassName = FILTER_FIELD_LABEL_CLASS,
+  onPick,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  options: Option[];
+  placeholder?: string;
+  disabled?: boolean;
+  dataAttr?: string;
+  labelClassName?: string;
+  onPick?: () => void;
+}) {
+  const filterSheetScrollLock = useContext(FilterSheetScrollLockContext);
+  const [open, setOpen] = useState(false);
+  const [renderedOptionCount, setRenderedOptionCount] = useState<number | null>(null);
+
+  const optionCount = renderedOptionCount ?? options.length;
+  const showMenuSearch =
+    FILTER_FIELD_MENU_ALWAYS_SHOW_SEARCH || optionCount > FILTER_LIST_VISIBLE_ROWS;
+  const menuContentPx = fieldSelectMenuContentPx(
+    optionCount,
+    showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
+  );
+
+  const summary = value
+    ? (options.find((o) => o.value === value)?.label ?? value)
+    : placeholder;
+  const isPlaceholder = !value;
+
+  const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
+    open: open && !disabled,
+    onOpenChange: setOpen,
+    contentPx: menuContentPx,
+    preferOpenDown: true,
+    matchTriggerWidth: true,
+    closeOnOutsidePointerDown: filterSheetScrollLock === null,
+  });
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    onPick?.();
+  }, [onPick]);
+
+  const menu =
+    open && !disabled && menuRect && isClient && portalHost ? (
+      <div
+        id={listId}
+        data-field-select-menu=""
+        data-vaul-no-drag=""
+        className={cn(FIELD_SELECT_MENU_SHELL_CLASS, "bg-card flex min-h-0 flex-col overscroll-contain")}
+        style={{
+          position: menuRect.position,
+          top: menuRect.top,
+          left: menuRect.left,
+          width: menuRect.width,
+          height: "auto",
+          minHeight: 0,
+          maxHeight: menuRect.maxHeight,
+          zIndex: fieldSelectMenuZIndex(portalHost),
+          touchAction: "pan-y",
+        }}
+        onTouchMove={(event) => {
+          event.stopPropagation();
+        }}
+        onTouchStart={(event) => {
+          event.stopPropagation();
+        }}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        <FieldSelectMenuShellHeightContext.Provider value={menuRect.maxHeight}>
+          <FilterMenuOptionCountContext.Provider value={setRenderedOptionCount}>
+            <FilterSingleSelectList
+              options={options}
+              value={value}
+              onChange={onChange}
+              onPick={closeMenu}
+              dataAttr={dataAttr}
+            />
+          </FilterMenuOptionCountContext.Provider>
+        </FieldSelectMenuShellHeightContext.Provider>
+      </div>
+    ) : null;
+
+  return (
+    <div ref={wrapRef} data-attr={dataAttr ? `${dataAttr}-wrap` : undefined}>
+      <p className={labelClassName}>{label}</p>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`${label}: ${summary}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={listId}
+        disabled={disabled}
+        className={cn(FILTER_TRIGGER_CLASS, disabled && "cursor-not-allowed opacity-60")}
+        data-attr={dataAttr ? `${dataAttr}-trigger` : undefined}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((prev) => !prev);
+        }}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left",
+            isPlaceholder ? "text-muted/70" : "text-foreground",
+          )}
+        >
+          {summary}
+        </span>
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      {menu && portalHost ? createPortal(menu, portalHost) : null}
+    </div>
+  );
+}
+
+/**
  * Filter field trigger + portaled overlay menu. Closed by default (single-line
  * summary + chevron); opening portals the option list over the trigger so the
  * fields below keep their exact position and the panel keeps its exact height.
@@ -379,12 +552,16 @@ export function FilterCollapsibleSection({
     showMenuSearch ? FIELD_SELECT_MENU_SEARCH_PX : 0,
   );
 
+  const filterSheetScrollLock = useContext(FilterSheetScrollLockContext);
+
   const { listId, isClient, wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
     open,
     onOpenChange: setOpen,
     contentPx: menuContentPx,
     preferOpenDown: true,
     matchTriggerWidth: true,
+    /* Inside a filter sheet, scroll/backdrop gestures close the panel — not each field menu. */
+    closeOnOutsidePointerDown: filterSheetScrollLock === null,
   });
 
   /* No scroll-into-view on open: containment comes first, so a low field is slid back
@@ -417,10 +594,12 @@ export function FilterCollapsibleSection({
            so stopping on this shell prevents option handlers inside the menu from ever
            running. Outside-dismiss paths already ignore `[data-field-select-menu]`. */
         onTouchMove={(event) => {
-          const element = fieldSelectEventTargetElement(event.target);
-          if (element?.closest('[role="listbox"]')) return;
           event.stopPropagation();
         }}
+        onTouchStart={(event) => {
+          event.stopPropagation();
+        }}
+        onWheel={(event) => event.stopPropagation()}
       >
         {/* The field name lives on the trigger's aria-label and a screen-reader-only row —
             repeating the label inside the portaled menu duplicated "PROPERTY" on other sheets. */}
@@ -503,11 +682,8 @@ export function FilterCheckboxList({
     [onChange, selected],
   );
 
-  const listRef = useFilterListboxPointerPick((value, event) => {
-    handlePortaledFieldSelectOptionPointerDown(
-      event as unknown as Parameters<typeof handlePortaledFieldSelectOptionPointerDown>[0],
-      () => toggle(value),
-    );
+  const listRef = useFilterListboxPointerPick((value) => {
+    toggle(value);
   });
 
   return (
@@ -536,6 +712,8 @@ export function FilterCheckboxList({
           ),
         }}
         onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
       >
         {options.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">{emptyMenuText}</p>
@@ -603,14 +781,9 @@ export function FilterSingleSelectList({
     return options.filter((opt) => fieldSelectMenuMatches(opt.label, query));
   }, [options, query]);
 
-  const listRef = useFilterListboxPointerPick((pickedValue, event) => {
-    handlePortaledFieldSelectOptionPointerDown(
-      event as unknown as Parameters<typeof handlePortaledFieldSelectOptionPointerDown>[0],
-      () => {
-        onChange(pickedValue);
-        if (onPick) deferAfterFieldSelectPick(onPick);
-      },
-    );
+  const listRef = useFilterListboxPointerPick((pickedValue) => {
+    onChange(pickedValue);
+    if (onPick) deferAfterFieldSelectPick(onPick);
   });
 
   return (
@@ -638,6 +811,8 @@ export function FilterSingleSelectList({
           ),
         }}
         onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
       >
         {visibleOptions.length === 0 ? (
           <p className="px-3 py-2 text-sm text-muted">No matches</p>

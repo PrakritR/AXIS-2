@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolvePublicApplyView } from "@/lib/rental-application/public-apply-session";
+import {
+  publicApplyGateKey,
+  publicApplyReturnPath,
+  resolvePublicApplyView,
+} from "@/lib/rental-application/public-apply-session";
 
 /**
  * Regression coverage for the blank public apply page: a SIGNED-IN non-resident
@@ -13,35 +17,46 @@ describe("resolvePublicApplyView", () => {
 
   it("routes a signed-in non-resident to create a resident account (the fixed blank-page case)", () => {
     expect(
-      resolvePublicApplyView({ propertyId, guestContinue: false, signedInNonResident: true }),
+      resolvePublicApplyView({ gateKey: propertyId, guestContinue: false, signedInNonResident: true }),
     ).toBe("signed-in-create-resident");
   });
 
   it("shows the anonymous account prompt for a signed-out visitor with a property link", () => {
     expect(
-      resolvePublicApplyView({ propertyId, guestContinue: false, signedInNonResident: false }),
+      resolvePublicApplyView({ gateKey: propertyId, guestContinue: false, signedInNonResident: false }),
     ).toBe("account-prompt");
+  });
+
+  it("gates portfolio apply links the same way as a single-property link", () => {
+    const gateKey = publicApplyGateKey({ portfolioPropertyIds: ["mgr-b", "mgr-a"] });
+    expect(gateKey).toBe("portfolio:mgr-a,mgr-b");
+    expect(
+      resolvePublicApplyView({ gateKey, guestContinue: false, signedInNonResident: true }),
+    ).toBe("signed-in-create-resident");
+    expect(publicApplyReturnPath({ portfolioPropertyIds: ["mgr-b", "mgr-a"] })).toBe(
+      "/rent/apply?ids=mgr-a%2Cmgr-b",
+    );
   });
 
   it("lets a signed-in non-resident fall back to the guest wizard when they choose guest", () => {
     expect(
-      resolvePublicApplyView({ propertyId, guestContinue: true, signedInNonResident: true }),
+      resolvePublicApplyView({ gateKey: propertyId, guestContinue: true, signedInNonResident: true }),
     ).toBe("wizard");
   });
 
   it("shows the wizard once a signed-out visitor chose to continue as guest", () => {
     expect(
-      resolvePublicApplyView({ propertyId, guestContinue: true, signedInNonResident: false }),
+      resolvePublicApplyView({ gateKey: propertyId, guestContinue: true, signedInNonResident: false }),
     ).toBe("wizard");
   });
 
   it("shows the wizard immediately when there is no property link, regardless of session", () => {
     for (const signedInNonResident of [true, false]) {
       expect(
-        resolvePublicApplyView({ propertyId: "", guestContinue: false, signedInNonResident }),
+        resolvePublicApplyView({ gateKey: "", guestContinue: false, signedInNonResident }),
       ).toBe("wizard");
       expect(
-        resolvePublicApplyView({ propertyId: "   ", guestContinue: false, signedInNonResident }),
+        resolvePublicApplyView({ gateKey: "   ", guestContinue: false, signedInNonResident }),
       ).toBe("wizard");
     }
   });
@@ -49,7 +64,7 @@ describe("resolvePublicApplyView", () => {
   it("only ever renders one real surface — the gate is never blank", () => {
     for (const guestContinue of [true, false]) {
       for (const signedInNonResident of [true, false]) {
-        const view = resolvePublicApplyView({ propertyId, guestContinue, signedInNonResident });
+        const view = resolvePublicApplyView({ gateKey: propertyId, guestContinue, signedInNonResident });
         expect(["account-prompt", "signed-in-create-resident", "wizard"]).toContain(view);
       }
     }

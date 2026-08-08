@@ -20,6 +20,10 @@ import { LISTING_ASSISTANT_UPDATED_EVENT, type ListingAssistantUpdatedDetail } f
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { ListingAddressAutocomplete } from "@/components/portal/listing-address-autocomplete";
 import {
+  ListingRoomDetailTabToggle,
+  type ListingRoomDetailTabId,
+} from "@/components/portal/manager-listing-room-detail-tabs";
+import {
   ListingUnifiedFeesTable,
   type FeeExpandableSection,
 } from "@/components/portal/listing-unified-fees-table";
@@ -1453,6 +1457,7 @@ export function ManagerAddListingForm({
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
   const [videoPreviewUrls, setVideoPreviewUrls] = useState<Record<string, string>>({});
+  const [roomDetailTabById, setRoomDetailTabById] = useState<Record<string, ListingRoomDetailTabId>>({});
   const videoPreviewUrlsRef = useRef<Record<string, string>>({});
   useEffect(() => {
     videoPreviewUrlsRef.current = videoPreviewUrls;
@@ -4144,8 +4149,16 @@ export function ManagerAddListingForm({
                       </div>
 
                       {!isEntireHome ? (
-                      <>
-                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                        <div className="sm:col-span-2 space-y-3">
+                          <ListingRoomDetailTabToggle
+                            value={roomDetailTabById[room.id] ?? "preview"}
+                            onChange={(next) =>
+                              setRoomDetailTabById((prev) => ({ ...prev, [room.id]: next }))
+                            }
+                          />
+
+                          {(roomDetailTabById[room.id] ?? "preview") === "preview" ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <FieldLabel hint="Up to 8 images, auto-compressed.">Photos</FieldLabel>
                         <div
@@ -4225,21 +4238,20 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       </div>
-                      </>
-                      ) : null}
-
-                      {!isEntireHome ? (
-                        <div className="sm:col-span-2">
+                          ) : (
+                        <div>
                           <FieldLabel hint="Keys, parking, access, what to bring for this room.">
                             Move-in instructions
                           </FieldLabel>
                           <Textarea
-                            rows={3}
+                            rows={4}
                             value={room.moveInInstructions}
                             onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
                             className={listingTextInputCls}
                             placeholder="Room-specific access, parking, and move-in details…"
                           />
+                        </div>
+                          )}
                         </div>
                       ) : null}
                   </ListingWizardCollapsibleCard>

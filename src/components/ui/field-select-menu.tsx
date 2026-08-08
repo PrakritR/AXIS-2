@@ -57,7 +57,7 @@ export const FIELD_SELECT_MENU_SHELL_CLASS =
  * Never `flex-1` here: a zero flex-basis collapses the auto-height shell.
  */
 export const FIELD_SELECT_MENU_LISTBOX_SCROLL_CLASS =
-  "min-h-0 overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]";
+  "min-h-0 overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch] touch-pan-y";
 
 /** Short menus (≤5 options, no search) — size to content with no inner scrollbar. */
 export const FIELD_SELECT_MENU_LISTBOX_FIT_CLASS = "overflow-visible py-1";
@@ -82,9 +82,13 @@ const OPEN_FIELD_SELECT_MODAL_SELECTORS = [
  * outside dismiss. Prefer the open Vaul sheet or filter panel host with absolute coords.
  */
 export function resolveFieldSelectMenuPortal(): HTMLElement {
-  const vaulSheet = document.querySelector<HTMLElement>(
+  const vaulSheetOpen = document.querySelector<HTMLElement>(
     '[data-slot="vaul-bottom-sheet"][data-state="open"]',
   );
+  if (vaulSheetOpen) return vaulSheetOpen;
+
+  /* Filter sheets mount only while `open` — `data-state` can lag a frame behind the host. */
+  const vaulSheet = document.querySelector<HTMLElement>('[data-slot="vaul-bottom-sheet"]');
   if (vaulSheet) return vaulSheet;
 
   for (const selector of OPEN_FIELD_SELECT_MODAL_SELECTORS) {
@@ -434,6 +438,7 @@ export function useFieldSelectMenu({
   fullBleed = false,
   constrainToTitleBand = false,
   closeOnOutsidePointerDown = true,
+  closeOnEscape = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -455,20 +460,35 @@ export function useFieldSelectMenu({
    * portal filter shell, which closes only via its scrim / header / toggle.
    */
   closeOnOutsidePointerDown?: boolean;
+  /** When false, Escape does not call `onOpenChange(false)` (portal filter shell). */
+  closeOnEscape?: boolean;
 }) {
   const listId = useId();
   const isClient = useIsClient();
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuRect, setMenuRect] = useState<FieldSelectMenuRect | null>(null);
+  const portalHostRef = useRef<HTMLElement | null>(null);
   const onOpenChangeRef = useRef(onOpenChange);
   const closeOnOutsidePointerDownRef = useRef(closeOnOutsidePointerDown);
+  const closeOnEscapeRef = useRef(closeOnEscape);
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
   }, [onOpenChange]);
   useEffect(() => {
     closeOnOutsidePointerDownRef.current = closeOnOutsidePointerDown;
   }, [closeOnOutsidePointerDown]);
+  useEffect(() => {
+    closeOnEscapeRef.current = closeOnEscape;
+  }, [closeOnEscape]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      portalHostRef.current = null;
+      return;
+    }
+    portalHostRef.current = resolveFieldSelectMenuPortal();
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -478,7 +498,7 @@ export function useFieldSelectMenu({
     const updateMenuRect = () => {
       const button = buttonRef.current;
       if (!button) return;
-      const portalHost = resolveFieldSelectMenuPortal();
+      const portalHost = portalHostRef.current ?? resolveFieldSelectMenuPortal();
       const inFilterPanel =
         portalHost !== document.body &&
         portalHost.matches('[data-slot="portal-filter-dropdown-panel"]');
@@ -541,7 +561,7 @@ export function useFieldSelectMenu({
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && closeOnEscapeRef.current) {
         onOpenChangeRef.current(false);
         buttonRef.current?.focus();
       }
@@ -571,7 +591,10 @@ export function useFieldSelectMenu({
     };
   }, [listId, open]);
 
-  const portalHost = menuRect && isClient ? resolveFieldSelectMenuPortal() : null;
+  const portalHost =
+    menuRect && isClient
+      ? portalHostRef.current ?? resolveFieldSelectMenuPortal()
+      : null;
   return { listId, isClient, wrapRef, buttonRef, menuRect, portalHost };
 }
 

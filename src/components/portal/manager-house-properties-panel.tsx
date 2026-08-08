@@ -10,6 +10,7 @@ import { ListingStickySubnav } from "@/components/marketing/listing-detail-subna
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
+import { ManagerPropertyRoomMoveInPanel } from "@/components/portal/manager-property-room-move-in-panel";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
@@ -317,9 +318,10 @@ function ManagerPropertyInlineDetails({
   };
 
   const propertyShareLabel = row ? managerPropertyRowTitle(row, bucket) : "Property";
+  const sharePropertyId = listingId ?? stablePropertyId ?? "";
   const sharePropertyOptions = useMemo(
-    () => (listingId ? [{ id: listingId, label: propertyShareLabel }] : []),
-    [listingId, propertyShareLabel],
+    () => (sharePropertyId ? [{ id: sharePropertyId, label: propertyShareLabel }] : []),
+    [sharePropertyId, propertyShareLabel],
   );
 
 
@@ -606,8 +608,8 @@ function ManagerPropertyInlineDetails({
     bucket === 3 || bucket === 5
       ? ["preview"]
       : bucket === 2 && listingId
-        ? ["preview", "house-details", "application", "lease", "calendar", "requests", "promotion"]
-        : ["preview", "house-details", "application", "lease"];
+        ? ["preview", "house-details", "move-in", "application", "lease", "calendar", "requests", "promotion"]
+        : ["preview", "house-details", "move-in", "application", "lease"];
   const activeDetailTab = availableTabs.includes(detailTab) ? detailTab : availableTabs[0]!;
   const detailSectionTabs = useMemo(
     () =>
@@ -691,15 +693,28 @@ function ManagerPropertyInlineDetails({
     }
     if (activeDetailTab === "application" && bucket !== 3 && bucket !== 5) {
       return (
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_DETAIL_BTN}
-          data-attr="property-application-add-footer"
-          onClick={() => applicationAddHandlerRef.current?.()}
-        >
-          Add
-        </Button>
+        <div className="flex w-full justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="property-application-add-footer"
+            onClick={() => applicationAddHandlerRef.current?.()}
+          >
+            Add
+          </Button>
+          {sharePropertyId ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="property-application-send-footer"
+              onClick={() => setShareApplicationOpen(true)}
+            >
+              Send application
+            </Button>
+          ) : null}
+        </div>
       );
     }
     if (activeDetailTab === "lease" && bucket !== 3 && bucket !== 5) {
@@ -762,6 +777,7 @@ function ManagerPropertyInlineDetails({
     stablePropertyId,
     canEditAction,
     canEditListing,
+    sharePropertyId,
     openFullListingEditor,
   ]);
 
@@ -868,6 +884,17 @@ function ManagerPropertyInlineDetails({
         />
       ) : null}
 
+      {activeDetailTab === "move-in" && bucket !== 3 && bucket !== 5 && managerSubmission ? (
+        <ManagerPropertyRoomMoveInPanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={listingOwnerUserId}
+          canEdit={canEditAction}
+          onUpdated={onUpdated}
+          showToast={showToast}
+        />
+      ) : null}
+
       {activeDetailTab === "application" && bucket !== 3 && bucket !== 5 ? (
         <ManagerPropertyApplicationQuestionsPanel
           sub={managerSubmission}
@@ -933,13 +960,13 @@ function ManagerPropertyInlineDetails({
         </PortalPageFooterActions>
       ) : null}
 
-      {listingId ? (
+      {listingId || stablePropertyId ? (
         <ShareLeadLinkModal
           open={shareApplicationOpen}
           onClose={() => setShareApplicationOpen(false)}
           kind="apply"
           properties={sharePropertyOptions}
-          preselectedPropertyId={listingId}
+          preselectedPropertyId={sharePropertyId || undefined}
         />
       ) : null}
 

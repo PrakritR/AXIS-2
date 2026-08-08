@@ -15,11 +15,13 @@ import { markPublicApplyGuestContinue } from "@/lib/rental-application/public-ap
  * two. Guest apply remains available here for anyone who wants no account.
  */
 export function SignedInResidentAccountPrompt({
-  propertyId,
+  gateKey,
+  applyReturnPath,
   propertyTitle,
   onContinueGuest,
 }: {
-  propertyId: string;
+  gateKey: string;
+  applyReturnPath: string;
   propertyTitle?: string;
   onContinueGuest: () => void;
 }) {
@@ -42,11 +44,10 @@ export function SignedInResidentAccountPrompt({
         setBusy(false);
         return;
       }
-      const base = body.redirectTo || "/resident/applications/apply";
-      const pid = propertyId.trim();
+      const returnPath = applyReturnPath.trim();
       // Full navigation so the freshly-set active-portal cookie and the new
       // resident role are re-read by the resident portal's server guard.
-      window.location.assign(pid ? `${base}?propertyId=${encodeURIComponent(pid)}` : base);
+      window.location.assign(returnPath || body.redirectTo || "/resident/applications/apply");
     } catch {
       setError("Could not create your resident account. Please try again.");
       setBusy(false);
@@ -86,7 +87,7 @@ export function SignedInResidentAccountPrompt({
           data-attr="signed-in-apply-as-guest"
           disabled={busy}
           onClick={() => {
-            markPublicApplyGuestContinue(propertyId);
+            markPublicApplyGuestContinue(gateKey);
             onContinueGuest();
           }}
         >

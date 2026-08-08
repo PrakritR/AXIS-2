@@ -26,6 +26,7 @@ import { PortalAdaptiveHeaderActions } from "@/components/portal/portal-adaptive
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
+import { armFilterSheetOpenSuppressFromOverlayDismiss } from "@/components/ui/field-select-portal-interaction";
 import { PortalActiveFilterChips } from "@/components/portal/portal-filter-chips";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
@@ -504,6 +505,16 @@ export function ManagerApplications({
   >(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [addApplicationOpen, setAddApplicationOpen] = useState(false);
+  const [applicationsFilterOpen, setApplicationsFilterOpen] = useState(false);
+  const openAddApplication = useCallback(() => {
+    armFilterSheetOpenSuppressFromOverlayDismiss();
+    setApplicationsFilterOpen(false);
+    setAddApplicationOpen(true);
+  }, []);
+  useEffect(() => {
+    if (!addApplicationOpen) return;
+    setApplicationsFilterOpen(false);
+  }, [addApplicationOpen]);
   const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [applicationSettingsOpen, setApplicationSettingsOpen] = useState(false);
@@ -1289,6 +1300,8 @@ export function ManagerApplications({
 
   const applicationsFilterSort = (
     <PortalFilterSortSheet
+      open={applicationsFilterOpen}
+      onOpenChange={setApplicationsFilterOpen}
       activeCount={portalFilterActiveCount([propertyFilters])}
       compactPanel
       filterFieldCount={1}
@@ -1302,6 +1315,7 @@ export function ManagerApplications({
         propertyOptions={propertyOptions}
         propertyFilters={propertyFilters}
         onPropertyFiltersChange={setPropertyFilters}
+        selectionMode="multi"
       />
     </PortalFilterSortSheet>
   );
@@ -1339,7 +1353,7 @@ export function ManagerApplications({
       variant="outline"
       className={PORTAL_HEADER_ACTION_BTN}
       data-attr="applications-add"
-      onClick={() => setAddApplicationOpen(true)}
+      onClick={openAddApplication}
       disabled={propertyOptions.length === 0}
       title={propertyOptions.length === 0 ? "Add a property before starting an application" : undefined}
     >
@@ -1434,7 +1448,10 @@ export function ManagerApplications({
             <DropdownMenuItem
               data-attr="applications-add-menu"
               disabled={propertyOptions.length === 0}
-              onSelect={() => setAddApplicationOpen(true)}
+              onSelect={(event) => {
+                event.preventDefault();
+                openAddApplication();
+              }}
             >
               Add
             </DropdownMenuItem>
@@ -1683,7 +1700,7 @@ export function ManagerApplications({
           <PortalListAddRow
             label="Add"
             icon={PORTAL_LIST_ADD_ICONS.application}
-            onClick={() => setAddApplicationOpen(true)}
+            onClick={openAddApplication}
             disabled={propertyOptions.length === 0}
             dataAttr="applications-list-add"
           />
@@ -1769,7 +1786,7 @@ export function ManagerApplications({
             <PortalListAddRow
               label="Add"
               icon={PORTAL_LIST_ADD_ICONS.application}
-              onClick={() => setAddApplicationOpen(true)}
+              onClick={openAddApplication}
               disabled={propertyOptions.length === 0}
               dataAttr="applications-list-add"
             />

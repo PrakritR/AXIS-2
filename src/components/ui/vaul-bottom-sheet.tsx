@@ -94,6 +94,11 @@ export function VaulBottomSheet({
    * viewport can never push the sheet's top off screen. Ignored unless `autoElevate`.
    */
   minHeightPx,
+  /**
+   * When false, the sheet cannot be dismissed by dragging or tapping the overlay —
+   * only the header ✕ (or an explicit `onOpenChange(false)` from the caller) closes it.
+   */
+  dismissible = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -109,6 +114,7 @@ export function VaulBottomSheet({
   maxHeightClass?: string;
   fillViewport?: boolean;
   minHeightPx?: number;
+  dismissible?: boolean;
 }) {
   const contentHugging = !fullScreen && !fillViewport;
   const elevated = autoElevate && !fullScreen;
@@ -151,7 +157,7 @@ export function VaulBottomSheet({
       : undefined;
 
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly>
+    <Drawer.Root open={open} onOpenChange={onOpenChange} handleOnly dismissible={dismissible}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/50 motion-reduce:transition-none" />
         <Drawer.Content

@@ -46,6 +46,7 @@ import {
 } from "@/components/portal/payment-schedule-ui";
 import { formatFriendlyReminderSchedule } from "@/lib/payment-reminder-presets";
 import { ApplicationFilterSortFields } from "@/components/portal/application-filter-sort-fields";
+import { PortalFormSingleSelect } from "@/components/portal/filter-field-lists";
 import { PortalFilterSortSheet, portalFilterActiveCount } from "@/components/portal/portal-filter-sort-sheet";
 import { PORTAL_PROPERTY_FILTER_SHEET_CLASS } from "@/components/portal/portal-filter-shell";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
@@ -3293,17 +3294,20 @@ export function ManagerResidents({
               <span className="font-medium text-muted">Phone</span>
               <Input type="tel" value={arPhone} onChange={(e) => setArPhone(e.target.value)} placeholder="(555) 555-0100" />
             </label>
-            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
-              <span className="font-medium text-muted">Property</span>
-              <Select
+            <div className={PORTAL_MODAL_FORM_FIELD_CLASS}>
+              <PortalFormSingleSelect
+                label="Property"
+                labelClassName="font-medium text-muted"
                 value={arPropertyId}
-                onChange={(e) => { setArPropertyId(e.target.value); setArRoomId(""); }}
-               
-              >
-                <option value="">Select property…</option>
-                {propertyOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </Select>
-            </label>
+                onChange={(next) => {
+                  setArPropertyId(next);
+                  setArRoomId("");
+                }}
+                options={propertyOptions.map((p) => ({ value: p.id, label: p.label }))}
+                placeholder="Select property…"
+                dataAttr="add-resident-property"
+              />
+            </div>
             <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Lease term</span>
               <Select
@@ -3522,23 +3526,20 @@ export function ManagerResidents({
               <span className="font-medium text-muted">Phone</span>
               <Input type="tel" value={erPhone} onChange={(e) => setErPhone(e.target.value)} placeholder="(555) 555-0100" />
             </label>
-            <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
-              <span className="font-medium text-muted">Property</span>
-              <NativeSelect
+            <div className={PORTAL_MODAL_FORM_FIELD_CLASS}>
+              <PortalFormSingleSelect
+                label="Property"
+                labelClassName="font-medium text-muted"
                 value={erPropertyId}
-                onChange={(e) => {
-                  setErPropertyId(e.target.value);
+                onChange={(next) => {
+                  setErPropertyId(next);
                   setErRoomId("");
                 }}
-              >
-                <option value="">Select property…</option>
-                {propertyOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
+                options={propertyOptions.map((p) => ({ value: p.id, label: p.label }))}
+                placeholder="Select property…"
+                dataAttr="edit-resident-property"
+              />
+            </div>
             <label className={PORTAL_MODAL_FORM_FIELD_CLASS}>
               <span className="font-medium text-muted">Lease term</span>
               <NativeSelect

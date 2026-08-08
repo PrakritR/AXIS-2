@@ -39,6 +39,27 @@ type QuestionsSaveTarget =
   | { mode: "requestChange"; saveId: string }
   | null;
 
+/** Property id the in-portal application preview wizard can bind to. */
+export function resolveApplicationPreviewPropertyId(input: {
+  listingId?: string | null;
+  saveTarget?: QuestionsSaveTarget;
+  managerUserId?: string | null;
+  bulkPropertyIds?: string[];
+}): string {
+  const explicit = input.listingId?.trim();
+  if (explicit) return explicit;
+  const fromSaveTarget = input.saveTarget?.saveId.trim();
+  if (fromSaveTarget) return fromSaveTarget;
+  const managerUserId = input.managerUserId?.trim();
+  const bulkIds = input.bulkPropertyIds?.map((id) => id.trim()).filter(Boolean) ?? [];
+  if (!managerUserId || bulkIds.length === 0) return "";
+  for (const propertyId of bulkIds) {
+    const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+    if (hit?.saveTarget.saveId.trim()) return hit.saveTarget.saveId.trim();
+  }
+  return "";
+}
+
 /**
  * Per-property application templates — same list chrome as the lease tab.
  */
@@ -73,6 +94,17 @@ export function ManagerPropertyApplicationQuestionsPanel({
   const templates = useMemo(() => readPropertyApplicationTemplates(syncedSub), [syncedSub]);
 
   const bulkPropertyIds = propertyIds?.filter((id) => id.trim()) ?? [];
+
+  const previewPropertyId = useMemo(
+    () =>
+      resolveApplicationPreviewPropertyId({
+        listingId,
+        saveTarget,
+        managerUserId,
+        bulkPropertyIds,
+      }),
+    [bulkPropertyIds, listingId, managerUserId, saveTarget],
+  );
 
   const persistSubmission = useCallback(
     (merged: ManagerListingSubmissionV1, opts: { message: string }) => {
@@ -173,9 +205,8 @@ export function ManagerPropertyApplicationQuestionsPanel({
   }, [onRegisterAddApplication, openAdd]);
 
   const openApplicationPreview = (template: PropertyApplicationTemplate) => {
-    const pid = listingId?.trim();
-    if (!pid) {
-      showToast("Publish this listing before previewing the application.");
+    if (!previewPropertyId) {
+      showToast("Could not load this property to preview the application.");
       return;
     }
     setPreviewTemplate(template);
@@ -210,7 +241,6 @@ export function ManagerPropertyApplicationQuestionsPanel({
 
   if (!managerUserId || (!saveTarget && bulkPropertyIds.length === 0)) return null;
 
-  const previewListingId = listingId?.trim() ?? "";
   const editorTitle = editorMode === "add" ? "Add application" : "Edit application";
 
   return (
@@ -295,10 +325,11 @@ export function ManagerPropertyApplicationQuestionsPanel({
         presentation="dialog"
         dense
         assistantStrip={false}
+        stackClassName="fixed inset-0 z-[80] overflow-y-auto overscroll-contain"
         panelClassName="flex max-h-[min(90vh,56rem)] w-full max-w-5xl flex-col"
         dataAttr="property-application-preview"
       >
-        {previewOpen && previewTemplate ? (
+        {previewOpen && previewTemplate && previewPropertyId ? (
           <div className="mx-auto w-full max-w-5xl">
             {previewTemplate.formVariant === "cosigner" ? (
               <CosignerApplyFlow
@@ -316,13 +347,13 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   setPreviewTemplate(null);
                 }}
               />
-            ) : previewListingId ? (
+            ) : (
               <RentalApplicationWizard
-                key={`${previewListingId}-${previewTemplate.id}`}
+                key={`${previewPropertyId}-${previewTemplate.id}`}
                 showToast={showToast}
                 mode="manager"
                 layout="embedded"
-                linkedPropertyId={previewListingId}
+                linkedPropertyId={previewPropertyId}
                 linkedRentalType={previewTemplate.kind === "short-term" ? "short_term" : "standard"}
                 templatePreview
                 onManagerCancel={() => {
@@ -330,7 +361,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   setPreviewTemplate(null);
                 }}
               />
-            ) : null}
+            )}
           </div>
         ) : null}
       </Modal>
