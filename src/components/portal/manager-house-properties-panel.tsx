@@ -693,7 +693,7 @@ function ManagerPropertyInlineDetails({
     }
     if (activeDetailTab === "application" && bucket !== 3 && bucket !== 5) {
       return (
-        <div className="flex w-full justify-end gap-2">
+        <div className="flex w-full justify-start gap-2">
           <Button
             type="button"
             variant="outline"
