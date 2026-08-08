@@ -75,11 +75,16 @@ export async function POST(req: Request) {
     const oauthEmail = user.email.trim().toLowerCase();
 
     if ((tourInquiryId || handoff === "message") && !token && !axisId) {
-      const contactEmail = prospectEmail.includes("@") ? prospectEmail : oauthEmail;
+      const contactEmail =
+        handoff === "message"
+          ? oauthEmail
+          : prospectEmail.includes("@")
+            ? prospectEmail
+            : oauthEmail;
       const handoffResult = await completeProspectHandoffForUser(service, {
         userId: user.id,
         email: contactEmail,
-        authEmail: contactEmail !== oauthEmail ? oauthEmail : undefined,
+        authEmail: oauthEmail,
         fullName: prospectFullName || oauthFullName(user.user_metadata),
         phone: prospectPhone,
         tourInquiryId: tourInquiryId || undefined,

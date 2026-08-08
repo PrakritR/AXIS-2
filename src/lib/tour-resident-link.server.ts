@@ -456,13 +456,15 @@ async function mergeProspectInboxThreadsAcrossEmails(
   }
 }
 
+import { isBlockedSelfServiceProfileEmail } from "@/lib/auth/prospect-contact-trust";
+
 /** Keep tour/message contact details on the profile for outbound Communication identity. */
 export async function applyProspectMessagingContactToProfile(
   db: Db,
   input: { userId: string; contactEmail: string; phone?: string | null },
 ): Promise<void> {
   const contactEmail = normalizeEmail(input.contactEmail);
-  if (!contactEmail.includes("@")) return;
+  if (!contactEmail.includes("@") || isBlockedSelfServiceProfileEmail(contactEmail)) return;
 
   const phone = input.phone?.trim() ? normalizeE164(input.phone.trim()) : null;
   const { data: profile } = await db.from("profiles").select("email, phone").eq("id", input.userId).maybeSingle();

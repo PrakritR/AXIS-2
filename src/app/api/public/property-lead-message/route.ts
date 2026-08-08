@@ -132,12 +132,13 @@ export async function POST(req: Request) {
         .eq("id", signedInUser.id)
         .maybeSingle();
       const authEmail = (signedInProfile?.email as string | undefined)?.trim().toLowerCase() || signedInUser.email?.trim().toLowerCase() || "";
-      await reconcileProspectInboxThreadsForResident(db, {
-        userId: signedInUser.id,
-        contactEmail: email,
-        authEmail: authEmail && authEmail !== email ? authEmail : undefined,
-        phone: phone || undefined,
-      }).catch(() => undefined);
+      if (authEmail && authEmail === email) {
+        await reconcileProspectInboxThreadsForResident(db, {
+          userId: signedInUser.id,
+          contactEmail: email,
+          phone: phone || undefined,
+        }).catch(() => undefined);
+      }
     }
 
     void notifyProspectPropertyMessageHandoff({

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACTIVE_PORTAL_COOKIE } from "@/lib/auth/portal-access";
 import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
+import { resolveTrustedProspectContactEmail } from "@/lib/auth/prospect-contact-trust";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { normalizeTourContactPhone } from "@/lib/tour-contact-quality";
@@ -58,11 +59,6 @@ export async function completeProspectHandoffForUser(
   db: Db,
   input: CompleteProspectHandoffInput,
 ): Promise<CompleteProspectHandoffResult> {
-  const email = normalizeEmail(input.email);
-  if (!email.includes("@")) {
-    return { ok: false, status: 400, error: "Profile email is required." };
-  }
-
   const tourInquiryId = input.tourInquiryId?.trim() ?? "";
   const handoff = input.handoff === "message" ? "message" : "";
   if (!tourInquiryId && handoff !== "message") {
@@ -70,16 +66,29 @@ export async function completeProspectHandoffForUser(
   }
 
   let inquiry: Record<string, unknown> | null = null;
+  let inquiryEmail = "";
   if (tourInquiryId) {
     inquiry = await loadTourInquiryById(db, tourInquiryId);
     if (!inquiry) {
       return { ok: false, status: 400, error: "Could not create your account. Check your details and try again." };
     }
-    const inquiryEmail = textField(inquiry, "email").toLowerCase();
-    if (!inquiryEmail || inquiryEmail !== email) {
+    inquiryEmail = textField(inquiry, "email").toLowerCase();
+    if (!inquiryEmail) {
       return { ok: false, status: 400, error: "Could not create your account. Check your details and try again." };
     }
   }
+
+  const trustedContact = resolveTrustedProspectContactEmail({
+    authEmail: input.authEmail ?? input.email,
+    requestedContactEmail: input.email,
+    tourInquiryEmailVerified: Boolean(tourInquiryId && inquiryEmail),
+    verifiedInquiryEmail: inquiryEmail || undefined,
+  });
+  if (!trustedContact.ok) {
+    return { ok: false, status: 400, error: trustedContact.error };
+  }
+  const email = trustedContact.contactEmail;
+  const authEmail = trustedContact.authEmail;
 
   let phone =
     normalizeTourContactPhone(input.phone ?? "") ??
@@ -117,14 +126,14 @@ export async function completeProspectHandoffForUser(
     await reconcileProspectInboxThreadsForResident(db, {
       userId: input.userId,
       contactEmail: email,
-      authEmail: input.authEmail,
+      authEmail,
       phone,
     });
   } else {
     await reconcileProspectInboxThreadsForResident(db, {
       userId: input.userId,
       contactEmail: email,
-      authEmail: input.authEmail,
+      authEmail,
       phone,
     });
   }

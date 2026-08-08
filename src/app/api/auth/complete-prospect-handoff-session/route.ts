@@ -37,7 +37,12 @@ export async function POST(req: Request) {
 
     const authEmail = user.email?.trim().toLowerCase() ?? "";
     const prospectEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-    const contactEmail = prospectEmail.includes("@") ? prospectEmail : authEmail;
+    const contactEmail =
+      handoff === "message"
+        ? authEmail
+        : prospectEmail.includes("@")
+          ? prospectEmail
+          : authEmail;
     if (!contactEmail.includes("@")) {
       return NextResponse.json({ error: "Profile email is required." }, { status: 400 });
     }
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
     const handoffResult = await completeProspectHandoffForUser(service, {
       userId: user.id,
       email: contactEmail,
-      authEmail: contactEmail !== authEmail ? authEmail : undefined,
+      authEmail,
       fullName: typeof body.fullName === "string" ? body.fullName.trim() : undefined,
       phone: typeof body.phone === "string" ? body.phone.trim() : undefined,
       tourInquiryId: tourInquiryId || undefined,

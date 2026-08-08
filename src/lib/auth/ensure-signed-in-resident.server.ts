@@ -34,7 +34,9 @@ export async function ensureSignedInResidentAccount(
   if (!authEmail.includes("@")) {
     return { ok: false, error: "Profile email is required." };
   }
-  const contactEmail = normalizeEmail(options?.contactEmail) || authEmail;
+  const requestedContact = normalizeEmail(options?.contactEmail);
+  const contactEmail =
+    requestedContact && requestedContact === authEmail ? requestedContact : authEmail;
 
   const { data: existingRoleRows } = await service.from("profile_roles").select("role").eq("user_id", user.id);
   const currentRoles = normalizePortalRoles(existingRoleRows, existingProfile?.role as string | undefined);
