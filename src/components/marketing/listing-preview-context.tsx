@@ -13,6 +13,17 @@ export function useListingPreviewNewTab(): boolean {
   return useContext(ListingPreviewNewTabContext);
 }
 
+/**
+ * True on public listing pages where apply/tour (and related actions) already
+ * live in the sticky sidebar / mobile pricing card — hide duplicate CTAs on
+ * media browsers and detail modals.
+ */
+export const ListingSidebarRenterCtasContext = createContext(false);
+
+export function useListingSidebarRenterCtas(): boolean {
+  return useContext(ListingSidebarRenterCtasContext);
+}
+
 export function listingLinkTargetProps(newTab: boolean): { target?: string; rel?: string } {
   return newTab ? { target: "_blank", rel: "noopener noreferrer" } : {};
 }

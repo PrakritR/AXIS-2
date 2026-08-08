@@ -16,6 +16,7 @@ import type {
 import {
   listingLinkTargetProps,
   useListingPreviewNewTab,
+  useListingSidebarRenterCtas,
 } from "@/components/marketing/listing-preview-context";
 import {
   buildSmsDeepLink,
@@ -415,10 +416,11 @@ function ListingModalActions({
   );
 }
 
-/** Hides renter apply/message CTAs in manager and modal listing previews. */
+/** Hides renter apply/message CTAs when sidebar (or preview) already covers them. */
 function PreviewSafeModalActions(props: Parameters<typeof ListingModalActions>[0]) {
   const previewBrowse = useListingPreviewNewTab();
-  if (previewBrowse) return null;
+  const sidebarRenterCtas = useListingSidebarRenterCtas();
+  if (previewBrowse || sidebarRenterCtas) return null;
   return <ListingModalActions {...props} />;
 }
 

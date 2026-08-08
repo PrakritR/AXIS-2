@@ -22,6 +22,7 @@ import { ListingRoomMediaBrowser } from "@/components/marketing/listing-room-med
 import { compareListingRoomMediaEntries } from "@/lib/listing-floor-order";
 import {
   ListingPreviewNewTabContext,
+  ListingSidebarRenterCtasContext,
 } from "@/components/marketing/listing-preview-context";
 import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
 import { ProspectListingCta } from "@/components/marketing/prospect-listing-cta";
@@ -400,6 +401,7 @@ export function ListingDetailSections({
   const propertyLabel = property.buildingName?.trim() || property.title?.trim() || property.address?.trim() || null;
   return (
     <ListingPreviewNewTabContext.Provider value={embeddedPreview}>
+    <ListingSidebarRenterCtasContext.Provider value={!embeddedPreview}>
     <div className="bg-background text-foreground min-w-0 max-w-full" data-listing-sections-root>
       <div
         className={`mx-auto flex min-w-0 max-w-6xl flex-col ${
@@ -558,6 +560,7 @@ export function ListingDetailSections({
         </div>
       </div>
     </div>
+    </ListingSidebarRenterCtasContext.Provider>
     </ListingPreviewNewTabContext.Provider>
   );
 }

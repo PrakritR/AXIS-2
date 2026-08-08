@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   listingLinkTargetProps,
   useListingPreviewNewTab,
+  useListingSidebarRenterCtas,
 } from "@/components/marketing/listing-preview-context";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
@@ -152,6 +153,7 @@ export function ListingSpaceMediaBrowser({
   const [photoIndex, setPhotoIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const previewBrowse = useListingPreviewNewTab();
+  const sidebarRenterCtas = useListingSidebarRenterCtas();
 
   const newTabProps = listingLinkTargetProps(previewBrowse);
 
@@ -211,8 +213,9 @@ export function ListingSpaceMediaBrowser({
     ? resolveSecondaryCta?.(entry, safeIndex) ?? secondaryCta
     : secondaryCta;
 
-  const footerPrimary = previewBrowse ? null : activePrimary;
-  const footerSecondary = previewBrowse ? null : activeSecondary;
+  const hideRenterCtas = previewBrowse || sidebarRenterCtas;
+  const footerPrimary = hideRenterCtas ? null : activePrimary;
+  const footerSecondary = hideRenterCtas ? null : activeSecondary;
 
   const heroShowsVideo = hasVideo;
   const heroPhotoUrl = !heroShowsVideo && photoCount > 0 ? photos[safePhotoIndex]! : null;
