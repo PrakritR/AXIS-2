@@ -55,23 +55,87 @@ export type ResidentTourLinkRow = {
   linked_at: string;
 };
 
+export function isResidentTourLinksSchemaError(message: string): boolean {
+  return /resident_tour_links|schema cache/i.test(message);
+}
+
+/** Email-scoped stand-in links when `resident_tour_links` is empty or not migrated yet. */
+export async function tourLinksFromEmailInquiries(
+  db: Db,
+  params: { userId: string; email: string },
+): Promise<ResidentTourLinkRow[]> {
+  const email = normalizeEmail(params.email);
+  if (!email.includes("@")) return [];
+
+  const { data, error } = await db
+    .from("portal_schedule_records")
+    .select("row_data")
+    .eq("id", INQUIRIES_RECORD_ID)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const now = new Date().toISOString();
+  return inquiryRowsFromRecord(data?.row_data)
+    .filter((row) => textField(row, "kind") === "tour" && normalizeEmail(textField(row, "email")) === email)
+    .map((inquiry) => {
+      const inquiryId = textField(inquiry, "id");
+      return {
+        id: `email:${inquiryId}`,
+        resident_user_id: params.userId,
+        inquiry_id: inquiryId,
+        tour_group_id: textField(inquiry, "tourGroupId") || null,
+        manager_user_id: textField(inquiry, "managerUserId") || textField(inquiry, "adminUserId") || null,
+        property_id: textField(inquiry, "propertyId") || null,
+        attendee_email: email,
+        linked_at: textField(inquiry, "createdAt") || now,
+      } satisfies ResidentTourLinkRow;
+    })
+    .filter((row) => row.inquiry_id);
+}
+
+export async function resolveResidentTourLinks(
+  db: Db,
+  params: { userId: string; email?: string | null },
+): Promise<ResidentTourLinkRow[]> {
+  const links = await loadResidentTourLinks(db, params.userId);
+  if (links.length > 0) return links;
+  const email = normalizeEmail(params.email);
+  if (!email.includes("@")) return [];
+  return tourLinksFromEmailInquiries(db, { userId: params.userId, email });
+}
+
 export async function loadResidentTourLinks(db: Db, userId: string): Promise<ResidentTourLinkRow[]> {
   const { data, error } = await db
     .from("resident_tour_links")
     .select("id, resident_user_id, inquiry_id, tour_group_id, manager_user_id, property_id, attendee_email, linked_at")
     .eq("resident_user_id", userId)
     .order("linked_at", { ascending: false });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isResidentTourLinksSchemaError(error.message)) return [];
+    throw new Error(error.message);
+  }
   return (data ?? []) as ResidentTourLinkRow[];
 }
 
-export async function residentHasTourLinks(db: Db, userId: string): Promise<boolean> {
+export async function residentHasTourLinks(
+  db: Db,
+  userId: string,
+  email?: string | null,
+): Promise<boolean> {
   const { count, error } = await db
     .from("resident_tour_links")
     .select("id", { count: "exact", head: true })
     .eq("resident_user_id", userId);
-  if (error) throw new Error(error.message);
-  return (count ?? 0) > 0;
+  if (error) {
+    if (!isResidentTourLinksSchemaError(error.message)) throw new Error(error.message);
+  } else if ((count ?? 0) > 0) {
+    return true;
+  }
+
+  const normalized = normalizeEmail(email);
+  if (!normalized.includes("@")) return false;
+  const fallback = await tourLinksFromEmailInquiries(db, { userId, email: normalized });
+  return fallback.length > 0;
 }
 
 export type LinkTourInquiryResult =
@@ -257,9 +321,13 @@ function viewFromPlannedEvent(event: Record<string, unknown>, link: ResidentTour
   };
 }
 
-/** Load tour views scoped to linked inquiry ids only. */
-export async function loadResidentTourViews(db: Db, userId: string): Promise<ResidentTourView[]> {
-  const links = await loadResidentTourLinks(db, userId);
+/** Load tour views scoped to linked inquiry ids (or email-matched inquiries as fallback). */
+export async function loadResidentTourViews(
+  db: Db,
+  userId: string,
+  options?: { email?: string | null },
+): Promise<ResidentTourView[]> {
+  const links = await resolveResidentTourLinks(db, { userId, email: options?.email });
   if (!links.length) return [];
 
   const { data: inquiryRecord } = await db

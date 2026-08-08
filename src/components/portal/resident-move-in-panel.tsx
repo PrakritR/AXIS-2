@@ -11,7 +11,11 @@ type ResidentMoveInPanelProps = {
 export async function ResidentMoveInPanel({
   residentEmail,
   basePath = RESIDENT_PORTAL_BASE_PATH,
-}: ResidentMoveInPanelProps) {
+}: {
+  residentEmail?: string | null;
+  tab?: string;
+  basePath?: string;
+}) {
   const email = residentEmail?.trim().toLowerCase() || "";
   const resolved = email ? await loadResidentMoveInForEmail(email) : null;
 

@@ -3,17 +3,24 @@
 import { useEffect } from "react";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  clearStaleBrowserAuth,
+  isStaleRefreshTokenError,
+  safeBrowserGetSession,
+} from "@/lib/supabase/safe-browser-session";
 
 const SIGNED_IN_FLAG_KEY = "axis:signed_in";
 
 async function refreshPortalSession(): Promise<void> {
   try {
     const supabase = createSupabaseBrowserClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { session } = await safeBrowserGetSession(supabase);
     if (!session) return;
-    await supabase.auth.refreshSession().catch(() => undefined);
+    const { error } = await supabase.auth.refreshSession();
+    if (error && isStaleRefreshTokenError(error)) {
+      await clearStaleBrowserAuth(supabase);
+      return;
+    }
     try {
       window.localStorage.setItem(SIGNED_IN_FLAG_KEY, "1");
     } catch {

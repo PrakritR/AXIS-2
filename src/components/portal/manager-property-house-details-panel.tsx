@@ -41,8 +41,8 @@ function FieldBlock({
   rows?: number;
 }) {
   return (
-    <div className="border-t border-border px-4 py-4 first:border-t-0">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-semibold text-foreground">{label}</p>
         {badge ? (
           <span
@@ -158,7 +158,8 @@ export function ManagerPropertyHouseDetailsPanel({
         </Button>
       }
     >
-      <FieldBlock
+      <div className="space-y-6">
+        <FieldBlock
         label="House description"
         badge="Manager only"
         value={draft.houseDescription}
@@ -180,6 +181,7 @@ export function ManagerPropertyHouseDetailsPanel({
         onChange={(v) => updateField("generalHouseInfo", v)}
         placeholder="Gate/door codes, laundry tips, trash schedule…"
       />
+      </div>
     </PortalPropertyDetailSection>
   );
 }

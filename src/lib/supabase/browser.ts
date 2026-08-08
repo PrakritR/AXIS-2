@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { registerBrowserAuthRecovery } from "@/lib/supabase/safe-browser-session";
 
 let supabaseBrowserClient: ReturnType<typeof createBrowserClient> | null = null;
 
@@ -14,5 +15,6 @@ export function createSupabaseBrowserClient() {
       autoRefreshToken: true,
     },
   });
+  registerBrowserAuthRecovery(supabaseBrowserClient);
   return supabaseBrowserClient;
 }

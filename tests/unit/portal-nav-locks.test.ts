@@ -89,7 +89,7 @@ describe("portal nav lock kinds", () => {
     });
 
     it("unlocked resident sections are not locked", () => {
-      for (const section of ["dashboard", "communication", "profile"]) {
+      for (const section of ["dashboard", "communication", "profile", "tour", "applications"]) {
         expect(
           portalNavLockKind({
             kind: "resident",
@@ -99,6 +99,17 @@ describe("portal nav lock kinds", () => {
           }),
         ).toBe("none");
       }
+    });
+
+    it("tour stays unlocked for approved residents even on a free manager plan", () => {
+      expect(
+        portalNavLockKind({
+          kind: "resident",
+          section: "tour",
+          subscriptionTier: "free",
+          residentNavStage: "post_approval_pre_lease",
+        }),
+      ).toBe("none");
     });
 
     it("never returns upsell for a resident, at any stage or tier", () => {

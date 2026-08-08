@@ -12,7 +12,6 @@ import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
-import { listingAllowedLeaseTerms } from "@/lib/rental-application/data";
 import {
   downloadAiGeneratedLeaseHtml,
   gatherLeaseGenerationContext,
@@ -110,11 +109,6 @@ export function ResidentLeasePanel() {
     if (!isShortTerm) return null;
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
-
-  const allowedRenewTerms = useMemo(() => {
-    const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? "";
-    return propertyId ? listingAllowedLeaseTerms(propertyId) : undefined;
-  }, [pipelineRow]);
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -435,9 +429,10 @@ export function ResidentLeasePanel() {
           currentEnd={pipelineRow.application?.leaseEnd ?? ""}
           currentTerm={pipelineRow.application?.leaseTerm ?? "12-Month"}
           currentRentLabel={pipelineRow.signedRentLabel ?? pipelineRow.application?.managerRentOverride ?? ""}
+          propertyId={pipelineRow.propertyId ?? pipelineRow.application?.propertyId ?? ""}
+          currentRentalType={pipelineRow.application?.rentalType}
           leaseId={pipelineRow.id}
           renewUrl="/api/resident/renew-lease"
-          allowedTermOptions={allowedRenewTerms}
           onSuccess={() => {
             setShowRenewModal(false);
             void handleMoveOutSuccess();

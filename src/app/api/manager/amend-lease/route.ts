@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       leaseStart?: string;
       leaseEnd?: string;
       monthlyRent?: number | string | null;
+      rentalType?: string;
     };
     const leaseId = (body.leaseId ?? "").trim();
     if (!leaseId) return NextResponse.json({ error: "leaseId is required." }, { status: 400 });
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
         rentRaw == null || rentRaw === ""
           ? null
           : Number(typeof rentRaw === "string" ? rentRaw.replace(/[^\d.]/g, "") : rentRaw);
+      const rentalTypeRaw = (body.rentalType ?? "").trim();
+      const rentalType =
+        rentalTypeRaw === "short_term" ? ("short_term" as const) : rentalTypeRaw === "standard" ? ("standard" as const) : undefined;
       if (!leaseTerm) return NextResponse.json({ error: "leaseTerm is required for a renewal." }, { status: 400 });
       if (!/^\d{4}-\d{2}-\d{2}$/.test(leaseStart)) {
         return NextResponse.json({ error: "Provide a valid leaseStart (YYYY-MM-DD)." }, { status: 400 });
@@ -68,7 +72,7 @@ export async function POST(req: NextRequest) {
       if (leaseEnd && !/^\d{4}-\d{2}-\d{2}$/.test(leaseEnd)) {
         return NextResponse.json({ error: "Provide a valid leaseEnd (YYYY-MM-DD) or omit it for month-to-month." }, { status: 400 });
       }
-      const result = await renewLease(db, leaseRecord, { leaseTerm, leaseStart, leaseEnd, monthlyRent });
+      const result = await renewLease(db, leaseRecord, { leaseTerm, leaseStart, leaseEnd, monthlyRent, rentalType });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
       return NextResponse.json({ ok: true, direction: "renew" });
     }

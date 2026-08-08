@@ -70,12 +70,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Property not found or manager unavailable." }, { status: 404 });
     }
 
+    const db = createSupabaseServiceRoleClient();
+    const { data: managerProfile } = await db
+      .from("profiles")
+      .select("email")
+      .eq("id", managerUserId)
+      .maybeSingle();
+    const managerEmail = textField(managerProfile as Record<string, unknown> | null, "email").toLowerCase();
+    const { data: residentProfile } = await db.from("profiles").select("id").eq("email", email).maybeSingle();
+    const hasResidentAccount = Boolean(residentProfile?.id);
+
     // Record the explicit opt-in when the prospect checked the box and gave a
     // phone. This lead flow only emails the manager today (no automated SMS to
     // the prospect), but capturing consent keeps a manager reply-by-text lawful
     // and provable. An unchecked box records nothing. A later STOP supersedes.
     if (smsConsent && phone) {
-      const db = createSupabaseServiceRoleClient();
       await recordOptIn(db, phone, null, "tours-contact-message").catch(() => undefined);
     }
 
@@ -90,18 +99,24 @@ export async function POST(req: Request) {
       body: message,
     });
 
-    const db = createSupabaseServiceRoleClient();
+    const ackBody = [
+      `Thanks for reaching out about ${propertyTitle}.`,
+      "",
+      hasResidentAccount
+        ? "Your message was sent to the property manager. Replies will appear here in Communication."
+        : "Your message was sent to the property manager. Create a free resident account to read replies in PropLane Communication.",
+    ].join("\n");
+
     await recordResidentProspectInboxMessage(db, {
       participantEmail: email,
       subject: `We received your message — ${topic}`,
-      body: [
-        `Thanks for reaching out about ${propertyTitle}.`,
-        "",
-        "Your message was sent to the property manager. Create a free resident account to read replies in PropLane Communication.",
-        "",
-        `Your message:`,
-        message,
-      ].join("\n"),
+      body: ackBody,
+      residentMessage: message,
+      residentName: name,
+      counterpartyEmail: managerEmail || undefined,
+      managerUserId,
+      propertyId,
+      propertyTitle,
     });
 
     void notifyProspectPropertyMessageHandoff({

@@ -62,6 +62,15 @@ vi.mock("@/lib/auth/portal-access", () => ({
   hasRole: vi.fn(),
 }));
 
+const ensureSignedInResidentAccount = vi.fn(async () => ({
+  ok: true,
+  createdResidentRole: false,
+  email: "resident@example.com",
+}));
+vi.mock("@/lib/auth/ensure-signed-in-resident.server", () => ({
+  ensureSignedInResidentAccount: (...args: unknown[]) => ensureSignedInResidentAccount(...(args as [])),
+}));
+
 const linkTourInquiryToResident = vi.fn(async () => ({ ok: true, linked: true, inquiryId: "inq-1" }));
 vi.mock("@/lib/tour-resident-link.server", () => ({
   linkTourInquiryToResident: (...args: unknown[]) => linkTourInquiryToResident(...(args as [])),
@@ -202,10 +211,31 @@ describe("partner-inquiries route resident tour linking", () => {
     const persisted = lastPersistedInquiry();
     expect(persisted.email).toBe("resident@example.com");
 
+    expect(ensureSignedInResidentAccount).toHaveBeenCalled();
     expect(linkTourInquiryToResident).toHaveBeenCalledWith(expect.anything(), {
       userId: "res-1",
       inquiryId: "inq-1",
       email: "resident@example.com",
     });
+  });
+
+  it("links tours for signed-in managers who book through a property link", async () => {
+    vi.mocked(getPortalAccessContext).mockResolvedValue({
+      user: { id: "mgr-1", email: "mgr@example.com" },
+      profile: { email: "mgr@example.com" },
+      roles: ["manager"],
+      effectiveRole: "manager",
+    } as never);
+    vi.mocked(hasRole).mockReturnValue(false);
+
+    const res = await postWith(makeRow({ email: "other@example.com" }));
+    expect(res.status).toBe(200);
+    const persisted = lastPersistedInquiry();
+    expect(persisted.email).toBe("mgr@example.com");
+    expect(ensureSignedInResidentAccount).toHaveBeenCalledWith(expect.anything(), {
+      id: "mgr-1",
+      email: "mgr@example.com",
+    });
+    expect(linkTourInquiryToResident).toHaveBeenCalled();
   });
 });

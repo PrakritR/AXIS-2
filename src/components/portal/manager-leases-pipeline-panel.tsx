@@ -923,6 +923,8 @@ export function ManagerLeasesPipelinePanel({
           currentEnd={renewLeaseRow.application?.leaseEnd ?? ""}
           currentTerm={renewLeaseRow.application?.leaseTerm ?? ""}
           currentRentLabel={renewLeaseRow.signedRentLabel ?? renewLeaseRow.application?.managerRentOverride ?? ""}
+          propertyId={renewLeaseRow.propertyId ?? renewLeaseRow.application?.propertyId ?? ""}
+          currentRentalType={renewLeaseRow.application?.rentalType}
           leaseId={renewLeaseRow.id}
           onSuccess={() => void handleAmendLeaseSuccess()}
         />

@@ -2,6 +2,8 @@ import { formatPacificDate } from "@/lib/pacific-time";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import type { LeasePipelineRow, SignedLeaseSnapshot } from "@/lib/lease-pipeline-storage";
+import { renewalRentalTypeForTerm } from "@/lib/lease-renewal-terms";
+import { SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import type { MockProperty } from "@/data/types";
 import type { ManagerListingSubmissionV1, ManagerRoomUnavailableRange } from "@/lib/manager-listing-submission";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -382,6 +384,7 @@ export type LeaseRenewalTerms = {
   /** Empty string means Month-to-Month (no end date). */
   leaseEnd: string;
   monthlyRent: number | null;
+  rentalType?: "standard" | "short_term";
 };
 
 /**
@@ -409,28 +412,42 @@ export async function renewLease(
     return { ok: false, error: "Only fully signed leases can be renewed." };
   }
 
-  const isMonthToMonth = terms.leaseTerm === "Month-to-Month";
+  const rentalType = terms.rentalType ?? renewalRentalTypeForTerm(terms.leaseTerm);
+  const isShortTerm = rentalType === "short_term";
+  const isMonthToMonth = !isShortTerm && terms.leaseTerm === "Month-to-Month";
   if (!terms.leaseStart) return { ok: false, error: "Renewal start date is required." };
-  if (!isMonthToMonth && !terms.leaseEnd) return { ok: false, error: "Renewal end date is required." };
+  if (isShortTerm && !terms.leaseEnd) {
+    return { ok: false, error: "Check-out date is required for a short-term renewal." };
+  }
+  if (!isMonthToMonth && !isShortTerm && !terms.leaseEnd) {
+    return { ok: false, error: "Renewal end date is required." };
+  }
   if (terms.leaseEnd && terms.leaseEnd < terms.leaseStart) {
     return { ok: false, error: "Renewal end date cannot be before the start date." };
   }
   if (terms.monthlyRent != null && (!Number.isFinite(terms.monthlyRent) || terms.monthlyRent <= 0)) {
-    return { ok: false, error: "Monthly rent must be a positive amount." };
+    return { ok: false, error: isShortTerm ? "Nightly rate must be a positive amount." : "Monthly rent must be a positive amount." };
   }
 
   // Room must stay free through the renewal period (open-ended for M2M).
-  const effectiveEnd = terms.leaseEnd || "9999-12-31";
+  const effectiveEnd = isMonthToMonth ? "9999-12-31" : terms.leaseEnd;
   const availability = await checkMoveOutAvailabilityForLease(db, leaseRow, leaseRecord, effectiveEnd);
   if (!availability.ok) return { ok: false, error: availability.reason };
 
   const iso = new Date().toISOString();
-  const rentLabel = terms.monthlyRent != null ? `$${terms.monthlyRent.toFixed(2)} / month` : null;
+  const canonicalTerm = isShortTerm ? SHORT_TERM_LEASE_TERM : terms.leaseTerm;
+  const rentLabel =
+    terms.monthlyRent != null
+      ? isShortTerm
+        ? `$${terms.monthlyRent.toFixed(2)} / night`
+        : `$${terms.monthlyRent.toFixed(2)} / month`
+      : null;
   const updatedApplication: NonNullable<LeasePipelineRow["application"]> = {
     ...(leaseRow.application ?? {}),
-    leaseTerm: terms.leaseTerm,
+    rentalType,
+    leaseTerm: canonicalTerm,
     leaseStart: terms.leaseStart,
-    leaseEnd: terms.leaseEnd,
+    leaseEnd: isMonthToMonth ? "" : terms.leaseEnd,
     ...(terms.monthlyRent != null ? { managerRentOverride: String(terms.monthlyRent) } : {}),
   };
   if (rentLabel) {
@@ -445,7 +462,7 @@ export async function renewLease(
     ...leaseRow,
     application: updatedApplication,
     ...(rentLabel ? { signedRentLabel: rentLabel } : {}),
-    pendingRenewal: { ...terms, requestedAtIso: iso },
+    pendingRenewal: { ...terms, leaseTerm: canonicalTerm, rentalType, requestedAtIso: iso },
     signedLeaseSnapshots,
     managerSignature: null,
     residentSignature: null,

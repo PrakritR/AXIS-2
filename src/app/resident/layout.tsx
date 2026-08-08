@@ -31,10 +31,15 @@ function isResidentApplicationsApplyPath(pathname: string): boolean {
   return pathname === "/resident/applications/apply";
 }
 
+function isResidentTourPath(pathname: string): boolean {
+  return pathname === "/resident/tour" || pathname.startsWith("/resident/tour/");
+}
+
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
   await assertPortalLayoutRole("resident", "resident", {
     allowSignedInApplyGate: isResidentApplicationsApplyPath(pathname),
+    allowResidentTourAccess: isResidentTourPath(pathname),
   });
 
   const residentPortal = await getResidentPortalDefinition();

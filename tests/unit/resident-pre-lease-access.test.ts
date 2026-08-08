@@ -75,7 +75,7 @@ describe("resident portal stage access", () => {
 
   it("post-lease unlocks services and house details and keeps tour and application reachable", () => {
     expect(isResidentPathAllowedForAccess("/resident/services/requests", postLease)).toBe(true);
-    expect(isResidentPathAllowedForAccess("/resident/move-in/placement", postLease)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/move-in", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/lease", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/tour", postLease)).toBe(true);
     expect(isResidentPathAllowedForAccess("/resident/applications/pending", postLease)).toBe(true);

@@ -4,6 +4,7 @@ import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { ProspectOAuthSignUpButtons } from "@/components/auth/prospect-oauth-sign-up-buttons";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -14,6 +15,7 @@ import { managerSignupFinishPhrase } from "@/lib/manager-access";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { managerPortalEntryPath } from "@/lib/auth/manager-google-services-onboarding";
+import { persistProspectHandoff } from "@/lib/auth/prospect-handoff-storage";
 import {
   BANNER_INFO_CLASS,
   BANNER_NEUTRAL_CLASS,
@@ -70,6 +72,11 @@ export default function CreateAccountClient() {
     () => searchParams.get("tour_inquiry")?.trim() || "",
     [searchParams],
   );
+  const handoffFromUrl = useMemo(
+    () => searchParams.get("handoff")?.trim() || "",
+    [searchParams],
+  );
+  const isProspectHandoff = Boolean(tourInquiryFromUrl) || handoffFromUrl === "message";
   const phoneFromUrl = useMemo(
     () => searchParams.get("phone")?.trim() || "",
     [searchParams],
@@ -82,7 +89,9 @@ export default function CreateAccountClient() {
     ? "resident"
     : sessionIdFromUrl
       ? "manager"
-      : roleFromUrl;
+      : isProspectHandoff
+        ? "resident"
+        : roleFromUrl;
 
   const [role, setRole] = useState<CreateAccountRole>(urlDerivedRole);
   const [email, setEmail] = useState("");
@@ -150,7 +159,42 @@ export default function CreateAccountClient() {
   }, [email, fullName]);
 
   const googleSignedIn = Boolean(googleSessionEmail);
-  const lockResidentEmail = role === "resident" && Boolean(axisIdFromUrl && emailFromUrl.includes("@"));
+  const lockResidentEmail =
+    role === "resident" && Boolean(emailFromUrl.includes("@") && (axisIdFromUrl || tourInquiryFromUrl));
+
+  const prospectHandoffSnapshot = useMemo(
+    () => ({
+      tourInquiryId: tourInquiryFromUrl || undefined,
+      handoff: handoffFromUrl === "message" ? ("message" as const) : undefined,
+      fullName: fullName.trim() || nameFromUrl || undefined,
+      phone: phone.trim() || phoneFromUrl || undefined,
+      email: email.trim() || emailFromUrl || undefined,
+      nextPath:
+        nextFromUrl ||
+        (tourInquiryFromUrl ? "/resident/tour/pending" : "/resident/communication/active"),
+    }),
+    [
+      email,
+      emailFromUrl,
+      fullName,
+      handoffFromUrl,
+      nameFromUrl,
+      nextFromUrl,
+      phone,
+      phoneFromUrl,
+      tourInquiryFromUrl,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isProspectHandoff) return;
+    persistProspectHandoff(prospectHandoffSnapshot);
+  }, [isProspectHandoff, prospectHandoffSnapshot]);
+
+  useEffect(() => {
+    if (!isProspectHandoff || googleSessionLoading || !googleSignedIn) return;
+    router.replace("/auth/resident-oauth-finish");
+  }, [googleSessionLoading, googleSignedIn, isProspectHandoff, router]);
 
   const normalEmail = email.trim().toLowerCase();
   const isEmailCheckable = normalEmail.length > 0 && normalEmail.includes("@");
@@ -378,13 +422,13 @@ export default function CreateAccountClient() {
       return;
     }
 
-    // Tour booking handoff: opt-in account creation linked to the inquiry record.
-    if (tourInquiryFromUrl) {
+    // Tour or message handoff: opt-in account creation linked to prospect activity.
+    if (tourInquiryFromUrl || handoffFromUrl === "message") {
       if (!email.trim().includes("@")) {
-        showToast("Enter the email you used to book your tour.");
+        showToast("Enter the email you used on your tour or message.");
         return;
       }
-      if (!phone.trim()) {
+      if (tourInquiryFromUrl && !phone.trim()) {
         showToast("Enter a phone number.");
         return;
       }
@@ -402,7 +446,8 @@ export default function CreateAccountClient() {
             password,
             fullName: fullName.trim() || undefined,
             phone: phone.trim(),
-            tourInquiryId: tourInquiryFromUrl,
+            tourInquiryId: tourInquiryFromUrl || undefined,
+            handoff: handoffFromUrl === "message" ? "message" : undefined,
           }),
         });
         const body = (await res.json().catch(() => ({}))) as { error?: string; redirectTo?: string };
@@ -416,14 +461,14 @@ export default function CreateAccountClient() {
           password,
         });
         if (signInError) {
-          showToast("Account created. Sign in to view your tour.");
+          showToast("Account created. Sign in to continue.");
           router.push("/auth/sign-in");
           return;
         }
         if (signInData?.user) {
           posthog.identify(signInData.user.id);
         }
-        window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour");
+        window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour/pending");
       } catch {
         showToast("Network error.");
       } finally {
@@ -467,23 +512,33 @@ export default function CreateAccountClient() {
       <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Create account</h1>
 
       <div className="mt-7">
-        <label className={FIELD_LABEL_CLASS} htmlFor="account-type">
-          Portal type
-        </label>
-        <Select
-          id="account-type"
-          className="mt-1.5"
-          value={role}
-          disabled={!!sessionIdFromUrl}
-          onChange={(e) => setRole(parseCreateAccountRole(e.target.value))}
-        >
-          <option value="resident">Resident</option>
-          <option value="manager">Manager</option>
-        </Select>
+        {!isProspectHandoff ? (
+          <>
+            <label className={FIELD_LABEL_CLASS} htmlFor="account-type">
+              Portal type
+            </label>
+            <Select
+              id="account-type"
+              className="mt-1.5"
+              value={role}
+              disabled={!!sessionIdFromUrl}
+              onChange={(e) => setRole(parseCreateAccountRole(e.target.value))}
+            >
+              <option value="resident">Resident</option>
+              <option value="manager">Manager</option>
+            </Select>
+          </>
+        ) : null}
       </div>
 
       <div className={`mt-6 ${BANNER_NEUTRAL_CLASS}`}>
-        {managerPostCheckout ? (
+        {isProspectHandoff ? (
+          <>
+            Create your resident account to track your{" "}
+            {tourInquiryFromUrl ? "tour request" : "message"} in the resident portal. Use the same email, name, and
+            phone you entered when you reached out — Google and Apple sign-in will carry those details through.
+          </>
+        ) : managerPostCheckout ? (
           <>
             {isAxisIntentSignup ? (
               <>
@@ -725,29 +780,62 @@ export default function CreateAccountClient() {
           <>
             {role === "resident" ? (
               <div>
-                {googleSignedIn && googleSessionEmail ? (
-                  <div className="mb-4">
-                    <GoogleSignedInBanner
-                      email={googleSessionEmail}
-                      fullName={googleSessionName}
-                      subtitle="Continue with Google below to finish setting up your resident account."
+                {isProspectHandoff ? (
+                  <>
+                    <ProspectOAuthSignUpButtons
+                      handoff={prospectHandoffSnapshot}
+                      disabled={busy || googleSessionLoading}
+                      onError={(message) => showToast(message)}
                     />
-                  </div>
-                ) : null}
-                {/* Email-only resident signup — the rental application is matched by email, so
-                    the Axis ID field is gone. A manager link may still pass one via the URL. */}
-                <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
-                {!googleSignedIn ? (
-                  <div className="my-4 flex items-center gap-3">
-                    <div className="h-px flex-1 bg-border" aria-hidden />
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
-                    <div className="h-px flex-1 bg-border" aria-hidden />
-                  </div>
-                ) : null}
+                    {!googleSignedIn ? (
+                      <div className="my-4 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-border" aria-hidden />
+                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                        <div className="h-px flex-1 bg-border" aria-hidden />
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    {googleSignedIn && googleSessionEmail ? (
+                      <div className="mb-4">
+                        <GoogleSignedInBanner
+                          email={googleSessionEmail}
+                          fullName={googleSessionName}
+                          subtitle="Continue with Google below to finish setting up your resident account."
+                        />
+                      </div>
+                    ) : null}
+                    <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
+                    {!googleSignedIn ? (
+                      <div className="my-4 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-border" aria-hidden />
+                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                        <div className="h-px flex-1 bg-border" aria-hidden />
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             ) : null}
             {!googleSignedIn || role !== "resident" ? (
               <>
+            {isProspectHandoff ? (
+              <div>
+                <label className={FIELD_LABEL_CLASS} htmlFor="prospect-name">
+                  Full name
+                  <Req />
+                </label>
+                <Input
+                  id="prospect-name"
+                  className="mt-1.5"
+                  placeholder="Your name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  autoComplete="name"
+                />
+              </div>
+            ) : null}
             <div>
               <label className={FIELD_LABEL_CLASS} htmlFor="email">
                 Email
@@ -765,13 +853,17 @@ export default function CreateAccountClient() {
                 disabled={lockResidentEmail}
               />
               {lockResidentEmail ? (
-                <p className="mt-1 text-xs text-muted/70">Must match the email on your rental application.</p>
+                <p className="mt-1 text-xs text-muted/70">
+                  {tourInquiryFromUrl
+                    ? "Must match the email you used to book your tour."
+                    : "Must match the email on your rental application."}
+                </p>
               ) : null}
             </div>
             <div>
               <label className={FIELD_LABEL_CLASS} htmlFor="signup-phone">
                 Phone number
-                <Req />
+                {isProspectHandoff && tourInquiryFromUrl ? <Req /> : null}
               </label>
               <Input
                 id="signup-phone"
@@ -819,7 +911,7 @@ export default function CreateAccountClient() {
             busy ||
             googleSessionLoading ||
             (googleSignedIn && managerNeedsPricing) ||
-            (googleSignedIn && role === "resident") ||
+            (googleSignedIn && role === "resident" && !isProspectHandoff) ||
             (role === "manager" && !!sessionIdFromUrl && (effectivePreviewLoading || !!effectivePreviewError || !effectiveCheckoutPreview))
           }
         >
@@ -827,7 +919,7 @@ export default function CreateAccountClient() {
             ? "Working…"
             : googleSignedIn && managerNeedsPricing
               ? "Continue on Partner pricing"
-              : googleSignedIn && role === "resident"
+              : googleSignedIn && role === "resident" && !isProspectHandoff
                 ? "Use Google above"
                 : "Create account"}
         </Button>

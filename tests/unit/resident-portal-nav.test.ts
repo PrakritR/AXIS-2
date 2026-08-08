@@ -77,20 +77,20 @@ describe("resident portal nav stages", () => {
     expect(residentSectionUnlockedForStage("services", "post_lease")).toBe(true);
   });
 
-  it("post-approval bottom bar is lease, payments, dashboard, communication", () => {
+  it("post-approval bottom bar is lease, payments, tour, and communication", () => {
     expect(residentBottomNavPrimarySections("post_approval_pre_lease")).toEqual([
       "lease",
       "payments",
-      "dashboard",
+      "tour",
       "communication",
     ]);
   });
 
-  it("post-lease bottom bar is services, payments, dashboard, communication", () => {
+  it("post-lease bottom bar is services, payments, tour, and communication", () => {
     expect(residentBottomNavPrimarySections("post_lease")).toEqual([
       "services",
       "payments",
-      "dashboard",
+      "tour",
       "communication",
     ]);
   });
@@ -119,6 +119,6 @@ describe("resident portal nav stages", () => {
     expect(residentSectionUnlockedForStage("lease", "post_lease")).toBe(true);
     expect(residentSectionUnlockedForStage("services", "post_lease")).toBe(true);
     expect(residentSectionUnlockedForStage("move-in", "post_lease")).toBe(true);
-    expect(isResidentPathAllowedForAccess("/resident/move-in/placement", postLease)).toBe(true);
+    expect(isResidentPathAllowedForAccess("/resident/move-in", postLease)).toBe(true);
   });
 });

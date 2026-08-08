@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
+import { getPortalAccessContext } from "@/lib/auth/portal-access";
+import { ensureSignedInResidentAccount } from "@/lib/auth/ensure-signed-in-resident.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import {
   adminHasPublishedSlot,
@@ -163,10 +164,8 @@ export async function POST(req: Request) {
           if (textValue(incoming.kind) === "tour") {
             incoming.email = accountEmail;
           }
-          if (hasRole(ctx, "resident")) {
-            linkingUserId = ctx.user.id;
-            linkingEmail = accountEmail;
-          }
+          linkingUserId = ctx.user.id;
+          linkingEmail = accountEmail;
         }
       }
     } catch {
@@ -337,11 +336,16 @@ export async function POST(req: Request) {
     }
 
     if (linkingUserId && linkingEmail && textValue(row.kind) === "tour") {
-      void linkTourInquiryToResident(db, {
-        userId: linkingUserId,
-        inquiryId: id,
-        email: linkingEmail,
-      }).catch(() => undefined);
+      try {
+        await ensureSignedInResidentAccount(db, { id: linkingUserId, email: linkingEmail });
+        await linkTourInquiryToResident(db, {
+          userId: linkingUserId,
+          inquiryId: id,
+          email: linkingEmail,
+        });
+      } catch {
+        // A link failure must not fail the booking — backfill runs on portal load.
+      }
     }
 
     return NextResponse.json({ ok: true, row });

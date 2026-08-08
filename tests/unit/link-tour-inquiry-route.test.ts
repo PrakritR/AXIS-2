@@ -15,6 +15,9 @@ vi.mock("@/lib/auth/portal-access", async (importOriginal) => ({
 vi.mock("@/lib/auth/admin-preview", () => ({
   getAdminPreviewFromCookies: vi.fn(),
 }));
+vi.mock("@/lib/auth/ensure-resident-portal-access.server", () => ({
+  ensureMayAccessResidentPortal: vi.fn(),
+}));
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
@@ -23,6 +26,7 @@ vi.mock("@/lib/tour-resident-link.server", () => ({
 }));
 
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
+import { ensureMayAccessResidentPortal } from "@/lib/auth/ensure-resident-portal-access.server";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -44,6 +48,7 @@ describe("POST /api/auth/link-tour-inquiry", () => {
     vi.clearAllMocks();
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({} as never);
     vi.mocked(getAdminPreviewFromCookies).mockResolvedValue(null as never);
+    vi.mocked(ensureMayAccessResidentPortal).mockResolvedValue({ ok: true });
     accessContext([]);
   });
 
@@ -59,20 +64,26 @@ describe("POST /api/auth/link-tour-inquiry", () => {
     expect(linkTourInquiryToResident).not.toHaveBeenCalled();
   });
 
-  it("denies non-resident roles", async () => {
+  it("promotes managers and links the tour", async () => {
     vi.mocked(getEffectiveSessionForPortal).mockResolvedValue({
       user: { id: "mgr-1" },
       profile: { role: "manager", email: "mgr@example.com" },
     } as never);
     accessContext(["manager"]);
+    vi.mocked(linkTourInquiryToResident).mockResolvedValue({ ok: true, linked: true, inquiryId: "inq-1" });
     const res = await linkTourInquiry(
       jsonRequest("http://localhost/api/auth/link-tour-inquiry", {
         method: "POST",
         body: { tourInquiryId: "inq-1" },
       }),
     );
-    expect(res.status).toBe(403);
-    expect(linkTourInquiryToResident).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(ensureMayAccessResidentPortal).toHaveBeenCalled();
+    expect(linkTourInquiryToResident).toHaveBeenCalledWith(expect.anything(), {
+      userId: "mgr-1",
+      inquiryId: "inq-1",
+      email: "mgr@example.com",
+    });
   });
 
   it("links a tour for authenticated residents", async () => {

@@ -10,7 +10,7 @@ import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal
 export async function assertPortalLayoutRole(
   portal: PreviewPortal,
   role: "manager" | "resident" | "vendor",
-  options?: { allowSignedInApplyGate?: boolean },
+  options?: { allowSignedInApplyGate?: boolean; allowResidentTourAccess?: boolean },
 ) {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) redirect("/auth/sign-in");
@@ -23,8 +23,13 @@ export async function assertPortalLayoutRole(
   const applyGateBypass =
     options?.allowSignedInApplyGate === true && portal === "resident" && Boolean(ctx.user);
 
+  const tourGateBypass =
+    options?.allowResidentTourAccess === true &&
+    portal === "resident" &&
+    hasRole(ctx, "resident");
+
   if (!hasRole(ctx, role)) {
-    if (applyGateBypass) return;
+    if (applyGateBypass || tourGateBypass) return;
     redirect("/auth/sign-in");
   }
 
@@ -33,7 +38,7 @@ export async function assertPortalLayoutRole(
   }
 
   if (ctx.effectiveRole !== role) {
-    if (applyGateBypass) return;
+    if (applyGateBypass || tourGateBypass) return;
     redirect(portalDashboardPath(ctx.effectiveRole ?? "resident"));
   }
 }

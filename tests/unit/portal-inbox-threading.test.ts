@@ -27,4 +27,22 @@ describe("portal inbox threading", () => {
     expect(messages[1]?.body).toBe("We will schedule a visit.");
     expect(withReply.preview).toContain("schedule");
   });
+
+  it("marks the root turn outbound when rootOutbound is set", () => {
+    const messages = inboxThreadMessages({
+      ...base,
+      rootOutbound: true,
+      messages: [
+        {
+          id: "ack-1",
+          from: "PropLane",
+          body: "Thanks for reaching out.",
+          at: "Jun 2",
+          outbound: false,
+        },
+      ],
+    });
+    expect(messages[0]?.outbound).toBe(true);
+    expect(messages[1]?.outbound).toBe(false);
+  });
 });

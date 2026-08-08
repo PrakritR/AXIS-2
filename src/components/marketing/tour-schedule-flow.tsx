@@ -22,7 +22,7 @@ import {
   PUBLIC_PROSPECT_CANVAS_CLASS,
 } from "@/components/marketing/prospect-public-handoff";
 import { useProspectContactAutofill, type ProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
-import { promoteToResidentPortal } from "@/lib/prospect-portal-handoff.client";
+import { completeSignedInTourBooking } from "@/lib/tour-resident-link.client";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
@@ -77,35 +77,7 @@ export function tourAvailabilityReadErrorMessage(status: number): string {
   return "We couldn't load this property's tour windows just now. Check your connection and try again.";
 }
 
-type TourLinkFetch = (
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Pick<Response, "ok">>;
-
-/** Link newly-booked inquiries immediately when the prospect already has an account. */
-export async function linkBookedToursToSignedInResident(
-  inquiryIds: string[],
-  request: TourLinkFetch = fetch,
-): Promise<boolean> {
-  const ids = [...new Set(inquiryIds.map((id) => id.trim()).filter(Boolean))];
-  if (ids.length === 0) return true;
-  const results = await Promise.all(
-    ids.map(async (tourInquiryId) => {
-      try {
-        const response = await request("/api/auth/link-tour-inquiry", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tourInquiryId }),
-        });
-        return response.ok;
-      } catch {
-        return false;
-      }
-    }),
-  );
-  return results.every(Boolean);
-}
+export { linkBookedToursToSignedInResident } from "@/lib/tour-resident-link.client";
 
 /** Sentinel when the prospect wants a property tour but has not picked a room yet. */
 export const TOUR_ROOM_UNDECIDED_KEY = "__tour-room-undecided__";
@@ -288,6 +260,9 @@ export function TourScheduleFlow({
       : residentCreateAccountHref(returnAfterAuth);
     const signInHref = residentSignInHref(returnAfterAuth, {
       tourInquiryId: submittedContact?.inquiryId,
+      email: submittedContact?.email,
+      fullName: submittedContact?.name,
+      phone: submittedContact?.phone,
     });
 
     return (
@@ -551,11 +526,20 @@ export function TourScheduleFlow({
                 .map((item) => item.row?.id?.trim() ?? "")
                 .filter(Boolean);
               if (signedInUserId) {
-                if (inquiryIds.length > 0) {
-                  await linkBookedToursToSignedInResident(inquiryIds);
+                const completed = await completeSignedInTourBooking(inquiryIds, "/resident/tour/pending");
+                if (completed.ok) {
+                  if (embedded) {
+                    onSuccess();
+                    return;
+                  }
+                  window.location.assign(completed.redirectTo);
+                  return;
                 }
-                const promoted = await promoteToResidentPortal("/resident/tour/pending");
-                if (promoted) return;
+                showToast(completed.error ?? "Your tour was booked. Open Tours in the resident portal to view it.");
+                if (embedded) {
+                  onSuccess();
+                  return;
+                }
               }
               setSubmitted(true);
               const firstInquiryId = inquiryIds[0] ?? "";

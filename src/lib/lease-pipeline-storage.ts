@@ -676,6 +676,7 @@ export type LeasePipelineRow = {
     leaseStart: string;
     leaseEnd: string;
     monthlyRent: number | null;
+    rentalType?: "standard" | "short_term";
     requestedAtIso: string;
   } | null;
   /** Prior fully-signed lease documents kept when a renewal/amendment clears signatures. */
