@@ -30,6 +30,11 @@ import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 import { downloadOrShareFile } from "@/lib/native/download-or-share";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  defaultPortalMessageChannelSelection,
+  PortalMessageSendViaField,
+  portalMessageChannelsFromSelection,
+} from "@/components/portal/portal-message-compose-fields";
+import {
   PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -1562,6 +1567,13 @@ export function AiDraftReplyCard({
   );
 }
 
+export type InboxScheduledSaveEdit = {
+  subject: string;
+  body: string;
+  deliverViaEmail?: boolean;
+  deliverViaSms?: boolean;
+};
+
 /**
  * Inline scheduled message — compact chip in the thread (`compact`) or full body
  * when nested inside another modal (`detail`).
@@ -1575,6 +1587,9 @@ export function InboxScheduledCard({
   deliverViaEmail,
   deliverViaSms,
   source: _source,
+  emailAvailable = true,
+  smsAvailable = false,
+  channelEditable,
   editable,
   busy = false,
   expanded: _expanded = true,
@@ -1593,6 +1608,10 @@ export function InboxScheduledCard({
   deliverViaEmail?: boolean;
   deliverViaSms?: boolean;
   source: "manual" | "automation";
+  emailAvailable?: boolean;
+  smsAvailable?: boolean;
+  /** When true (default for editable manual rows), Send via can be changed while editing. */
+  channelEditable?: boolean;
   editable: boolean;
   busy?: boolean;
   /** @deprecated Use `presentation="detail"` instead. */
@@ -1603,17 +1622,26 @@ export function InboxScheduledCard({
   presentation?: "compact" | "detail";
   onCancel: () => void;
   onSendNow: () => void;
-  /** Inline save of edited subject/body. Present only when `editable`. */
-  onSaveEdit?: (next: { subject: string; body: string }) => void | Promise<void>;
+  /** Inline save of edited subject/body/channels. Present only when `editable`. */
+  onSaveEdit?: (next: InboxScheduledSaveEdit) => void | Promise<void>;
   /** When false, hides Send now / Cancel send (template editors). */
   showSendActions?: boolean;
 }) {
+  const canEditChannels =
+    channelEditable ??
+    (editable && _source === "manual" && Boolean(onSaveEdit) && (emailAvailable || smsAvailable));
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftSubject, setDraftSubject] = useState(subject);
   const [draftBody, setDraftBody] = useState(body);
+  const [draftSendVia, setDraftSendVia] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const draftChannels = portalMessageChannelsFromSelection(draftSendVia);
+  const draftChannelsOk =
+    !canEditChannels || !editing || draftChannels.viaEmail || draftChannels.viaSms;
 
   const closeModal = () => {
     setModalOpen(false);
@@ -1624,6 +1652,14 @@ export function InboxScheduledCard({
   const startEdit = () => {
     setDraftSubject(subject);
     setDraftBody(body);
+    setDraftSendVia(
+      defaultPortalMessageChannelSelection(
+        emailAvailable,
+        smsAvailable,
+        deliverViaEmail !== false,
+        deliverViaSms === true,
+      ),
+    );
     setSaveError(null);
     setEditing(true);
   };
@@ -1632,10 +1668,19 @@ export function InboxScheduledCard({
     setEditing(false);
   };
   const saveEdit = () => {
-    if (!onSaveEdit || !draftBody.trim()) return;
+    if (!onSaveEdit || !draftBody.trim() || !draftChannelsOk) return;
     setSaving(true);
     setSaveError(null);
-    void Promise.resolve(onSaveEdit({ subject: draftSubject.trim(), body: draftBody.trim() }))
+    const channels = portalMessageChannelsFromSelection(draftSendVia);
+    void Promise.resolve(
+      onSaveEdit({
+        subject: draftSubject.trim(),
+        body: draftBody.trim(),
+        ...(canEditChannels
+          ? { deliverViaEmail: channels.viaEmail, deliverViaSms: channels.viaSms }
+          : {}),
+      }),
+    )
       .then(() => {
         setSaveError(null);
         setEditing(false);
@@ -1676,6 +1721,15 @@ export function InboxScheduledCard({
 
       {editing ? (
         <div className="space-y-2 text-left">
+          {canEditChannels ? (
+            <PortalMessageSendViaField
+              selected={draftSendVia}
+              onChange={setDraftSendVia}
+              emailAvailable={emailAvailable}
+              smsAvailable={smsAvailable}
+              dataAttr="inbox-scheduled-edit-send-via"
+            />
+          ) : null}
           <Input
             value={draftSubject}
             onChange={(e) => setDraftSubject(e.target.value)}
@@ -1702,7 +1756,7 @@ export function InboxScheduledCard({
               variant="primary"
               className="h-8 min-h-0 px-3 text-[12px]"
               onClick={saveEdit}
-              disabled={saving || !draftBody.trim()}
+              disabled={saving || !draftBody.trim() || !draftChannelsOk}
               data-attr="inbox-scheduled-save"
             >
               {saving ? "Saving…" : "Save"}

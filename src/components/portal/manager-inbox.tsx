@@ -861,6 +861,8 @@ export const ManagerInbox = forwardRef<
   const [replySending, setReplySending] = useState(false);
   const [replyViaEmail, setReplyViaEmail] = useState(true);
   const [replyViaSms, setReplyViaSms] = useState(false);
+  const [aiDraftViaEmail, setAiDraftViaEmail] = useState(true);
+  const [aiDraftViaSms, setAiDraftViaSms] = useState(false);
   const [approvingDraft, setApprovingDraft] = useState(false);
   const [aiAutoSend, setAiAutoSend] = useState(false);
   const autoSentDraftRef = useRef<string | null>(null);
@@ -987,11 +989,10 @@ export const ManagerInbox = forwardRef<
     [reloadScheduled, reloadInbox, showToast],
   );
 
-  // Inline edit of a scheduled message's subject/body, saved in place.
   const saveScheduledEdit = useCallback(
     async (
       item: { id: string; source: "manual" | "automation" },
-      next: { subject: string; body: string },
+      next: { subject: string; body: string; deliverViaEmail?: boolean; deliverViaSms?: boolean },
     ) => {
       // Rejects on failure so the inline editor stays open with the draft text.
       // The card renders the message inline, so there is deliberately no toast.
@@ -1001,7 +1002,12 @@ export const ManagerInbox = forwardRef<
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ subject: next.subject, body: next.body }),
+            body: JSON.stringify({
+              subject: next.subject,
+              body: next.body,
+              ...(next.deliverViaEmail !== undefined ? { deliverViaEmail: next.deliverViaEmail } : {}),
+              ...(next.deliverViaSms !== undefined ? { deliverViaSms: next.deliverViaSms } : {}),
+            }),
           });
           if (!res.ok) throw new Error(await readPortalApiError(res, "Could not save changes."));
         } else {
@@ -1172,6 +1178,15 @@ export const ManagerInbox = forwardRef<
     return smsRecipients.some((r) => r.residentEmail?.trim().toLowerCase() === norm && r.phone?.trim());
   }, [activeThread, smsRecipients, smsUiEnabled]);
 
+  const smsRecipientEmails = useMemo(() => {
+    if (!smsUiEnabled) return new Set<string>();
+    return new Set(
+      smsRecipients
+        .filter((r) => r.phone?.trim() && r.residentEmail?.trim())
+        .map((r) => r.residentEmail.trim().toLowerCase()),
+    );
+  }, [smsRecipients, smsUiEnabled]);
+
   const discardActiveDraft = useCallback(async () => {
     if (!activeThread?.aiDraft) return;
     const updated: InboxThread = { ...activeThread, aiDraft: undefined };
@@ -1185,8 +1200,8 @@ export const ManagerInbox = forwardRef<
 
   const approveActiveDraft = useCallback(async () => {
     if (!activeThread?.aiDraft?.text?.trim()) return;
-    const viaEmail = replyViaEmail || !activeSmsAvailable;
-    const viaSms = replyViaSms && activeSmsAvailable;
+    const viaEmail = aiDraftViaEmail || !activeSmsAvailable;
+    const viaSms = aiDraftViaSms && activeSmsAvailable;
     if (!viaEmail && !viaSms) {
       showToast("Choose Email, SMS, or both.");
       return;
@@ -1197,7 +1212,13 @@ export const ManagerInbox = forwardRef<
     } finally {
       setApprovingDraft(false);
     }
-  }, [activeSmsAvailable, activeThread, handleReply, replyViaEmail, replyViaSms, showToast]);
+  }, [activeSmsAvailable, activeThread, aiDraftViaEmail, aiDraftViaSms, handleReply, showToast]);
+
+  useEffect(() => {
+    if (!activeThread?.aiDraft?.text || activeThread.aiDraft.status !== "pending_approval") return;
+    setAiDraftViaEmail(true);
+    setAiDraftViaSms(false);
+  }, [activeThread?.aiDraft?.text, activeThread?.aiDraft?.status, activeThread?.id]);
 
   useEffect(() => {
     autoSentDraftRef.current = null;
@@ -1232,10 +1253,23 @@ export const ManagerInbox = forwardRef<
     />
   );
 
+  const aiDraftChannelPicker = (
+    <InboxReplyChannelPicker
+      viaEmail={aiDraftViaEmail}
+      viaSms={aiDraftViaSms}
+      onViaEmailChange={setAiDraftViaEmail}
+      onViaSmsChange={setAiDraftViaSms}
+      emailAvailable
+      smsAvailable={activeSmsAvailable}
+    />
+  );
+
   const editActiveDraft = useCallback(() => {
     if (!activeThread?.aiDraft?.text) return;
     setReplyDraft(activeThread.aiDraft.text);
-  }, [activeThread]);
+    setReplyViaEmail(aiDraftViaEmail);
+    setReplyViaSms(aiDraftViaSms && activeSmsAvailable);
+  }, [activeSmsAvailable, activeThread, aiDraftViaEmail, aiDraftViaSms]);
 
   const showAiDraftUi = Boolean(
     activeThread &&
@@ -1478,6 +1512,9 @@ export const ManagerInbox = forwardRef<
             channel={item.channel}
             deliverViaEmail={item.deliverViaEmail}
             deliverViaSms={item.deliverViaSms}
+            emailAvailable
+            smsAvailable={activeSmsAvailable}
+            channelEditable={item.source === "manual" && item.editable}
             source={item.source}
             editable={item.editable}
             busy={scheduledBusyId === item.id}
@@ -1531,7 +1568,7 @@ export const ManagerInbox = forwardRef<
                 onApprove={() => void approveActiveDraft()}
                 onEdit={editActiveDraft}
                 onDiscard={() => void discardActiveDraft()}
-                channelControl={replyChannelPicker}
+                channelControl={aiDraftChannelPicker}
                 autoSend={aiAutoSend}
                 onAutoSendChange={setAiAutoSend}
                 onGenerate={
@@ -1615,7 +1652,11 @@ export const ManagerInbox = forwardRef<
       ) : null}
 
       {tabId === "schedule" && !searchActive ? (
-        <ManagerInboxSchedulePanel portalBase={portalBase} />
+        <ManagerInboxSchedulePanel
+          portalBase={portalBase}
+          smsUiEnabled={smsUiEnabled}
+          smsRecipientEmails={smsRecipientEmails}
+        />
       ) : suppressListPane ? (
         <div
           className={`${

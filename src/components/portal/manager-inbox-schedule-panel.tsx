@@ -80,10 +80,15 @@ function rowId(row: ScheduleRow): string {
 export function ManagerInboxSchedulePanel({
   portalBase,
   filterResidentEmail,
+  smsUiEnabled = false,
+  smsRecipientEmails,
 }: {
   portalBase: string;
   /** When set, only show scheduled messages addressed to this resident (case-insensitive). */
   filterResidentEmail?: string;
+  smsUiEnabled?: boolean;
+  /** Lowercased resident emails that have a phone on file and can receive SMS. */
+  smsRecipientEmails?: ReadonlySet<string>;
 }) {
   void portalBase;
   const { showToast } = useAppUi();
@@ -263,6 +268,14 @@ export function ManagerInboxSchedulePanel({
         ? threadScheduledItemFromManualMessage(row.message)
         : threadScheduledItemFromAutomationMessage(row.message);
     const isScheduled = row.message.status === "scheduled";
+    const recipientEmail = (
+      row.kind === "manual" ? row.message.recipientEmail : row.message.residentEmail
+    )
+      ?.trim()
+      .toLowerCase();
+    const smsAvailable = Boolean(
+      smsUiEnabled && recipientEmail && smsRecipientEmails?.has(recipientEmail),
+    );
 
     return (
       <div className="space-y-3">
@@ -283,6 +296,9 @@ export function ManagerInboxSchedulePanel({
           channel={scheduled.channel}
           deliverViaEmail={scheduled.deliverViaEmail}
           deliverViaSms={scheduled.deliverViaSms}
+          emailAvailable
+          smsAvailable={smsAvailable}
+          channelEditable={row.kind === "manual" && scheduled.editable && isScheduled}
           source={scheduled.source}
           editable={scheduled.editable && isScheduled}
           busy={editBusy}
@@ -331,7 +347,14 @@ export function ManagerInboxSchedulePanel({
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         credentials: "include",
-                        body: JSON.stringify({ subject: next.subject, body: next.body }),
+                        body: JSON.stringify({
+                          subject: next.subject,
+                          body: next.body,
+                          ...(next.deliverViaEmail !== undefined
+                            ? { deliverViaEmail: next.deliverViaEmail }
+                            : {}),
+                          ...(next.deliverViaSms !== undefined ? { deliverViaSms: next.deliverViaSms } : {}),
+                        }),
                       },
                     );
                     if (!res.ok) {

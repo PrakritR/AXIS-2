@@ -109,6 +109,7 @@ describe("inbox thread omnichannel primitives", () => {
         body="Original body"
         source="manual"
         editable
+        smsAvailable
         onCancel={vi.fn()}
         onSendNow={vi.fn()}
         onSaveEdit={onSaveEdit}
@@ -118,10 +119,15 @@ describe("inbox thread omnichannel primitives", () => {
     fireEvent.click(screen.getByText("Edit"));
     const bodyField = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
     expect(bodyField).toBeTruthy();
+    expect(document.querySelector('[data-attr="inbox-scheduled-edit-send-via"]')).toBeTruthy();
     fireEvent.change(bodyField, { target: { value: "Edited body" } });
     fireEvent.click(screen.getByText("Save"));
     expect(onSaveEdit).toHaveBeenCalledTimes(1);
-    expect(onSaveEdit.mock.calls[0][0]).toMatchObject({ body: "Edited body" });
+    expect(onSaveEdit.mock.calls[0][0]).toMatchObject({
+      body: "Edited body",
+      deliverViaEmail: true,
+      deliverViaSms: false,
+    });
   });
 
   it("keeps the editor open with the draft intact when the save rejects", async () => {
