@@ -54,7 +54,7 @@ const KPI_TONE_STYLES = {
 const BOTTOM_TABS = [
   { section: "properties", label: "Properties", icon: Building2 },
   { section: "residents", label: "Residents", icon: Users },
-  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard, active: true },
+  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { section: "communication", label: "Communication", icon: MessagesSquare },
 ] as const;
 
@@ -215,14 +215,16 @@ export function MobileAppPreview({ className }: { className?: string }) {
                   <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
                     <Icon className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} strokeWidth={active ? 2.25 : 2} />
                   </span>
-                  <span
-                    className={cn(
-                      PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
-                      active ? "text-primary" : "text-muted",
-                    )}
-                  >
-                    {label}
-                  </span>
+                  {section !== "dashboard" ? (
+                    <span
+                      className={cn(
+                        PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
+                        active ? "text-primary" : "text-muted",
+                      )}
+                    >
+                      {label}
+                    </span>
+                  ) : null}
                 </div>
                 );
               })}

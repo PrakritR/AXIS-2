@@ -430,9 +430,11 @@ export function PortalSidebar({
           ) : (
             <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS} aria-hidden />
           )}
-          <span className={`${PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS} ${active ? "text-primary" : "text-muted"}`}>
-            {s.label}
-          </span>
+          {s.section !== "dashboard" ? (
+            <span className={`${PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS} ${active ? "text-primary" : "text-muted"}`}>
+              {s.label}
+            </span>
+          ) : null}
         </Link>
       );
     }
