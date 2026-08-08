@@ -11,7 +11,6 @@ import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox"
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import { useProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
-import { promoteToResidentPortal } from "@/lib/prospect-portal-handoff.client";
 import {
   residentCreateAccountHref,
   residentSignInHref,
@@ -35,6 +34,7 @@ import {
 import {
   ProspectAccountHandoff,
   ProspectPublicSuccessBanner,
+  ProspectViewInPortalAction,
   PUBLIC_PROSPECT_CANVAS_CLASS,
 } from "@/components/marketing/prospect-public-handoff";
 
@@ -239,6 +239,7 @@ function MessageFlow({
   } | null>(null);
   const contactAutofill = useProspectContactAutofill();
   const signedInUserId = contactAutofill.userId;
+  const hasResidentRole = contactAutofill.hasResidentRole;
   const [topic, setTopic] = useState("");
   const [otherTopicDetail, setOtherTopicDetail] = useState("");
   const [name, setName] = useState("");
@@ -299,10 +300,6 @@ function MessageFlow({
         showToast(data.error ?? "Could not send message.");
         return;
       }
-      if (signedInUserId) {
-        const promoted = await promoteToResidentPortal("/resident/communication/active");
-        if (promoted) return;
-      }
       setSubmittedContact({
         name: n,
         email: em,
@@ -328,8 +325,10 @@ function MessageFlow({
       <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
         <ProspectPublicSuccessBanner eyebrow="Message sent" title="Your message is in">
           <p>
-            We sent your message to the property manager{propertyTitle ? ` about ${propertyTitle}` : ""}. You will get
-            replies by email, and you can read them in PropLane Communication once you have a resident account.
+            We sent your message to the property manager{propertyTitle ? ` about ${propertyTitle}` : ""}.
+            {signedInUserId
+              ? " You can read manager replies in PropLane Communication."
+              : " You will get replies by email, and you can read them in PropLane Communication once you have a resident account."}
           </p>
           <p className="font-medium">Topic: {submittedContact.topic}</p>
         </ProspectPublicSuccessBanner>
@@ -343,7 +342,14 @@ function MessageFlow({
             createAccountDataAttr="message-success-create-account"
             signInDataAttr="message-success-sign-in"
           />
-        ) : null}
+        ) : (
+          <ProspectViewInPortalAction
+            signedIn
+            hasResidentRole={hasResidentRole}
+            portalPath="/resident/communication/active"
+            dataAttr="message-success-view-in-portal"
+          />
+        )}
 
         <div>
           <button

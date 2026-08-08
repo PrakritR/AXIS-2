@@ -32,7 +32,7 @@ export function residentCreateAccountHref(
     tourInquiryId && !baseNext.includes("link_tour=")
       ? `/resident/tour?link_tour=${encodeURIComponent(tourInquiryId)}`
       : baseNext;
-  const q = new URLSearchParams({ role: "resident", next });
+  const q = new URLSearchParams({ mode: "create", role: "resident", next });
   const email = opts?.email?.trim().toLowerCase();
   if (email) q.set("email", email);
   const fullName = opts?.fullName?.trim();
