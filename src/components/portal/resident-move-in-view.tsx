@@ -1,6 +1,7 @@
 "use client";
 
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { ResidentMoveInMediaGallery } from "@/components/portal/move-in-media-fields";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PORTAL_INLINE_UNLOCK_NOTICE_CLASS } from "@/components/portal/portal-metrics";
 import {
@@ -109,6 +110,10 @@ function ResidentMoveInTabContent({
               </span>
             )}
           </div>
+          <ResidentMoveInMediaGallery
+            photoDataUrls={resolved.moveInPhotoDataUrls}
+            videoDataUrl={resolved.moveInVideoDataUrl}
+          />
         </section>
       ) : null}
     </>

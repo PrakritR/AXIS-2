@@ -19,6 +19,8 @@ export type ResidentMoveInResolved = {
   roomLabel: string;
   earliestMoveInDateLabel: string | null;
   instructions: string | null;
+  moveInPhotoDataUrls: string[];
+  moveInVideoDataUrl: string | null;
   generalHouseInfo: string | null;
   houseRulesText: string | null;
   /** Property amenities offered (from the listing's amenitiesText), one entry per amenity. */
@@ -186,11 +188,15 @@ export function resolveResidentMoveInFromApplications(
   }
 
   let roomLevelInstructions: string | null = null;
+  let roomLevelPhotoDataUrls: string[] = [];
+  let roomLevelVideoDataUrl: string | null = null;
   let listingMoveInDate: string | null = null;
   if (sub) {
     if (isEntireHomeListing(sub)) {
       listingMoveInDate = sub.houseMoveInAvailableDate?.trim() || null;
       roomLevelInstructions = sub.houseMoveInInstructions?.trim() || null;
+      roomLevelPhotoDataUrls = sub.houseMoveInPhotoDataUrls ?? [];
+      roomLevelVideoDataUrl = sub.houseMoveInVideoDataUrl ?? null;
     }
     const parsed = roomChoice ? parseRoomChoiceValue(roomChoice) : null;
     const listingRoomId = parsed?.listingRoomId ?? null;
@@ -205,8 +211,12 @@ export function resolveResidentMoveInFromApplications(
       if (!isEntireHomeListing(sub)) {
         listingMoveInDate = room.moveInAvailableDate?.trim() || null;
         roomLevelInstructions = room.moveInInstructions?.trim() || null;
+        roomLevelPhotoDataUrls = room.moveInPhotoDataUrls ?? [];
+        roomLevelVideoDataUrl = room.moveInVideoDataUrl ?? null;
       } else if (!roomLevelInstructions) {
         roomLevelInstructions = room.moveInInstructions?.trim() || null;
+        if (roomLevelPhotoDataUrls.length === 0) roomLevelPhotoDataUrls = room.moveInPhotoDataUrls ?? [];
+        if (!roomLevelVideoDataUrl) roomLevelVideoDataUrl = room.moveInVideoDataUrl ?? null;
       }
     }
   }
@@ -234,6 +244,8 @@ export function resolveResidentMoveInFromApplications(
     roomLabel,
     earliestMoveInDateLabel,
     instructions,
+    moveInPhotoDataUrls: roomLevelPhotoDataUrls,
+    moveInVideoDataUrl: roomLevelVideoDataUrl,
     generalHouseInfo,
     houseRulesText,
     amenities,
