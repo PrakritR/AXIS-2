@@ -309,6 +309,11 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: NativeAuthHubProps) {
           )}
         </p>
         <AuthLegalConsent action="continue" className="px-1" />
+        <p className="native-hide text-muted">
+          <Link href="/app" className="font-semibold text-primary hover:opacity-90" data-attr="auth-hub-mobile-app">
+            PropLane mobile app
+          </Link>
+        </p>
       </div>
     </div>
   );

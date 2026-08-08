@@ -80,6 +80,7 @@ export const proPortal: PortalDefinition = {
       ],
     },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
+    { section: "app", label: "App", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
@@ -100,5 +101,6 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Finances", path: "/portal/financials/income" },
   { label: "Documents", path: "/portal/documents/library" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
+  { label: "App", path: "/portal/app" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;

@@ -48,6 +48,12 @@ describe("platform parity (web + native WebView)", () => {
     expect(isNativeAppAllowedPath("/contact")).toBe(true);
   });
 
+  it("public /app download page is an in-app route reachable from marketing and auth promos", () => {
+    expect(isInAppPath("/app")).toBe(true);
+    expect(isNativeDeepLinkPath("/app")).toBe(true);
+    expect(isNativeAppAllowedPath("/app")).toBe(true);
+  });
+
   it("auth legal pages are in-app routes reachable from auth footers on native", () => {
     for (const path of ["/tos", "/privacy"] as const) {
       expect(isInAppPath(path)).toBe(true);

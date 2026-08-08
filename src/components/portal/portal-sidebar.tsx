@@ -42,7 +42,7 @@ import {
 } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/portal-sidebar-cookie";
-import { groupNavItems, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
+import { groupNavItems, isAppNavHiddenInNativeShell, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
 import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import { cn } from "@/lib/utils";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
@@ -139,15 +139,20 @@ export function PortalSidebar({
 
   const navItems = useMemo(
     () =>
-      visibleSections.map((section) => ({
-        section: section.section,
-        label: section.label,
-        href: hrefForSection(definition, section.section),
-        prefetchHrefs: section.tabs.length
-          ? section.tabs.map((tab) => `${definition.basePath}/${section.section}/${tab.id}`)
-          : [`${definition.basePath}/${section.section}`],
-      })),
-    [definition, visibleSections],
+      visibleSections
+        .filter(
+          (section) =>
+            !isAppNavHiddenInNativeShell(definition.kind, section.section, showNativeChrome),
+        )
+        .map((section) => ({
+          section: section.section,
+          label: section.label,
+          href: hrefForSection(definition, section.section),
+          prefetchHrefs: section.tabs.length
+            ? section.tabs.map((tab) => `${definition.basePath}/${section.section}/${tab.id}`)
+            : [`${definition.basePath}/${section.section}`],
+        })),
+    [definition, visibleSections, showNativeChrome],
   );
 
   const navGroups = useMemo(() => groupNavItems(definition.kind, navItems), [definition.kind, navItems]);

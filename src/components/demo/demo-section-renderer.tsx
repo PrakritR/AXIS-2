@@ -50,6 +50,10 @@ const ManagerDocumentsPanel = dynamic(() => import("@/components/portal/manager-
 const PortalCalendar = dynamic(() => import("@/components/portal/portal-calendar").then((m) => m.PortalCalendar), { ssr: false, loading });
 const ProAccountLinksPanel = dynamic(() => import("@/components/portal/pro-account-links-panel").then((m) => m.ProAccountLinksPanel), { ssr: false, loading });
 const ManagerPromotion = dynamic(() => import("@/components/portal/manager-promotion").then((m) => m.ManagerPromotion), { ssr: false, loading });
+const ManagerMobileAppPanel = dynamic(
+  () => import("@/components/portal/manager-mobile-app-panel").then((m) => m.ManagerMobileAppPanel),
+  { ssr: false, loading },
+);
 const PortalBugFeedbackPanel = dynamic(() => import("@/components/portal/portal-bug-feedback-panel").then((m) => m.PortalBugFeedbackPanel), { ssr: false, loading });
 const PortalProfileClient = dynamic(() => import("@/components/portal/portal-profile-client").then((m) => m.PortalProfileClient), { ssr: false, loading });
 
@@ -169,6 +173,8 @@ export function DemoSectionRenderer({
       case "bugs-feedback":
         // The demo manager portal mirrors the real "pro" portal definition.
         return <PortalBugFeedbackPanel reporterRole="pro" />;
+      case "app":
+        return <ManagerMobileAppPanel />;
       case "profile":
         return (
           <PortalProfileClient

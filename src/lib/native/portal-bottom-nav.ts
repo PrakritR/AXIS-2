@@ -32,6 +32,7 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
   "financials",
   "documents",
   "bugs-feedback",
+  "app",
 ] as const;
 
 /**
