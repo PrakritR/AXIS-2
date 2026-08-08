@@ -15,14 +15,12 @@ import {
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
 import { DocumentsTableShell } from "@/components/portal/documents-table-shell";
 import {
-  DocumentInlineViewer,
+  openDocumentInNewTab,
   ResidentAddDocumentModal,
   ResidentOtherDocumentsTable,
-  triggerDocumentDownload,
 } from "@/components/portal/resident-other-documents";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -50,7 +48,6 @@ import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-ap
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   LEASE_PIPELINE_EVENT,
-  runLeaseDownload,
   findLeaseForResidentEmail,
   getLeaseDocumentHtml,
   hasBothLeaseSignatures,
@@ -234,23 +231,14 @@ function ResidentApplicationDocumentDetail({
   );
 }
 
-/** Ledger-statement PDF scoped to a single day — serves as the receipt for that payment. */
-function receiptPdfHref(date: string): string {
-  const params = new URLSearchParams({ from: date, to: date, format: "pdf" });
-  return `/api/reports/resident-ledger/export?${params.toString()}`;
-}
-
-/** Documents › Rent receipts — one row per recorded payment, with an inline receipt document below. */
+/** Documents › Rent receipts — one row per recorded payment; tap opens the receipt in a new tab. */
 function RentReceiptsTab() {
+  const { showToast } = useAppUi();
   const session = usePortalSession();
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [generated, setGenerated] = useState(false);
   const [range, setRange] = useState(() => residentLedgerReceiptRange());
-  // Track the open receipt by its stable id, NOT by (date/amount/description)
-  // value — the ledger contains true-duplicate payments, and value equality
-  // makes them indistinguishable so a row never opens inline. See buildReceiptRows.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Demo sandbox: no authenticated ledger API — derive receipt rows from the
   // seeded local charges and build receipt PDFs in the browser.
   const demoMode = isDemoModeActive();
@@ -259,9 +247,6 @@ function RentReceiptsTab() {
   const sessionUserId = session.userId ?? null;
 
   const loadReceipts = useCallback(async (from: string, to: string) => {
-    // A reload rebuilds the row list (and its positional ids), so any open
-    // receipt no longer maps to the same payment — collapse it.
-    setSelectedId(null);
     if (demoMode) {
       const rows = readChargesForResident(sessionEmail, sessionUserId)
         .filter((charge) => charge.status === "paid" && charge.paidAt)
@@ -299,11 +284,6 @@ function RentReceiptsTab() {
     [ledgerReport],
   );
 
-  const selected = useMemo<ReceiptRow | null>(
-    () => (selectedId != null ? receipts.find((row) => row.id === selectedId) ?? null : null),
-    [receipts, selectedId],
-  );
-
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   const buildDemoReceipt = useCallback(async (row: ReceiptRow): Promise<string> => {
@@ -321,30 +301,30 @@ function RentReceiptsTab() {
     return url;
   }, []);
 
-  const downloadReceipt = useCallback(
+  const openReceipt = useCallback(
     (row: ReceiptRow) => {
       if (demoMode) {
-        void buildDemoReceipt(row).then((url) => triggerDocumentDownload(url, `payment-receipt-${row.date}.pdf`));
+        void buildDemoReceipt(row).then((url) => {
+          if (!openDocumentInNewTab({ src: url })) {
+            showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
+          }
+        });
         return;
       }
-      triggerDocumentDownload(receiptPdfHref(row.date));
+      if (
+        !openDocumentInNewTab({
+          srcDoc: buildRentReceiptHtml({
+            residentName: sessionEmail || undefined,
+            description: row.description,
+            amountLabel: row.amount,
+            dateLabel: row.date,
+          }),
+        })
+      ) {
+        showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
+      }
     },
-    [demoMode, buildDemoReceipt],
-  );
-
-  // Rendered receipt document (white serif page, like the lease/application) —
-  // everything the receipt shows is already in the row, so no extra fetch.
-  const previewHtml = useMemo(
-    () =>
-      selected
-        ? buildRentReceiptHtml({
-            residentName: demoMode ? DEMO_RESIDENT_NAME : sessionEmail || undefined,
-            description: selected.description,
-            amountLabel: selected.amount,
-            dateLabel: selected.date,
-          })
-        : null,
-    [selected, demoMode, sessionEmail],
+    [demoMode, buildDemoReceipt, sessionEmail, showToast],
   );
 
   return (
@@ -390,43 +370,31 @@ function RentReceiptsTab() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
               </>
             }
-            rows={receipts.map((row) => {
-              const isOpen = selectedId === row.id;
-              const toggle = () => setSelectedId((cur) => (cur === row.id ? null : row.id));
-              return {
-                key: row.id,
-                expanded: isOpen,
-                onToggle: toggle,
-                cells: (
-                  <>
-                    <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                      <PortalTableInlineExpand expanded={isOpen} className="min-w-0 truncate font-medium text-foreground">
-                        {receiptRowLabel(row.description)}
-                      </PortalTableInlineExpand>
-                    </td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
-                  </>
-                ),
-                card: (
-                  <PortalMobileSummaryCard
-                    title={receiptRowLabel(row.description)}
-                    subtitle={row.amount}
-                    meta={row.date}
-                    expanded={isOpen}
-                    onClick={toggle}
-                  />
-                ),
-                detail: isOpen ? (
-                  <DocumentInlineViewer
-                    embedded
-                    title={`${receiptRowLabel(row.description)} ${row.date}`}
-                    srcDoc={previewHtml}
-                    onDownload={() => downloadReceipt(row)}
-                  />
-                ) : null,
-              };
-            })}
+            rows={receipts.map((row) => ({
+              key: row.id,
+              expanded: false,
+              detail: null,
+              onToggle: () => openReceipt(row),
+              cells: (
+                <>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <span className="min-w-0 truncate font-medium text-foreground">
+                      {receiptRowLabel(row.description)}
+                    </span>
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
+                </>
+              ),
+              card: (
+                <PortalMobileSummaryCard
+                  title={receiptRowLabel(row.description)}
+                  subtitle={row.amount}
+                  meta={row.date}
+                  onClick={() => openReceipt(row)}
+                />
+              ),
+            }))}
           />
         )}
       </div>
@@ -447,8 +415,6 @@ function SignedLeaseDocumentsTable() {
   const [residentAxisId, setResidentAxisId] = useState("");
   const [profileManagerId, setProfileManagerId] = useState<string | null>(null);
   const [axisResolved, setAxisResolved] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-
   useEffect(() => {
     if (!session.userId) {
       queueMicrotask(() => setAxisResolved(true));
@@ -532,8 +498,10 @@ function SignedLeaseDocumentsTable() {
   const signedAt = row.fullySignedAt ?? row.updatedAtIso;
   const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
 
-  const onDownload = () => {
-    runLeaseDownload(row, showToast);
+  const openLease = () => {
+    if (!openDocumentInNewTab({ src: pdfSrc, srcDoc: leaseHtml })) {
+      showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
+    }
   };
 
   return (
@@ -550,14 +518,13 @@ function SignedLeaseDocumentsTable() {
       rows={[
         {
           key: row.id,
-          expanded: previewOpen,
-          onToggle: () => setPreviewOpen((open) => !open),
+          expanded: false,
+          detail: null,
+          onToggle: openLease,
           cells: (
             <>
               <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                <PortalTableInlineExpand expanded={previewOpen} className="min-w-0 truncate font-medium text-foreground">
-                  {leaseName}
-                </PortalTableInlineExpand>
+                <span className="min-w-0 truncate font-medium text-foreground">{leaseName}</span>
               </td>
               <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
               <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
@@ -568,21 +535,9 @@ function SignedLeaseDocumentsTable() {
               title={leaseName}
               subtitle="Fully signed"
               meta={safeFormatDateTime(signedAt)}
-              expanded={previewOpen}
-              onClick={() => setPreviewOpen((open) => !open)}
+              onClick={openLease}
             />
           ),
-          detail: previewOpen ? (
-            <DocumentInlineViewer
-              embedded
-              title={leaseName}
-              src={pdfSrc}
-              srcDoc={leaseHtml}
-              onDownload={onDownload}
-              downloadLabel="Download PDF"
-              downloadAttr="resident-documents-lease-download-pdf"
-            />
-          ) : null,
         },
       ]}
     />

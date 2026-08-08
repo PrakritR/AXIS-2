@@ -53,6 +53,32 @@ export function triggerDocumentDownload(href: string, fileName?: string): void {
   anchor.remove();
 }
 
+/** Open a PDF/data URL or rendered HTML document in a new browser tab. */
+export function openDocumentInNewTab({
+  src,
+  srcDoc,
+}: {
+  src?: string | null;
+  srcDoc?: string | null;
+}): boolean {
+  if (typeof window === "undefined") return false;
+  const direct = src?.trim();
+  if (direct) {
+    const win = window.open(direct, "_blank", "noopener,noreferrer");
+    return win != null;
+  }
+  const html = srcDoc?.trim();
+  if (!html) return false;
+  const blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  if (!win) {
+    URL.revokeObjectURL(blobUrl);
+    return false;
+  }
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  return true;
+}
+
 /**
  * Inline document view rendered BELOW a Documents table when a row is clicked —
  * the lease/application-style presentation (rendered document in an embedded
