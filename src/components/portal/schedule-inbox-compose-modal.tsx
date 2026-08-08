@@ -14,6 +14,10 @@ import {
   ScheduleInboxRecipientPicker,
   type ScheduleRecipientKey,
 } from "@/components/portal/schedule-inbox-recipient-picker";
+import {
+  PortalMessageSendViaField,
+  portalMessageChannelsFromSelection,
+} from "@/components/portal/portal-message-compose-fields";
 
 function defaultSendAtLocal(): string {
   const d = new Date();
@@ -87,14 +91,24 @@ export function ScheduleInboxComposeForm({
     return match ? `id:${match.id}` : "admin";
   });
   const [busy, setBusy] = useState(false);
-  const deliverViaEmail = true;
-  const deliverViaSms = true;
+  const [sendVia, setSendVia] = useState<string[]>(() => {
+    if (!editMessage) return ["email"];
+    const channels: string[] = [];
+    if (editMessage.deliverViaEmail !== false) channels.push("email");
+    if (editMessage.deliverViaSms) channels.push("sms");
+    return channels.length > 0 ? channels : ["email"];
+  });
+  const { viaEmail, viaSms } = portalMessageChannelsFromSelection(sendVia);
 
   const submit = async () => {
     const subjectTrim = subject.trim();
     const bodyTrim = body.trim();
     if (!subjectTrim || !bodyTrim) {
       showToast("Subject and message are required.");
+      return;
+    }
+    if (!viaEmail && !viaSms) {
+      showToast("Choose at least one channel under Send via.");
       return;
     }
     const sendAt = new Date(sendAtLocal);
@@ -118,8 +132,8 @@ export function ScheduleInboxComposeForm({
             subject: subjectTrim,
             body: bodyTrim,
             sendAt: sendAt.toISOString(),
-            deliverViaEmail,
-            deliverViaSms,
+            deliverViaEmail: viaEmail,
+            deliverViaSms: viaSms,
           }),
         });
         if (!res.ok) {
@@ -132,8 +146,8 @@ export function ScheduleInboxComposeForm({
           subject: subjectTrim,
           body: bodyTrim,
           sendAt: sendAt.toISOString(),
-          deliverViaEmail,
-          deliverViaSms,
+          deliverViaEmail: viaEmail,
+          deliverViaSms: viaSms,
         };
 
         if (recipientKey === "admin") {
@@ -257,6 +271,14 @@ export function ScheduleInboxComposeForm({
             disabled={busy}
           />
         </div>
+
+        <PortalMessageSendViaField
+          selected={sendVia}
+          onChange={setSendVia}
+          disabled={busy}
+          footerNote="Always saved to PropLane inbox. Choose email and/or SMS for delivery."
+          dataAttr="scheduled-message-send-via"
+        />
 
         <div className="flex flex-wrap gap-2">
           <Button

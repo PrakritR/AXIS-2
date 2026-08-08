@@ -58,6 +58,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       body?: string;
       sendAt?: string;
       deliverViaEmail?: boolean;
+      deliverViaSms?: boolean;
       senderPortal?: string;
     };
     const preferredRole = parsePreferredRole(req, body);
@@ -103,6 +104,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (typeof body.subject === "string") patch.subject = body.subject.trim();
     if (typeof body.body === "string") patch.body = body.body.trim();
     if (typeof body.deliverViaEmail === "boolean") patch.deliverViaEmail = body.deliverViaEmail;
+    if (typeof body.deliverViaSms === "boolean") patch.deliverViaSms = body.deliverViaSms;
     if (typeof body.sendAt === "string" && body.sendAt.trim()) {
       const sendAt = new Date(body.sendAt);
       if (Number.isNaN(sendAt.getTime())) {

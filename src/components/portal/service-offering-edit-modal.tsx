@@ -23,7 +23,7 @@ export function ServiceOfferingFields({
 }) {
   return (
     <>
-      <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] px-3 py-2.5">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border text-primary"

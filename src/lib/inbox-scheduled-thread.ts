@@ -37,6 +37,8 @@ export type ThreadScheduledItem = {
    * channels come online, rather than a parallel list.
    */
   channel: "email" | "sms";
+  deliverViaEmail: boolean;
+  deliverViaSms: boolean;
 };
 
 function normalizeEmail(value: string | null | undefined): string {
@@ -56,6 +58,8 @@ export function threadScheduledItemFromManualMessage(
     body: message.body,
     editable: !isResidentOriginatedScheduledMessage(message),
     channel: message.deliverViaSms && !message.deliverViaEmail ? "sms" : "email",
+    deliverViaEmail: message.deliverViaEmail !== false,
+    deliverViaSms: message.deliverViaSms === true,
   };
 }
 
@@ -73,6 +77,8 @@ export function threadScheduledItemFromAutomationMessage(
     meta: [message.chargeTitle, message.propertyLabel].filter(Boolean).join(" · ") || undefined,
     editable: true,
     channel: "email",
+    deliverViaEmail: true,
+    deliverViaSms: false,
   };
 }
 

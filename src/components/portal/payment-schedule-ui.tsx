@@ -385,8 +385,7 @@ export function ChargeRemindersModal({
           source="automation"
           editable={editingMessage.status === "scheduled"}
           busy={detailBusy}
-          expanded
-          onToggleExpand={() => setEditingMessage(null)}
+          presentation="detail"
           onCancel={() => void toggleCancelled(editingMessage, true).then(() => setEditingMessage(null))}
           onSendNow={() => {
             if (editingMessage.status !== "scheduled") return;
@@ -1145,9 +1144,8 @@ function PaymentAutomationSettingsForm({
             meta="Placeholders like {residentName} and {dueDate} are filled when the reminder sends."
             source="automation"
             editable
-            expanded
+            presentation="detail"
             showSendActions={false}
-            onToggleExpand={() => setMessageModalOpen(false)}
             onCancel={() => setMessageModalOpen(false)}
             onSendNow={() => {}}
             onSaveEdit={async (next) => {

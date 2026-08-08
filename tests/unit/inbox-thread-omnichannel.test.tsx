@@ -4,8 +4,8 @@
 //  1. Every bubble carries a channel tag (Email today) — omnichannel-ready.
 //  2. A long message renders in FULL (pre-wrap, no clamp/truncate) so a reply
 //     bubble never clips.
-//  3. Scheduled messages render INLINE as a "Scheduled · sends <when>" card
-//     with Cancel / Send now actions, replacing the standalone Schedule table.
+//  3. Scheduled messages render as a compact chip in the thread; tap opens a
+//     popup with the full body and Send now / Cancel / Edit actions.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import {
@@ -17,6 +17,12 @@ import {
 afterEach(cleanup);
 
 const LONG = "This is a very long reply ".repeat(40).trim();
+
+function openScheduledDetail() {
+  const toggle = document.querySelector('[data-attr="inbox-scheduled-toggle"]');
+  expect(toggle).toBeTruthy();
+  fireEvent.click(toggle!);
+}
 
 describe("inbox thread omnichannel primitives", () => {
   it("tags each bubble with its channel when multi-channel timeline requests it", () => {
@@ -30,7 +36,6 @@ describe("inbox thread omnichannel primitives", () => {
     };
     render(<InboxBubble message={msg} showChannel />);
     expect(screen.getByText("Email")).toBeTruthy();
-    // The complete text is present (not clipped to a preview).
     const body = screen.getByText(LONG);
     expect(body).toBeTruthy();
     expect(body.className).not.toMatch(/line-clamp|truncate/);
@@ -50,7 +55,7 @@ describe("inbox thread omnichannel primitives", () => {
     expect(screen.getByText("Sending…")).toBeTruthy();
   });
 
-  it("renders a scheduled message COMPACT by default — summary only, no body/actions", () => {
+  it("renders a compact scheduled chip in the thread; full body opens in a popup", () => {
     const { container } = render(
       <InboxScheduledCard
         sendLabel="Jul 25, 2026, 9:00 AM"
@@ -58,22 +63,20 @@ describe("inbox thread omnichannel primitives", () => {
         body={LONG}
         source="manual"
         editable
-        expanded={false}
-        onToggleExpand={vi.fn()}
         onCancel={vi.fn()}
         onSendNow={vi.fn()}
         onSaveEdit={vi.fn()}
       />,
     );
-    // Compact summary row is present and clickable to expand…
     expect(container.querySelector('[data-attr="inbox-scheduled-toggle"]')).toBeTruthy();
-    // …but the full body and actions are hidden until expanded (compact).
     expect(screen.queryByText(LONG)).toBeNull();
-    expect(screen.queryByText("Send now")).toBeNull();
-    expect(screen.queryByText("Cancel send")).toBeNull();
+    openScheduledDetail();
+    expect(screen.getByText(LONG)).toBeTruthy();
+    expect(screen.getByText("Send now")).toBeTruthy();
+    expect(screen.getByText("Cancel send")).toBeTruthy();
   });
 
-  it("expanded, shows the full body and Cancel/Send-now actions that fire", () => {
+  it("shows the full body and Cancel/Send-now actions that fire from the popup", () => {
     const onCancel = vi.fn();
     const onSendNow = vi.fn();
     render(
@@ -83,22 +86,21 @@ describe("inbox thread omnichannel primitives", () => {
         body={LONG}
         source="manual"
         editable
-        expanded
-        onToggleExpand={vi.fn()}
         onCancel={onCancel}
         onSendNow={onSendNow}
         onSaveEdit={vi.fn()}
       />,
     );
-    // Full scheduled body is shown, not truncated.
+    openScheduledDetail();
     expect(screen.getByText(LONG)).toBeTruthy();
-    fireEvent.click(screen.getByText("Cancel send"));
     fireEvent.click(screen.getByText("Send now"));
-    expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSendNow).toHaveBeenCalledTimes(1);
+    openScheduledDetail();
+    fireEvent.click(screen.getByText("Cancel send"));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("expanded + editable, Edit swaps to inline textareas and Save persists edits", () => {
+  it("editable detail popup: Edit swaps to inline textareas and Save persists edits", () => {
     const onSaveEdit = vi.fn();
     render(
       <InboxScheduledCard
@@ -107,13 +109,12 @@ describe("inbox thread omnichannel primitives", () => {
         body="Original body"
         source="manual"
         editable
-        expanded
-        onToggleExpand={vi.fn()}
         onCancel={vi.fn()}
         onSendNow={vi.fn()}
         onSaveEdit={onSaveEdit}
       />,
     );
+    openScheduledDetail();
     fireEvent.click(screen.getByText("Edit"));
     const bodyField = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
     expect(bodyField).toBeTruthy();
@@ -132,13 +133,12 @@ describe("inbox thread omnichannel primitives", () => {
         body="Original body"
         source="manual"
         editable
-        expanded
-        onToggleExpand={vi.fn()}
         onCancel={vi.fn()}
         onSendNow={vi.fn()}
         onSaveEdit={onSaveEdit}
       />,
     );
+    openScheduledDetail();
     fireEvent.click(screen.getByText("Edit"));
     const bodyField = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
     fireEvent.change(bodyField, { target: { value: "Edited body" } });
@@ -149,27 +149,25 @@ describe("inbox thread omnichannel primitives", () => {
         "Could not save changes.",
       ),
     );
-    // Editor still open, edited text NOT discarded.
     const stillEditing = document.querySelector('[data-attr="inbox-scheduled-edit-body"]') as HTMLTextAreaElement;
     expect(stillEditing).toBeTruthy();
     expect(stillEditing.value).toBe("Edited body");
   });
 
-  it("falls back to internal expand state when no onToggleExpand is given", () => {
+  it("detail presentation shows body inline without a toggle chip", () => {
     render(
       <InboxScheduledCard
         sendLabel="Jul 25"
         subject="Rent reminder"
-        body="Original body"
+        body="Inline body"
         source="manual"
         editable={false}
+        presentation="detail"
         onCancel={vi.fn()}
         onSendNow={vi.fn()}
       />,
     );
-    expect(screen.queryByText("Send now")).toBeNull();
-    fireEvent.click(document.querySelector('[data-attr="inbox-scheduled-toggle"]') as HTMLButtonElement);
-    expect(screen.getByText("Send now")).toBeTruthy();
-    expect(screen.getByText("Cancel send")).toBeTruthy();
+    expect(document.querySelector('[data-attr="inbox-scheduled-toggle"]')).toBeNull();
+    expect(screen.getByText("Inline body")).toBeTruthy();
   });
 });

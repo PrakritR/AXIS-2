@@ -61,6 +61,14 @@ function statusClass(status: string): string {
   return "text-primary";
 }
 
+function scheduleRowChannelLabel(row: ScheduleRow): string {
+  if (row.kind === "automation") return "Email";
+  const parts: string[] = [];
+  if (row.message.deliverViaEmail !== false) parts.push("Email");
+  if (row.message.deliverViaSms) parts.push("SMS");
+  return parts.length > 0 ? parts.join(" · ") : "Email";
+}
+
 type ScheduleRow =
   | { kind: "manual"; message: ScheduledInboxMessageRecord }
   | { kind: "automation"; message: ScheduledPaymentMessage };
@@ -273,11 +281,12 @@ export function ManagerInboxSchedulePanel({
           body={scheduled.body}
           meta={scheduled.meta}
           channel={scheduled.channel}
+          deliverViaEmail={scheduled.deliverViaEmail}
+          deliverViaSms={scheduled.deliverViaSms}
           source={scheduled.source}
           editable={scheduled.editable && isScheduled}
           busy={editBusy}
-          expanded
-          onToggleExpand={() => setEditingRowId(null)}
+          presentation="detail"
           onCancel={() => {
             if (!isScheduled) return;
             setEditBusy(true);
@@ -425,9 +434,7 @@ export function ManagerInboxSchedulePanel({
                     >
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold text-foreground">{subject}</p>
-                      <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                        {isManual ? "Manual" : "Automated"}
-                      </span>
+                      <span className="shrink-0 text-[11px] font-medium text-muted">{scheduleRowChannelLabel(row)}</span>
                     </div>
                     <p className="mt-1 truncate text-xs text-muted">
                       {recipientName} · {recipientEmail}
@@ -462,7 +469,7 @@ export function ManagerInboxSchedulePanel({
                     ) : null}
                   </th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Send date &amp; time</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Source</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Channels</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Recipient</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
@@ -505,11 +512,7 @@ export function ManagerInboxSchedulePanel({
                           ) : null}
                         </td>
                         <td className={PORTAL_TABLE_TD}>{sendLabel}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                            {isManual ? "Manual" : "Automated"}
-                          </span>
-                        </td>
+                        <td className={PORTAL_TABLE_TD}>{scheduleRowChannelLabel(row)}</td>
                         <td className={PORTAL_TABLE_TD}>
                           <div className="font-medium">{recipientName}</div>
                           <div className="text-xs text-muted">{recipientEmail}</div>

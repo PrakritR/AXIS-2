@@ -18,20 +18,17 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
-  updateExtraListingFromSubmission,
-  updatePendingManagerProperty,
 } from "@/lib/demo-property-pipeline";
 import {
-  createManagerListingServiceOption,
-  LISTING_SERVICE_QUICK_ADDS,
   normalizeManagerListingSubmissionV1,
   resolveServiceOfferPricing,
   type ManagerListingServiceOption,
   type ManagerListingSubmissionV1,
-  type ListingServiceQuickAdd,
 } from "@/lib/manager-listing-submission";
 import { resolvePropertySaveTargetById } from "@/lib/manager-property-save-target";
 import { createServiceRequest, CUSTOM_SERVICE_REQUEST_OFFER_ID } from "@/lib/service-requests-storage";
+import { ServiceOfferingEditModal } from "@/components/portal/service-offering-edit-modal";
+import { ServiceRequestCatalogModal } from "@/components/portal/service-request-catalog-modal";
 
 type PropertyOption = { propertyId: string; propertyLabel: string };
 
@@ -144,11 +141,7 @@ export function ManagerCreateServiceRequestModal({
   const [notes, setNotes] = useState("");
   const [customTitle, setCustomTitle] = useState("");
   const [customPriceLimit, setCustomPriceLimit] = useState("");
-  const [addingOffer, setAddingOffer] = useState(false);
-  const [savingOffer, setSavingOffer] = useState(false);
-  const [newOfferName, setNewOfferName] = useState("");
-  const [newOfferPrice, setNewOfferPrice] = useState("");
-  const [newOfferDeposit, setNewOfferDeposit] = useState("");
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [requestPrice, setRequestPrice] = useState("");
   const [requestDeposit, setRequestDeposit] = useState("");
 
@@ -180,10 +173,7 @@ export function ManagerCreateServiceRequestModal({
       setNotes("");
       setCustomTitle("");
       setCustomPriceLimit("");
-      setAddingOffer(false);
-      setNewOfferName("");
-      setNewOfferPrice("");
-      setNewOfferDeposit("");
+      setCatalogModalOpen(false);
       setRequestPrice("");
       setRequestDeposit("");
     });
@@ -266,58 +256,9 @@ export function ManagerCreateServiceRequestModal({
     [managerUserId, propertyId],
   );
 
-  const addOffer = (preset?: ListingServiceQuickAdd) => {
-    if (savingOffer) return;
-    if (!managerUserId) {
-      showToast("Could not identify your manager account.");
-      return;
-    }
-    if (!propertyId) {
-      showToast("Choose a property first.");
-      return;
-    }
-    const name = (preset?.name ?? newOfferName).trim();
-    if (!name) {
-      showToast("Enter a name for the request type.");
-      return;
-    }
-    if (!propertySaveTarget || !propertySubmission) {
-      showToast("Could not update this property's offerings.");
-      return;
-    }
-    setSavingOffer(true);
-    try {
-      const pricing = preset ? resolveServiceOfferPricing({ name, price: preset.price, deposit: preset.deposit }) : { price: newOfferPrice.trim(), deposit: newOfferDeposit.trim() };
-      const offer: ManagerListingServiceOption = {
-        ...createManagerListingServiceOption(name, preset?.description ?? ""),
-        price: pricing.price,
-        deposit: pricing.deposit,
-      };
-      const nextSubmission: ManagerListingSubmissionV1 = {
-        ...propertySubmission,
-        serviceRequestOptions: [...(propertySubmission.serviceRequestOptions ?? []), offer],
-      };
-      const ok =
-        propertySaveTarget.mode === "pending"
-          ? updatePendingManagerProperty(propertySaveTarget.saveId, nextSubmission, managerUserId)
-          : propertySaveTarget.mode === "listing"
-            ? updateExtraListingFromSubmission(propertySaveTarget.saveId, managerUserId, nextSubmission)
-            : false;
-      if (!ok) {
-        showToast("Could not add the request type.");
-        return;
-      }
-      showToast(`${offer.name} added to this property's offerings.`);
-      setOfferId(offer.id);
-      setRequestPrice(pricing.price);
-      setRequestDeposit(pricing.deposit);
-      setAddingOffer(false);
-      setNewOfferName("");
-      setNewOfferPrice("");
-      setNewOfferDeposit("");
-    } finally {
-      setSavingOffer(false);
-    }
+  const onCatalogSaved = (offerId?: string) => {
+    setTick((t) => t + 1);
+    if (offerId) setOfferId(offerId);
   };
 
   const isCustomOffer = offerId === CUSTOM_SERVICE_REQUEST_OFFER_ID;
@@ -400,9 +341,11 @@ export function ManagerCreateServiceRequestModal({
   };
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
+      dismissBlocked={catalogModalOpen}
       title="Add request"
       footer={
         <ModalFooter>
@@ -446,7 +389,7 @@ export function ManagerCreateServiceRequestModal({
               setPropertyId(e.target.value);
               setResidentEmail("");
               setOfferId("");
-              setAddingOffer(false);
+              setCatalogModalOpen(false);
             }}
             disabled={busy}
           >
@@ -509,10 +452,22 @@ export function ManagerCreateServiceRequestModal({
           </Select>
           {propertyId && offersForProperty.length === 0 ? (
             <span className="text-[11px] font-normal normal-case text-muted">
-              No catalog offerings yet. Choose Custom or add one below.
+              No catalog offerings yet. Choose Custom or add a request type below.
             </span>
           ) : null}
         </label>
+
+        {propertyId && propertySubmission && propertySaveTarget && managerUserId ? (
+          <button
+            type="button"
+            className="flex w-full cursor-pointer items-center justify-center rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] px-3 py-2.5 text-sm font-semibold text-primary transition hover:border-primary/50 hover:bg-primary/[0.07]"
+            data-attr="service-request-manage-catalog"
+            onClick={() => setCatalogModalOpen(true)}
+            disabled={busy}
+          >
+            Manage request types for this property
+          </button>
+        ) : null}
 
         {isCustomOffer ? (
           <>
@@ -560,96 +515,6 @@ export function ManagerCreateServiceRequestModal({
           </div>
         ) : null}
 
-        {propertyId ? (
-          <div className="rounded-xl border border-dashed border-border p-3">
-            {!addingOffer ? (
-              <button
-                type="button"
-                data-attr="add-request-modal-add-offer-toggle"
-                className="text-xs font-semibold text-primary hover:underline"
-                onClick={() => setAddingOffer(true)}
-                disabled={busy}
-              >
-                + Add a request type
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">
-                  New request type for {selectedProperty?.propertyLabel ?? "this property"}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {LISTING_SERVICE_QUICK_ADDS.map((preset) => (
-                    <Button
-                      key={preset.name}
-                      type="button"
-                      variant="outline"
-                      className="h-7 rounded-full px-2.5 text-[11px]"
-                      data-attr="add-request-modal-quick-add"
-                      onClick={() => addOffer(preset)}
-                      disabled={savingOffer}
-                    >
-                      + {preset.name}
-                    </Button>
-                  ))}
-                </div>
-                <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                  Name
-                  <Input
-                    value={newOfferName}
-                    onChange={(e) => setNewOfferName(e.target.value)}
-                    placeholder="e.g. Parking spot"
-                    disabled={savingOffer}
-                  />
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                    Price
-                    <Input
-                      value={newOfferPrice}
-                      onChange={(e) => setNewOfferPrice(e.target.value)}
-                      placeholder="e.g. $25/mo"
-                      disabled={savingOffer}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                    Deposit
-                    <Input
-                      value={newOfferDeposit}
-                      onChange={(e) => setNewOfferDeposit(e.target.value)}
-                      placeholder="e.g. $100"
-                      disabled={savingOffer}
-                    />
-                  </label>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => setAddingOffer(false)}
-                    disabled={savingOffer}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    className="rounded-full"
-                    data-attr="add-request-modal-save-offer"
-                    onClick={() => addOffer()}
-                    disabled={savingOffer}
-                  >
-                    {savingOffer ? "Adding…" : "Add to property"}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted">
-                  Every resident at this property will see it. This is not specific to the resident selected above.
-                </p>
-              </div>
-            )}
-          </div>
-        ) : null}
-
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Notes (optional)
           <Input
@@ -661,5 +526,19 @@ export function ManagerCreateServiceRequestModal({
         </label>
       </div>
     </Modal>
+
+    {propertySubmission && propertySaveTarget && managerUserId ? (
+      <ServiceRequestCatalogModal
+        open={catalogModalOpen}
+        sub={propertySubmission}
+        saveTarget={propertySaveTarget}
+        managerUserId={managerUserId}
+        onClose={() => setCatalogModalOpen(false)}
+        onUpdated={() => setTick((t) => t + 1)}
+        onOfferSaved={(id) => onCatalogSaved(id)}
+        showToast={showToast}
+      />
+    ) : null}
+    </>
   );
 }

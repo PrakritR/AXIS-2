@@ -88,7 +88,6 @@ export function ResidentDirectChatPane({
   const [sending, setSending] = useState(false);
   const [inboxTick, setInboxTick] = useState(0);
   const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
-  const [expandedScheduledId, setExpandedScheduledId] = useState<string | null>(null);
   const [scheduledBusyId, setScheduledBusyId] = useState<string | null>(null);
   const { messages: scheduledPaymentMessages, reload: reloadAutomationScheduled } = useScheduledPaymentMessages({
     includeHidden: false,
@@ -291,11 +290,11 @@ export function ResidentDirectChatPane({
             body={item.body}
             meta={item.meta}
             channel={item.channel}
+            deliverViaEmail={item.deliverViaEmail}
+            deliverViaSms={item.deliverViaSms}
             source={item.source}
             editable={item.editable}
             busy={scheduledBusyId === item.id}
-            expanded={expandedScheduledId === item.id}
-            onToggleExpand={() => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))}
             onCancel={() => {
               setScheduledBusyId(item.id);
               void fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(item.id)}`, {

@@ -928,7 +928,6 @@ export const ManagerInbox = forwardRef<
   // The old standalone Schedule table is gone; upcoming messages to this person
   // render as "Scheduled · sends <when>" cards at the tail of their conversation,
   // cancelable / send-now / editable in place.
-  const [expandedScheduledId, setExpandedScheduledId] = useState<string | null>(null);
   const [scheduledBusyId, setScheduledBusyId] = useState<string | null>(null);
 
   const threadScheduledItems = useMemo(
@@ -938,11 +937,6 @@ export const ManagerInbox = forwardRef<
         : [],
     [activeThread, manualScheduledMessages, scheduledMessages],
   );
-
-  // A fresh scheduled-edit panel per conversation.
-  useEffect(() => {
-    setExpandedScheduledId(null);
-  }, [expandedId]);
 
   const reloadScheduled = useCallback(() => {
     void reloadManualScheduled();
@@ -965,7 +959,6 @@ export const ManagerInbox = forwardRef<
           await patchScheduledMessage(item.id, { cancelled: true });
         }
         showToast("Scheduled send cancelled.");
-        setExpandedScheduledId((cur) => (cur === item.id ? null : cur));
         reloadScheduled();
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Could not cancel send.");
@@ -983,7 +976,6 @@ export const ManagerInbox = forwardRef<
         if (item.source === "manual") await sendManualScheduledMessageNow(item.id);
         else await sendAutomationScheduledMessageNow(item.id);
         showToast("Message sent.");
-        setExpandedScheduledId((cur) => (cur === item.id ? null : cur));
         reloadScheduled();
         reloadInbox();
       } catch (e) {
@@ -1484,11 +1476,11 @@ export const ManagerInbox = forwardRef<
             body={item.body}
             meta={item.meta}
             channel={item.channel}
+            deliverViaEmail={item.deliverViaEmail}
+            deliverViaSms={item.deliverViaSms}
             source={item.source}
             editable={item.editable}
             busy={scheduledBusyId === item.id}
-            expanded={expandedScheduledId === item.id}
-            onToggleExpand={() => setExpandedScheduledId((cur) => (cur === item.id ? null : item.id))}
             onCancel={() => void cancelScheduledItem(item)}
             onSendNow={() => void sendScheduledItemNow(item)}
             onSaveEdit={item.editable ? (next) => saveScheduledEdit(item, next) : undefined}

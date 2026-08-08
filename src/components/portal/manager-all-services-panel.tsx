@@ -13,6 +13,7 @@ import { ApplicationFilterSortFields } from "@/components/portal/application-fil
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import {
   ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
   PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE,
 } from "@/components/portal/portal-metrics";
 import { PortalActiveFilterChips, type PortalActiveFilterChip } from "@/components/portal/portal-filter-chips";
@@ -48,6 +49,7 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
+import { ManagerEditServiceRequestsModal } from "@/components/portal/manager-edit-service-requests-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import {
   ManagerVendorsPanel,
@@ -109,6 +111,7 @@ export function ManagerAllServicesPanel({
     if (reqBucket !== requestBucketProp) setReqBucket(requestBucketProp);
   }
   const [addRequestOpen, setAddRequestOpen] = useState(false);
+  const [editServiceRequestsOpen, setEditServiceRequestsOpen] = useState(false);
   const [addWorkOrderOpen, setAddWorkOrderOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
@@ -375,15 +378,28 @@ export function ManagerAllServicesPanel({
         onAdd={() => vendorsPanelRef.current?.openAddVendor()}
       />
     ) : typeFilter === "requests" ? (
-      <Button
-        type="button"
-        variant="outline"
-        className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
-        data-attr="manager-service-request-add"
-        onClick={() => setAddRequestOpen(true)}
-      >
-        Add
-      </Button>
+      <div className="flex w-full shrink-0 flex-col gap-2 md:w-auto md:flex-row md:items-center">
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_HEADER_ACTION_BTN}
+          data-attr="edit-service-requests-open"
+          onClick={() => setEditServiceRequestsOpen(true)}
+          disabled={propertyOptions.length === 0}
+          title={propertyOptions.length === 0 ? "Add a property before editing its request types" : undefined}
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_HEADER_PRIMARY_ACTION_BTN_RESPONSIVE}
+          data-attr="manager-service-request-add"
+          onClick={() => setAddRequestOpen(true)}
+        >
+          Add
+        </Button>
+      </div>
     ) : (
       <Button
         type="button"
@@ -598,6 +614,15 @@ export function ManagerAllServicesPanel({
           setDataTick((t) => t + 1);
           setReqBucket("pending");
         }}
+      />
+
+      <ManagerEditServiceRequestsModal
+        open={editServiceRequestsOpen}
+        onClose={() => setEditServiceRequestsOpen(false)}
+        propertyOptions={propertyOptions}
+        managerUserId={userId}
+        onSaved={() => setPropertyTick((t) => t + 1)}
+        showToast={showToast}
       />
 
       <ManagerCreateWorkOrderModal
