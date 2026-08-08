@@ -490,7 +490,6 @@ function ResidentServicesRequestAddRow({
     <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
       <PortalListAddRow
         label="Schedule service"
-        hint="Contact our support team"
         icon={ClipboardList}
         onClick={onRequest}
         disabled={disabled}
@@ -511,7 +510,6 @@ function ResidentServicesMaintenanceAddRow({
     <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
       <PortalListAddRow
         label="Report maintenance"
-        hint="Describe an issue at your home"
         icon={Wrench}
         onClick={onReport}
         disabled={disabled}
