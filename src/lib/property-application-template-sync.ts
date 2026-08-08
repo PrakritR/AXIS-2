@@ -35,22 +35,33 @@ function defaultLabelForSeed(seed: ApplicationTemplateSeed): string {
 function cosignerApplicationSeeds(
   leaseSeeds: ReturnType<typeof buildLeaseTemplateSeeds>,
 ): ApplicationTemplateSeed[] {
-  return leaseSeeds.map((leaseSeed) => ({
-    seedKey: leaseSeed.kind === "short-term" ? COSIGNER_SHORT_TERM_SEED_KEY : COSIGNER_LONG_TERM_SEED_KEY,
-    kind: leaseSeed.kind,
-    label: defaultLabelForSeed({
-      seedKey: leaseSeed.kind === "short-term" ? COSIGNER_SHORT_TERM_SEED_KEY : COSIGNER_LONG_TERM_SEED_KEY,
+  const seen = new Set<PropertyLeaseTemplateKind>();
+  const out: ApplicationTemplateSeed[] = [];
+  for (const leaseSeed of leaseSeeds) {
+    if (seen.has(leaseSeed.kind)) continue;
+    seen.add(leaseSeed.kind);
+    const seedKey =
+      leaseSeed.kind === "short-term" ? COSIGNER_SHORT_TERM_SEED_KEY : COSIGNER_LONG_TERM_SEED_KEY;
+    out.push({
+      seedKey,
       kind: leaseSeed.kind,
-      label: leaseSeed.label,
-      formVariant: "cosigner",
-      applicationLeaseTerms: leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
-    }),
-    formVariant: "cosigner" as ApplicationFormVariant,
-    applicationLeaseTerms: leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
-  }));
+      label: defaultLabelForSeed({
+        seedKey,
+        kind: leaseSeed.kind,
+        label: leaseSeed.label,
+        formVariant: "cosigner",
+        applicationLeaseTerms:
+          leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
+      }),
+      formVariant: "cosigner" as ApplicationFormVariant,
+      applicationLeaseTerms:
+        leaseSeed.kind === "short-term" ? leaseSeed.applicationLeaseTerms : [],
+    });
+  }
+  return out;
 }
 
-/** Every property keeps four auto-seeded applications: long-term, short-term, and matching co-signer forms. */
+/** Every property keeps auto-seeded applications for each lease default plus long/short co-signer forms. */
 export function buildApplicationTemplateSeeds(
   sub: Parameters<typeof buildLeaseTemplateSeeds>[0],
 ): ApplicationTemplateSeed[] {

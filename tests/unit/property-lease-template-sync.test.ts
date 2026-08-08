@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import {
   buildLeaseTemplateSeeds,
+  resolveLeaseTemplateScenarioForApplication,
   resolvePropertyLeaseTemplateForApplication,
   syncPropertyLeaseTemplatesFromListing,
 } from "@/lib/property-lease-template-sync";
@@ -11,27 +12,31 @@ import { syncPropertyApplicationTemplatesFromListing } from "@/lib/property-appl
 import { readPropertyApplicationTemplates } from "@/lib/property-application-templates";
 
 describe("property lease template sync", () => {
-  it("seeds only long-term and short-term defaults", () => {
+  it("seeds individual and bundle long/short defaults", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month", "3-Month", "Custom"];
     sub.shortTermRentalsAllowed = true;
     const seeds = buildLeaseTemplateSeeds(sub);
-    expect(seeds).toHaveLength(2);
-    expect(seeds.map((s) => s.seedKey).sort()).toEqual(["primary", "short-term"]);
+    expect(seeds).toHaveLength(4);
+    expect(seeds.map((s) => s.seedKey).sort()).toEqual(
+      ["bundle-primary", "bundle-short-term", "primary", "short-term"].sort(),
+    );
     expect(seeds.find((s) => s.seedKey === "primary")?.applicationLeaseTerms?.sort()).toEqual(
       ["12-Month", "Month-to-Month", "3-Month", "Custom"].sort(),
     );
   });
 
-  it("syncs exactly two lease templates from listing offered terms", () => {
+  it("syncs four lease templates from listing offered terms", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month"];
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const templates = readPropertyLeaseTemplates(synced);
-    expect(templates).toHaveLength(2);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["primary", "short-term"]);
-    expect(templates.find((t) => t.listingSeedKey === "primary")?.label).toBe("Long-term lease");
-    expect(templates.find((t) => t.listingSeedKey === "short-term")?.label).toBe("Short-term lease");
+    expect(templates).toHaveLength(4);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
+      ["bundle-primary", "bundle-short-term", "primary", "short-term"].sort(),
+    );
+    expect(templates.find((t) => t.listingSeedKey === "primary")?.label).toBe("Individual room · Long-term");
+    expect(templates.find((t) => t.listingSeedKey === "bundle-primary")?.label).toBe("Lease bundle · Long-term");
   });
 
   it("resolves the long-term template for month-to-month applicants", () => {
@@ -104,8 +109,10 @@ describe("property lease template sync", () => {
     ];
     const synced = syncPropertyLeaseTemplatesFromListing(sub);
     const templates = readPropertyLeaseTemplates(synced);
-    expect(templates).toHaveLength(2);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(["primary", "short-term"]);
+    expect(templates).toHaveLength(4);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
+      ["bundle-primary", "bundle-short-term", "primary", "short-term"].sort(),
+    );
     expect(templates.find((t) => t.listingSeedKey === "primary")?.applicationLeaseTerms).toEqual([
       "3-Month",
       "Month-to-Month",
@@ -131,19 +138,23 @@ describe("property lease template sync", () => {
     expect(again.leaseConfigMode).toBe("custom");
   });
 
-  it("mirrors the four defaults for application templates", () => {
+  it("mirrors lease defaults plus co-signer forms for application templates", () => {
     const sub = createDefaultListingSubmission();
     sub.allowedLeaseTerms = ["12-Month", "Month-to-Month", "Custom"];
     sub.shortTermRentalsAllowed = true;
     const synced = syncPropertyApplicationTemplatesFromListing(sub);
     const templates = readPropertyApplicationTemplates(synced);
-    expect(templates).toHaveLength(4);
-    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual([
-      "cosigner",
-      "cosigner-short-term",
-      "primary",
-      "short-term",
-    ]);
+    expect(templates).toHaveLength(6);
+    expect(templates.map((t) => t.listingSeedKey).sort()).toEqual(
+      [
+        "bundle-primary",
+        "bundle-short-term",
+        "cosigner",
+        "cosigner-short-term",
+        "primary",
+        "short-term",
+      ].sort(),
+    );
     expect(templates.find((t) => t.listingSeedKey === "primary")?.label).toBe("Long-term application");
     expect(templates.find((t) => t.listingSeedKey === "short-term")?.label).toBe("Short-term application");
     expect(templates.find((t) => t.listingSeedKey === "cosigner")?.label).toBe("Long-term co-signer application");
@@ -152,5 +163,36 @@ describe("property lease template sync", () => {
     );
     expect(templates.find((t) => t.listingSeedKey === "cosigner")?.formVariant).toBe("cosigner");
     expect(templates.find((t) => t.listingSeedKey === "cosigner-short-term")?.formVariant).toBe("cosigner");
+  });
+
+  it("resolves lease template scenario from application bundle and term", () => {
+    expect(
+      resolveLeaseTemplateScenarioForApplication({ leaseTerm: "12-Month", rentalType: "long_term" }),
+    ).toBe("individual-long");
+    expect(
+      resolveLeaseTemplateScenarioForApplication({
+        leaseTerm: SHORT_TERM_LEASE_TERM,
+        rentalType: "short_term",
+      }),
+    ).toBe("individual-short");
+    expect(
+      resolveLeaseTemplateScenarioForApplication({
+        leaseTerm: "12-Month",
+        bundleId: "AXISGRP-test123456",
+      }),
+    ).toBe("bundle-long");
+    expect(
+      resolveLeaseTemplateScenarioForApplication({
+        leaseTerm: "12-Month",
+        applyingAsGroup: "yes",
+        groupId: "AXISGRP-test123456",
+      } as Parameters<typeof resolveLeaseTemplateScenarioForApplication>[0]),
+    ).toBe("individual-long");
+    expect(
+      resolveLeaseTemplateScenarioForApplication(
+        { leaseTerm: SHORT_TERM_LEASE_TERM, rentalType: "short_term" },
+        "joint_bundle",
+      ),
+    ).toBe("bundle-short");
   });
 });

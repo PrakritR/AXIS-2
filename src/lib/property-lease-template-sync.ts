@@ -23,6 +23,51 @@ type LeaseTemplateSeed = {
 
 const LONG_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "primary";
 const SHORT_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "short-term";
+export const BUNDLE_LONG_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "bundle-primary";
+export const BUNDLE_SHORT_TERM_SEED_KEY: PropertyLeaseListingSeedKey = "bundle-short-term";
+
+export type LeaseTemplateScenarioId =
+  | "individual-long"
+  | "individual-short"
+  | "bundle-long"
+  | "bundle-short"
+  | "custom";
+
+export function leaseTemplateScenarioLabel(id: LeaseTemplateScenarioId): string {
+  switch (id) {
+    case "individual-long":
+      return "Individual room · Long-term";
+    case "individual-short":
+      return "Individual · Short-term";
+    case "bundle-long":
+      return "Lease bundle · Long-term";
+    case "bundle-short":
+      return "Lease bundle · Short-term";
+    case "custom":
+      return "Custom lease builder";
+    default:
+      return "Lease";
+  }
+}
+
+export function listingSeedKeyForLeaseScenario(
+  scenario: LeaseTemplateScenarioId,
+): PropertyLeaseListingSeedKey | null {
+  switch (scenario) {
+    case "individual-long":
+      return LONG_TERM_SEED_KEY;
+    case "individual-short":
+      return SHORT_TERM_SEED_KEY;
+    case "bundle-long":
+      return BUNDLE_LONG_TERM_SEED_KEY;
+    case "bundle-short":
+      return BUNDLE_SHORT_TERM_SEED_KEY;
+    case "custom":
+      return null;
+    default:
+      return LONG_TERM_SEED_KEY;
+  }
+}
 
 /** Legacy per-term seed keys collapsed into the single long-term default. */
 const LEGACY_LONG_TERM_SEED_KEYS: PropertyLeaseListingSeedKey[] = [
@@ -45,7 +90,7 @@ function longTermApplicationLeaseTerms(
   return allowed.length > 0 ? allowed : ["12-Month"];
 }
 
-/** Every property keeps exactly two auto-seeded templates: long-term and short-term. */
+/** Every property keeps four auto-seeded templates: individual + bundle, long + short. */
 export function buildLeaseTemplateSeeds(
   sub: Pick<
     ManagerListingSubmissionV1,
@@ -57,17 +102,30 @@ export function buildLeaseTemplateSeeds(
     | "listingPlaceCategoryId"
   >,
 ): LeaseTemplateSeed[] {
+  const longTerms = longTermApplicationLeaseTerms(sub);
   return [
     {
       seedKey: LONG_TERM_SEED_KEY,
       kind: "long-term",
-      label: "Long-term lease",
-      applicationLeaseTerms: longTermApplicationLeaseTerms(sub),
+      label: "Individual room · Long-term",
+      applicationLeaseTerms: longTerms,
     },
     {
       seedKey: SHORT_TERM_SEED_KEY,
       kind: "short-term",
-      label: "Short-term lease",
+      label: "Individual · Short-term",
+      applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
+    },
+    {
+      seedKey: BUNDLE_LONG_TERM_SEED_KEY,
+      kind: "long-term",
+      label: "Lease bundle · Long-term",
+      applicationLeaseTerms: longTerms,
+    },
+    {
+      seedKey: BUNDLE_SHORT_TERM_SEED_KEY,
+      kind: "short-term",
+      label: "Lease bundle · Short-term",
       applicationLeaseTerms: [SHORT_TERM_LEASE_TERM],
     },
   ];
@@ -136,6 +194,12 @@ function adoptPreviousSeededTemplate(
   if (seed.seedKey === SHORT_TERM_SEED_KEY) {
     return seededExisting.find((t) => t.listingSeedKey === SHORT_TERM_SEED_KEY) ?? null;
   }
+  if (seed.seedKey === BUNDLE_LONG_TERM_SEED_KEY) {
+    return seededExisting.find((t) => t.listingSeedKey === BUNDLE_LONG_TERM_SEED_KEY) ?? null;
+  }
+  if (seed.seedKey === BUNDLE_SHORT_TERM_SEED_KEY) {
+    return seededExisting.find((t) => t.listingSeedKey === BUNDLE_SHORT_TERM_SEED_KEY) ?? null;
+  }
 
   return null;
 }
@@ -201,16 +265,20 @@ export function formatApplicationLeaseTermsLabel(terms: string[] | undefined): s
 /** Pick the property lease template that best matches an applicant's lease-term choice. */
 export function resolvePropertyLeaseTemplateForApplication(
   sub: ManagerListingSubmissionV1,
-  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType">,
+  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType" | "bundleId">,
 ): PropertyLeaseTemplate | null {
   const templates = readPropertyLeaseTemplates(sub);
   if (templates.length === 0) return null;
 
+  const bundleApplication = applicationUsesBundleLeaseTemplate(application);
   const shortTermTemplate =
-    templates.find((t) => t.listingSeedKey === SHORT_TERM_SEED_KEY) ??
-    templates.find((t) => t.kind === "short-term");
+    templates.find((t) =>
+      t.listingSeedKey === (bundleApplication ? BUNDLE_SHORT_TERM_SEED_KEY : SHORT_TERM_SEED_KEY),
+    ) ?? templates.find((t) => t.kind === "short-term");
   const longTermTemplate =
-    templates.find((t) => t.listingSeedKey === LONG_TERM_SEED_KEY) ??
+    templates.find((t) =>
+      t.listingSeedKey === (bundleApplication ? BUNDLE_LONG_TERM_SEED_KEY : LONG_TERM_SEED_KEY),
+    ) ??
     templates.find((t) => t.kind === "long-term") ??
     templates[0]!;
 
@@ -228,6 +296,10 @@ export function resolvePropertyLeaseTemplateForApplication(
     const explicit = templates.filter((t) => (t.applicationLeaseTerms ?? []).includes(term));
     if (explicit.length === 1) return explicit[0]!;
     if (explicit.length > 1) {
+      const bundleScoped = bundleApplication
+        ? explicit.filter((t) => t.listingSeedKey?.startsWith("bundle-"))
+        : explicit.filter((t) => !t.listingSeedKey?.startsWith("bundle-"));
+      if (bundleScoped.length === 1) return bundleScoped[0]!;
       return [...explicit].sort((a, b) => a.label.localeCompare(b.label))[0]!;
     }
   }
@@ -235,14 +307,87 @@ export function resolvePropertyLeaseTemplateForApplication(
   return longTermTemplate;
 }
 
+export function applicationUsesBundleLeaseTemplate(
+  application: Pick<Partial<RentalWizardFormState>, "bundleId">,
+  leaseKind?: "individual" | "joint_bundle",
+): boolean {
+  return Boolean(application.bundleId?.trim()) || leaseKind === "joint_bundle";
+}
+
+export function resolveLeaseTemplateScenarioForApplication(
+  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType" | "bundleId">,
+  leaseKind?: "individual" | "joint_bundle",
+): LeaseTemplateScenarioId {
+  const bundle = applicationUsesBundleLeaseTemplate(application, leaseKind);
+  const short =
+    application.rentalType === "short_term" ||
+    normalizeApplicationLeaseTerm(application.leaseTerm ?? "") === SHORT_TERM_LEASE_TERM;
+  if (bundle) return short ? "bundle-short" : "bundle-long";
+  return short ? "individual-short" : "individual-long";
+}
+
+export function findLeaseTemplateForScenario(
+  templates: PropertyLeaseTemplate[],
+  scenario: LeaseTemplateScenarioId,
+): PropertyLeaseTemplate | null {
+  if (scenario === "custom") {
+    return templates.find((t) => t.kind === "custom") ?? null;
+  }
+  const seedKey = listingSeedKeyForLeaseScenario(scenario);
+  if (!seedKey) return null;
+  return templates.find((t) => t.listingSeedKey === seedKey) ?? null;
+}
+
+export function listLeaseTemplateGenerateChoices(
+  sub: ManagerListingSubmissionV1,
+  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType" | "bundleId">,
+  leaseKind?: "individual" | "joint_bundle",
+): { scenario: LeaseTemplateScenarioId; template: PropertyLeaseTemplate | null; label: string }[] {
+  const templates = readPropertyLeaseTemplates(sub);
+  const scenarios: LeaseTemplateScenarioId[] = [
+    "individual-long",
+    "individual-short",
+    "bundle-long",
+    "bundle-short",
+  ];
+  const custom = templates.find((t) => t.kind === "custom");
+  const rows = scenarios.map((scenario) => ({
+    scenario,
+    template: findLeaseTemplateForScenario(templates, scenario),
+    label: leaseTemplateScenarioLabel(scenario),
+  }));
+  if (custom) {
+    rows.push({ scenario: "custom", template: custom, label: leaseTemplateScenarioLabel("custom") });
+  }
+  const defaultScenario = resolveLeaseTemplateScenarioForApplication(application, leaseKind);
+  const defaultIdx = rows.findIndex((r) => r.scenario === defaultScenario);
+  if (defaultIdx > 0) {
+    const [hit] = rows.splice(defaultIdx, 1);
+    rows.unshift(hit!);
+  }
+  return rows;
+}
+
 /** Overlay the matched lease template onto legacy top-level lease fields for generation. */
 export function submissionWithLeaseTemplateForApplication(
   sub: ManagerListingSubmissionV1,
-  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType">,
+  application: Pick<Partial<RentalWizardFormState>, "leaseTerm" | "rentalType" | "bundleId">,
 ): ManagerListingSubmissionV1 {
   const template = resolvePropertyLeaseTemplateForApplication(sub, application);
   if (!template) return sub;
   const templates = readPropertyLeaseTemplates(sub);
   const rest = templates.filter((t) => t.id !== template.id);
+  return syncLegacyLeaseFieldsFromTemplates(sub, [template, ...rest]);
+}
+
+/** Pin a specific property lease template before generation. */
+export function submissionWithLeaseTemplateById(
+  sub: ManagerListingSubmissionV1,
+  templateId: string,
+): ManagerListingSubmissionV1 {
+  const templates = readPropertyLeaseTemplates(sub);
+  const template = templates.find((t) => t.id === templateId);
+  if (!template) return sub;
+  const rest = templates.filter((t) => t.id !== templateId);
   return syncLegacyLeaseFieldsFromTemplates(sub, [template, ...rest]);
 }

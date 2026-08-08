@@ -1,3 +1,4 @@
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { getBundleChoiceLabel } from "@/lib/rental-application/data";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
@@ -8,6 +9,31 @@ import {
   type BundleApplicationGroup,
 } from "./bundle-group-application";
 import type { JointLeaseMember } from "./types";
+
+export function jointLeaseRowIncludesMember(
+  row: Pick<LeasePipelineRow, "leaseKind" | "jointLeaseMembers" | "residentEmail" | "axisId">,
+  member: { email?: string | null; applicationId?: string | null },
+): boolean {
+  const email = member.email?.trim().toLowerCase() ?? "";
+  const applicationId = member.applicationId?.trim() ?? "";
+  const normalizedAppId = applicationId ? normalizeApplicationAxisId(applicationId) : "";
+
+  if (row.leaseKind === "joint_bundle") {
+    if (row.jointLeaseMembers?.length) {
+      return row.jointLeaseMembers.some((m) => {
+        if (email && m.residentEmail.trim().toLowerCase() === email) return true;
+        if (normalizedAppId && normalizeApplicationAxisId(m.applicationId) === normalizedAppId) return true;
+        return false;
+      });
+    }
+  }
+
+  if (email && row.residentEmail.trim().toLowerCase() === email) return true;
+  if (normalizedAppId && row.axisId?.trim() && normalizeApplicationAxisId(row.axisId) === normalizedAppId) {
+    return true;
+  }
+  return false;
+}
 
 function escapeHtml(s: string): string {
   return s

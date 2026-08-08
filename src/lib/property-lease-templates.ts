@@ -27,6 +27,8 @@ export type PropertyLeaseListingSeedKey =
   | "short-term"
   | "custom-term"
   | "primary"
+  | "bundle-primary"
+  | "bundle-short-term"
   | "cosigner"
   | "cosigner-short-term";
 

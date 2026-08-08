@@ -42,6 +42,8 @@ import {
 import { stripLeaseAiDisclaimerFromHtml, stripLeaseAiReviewDisclaimer } from "@/lib/lease-templates/types";
 import { effectiveApplicationForRow, enrichApplicationForLease, readManagerApplicationRows, signedRentLabelForRow, writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel, getBundleChoiceLabel } from "@/lib/rental-application/data";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { submissionWithLeaseTemplateById } from "@/lib/property-lease-template-sync";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/manager-portfolio-access";
@@ -76,7 +78,7 @@ import {
   type BundleGroupRowInput,
 } from "@/lib/bundle-group/bundle-group-application";
 import { applyLeaseBillingToContext } from "@/lib/lease-billing-snapshot";
-import { buildJointLeaseMembers, buildJointLeasePipelineRow } from "@/lib/bundle-group/joint-lease";
+import { buildJointLeaseMembers, buildJointLeasePipelineRow, jointLeaseRowIncludesMember } from "@/lib/bundle-group/joint-lease";
 import type { JointLeaseMember, LeaseKind } from "@/lib/bundle-group/types";
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
@@ -671,6 +673,8 @@ export type LeasePipelineRow = {
   jointLeaseMembers?: JointLeaseMember[];
   primaryApplicationId?: string | null;
   bundleGroupKey?: string | null;
+  /** Property lease template used for the last generation. */
+  leaseGenerationTemplateId?: string | null;
 };
 
 function workflowStatusForRow(
@@ -870,6 +874,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
     jointLeaseMembers: Array.isArray(r.jointLeaseMembers) ? r.jointLeaseMembers : undefined,
     primaryApplicationId: typeof r.primaryApplicationId === "string" ? r.primaryApplicationId : null,
     bundleGroupKey: typeof r.bundleGroupKey === "string" ? r.bundleGroupKey : null,
+    leaseGenerationTemplateId:
+      typeof r.leaseGenerationTemplateId === "string" ? r.leaseGenerationTemplateId : null,
   };
 }
 
@@ -1656,12 +1662,16 @@ export function leasePipelineRowsForManagerResident(
 ): LeasePipelineRow[] {
   const selectedAxisId = normalizeApplicationAxisId(residentRecordId);
   const email = residentEmail.trim().toLowerCase();
-  const rows = readLeasePipeline(managerUserId).filter((row) => {
-    const rowAxisId = row.axisId?.trim() ? normalizeApplicationAxisId(row.axisId) : "";
-    if (rowAxisId && rowAxisId === selectedAxisId) return true;
-    return row.residentEmail.trim().toLowerCase() === email;
-  });
+  const allRows = readLeasePipeline(managerUserId);
+  const rows = allRows.filter((row) =>
+    jointLeaseRowIncludesMember(row, { email, applicationId: residentRecordId }),
+  );
   rows.sort((a, b) => {
+    const aJoint = a.leaseKind === "joint_bundle";
+    const bJoint = b.leaseKind === "joint_bundle";
+    const jointDelta = Number(bJoint) - Number(aJoint);
+    if (jointDelta !== 0) return jointDelta;
+
     const aAxisMatch = (a.axisId?.trim() ? normalizeApplicationAxisId(a.axisId) : "") === selectedAxisId;
     const bAxisMatch = (b.axisId?.trim() ? normalizeApplicationAxisId(b.axisId) : "") === selectedAxisId;
     const axisDelta = Number(bAxisMatch) - Number(aAxisMatch);
@@ -1765,7 +1775,24 @@ export type ResidentLeaseAuthContext = {
 /** True when a lease belongs to the resident's approved manager-client relationship. */
 export function residentLeaseAuthorized(row: LeasePipelineRow, ctx: ResidentLeaseAuthContext): boolean {
   const email = ctx.email?.trim().toLowerCase() || "";
-  if (!email || row.residentEmail.trim().toLowerCase() !== email) return false;
+  if (!email) return false;
+
+  const isMember = jointLeaseRowIncludesMember(row, {
+    email,
+    applicationId: ctx.residentAxisId,
+  });
+  if (!isMember) return false;
+
+  if (row.leaseKind === "joint_bundle") {
+    for (const app of readManagerApplicationRows()) {
+      if (app.bucket !== "approved" || app.email?.trim().toLowerCase() !== email) continue;
+      if (row.jointLeaseMembers?.some((m) => m.applicationId.trim() === app.id.trim())) {
+        if (app.managerUserId && row.managerUserId && app.managerUserId === row.managerUserId) return true;
+        if (!row.managerUserId || !app.managerUserId) return true;
+      }
+    }
+    return Boolean(row.managerUserId);
+  }
 
   const residentAxisId = ctx.residentAxisId?.trim() || ctx.profileManagerId?.trim() || "";
   if (residentAxisId && row.axisId?.trim()) {
@@ -1816,11 +1843,13 @@ export function findLeaseForResidentEmail(email: string, auth?: ResidentLeaseAut
   const e = email.trim().toLowerCase();
   if (!e) return null;
   const ctx: ResidentLeaseAuthContext = { email: e, ...auth };
-  const matches = readLeasePipeline()
-    .filter((r) => r.residentEmail.toLowerCase() === e)
-    .filter((r) => residentLeaseAuthorized(r, ctx));
+  const matches = readLeasePipeline().filter((row) =>
+    jointLeaseRowIncludesMember(row, { email: e, applicationId: ctx.residentAxisId }),
+  ).filter((r) => residentLeaseAuthorized(r, ctx));
   if (matches.length === 0) return null;
   matches.sort((a, b) => {
+    const jointDelta = Number(b.leaseKind === "joint_bundle") - Number(a.leaseKind === "joint_bundle");
+    if (jointDelta !== 0) return jointDelta;
     const visibleDelta = Number(residentCanViewLeaseRow(b)) - Number(residentCanViewLeaseRow(a));
     if (visibleDelta !== 0) return visibleDelta;
     const priorityDelta = residentLeasePriority(b) - residentLeasePriority(a);
@@ -2066,10 +2095,46 @@ function applicationSnapshotForLeaseRow(row: LeasePipelineRow): Partial<RentalWi
     ...app,
     propertyId: app.propertyId?.trim() || row.propertyId?.trim() || undefined,
     roomChoice1: app.roomChoice1?.trim() || row.roomChoice?.trim() || undefined,
+    bundleId:
+      app.bundleId?.trim() ||
+      row.jointLeaseBundleId?.trim() ||
+      undefined,
   };
 }
 
-function leaseGenerationContextForRow(row: LeasePipelineRow, managerUserId?: string | null) {
+/** Merged application answers used for lease generation and template defaults. */
+export function leaseApplicationSnapshotForRow(
+  row: LeasePipelineRow,
+): Partial<RentalWizardFormState> | undefined {
+  return applicationSnapshotForLeaseRow(row);
+}
+
+/** Bundle group members share one joint lease row — route manager actions there when it exists. */
+export function resolveManagerLeaseGenerationRow(
+  rowId: string,
+  managerUserId?: string | null,
+): LeasePipelineRow | null {
+  const rows = readLeasePipeline(managerUserId);
+  const row = rows.find((candidate) => candidate.id === rowId);
+  if (!row) return null;
+  if (row.leaseKind === "joint_bundle") return row;
+
+  const joint = rows.find(
+    (candidate) =>
+      candidate.leaseKind === "joint_bundle" &&
+      jointLeaseRowIncludesMember(candidate, {
+        email: row.residentEmail,
+        applicationId: row.axisId,
+      }),
+  );
+  return joint ?? row;
+}
+
+function leaseGenerationContextForRow(
+  row: LeasePipelineRow,
+  managerUserId?: string | null,
+  templateId?: string | null,
+) {
   const app = applicationSnapshotForLeaseRow(row);
   if (!app || !Object.keys(app).length) return null;
   let ctx = leaseContextFromApplication(app as RentalWizardFormState);
@@ -2093,7 +2158,26 @@ function leaseGenerationContextForRow(row: LeasePipelineRow, managerUserId?: str
       };
     }
   }
+  const pinnedTemplateId = templateId ?? row.leaseGenerationTemplateId;
+  if (ctx.submission && pinnedTemplateId) {
+    ctx = {
+      ...ctx,
+      submission: submissionWithLeaseTemplateById(
+        normalizeManagerListingSubmissionV1(ctx.submission),
+        pinnedTemplateId,
+      ),
+    };
+  }
   return applyLeaseBillingToContext(ctx, row, managerUserId ?? row.managerUserId);
+}
+
+/** Build generation context for preview UI (template picker). */
+export function leaseGenerationPreviewContextForRow(
+  row: LeasePipelineRow,
+  managerUserId?: string | null,
+  templateId?: string | null,
+) {
+  return leaseGenerationContextForRow(row, managerUserId, templateId);
 }
 
 export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: true } | { ok: false; error: string } {
@@ -2182,11 +2266,13 @@ async function prepareManagerTemplatePdfForSignature(
 export function generateLeaseHtmlForRow(
   rowId: string,
   managerUserId?: string | null,
-  options?: { discardManagerEdits?: boolean },
+  options?: { discardManagerEdits?: boolean; templateId?: string | null },
 ): { ok: true; version: number } | { ok: false; error: string } {
-  void options;
+  void options?.discardManagerEdits;
+  const resolved = resolveManagerLeaseGenerationRow(rowId, managerUserId);
+  const targetId = resolved?.id ?? rowId;
   const rows = readLeasePipeline(managerUserId);
-  const row = rows.find((r) => r.id === rowId);
+  const row = rows.find((r) => r.id === targetId);
   if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
   if (!leaseAllowsManagerDocumentEdits(row)) {
     return { ok: false, error: "Move the lease back to manager review before generating a new document." };
@@ -2195,7 +2281,8 @@ export function generateLeaseHtmlForRow(
   if (!app || !Object.keys(app).length) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
-  const ctx = leaseGenerationContextForRow(row, managerUserId);
+  const templateId = options?.templateId ?? row.leaseGenerationTemplateId ?? null;
+  const ctx = leaseGenerationContextForRow(row, managerUserId, templateId);
   if (!ctx) {
     return { ok: false, error: "No application data on file — approve an application with saved answers first." };
   }
@@ -2203,7 +2290,7 @@ export function generateLeaseHtmlForRow(
   if (outcome.kind !== "generated") return { ok: false, error: outcome.error };
   const version = (row.versionNumber ?? row.pdfVersion) + 1;
   const ok = updateLeasePipelineRow(
-    rowId,
+    targetId,
     {
       application: app,
       generatedHtml: outcome.html,
@@ -2220,6 +2307,7 @@ export function generateLeaseHtmlForRow(
       templateVersion: outcome.templateVersion,
       templateDocumentUrl: outcome.templateDocument?.url ?? null,
       templateDocumentName: outcome.templateDocument?.name ?? null,
+      leaseGenerationTemplateId: templateId,
     },
     managerUserId,
   );
@@ -2689,7 +2777,9 @@ export function residentSendLeaseToManager(email: string): boolean {
 }
 
 export async function sendLeaseToResident(rowId: string, managerUserId?: string | null): Promise<LeasePipelineActionResult> {
-  const logical = readLeasePipeline(managerUserId).find((r) => r.id === rowId);
+  const resolved = resolveManagerLeaseGenerationRow(rowId, managerUserId);
+  const targetId = resolved?.id ?? rowId;
+  const logical = readLeasePipeline(managerUserId).find((r) => r.id === targetId);
   if (!logical || !leaseAccessibleToManager(logical, managerUserId)) {
     return { ok: false, error: "Lease not found." };
   }
@@ -2705,7 +2795,7 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
   const gateBlocker = leaseSendGateBlocker(logical);
   if (gateBlocker) return { ok: false, error: gateBlocker };
   const raw = [...materializeLeasePipeline(managerUserId)];
-  const idx = findRawLeaseRowIndex(rowId, managerUserId);
+  const idx = findRawLeaseRowIndex(targetId, managerUserId);
   if (idx === -1) return { ok: false, error: "Lease record could not be saved locally." };
   const prepared = await prepareManagerTemplatePdfForSignature(raw[idx]!, managerUserId);
   if ("error" in prepared) return { ok: false, error: prepared.error };

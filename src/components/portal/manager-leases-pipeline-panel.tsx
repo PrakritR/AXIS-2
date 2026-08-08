@@ -27,7 +27,7 @@ import {
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
-import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
+import { LeaseGenerateModal } from "@/components/portal/lease-generate-modal";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
 import { applySignedLeaseRenewal } from "@/lib/lease-renewal-payments";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
@@ -37,7 +37,6 @@ import {
   deleteLeasePipelineRow,
   generateLeaseHtmlForRow,
   leaseAllowsManagerDocumentEdits,
-  leaseGenerationSupportedForRow,
   managerSignLease,
   confirmUploadedLeaseParse,
   leaseNeedsUploadedLeaseReviewAction,
@@ -50,6 +49,7 @@ import {
   hasBothLeaseSignatures,
   leaseRowMatchesManagerTab,
   residentHasSignedLease,
+  resolveManagerLeaseGenerationRow,
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -107,7 +107,7 @@ export function ManagerLeasesPipelinePanel({
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [editLeaseRowId, setEditLeaseRowId] = useState<string | null>(null);
-  const [regenerateLeaseRow, setRegenerateLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [generateLeaseRow, setGenerateLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [importReviewRowId, setImportReviewRowId] = useState<string | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
@@ -276,20 +276,15 @@ export function ManagerLeasesPipelinePanel({
     onDetailOpenChange?.(Boolean(leaseIdProp && detailRow));
   }, [detailRow, leaseIdProp, onDetailOpenChange]);
 
-  const runGenerateLease = (row: LeasePipelineRow, discardManagerEdits = false) => {
+  const runGenerateLease = (row: LeasePipelineRow) => {
     if (generatingRowId) return;
-    setGeneratingRowId(row.id);
-    window.setTimeout(() => {
-      try {
-        const res = generateLeaseHtmlForRow(row.id, managerUserId, { discardManagerEdits });
-        if (res.ok) {
-          showToast(`Lease generated (v${res.version}).`);
-        } else showToast(res.error ?? "Could not generate.");
-      } finally {
-        setGeneratingRowId(null);
-        setRegenerateLeaseRow(null);
-      }
-    }, 0);
+    setGenerateLeaseRow(resolveManagerLeaseGenerationRow(row.id, managerUserId) ?? row);
+  };
+
+  const handleLeaseGenerated = (rowId: string) => {
+    setGenerateLeaseRow(null);
+    setEditLeaseRowId(rowId);
+    void syncLeasePipelineFromServer(managerUserId, { force: true });
   };
 
   const onDownload = (row: LeasePipelineRow) => {
@@ -568,7 +563,7 @@ export function ManagerLeasesPipelinePanel({
         data-attr="lease-generate"
         disabled={generatingRowId === row.id || !generation.ok}
         title={generation.ok ? undefined : generation.error}
-        onClick={() => setRegenerateLeaseRow(row)}
+        onClick={() => runGenerateLease(row)}
       >
         {generatingRowId === row.id ? "Generating…" : hasLeaseDocument(row) ? "Regenerate" : "Generate lease"}
       </Button>
@@ -720,7 +715,7 @@ export function ManagerLeasesPipelinePanel({
             <DropdownMenuItem
               data-attr="lease-generate"
               disabled={generatingRowId === row.id || !generation.ok}
-              onSelect={() => setRegenerateLeaseRow(row)}
+              onSelect={() => runGenerateLease(row)}
             >
               {generatingRowId === row.id ? "Generating…" : hasLeaseDocument(row) ? "Regenerate" : "Generate lease"}
             </DropdownMenuItem>
@@ -908,16 +903,16 @@ export function ManagerLeasesPipelinePanel({
         />
       ) : null}
 
-      <LeaseRegenerateConfirmModal
-        open={regenerateLeaseRow !== null}
-        busy={Boolean(regenerateLeaseRow && generatingRowId === regenerateLeaseRow.id)}
-        replacesManagerEdits={false}
+      <LeaseGenerateModal
+        open={generateLeaseRow !== null}
+        row={generateLeaseRow}
+        managerUserId={managerUserId}
+        busy={Boolean(generateLeaseRow && generatingRowId === generateLeaseRow.id)}
+        replacesManagerEdits={Boolean(generateLeaseRow?.generatedHtml || generateLeaseRow?.managerUploadedPdf?.dataUrl)}
         onClose={() => {
-          if (!generatingRowId) setRegenerateLeaseRow(null);
+          if (!generatingRowId) setGenerateLeaseRow(null);
         }}
-        onConfirm={() => {
-          if (regenerateLeaseRow) runGenerateLease(regenerateLeaseRow, true);
-        }}
+        onGenerated={handleLeaseGenerated}
       />
 
       {renewLeaseRow ? (

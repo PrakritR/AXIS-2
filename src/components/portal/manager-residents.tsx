@@ -66,7 +66,7 @@ import { PortalListAddRow, PORTAL_LIST_ADD_ICONS } from "@/components/portal/por
 import { PORTAL_LIST_PAGE_BODY } from "@/components/portal/portal-inbox-ui";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeasePrimaryHeaderActions } from "@/components/portal/lease-primary-header-actions";
-import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
+import { LeaseGenerateModal } from "@/components/portal/lease-generate-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPipelineLeaseEditModal } from "@/components/portal/manager-pipeline-lease-edit-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -130,7 +130,6 @@ import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
-  generateLeaseHtmlForRow,
   regenerateEditableLeasesForResident,
   leaseGenerationSupportedForRow,
   managerSignLease,
@@ -341,7 +340,6 @@ export function ManagerResidents({
   const [importReviewLeaseId, setImportReviewLeaseId] = useState<string | null>(null);
   const [editResidentLeaseId, setEditResidentLeaseId] = useState<string | null>(null);
   const [activeResidentLeaseId, setActiveResidentLeaseId] = useState<string | null>(null);
-  const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
   const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageBusy, setMessageBusy] = useState(false);
@@ -2186,31 +2184,15 @@ export function ManagerResidents({
     [selected, showToast, userId],
   );
 
-  function runGenerateLease(rowId: string, discardManagerEdits = false) {
-    if (generatingLeaseRowId) return;
-    setGeneratingLeaseRowId(rowId);
-    window.setTimeout(() => {
-      try {
-        const result = generateLeaseHtmlForRow(rowId, userId, { discardManagerEdits });
-        if (result.ok) {
-          setLeaseTick((n) => n + 1);
-          showToast(`Lease generated (v${result.version}).`);
-        } else {
-          showToast(result.error);
-        }
-      } finally {
-        setGeneratingLeaseRowId(null);
-        setRegenerateConfirmLeaseId(null);
-      }
-    }, 0);
-  }
-
   function openGenerateLeaseConfirm(rowId: string) {
-    if (generatingLeaseRowId) return;
     const row = readLeasePipeline(userId).find((r) => r.id === rowId);
     if (!row || !leaseAllowsManagerDocumentEdits(row) || !leaseGenerationSupportedForRow(row).ok) return;
     setRegenerateConfirmLeaseId(rowId);
   }
+
+  const generateLeaseRow = regenerateConfirmLeaseId
+    ? readLeasePipeline(userId).find((r) => r.id === regenerateConfirmLeaseId) ?? null
+    : null;
 
   function signLeaseAsManager(row: LeasePipelineRow) {
     if (!residentHasSignedLease(row)) {
@@ -2441,11 +2423,8 @@ export function ManagerResidents({
           showToast("Lease moved to Manager Review.");
         }}
         canEditDocument={leaseAllowsManagerDocumentEdits(residentLease)}
-        generateLeaseDisabled={
-          generatingLeaseRowId === residentLease.id ||
-          !leaseGenerationSupportedForRow(residentLease).ok
-        }
-        generateLeaseBusy={generatingLeaseRowId === residentLease.id}
+        generateLeaseDisabled={!leaseGenerationSupportedForRow(residentLease).ok}
+        generateLeaseBusy={false}
         generateLeaseTitle={leaseGenerationGateTitle(residentLease)}
         onGenerateLease={() => openGenerateLeaseConfirm(residentLease.id)}
         onEditLease={
@@ -2895,16 +2874,19 @@ export function ManagerResidents({
 
   return (
     <>
-      <LeaseRegenerateConfirmModal
-        open={regenerateConfirmLeaseId !== null}
-        busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
-        replacesManagerEdits={false}
-        onClose={() => {
-          if (generatingLeaseRowId) return;
+      <LeaseGenerateModal
+        open={generateLeaseRow !== null}
+        row={generateLeaseRow}
+        managerUserId={userId}
+        busy={false}
+        replacesManagerEdits={Boolean(
+          generateLeaseRow?.generatedHtml || generateLeaseRow?.managerUploadedPdf?.dataUrl,
+        )}
+        onClose={() => setRegenerateConfirmLeaseId(null)}
+        onGenerated={(rowId) => {
+          setLeaseTick((n) => n + 1);
           setRegenerateConfirmLeaseId(null);
-        }}
-        onConfirm={() => {
-          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId, true);
+          setEditResidentLeaseId(rowId);
         }}
       />
       {signingLease ? (

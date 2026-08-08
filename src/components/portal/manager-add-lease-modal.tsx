@@ -5,7 +5,7 @@ import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/mod
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
+import { LeaseGenerateModal } from "@/components/portal/lease-generate-modal";
 import { UploadedLeaseReviewModal } from "@/components/portal/uploaded-lease-review-modal";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import {
@@ -16,7 +16,6 @@ import {
 import {
   confirmUploadedLeaseParse,
   ensureManagerReviewLeaseForApplication,
-  generateLeaseHtmlForRow,
   leaseAllowsManagerDocumentEdits,
   leaseGenerationSupportedForRow,
   readLeasePipeline,
@@ -148,8 +147,7 @@ export function ManagerAddLeaseModal({
   const [propertyId, setPropertyId] = useState("");
   const [applicationId, setApplicationId] = useState("");
   const [busy, setBusy] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [generateLeaseRowId, setGenerateLeaseRowId] = useState<string | null>(null);
   const [importReviewLeaseId, setImportReviewLeaseId] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
 
@@ -195,7 +193,7 @@ export function ManagerAddLeaseModal({
   useEffect(() => {
     if (!open) return;
     setImportReviewLeaseId(null);
-    setRegenerateOpen(false);
+    setGenerateLeaseRowId(null);
     if (!initialApplicationId && !initialPropertyId) {
       setPropertyId("");
       setApplicationId("");
@@ -275,30 +273,12 @@ export function ManagerAddLeaseModal({
       showToast(gate.error);
       return;
     }
-    setRegenerateOpen(true);
+    setGenerateLeaseRowId(ensured.rowId);
   }
 
-  function runGenerate() {
-    const ensured = ensureLeaseRow();
-    if (!ensured.ok) return;
-    setGenerating(true);
-    window.setTimeout(() => {
-      try {
-        const result = generateLeaseHtmlForRow(ensured.rowId, managerUserId, { discardManagerEdits: true });
-        if (result.ok) {
-          onSubmitted();
-          showToast(`Lease generated (v${result.version}).`);
-          onOpenLease?.(ensured.rowId);
-          onClose();
-        } else {
-          showToast(result.error);
-        }
-      } finally {
-        setGenerating(false);
-        setRegenerateOpen(false);
-      }
-    }, 0);
-  }
+  const generateLeaseRow = generateLeaseRowId
+    ? readLeasePipeline(managerUserId).find((candidate) => candidate.id === generateLeaseRowId) ?? null
+    : null;
 
   const reviewRow = importReviewLeaseId
     ? readLeasePipeline(managerUserId).find((row) => row.id === importReviewLeaseId) ?? null
@@ -312,7 +292,7 @@ export function ManagerAddLeaseModal({
       <Modal
         open={open}
         onClose={() => {
-          if (!busy && !generating) onClose();
+          if (!busy) onClose();
         }}
         title="Add lease"
         description="Choose a property and resident, then upload a signed PDF or generate a lease."
@@ -329,7 +309,7 @@ export function ManagerAddLeaseModal({
                 setPropertyId(e.target.value);
                 setApplicationId("");
               }}
-              disabled={busy || generating || noProperties}
+              disabled={busy || noProperties}
               data-attr="add-lease-property"
             >
               <option value="">{noProperties ? "No properties in portfolio" : "Select property"}</option>
@@ -347,7 +327,7 @@ export function ManagerAddLeaseModal({
               className={compactField}
               value={applicationId}
               onChange={(e) => setApplicationId(e.target.value)}
-              disabled={busy || generating || !propertyId || residentsForProperty.length === 0}
+              disabled={busy || !propertyId || residentsForProperty.length === 0}
               data-attr="add-lease-resident"
             >
               <option value="">
@@ -375,23 +355,23 @@ export function ManagerAddLeaseModal({
           ) : null}
         </div>
         <ModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy || generating}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="outline"
             data-attr="add-lease-generate"
-            disabled={!applicationId || busy || generating}
+            disabled={!applicationId || busy}
             onClick={openGenerateConfirm}
           >
-            {generating ? "Generating…" : "Generate lease"}
+            {busy ? "Uploading…" : "Generate lease"}
           </Button>
           <Button
             type="button"
             variant="primary"
             data-attr="add-lease-upload"
-            disabled={!applicationId || busy || generating}
+            disabled={!applicationId || busy}
             onClick={() => uploadRef.current?.click()}
           >
             {busy ? "Uploading…" : "Upload PDF"}
@@ -411,14 +391,20 @@ export function ManagerAddLeaseModal({
         }}
       />
 
-      <LeaseRegenerateConfirmModal
-        open={regenerateOpen}
-        busy={generating}
-        replacesManagerEdits={false}
-        onClose={() => {
-          if (!generating) setRegenerateOpen(false);
+      <LeaseGenerateModal
+        open={generateLeaseRow !== null}
+        row={generateLeaseRow}
+        managerUserId={managerUserId}
+        replacesManagerEdits={Boolean(
+          generateLeaseRow?.generatedHtml || generateLeaseRow?.managerUploadedPdf?.dataUrl,
+        )}
+        onClose={() => setGenerateLeaseRowId(null)}
+        onGenerated={(rowId) => {
+          onSubmitted();
+          setGenerateLeaseRowId(null);
+          onOpenLease?.(rowId);
+          onClose();
         }}
-        onConfirm={runGenerate}
       />
 
       {reviewRow?.uploadedLeaseParse ? (

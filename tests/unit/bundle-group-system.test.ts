@@ -10,7 +10,8 @@ import {
   bundleGroupReadyForJointLease,
   validateBundleGroupJoin,
 } from "@/lib/bundle-group/bundle-group-application";
-import { jointLeasePartiesParagraph } from "@/lib/bundle-group/joint-lease";
+import { jointLeasePartiesParagraph, jointLeaseRowIncludesMember } from "@/lib/bundle-group/joint-lease";
+import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 
 describe("splitMoneyEvenly", () => {
   it("splits evenly with remainder cents to lowest indices", () => {
@@ -109,6 +110,45 @@ describe("bundle group application", () => {
         { propertyId: "p1", bundleId: "b2", groupId: "PROPLANE-ABC12345" },
       ),
     ).toMatch(/bundle must match/i);
+  });
+});
+
+describe("jointLeaseRowIncludesMember", () => {
+  const jointRow = {
+    leaseKind: "joint_bundle",
+    residentEmail: "organizer@test.com",
+    axisId: "app-org",
+    jointLeaseMembers: [
+      {
+        applicationId: "app-org",
+        residentEmail: "organizer@test.com",
+        residentName: "Organizer",
+        residentUserId: null,
+        role: "first",
+      },
+      {
+        applicationId: "app-join",
+        residentEmail: "joiner@test.com",
+        residentName: "Joiner",
+        residentUserId: null,
+        role: "joining",
+      },
+    ],
+  } satisfies Pick<LeasePipelineRow, "leaseKind" | "jointLeaseMembers" | "residentEmail" | "axisId">;
+
+  it("matches joint bundle members by email", () => {
+    expect(jointLeaseRowIncludesMember(jointRow, { email: "joiner@test.com" })).toBe(true);
+    expect(jointLeaseRowIncludesMember(jointRow, { email: "stranger@test.com" })).toBe(false);
+  });
+
+  it("matches individual rows by email or application id", () => {
+    const individual = {
+      leaseKind: "individual",
+      residentEmail: "solo@test.com",
+      axisId: "app-solo",
+    } satisfies Pick<LeasePipelineRow, "leaseKind" | "jointLeaseMembers" | "residentEmail" | "axisId">;
+    expect(jointLeaseRowIncludesMember(individual, { email: "solo@test.com" })).toBe(true);
+    expect(jointLeaseRowIncludesMember(individual, { applicationId: "app-solo" })).toBe(true);
   });
 });
 

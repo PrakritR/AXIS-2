@@ -404,6 +404,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   if (step === 1) {
     const showCosigner = showWizardField("hasCosigner");
     const showGroup = showWizardField("applyingAsGroup");
+    const deferGroupToPropertyStep =
+      Boolean(form.propertyId.trim()) &&
+      getBundleOptionsForProperty(form.propertyId, { rentalType: form.rentalType }).length > 0;
     const joiningGroup = Boolean(form.groupLeaderAppId.trim());
     const organizingGroup = form.applyingAsGroup === "yes" && !joiningGroup;
     const inviteAppId = savedApplicationId.trim();
@@ -446,7 +449,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </>
           ) : null}
 
-          {showGroup ? (
+          {showGroup && !deferGroupToPropertyStep ? (
             <>
               <ApplyFieldRow
                 label="Applying as part of a group?"
@@ -569,6 +572,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
       ? getBundleOptionsForProperty(form.propertyId, { rentalType: form.rentalType })
       : [];
     const bundleSelected = Boolean(form.bundleId.trim());
+    const showBundleGroup = showWizardField("applyingAsGroup") && bundleSelected;
+    const joiningGroupOnProperty = Boolean(form.groupLeaderAppId.trim());
+    const organizingBundleGroup = form.applyingAsGroup === "yes" && !joiningGroupOnProperty;
+    const inviteAppIdOnProperty = savedApplicationId.trim();
     const propertySearchOptions = propertyOptions.map((o) => {
       const prop = getPropertyById(o.value);
       return {
@@ -721,19 +728,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               onChange={(e) => {
                 const next = e.target.value;
                 if (next && isByRoom) {
-                  // A bundle application replaces ranked room choices.
                   patch({
                     bundleId: next,
                     roomChoice1: "",
                     roomChoice2: "",
                     roomChoice3: "",
-                    ...(form.applyingAsGroup !== "yes" ? { applyingAsGroup: "yes" as const } : {}),
                   });
                 } else {
-                  patch({
-                    bundleId: next,
-                    ...(next && form.applyingAsGroup !== "yes" ? { applyingAsGroup: "yes" as const } : {}),
-                  });
+                  patch({ bundleId: next });
                 }
               }}
             >
@@ -748,6 +750,104 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 </option>
               ))}
             </Select>
+          </div>
+        ) : null}
+
+        {showBundleGroup ? (
+          <div className="divide-y divide-border/60 rounded-2xl border border-border bg-card/30 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
+            <ApplyFieldRow
+              label="Applying as part of a group?"
+              error={errors.applyingAsGroup}
+              fieldKey="applyingAsGroup"
+              inline
+              showRequiredMarker={false}
+              labelClassName="text-sm font-semibold text-foreground"
+              className="px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5"
+            >
+              <YesNoPills
+                value={form.applyingAsGroup}
+                error={errors.applyingAsGroup}
+                name="Group application"
+                fieldKey="applyingAsGroup"
+                suppressError
+                onChange={(v) => {
+                  if (v === "no") {
+                    patch({
+                      applicantRole: "signer",
+                      applyingAsGroup: v,
+                      groupRole: null,
+                      groupSize: "",
+                      groupId: "",
+                      groupLeaderAppId: "",
+                    });
+                    return;
+                  }
+                  onEnsureApplicationId?.();
+                  patch({
+                    applicantRole: "signer",
+                    applyingAsGroup: v,
+                    groupRole: joiningGroupOnProperty ? "joining" : "first",
+                    groupId: joiningGroupOnProperty
+                      ? form.groupId
+                      : form.groupId.trim() || makeApplicationGroupId(),
+                  });
+                }}
+              />
+            </ApplyFieldRow>
+
+            {form.applyingAsGroup === "yes" ? (
+              <ApplyFieldRow
+                label="Organizer application ID"
+                optional
+                inline
+                error={errors.groupLeaderAppId}
+                fieldKey="groupLeaderAppId"
+                labelClassName="text-sm font-semibold text-foreground"
+                className="px-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,280px)] sm:px-5"
+              >
+                <GroupLeaderAppIdField
+                  value={form.groupLeaderAppId}
+                  onChange={(next) => {
+                    const trimmed = next.trim();
+                    patch({
+                      groupLeaderAppId: next,
+                      groupRole: trimmed ? "joining" : "first",
+                      groupId: trimmed ? form.groupId : makeApplicationGroupId(),
+                      ...(trimmed ? { groupSize: "" } : {}),
+                    });
+                  }}
+                  error={errors.groupLeaderAppId}
+                  onResolved={(preview) => {
+                    if (preview) {
+                      patch({
+                        groupLeaderAppId: preview.leaderAppId,
+                        groupId: preview.groupId,
+                        groupRole: "joining",
+                        ...(preview.propertyId && !form.propertyId.trim()
+                          ? { propertyId: preview.propertyId }
+                          : {}),
+                        ...(preview.groupSize != null && !form.groupSize.trim()
+                          ? { groupSize: String(preview.groupSize) }
+                          : {}),
+                      });
+                    }
+                  }}
+                  suppressError
+                />
+              </ApplyFieldRow>
+            ) : null}
+
+            {organizingBundleGroup && inviteAppIdOnProperty ? (
+              <div className="px-4 pb-4 sm:px-5">
+                <GroupInviteCallout
+                  leaderAppId={inviteAppIdOnProperty}
+                  organizerName={form.fullLegalName.trim() || undefined}
+                  groupSize={form.groupSize.trim() || undefined}
+                  propertyId={form.propertyId.trim() || undefined}
+                  pendingSubmit
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
 

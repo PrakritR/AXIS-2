@@ -446,10 +446,18 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
         : (subNorm?.rooms ?? []).filter((r) => r.name.trim()))
     : [];
   const bundleRoomNames = bundleRooms.map((r) => r.name.trim()).filter(Boolean);
+  const allListingRoomIds = (subNorm?.rooms ?? []).map((r) => r.id);
+  const bundleCoversEntireHome =
+    Boolean(leasedBundle && subNorm) &&
+    (isEntireHomeListing(subNorm!) ||
+      !leasedBundle!.includedRoomIds?.length ||
+      leasedBundle!.includedRoomIds!.length >= allListingRoomIds.length);
   const bundlePremisesLabel = leasedBundle
-    ? [leasedBundle.label.trim() || "Lease bundle", bundleRoomNames.length ? bundleRoomNames.join(", ") : leasedBundle.roomsLine.trim()]
-        .filter(Boolean)
-        .join(" — ")
+    ? bundleCoversEntireHome
+      ? "Entire home"
+      : [leasedBundle.label.trim() || "Lease bundle", bundleRoomNames.length ? bundleRoomNames.join(", ") : leasedBundle.roomsLine.trim()]
+          .filter(Boolean)
+          .join(" — ")
     : "";
 
   // Whole-home application: the premises are the entire unit. Derived from the LISTING, not

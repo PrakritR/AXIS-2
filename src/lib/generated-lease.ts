@@ -18,7 +18,11 @@ import {
   normalizeManagerListingSubmissionV1,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import { submissionWithLeaseTemplateForApplication } from "@/lib/property-lease-template-sync";
+import {
+  submissionWithLeaseTemplateForApplication,
+  BUNDLE_LONG_TERM_SEED_KEY,
+  BUNDLE_SHORT_TERM_SEED_KEY,
+} from "@/lib/property-lease-template-sync";
 import { normalizeApplicationLeaseTerm } from "@/lib/resident-manual-lease-terms";
 import { leaseCss } from "@/lib/lease-templates/types";
 import { resolveSubmissionRoom, submissionRoomRentLabel } from "@/lib/listing-room-resolution";
@@ -194,14 +198,20 @@ export function selectLeaseTemplateDoc(
   const sub = ctx.submission;
   if (!sub) return null;
   const templates = Array.isArray(sub.propertyLeaseTemplates) ? sub.propertyLeaseTemplates : [];
+  const bundlePlacement =
+    Boolean(ctx.application.bundleId?.trim()) || ctx.leaseKind === "joint_bundle";
 
   if (stayKind === "short") {
-    const shortTerm = templates.find((template) => template?.listingSeedKey === "short-term") ??
+    const seedKey = bundlePlacement ? BUNDLE_SHORT_TERM_SEED_KEY : "short-term";
+    const shortTerm =
+      templates.find((template) => template?.listingSeedKey === seedKey) ??
       templates.find((template) => template?.kind === "short-term");
     return shortTerm ? templateDocumentForFields(shortTerm) : null;
   }
 
-  const longTerm = templates.find((template) => template?.listingSeedKey === "primary") ??
+  const longSeedKey = bundlePlacement ? BUNDLE_LONG_TERM_SEED_KEY : "primary";
+  const longTerm =
+    templates.find((template) => template?.listingSeedKey === longSeedKey) ??
     templates.find((template) => template?.kind === "long-term");
   // Existing listings predate propertyLeaseTemplates. Their one top-level
   // document remains the long-term template with no manager action required.
