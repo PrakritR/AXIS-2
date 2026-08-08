@@ -1025,10 +1025,9 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "lease") {
-    if (tabParts?.length) notFound();
-    // ResidentLeasePanel renders its own "Lease" page shell (title + actions);
-    // don't wrap it in a second shell or the header stacks twice.
-    return <ResidentLeasePanel />;
+    if (tabParts && tabParts.length > 1) notFound();
+    const leaseDetailId = tabParts?.length === 1 ? decodeURIComponent(tabParts[0]!) : undefined;
+    return <ResidentLeasePanel basePath={def.basePath} leaseDetailId={leaseDetailId} />;
   }
 
   if (kind === "resident" && section === "move-in") {

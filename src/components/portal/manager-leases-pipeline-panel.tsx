@@ -107,6 +107,7 @@ export function ManagerLeasesPipelinePanel({
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [renewLeaseRow, setRenewLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [renewInitialTerm, setRenewInitialTerm] = useState<string | undefined>(undefined);
   const [editLeaseRowId, setEditLeaseRowId] = useState<string | null>(null);
   const [generateLeaseRow, setGenerateLeaseRow] = useState<LeasePipelineRow | null>(null);
   const [importReviewRowId, setImportReviewRowId] = useState<string | null>(null);
@@ -628,7 +629,10 @@ export function ManagerLeasesPipelinePanel({
         variant="outline"
         className={RESIDENT_DETAIL_HEADER_ACTION_BTN}
         data-attr="lease-renew"
-        onClick={() => setRenewLeaseRow(row)}
+        onClick={() => {
+          setRenewInitialTerm(undefined);
+          setRenewLeaseRow(row);
+        }}
       >
         Renew lease
       </Button>
@@ -728,7 +732,13 @@ export function ManagerLeasesPipelinePanel({
           ) : null}
           {showRenewals ? (
             <>
-              <DropdownMenuItem data-attr="lease-renew" onSelect={() => setRenewLeaseRow(row)}>
+              <DropdownMenuItem
+                data-attr="lease-renew"
+                onSelect={() => {
+                  setRenewInitialTerm(undefined);
+                  setRenewLeaseRow(row);
+                }}
+              >
                 Renew lease
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setAmendLeaseRow(row)}>Extend move-out</DropdownMenuItem>
@@ -888,9 +898,17 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setAmendLeaseRow(null)}
           currentEnd={amendLeaseRow.application?.leaseEnd ?? ""}
           leaseStart={amendLeaseRow.application?.leaseStart ?? ""}
+          propertyId={amendLeaseRow.propertyId ?? amendLeaseRow.application?.propertyId ?? ""}
           checkUrl="/api/manager/amend-lease"
           amendUrl="/api/manager/amend-lease"
           amendBody={{ leaseId: amendLeaseRow.id }}
+          onOpenRenew={(leaseTerm) => {
+            const row = amendLeaseRow;
+            setAmendLeaseRow(null);
+            if (!row) return;
+            setRenewLeaseRow(row);
+            setRenewInitialTerm(leaseTerm);
+          }}
           onSuccess={() => void handleAmendLeaseSuccess()}
         />
       ) : null}
@@ -919,7 +937,11 @@ export function ManagerLeasesPipelinePanel({
       {renewLeaseRow ? (
         <LeaseRenewModal
           open
-          onClose={() => setRenewLeaseRow(null)}
+          onClose={() => {
+            setRenewLeaseRow(null);
+            setRenewInitialTerm(undefined);
+          }}
+          initialLeaseTerm={renewInitialTerm}
           currentEnd={renewLeaseRow.application?.leaseEnd ?? ""}
           currentTerm={renewLeaseRow.application?.leaseTerm ?? ""}
           currentRentLabel={renewLeaseRow.signedRentLabel ?? renewLeaseRow.application?.managerRentOverride ?? ""}

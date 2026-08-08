@@ -1,5 +1,5 @@
 import type { LeasePipelineRow, SignedLeaseSnapshot } from "@/lib/lease-pipeline-storage";
-import { hasBothLeaseSignatures } from "@/lib/lease-pipeline-storage";
+import { hasBothLeaseSignatures, residentCanViewLeaseRow } from "@/lib/lease-pipeline-storage";
 
 export type ResidentLeaseDocumentRow = {
   id: string;
@@ -48,11 +48,13 @@ export function buildResidentLeaseDocumentRows(row: LeasePipelineRow | null): Re
       snapshot: null,
       pipelineRow: row,
     });
-  } else if (row.pendingRenewal || row.bucket !== "signed") {
+  } else if (residentCanViewLeaseRow(row)) {
     rows.unshift({
       id: encodeLeaseDocumentDetailId(row.id),
       leaseRowId: row.id,
-      label: `Renewal in progress${row.unit ? ` · ${row.unit}` : ""}`,
+      label: row.pendingRenewal
+        ? `Renewal in progress${row.unit ? ` · ${row.unit}` : ""}`
+        : `Lease agreement${row.unit ? ` · ${row.unit}` : ""}`,
       status: row.status ?? "Pending signatures",
       signedAt: row.updatedAtIso,
       snapshot: null,
@@ -94,7 +96,9 @@ export function resolveResidentLeaseDocumentView(
   const signedAt = row.fullySignedAt ?? row.updatedAtIso;
   const title = hasBothLeaseSignatures(row)
     ? `Current lease${row.unit ? ` · ${row.unit}` : ""}`
-    : `Renewal in progress${row.unit ? ` · ${row.unit}` : ""}`;
+    : row.pendingRenewal
+      ? `Renewal in progress${row.unit ? ` · ${row.unit}` : ""}`
+      : `Lease agreement${row.unit ? ` · ${row.unit}` : ""}`;
   return {
     title,
     subtitle: hasBothLeaseSignatures(row) ? `Fully signed · ${signedAt}` : row.status ?? "Pending signatures",

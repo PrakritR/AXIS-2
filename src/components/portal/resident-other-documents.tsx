@@ -21,7 +21,9 @@ import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PortalMobileSummaryCard,
   PortalTableDetailActions,
   PortalTableInlineExpand,
-  PORTAL_DETAIL_BTN,} from "@/components/portal/portal-data-table";
+  PORTAL_DETAIL_BTN,
+  RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN,
+} from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -646,7 +648,7 @@ export function ResidentOtherDocumentsTable({
         <Button
           type="button"
           variant="outline"
-          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
           data-attr="resident-document-download"
           onClick={() => triggerDocumentDownload(selected.upload.dataUrl, selected.name)}
         >
@@ -655,7 +657,7 @@ export function ResidentOtherDocumentsTable({
         <Button
           type="button"
           variant="outline"
-          className={cn(PORTAL_DETAIL_BTN, "flex-1 text-danger")}
+          className={cn(RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN, "text-danger")}
           data-attr="resident-document-remove"
           onClick={() => {
             setSelectedId(null);
@@ -669,7 +671,7 @@ export function ResidentOtherDocumentsTable({
       <Button
         type="button"
         variant="outline"
-        className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+        className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
         data-attr="resident-shared-document-download"
         onClick={() =>
           triggerDocumentDownload(`${SHARED_DOCUMENTS_SIGNED_URL_BASE}/${selected.doc.id}/signed-url?download=1`)

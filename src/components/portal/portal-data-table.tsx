@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalListPreviewLimit, sliceForPortalPreview } from "@/lib/portal-mobile-preview";
+import { cn } from "@/lib/utils";
 
 /** Outer frame for tabbed portal tables — flat on the page canvas by default. */
 export const PORTAL_DATA_TABLE_WRAP = "relative z-0 max-w-full overflow-hidden";
@@ -314,6 +315,12 @@ export const PORTAL_TABLE_ROW_TOGGLE_CLASS =
 /** Secondary actions in {@link PortalTableDetailActions} (use with `Button variant="outline"`). */
 export const PORTAL_DETAIL_BTN =
   "h-11 min-h-[44px] !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
+
+/** Pinned footer on resident Documents detail pages — left-aligned, compact (not full-width). */
+export const RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN = cn(
+  PORTAL_DETAIL_BTN,
+  "h-9 min-h-0 w-auto max-w-none flex-none shrink-0 px-4",
+);
 
 /**
  * @deprecated Use `Button variant="primary"` with {@link PORTAL_DETAIL_BTN} instead.

@@ -274,6 +274,16 @@ export function residentDocumentsLeaseDetailHref(basePath: string, leaseId: stri
   return `${basePath}/documents/lease/${encodeURIComponent(leaseId)}`;
 }
 
+/** Resident Lease section list. */
+export function residentLeaseListHref(basePath: string): string {
+  return `${basePath}/lease`;
+}
+
+/** Resident Lease section detail. */
+export function residentLeaseDetailHref(basePath: string, leaseDetailId: string): string {
+  return `${basePath}/lease/${encodeURIComponent(leaseDetailId)}`;
+}
+
 /** Resident Documents › Rent receipts list. */
 export function residentDocumentsReceiptsListHref(basePath: string): string {
   return `${basePath}/documents/receipts`;

@@ -8,13 +8,24 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
 import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
 import {
+  extendMoveOutTypesForProperty,
   renewalLeaseTermOptionsForProperty,
   renewalRentalTypeForTerm,
+  type ExtendMoveOutTypeId,
 } from "@/lib/lease-renewal-terms";
 import { formatPacificDate } from "@/lib/pacific-time";
 import { cn } from "@/lib/utils";
 
-type LeaseChangeIntent = "extend" | "early" | "renew";
+type LeaseChangeIntent = "extend" | "early";
+
+function extendTypeChipClass(active: boolean): string {
+  return cn(
+    "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+    active
+      ? "border-primary bg-primary/10 text-primary"
+      : "border-border text-muted hover:border-primary/30 hover:text-foreground",
+  );
+}
 
 function addMonthsToIsoDate(isoDate: string, months: number): string {
   const parts = isoDate.split("-").map(Number);
@@ -42,8 +53,8 @@ export function LeaseAmendMoveOutModal({
   amendUrl,
   amendBody,
   onSuccess,
+  propertyId = "",
   onOpenRenew,
-  showRenewOption = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -54,21 +65,30 @@ export function LeaseAmendMoveOutModal({
   amendUrl: string;
   amendBody?: Record<string, string>;
   onSuccess: () => void;
-  /** Opens the full renewal-term flow (month-to-month, 3/6/12 month, custom). */
-  onOpenRenew?: () => void;
-  showRenewOption?: boolean;
+  /** Listing id — scopes extend types (month-to-month, short term, long term, custom). */
+  propertyId?: string;
+  /** Opens full renewal when resident picks a new lease term (not a custom move-out date). */
+  onOpenRenew?: (leaseTerm: string) => void;
 }) {
   const { showToast } = useAppUi();
   const [intent, setIntent] = useState<LeaseChangeIntent>("extend");
+  const [extendType, setExtendType] = useState<ExtendMoveOutTypeId | null>(null);
+  const [selectedLongTerm, setSelectedLongTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [availability, setAvailability] = useState<AvailabilityResult>({ status: "idle" });
   const [submitting, setSubmitting] = useState(false);
   const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const extendTypeOptions = useMemo(() => extendMoveOutTypesForProperty(propertyId), [propertyId]);
+  const longTermOption = extendTypeOptions.find((option) => option.id === "long_term");
+  const longTermChoices = longTermOption?.id === "long_term" ? longTermOption.leaseTerms : [];
+
   useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
         setIntent("extend");
+        setExtendType(null);
+        setSelectedLongTerm("");
         setSelectedDate("");
         setAvailability({ status: "idle" });
         setSubmitting(false);
@@ -82,6 +102,10 @@ export function LeaseAmendMoveOutModal({
     queueMicrotask(() => setSelectedDate(currentEnd));
   }, [open, intent, currentEnd, selectedDate]);
 
+  const showCustomDateExtend = intent === "extend" && (!propertyId.trim() || extendType === "custom");
+  const showExtendTypePicker = intent === "extend" && Boolean(propertyId.trim());
+  const showLongTermPicker = showExtendTypePicker && extendType === "long_term" && longTermChoices.length > 0;
+
   const direction = selectedDate
     ? selectedDate < currentEnd
       ? "decrease"
@@ -91,6 +115,7 @@ export function LeaseAmendMoveOutModal({
     : null;
 
   useEffect(() => {
+    if (!showCustomDateExtend) return;
     if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
     if (!selectedDate || selectedDate === currentEnd) {
       queueMicrotask(() => setAvailability({ status: "idle" }));
@@ -138,10 +163,10 @@ export function LeaseAmendMoveOutModal({
     return () => {
       if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
     };
-  }, [selectedDate, currentEnd, direction, checkUrl, amendBody]);
+  }, [showCustomDateExtend, selectedDate, currentEnd, direction, checkUrl, amendBody]);
 
   const canConfirm =
-    intent !== "renew" &&
+    (intent === "early" || showCustomDateExtend) &&
     Boolean(selectedDate) &&
     selectedDate !== currentEnd &&
     !submitting &&
@@ -188,6 +213,46 @@ export function LeaseAmendMoveOutModal({
     }
   };
 
+  const handleExtendTypeSelect = (typeId: ExtendMoveOutTypeId) => {
+    setExtendType(typeId);
+    setSelectedLongTerm("");
+    setSelectedDate("");
+    setAvailability({ status: "idle" });
+
+    if (typeId === "month_to_month") {
+      const option = extendTypeOptions.find((entry) => entry.id === "month_to_month");
+      if (option?.id === "month_to_month") {
+        onClose();
+        onOpenRenew?.(option.leaseTerm);
+      }
+      return;
+    }
+    if (typeId === "short_term") {
+      const option = extendTypeOptions.find((entry) => entry.id === "short_term");
+      if (option?.id === "short_term") {
+        onClose();
+        onOpenRenew?.(option.leaseTerm);
+      }
+      return;
+    }
+    if (typeId === "long_term") {
+      return;
+    }
+    if (typeId === "custom") {
+      const listingTerms = renewalLeaseTermOptionsForProperty(propertyId);
+      if (listingTerms.includes(CUSTOM_LEASE_TERM)) {
+        onClose();
+        onOpenRenew?.(CUSTOM_LEASE_TERM);
+      }
+    }
+  };
+
+  const handleLongTermSelect = (leaseTerm: string) => {
+    setSelectedLongTerm(leaseTerm);
+    onClose();
+    onOpenRenew?.(leaseTerm);
+  };
+
   const currentEndFormatted = currentEnd
     ? formatPacificDate(currentEnd, { year: "numeric", month: "long", day: "numeric" })
     : "—";
@@ -198,13 +263,13 @@ export function LeaseAmendMoveOutModal({
       title={title}
       onClose={onClose}
       footer={
-        intent === "renew" ? undefined : (
+        showCustomDateExtend || intent === "early" ? (
         <ModalFooter className="w-full">
           <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => handleConfirm()}>
             {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
           </Button>
         </ModalFooter>
-        )
+        ) : undefined
       }
     >
       <div className="mb-5 flex items-center gap-3 rounded-xl bg-accent/30 px-4 py-3 text-sm">
@@ -217,20 +282,16 @@ export function LeaseAmendMoveOutModal({
           [
             { id: "extend" as const, label: "Extend move-out" },
             { id: "early" as const, label: "Early move-out" },
-            ...(showRenewOption ? [{ id: "renew" as const, label: "Renew term" }] : []),
           ] as const
         ).map((option) => (
           <button
             key={option.id}
             type="button"
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-              intent === option.id
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted hover:border-primary/30 hover:text-foreground",
-            )}
+            className={extendTypeChipClass(intent === option.id)}
             onClick={() => {
               setIntent(option.id);
+              setExtendType(null);
+              setSelectedLongTerm("");
               setSelectedDate("");
               setAvailability({ status: "idle" });
             }}
@@ -240,31 +301,52 @@ export function LeaseAmendMoveOutModal({
         ))}
       </div>
 
-      {intent === "renew" ? (
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            Choose a new lease term — month-to-month, 3 / 6 / 12 months, or custom — based on what your property offers.
-            Your current lease stays on file; the new lease replaces it after both parties sign.
-          </p>
-          <Button
-            type="button"
-            variant="primary"
-            className="w-full rounded-full"
-            onClick={() => {
-              onClose();
-              onOpenRenew?.();
-            }}
-          >
-            Choose renewal term
-          </Button>
+      {showExtendTypePicker ? (
+        <div className="mb-4">
+          <label className="mb-1.5 block text-sm font-semibold text-muted">Extension type</label>
+          <div className="flex flex-wrap gap-2">
+            {extendTypeOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={extendTypeChipClass(extendType === option.id)}
+                onClick={() => handleExtendTypeSelect(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {extendType === "custom" ? (
+            <p className="mt-2 text-xs text-muted">Pick a later move-out date for your current lease term.</p>
+          ) : null}
         </div>
-      ) : (
+      ) : null}
+
+      {showLongTermPicker ? (
+        <div className="mb-4">
+          <label className="mb-1.5 block text-sm font-semibold text-muted">Long-term length</label>
+          <div className="flex flex-wrap gap-2">
+            {longTermChoices.map((term) => (
+              <button
+                key={term}
+                type="button"
+                className={extendTypeChipClass(selectedLongTerm === term)}
+                onClick={() => handleLongTermSelect(term)}
+              >
+                {term}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {(intent === "early" || showCustomDateExtend) ? (
         <>
       <div className="mb-4">
         <label className="mb-1.5 block text-sm font-semibold text-muted">
           {intent === "early" ? "New move-out date (earlier)" : "New move-out date"}
         </label>
-        {intent === "extend" && quickExtendOptions.length > 0 ? (
+        {showCustomDateExtend && quickExtendOptions.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {quickExtendOptions.map((option) => (
               <button
@@ -332,7 +414,9 @@ export function LeaseAmendMoveOutModal({
         </div>
       ) : null}
         </>
-      )}
+      ) : intent === "extend" && showExtendTypePicker && !extendType ? (
+        <p className="text-sm text-muted">Choose how you want to extend — options match what this property offers on new leases.</p>
+      ) : null}
     </Modal>
   );
 }
@@ -362,6 +446,7 @@ export function LeaseRenewModal({
   leaseId,
   onSuccess,
   renewUrl = "/api/manager/amend-lease",
+  initialLeaseTerm,
 }: {
   open: boolean;
   onClose: () => void;
@@ -373,19 +458,21 @@ export function LeaseRenewModal({
   leaseId: string;
   onSuccess: () => void;
   renewUrl?: string;
+  /** Pre-select a term when opened from the extend-move-out flow. */
+  initialLeaseTerm?: string;
 }) {
   const { showToast } = useAppUi();
   const termOptions = useMemo(() => renewalLeaseTermOptionsForProperty(propertyId), [propertyId]);
   const defaultStart = currentEnd ? dayAfter(currentEnd) : new Date().toISOString().slice(0, 10);
-  const initialTerm = useMemo(() => {
-    const trimmed = currentTerm.trim();
-    if (trimmed && termOptions.includes(trimmed)) return trimmed;
+  const resolvedInitialTerm = useMemo(() => {
+    const preferred = (initialLeaseTerm ?? currentTerm).trim();
+    if (preferred && termOptions.includes(preferred)) return preferred;
     if (currentRentalType === "short_term" && termOptions.includes(SHORT_TERM_LEASE_TERM)) {
       return SHORT_TERM_LEASE_TERM;
     }
     return termOptions[0] ?? "12-Month";
-  }, [currentTerm, currentRentalType, termOptions]);
-  const [leaseTerm, setLeaseTerm] = useState(initialTerm);
+  }, [initialLeaseTerm, currentTerm, currentRentalType, termOptions]);
+  const [leaseTerm, setLeaseTerm] = useState(resolvedInitialTerm);
   const [leaseStart, setLeaseStart] = useState(defaultStart);
   const [customEnd, setCustomEnd] = useState("");
   const [rent, setRent] = useState(() => currentRentLabel.replace(/[^\d.]/g, ""));
@@ -394,14 +481,14 @@ export function LeaseRenewModal({
   useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
-        setLeaseTerm(initialTerm);
+        setLeaseTerm(resolvedInitialTerm);
         setLeaseStart(defaultStart);
         setCustomEnd("");
         setRent(currentRentLabel.replace(/[^\d.]/g, ""));
         setSubmitting(false);
       });
     }
-  }, [open, initialTerm, defaultStart, currentRentLabel]);
+  }, [open, resolvedInitialTerm, defaultStart, currentRentLabel]);
 
   const rentalType = renewalRentalTypeForTerm(leaseTerm);
   const isShortTerm = rentalType === "short_term";

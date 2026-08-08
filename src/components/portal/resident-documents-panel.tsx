@@ -21,9 +21,8 @@ import {
 } from "@/components/portal/resident-other-documents";
 import { ApplicationDocumentPreview, ApplicationPdfDownloadButton } from "@/components/portal/manager-applications";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
+import { RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { buildResidentLeaseDocumentRows, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
@@ -224,7 +223,7 @@ function ResidentApplicationDocumentDetail({
         <ApplicationPdfDownloadButton
           row={row}
           label="Download application"
-          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
         />
       }
     >
@@ -356,9 +355,9 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
     view.pipelineRow ??
     ({
       ...row,
-      generatedHtml: leaseHtml,
-      managerUploadedPdf: pdfSrc
-        ? { dataUrl: pdfSrc, fileName: "lease.pdf", uploadedAt: view.subtitle }
+      generatedHtml: view.leaseHtml,
+      managerUploadedPdf: view.pdfSrc
+        ? { dataUrl: view.pdfSrc, fileName: "lease.pdf", uploadedAt: view.subtitle }
         : row.managerUploadedPdf,
     } as typeof row);
 
@@ -376,7 +375,7 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
         <Button
           type="button"
           variant="outline"
-          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
           data-attr="resident-documents-lease-download-pdf"
           onClick={() => runLeaseDownload(downloadTarget, showToast)}
         >
@@ -392,7 +391,7 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
           src={view.pdfSrc}
           srcDoc={view.leaseHtml}
           onDownload={() => runLeaseDownload(downloadTarget, showToast)}
-          downloadLabel={pdfSrc ? "Download lease" : "Download / print lease"}
+          downloadLabel={view.pdfSrc ? "Download lease" : "Download / print lease"}
           downloadAttr="resident-documents-lease-download-pdf"
         />
       </div>
@@ -525,7 +524,7 @@ function ResidentReceiptDocumentDetail({ receiptId, basePath }: { receiptId: str
         <Button
           type="button"
           variant="outline"
-          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
           data-attr="resident-documents-receipt-download"
           onClick={() => downloadReceipt(receipt)}
         >

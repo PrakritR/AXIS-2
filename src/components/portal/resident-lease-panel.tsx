@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
@@ -9,6 +9,14 @@ import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
+import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { DocumentInlineViewer } from "@/components/portal/resident-other-documents";
+import { ResidentLeaseListTable, useResidentLeasePipelineRow } from "@/components/portal/resident-lease-list";
+import { PORTAL_DETAIL_BTN, PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { cn } from "@/lib/utils";
+import { residentLeaseDetailHref, residentLeaseListHref } from "@/lib/portal-detail-routes";
+import { decodeLeaseDocumentDetailId, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -18,8 +26,6 @@ import {
   leaseContextFromApplication,
 } from "@/lib/generated-lease";
 import {
-  LEASE_PIPELINE_EVENT,
-  findLeaseForResidentEmail,
   hasBothLeaseSignatures,
   runLeaseDownload,
   residentCanViewLeaseRow,
@@ -32,40 +38,33 @@ import {
 import { useResidentPortalAxisContext } from "@/hooks/use-resident-portal-axis";
 
 /**
- * Self-contained resident Lease tab: review + sign the lease and download or
- * upload the document. General document uploads live in Documents › Other
- * documents, not here.
+ * Resident Lease section — list of all lease records (current, prior, in progress);
+ * each row opens a detail page like Documents › Application.
  */
-export function ResidentLeasePanel() {
+export function ResidentLeasePanel({
+  leaseDetailId,
+  basePath = RESIDENT_PORTAL_BASE_PATH,
+}: {
+  leaseDetailId?: string;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
   const uploadRef = useRef<HTMLInputElement>(null);
-  const [pipelineTick, setPipelineTick] = useState(0);
+  const { email, residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
+  const pipelineRow = useResidentLeasePipelineRow();
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
-  const { email, residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
+  const [renewInitialTerm, setRenewInitialTerm] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    const on = () => setPipelineTick((t) => t + 1);
-    void syncLeasePipelineFromServer().then(on);
-    window.addEventListener(LEASE_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
-    return () => {
-      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
-    };
-  }, []);
-
-  const pipelineRow = useMemo(() => {
-    void pipelineTick;
-    if (!email || !axisResolved) return null;
-    return findLeaseForResidentEmail(email, {
-      email,
-      residentAxisId,
-      profileManagerId,
-    });
-  }, [axisResolved, email, pipelineTick, profileManagerId, residentAxisId]);
+  const listHref = residentLeaseListHref(basePath);
+  const documentView = useMemo(
+    () => (leaseDetailId && pipelineRow ? resolveResidentLeaseDocumentView(pipelineRow, leaseDetailId) : null),
+    [leaseDetailId, pipelineRow],
+  );
+  const snapshotId = leaseDetailId ? decodeLeaseDocumentDetailId(leaseDetailId).snapshotId : null;
+  const isHistoricalDetail = Boolean(snapshotId);
 
   const leaseAuthorized = useMemo(() => {
     if (!pipelineRow || !email) return false;
@@ -141,7 +140,6 @@ export function ResidentLeasePanel() {
         residentSignature: { role: "resident" as const, name: signatureName, signedAtIso: new Date().toISOString() },
       };
       showToast(hasBothLeaseSignatures(signedRow) ? "Lease fully signed." : "Lease signed. Your manager still needs to sign.");
-      setPipelineTick((t) => t + 1);
       setShowSigningModal(false);
       return true;
     } else {
@@ -157,7 +155,6 @@ export function ResidentLeasePanel() {
     setUploadingPdf(false);
     if (uploadRef.current) uploadRef.current.value = "";
     if (result.ok) {
-      setPipelineTick((t) => t + 1);
       showToast("Signed PDF uploaded.");
     } else {
       showToast(result.error ?? "Upload failed.");
@@ -167,7 +164,6 @@ export function ResidentLeasePanel() {
   const onSendToManager = () => {
     if (!email) return;
     if (residentSendLeaseToManager(email)) {
-      setPipelineTick((t) => t + 1);
       showToast("Lease sent to manager.");
     } else {
       showToast("Upload the signed PDF first, then send it to your manager.");
@@ -176,7 +172,6 @@ export function ResidentLeasePanel() {
 
   const handleMoveOutSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(undefined, { force: true });
-    setPipelineTick((t) => t + 1);
   }, []);
 
   const renderLeaseContent = () => {
@@ -390,7 +385,21 @@ export function ResidentLeasePanel() {
     </div>
   ) : null;
 
-  return (
+  const showWorkflowDetail = Boolean(leaseDetailId && documentView && !isHistoricalDetail && isPendingLease);
+
+  const downloadTarget =
+    documentView?.pipelineRow ??
+    (pipelineRow && documentView
+      ? ({
+          ...pipelineRow,
+          generatedHtml: documentView.leaseHtml,
+          managerUploadedPdf: documentView.pdfSrc
+            ? { dataUrl: documentView.pdfSrc, fileName: "lease.pdf", uploadedAt: documentView.subtitle }
+            : pipelineRow.managerUploadedPdf,
+        } as typeof pipelineRow)
+      : null);
+
+  const modals = (
     <>
       <input
         ref={uploadRef}
@@ -415,17 +424,25 @@ export function ResidentLeasePanel() {
         onClose={() => setShowMoveOutModal(false)}
         currentEnd={pipelineRow?.application?.leaseEnd ?? ""}
         leaseStart={pipelineRow?.application?.leaseStart ?? ""}
+        propertyId={pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? ""}
         checkUrl="/api/resident/check-move-out-availability"
         amendUrl="/api/resident/extend-lease"
-        showRenewOption
-        onOpenRenew={() => setShowRenewModal(true)}
+        onOpenRenew={(leaseTerm) => {
+          setRenewInitialTerm(leaseTerm);
+          setShowMoveOutModal(false);
+          setShowRenewModal(true);
+        }}
         onSuccess={() => void handleMoveOutSuccess()}
       />
 
       {pipelineRow ? (
         <LeaseRenewModal
           open={showRenewModal}
-          onClose={() => setShowRenewModal(false)}
+          onClose={() => {
+            setShowRenewModal(false);
+            setRenewInitialTerm(undefined);
+          }}
+          initialLeaseTerm={renewInitialTerm}
           currentEnd={pipelineRow.application?.leaseEnd ?? ""}
           currentTerm={pipelineRow.application?.leaseTerm ?? "12-Month"}
           currentRentLabel={pipelineRow.signedRentLabel ?? pipelineRow.application?.managerRentOverride ?? ""}
@@ -435,20 +452,120 @@ export function ResidentLeasePanel() {
           renewUrl="/api/resident/renew-lease"
           onSuccess={() => {
             setShowRenewModal(false);
+            setRenewInitialTerm(undefined);
             void handleMoveOutSuccess();
           }}
         />
       ) : null}
+    </>
+  );
 
-      <ManagerPortalPageShell
-        title="Lease"
-        hideTitleOnMobileNav
-        titleAside={leaseTitleAside}
-        compactFilterRow
+  if (!leaseDetailId) {
+    return (
+      <>
+        {modals}
+        <ManagerPortalPageShell title="Lease" hideTitleOnMobileNav compactFilterRow>
+          {!email ? (
+            <p className="text-sm text-muted">Sign in to view your lease.</p>
+          ) : !axisResolved ? (
+            <PortalEmptyState variant="plain" icon="lease" title="Loading your leases…" />
+          ) : (
+            <ResidentLeaseListTable basePath={basePath} detailHref={residentLeaseDetailHref} />
+          )}
+        </ManagerPortalPageShell>
+      </>
+    );
+  }
+
+  if (!axisResolved) {
+    return (
+      <>
+        {modals}
+        <PortalRecordDetailPage
+          pageTitle="Lease"
+          title="Lease"
+          backHref={listHref}
+          hideBackText
+          bareHeader
+          dataAttrBack="resident-lease-detail-back"
+          pinScrollBody
+        >
+          <div className="px-3 py-6">
+            <PortalEmptyState variant="plain" icon="lease" title="Loading your lease…" />
+          </div>
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  if (!documentView) {
+    return (
+      <>
+        {modals}
+        <PortalRecordDetailPage
+          pageTitle="Lease"
+          title="Lease"
+          backHref={listHref}
+          hideBackText
+          bareHeader
+          dataAttrBack="resident-lease-detail-back"
+          pinScrollBody
+        >
+          <div className="px-3 py-6">
+            <PortalDataTableEmpty icon="lease" message="Lease not found." />
+          </div>
+        </PortalRecordDetailPage>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {modals}
+      <PortalRecordDetailPage
+        pageTitle="Lease"
+        title={documentView.title}
+        subtitle={documentView.subtitle}
+        backHref={listHref}
+        hideBackText
+        bareHeader
+        dataAttrBack="resident-lease-detail-back"
+        pinScrollBody
+        titleAside={!isHistoricalDetail ? leaseTitleAside : undefined}
+        footer={
+          downloadTarget ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+              data-attr="resident-lease-download-pdf"
+              onClick={() => runLeaseDownload(downloadTarget, showToast)}
+            >
+              {documentView.pdfSrc ? "Download lease" : "Download / print lease"}
+            </Button>
+          ) : undefined
+        }
       >
-        {leaseMobileActionsRow}
-        {renderLeaseContent()}
-      </ManagerPortalPageShell>
+        <div className="px-3 pb-6 pt-2 sm:px-4">
+          {showWorkflowDetail ? (
+            <>
+              {leaseMobileActionsRow}
+              {renderLeaseContent()}
+            </>
+          ) : (
+            <DocumentInlineViewer
+              embedded
+              hideActions
+              title={documentView.title}
+              src={documentView.pdfSrc}
+              srcDoc={documentView.leaseHtml}
+              onDownload={() => downloadTarget && runLeaseDownload(downloadTarget, showToast)}
+              downloadLabel={documentView.pdfSrc ? "Download lease" : "Download / print lease"}
+              downloadAttr="resident-lease-download-pdf"
+            />
+          )}
+        </div>
+      </PortalRecordDetailPage>
     </>
   );
 }
