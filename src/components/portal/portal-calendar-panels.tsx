@@ -8,7 +8,7 @@ import { Input, NativeSelect, Select } from "@/components/ui/input";
 import { FieldSingleSelect } from "@/components/ui/checkbox-multi-select";
 import { Modal, ModalFooter, MODAL_HEADER_CLOSE_CLASS } from "@/components/ui/modal";
 import { X } from "lucide-react";
-import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { PortalNotificationPreviewModal, type NotificationConfirmDraft } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate } from "@/lib/pacific-time";
@@ -294,6 +294,74 @@ function weekdayLabelList(days: number[]) {
     .join(", ");
 }
 
+type TourGuestNotifyPreviewAction = "confirm" | "delete";
+
+type TourGuestNotifyPreview =
+  | {
+      action: "confirm";
+      meeting: DemoMeeting;
+      endIso: string;
+      subject: string;
+      body: string;
+    }
+  | {
+      action: "delete";
+      meeting: DemoMeeting;
+      subject: string;
+      body: string;
+    };
+
+const TOUR_GUEST_NOTIFY_PREVIEW_COPY: Record<
+  TourGuestNotifyPreviewAction,
+  {
+    title: string;
+    intro: string;
+    skipMessageLabel: string;
+    confirmLabel: string;
+    confirmLabelWithoutMessage: string;
+    confirmBusyLabel: string;
+  }
+> = {
+  confirm: {
+    title: "Confirm tour — guest notification preview",
+    intro: "Confirming schedules the tour and sends this message to the guest.",
+    skipMessageLabel: "Don't message guest",
+    confirmLabel: "Confirm tour & send notification",
+    confirmLabelWithoutMessage: "Confirm tour only",
+    confirmBusyLabel: "Confirming…",
+  },
+  delete: {
+    title: "Delete tour — guest notification preview",
+    intro: "Deleting removes this tour request from your calendar and sends this message to the guest.",
+    skipMessageLabel: "Don't message guest",
+    confirmLabel: "Delete tour & send notification",
+    confirmLabelWithoutMessage: "Delete tour only",
+    confirmBusyLabel: "Deleting…",
+  },
+};
+
+function buildTourGuestNotifyContext(
+  meeting: DemoMeeting,
+  scheduleOwnerLabel: string | null | undefined,
+  tourEndIso: string,
+) {
+  const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
+  return buildTourNotificationContext({
+    origin: typeof window !== "undefined" ? window.location.origin : "",
+    guestName: meeting.name || "Guest",
+    guestEmail: meeting.email,
+    guestPhone: meeting.phone || null,
+    propertyId: meeting.propertyId || null,
+    propertyTitle: meeting.propertyTitle || property?.title || "Property",
+    propertyAddress: property?.address || null,
+    roomLabel: meeting.roomLabel || null,
+    tourStartIso: meeting.startIso,
+    tourEndIso,
+    notes: meeting.notes || null,
+    managerLabel: scheduleOwnerLabel || null,
+  });
+}
+
 export function PortalCalendarPanels({
   storageKey,
   /** When set, availability edits apply to every key (union display). */
@@ -424,18 +492,8 @@ export function PortalCalendarPanels({
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
   const [durationChoice, setDurationChoice] = useState<number | "custom">(DEFAULT_EVENT_DURATION_MINUTES);
   const [customDurationText, setCustomDurationText] = useState(String(DEFAULT_EVENT_DURATION_MINUTES));
-  const [tourConfirmPreview, setTourConfirmPreview] = useState<{
-    meeting: DemoMeeting;
-    endIso: string;
-    subject: string;
-    body: string;
-  } | null>(null);
-  const [tourDeletePreview, setTourDeletePreview] = useState<{
-    meeting: DemoMeeting;
-    subject: string;
-    body: string;
-  } | null>(null);
-  const [tourConfirmBusy, setTourConfirmBusy] = useState(false);
+  const [tourGuestNotifyPreview, setTourGuestNotifyPreview] = useState<TourGuestNotifyPreview | null>(null);
+  const [tourNotifyPreviewBusy, setTourNotifyPreviewBusy] = useState(false);
   /**
    * The guest has already been emailed "Your PropLane tour is confirmed", so
    * every destructive action on a confirmed tour is staged behind an explicit
@@ -663,62 +721,16 @@ export function PortalCalendarPanels({
       showToast("Guest email is required before confirming this tour.");
       return;
     }
-    const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
     const endIso = endIsoForDuration(meeting.startIso, selectedDurationMinutes);
-    const ctx = buildTourNotificationContext({
-      origin: typeof window !== "undefined" ? window.location.origin : "",
-      guestName: meeting.name || "Guest",
-      guestEmail: meeting.email,
-      guestPhone: meeting.phone || null,
-      propertyId: meeting.propertyId || null,
-      propertyTitle: meeting.propertyTitle || property?.title || "Property",
-      propertyAddress: property?.address || null,
-      roomLabel: meeting.roomLabel || null,
-      tourStartIso: meeting.startIso,
-      tourEndIso: endIso,
-      notes: meeting.notes || null,
-      managerLabel: scheduleOwnerLabel || null,
-    });
-    setTourConfirmPreview({
+    const ctx = buildTourGuestNotifyContext(meeting, scheduleOwnerLabel, endIso);
+    setTourGuestNotifyPreview({
+      action: "confirm",
       meeting,
       endIso,
       subject: TOUR_CONFIRMED_TENANT_SUBJECT,
       body: buildTourConfirmedTenantBody(ctx),
     });
   }, [scheduleOwnerLabel, selectedBlock, selectedDurationMinutes, showToast]);
-
-  const confirmTourWithNotification = useCallback(async (skipMessage: boolean) => {
-    if (!tourConfirmPreview || tourConfirmBusy) return;
-    const { meeting, endIso } = tourConfirmPreview;
-    setTourConfirmBusy(true);
-    try {
-      const result = await acceptPartnerInquiryFromServer(meeting.sourceId, {
-        start: meeting.startIso,
-        end: endIso,
-        notifyTenant: !skipMessage,
-      });
-      if (!result.ok) {
-        showToast(result.error ?? "Could not confirm tour.");
-        return;
-      }
-      setTourConfirmPreview(null);
-      setSelectedBlock(null);
-      setMeetingRefresh((n) => n + 1);
-      onMeetingsChanged?.();
-      reloadAvailability();
-      if (skipMessage) {
-        showToast("Tour confirmed (no guest notification sent).");
-      } else if (result.notificationSkipped) {
-        showToast("Tour confirmed. Confirmation sent to PropLane inbox (email skipped for demo address or missing provider).");
-      } else if (result.error) {
-        showToast("Tour confirmed, but the confirmation email could not be sent.");
-      } else {
-        showToast("Tour confirmed and confirmation sent via inbox and email.");
-      }
-    } finally {
-      setTourConfirmBusy(false);
-    }
-  }, [onMeetingsChanged, reloadAvailability, showToast, tourConfirmBusy, tourConfirmPreview]);
 
   const openTourDeletePreview = useCallback(() => {
     if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
@@ -732,22 +744,9 @@ export function PortalCalendarPanels({
       setPendingTourAction("delete");
       return;
     }
-    const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
-    const ctx = buildTourNotificationContext({
-      origin: typeof window !== "undefined" ? window.location.origin : "",
-      guestName: meeting.name || "Guest",
-      guestEmail: meeting.email,
-      guestPhone: meeting.phone || null,
-      propertyId: meeting.propertyId || null,
-      propertyTitle: meeting.propertyTitle || property?.title || "Property",
-      propertyAddress: property?.address || null,
-      roomLabel: meeting.roomLabel || null,
-      tourStartIso: meeting.startIso,
-      tourEndIso: meeting.endIso,
-      notes: meeting.notes || null,
-      managerLabel: scheduleOwnerLabel || null,
-    });
-    setTourDeletePreview({
+    const ctx = buildTourGuestNotifyContext(meeting, scheduleOwnerLabel, meeting.endIso);
+    setTourGuestNotifyPreview({
+      action: "delete",
       meeting,
       subject: TOUR_REQUEST_REMOVED_TENANT_SUBJECT,
       body: buildTourRequestRemovedTenantBody(ctx),
@@ -755,12 +754,45 @@ export function PortalCalendarPanels({
     setPendingTourAction(null);
   }, [scheduleOwnerLabel, selectedBlock, showToast]);
 
-  const confirmTourDeleteWithNotification = useCallback(
-    async (skipMessage: boolean, _channels?: unknown, draft?: { subject?: string; body?: string }) => {
-      if (!tourDeletePreview || tourActionBusy) return;
-      const { meeting } = tourDeletePreview;
-      setTourActionBusy(true);
+  const submitTourGuestNotifyPreview = useCallback(
+    async (skipMessage: boolean, _channels?: unknown, draft?: NotificationConfirmDraft) => {
+      if (!tourGuestNotifyPreview || tourNotifyPreviewBusy) return;
+      const preview = tourGuestNotifyPreview;
+      setTourNotifyPreviewBusy(true);
       try {
+        if (preview.action === "confirm") {
+          const { meeting, endIso } = preview;
+          const result = await acceptPartnerInquiryFromServer(meeting.sourceId, {
+            start: meeting.startIso,
+            end: endIso,
+            notifyTenant: !skipMessage,
+            subject: draft?.subject,
+            body: draft?.body,
+          });
+          if (!result.ok) {
+            showToast(result.error ?? "Could not confirm tour.");
+            return;
+          }
+          setTourGuestNotifyPreview(null);
+          setSelectedBlock(null);
+          setMeetingRefresh((n) => n + 1);
+          onMeetingsChanged?.();
+          reloadAvailability();
+          if (skipMessage) {
+            showToast("Tour confirmed (no guest notification sent).");
+          } else if (result.notificationSkipped) {
+            showToast(
+              "Tour confirmed. Confirmation sent to PropLane inbox (email skipped for demo address or missing provider).",
+            );
+          } else if (result.error) {
+            showToast("Tour confirmed, but the confirmation email could not be sent.");
+          } else {
+            showToast("Tour confirmed and confirmation sent via inbox and email.");
+          }
+          return;
+        }
+
+        const { meeting } = preview;
         const ok = await deletePartnerInquiryFromServer(meeting.sourceId, {
           notifyTenant: !skipMessage,
           subject: draft?.subject,
@@ -770,7 +802,7 @@ export function PortalCalendarPanels({
           showToast("Could not delete this tour.");
           return;
         }
-        setTourDeletePreview(null);
+        setTourGuestNotifyPreview(null);
         setSelectedBlock(null);
         setPendingTourAction(null);
         setMeetingRefresh((n) => n + 1);
@@ -780,10 +812,10 @@ export function PortalCalendarPanels({
           skipMessage ? "Tour removed (no guest notification sent)." : "Tour removed and guest notified.",
         );
       } finally {
-        setTourActionBusy(false);
+        setTourNotifyPreviewBusy(false);
       }
     },
-    [onMeetingsChanged, reloadAvailability, showToast, tourActionBusy, tourDeletePreview],
+    [onMeetingsChanged, reloadAvailability, showToast, tourGuestNotifyPreview, tourNotifyPreviewBusy],
   );
 
   const deleteSelectedMeeting = useCallback(async () => {
@@ -1797,50 +1829,31 @@ export function PortalCalendarPanels({
     ) : null
   );
 
-  const tourConfirmPreviewModal = (
+  const tourGuestNotifyPreviewModal = tourGuestNotifyPreview ? (
     <PortalNotificationPreviewModal
-      open={tourConfirmPreview !== null}
-      title="Confirm tour — guest notification preview"
-      onClose={() => setTourConfirmPreview(null)}
-      recipient={tourConfirmPreview?.meeting.email ?? ""}
-      subject={tourConfirmPreview?.subject ?? ""}
-      body={tourConfirmPreview?.body ?? ""}
-      intro="Confirming schedules the tour and sends this message to the guest."
-      skipMessageLabel="Don't message guest"
+      open
+      title={TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].title}
+      onClose={() => setTourGuestNotifyPreview(null)}
+      recipient={tourGuestNotifyPreview.meeting.email ?? ""}
+      recipientPhone={tourGuestNotifyPreview.meeting.phone?.trim() || undefined}
+      subject={tourGuestNotifyPreview.subject}
+      body={tourGuestNotifyPreview.body}
+      intro={TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].intro}
+      skipMessageLabel={TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].skipMessageLabel}
       showChannelPicker
-      emailAvailable={Boolean(tourConfirmPreview?.meeting.email?.includes("@"))}
-      smsAvailable
-      confirmLabel="Confirm tour & send notification"
-      confirmLabelWithoutMessage="Confirm tour only"
-      confirmBusy={tourConfirmBusy}
-      confirmBusyLabel="Confirming…"
-      panelClassName="z-[90] max-w-xl"
-      onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
-    />
-  );
-
-  const tourDeletePreviewModal = (
-    <PortalNotificationPreviewModal
-      open={tourDeletePreview !== null}
-      title="Delete tour — guest notification preview"
-      onClose={() => setTourDeletePreview(null)}
-      recipient={tourDeletePreview?.meeting.email ?? ""}
-      subject={tourDeletePreview?.subject ?? ""}
-      body={tourDeletePreview?.body ?? ""}
-      intro="Deleting removes this tour request from your calendar and sends this message to the guest."
-      skipMessageLabel="Delete tour without messaging guest"
-      showChannelPicker={false}
-      emailAvailable={Boolean(tourDeletePreview?.meeting.email?.includes("@"))}
-      smsAvailable={false}
+      emailAvailable={Boolean(tourGuestNotifyPreview.meeting.email?.includes("@"))}
+      smsAvailable={Boolean(tourGuestNotifyPreview.meeting.phone?.trim())}
       showSchedule={false}
-      confirmLabel="Delete tour & send notification"
-      confirmLabelWithoutMessage="Delete tour only"
-      confirmBusy={tourActionBusy}
-      confirmBusyLabel="Deleting…"
+      confirmLabel={TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].confirmLabel}
+      confirmLabelWithoutMessage={
+        TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].confirmLabelWithoutMessage
+      }
+      confirmBusy={tourNotifyPreviewBusy}
+      confirmBusyLabel={TOUR_GUEST_NOTIFY_PREVIEW_COPY[tourGuestNotifyPreview.action].confirmBusyLabel}
       panelClassName="z-[90] max-w-xl"
-      onConfirm={(skipMessage, _channels, draft) => void confirmTourDeleteWithNotification(skipMessage, _channels, draft)}
+      onConfirm={(skipMessage, _channels, draft) => void submitTourGuestNotifyPreview(skipMessage, _channels, draft)}
     />
-  );
+  ) : null;
 
   if (!storageKey && !readOnly && writeStorageKeys.length === 0) {
     return bareSurface ? (
@@ -2423,8 +2436,7 @@ export function PortalCalendarPanels({
           </Modal>
         ) : null}
         {selectedBlockModal}
-        {tourConfirmPreviewModal}
-        {tourDeletePreviewModal}
+        {tourGuestNotifyPreviewModal}
       </>
     );
   }
@@ -2818,8 +2830,7 @@ export function PortalCalendarPanels({
         </div>
       </Modal>
       {selectedBlockModal}
-      {tourConfirmPreviewModal}
-      {tourDeletePreviewModal}
+      {tourGuestNotifyPreviewModal}
     </>
   );
 }

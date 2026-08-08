@@ -133,6 +133,9 @@ export type ConfirmTourOptions = {
   requestedEnd?: string;
   instructions?: string;
   notifyTenant: boolean;
+  /** Manager-edited notification copy from the preview modal. */
+  notificationSubject?: string;
+  notificationBody?: string;
   /**
    * When true (the auto-approve/tool path), refuse to book a slot a confirmed
    * tour already occupies — the stale-proposal double-book guard. The manual
@@ -293,6 +296,10 @@ export async function confirmTourInquiry(db: Db, opts: ConfirmTourOptions): Prom
       row,
       { start, end, managerUserId, adminLabel: selectedWindow.adminLabel },
       instructions || undefined,
+      {
+        subject: opts.notificationSubject,
+        body: opts.notificationBody,
+      },
     );
   }
 

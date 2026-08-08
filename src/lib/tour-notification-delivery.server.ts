@@ -617,6 +617,7 @@ export async function notifyTenantTourConfirmed(
   inquiry: TourInquiryPayload,
   window: { start: string; end: string; managerUserId: string; adminLabel?: string },
   instructions?: string,
+  opts?: { subject?: string; body?: string },
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const guestEmail = textField(inquiry as Record<string, unknown>, "email");
   if (!guestEmail || !guestEmail.includes("@")) {
@@ -643,9 +644,9 @@ export async function notifyTenantTourConfirmed(
     tourInquiryId: textField(inquiry as Record<string, unknown>, "id") || null,
   });
 
-  const subject = TOUR_CONFIRMED_TENANT_SUBJECT;
-  const text = buildTourConfirmedTenantBody(ctx);
-  const html = buildTourConfirmedTenantHtml(ctx);
+  const subject = opts?.subject?.trim() || TOUR_CONFIRMED_TENANT_SUBJECT;
+  const text = opts?.body?.trim() || buildTourConfirmedTenantBody(ctx);
+  const html = opts?.body?.trim() ? undefined : buildTourConfirmedTenantHtml(ctx);
 
   const { data: guestProfile } = await db.from("profiles").select("id").eq("email", guestEmail).maybeSingle();
 

@@ -20,12 +20,22 @@ export async function POST(req: Request) {
       end?: unknown;
       instructions?: unknown;
       notifyTenant?: unknown;
+      subject?: unknown;
+      messageBody?: unknown;
+      body?: unknown;
     };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const admin = await isAdminUser(user.id);
     const db = createSupabaseServiceRoleClient();
+
+    const customBody =
+      typeof body.messageBody === "string"
+        ? body.messageBody.trim()
+        : typeof body.body === "string"
+          ? body.body.trim()
+          : "";
 
     const result = await confirmTourInquiry(db, {
       inquiryId: id,
@@ -35,6 +45,8 @@ export async function POST(req: Request) {
       requestedEnd: typeof body.end === "string" ? body.end.trim() : "",
       instructions: typeof body.instructions === "string" ? body.instructions.trim() : "",
       notifyTenant: body.notifyTenant === true,
+      notificationSubject: typeof body.subject === "string" ? body.subject.trim() : undefined,
+      notificationBody: customBody || undefined,
       req,
     });
 

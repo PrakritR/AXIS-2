@@ -751,7 +751,14 @@ async function deletePartnerInquiryEventRecords(row: PartnerInquiry): Promise<bo
 
 export async function acceptPartnerInquiryFromServer(
   id: string,
-  opts?: { instructions?: string; start?: string; end?: string; notifyTenant?: boolean },
+  opts?: {
+    instructions?: string;
+    start?: string;
+    end?: string;
+    notifyTenant?: boolean;
+    subject?: string;
+    body?: string;
+  },
 ): Promise<{ ok: boolean; error?: string; notificationSkipped?: boolean }> {
   const row = readPartnerInquiries().find((r) => r.id === id);
   if (row?.kind === "tour") {
@@ -765,6 +772,8 @@ export async function acceptPartnerInquiryFromServer(
         end: opts?.end ?? row.proposedEnd,
         instructions: opts?.instructions,
         notifyTenant: opts?.notifyTenant === true,
+        subject: opts?.subject,
+        body: opts?.body,
       }),
     });
     const data = (await res.json().catch(() => ({}))) as {
