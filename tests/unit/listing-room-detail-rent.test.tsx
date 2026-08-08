@@ -110,10 +110,12 @@ describe("room detail modal — rent", () => {
     expect(within(statCard("Rent")).getByText("Included")).toBeTruthy();
   });
 
-  it("renders a multi-month availability calendar in the room modal", () => {
+  it("renders a single-month availability calendar with month navigation in the room modal", () => {
     renderRoom(roomRow());
     expect(screen.getByText("Availability timeline")).toBeTruthy();
     expect(screen.getByText(/Green dates are open and red dates are unavailable/)).toBeTruthy();
+    expect(screen.getByLabelText("Previous month")).toBeTruthy();
+    expect(screen.getByLabelText("Next month")).toBeTruthy();
     expect(screen.getAllByText("Open").length).toBeGreaterThan(0);
   });
 });

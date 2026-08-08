@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   applyListingFeesToSubmission,
   defaultCoreListingFeeRows,
+  defaultRemovedStandardListingFeeRowsForNewListing,
   legacyListingAmountsFromFees,
   listingFeesFromLegacyScalars,
   resolveListingFees,
   validateListingFeeRows,
 } from "@/lib/listing-fees";
-import { createDefaultListingSubmission, normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  createDefaultListingSubmission,
+  createNewListingWizardSubmission,
+  normalizeManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
 
 describe("listing fees migration", () => {
   it("builds preset rows from legacy scalar fields", () => {
@@ -50,6 +55,33 @@ describe("listing fees migration", () => {
     const n = normalizeManagerListingSubmissionV1(sub);
     expect(n.customFees?.some((f) => f.presetId === "security_deposit")).toBe(true);
     expect(n.securityDeposit).toBe("100");
+  });
+
+  it("does not re-materialize fee rows the manager removed", () => {
+    const sub = createDefaultListingSubmission();
+    sub.securityDeposit = "900";
+    sub.moveInFee = "0";
+    sub.parkingMonthly = "25";
+    sub.removedStandardListingFeeRows = ["parkingMonthly", "hoaMonthly"];
+    const n = normalizeManagerListingSubmissionV1(sub);
+    expect(n.customFees?.some((f) => f.presetId === "parking_monthly")).toBe(false);
+    expect(n.customFees?.some((f) => f.presetId === "hoa_monthly")).toBe(false);
+    expect(n.parkingMonthly).toBe("");
+    expect(n.securityDeposit).toBe("900");
+    expect(n.removedStandardListingFeeRows).toEqual(["parkingMonthly", "hoaMonthly"]);
+  });
+
+  it("new listing wizard hides every standard other fee except application", () => {
+    const hidden = defaultRemovedStandardListingFeeRowsForNewListing();
+    expect(hidden).not.toContain("applicationFee");
+    expect(hidden).toContain("parkingMonthly");
+    expect(hidden).toContain("holdingDeposit");
+
+    const sub = createNewListingWizardSubmission();
+    expect(sub.removedStandardListingFeeRows).toEqual(hidden);
+    expect(sub.holdingDeposit).toBe("");
+    expect(sub.customFees?.some((f) => f.presetId === "parking_monthly")).toBe(false);
+    expect(sub.customFees?.some((f) => f.presetId === "holding_deposit")).toBe(false);
   });
 
   it("validates required preset amounts", () => {

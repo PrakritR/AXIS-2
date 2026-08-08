@@ -35,12 +35,14 @@ function keyFor(propertyId: string, managerUserId: string): string {
 export async function fetchApplicationFeePreview(input: {
   propertyId: string;
   managerUserId: string;
+  rentalType?: "standard" | "short_term";
 }): Promise<ApplicationFeePreview | null> {
   const propertyId = input.propertyId.trim();
   const managerUserId = input.managerUserId.trim();
   if (!propertyId || !managerUserId) return null;
 
-  const key = keyFor(propertyId, managerUserId);
+  const rentalType = input.rentalType === "short_term" ? "short_term" : "standard";
+  const key = `${keyFor(propertyId, managerUserId)}::${rentalType}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < PREVIEW_TTL_MS) return hit.value;
 
@@ -52,7 +54,11 @@ export async function fetchApplicationFeePreview(input: {
       const res = await fetch("/api/public/application-fee-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId, managerUserId }),
+        body: JSON.stringify({
+          propertyId,
+          managerUserId,
+          rentalType: rentalType === "short_term" ? "short_term" : undefined,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         applicationFeeCents?: number;

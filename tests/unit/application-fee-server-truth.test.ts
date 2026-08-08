@@ -276,6 +276,48 @@ describe("resolveApplicationFeeProperty — the listing's own fee is authoritati
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("NO_APPLICATION_FEE");
   });
+
+  it("short-term rentalType uses shortTermApplicationFee when set", async () => {
+    const db = {
+      from: (table: string) => {
+        const chain: Record<string, unknown> = {};
+        chain.select = () => chain;
+        chain.eq = () => chain;
+        chain.maybeSingle = async () => {
+          if (table === "manager_property_records") {
+            return {
+              data: {
+                manager_user_id: MANAGER_ID,
+                property_data: {
+                  listingSubmission: {
+                    v: 1,
+                    applicationFee: "$50",
+                    shortTermApplicationFee: "$35",
+                    rooms: [],
+                    bathrooms: [],
+                  },
+                },
+              },
+              error: null,
+            };
+          }
+          if (table === "manager_automation_settings") {
+            return { data: { row_data: { applicationSettings: { applicationFeeCents: 7500 } } }, error: null };
+          }
+          return { data: null, error: null };
+        };
+        return chain;
+      },
+    } as unknown as SupabaseClient;
+
+    const res = await resolveApplicationFeeProperty(db, {
+      propertyId: "p1",
+      managerUserId: MANAGER_ID,
+      rentalType: "short_term",
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.applicationFeeCents).toBe(3500);
+  });
 });
 
 describe("resolveApplicationFeeItemization — $0 fee never dead-ends", () => {

@@ -260,6 +260,12 @@ describe("createNewListingWizardSubmission — pre-filled new-listing defaults",
   it("pre-selects a 12-Month lease so the common case publishes with minimal typing", () => {
     expect(createNewListingWizardSubmission().allowedLeaseTerms).toEqual(["12-Month"]);
   });
+  it("starts with only application fee in Other fees (other standard rows are removed)", () => {
+    const sub = createNewListingWizardSubmission();
+    expect(sub.removedStandardListingFeeRows).toContain("parkingMonthly");
+    expect(sub.removedStandardListingFeeRows).not.toContain("applicationFee");
+    expect(sub.holdingDeposit).toBe("");
+  });
   it("does not change the blank base used by tests / back-compat", () => {
     expect(createDefaultListingSubmission().allowedLeaseTerms).toEqual([]);
   });

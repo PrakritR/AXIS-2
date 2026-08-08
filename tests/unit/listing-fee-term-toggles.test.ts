@@ -16,7 +16,8 @@ describe("listing fee term toggles", () => {
   it("derives ST toggles from stored submission amounts", () => {
     const sub = createDefaultListingSubmission();
     sub.shortTermDailyCost = "85";
-    sub.applicationFee = "50";
+    sub.shortTermApplicationFee = "50";
+    sub.applicationFee = "40";
     sub.shortTermDeposit = "";
     sub.shortTermMoveInFee = "0";
 
@@ -44,11 +45,23 @@ describe("listing fee term toggles", () => {
   it("clears ST fields when toggled off", () => {
     const sub = createDefaultListingSubmission();
     sub.shortTermDailyCost = "120";
-    sub.applicationFee = "40";
+    sub.shortTermApplicationFee = "40";
+    sub.applicationFee = "55";
 
     const next = applyListingStFeeToggle(sub, "rent", false);
     expect(next.shortTermDailyCost).toBe("");
-    expect(next.applicationFee).toBe("40");
+    expect(next.shortTermApplicationFee).toBe("40");
+    expect(next.applicationFee).toBe("55");
+  });
+
+  it("clears short-term application fee independently of long-term", () => {
+    const sub = createDefaultListingSubmission();
+    sub.shortTermApplicationFee = "30";
+    sub.applicationFee = "55";
+
+    const next = applyListingStFeeToggle(sub, "applicationFee", false, { ...deriveListingLtFeeToggles(sub), applicationFee: true });
+    expect(next.shortTermApplicationFee).toBe("");
+    expect(next.applicationFee).toBe("55");
   });
 
   it("clears LT entire-home rent when toggled off", () => {

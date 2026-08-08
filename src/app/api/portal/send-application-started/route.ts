@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
     }
 
-    let body: { email?: unknown; axisId?: unknown };
+    let body: { email?: unknown; axisId?: unknown; setupToken?: unknown };
     try {
       body = (await req.json()) as typeof body;
     } catch {
@@ -77,13 +77,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Application is no longer in progress." }, { status: 400 });
     }
 
-    const ensured = await ensureResidentSetupTokenForApplication(db, match.id);
+    const ensured = await ensureResidentSetupTokenForApplication(db, match.id, {
+      preferredToken: typeof body.setupToken === "string" ? body.setupToken : null,
+    });
     if (!ensured.ok) {
       return NextResponse.json({ error: ensured.error }, { status: 500 });
     }
 
     const origin = appOrigin();
-    const resumeUrl = inProgressApplicationResumeUrl(origin, row);
+    const resumeUrl = inProgressApplicationResumeUrl(origin, ensured.row, {
+      token: ensured.token,
+      axisId: ensured.axisId,
+    });
     const signupUrl = `${origin}${buildResidentSetupHref(ensured.token, ensured.axisId)}`;
     const text = buildApplicationStartedEmailBody({
       applicantName: row.name || undefined,

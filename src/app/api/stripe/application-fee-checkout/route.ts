@@ -14,6 +14,7 @@ type Body = {
   residentName?: string;
   /** Listing owner Supabase user id (matches `profiles.id` / `MockProperty.managerUserId`). */
   managerUserId?: string;
+  rentalType?: "standard" | "short_term";
   /** Checkout return path (defaults to public apply). Must start with `/`. */
   returnPath?: string;
   /**
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       residentEmail,
       residentName: residentName || undefined,
       managerUserId,
+      rentalType: body.rentalType === "short_term" ? "short_term" : "standard",
       mode,
       // Embedded returns the applicant to the same apply step after paying; the
       // wizard verifies the session server-side before treating the fee as paid.

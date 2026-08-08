@@ -14,6 +14,7 @@ import { propertyAcceptingOnlineApplications } from "@/lib/property-application-
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-links";
 import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import { residentSetupIdFromUrlParams } from "@/lib/auth/resident-setup-token";
 import {
   hasPublicApplyGuestContinue,
   markPublicApplyGuestContinue,
@@ -21,6 +22,11 @@ import {
   publicApplyReturnPath,
   resolvePublicApplyView,
 } from "@/lib/rental-application/public-apply-session";
+
+function publicApplyResumeLinkActive(searchParams: { get(name: string): string | null }): boolean {
+  const token = searchParams.get("token")?.trim();
+  return Boolean(token && residentSetupIdFromUrlParams(searchParams));
+}
 
 /**
  * Public guest apply surface — account recommended, not required.
@@ -94,6 +100,8 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     [propertyId, portfolioPropertyIds, rentalType],
   );
 
+  const resumeFromEmailLink = useMemo(() => publicApplyResumeLinkActive(searchParams), [searchParams]);
+
   const [guestBypass, setGuestBypass] = useState(false);
   const [guestContinuedInSession, setGuestContinuedInSession] = useState(false);
 
@@ -105,12 +113,18 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     setGuestContinuedInSession(hasPublicApplyGuestContinue(applyGateKey));
   }, [applyGateKey]);
 
+  useEffect(() => {
+    if (!resumeFromEmailLink || !applyGateKey) return;
+    markPublicApplyGuestContinue(applyGateKey);
+    setGuestBypass(true);
+  }, [applyGateKey, resumeFromEmailLink]);
+
   const continueAsGuest = useCallback(() => {
     if (applyGateKey) markPublicApplyGuestContinue(applyGateKey);
     setGuestBypass(true);
   }, [applyGateKey]);
 
-  const guestContinue = !applyGateKey || guestBypass || guestContinuedInSession;
+  const guestContinue = !applyGateKey || guestBypass || guestContinuedInSession || resumeFromEmailLink;
 
   const view = resolvePublicApplyView({
     gateKey: applyGateKey,

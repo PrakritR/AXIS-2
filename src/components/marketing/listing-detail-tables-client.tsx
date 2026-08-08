@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
@@ -120,7 +121,7 @@ function availabilityDayClasses(unavailable: boolean, isPast: boolean, isToday: 
   return `${base} ${past} ${today}`;
 }
 
-function MonthAvailabilityMiniCalendar({
+function MonthAvailabilityCalendarGrid({
   monthStart,
   windows,
   today,
@@ -129,68 +130,87 @@ function MonthAvailabilityMiniCalendar({
   windows: RoomUnavailabilityWindow[];
   today: Date;
 }) {
-  const tone = monthAvailabilityTone(monthStart, windows, today);
   const cells = buildMonthDayCells(monthStart);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-2.5 sm:p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-foreground">
-          {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-        </p>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${monthTonePillClasses(tone)}`}
-        >
-          {monthToneLabel(tone)}
-        </span>
-      </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-semibold uppercase tracking-wide text-muted">
+    <>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-semibold uppercase tracking-wide text-muted sm:text-[10px]">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label) => (
           <span key={label}>{label}</span>
         ))}
       </div>
-      <div className="mt-0.5 grid grid-cols-7 gap-0.5">
+      <div className="mt-1 grid grid-cols-7 gap-0.5">
         {cells.map((cell, idx) => {
-          if (!cell) return <span key={`empty-${idx}`} className="h-6 sm:h-7" />;
+          if (!cell) return <span key={`empty-${idx}`} className="h-7 sm:h-8" />;
           const unavailable = dayIsUnavailable(cell, windows);
           const isToday = dateKey(cell) === dateKey(today);
           const isPast = cell.getTime() < today.getTime();
           return (
             <span
               key={dateKey(cell)}
-              className={`flex h-6 items-center justify-center rounded-md text-[10px] font-medium sm:h-7 sm:text-[11px] ${availabilityDayClasses(unavailable, isPast, isToday)}`}
+              className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium sm:h-8 sm:text-xs ${availabilityDayClasses(unavailable, isPast, isToday)}`}
             >
               {cell.getDate()}
             </span>
           );
         })}
       </div>
-    </div>
+    </>
   );
 }
 
 function RoomAvailabilityTimelineCalendar({ windows }: { windows: RoomUnavailabilityWindow[] }) {
   const today = startOfLocalDay(new Date());
   const { startMonth, monthCount } = resolveAvailabilityMonthRange(windows);
-  const months = Array.from({ length: monthCount }, (_, index) => addMonths(startMonth, index));
+  const windowsKey = windows.map((w) => `${w.start?.toISOString() ?? ""}|${w.end?.toISOString() ?? ""}`).join(",");
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [prevWindowsKey, setPrevWindowsKey] = useState(windowsKey);
+  if (windowsKey !== prevWindowsKey) {
+    setPrevWindowsKey(windowsKey);
+    setMonthOffset(0);
+  }
+
+  const clampedOffset = Math.min(Math.max(monthOffset, 0), Math.max(monthCount - 1, 0));
+  const monthStart = addMonths(startMonth, clampedOffset);
+  const tone = monthAvailabilityTone(monthStart, windows, today);
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted">
-        Green dates are open and red dates are unavailable. Each month summary shows whether the rest of that month is
-        fully open, fully blocked, or mixed.
+        Green dates are open and red dates are unavailable. Use the arrows to browse upcoming months.
       </p>
-      <div className="-mx-1 max-h-[min(48vh,380px)] overflow-y-auto overscroll-contain px-1">
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-          {months.map((monthStart) => (
-            <MonthAvailabilityMiniCalendar
-              key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`}
-              monthStart={monthStart}
-              windows={windows}
-              today={today}
-            />
-          ))}
+      <div className="rounded-xl border border-border bg-card p-3 sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            aria-label="Previous month"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted transition hover:border-primary/45 hover:bg-accent/35 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={clampedOffset <= 0}
+            onClick={() => setMonthOffset((value) => Math.max(value - 1, 0))}
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+          </button>
+          <div className="min-w-0 flex flex-1 flex-col items-center gap-1 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+            </p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${monthTonePillClasses(tone)}`}
+            >
+              {monthToneLabel(tone)}
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label="Next month"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted transition hover:border-primary/45 hover:bg-accent/35 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={clampedOffset >= monthCount - 1}
+            onClick={() => setMonthOffset((value) => Math.min(value + 1, monthCount - 1))}
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </button>
         </div>
+        <MonthAvailabilityCalendarGrid monthStart={monthStart} windows={windows} today={today} />
       </div>
     </div>
   );

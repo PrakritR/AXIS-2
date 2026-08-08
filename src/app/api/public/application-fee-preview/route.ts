@@ -9,6 +9,8 @@ export const runtime = "nodejs";
 type Body = {
   propertyId?: string;
   managerUserId?: string;
+  /** Long-term vs short-term application — picks the listing's fee field. */
+  rentalType?: "standard" | "short_term";
   /** Optional — when present, also reports whether the code currently looks redeemable. */
   waiverCode?: string;
   /** "manual" (Zelle/Venmo/other) never carries a Stripe service fee; defaults to "card". */
@@ -37,7 +39,15 @@ export async function POST(req: Request) {
     // A 0 effective fee is a normal "applications are free" answer here — the
     // wizard passes the applicant through with no payment step. Only the
     // checkout mint treats 0 as an error, and it is never called for a 0 fee.
-    const resolved = await resolveApplicationFeeProperty(db, { propertyId, managerUserId }, { allowZeroFee: true });
+    const resolved = await resolveApplicationFeeProperty(
+      db,
+      {
+        propertyId,
+        managerUserId,
+        rentalType: body.rentalType === "short_term" ? "short_term" : "standard",
+      },
+      { allowZeroFee: true },
+    );
     if (!resolved.ok) {
       return NextResponse.json({ error: resolved.error, code: resolved.code }, { status: resolved.status });
     }

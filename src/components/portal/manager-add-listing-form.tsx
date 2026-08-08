@@ -157,7 +157,13 @@ import {
   type ListingLtFeeToggles,
   type ListingStFeeToggles,
 } from "@/lib/listing-fee-term-toggles";
+import {
+  ensureSubmissionListingFees,
+  parseRemovedStandardListingFeeRows,
+  removedStandardListingFeeRowSet,
+} from "@/lib/listing-fees";
 import { bundleShortTermPriceLabel } from "@/lib/listing-bundle-short-term";
+import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 import { canNavigateToWizardStep } from "@/lib/wizard-step-nav";
 import {
   buildListingStepFieldOrder,
@@ -1345,10 +1351,12 @@ export function ManagerAddListingForm({
       normalizeManagerListingSubmissionV1(initialSubmission ?? createDefaultListingSubmission()),
     ),
   );
-  // Standard "Other fees" rows the manager deleted this session — hidden but re-addable
-  // from the + Add fee menu. Session-only: a removed row also has its amounts cleared, so
-  // on reload it simply reappears empty (an empty fee bills nothing), which is harmless.
-  const [removedFeeRows, setRemovedFeeRows] = useState<Set<ListingFeeRowId>>(() => new Set());
+  // Standard "Other fees" rows the manager removed — persisted on the submission so
+  // normalize/sync does not re-materialize them on save or reload.
+  const removedFeeRows = useMemo(
+    () => removedStandardListingFeeRowSet(sub) as Set<ListingFeeRowId>,
+    [sub.removedStandardListingFeeRows],
+  );
   // Furnishing is a "Furnished" checkbox (default off = unfurnished). This holds rooms the
   // manager just checked Furnished on that have no furniture ticked yet (an empty furnished
   // state the `furnishing` string alone can't represent), plus the furniture we remember so
@@ -1682,29 +1690,27 @@ export function ManagerAddListingForm({
   // called for "rent" (the core price row is not removable).
   const handleRemoveStandardRow = (feeId: ListingFeeRowId) => {
     setSub((s) => {
-      let next = applyListingLtFeeToggle(s, feeId, false, stFeeToggles);
-      next = applyListingStFeeToggle(next, feeId, false, ltFeeToggles);
-      return next;
+      let next = applyListingLtFeeToggle(s, feeId, false);
+      next = applyListingStFeeToggle(next, feeId, false);
+      const removed = new Set(parseRemovedStandardListingFeeRows(next));
+      removed.add(feeId);
+      next = { ...next, removedStandardListingFeeRows: [...removed] };
+      return ensureSubmissionListingFees(next);
     });
     setLtFeeToggles((prev) => ({ ...prev, [feeId]: false }));
     setStFeeToggles((prev) => ({ ...prev, [feeId]: false }));
-    setRemovedFeeRows((prev) => {
-      const next = new Set(prev);
-      next.add(feeId);
-      return next;
-    });
     const row = LISTING_STANDARD_FEE_ROWS.find((r) => r.id === feeId);
     if (row?.ltField) clearListingFieldError(String(row.ltField));
     if (row?.stField) clearListingFieldError(String(row.stField));
   };
 
   const handleAddStandardRow = (feeId: ListingFeeRowId) => {
-    setRemovedFeeRows((prev) => {
-      if (!prev.has(feeId)) return prev;
-      const next = new Set(prev);
-      next.delete(feeId);
-      return next;
-    });
+    setSub((s) =>
+      ensureSubmissionListingFees({
+        ...s,
+        removedStandardListingFeeRows: parseRemovedStandardListingFeeRows(s).filter((id) => id !== feeId),
+      }),
+    );
   };
 
   const handleLtFeeAmount = (field: keyof ManagerListingSubmissionV1, amount: string) => {
@@ -2519,7 +2525,10 @@ export function ManagerAddListingForm({
     async (opts?: { silent?: boolean; closeAfter?: boolean }): Promise<boolean> => {
       if (!draftAutoSaveEligible || busy || closingDraft) return false;
 
-      const current: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: serviceOffers };
+      const current: ManagerListingSubmissionV1 = ensureSubmissionListingFees({
+        ...sub,
+        serviceRequestOptions: serviceOffers,
+      });
       const fingerprint = listingSubmissionFingerprint(current);
       const contentChangedSinceOpen = listingWizardHasUnsavedInput(
         current,
@@ -2715,7 +2724,7 @@ export function ManagerAddListingForm({
       return;
     }
 
-    const submission: ManagerListingSubmissionV1 = {
+    const submission: ManagerListingSubmissionV1 = ensureSubmissionListingFees({
       ...sub,
       serviceRequestOptions: serviceOffers,
       customApplicationFields: finalizeCustomApplicationFields(sub.customApplicationFields),
@@ -2729,7 +2738,7 @@ export function ManagerAddListingForm({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
       })),
-    };
+    });
     submission.sharedSpaces = submission.sharedSpaces.filter((space) => space.name.trim());
     submission.rooms = submission.rooms.map((room, i) => ({
       ...room,
@@ -3197,6 +3206,13 @@ export function ManagerAddListingForm({
       : sub.entireHomeUtilitiesPaymentModel === "included_in_rent"
         ? "Utilities included"
         : "Payment amount";
+  const wholePlaceStNightly = shortTermNightlyRate(sub.shortTermDailyCost);
+  const wholePlaceStSummary =
+    wholePlaceStNightly > 0
+      ? `$${wholePlaceStNightly}/night`
+      : sub.shortTermRentalsAllowed
+        ? "Short-term rent not set"
+        : undefined;
   const wholePlaceFeeSection: FeeExpandableSection | null = isEntireHome
     ? {
         key: "wholeplace",
@@ -3220,7 +3236,10 @@ export function ManagerAddListingForm({
                 id: "whole-place",
                 title: "Whole place lease",
                 summary: `${entireHomeRent > 0 ? `$${entireHomeRent}/mo` : "Rent not set"} · ${entireHomeUtilShort}`,
-                expanded: isListingItemExpanded(wholePlaceKey) || Boolean(stepFieldErrors.monthlyRent),
+                shortTermSummary: wholePlaceStSummary,
+                expanded:
+                  isListingItemExpanded(wholePlaceKey) ||
+                  Boolean(stepFieldErrors.monthlyRent || stepFieldErrors.shortTermDailyCost),
                 onToggle: () => toggleListingItem(wholePlaceKey),
                 onRemove: () => handleRemoveStandardRow("rent"),
                 hasError: Boolean(stepFieldErrors.monthlyRent),
@@ -3287,6 +3306,30 @@ export function ManagerAddListingForm({
                           />
                         </div>
                       </>
+                    ) : null}
+                    {sub.shortTermRentalsAllowed ? (
+                      <ShortTermRentSection
+                        rent={(sub.shortTermDailyCost ?? "").replace(/^\$/, "").trim()}
+                        moveInFee={(sub.shortTermMoveInFee ?? "").replace(/^\$/, "").trim()}
+                        deposit={(sub.shortTermDeposit ?? "").replace(/^\$/, "").trim()}
+                        rentInvalid={Boolean(stepFieldErrors.shortTermDailyCost)}
+                        onRent={(v) => {
+                          clearListingFieldError("shortTermDailyCost");
+                          expandListingItem(wholePlaceKey);
+                          setSub((s) => ({ ...s, shortTermDailyCost: v }));
+                          if (v.trim()) setStFeeToggles((prev) => ({ ...prev, rent: true }));
+                        }}
+                        onMoveIn={(v) => {
+                          clearListingFieldError("shortTermMoveInFee");
+                          setSub((s) => ({ ...s, shortTermMoveInFee: v }));
+                          if (v.trim()) setStFeeToggles((prev) => ({ ...prev, moveInFee: true }));
+                        }}
+                        onDeposit={(v) => {
+                          clearListingFieldError("shortTermDeposit");
+                          setSub((s) => ({ ...s, shortTermDeposit: v }));
+                          if (v.trim()) setStFeeToggles((prev) => ({ ...prev, securityDeposit: true }));
+                        }}
+                      />
                     ) : null}
                   </div>
                 ),
