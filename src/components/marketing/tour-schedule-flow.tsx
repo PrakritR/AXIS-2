@@ -54,6 +54,33 @@ function getFirstDayOfMonth(year: number, month: number) {
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
+/** Matches manager calendar open-slot styling — green = bookable. */
+const TOUR_OPEN_DAY_CLASS =
+  "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/90 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+const TOUR_OPEN_SLOT_CLASS =
+  "border-emerald-300 bg-emerald-100 text-emerald-900 hover:border-emerald-400 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+const TOUR_OPEN_LIST_CHIP_CLASS =
+  "rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-950 ring-1 ring-inset ring-emerald-300 hover:bg-emerald-200/90 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+
+function openDaysInMonth(
+  calYear: number,
+  calMonth: number,
+  daysInMonth: number,
+  availability: Set<string>,
+  today: Date,
+): number[] {
+  const out: number[] = [];
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const isPast =
+      calYear === today.getFullYear() && calMonth === today.getMonth() && day < today.getDate();
+    if (isPast) continue;
+    if (dateHasAvailability(new Date(calYear, calMonth, day, 12, 0, 0, 0), availability)) {
+      out.push(day);
+    }
+  }
+  return out;
+}
+
 type TourRoomOption = {
   key: string;
   label: string;
@@ -696,6 +723,15 @@ function Step2({
   const today = new Date();
   const selectedDateStr = selectedDay != null ? toLocalDateStr(new Date(calYear, calMonth, selectedDay, 12, 0, 0, 0)) : null;
   const openSlots = selectedDateStr ? openSlotIndicesForDateStr(availability, selectedDateStr) : [];
+  const bookableDays = useMemo(
+    () => openDaysInMonth(calYear, calMonth, daysInMonth, availability, new Date()),
+    [availability, calMonth, calYear, daysInMonth],
+  );
+  const listableBookableDays = selectedDay
+    ? bookableDays.filter((day) => day !== selectedDay)
+    : bookableDays;
+  const showOpenDateList =
+    !availabilityLoading && !availabilityError && availability.size > 0 && listableBookableDays.length > 0;
 
   return (
     <div className="space-y-6">
@@ -723,7 +759,8 @@ function Step2({
         </p>
       ) : (
         <p className="text-sm text-muted">
-          Pick one published 30-minute window for <span className="font-semibold text-foreground">{property.title}</span>.
+          Pick a <span className="font-semibold text-emerald-800">green</span> date with an open tour window for{" "}
+          <span className="font-semibold text-foreground">{property.title}</span>.
         </p>
       )}
       <div
@@ -759,27 +796,53 @@ function Step2({
                 onClick={() => onSelectDay(day)}
                 className={`aspect-square rounded-xl text-sm font-medium transition-all ${
                   isSelected
-                    ? "bg-primary text-white shadow-sm"
+                    ? "bg-primary text-white shadow-sm ring-2 ring-primary/30"
                     : isAvailable && !isPast
-                    ? "bg-card text-foreground hover:bg-primary/[0.08] hover:text-primary"
-                    : "cursor-not-allowed text-foreground/30"
+                      ? TOUR_OPEN_DAY_CLASS
+                      : "cursor-not-allowed text-foreground/30"
                 }`}
+                aria-label={
+                  isAvailable && !isPast
+                    ? `${MONTHS[calMonth]} ${day} — open for tours`
+                    : `${MONTHS[calMonth]} ${day} — unavailable`
+                }
               >
                 {day}
               </button>
             );
           })}
         </div>
+
+        {showOpenDateList ? (
+          <div className="mt-3" data-attr="tour-open-dates-list">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-800">
+              {selectedDay ? "Other open dates" : "Open dates"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {listableBookableDays.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => onSelectDay(day)}
+                  className={TOUR_OPEN_LIST_CHIP_CLASS}
+                  data-attr="tour-open-date-chip"
+                >
+                  {MONTHS[calMonth]} {day}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {selectedDay && (
+      {selectedDay ? (
         <div>
           <p className="mb-3 text-sm font-semibold text-foreground">
             Available times · {MONTHS[calMonth]} {selectedDay}
           </p>
           {openSlots.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-3 text-sm text-muted">
-              No published tour windows for this day.
+            <p className="rounded-2xl border border-dashed border-emerald-300/60 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              No tour windows on this day — pick another green date above.
             </p>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -791,7 +854,7 @@ function Step2({
                   className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
                     selectedSlotIndex === slotIndex
                       ? "border-primary bg-primary text-white"
-                      : "border-border bg-card text-foreground hover:border-primary hover:text-primary"
+                      : TOUR_OPEN_SLOT_CLASS
                   }`}
                 >
                   {formatAvailabilitySlotLabel(slotIndex)}
@@ -800,7 +863,7 @@ function Step2({
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {selectedSlotIndex != null && managersAtSelectedSlot.length > 1 && (
         <div>
