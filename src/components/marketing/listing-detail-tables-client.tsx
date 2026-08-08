@@ -180,15 +180,17 @@ function RoomAvailabilityTimelineCalendar({ windows }: { windows: RoomUnavailabi
         Green dates are open and red dates are unavailable. Each month summary shows whether the rest of that month is
         fully open, fully blocked, or mixed.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {months.map((monthStart) => (
-          <MonthAvailabilityMiniCalendar
-            key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`}
-            monthStart={monthStart}
-            windows={windows}
-            today={today}
-          />
-        ))}
+      <div className="-mx-1 max-h-[min(48vh,380px)] overflow-y-auto overscroll-contain px-1">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          {months.map((monthStart) => (
+            <MonthAvailabilityMiniCalendar
+              key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`}
+              monthStart={monthStart}
+              windows={windows}
+              today={today}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -199,8 +201,21 @@ const LISTING_MODAL_CARD = "rounded-xl border border-border bg-card p-4";
 const LISTING_MODAL_MEDIA_WRAP = "mx-auto flex w-full max-w-2xl flex-col items-center";
 const LISTING_MODAL_MEDIA_FRAME = "aspect-video w-full overflow-hidden rounded-lg";
 
-function ListingModalBody({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-4 p-5 pb-6 sm:p-6">{children}</div>;
+function ListingModalBody({
+  children,
+  footer,
+}: {
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="space-y-4 p-5 sm:p-6">{children}</div>
+      </div>
+      {footer ? <div className="shrink-0 border-t border-border bg-card px-5 py-4 sm:px-6">{footer}</div> : null}
+    </>
+  );
 }
 
 function ListingModalHeader({
@@ -395,7 +410,7 @@ function ListingModalActions({
   newTabProps: ReturnType<typeof listingLinkTargetProps>;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row">
+    <div className="flex flex-col gap-2 sm:flex-row">
       <ListingModalCta
         href={primary.href}
         label={primary.label}
@@ -534,7 +549,7 @@ export function ListingDetailModal({
     <div className="fixed inset-0 z-[240] flex items-end justify-center p-3 sm:items-center sm:p-6" role="dialog" aria-modal>
       <button type="button" className="absolute inset-0 modal-overlay" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="modal-panel relative z-10 max-h-[min(92vh,820px)] w-full max-w-lg overflow-y-auto rounded-3xl border border-border shadow-2xl sm:max-w-2xl"
+        className="modal-panel relative z-10 flex max-h-[min(92vh,820px)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-border shadow-2xl sm:max-w-2xl"
         onClick={stop}
       >
         <button
@@ -547,7 +562,32 @@ export function ListingDetailModal({
         </button>
 
         {state.kind === "room" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textEnabled
+                    ? buildSmsDeepLink({
+                        intent: "apply",
+                        propertyId: listingPropertyId,
+                        propertyLabel: label,
+                        roomName: state.room.name,
+                        toPhone: contactSmsPhone,
+                      })
+                    : textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply-room",
+                }}
+                secondary={{
+                  href: textMessageHref,
+                  label: messageLabel,
+                  dataAttr: "listing-text-message",
+                  ...messageCtaExtras,
+                }}
+              />
+            }
+          >
             {(() => {
               const roomChoiceValue = `${listingPropertyId}${LISTING_ROOM_CHOICE_SEP}${state.room.id}`;
               const roomUnavailableWindows = getRoomUnavailabilityWindows(roomChoiceValue);
@@ -678,28 +718,6 @@ export function ListingDetailModal({
                       </>
                     );
                   })()}
-                  <PreviewSafeModalActions
-                    newTabProps={newTabProps}
-                    primary={{
-                      href: textEnabled
-                        ? buildSmsDeepLink({
-                            intent: "apply",
-                            propertyId: listingPropertyId,
-                            propertyLabel: label,
-                            roomName: state.room.name,
-                            toPhone: contactSmsPhone,
-                          })
-                        : textApplyHref,
-                      label: applyLabel,
-                      dataAttr: "listing-text-apply-room",
-                    }}
-                    secondary={{
-                      href: textMessageHref,
-                      label: messageLabel,
-                      dataAttr: "listing-text-message",
-                      ...messageCtaExtras,
-                    }}
-                  />
                 </>
               );
             })()}
@@ -707,7 +725,24 @@ export function ListingDetailModal({
         ) : null}
 
         {state.kind === "floorPlan" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textMessageAbout("the floor plan / layout"),
+                  label: messageLabel,
+                  dataAttr: "listing-text-message-layout",
+                  ...messageCtaExtras,
+                }}
+                secondary={{
+                  href: textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply",
+                }}
+              />
+            }
+          >
             <ListingModalHeader eyebrow="Floor plan" title={state.floor.floorLabel} />
             <ListingModalSection label="Layout">
               <div className={LISTING_MODAL_MEDIA_WRAP}>
@@ -732,25 +767,28 @@ export function ListingDetailModal({
                 )}
               </div>
             </ListingModalSection>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textMessageAbout("the floor plan / layout"),
-                label: messageLabel,
-                dataAttr: "listing-text-message-layout",
-                ...messageCtaExtras,
-              }}
-              secondary={{
-                href: textApplyHref,
-                label: applyLabel,
-                dataAttr: "listing-text-apply",
-              }}
-            />
           </ListingModalBody>
         ) : null}
 
         {state.kind === "bathroom" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textMessageAbout("this bathroom"),
+                  label: messageLabel,
+                  dataAttr: "listing-text-message-bathroom",
+                  ...messageCtaExtras,
+                }}
+                secondary={{
+                  href: textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply",
+                }}
+              />
+            }
+          >
             <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
             {(state.row.modal.photoUrls?.length ?? 0) > 0 ? (
               <ListingModalSection label="Photos">
@@ -780,25 +818,28 @@ export function ListingDetailModal({
             <ListingModalSection label="Info">
               <ListingModalTags tags={state.row.modal.includedTags} />
             </ListingModalSection>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textMessageAbout("this bathroom"),
-                label: messageLabel,
-                dataAttr: "listing-text-message-bathroom",
-                ...messageCtaExtras,
-              }}
-              secondary={{
-                href: textApplyHref,
-                label: applyLabel,
-                dataAttr: "listing-text-apply",
-              }}
-            />
           </ListingModalBody>
         ) : null}
 
         {state.kind === "shared" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply",
+                }}
+                secondary={{
+                  href: textMessageHref,
+                  label: messageLabel,
+                  dataAttr: "listing-text-message",
+                  ...messageCtaExtras,
+                }}
+              />
+            }
+          >
             <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
             <ListingModalVideo
               label={state.row.modal.tourEyebrow}
@@ -816,25 +857,28 @@ export function ListingDetailModal({
             <ListingModalSection label="What's included">
               <ListingModalTags tags={state.row.modal.includedTags} />
             </ListingModalSection>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textApplyHref,
-                label: applyLabel,
-                dataAttr: "listing-text-apply",
-              }}
-              secondary={{
-                href: textMessageHref,
-                label: messageLabel,
-                dataAttr: "listing-text-message",
-                ...messageCtaExtras,
-              }}
-            />
           </ListingModalBody>
         ) : null}
 
         {state.kind === "lease" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply",
+                }}
+                secondary={{
+                  href: textMessageAbout("lease terms"),
+                  label: messageLabel,
+                  dataAttr: "listing-text-message-lease",
+                  ...messageCtaExtras,
+                }}
+              />
+            }
+          >
             <ListingModalHeader
               eyebrow="Lease"
               icon={state.row.icon}
@@ -850,25 +894,37 @@ export function ListingDetailModal({
             <ListingModalSection label="Details">
               <p className="text-muted">{state.row.body}</p>
             </ListingModalSection>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textApplyHref,
-                label: applyLabel,
-                dataAttr: "listing-text-apply",
-              }}
-              secondary={{
-                href: textMessageAbout("lease terms"),
-                label: messageLabel,
-                dataAttr: "listing-text-message-lease",
-                ...messageCtaExtras,
-              }}
-            />
           </ListingModalBody>
         ) : null}
 
         {state.kind === "bundle" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textEnabled
+                    ? buildSmsDeepLink({
+                        intent: "bundle",
+                        propertyId: listingPropertyId,
+                        propertyLabel: label,
+                        bundleId: state.row.id,
+                        bundleLabel: state.row.label,
+                        toPhone: contactSmsPhone,
+                      })
+                    : textApplyHref,
+                  label: textEnabled ? "Text for bundle" : "Apply online",
+                  dataAttr: "listing-text-bundle",
+                }}
+                secondary={{
+                  href: textMessageHref,
+                  label: messageLabel,
+                  dataAttr: "listing-text-message",
+                  ...messageCtaExtras,
+                }}
+              />
+            }
+          >
             <ListingModalHeader eyebrow="Bundle" title={state.row.label} />
             <ListingModalSection label="Monthly">
               <div className="flex flex-wrap items-baseline gap-2">
@@ -898,54 +954,34 @@ export function ListingDetailModal({
               )}
             </ListingModalSection>
             <p className="text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textEnabled
-                  ? buildSmsDeepLink({
-                      intent: "bundle",
-                      propertyId: listingPropertyId,
-                      propertyLabel: label,
-                      bundleId: state.row.id,
-                      bundleLabel: state.row.label,
-                      toPhone: contactSmsPhone,
-                    })
-                  : textApplyHref,
-                label: textEnabled ? "Text for bundle" : "Apply online",
-                dataAttr: "listing-text-bundle",
-              }}
-              secondary={{
-                href: textMessageHref,
-                label: messageLabel,
-                dataAttr: "listing-text-message",
-                ...messageCtaExtras,
-              }}
-            />
           </ListingModalBody>
         ) : null}
 
         {state.kind === "amenity" ? (
-          <ListingModalBody>
+          <ListingModalBody
+            footer={
+              <PreviewSafeModalActions
+                newTabProps={newTabProps}
+                primary={{
+                  href: textMessageHref,
+                  label: messageLabel,
+                  dataAttr: "listing-text-message",
+                  ...messageCtaExtras,
+                }}
+                secondary={{
+                  href: textApplyHref,
+                  label: applyLabel,
+                  dataAttr: "listing-text-apply",
+                }}
+              />
+            }
+          >
             <ListingModalHeader eyebrow="Amenity" icon={state.row.icon} title={state.row.label} />
             <ListingModalSection label="About">
               <p className="text-muted">
                 This feature is included with the listing as described. Confirm specifics with the leasing team before you apply.
               </p>
             </ListingModalSection>
-            <PreviewSafeModalActions
-              newTabProps={newTabProps}
-              primary={{
-                href: textMessageHref,
-                label: messageLabel,
-                dataAttr: "listing-text-message",
-                ...messageCtaExtras,
-              }}
-              secondary={{
-                href: textApplyHref,
-                label: applyLabel,
-                dataAttr: "listing-text-apply",
-              }}
-            />
           </ListingModalBody>
         ) : null}
       </div>

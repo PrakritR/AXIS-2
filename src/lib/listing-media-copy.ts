@@ -131,3 +131,77 @@ export function copyListingMediaBetweenSubmissions(
     },
   };
 }
+
+export type ListingRoomMediaSnapshot = {
+  roomName: string;
+  photoDataUrls: string[];
+  videoDataUrl: string | null;
+};
+
+export type SwapListingRoomMediaResult = {
+  submission: ManagerListingSubmissionV1;
+  swapped: boolean;
+  before: { roomA: ListingRoomMediaSnapshot; roomB: ListingRoomMediaSnapshot };
+  after: { roomA: ListingRoomMediaSnapshot; roomB: ListingRoomMediaSnapshot };
+};
+
+function roomMediaSnapshot(room: { name: string; photoDataUrls: string[]; videoDataUrl?: string | null }): ListingRoomMediaSnapshot {
+  return {
+    roomName: room.name,
+    photoDataUrls: [...room.photoDataUrls],
+    videoDataUrl: room.videoDataUrl ?? null,
+  };
+}
+
+function findRoomIndexByName(rooms: { name: string }[], roomName: string): number {
+  const target = roomName.trim().toLowerCase();
+  return rooms.findIndex((room) => room.name.trim().toLowerCase() === target);
+}
+
+/** Swap listing photos + video between two named rooms; leaves every other field untouched. */
+export function swapListingRoomMedia(
+  submission: ManagerListingSubmissionV1,
+  roomNameA: string,
+  roomNameB: string,
+): SwapListingRoomMediaResult {
+  const next = normalizeManagerListingSubmissionV1(submission);
+  const idxA = findRoomIndexByName(next.rooms, roomNameA);
+  const idxB = findRoomIndexByName(next.rooms, roomNameB);
+  const roomA = idxA >= 0 ? next.rooms[idxA]! : null;
+  const roomB = idxB >= 0 ? next.rooms[idxB]! : null;
+  const emptySnapshot = (name: string): ListingRoomMediaSnapshot => ({
+    roomName: name,
+    photoDataUrls: [],
+    videoDataUrl: null,
+  });
+
+  if (!roomA || !roomB || idxA === idxB) {
+    return {
+      submission: next,
+      swapped: false,
+      before: { roomA: roomA ? roomMediaSnapshot(roomA) : emptySnapshot(roomNameA), roomB: roomB ? roomMediaSnapshot(roomB) : emptySnapshot(roomNameB) },
+      after: { roomA: roomA ? roomMediaSnapshot(roomA) : emptySnapshot(roomNameA), roomB: roomB ? roomMediaSnapshot(roomB) : emptySnapshot(roomNameB) },
+    };
+  }
+
+  const before = { roomA: roomMediaSnapshot(roomA), roomB: roomMediaSnapshot(roomB) };
+  const photosA = [...roomA.photoDataUrls];
+  const videoA = roomA.videoDataUrl ?? null;
+  const photosB = [...roomB.photoDataUrls];
+  const videoB = roomB.videoDataUrl ?? null;
+
+  next.rooms = next.rooms.map((room, index) => {
+    if (index === idxA) return { ...room, photoDataUrls: photosB, videoDataUrl: videoB };
+    if (index === idxB) return { ...room, photoDataUrls: photosA, videoDataUrl: videoA };
+    return room;
+  });
+
+  const afterRoomA = next.rooms[idxA]!;
+  const afterRoomB = next.rooms[idxB]!;
+  return {
+    submission: next,
+    swapped: true,
+    before,
+    after: { roomA: roomMediaSnapshot(afterRoomA), roomB: roomMediaSnapshot(afterRoomB) },
+  };
+}
