@@ -448,6 +448,7 @@ export default function CreateAccountClient() {
             phone: phone.trim(),
             tourInquiryId: tourInquiryFromUrl || undefined,
             handoff: handoffFromUrl === "message" ? "message" : undefined,
+            nextPath: prospectHandoffSnapshot.nextPath,
           }),
         });
         const body = (await res.json().catch(() => ({}))) as { error?: string; redirectTo?: string };

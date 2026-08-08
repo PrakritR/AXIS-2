@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACTIVE_PORTAL_COOKIE } from "@/lib/auth/portal-access";
+import { isUnsafeRedirectPath } from "@/lib/auth/normalize-post-auth-path";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { normalizeTourContactPhone } from "@/lib/tour-contact-quality";
@@ -29,7 +30,18 @@ export type CompleteProspectHandoffInput = {
   phone?: string;
   tourInquiryId?: string;
   handoff?: "message";
+  /** Property-scoped compose URL from the public message handoff (`next` query param). */
+  nextPath?: string;
 };
+
+/** Safe post-signup destination for a message prospect handoff. */
+export function prospectMessageHandoffRedirect(nextPath?: string): string {
+  const trimmed = nextPath?.trim() ?? "";
+  if (trimmed.startsWith("/") && !isUnsafeRedirectPath(trimmed)) {
+    return trimmed;
+  }
+  return "/resident/communication/active";
+}
 
 export type CompleteProspectHandoffResult =
   | { ok: true; redirectTo: string }
@@ -103,7 +115,8 @@ export async function completeProspectHandoffForUser(
     await attachInboxThreadsToResident(db, input.userId, email);
   }
 
-  const redirectTo = handoff === "message" ? "/resident/communication/active" : "/resident/tour/pending";
+  const redirectTo =
+    handoff === "message" ? prospectMessageHandoffRedirect(input.nextPath) : "/resident/tour/pending";
   return { ok: true, redirectTo };
 }
 

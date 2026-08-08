@@ -60,6 +60,7 @@ function ResidentOauthFinishContent() {
             handoff: prospectHandoff?.handoff,
             fullName: prospectHandoff?.fullName,
             phone: prospectHandoff?.phone,
+            nextPath: prospectHandoff?.nextPath,
           }),
         });
         const body = (await res.json()) as { error?: string; redirectTo?: string };
