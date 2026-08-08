@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
@@ -30,8 +30,13 @@ import {
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   buildResidentLeaseDocumentRows,
+  filterResidentLeaseDocumentRows,
+  residentLeaseStatusFilterTabs,
   type ResidentLeaseDocumentRow,
+  type ResidentLeaseStatusFilter,
 } from "@/lib/resident-lease-documents";
+import { residentLeaseDetailHref } from "@/lib/portal-detail-routes";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -118,24 +123,45 @@ function leaseDocumentPropertyLabel(pipelineRow: LeasePipelineRow | null): strin
   return unit && unit !== "—" ? unit : "—";
 }
 
+function resolveLeaseDetailHref(
+  basePath: string,
+  entry: ResidentLeaseDocumentRow,
+  detailHref: (basePath: string, leaseDetailId: string) => string,
+  routePendingToLeaseSection: boolean,
+): string {
+  if (routePendingToLeaseSection && entry.filterBucket === "pending") {
+    return residentLeaseDetailHref(RESIDENT_PORTAL_BASE_PATH, entry.id);
+  }
+  return detailHref(basePath, entry.id);
+}
+
 export function ResidentLeaseListTable({
   basePath,
   detailHref,
   emptyMessage = "Your lease will appear here once your manager sends it for review.",
+  routePendingToLeaseSection = false,
+  statusFilter = "all",
 }: {
   basePath: string;
   detailHref: (basePath: string, leaseDetailId: string) => string;
   emptyMessage?: string;
+  /** Pending rows open the Lease section (signing workflow) instead of Documents. */
+  routePendingToLeaseSection?: boolean;
+  statusFilter?: ResidentLeaseStatusFilter;
 }) {
   const router = useRouter();
   const navigate = usePortalNavigate();
   const pipelineRow = useResidentLeasePipelineRow();
-  const documentRows = useMemo(() => buildResidentLeaseDocumentRows(pipelineRow), [pipelineRow]);
+  const documentRows = useMemo(() => {
+    const rows = buildResidentLeaseDocumentRows(pipelineRow);
+    return filterResidentLeaseDocumentRows(rows, statusFilter);
+  }, [pipelineRow, statusFilter]);
   const propertyLabel = useMemo(() => leaseDocumentPropertyLabel(pipelineRow), [pipelineRow]);
 
   const leaseDetailPath = useCallback(
-    (entry: ResidentLeaseDocumentRow) => detailHref(basePath, entry.id),
-    [basePath, detailHref],
+    (entry: ResidentLeaseDocumentRow) =>
+      resolveLeaseDetailHref(basePath, entry, detailHref, routePendingToLeaseSection),
+    [basePath, detailHref, routePendingToLeaseSection],
   );
 
   const openLease = useCallback(
@@ -163,42 +189,90 @@ export function ResidentLeaseListTable({
       rows={documentRows.map((entry) => {
         const href = leaseDetailPath(entry);
         return {
-        key: entry.id,
-        expanded: false,
-        detail: null,
-        onToggle: () => openLease(entry),
-        cells: (
-          <>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <Link
-                href={href}
-                className="block min-w-0 text-left"
-                onClick={portalNavClick(router, href)}
-                onMouseEnter={() => prefetchPortalHref(router, href)}
-                onFocus={() => prefetchPortalHref(router, href)}
-              >
-                <PortalTableInlineExpand expanded={false} className="min-w-0 truncate font-medium text-foreground">
-                  <span className="truncate">{entry.label}</span>
-                </PortalTableInlineExpand>
-              </Link>
-            </td>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>{entry.status}</td>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <p className="min-w-0 truncate">{propertyLabel}</p>
-            </td>
-          </>
-        ),
-        card: (
-          <PortalMobileSummaryCard
-            title={entry.label}
-            subtitle={entry.status}
-            meta={propertyLabel}
-            onClick={() => openLease(entry)}
-          />
-        ),
-      };
+          key: entry.id,
+          expanded: false,
+          detail: null,
+          onToggle: () => openLease(entry),
+          cells: (
+            <>
+              <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                <Link
+                  href={href}
+                  className="block min-w-0 text-left"
+                  onClick={portalNavClick(router, href)}
+                  onMouseEnter={() => prefetchPortalHref(router, href)}
+                  onFocus={() => prefetchPortalHref(router, href)}
+                >
+                  <PortalTableInlineExpand expanded={false} className="min-w-0 truncate font-medium text-foreground">
+                    <span className="truncate">{entry.label}</span>
+                  </PortalTableInlineExpand>
+                </Link>
+              </td>
+              <td className={`${PORTAL_TABLE_TD} align-middle`}>{entry.status}</td>
+              <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                <p className="min-w-0 truncate">{propertyLabel}</p>
+              </td>
+            </>
+          ),
+          card: (
+            <PortalMobileSummaryCard
+              title={entry.label}
+              subtitle={entry.status}
+              meta={propertyLabel}
+              onClick={() => openLease(entry)}
+            />
+          ),
+        };
       })}
     />
+  );
+}
+
+export function ResidentLeaseListSection({
+  basePath,
+  detailHref,
+  emptyMessage,
+  routePendingToLeaseSection = false,
+}: {
+  basePath: string;
+  detailHref: (basePath: string, leaseDetailId: string) => string;
+  emptyMessage?: string;
+  routePendingToLeaseSection?: boolean;
+}) {
+  const pipelineRow = useResidentLeasePipelineRow();
+  const allRows = useMemo(() => buildResidentLeaseDocumentRows(pipelineRow), [pipelineRow]);
+  const filterTabs = useMemo(() => residentLeaseStatusFilterTabs(allRows), [allRows]);
+  const showFilters = filterTabs.some((tab) => tab.id !== "all" && tab.count > 0) && allRows.length > 1;
+  const [statusFilter, setStatusFilter] = useState<ResidentLeaseStatusFilter>("all");
+
+  useEffect(() => {
+    if (statusFilter === "all") return;
+    const active = filterTabs.find((tab) => tab.id === statusFilter);
+    if (!active || active.count === 0) {
+      queueMicrotask(() => setStatusFilter("all"));
+    }
+  }, [filterTabs, statusFilter]);
+
+  return (
+    <div className="space-y-3">
+      {showFilters ? (
+        <ManagerPortalStatusPills
+          tabs={filterTabs}
+          activeId={statusFilter}
+          onChange={(id) => setStatusFilter(id as ResidentLeaseStatusFilter)}
+          activeTone="monochrome"
+          compact
+          selectAriaLabel="Lease status"
+        />
+      ) : null}
+      <ResidentLeaseListTable
+        basePath={basePath}
+        detailHref={detailHref}
+        emptyMessage={emptyMessage}
+        routePendingToLeaseSection={routePendingToLeaseSection}
+        statusFilter={statusFilter}
+      />
+    </div>
   );
 }
 

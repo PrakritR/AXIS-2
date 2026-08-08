@@ -1,15 +1,40 @@
 import type { LeasePipelineRow, SignedLeaseSnapshot } from "@/lib/lease-pipeline-storage";
 import { hasBothLeaseSignatures, residentCanViewLeaseRow } from "@/lib/lease-pipeline-storage";
 
+export type ResidentLeaseDocumentFilterBucket = "pending" | "signed";
+
+export type ResidentLeaseStatusFilter = "all" | ResidentLeaseDocumentFilterBucket;
+
 export type ResidentLeaseDocumentRow = {
   id: string;
   leaseRowId: string;
   label: string;
   status: string;
   signedAt: string;
+  filterBucket: ResidentLeaseDocumentFilterBucket;
   snapshot: SignedLeaseSnapshot | null;
   pipelineRow: LeasePipelineRow | null;
 };
+
+export function residentLeaseStatusFilterTabs(
+  rows: ResidentLeaseDocumentRow[],
+): { id: ResidentLeaseStatusFilter; label: string; count: number }[] {
+  const pending = rows.filter((row) => row.filterBucket === "pending").length;
+  const signed = rows.filter((row) => row.filterBucket === "signed").length;
+  return [
+    { id: "all", label: "All", count: rows.length },
+    { id: "pending", label: "Pending", count: pending },
+    { id: "signed", label: "Signed", count: signed },
+  ];
+}
+
+export function filterResidentLeaseDocumentRows(
+  rows: ResidentLeaseDocumentRow[],
+  filter: ResidentLeaseStatusFilter,
+): ResidentLeaseDocumentRow[] {
+  if (filter === "all") return rows;
+  return rows.filter((row) => row.filterBucket === filter);
+}
 
 export function encodeLeaseDocumentDetailId(leaseRowId: string, snapshotId?: string | null): string {
   if (!snapshotId) return leaseRowId;
@@ -31,8 +56,9 @@ export function buildResidentLeaseDocumentRows(row: LeasePipelineRow | null): Re
       id: encodeLeaseDocumentDetailId(row.id, snapshot.id),
       leaseRowId: row.id,
       label: snapshot.label,
-      status: "Prior lease",
+      status: "Signed",
       signedAt: snapshot.fullySignedAt,
+      filterBucket: "signed",
       snapshot,
       pipelineRow: null,
     });
@@ -43,20 +69,26 @@ export function buildResidentLeaseDocumentRows(row: LeasePipelineRow | null): Re
       id: encodeLeaseDocumentDetailId(row.id),
       leaseRowId: row.id,
       label: `Current lease${row.unit ? ` · ${row.unit}` : ""}`,
-      status: "Fully signed",
+      status: "Signed",
       signedAt: row.fullySignedAt ?? row.updatedAtIso,
+      filterBucket: "signed",
       snapshot: null,
       pipelineRow: row,
     });
-  } else if (residentCanViewLeaseRow(row)) {
+  } else if (
+    residentCanViewLeaseRow(row) ||
+    row.pendingRenewal ||
+    ((row.signedLeaseSnapshots?.length ?? 0) > 0 && Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl))
+  ) {
     rows.unshift({
       id: encodeLeaseDocumentDetailId(row.id),
       leaseRowId: row.id,
       label: row.pendingRenewal
         ? `Renewal in progress${row.unit ? ` · ${row.unit}` : ""}`
         : `Lease agreement${row.unit ? ` · ${row.unit}` : ""}`,
-      status: row.status ?? "Pending signatures",
+      status: "Pending",
       signedAt: row.updatedAtIso,
+      filterBucket: "pending",
       snapshot: null,
       pipelineRow: row,
     });

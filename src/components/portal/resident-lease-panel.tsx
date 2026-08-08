@@ -4,13 +4,12 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
-import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { DocumentInlineViewer } from "@/components/portal/resident-other-documents";
-import { ResidentLeaseListTable, useResidentLeasePipelineRow } from "@/components/portal/resident-lease-list";
+import { ResidentLeaseListSection, useResidentLeasePipelineRow } from "@/components/portal/resident-lease-list";
 import {
   PortalDataTableEmpty,
   RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN,
@@ -19,6 +18,9 @@ import {
 import { residentLeaseDetailHref, residentLeaseListHref } from "@/lib/portal-detail-routes";
 import { decodeLeaseDocumentDetailId, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
+import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
+import { residentLeaseManagerMessageDraft } from "@/lib/resident-manager-message-draft";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -51,6 +53,7 @@ export function ResidentLeasePanel({
   basePath?: string;
 }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const uploadRef = useRef<HTMLInputElement>(null);
   const { email, residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
   const pipelineRow = useResidentLeasePipelineRow();
@@ -67,6 +70,13 @@ export function ResidentLeasePanel({
   );
   const snapshotId = leaseDetailId ? decodeLeaseDocumentDetailId(leaseDetailId).snapshotId : null;
   const isHistoricalDetail = Boolean(snapshotId);
+  const isCurrentLeaseDetail = Boolean(leaseDetailId && documentView && !isHistoricalDetail);
+  const isPendingDetail = Boolean(
+    isCurrentLeaseDetail && pipelineRow && !hasBothLeaseSignatures(pipelineRow),
+  );
+  const isSignedCurrentDetail = Boolean(
+    isCurrentLeaseDetail && pipelineRow && hasBothLeaseSignatures(pipelineRow),
+  );
 
   const leaseAuthorized = useMemo(() => {
     if (!pipelineRow || !email) return false;
@@ -87,11 +97,9 @@ export function ResidentLeasePanel({
   const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
   const isPreparingLease = Boolean(email && (!pipelineRow || !leaseVisibleToResident));
-  const isPendingLease = Boolean(pipelineRow && leaseVisibleToResident && !leaseFullyExecuted);
-  const isSignedLease = Boolean(pipelineRow && leaseVisibleToResident && leaseFullyExecuted);
+  const showSigningWorkflowActions = !leaseFullyExecuted && pipelineRow?.status !== "Fully Signed";
 
   const residentAlreadySigned = Boolean(pipelineRow?.residentSignature);
-  const showSigningWorkflowActions = !leaseFullyExecuted && pipelineRow?.status !== "Fully Signed";
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -174,108 +182,19 @@ export function ResidentLeasePanel({
 
   const handleMoveOutSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(undefined, { force: true });
-  }, []);
+    showToast("Your manager was notified. A new lease is being prepared for your review.");
+  }, [showToast]);
 
-  const renderLeaseContent = () => {
-    if (!email) {
-      return <p className="text-sm text-muted">Sign in to view your lease.</p>;
-    }
-    if (!axisResolved) {
-      return (
-        <PortalEmptyState
-          variant="plain"
-          icon="lease"
-          title="Loading your lease…"
-        />
-      );
-    }
-    if (isPreparingLease) {
-      return (
-        <PortalEmptyState
-          variant="plain"
-          icon="lease"
-          title="Your lease is being prepared. Once your manager sends it, it will appear here for review and signature."
-        />
-      );
-    }
-    if (!pipelineRow) {
-      return null;
-    }
-
-    const previewHint = isSignedLease
-      ? "Your signed lease will appear here."
-      : "Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview.";
-
-    return (
-      <>
-        <div className="mb-6">
-          <LeaseDocumentPreview className="mt-0" row={pipelineRow} emptyHint={previewHint} />
-          {isPendingLease &&
-          pipelineRow.managerUploadedPdf?.dataUrl &&
-          pipelineRow.status === "Resident Signature Pending" ? (
-            <p className="mt-3 rounded-lg border border-border bg-[var(--status-approved-bg)] px-3 py-2.5 text-sm leading-snug text-[var(--status-approved-fg)]">
-              Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
-            </p>
-          ) : null}
-        </div>
-        {isSignedLease && upgradeBreakdown ? (
-          <div className="mt-4 rounded-xl border border-border bg-card p-3 sm:p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-approved-fg)]">Upgrade to long-term rental</p>
-            <p className="mt-1.5 text-sm text-muted">
-              You are currently on a short-term stay. Upgrading creates a new long-term lease. Rent is due on the <strong>1st of every month</strong>; your first month will be prorated based on your move-in date.
-            </p>
-            <div className="mt-4 space-y-1 text-sm">
-              <div className="flex justify-between gap-3 border-b border-blue-100 pb-2">
-                <span className="text-muted">Application fee</span>
-                <span className="font-medium text-emerald-700">{upgradeBreakdown.applicationFee.label}</span>
-              </div>
-              <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                <span className="text-muted">Move-in fee balance</span>
-                <span className="font-semibold text-foreground">{upgradeBreakdown.moveInFee.label}</span>
-              </div>
-              <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                <span className="text-muted">Security deposit balance</span>
-                <span className="font-semibold text-foreground">{upgradeBreakdown.securityDeposit.label}</span>
-              </div>
-              {upgradeBreakdownMtm?.monthToMonthSurcharge.label ? (
-                <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
-                  <span className="text-muted">Month-to-month option</span>
-                  <span className="font-medium text-amber-700">+{upgradeBreakdownMtm.monthToMonthSurcharge.label}</span>
-                </div>
-              ) : null}
-              <div className="flex justify-between gap-3 pt-2">
-                <span className="font-semibold text-foreground">Total due to upgrade</span>
-                <span className="font-bold text-foreground">${upgradeBreakdown.totalDue.toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="primary"
-                className="rounded-full text-sm"
-                onClick={() => showToast("Upgrade request sent to your manager. They will prepare your new long-term lease.")}
-              >
-                Request upgrade to long-term
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full text-sm"
-                onClick={() => showToast("Month-to-month upgrade request sent. Your manager will prepare the lease with the surcharge included.")}
-              >
-                Request month-to-month
-              </Button>
-            </div>
-            <p className="mt-3 text-xs text-muted">
-              Payments will update automatically in your Payments tab once the manager processes your upgrade. If you switch to month-to-month, a new lease at the adjusted rate is required.
-            </p>
-          </div>
-        ) : null}
-      </>
+  const openRequestEdits = useCallback(() => {
+    if (!pipelineRow || !documentView) return;
+    stageResidentComposePrefill(
+      residentLeaseManagerMessageDraft(pipelineRow, {
+        leaseTitle: documentView.title,
+        requestEdits: true,
+      }),
     );
-  };
-
-  const showWorkflowDetail = Boolean(leaseDetailId && documentView && !isHistoricalDetail && isPendingLease);
+    navigate(`${RESIDENT_PORTAL_BASE_PATH}/communication/active`);
+  }, [documentView, navigate, pipelineRow]);
 
   const downloadTarget =
     documentView?.pipelineRow ??
@@ -292,7 +211,16 @@ export function ResidentLeasePanel({
   const leaseDetailFooter =
     leaseDetailId && documentView ? (
       <ResidentDocumentsDetailFooter>
-        {isPendingLease && pipelineRow && !isHistoricalDetail ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
+          data-attr="resident-lease-request-edits"
+          onClick={openRequestEdits}
+        >
+          Request edits
+        </Button>
+        {isPendingDetail && pipelineRow ? (
           <>
             <Button
               type="button"
@@ -334,7 +262,7 @@ export function ResidentLeasePanel({
               </>
             ) : null}
           </>
-        ) : isSignedLease && pipelineRow && !isHistoricalDetail ? (
+        ) : isSignedCurrentDetail && pipelineRow ? (
           <>
             <Button
               type="button"
@@ -367,6 +295,81 @@ export function ResidentLeasePanel({
         ) : null}
       </ResidentDocumentsDetailFooter>
     ) : undefined;
+
+  const leaseDetailBody = documentView ? (
+    <div className="px-3 pb-6 pt-2 sm:px-4 text-left">
+      <DocumentInlineViewer
+        embedded
+        hideActions
+        title={documentView.title}
+        src={documentView.pdfSrc}
+        srcDoc={documentView.leaseHtml}
+        onDownload={() => downloadTarget && runLeaseDownload(downloadTarget, showToast)}
+        downloadLabel={documentView.pdfSrc ? "Download lease" : "Download / print lease"}
+        downloadAttr="resident-lease-download-pdf"
+      />
+      {isPendingDetail &&
+      pipelineRow?.managerUploadedPdf?.dataUrl &&
+      pipelineRow.status === "Resident Signature Pending" ? (
+        <p className="mt-3 rounded-lg border border-border bg-[var(--status-approved-bg)] px-3 py-2.5 text-sm leading-snug text-[var(--status-approved-fg)]">
+          Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
+        </p>
+      ) : null}
+      {isSignedCurrentDetail && upgradeBreakdown ? (
+        <div className="mt-4 rounded-xl border border-border bg-card p-3 sm:p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-approved-fg)]">Upgrade to long-term rental</p>
+          <p className="mt-1.5 text-sm text-muted">
+            You are currently on a short-term stay. Upgrading creates a new long-term lease. Rent is due on the <strong>1st of every month</strong>; your first month will be prorated based on your move-in date.
+          </p>
+          <div className="mt-4 space-y-1 text-sm">
+            <div className="flex justify-between gap-3 border-b border-blue-100 pb-2">
+              <span className="text-muted">Application fee</span>
+              <span className="font-medium text-emerald-700">{upgradeBreakdown.applicationFee.label}</span>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+              <span className="text-muted">Move-in fee balance</span>
+              <span className="font-semibold text-foreground">{upgradeBreakdown.moveInFee.label}</span>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+              <span className="text-muted">Security deposit balance</span>
+              <span className="font-semibold text-foreground">{upgradeBreakdown.securityDeposit.label}</span>
+            </div>
+            {upgradeBreakdownMtm?.monthToMonthSurcharge.label ? (
+              <div className="flex justify-between gap-3 border-b border-blue-100 py-2">
+                <span className="text-muted">Month-to-month option</span>
+                <span className="font-medium text-amber-700">+{upgradeBreakdownMtm.monthToMonthSurcharge.label}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-3 pt-2">
+              <span className="font-semibold text-foreground">Total due to upgrade</span>
+              <span className="font-bold text-foreground">${upgradeBreakdown.totalDue.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full text-sm"
+              onClick={() => showToast("Upgrade request sent to your manager. They will prepare your new long-term lease.")}
+            >
+              Request upgrade to long-term
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-sm"
+              onClick={() => showToast("Month-to-month upgrade request sent. Your manager will prepare the lease with the surcharge included.")}
+            >
+              Request month-to-month
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            Payments will update automatically in your Payments tab once the manager processes your upgrade. If you switch to month-to-month, a new lease at the adjusted rate is required.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  ) : null;
 
   const modals = (
     <>
@@ -439,7 +442,7 @@ export function ResidentLeasePanel({
           ) : !axisResolved ? (
             <PortalEmptyState variant="plain" icon="lease" title="Loading your leases…" />
           ) : (
-            <ResidentLeaseListTable basePath={basePath} detailHref={residentLeaseDetailHref} />
+            <ResidentLeaseListSection basePath={basePath} detailHref={residentLeaseDetailHref} />
           )}
         </ManagerPortalPageShell>
       </>
@@ -502,22 +505,7 @@ export function ResidentLeasePanel({
         pinScrollBody
         footer={leaseDetailFooter}
       >
-        <div className="px-3 pb-6 pt-2 sm:px-4 text-left">
-          {showWorkflowDetail ? (
-            renderLeaseContent()
-          ) : (
-            <DocumentInlineViewer
-              embedded
-              hideActions
-              title={documentView.title}
-              src={documentView.pdfSrc}
-              srcDoc={documentView.leaseHtml}
-              onDownload={() => downloadTarget && runLeaseDownload(downloadTarget, showToast)}
-              downloadLabel={documentView.pdfSrc ? "Download lease" : "Download / print lease"}
-              downloadAttr="resident-lease-download-pdf"
-            />
-          )}
-        </div>
+        {leaseDetailBody}
       </PortalRecordDetailPage>
     </>
   );

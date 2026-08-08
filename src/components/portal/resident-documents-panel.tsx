@@ -23,8 +23,11 @@ import { ApplicationDocumentPreview, ApplicationPdfDownloadButton } from "@/comp
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN, ResidentDocumentsDetailFooter } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
-import { ResidentLeaseListTable } from "@/components/portal/resident-lease-list";
+import { ResidentLeaseListSection } from "@/components/portal/resident-lease-list";
 import { resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
+import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
+import { residentLeaseManagerMessageDraft } from "@/lib/resident-manager-message-draft";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { buildReceiptRows, type ReceiptRow } from "@/lib/rent-receipts";
@@ -332,9 +335,21 @@ function useResidentLeaseDocumentSource(): LeasePipelineRow | null {
 
 function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; basePath: string }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
   const row = useResidentLeaseDocumentSource();
   const listHref = residentDocumentsLeaseListHref(basePath);
   const view = useMemo(() => resolveResidentLeaseDocumentView(row, leaseId), [row, leaseId]);
+
+  const openRequestEdits = useCallback(() => {
+    if (!row || !view) return;
+    stageResidentComposePrefill(
+      residentLeaseManagerMessageDraft(row, {
+        leaseTitle: view.title,
+        requestEdits: true,
+      }),
+    );
+    navigate(`${RESIDENT_PORTAL_BASE_PATH}/communication/active`);
+  }, [navigate, row, view]);
 
   if (!row || !view) {
     return (
@@ -376,6 +391,15 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
       pinScrollBody
       footer={
         <ResidentDocumentsDetailFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
+            data-attr="resident-documents-lease-request-edits"
+            onClick={openRequestEdits}
+          >
+            Request edits
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -690,9 +714,10 @@ function RentReceiptsTab({ basePath }: { basePath: string }) {
  */
 function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
   return (
-    <ResidentLeaseListTable
+    <ResidentLeaseListSection
       basePath={basePath}
       detailHref={residentDocumentsLeaseDetailHref}
+      routePendingToLeaseSection
       emptyMessage="Your signed lease will appear here once it's signed."
     />
   );

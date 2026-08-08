@@ -1004,10 +1004,16 @@ export function ManagerLeasesPipelinePanel({
             key={row.id}
             name={row.residentName}
             subtitle={row.unit}
-            preview={row.status}
+            preview={
+              row.pendingRenewal && row.status === "Manager Review"
+                ? "Renewal requested · Manager Review"
+                : row.status
+            }
             meta={row.updated}
             badge={
-              row.leaseKind === "joint_bundle" ? (
+              row.pendingRenewal ? (
+                <Badge tone="warning">Renewal requested</Badge>
+              ) : row.leaseKind === "joint_bundle" ? (
                 <Badge tone="neutral">Joint bundle</Badge>
               ) : undefined
             }
