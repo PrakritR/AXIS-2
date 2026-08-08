@@ -274,13 +274,36 @@ export function residentDocumentsLeaseDetailHref(basePath: string, leaseId: stri
   return `${basePath}/documents/lease/${encodeURIComponent(leaseId)}`;
 }
 
+/** Resident lease list buckets (Pending / Signed). */
+export const RESIDENT_LEASE_BUCKETS = ["pending", "signed"] as const;
+export type ResidentLeaseBucketId = (typeof RESIDENT_LEASE_BUCKETS)[number];
+
+export function parseResidentLeaseBucket(raw: string | undefined | null): ResidentLeaseBucketId {
+  if (raw && (RESIDENT_LEASE_BUCKETS as readonly string[]).includes(raw)) {
+    return raw as ResidentLeaseBucketId;
+  }
+  return "pending";
+}
+
 /** Resident Lease section list. */
-export function residentLeaseListHref(basePath: string): string {
-  return `${basePath}/lease`;
+export function residentLeaseListHref(
+  basePath: string,
+  bucket: ResidentLeaseBucketId = "pending",
+): string {
+  return `${basePath}/lease/${bucket}`;
 }
 
 /** Resident Lease section detail. */
-export function residentLeaseDetailHref(basePath: string, leaseDetailId: string): string {
+export function residentLeaseDetailHref(
+  basePath: string,
+  bucket: ResidentLeaseBucketId,
+  leaseDetailId: string,
+): string {
+  return `${basePath}/lease/${bucket}/${encodeURIComponent(leaseDetailId)}`;
+}
+
+/** @deprecated Legacy single-segment detail URLs still resolve; prefer bucketed hrefs. */
+export function residentLeaseLegacyDetailHref(basePath: string, leaseDetailId: string): string {
   return `${basePath}/lease/${encodeURIComponent(leaseDetailId)}`;
 }
 

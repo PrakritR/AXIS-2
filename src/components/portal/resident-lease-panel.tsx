@@ -8,15 +8,25 @@ import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { DocumentInlineViewer } from "@/components/portal/resident-other-documents";
-import { ResidentLeaseListSection, useResidentLeasePipelineRow } from "@/components/portal/resident-lease-list";
+import {
+  RESIDENT_LEASE_LIST_LABEL,
+  ResidentLeaseBareDocumentPreview,
+  residentLeaseDetailSubtitle,
+} from "@/components/portal/resident-lease-document-preview";
+import { ResidentLeaseListTable, useResidentLeasePipelineRow } from "@/components/portal/resident-lease-list";
+import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
+import { LocalDestinationNav } from "@/components/ui/destination-nav";
 import {
   PortalDataTableEmpty,
   RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN,
   ResidentDocumentsDetailFooter,
 } from "@/components/portal/portal-data-table";
-import { residentLeaseDetailHref, residentLeaseListHref } from "@/lib/portal-detail-routes";
-import { decodeLeaseDocumentDetailId, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
+import {
+  residentLeaseDetailHref,
+  residentLeaseListHref,
+  type ResidentLeaseBucketId,
+} from "@/lib/portal-detail-routes";
+import { decodeLeaseDocumentDetailId, buildResidentLeaseDocumentRows, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
 import { residentLeaseManagerMessageDraft } from "@/lib/resident-manager-message-draft";
@@ -39,6 +49,7 @@ import {
   residentUploadLeasePdf,
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
+import { safeFormatDateTime } from "@/lib/pacific-time";
 import { useResidentPortalAxisContext } from "@/hooks/use-resident-portal-axis";
 
 /**
@@ -47,9 +58,11 @@ import { useResidentPortalAxisContext } from "@/hooks/use-resident-portal-axis";
  */
 export function ResidentLeasePanel({
   leaseDetailId,
+  bucket = "pending",
   basePath = RESIDENT_PORTAL_BASE_PATH,
 }: {
   leaseDetailId?: string;
+  bucket?: ResidentLeaseBucketId;
   basePath?: string;
 }) {
   const { showToast } = useAppUi();
@@ -63,7 +76,12 @@ export function ResidentLeasePanel({
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [renewInitialTerm, setRenewInitialTerm] = useState<string | undefined>(undefined);
 
-  const listHref = residentLeaseListHref(basePath);
+  const detailEntry = useMemo(() => {
+    if (!leaseDetailId || !pipelineRow) return null;
+    return buildResidentLeaseDocumentRows(pipelineRow).find((row) => row.id === leaseDetailId) ?? null;
+  }, [leaseDetailId, pipelineRow]);
+  const activeBucket = detailEntry?.filterBucket ?? bucket;
+  const listHref = residentLeaseListHref(basePath, activeBucket);
   const documentView = useMemo(
     () => (leaseDetailId && pipelineRow ? resolveResidentLeaseDocumentView(pipelineRow, leaseDetailId) : null),
     [leaseDetailId, pipelineRow],
@@ -298,15 +316,10 @@ export function ResidentLeasePanel({
 
   const leaseDetailBody = documentView ? (
     <div className="px-3 pb-6 pt-2 sm:px-4 text-left">
-      <DocumentInlineViewer
-        embedded
-        hideActions
-        title={documentView.title}
-        src={documentView.pdfSrc}
-        srcDoc={documentView.leaseHtml}
-        onDownload={() => downloadTarget && runLeaseDownload(downloadTarget, showToast)}
-        downloadLabel={documentView.pdfSrc ? "Download lease" : "Download / print lease"}
-        downloadAttr="resident-lease-download-pdf"
+      <ResidentLeaseBareDocumentPreview
+        pdfSrc={documentView.pdfSrc}
+        leaseHtml={documentView.leaseHtml}
+        title={RESIDENT_LEASE_LIST_LABEL}
       />
       {isPendingDetail &&
       pipelineRow?.managerUploadedPdf?.dataUrl &&
@@ -433,16 +446,48 @@ export function ResidentLeasePanel({
   );
 
   if (!leaseDetailId) {
+    const allRows = buildResidentLeaseDocumentRows(pipelineRow);
+    const filterTabs = [
+      {
+        id: "pending" as const,
+        label: "Pending",
+        count: allRows.filter((row) => row.filterBucket === "pending").length,
+      },
+      {
+        id: "signed" as const,
+        label: "Signed",
+        count: allRows.filter((row) => row.filterBucket === "signed").length,
+      },
+    ];
+    const filterRow = (
+      <LocalDestinationNav
+        items={filterTabs.map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          count: tab.count,
+          dataAttr: `resident-lease-bucket-${tab.id}`,
+        }))}
+        activeId={bucket}
+        onChange={(id) => navigate(residentLeaseListHref(basePath, id as ResidentLeaseBucketId))}
+        ariaLabel="Lease status"
+      />
+    );
+
     return (
       <>
         {modals}
         <ManagerPortalPageShell title="Lease" hideTitleOnMobileNav compactFilterRow>
+          <PortalListControlStack className="mb-2 max-lg:mb-2" destinationRow={filterRow} />
           {!email ? (
             <p className="text-sm text-muted">Sign in to view your lease.</p>
           ) : !axisResolved ? (
             <PortalEmptyState variant="plain" icon="lease" title="Loading your leases…" />
           ) : (
-            <ResidentLeaseListSection basePath={basePath} detailHref={residentLeaseDetailHref} />
+            <ResidentLeaseListTable
+              basePath={basePath}
+              bucket={bucket}
+              detailHref={residentLeaseDetailHref}
+            />
           )}
         </ManagerPortalPageShell>
       </>
@@ -496,8 +541,12 @@ export function ResidentLeasePanel({
       {modals}
       <PortalRecordDetailPage
         pageTitle="Lease"
-        title={documentView.title}
-        subtitle={documentView.subtitle}
+        title={RESIDENT_LEASE_LIST_LABEL}
+        subtitle={
+          detailEntry
+            ? residentLeaseDetailSubtitle(detailEntry.status, safeFormatDateTime(detailEntry.signedAt))
+            : documentView.subtitle
+        }
         backHref={listHref}
         hideBackText
         bareHeader

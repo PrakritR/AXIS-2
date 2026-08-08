@@ -23,8 +23,13 @@ import { ApplicationDocumentPreview, ApplicationPdfDownloadButton } from "@/comp
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
 import { RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN, ResidentDocumentsDetailFooter } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
-import { ResidentLeaseListSection } from "@/components/portal/resident-lease-list";
-import { resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
+import { ResidentLeaseDocumentsListSection } from "@/components/portal/resident-lease-list";
+import {
+  RESIDENT_LEASE_LIST_LABEL,
+  ResidentLeaseBareDocumentPreview,
+  residentLeaseDetailSubtitle,
+} from "@/components/portal/resident-lease-document-preview";
+import { resolveResidentLeaseDocumentView, buildResidentLeaseDocumentRows } from "@/lib/resident-lease-documents";
 import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
 import { residentLeaseManagerMessageDraft } from "@/lib/resident-manager-message-draft";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
@@ -339,6 +344,10 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
   const row = useResidentLeaseDocumentSource();
   const listHref = residentDocumentsLeaseListHref(basePath);
   const view = useMemo(() => resolveResidentLeaseDocumentView(row, leaseId), [row, leaseId]);
+  const detailEntry = useMemo(() => {
+    if (!row || !leaseId) return null;
+    return buildResidentLeaseDocumentRows(row).find((entry) => entry.id === leaseId) ?? null;
+  }, [leaseId, row]);
 
   const openRequestEdits = useCallback(() => {
     if (!row || !view) return;
@@ -382,8 +391,12 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
   return (
     <PortalRecordDetailPage
       pageTitle="Documents"
-      title={view.title}
-      subtitle={view.subtitle}
+      title={RESIDENT_LEASE_LIST_LABEL}
+      subtitle={
+        detailEntry
+          ? residentLeaseDetailSubtitle(detailEntry.status, safeFormatDateTime(detailEntry.signedAt))
+          : view.subtitle
+      }
       backHref={listHref}
       hideBackText
       bareHeader
@@ -413,15 +426,10 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
       }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
-        <DocumentInlineViewer
-          embedded
-          hideActions
-          title={view.title}
-          src={view.pdfSrc}
-          srcDoc={view.leaseHtml}
-          onDownload={() => runLeaseDownload(downloadTarget, showToast)}
-          downloadLabel={view.pdfSrc ? "Download lease" : "Download / print lease"}
-          downloadAttr="resident-documents-lease-download-pdf"
+        <ResidentLeaseBareDocumentPreview
+          pdfSrc={view.pdfSrc}
+          leaseHtml={view.leaseHtml}
+          title={RESIDENT_LEASE_LIST_LABEL}
         />
       </div>
     </PortalRecordDetailPage>
@@ -713,14 +721,7 @@ function RentReceiptsTab({ basePath }: { basePath: string }) {
  * Signing and renewals live on the standalone Lease tab.
  */
 function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
-  return (
-    <ResidentLeaseListSection
-      basePath={basePath}
-      detailHref={residentDocumentsLeaseDetailHref}
-      routePendingToLeaseSection
-      emptyMessage="Your signed lease will appear here once it's signed."
-    />
-  );
+  return <ResidentLeaseDocumentsListSection basePath={basePath} />;
 }
 
 export function ResidentDocumentsPanel({

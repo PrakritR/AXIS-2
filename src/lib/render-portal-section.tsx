@@ -1025,9 +1025,30 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "lease") {
-    if (tabParts && tabParts.length > 1) notFound();
-    const leaseDetailId = tabParts?.length === 1 ? decodeURIComponent(tabParts[0]!) : undefined;
-    return <ResidentLeasePanel basePath={def.basePath} leaseDetailId={leaseDetailId} />;
+    const LEASE_BUCKETS = ["pending", "signed"] as const;
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/lease/pending`);
+    }
+    if (tabParts.length > 2) notFound();
+    const tabRaw = tabParts[0]!;
+    const leaseBucket = LEASE_BUCKETS.includes(tabRaw as (typeof LEASE_BUCKETS)[number])
+      ? (tabRaw as (typeof LEASE_BUCKETS)[number])
+      : null;
+    if (!leaseBucket) {
+      const legacyDetailId = decodeURIComponent(tabRaw);
+      return <ResidentLeasePanel basePath={def.basePath} leaseDetailId={legacyDetailId} />;
+    }
+    if (tabParts.length === 1) {
+      return <ResidentLeasePanel basePath={def.basePath} bucket={leaseBucket} />;
+    }
+    const leaseDetailId = decodeURIComponent(tabParts[1]!);
+    return (
+      <ResidentLeasePanel
+        basePath={def.basePath}
+        bucket={leaseBucket}
+        leaseDetailId={leaseDetailId}
+      />
+    );
   }
 
   if (kind === "resident" && section === "move-in") {
